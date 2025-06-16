@@ -17,12 +17,10 @@ func NewCatppuccinMochaTheme() *CatppuccinMochaTheme {
 	// Base colors (backgrounds and surfaces)
 	base := "#1e1e2e"       // main background
 	mantle := "#181825"     // darker background
-	crust := "#11111b"      // darkest background
 	
 	// Surface colors (UI elements)
 	surface0 := "#313244"   // subtle UI elements
 	surface1 := "#45475a"   // UI element backgrounds
-	surface2 := "#585b70"   // active/selected UI elements
 	
 	// Overlay colors (borders and separators)
 	overlay0 := "#6c7086"   // muted borders
@@ -35,7 +33,6 @@ func NewCatppuccinMochaTheme() *CatppuccinMochaTheme {
 	text := "#cdd6f4"       // primary text
 	
 	// Accent colors - Catppuccin signature colors
-	rosewater := "#f5e0dc"
 	flamingo := "#f2cdcd"
 	pink := "#f5c2e7"
 	mauve := "#cba6f7"      // purple
@@ -55,7 +52,6 @@ func NewCatppuccinMochaTheme() *CatppuccinMochaTheme {
 	lightMantle := "#e6e9ef"    // darker background
 	lightSurface0 := "#ccd0da"  // subtle UI elements
 	lightSurface1 := "#bcc0cc"  // UI element backgrounds
-	lightSurface2 := "#acb0be"  // active/selected UI elements
 	lightOverlay0 := "#9ca0b0"  // muted borders
 	lightOverlay1 := "#8c8fa1"  // borders
 	lightOverlay2 := "#7c7f93"  // active borders
