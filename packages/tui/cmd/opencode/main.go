@@ -26,7 +26,11 @@ func main() {
 
 	appInfoStr := os.Getenv("OPENCODE_APP_INFO")
 	var appInfo client.AppInfo
-	json.Unmarshal([]byte(appInfoStr), &appInfo)
+	err := json.Unmarshal([]byte(appInfoStr), &appInfo)
+	if err != nil {
+		slog.Error("Failed to unmarshal app info", "error", err)
+		os.Exit(1)
+	}
 
 	logfile := filepath.Join(appInfo.Path.Data, "log", "tui.log")
 	if _, err := os.Stat(filepath.Dir(logfile)); os.IsNotExist(err) {

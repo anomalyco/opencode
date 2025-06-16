@@ -126,6 +126,10 @@ func (a *App) InitializeProvider() tea.Cmd {
 			// TODO: notify user
 			return nil
 		}
+		if providersResponse != nil && providersResponse.StatusCode() != 200 {
+			slog.Error("failed to retrieve providers", "status", providersResponse.StatusCode(), "message", string(providersResponse.Body))
+			return nil
+		}
 		providers := []client.ProviderInfo{}
 		var defaultProvider *client.ProviderInfo
 		var defaultModel *client.ModelInfo
