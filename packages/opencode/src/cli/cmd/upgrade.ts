@@ -6,6 +6,7 @@ import fs from "fs/promises"
 import os from "os"
 import * as prompts from "@clack/prompts"
 import { Global } from "../../global"
+import { Upgrade } from "../../upgrade"
 
 const API = "https://api.github.com/repos/sst/opencode"
 
@@ -123,6 +124,8 @@ export const UpgradeCommand = {
     UI.println(UI.logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
+    console.log(await Upgrade.method())
+    return
 
     if (!process.execPath.includes(path.join(".opencode", "bin")) && false) {
       prompts.log.error(

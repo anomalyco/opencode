@@ -1,0 +1,1 @@
+export namespace GlobalConfig {}
