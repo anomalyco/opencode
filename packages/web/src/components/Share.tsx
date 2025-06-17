@@ -1518,7 +1518,7 @@ export default function Share(props: {
                                       desc={desc}
                                       data-size="sm"
                                       text={
-                                        command + (result() ? `\n${result}` : "")
+                                        command + (result() ? `\n${result()}` : "")
                                       }
                                     />
                                   </div>
