@@ -6,6 +6,23 @@ import { NamedError } from "../util/error"
 export namespace Installation {
   export type Method = Awaited<ReturnType<typeof method>>
 
+  export const Info = z
+    .object({
+      version: z.string(),
+      latest: z.string(),
+    })
+    .openapi({
+      ref: "InstallationInfo",
+    })
+  export type Info = z.infer<typeof Info>
+
+  export async function info() {
+    return {
+      version: VERSION,
+      latest: await latest(),
+    }
+  }
+
   export async function method() {
     if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()

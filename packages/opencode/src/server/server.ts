@@ -15,6 +15,7 @@ import { NamedError } from "../util/error"
 import { Fzf } from "../external/fzf"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../external/ripgrep"
+import { Installation } from "../installation"
 
 const ERRORS = {
   400: {
@@ -464,6 +465,25 @@ export namespace Server {
             limit: 10,
           })
           return c.json(result)
+        },
+      )
+      .post(
+        "installation_info",
+        describeRoute({
+          description: "Get installation info",
+          responses: {
+            200: {
+              description: "Get installation info",
+              content: {
+                "application/json": {
+                  schema: resolver(Installation.Info),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(Installation.info())
         },
       )
 
