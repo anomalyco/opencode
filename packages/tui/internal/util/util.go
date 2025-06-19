@@ -1,6 +1,9 @@
 package util
 
 import (
+	"os"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
@@ -16,4 +19,19 @@ func Clamp(v, low, high int) int {
 		low, high = high, low
 	}
 	return min(high, max(low, v))
+}
+
+func IsWsl() bool {
+	// Check for WSL environment variables
+	if os.Getenv("WSL_DISTRO_NAME") != "" {
+		return true
+	}
+
+	// Check /proc/version for WSL signature
+	if data, err := os.ReadFile("/proc/version"); err == nil {
+		version := strings.ToLower(string(data))
+		return strings.Contains(version, "microsoft") || strings.Contains(version, "wsl")
+	}
+
+	return false
 }

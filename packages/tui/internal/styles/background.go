@@ -8,6 +8,6 @@ var Terminal *TerminalInfo
 
 func init() {
 	Terminal = &TerminalInfo{
-		BackgroundIsDark: false,
+		BackgroundIsDark: true,
 	}
 }

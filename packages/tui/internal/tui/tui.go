@@ -42,7 +42,11 @@ type appModel struct {
 
 func (a appModel) Init() tea.Cmd {
 	var cmds []tea.Cmd
-	cmds = append(cmds, tea.RequestBackgroundColor)
+	// https://github.com/charmbracelet/bubbletea/issues/1440
+	// https://github.com/sst/opencode/issues/127
+	if !util.IsWsl() {
+		cmds = append(cmds, tea.RequestBackgroundColor)
+	}
 	cmds = append(cmds, a.app.InitializeProvider())
 	cmds = append(cmds, a.editor.Init())
 	cmds = append(cmds, a.messages.Init())
