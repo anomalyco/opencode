@@ -194,6 +194,7 @@
           border-radius: 7px;
           white-space: nowrap;
 
+          z-index: 1;
           opacity: 0;
           visibility: hidden;
 
