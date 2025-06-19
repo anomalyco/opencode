@@ -260,6 +260,7 @@ export namespace Session {
     if (msgs.length === 0 && !session.parentID) {
       generateText({
         maxTokens: input.providerID === "google" ? 1024 : 20,
+        providerOptions: model.info.providerOptions,
         messages: [
           ...SystemPrompt.title(input.providerID).map(
             (x): CoreMessage => ({
@@ -512,6 +513,7 @@ export namespace Session {
       toolCallStreaming: true,
       abortSignal: abort.signal,
       maxSteps: 1000,
+      providerOptions: model.info.providerOptions,
       messages: [
         ...system.map(
           (x, index): CoreMessage => ({
@@ -533,7 +535,7 @@ export namespace Session {
         ),
       ],
       temperature: model.info.temperature ? 0 : undefined,
-      tools: {
+      tools: model.info.tools === false ? undefined : {
         ...tools,
       },
       model: model.language,

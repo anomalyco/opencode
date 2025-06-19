@@ -12,6 +12,7 @@ export namespace ModelsDev {
       name: z.string(),
       attachment: z.boolean(),
       reasoning: z.boolean(),
+      tools: z.boolean().optional(),
       temperature: z.boolean(),
       cost: z.object({
         input: z.number(),
@@ -24,6 +25,7 @@ export namespace ModelsDev {
         output: z.number(),
       }),
       id: z.string(),
+      providerOptions: z.record(z.string(), z.any()).optional()
     })
     .openapi({
       ref: "Model.Info",

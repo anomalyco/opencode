@@ -161,6 +161,7 @@ export namespace Provider {
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
           temperature: model.temperature ?? existing?.temperature ?? false,
+          tools: model.tools,
           cost: model.cost ??
             existing?.cost ?? {
               input: 0,
@@ -168,6 +169,7 @@ export namespace Provider {
               inputCached: 0,
               outputCached: 0,
             },
+          providerOptions: model.providerOptions,
           limit: model.limit ??
             existing?.limit ?? {
               context: 0,
