@@ -161,16 +161,18 @@ export namespace Provider {
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
           temperature: model.temperature ?? existing?.temperature ?? false,
-          cost: model.cost ??
-            existing?.cost ?? {
-              input: 0,
-              output: 0,
-              inputCached: 0,
-              outputCached: 0,
-            },
+          tool_call: model.tool_call ?? existing?.tool_call ?? true,
+          cost: {
+            ...existing?.cost,
+            ...model.cost,
+            input: 0,
+            output: 0,
+            cache_read: 0,
+            cache_write: 0,
+          },
           options: {
-            tools: model.options?.tools,
-            providerOptions: model.options?.providerOptions,
+            ...existing?.options,
+            ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {

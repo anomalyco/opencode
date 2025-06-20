@@ -13,6 +13,7 @@ export namespace ModelsDev {
       attachment: z.boolean(),
       reasoning: z.boolean(),
       temperature: z.boolean(),
+      tool_call: z.boolean(),
       cost: z.object({
         input: z.number(),
         output: z.number(),
@@ -24,10 +25,7 @@ export namespace ModelsDev {
         output: z.number(),
       }),
       id: z.string(),
-      options: z.object({
-        providerOptions: z.record(z.string(), z.any()).optional(),
-        tools: z.boolean().optional(),
-      }),
+      options: z.record(z.any()),
     })
     .openapi({
       ref: "Model.Info",
@@ -51,7 +49,7 @@ export namespace ModelsDev {
 
   export async function get() {
     const file = Bun.file(filepath)
-    const result = await file.json().catch(() => { })
+    const result = await file.json().catch(() => {})
     if (result) {
       refresh()
       return result as Record<string, Provider>
