@@ -7,6 +7,7 @@
 - **Typecheck**: `bun run typecheck` (npm run typecheck)
 - **Test**: `bun test` (runs all tests)
 - **Single test**: `bun test test/tool/tool.test.ts` (specific test file)
+- **API Client Generation**: `cd packages/tui && go generate ./pkg/client/` (after changes to server endpoints)
 
 ## Code Style
 
@@ -37,3 +38,4 @@
 - **Validation**: All inputs validated with Zod schemas
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
+- **API Client**: Go TUI communicates with TypeScript server via generated client. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, run `cd packages/tui && go generate ./pkg/client/` to update the Go client code and OpenAPI spec.
