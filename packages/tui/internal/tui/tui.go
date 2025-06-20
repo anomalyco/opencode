@@ -77,8 +77,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyString {
 			// Escape always closes current modal
 			case "esc", "ctrl+c":
+				cmd := a.modal.Close()
 				a.modal = nil
-				return a, nil
+				return a, cmd
 			}
 
 			// Pass all other key presses to the modal
@@ -194,8 +195,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		slog.Debug("Background color", "isDark", msg.IsDark())
 	case modal.CloseModalMsg:
+		var cmd tea.Cmd
+		if a.modal != nil {
+			cmd = a.modal.Close()
+		}
 		a.modal = nil
-		return a, nil
+		return a, cmd
 	case commands.ExecuteCommandMsg:
 		updated, cmd := a.executeCommand(commands.Command(msg))
 		return updated, cmd
