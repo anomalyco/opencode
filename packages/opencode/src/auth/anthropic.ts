@@ -8,7 +8,7 @@ export namespace AuthAnthropic {
     const pkce = await generatePKCE()
     const url = new URL("https://claude.ai/oauth/authorize", import.meta.url)
     url.searchParams.set("code", "true")
-    url.searchParams.set("client_id", "9d1c250a-e61b-44d9-88ed-5944d1962f5e")
+    url.searchParams.set("client_id", CLIENT_ID)
     url.searchParams.set("response_type", "code")
     url.searchParams.set(
       "redirect_uri",
@@ -38,7 +38,7 @@ export namespace AuthAnthropic {
         code: splits[0],
         state: splits[1],
         grant_type: "authorization_code",
-        client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+        client_id: CLIENT_ID,
         redirect_uri: "https://console.anthropic.com/oauth/code/callback",
         code_verifier: verifier,
       }),
