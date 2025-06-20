@@ -47,8 +47,10 @@ type themeDialog struct {
 	width  int
 	height int
 
-	modal *modal.Modal
-	list  list.List[themeItem]
+	modal         *modal.Modal
+	list          list.List[themeItem]
+	originalTheme string
+	themeApplied  bool
 }
 
 func (t *themeDialog) Init() tea.Cmd {
@@ -64,26 +66,31 @@ func (t *themeDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			if item, idx := t.list.GetSelectedItem(); idx >= 0 {
-				previousTheme := theme.CurrentThemeName()
 				selectedTheme := item.name
-				if previousTheme == selectedTheme {
-					return t, util.CmdHandler(modal.CloseModalMsg{})
-				}
 				if err := theme.SetTheme(selectedTheme); err != nil {
 					// status.Error(err.Error())
 					return t, nil
 				}
+				t.themeApplied = true
 				return t, tea.Sequence(
 					util.CmdHandler(modal.CloseModalMsg{}),
 					util.CmdHandler(ThemeSelectedMsg{ThemeName: selectedTheme}),
 				)
 			}
+
 		}
 	}
+
+	_, prevIdx := t.list.GetSelectedItem()
 
 	var cmd tea.Cmd
 	listModel, cmd := t.list.Update(msg)
 	t.list = listModel.(list.List[themeItem])
+
+	if item, newIdx := t.list.GetSelectedItem(); newIdx >= 0 && newIdx != prevIdx {
+		theme.SetTheme(item.name)
+	}
+
 	return t, cmd
 }
 
@@ -92,6 +99,9 @@ func (t *themeDialog) Render(background string) string {
 }
 
 func (t *themeDialog) Close() tea.Cmd {
+	if !t.themeApplied {
+		theme.SetTheme(t.originalTheme)
+	}
 	return nil
 }
 
@@ -120,7 +130,9 @@ func NewThemeDialog() ThemeDialog {
 	list.SetSelectedIndex(selectedIdx)
 
 	return &themeDialog{
-		list:  list,
-		modal: modal.New(modal.WithTitle("Select Theme"), modal.WithMaxWidth(40)),
+		list:          list,
+		modal:         modal.New(modal.WithTitle("Select Theme"), modal.WithMaxWidth(40)),
+		originalTheme: currentTheme,
+		themeApplied:  false,
 	}
 }
