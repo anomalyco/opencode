@@ -75,7 +75,7 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      if (!process.env["AWS_PROFILE"]) false
+      if (!process.env["AWS_PROFILE"]) return false
 
       const region = process.env["AWS_REGION"] ?? "us-east-1"
 
