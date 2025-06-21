@@ -351,23 +351,25 @@ export namespace Provider {
       }
     }
     
-    // Default lightweight models by provider
-    const defaults: Record<string, string> = {
-      'anthropic': 'claude-3-5-haiku-20241022',
-      'openai': 'gpt-4o-mini',
-      'google': 'gemini-2.5-flash-preview-05-20'
-    }
-    
-    if (defaults[providerID]) {
-      try {
-        return await getModel(providerID, defaults[providerID])
-      } catch (e) {
-        log.warn("Failed to get default lightweight model", { providerID, model: defaults[providerID], error: e })
+    const providers = await list()
+    const provider = providers[providerID]
+    if (!provider) return null
+
+    // Select cheapest model whose cost.output <= 4
+    let selected: { info: ModelsDev.Model; language: LanguageModel } | null = null
+    for (const model of Object.values(provider.info.models)) {
+      if (model.cost.output <= 4) {
+        try {
+          const m = await getModel(providerID, model.id)
+          if (!selected || m.info.cost.output < selected.info.cost.output) {
+            selected = m
+          }
+        } catch {
+          // ignore errors and continue searching
+        }
       }
     }
-    
-    // No lightweight model available
-    return null
+    return selected
   }
 
   const TOOLS = [

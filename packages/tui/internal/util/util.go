@@ -35,3 +35,16 @@ func IsWsl() bool {
 
 	return false
 }
+
+func ParseModel(model string) (providerID, modelID string) {
+	parts := strings.Split(model, "/")
+	if len(parts) == 0 {
+		return "", ""
+	}
+
+	providerID = parts[0]
+	if len(parts) > 1 {
+		modelID = strings.Join(parts[1:], "/")
+	}
+	return
+}

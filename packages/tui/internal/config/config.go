@@ -11,9 +11,11 @@ import (
 )
 
 type State struct {
-	Theme    string `toml:"theme"`
-	Provider string `toml:"provider"`
-	Model    string `toml:"model"`
+	Theme         string `toml:"theme"`
+	MainProvider  string `toml:"main_provider"`
+	MainModel     string `toml:"main_model"`
+	LightProvider string `toml:"light_provider"`
+	LightModel    string `toml:"light_model"`
 }
 
 func NewState() *State {

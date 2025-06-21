@@ -95,7 +95,7 @@ func (m statusComponent) View() string {
 	if m.app.Session.Id != "" {
 		tokens := float32(0)
 		cost := float32(0)
-		contextWindow := m.app.Model.Limit.Context
+		contextWindow := m.app.MainModel.Limit.Context
 
 		for _, message := range m.app.Messages {
 			if message.Metadata.Assistant != nil {

@@ -121,8 +121,19 @@ func (m *editorComponent) Content() string {
 	}
 
 	model := ""
-	if m.app.Model != nil {
-		model = muted(m.app.Provider.Name) + base(" "+m.app.Model.Name)
+	if m.app.MainModel != nil {
+		model = muted(m.app.MainProvider.Name) + base(" "+m.app.MainModel.Name)
+
+		// show lightweight model if configured
+		if m.app.LightModel != nil {
+			if m.app.LightProvider != nil && m.app.LightProvider.Id == m.app.MainProvider.Id {
+				// Same provider – show friendly name
+				model = model + muted(" (⚡"+m.app.LightModel.Name+")")
+			} else {
+				// Different provider – show model ID
+				model = model + muted(" (⚡"+m.app.LightModel.Id+")")
+			}
+		}
 	}
 
 	space := m.width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
