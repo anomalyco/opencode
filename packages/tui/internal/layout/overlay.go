@@ -109,11 +109,11 @@ func PlaceOverlay(
 			// Get the foreground line
 			fgLine := fgLines[i-y]
 			fgLineWidth := ansi.PrintableRuneWidth(fgLine)
-			
+
 			// Extract the styles at the border positions
 			leftStyle := getStyleAtPosition(bgLine, pos)
-			rightStyle := getStyleAtPosition(bgLine, pos + 1 + fgLineWidth)
-			
+			rightStyle := getStyleAtPosition(bgLine, pos+1+fgLineWidth)
+
 			// Left border - combine background from original with border foreground
 			leftSeq := combineStyles(leftStyle, options.borderColor)
 			if leftSeq != "" {
@@ -172,17 +172,17 @@ type ansiStyle struct {
 // parseANSISequence parses an ANSI escape sequence into its components
 func parseANSISequence(seq string) ansiStyle {
 	style := ansiStyle{}
-	
+
 	// Extract the parameters from the sequence (e.g., \x1b[38;5;123;48;5;456m -> "38;5;123;48;5;456")
 	if !strings.HasPrefix(seq, "\x1b[") || !strings.HasSuffix(seq, "m") {
 		return style
 	}
-	
+
 	params := seq[2 : len(seq)-1]
 	if params == "" {
 		return style
 	}
-	
+
 	parts := strings.Split(params, ";")
 	i := 0
 	for i < len(parts) {
@@ -222,7 +222,7 @@ func parseANSISequence(seq string) ansiStyle {
 		}
 		i++
 	}
-	
+
 	return style
 }
 
@@ -231,32 +231,32 @@ func combineStyles(bgStyle ansiStyle, fgColor *compat.AdaptiveColor) string {
 	if fgColor == nil && bgStyle.bgColor == "" && len(bgStyle.attrs) == 0 {
 		return ""
 	}
-	
+
 	var parts []string
-	
+
 	// Add attributes
 	parts = append(parts, bgStyle.attrs...)
-	
+
 	// Add background color from the original style
 	if bgStyle.bgColor != "" {
 		parts = append(parts, bgStyle.bgColor)
 	}
-	
+
 	// Add foreground color if specified
 	if fgColor != nil {
 		// Use the light color (could be improved to detect terminal background)
 		color := (*fgColor).Light
-		
+
 		// Use RGBA to get color components
 		r, g, b, _ := color.RGBA()
 		// RGBA returns 16-bit values, we need 8-bit
 		parts = append(parts, fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8))
 	}
-	
+
 	if len(parts) == 0 {
 		return ""
 	}
-	
+
 	return fmt.Sprintf("\x1b[%sm", strings.Join(parts, ";"))
 }
 
@@ -264,10 +264,10 @@ func combineStyles(bgStyle ansiStyle, fgColor *compat.AdaptiveColor) string {
 func getStyleAtPosition(s string, targetPos int) ansiStyle {
 	// ANSI escape sequence regex
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	
+
 	visualPos := 0
 	currentStyle := ansiStyle{}
-	
+
 	i := 0
 	for i < len(s) && visualPos <= targetPos {
 		// Check if we're at an ANSI escape sequence
@@ -275,7 +275,7 @@ func getStyleAtPosition(s string, targetPos int) ansiStyle {
 			// Found an ANSI sequence at current position
 			seq := s[i : i+match[1]]
 			parsedStyle := parseANSISequence(seq)
-			
+
 			// Update current style (merge with existing)
 			if parsedStyle.fgColor != "" {
 				currentStyle.fgColor = parsedStyle.fgColor
@@ -286,7 +286,7 @@ func getStyleAtPosition(s string, targetPos int) ansiStyle {
 			if len(parsedStyle.attrs) > 0 {
 				currentStyle.attrs = parsedStyle.attrs
 			}
-			
+
 			i += match[1]
 		} else if i < len(s) {
 			// Regular character
@@ -298,7 +298,7 @@ func getStyleAtPosition(s string, targetPos int) ansiStyle {
 			visualPos++
 		}
 	}
-	
+
 	return currentStyle
 }
 
