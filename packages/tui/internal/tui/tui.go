@@ -465,6 +465,24 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			cmds = append(cmds, tea.SetClipboard(shareUrl))
 			cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
 		}
+	case commands.SessionUnshareCommand:
+		if a.app.Session.Id == "" {
+			return a, nil
+		}
+		response, err := a.app.Client.PostSessionUnshareWithResponse(
+			context.Background(),
+			client.PostSessionUnshareJSONRequestBody{
+				SessionID: a.app.Session.Id,
+			},
+		)
+		if err != nil {
+			slog.Error("Failed to unshare session", "error", err)
+			return a, toast.NewErrorToast("Failed to unshare session")
+		}
+		if response.JSON200 != nil && response.StatusCode() != 200 {
+			return a, toast.NewErrorToast("Failed to unshare session: " + string(response.Body))
+		}
+		cmds = append(cmds, toast.NewSuccessToast("Unshared the current session"))
 	case commands.SessionInterruptCommand:
 		if a.app.Session.Id == "" {
 			return a, nil

@@ -266,6 +266,7 @@ func (m *messagesComponent) header() string {
 	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
 	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
 		headerLines = append(headerLines, muted(m.app.Session.Share.Url))
+		headerLines = append(headerLines, base("/unshare")+muted(" to stop sharing"))
 	} else {
 		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
 	}
@@ -357,14 +358,14 @@ func (m *messagesComponent) home() string {
 		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
 	)
 
-	lines := []string{}
-	lines = append(lines, logoAndVersion)
-	lines = append(lines, "")
-	lines = append(lines, "")
-	// lines = append(lines, base("cwd ")+muted(cwd))
-	// lines = append(lines, base("config ")+muted(config))
-	// lines = append(lines, "")
-	lines = append(lines, commands)
+	lines := []string{
+		logoAndVersion,
+		"",
+		"",
+		//base("cwd ")+muted(cwd),
+		//base("config ")+muted(config)
+		commands,
+	}
 
 	return lipgloss.Place(
 		m.width,
