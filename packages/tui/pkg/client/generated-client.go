@@ -76,14 +76,16 @@ type ConfigInfo struct {
 				Input      float32  `json:"input"`
 				Output     float32  `json:"output"`
 			} `json:"cost,omitempty"`
-			Id    *string `json:"id,omitempty"`
-			Limit *struct {
+			Id          *string `json:"id,omitempty"`
+			LastUpdated *string `json:"last_updated,omitempty"`
+			Limit       *struct {
 				Context float32 `json:"context"`
 				Output  float32 `json:"output"`
 			} `json:"limit,omitempty"`
 			Name        *string                 `json:"name,omitempty"`
 			Options     *map[string]interface{} `json:"options,omitempty"`
 			Reasoning   *bool                   `json:"reasoning,omitempty"`
+			ReleaseDate *string                 `json:"release_date,omitempty"`
 			Temperature *bool                   `json:"temperature,omitempty"`
 			ToolCall    *bool                   `json:"tool_call,omitempty"`
 		} `json:"models"`
@@ -435,14 +437,16 @@ type ModelInfo struct {
 		Input      float32  `json:"input"`
 		Output     float32  `json:"output"`
 	} `json:"cost"`
-	Id    string `json:"id"`
-	Limit struct {
+	Id          string  `json:"id"`
+	LastUpdated *string `json:"last_updated,omitempty"`
+	Limit       struct {
 		Context float32 `json:"context"`
 		Output  float32 `json:"output"`
 	} `json:"limit"`
 	Name        string                 `json:"name"`
 	Options     map[string]interface{} `json:"options"`
 	Reasoning   bool                   `json:"reasoning"`
+	ReleaseDate *string                `json:"release_date,omitempty"`
 	Temperature bool                   `json:"temperature"`
 	ToolCall    bool                   `json:"tool_call"`
 }

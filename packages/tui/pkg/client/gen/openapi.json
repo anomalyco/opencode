@@ -1546,6 +1546,14 @@
                       "options": {
                         "type": "object",
                         "additionalProperties": {}
+                      },
+                      "release_date": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$"
+                      },
+                      "last_updated": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$"
                       }
                     }
                   }
@@ -1794,6 +1802,14 @@
           "options": {
             "type": "object",
             "additionalProperties": {}
+          },
+          "release_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$"
+          },
+          "last_updated": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}(-\\d{2})?$"
           }
         },
         "required": [
