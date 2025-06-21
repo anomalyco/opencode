@@ -1,4 +1,4 @@
-import type { CoreMessage, LanguageModelV1Prompt } from "ai"
+import type { LanguageModelV1Prompt } from "ai"
 import { unique } from "remeda"
 
 export namespace ProviderTransform {
