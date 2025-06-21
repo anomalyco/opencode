@@ -154,6 +154,10 @@ export namespace Config {
           "Model to use in the format of provider/model, eg anthropic/claude-2",
         )
         .optional(),
+      lightweight_model: z
+        .string()
+        .describe("Lightweight model to use for tasks like window title generation")
+        .optional(),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({
@@ -194,7 +198,7 @@ export namespace Config {
         )
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return result
   })
