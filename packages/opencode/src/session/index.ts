@@ -161,11 +161,12 @@ export namespace Session {
   }
 
   export async function unshare(id: string) {
+    const share = await Storage.readJSON<ShareInfo>("session/share/" + id)
     await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id)
+    await Share.remove(id, share.secret)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
