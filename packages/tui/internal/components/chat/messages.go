@@ -266,7 +266,6 @@ func (m *messagesComponent) header() string {
 	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
 	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
 		headerLines = append(headerLines, muted(m.app.Session.Share.Url))
-		headerLines = append(headerLines, base("/unshare")+muted(" to stop sharing"))
 	} else {
 		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
 	}
