@@ -403,8 +403,11 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 					Foreground(t.BackgroundElement()).
 					Bold(true)
 			} else {
-				// Inactive selection - no special styling like the original
-				itemStyle = baseStyle.Width(paneWidth)
+				// Inactive selection - use accent color to show selection
+				itemStyle = itemStyle.
+					Background(t.BackgroundElement()).
+					Foreground(t.Accent()).
+					Bold(true)
 			}
 		}
 
