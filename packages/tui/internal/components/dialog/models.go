@@ -103,10 +103,12 @@ var modelKeys = modelKeyMap{
 }
 
 func (m *modelDialog) Init() tea.Cmd {
-	// Initialize with current selections
+	if len(m.availableProviders) == 0 {
+		return nil
+	}
+
 	if m.app.MainProvider != nil {
 		m.mainProvider = *m.app.MainProvider
-		// Find and select current model
 		models := m.getModelsForProvider(m.mainProvider)
 		for i, model := range models {
 			if m.app.MainModel != nil && model.Id == m.app.MainModel.Id {
@@ -114,15 +116,15 @@ func (m *modelDialog) Init() tea.Cmd {
 				break
 			}
 		}
+	} else {
+		m.mainProvider = m.availableProviders[0]
 	}
 
-	// Initialize lightweight model selection from config
 	m.lightProvider = m.mainProvider
+
 	if m.app.LightProvider != nil && m.app.LightModel != nil {
-		// Use the lightweight provider and model from app state
 		m.lightProvider = *m.app.LightProvider
 
-		// Find the model in that provider
 		models := m.getModelsForProvider(m.lightProvider)
 		for i, model := range models {
 			if model.Id == m.app.LightModel.Id {
@@ -130,10 +132,7 @@ func (m *modelDialog) Init() tea.Cmd {
 				break
 			}
 		}
-	}
-
-	// If no lightweight model configured, try to select a default one
-	if m.lightSelectedIdx == 0 {
+	} else {
 		models := m.getModelsForProvider(m.lightProvider)
 		for i, model := range models {
 			if isLightweightModel(model) {
@@ -292,12 +291,19 @@ func (m *modelDialog) switchPane() {
 func (m *modelDialog) View() string {
 	t := theme.CurrentTheme()
 
-	// Base style for the content
+	if len(m.availableProviders) == 0 {
+		emptyStyle := lipgloss.NewStyle().
+			Background(t.BackgroundElement()).
+			Foreground(t.TextMuted()).
+			Padding(2, 4).
+			Align(lipgloss.Center)
+		return emptyStyle.Render("No providers configured. Please configure at least one provider.")
+	}
+
 	baseStyle := lipgloss.NewStyle().
 		Background(t.BackgroundElement()).
 		Foreground(t.Text())
 
-	// Render main model pane
 	mainPane := m.renderPane(
 		"Main Model",
 		m.mainProvider,
@@ -307,7 +313,6 @@ func (m *modelDialog) View() string {
 		baseStyle,
 	)
 
-	// Render lightweight model pane
 	lightPane := m.renderPane(
 		"Lightweight Model",
 		m.lightProvider,
@@ -317,7 +322,6 @@ func (m *modelDialog) View() string {
 		baseStyle,
 	)
 
-	// Create divider with background
 	dividerHeight := 1 + numVisibleModels + 1 // 1 header + models + 1 scroll line
 	dividerLines := make([]string, dividerHeight)
 	for i := range dividerLines {
@@ -328,7 +332,6 @@ func (m *modelDialog) View() string {
 		Foreground(t.TextMuted()).
 		Render(strings.Join(dividerLines, "\n"))
 
-	// Join panes horizontally
 	content := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		mainPane,
@@ -336,16 +339,13 @@ func (m *modelDialog) View() string {
 		lightPane,
 	)
 
-	// Apply background to entire content area
 	content = baseStyle.
 		Width(totalDialogWidth).
 		Height(dividerHeight).
 		Render(content)
 
-	// Scroll indicators like the original dialog
 	scrollIndicator := m.getScrollIndicators(totalDialogWidth)
 
-	// Final join with consistent background
 	if scrollIndicator != "" {
 		return baseStyle.
 			Width(totalDialogWidth).
@@ -362,7 +362,6 @@ func (m *modelDialog) View() string {
 func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, selectedIdx, scrollOffset int, isActive bool, baseStyle lipgloss.Style) string {
 	t := theme.CurrentTheme()
 
-	// Simple header like in the original dialog
 	headerText := fmt.Sprintf("%s (%s)", title, provider.Name)
 	headerStyle := lipgloss.NewStyle().
 		Width(paneWidth).
@@ -378,7 +377,6 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 
 	headerRendered := headerStyle.Render(headerText)
 
-	// Render models
 	models := m.getModelsForProvider(provider)
 	endIdx := min(scrollOffset+numVisibleModels, len(models))
 	modelItems := make([]string, 0, endIdx-scrollOffset)
@@ -387,23 +385,19 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 		model := models[i]
 		isLightweight := isLightweightModel(model)
 
-		// Build model display name
 		modelName := model.Name
 		if isLightweight {
 			modelName = fmt.Sprintf("⚡ %s", modelName)
 		}
 
-		// Apply styling based on selection and pane state
 		itemStyle := baseStyle.Width(paneWidth)
 		if i == selectedIdx {
 			if isActive {
-				// Active selection - use primary color like the original dialog
 				itemStyle = itemStyle.
 					Background(t.Primary()).
 					Foreground(t.BackgroundElement()).
 					Bold(true)
 			} else {
-				// Inactive selection - use accent color to show selection
 				itemStyle = itemStyle.
 					Background(t.BackgroundElement()).
 					Foreground(t.Accent()).
@@ -414,15 +408,12 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 		modelItems = append(modelItems, itemStyle.Render(modelName))
 	}
 
-	// Fill empty space if needed
 	for len(modelItems) < numVisibleModels {
 		modelItems = append(modelItems, baseStyle.Width(paneWidth).Render(" "))
 	}
 
-	// Join model items
 	modelList := lipgloss.JoinVertical(lipgloss.Left, modelItems...)
 
-	// Scroll indicators
 	scrollIndicatorContent := ""
 	if len(models) > numVisibleModels {
 		if scrollOffset > 0 {
@@ -436,7 +427,6 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 		}
 	}
 
-	// Scroll indicator
 	var scrollIndicator string
 	if scrollIndicatorContent != "" {
 		scrollIndicator = lipgloss.NewStyle().
@@ -447,11 +437,9 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 			Bold(true).
 			Render(scrollIndicatorContent)
 	} else {
-		// Empty line to maintain consistent height
 		scrollIndicator = baseStyle.Width(paneWidth).Render(" ")
 	}
 
-	// Build final pane with consistent structure
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		headerRendered,
@@ -463,7 +451,6 @@ func (m *modelDialog) renderPane(title string, provider client.ProviderInfo, sel
 func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 	var indicator string
 
-	// Check main pane scroll
 	mainModels := len(m.mainProvider.Models)
 	if mainModels > numVisibleModels {
 		if m.mainScrollOffset > 0 {
@@ -474,19 +461,16 @@ func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 		}
 	}
 
-	// Navigation help
 	if m.hScrollPossible {
 		indicator = "← " + indicator + "→"
 	}
 
-	// Add tab indicator
 	if indicator != "" {
 		indicator += " • [Tab] Switch pane"
 	}
 
 	if indicator == "" {
 		t := theme.CurrentTheme()
-		// Return empty line with background to maintain consistent height
 		return lipgloss.NewStyle().
 			Background(t.BackgroundElement()).
 			Width(maxWidth).
@@ -518,6 +502,16 @@ func (m *modelDialog) Close() tea.Cmd {
 func NewModelDialog(app *app.App) ModelDialog {
 	availableProviders, _ := app.ListProviders(context.Background())
 
+	if len(availableProviders) == 0 {
+		return &modelDialog{
+			app:                app,
+			availableProviders: availableProviders,
+			hScrollOffset:      0,
+			hScrollPossible:    false,
+			modal:              modal.New(modal.WithTitle("Select Models - No Providers Available")),
+		}
+	}
+
 	dialog := &modelDialog{
 		app:                app,
 		availableProviders: availableProviders,
@@ -528,7 +522,6 @@ func NewModelDialog(app *app.App) ModelDialog {
 		modal:              modal.New(modal.WithTitle("Select Models")),
 	}
 
-	// Initialize current selections
 	dialog.Init()
 
 	return dialog

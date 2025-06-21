@@ -121,17 +121,15 @@ func (m *editorComponent) Content() string {
 	}
 
 	model := ""
-	if m.app.MainModel != nil {
+	if m.app.MainModel != nil && m.app.MainProvider != nil {
 		model = muted(m.app.MainProvider.Name) + base(" "+m.app.MainModel.Name)
 
 		// show lightweight model if configured
-		if m.app.LightModel != nil {
-			if m.app.LightProvider != nil && m.app.LightProvider.Id == m.app.MainProvider.Id {
-				// Same provider – show friendly name
+		if m.app.LightModel != nil && m.app.LightProvider != nil {
+			if m.app.LightProvider.Id == m.app.MainProvider.Id {
 				model = model + muted(" (⚡"+m.app.LightModel.Name+")")
 			} else {
-				// Different provider – show model ID
-				model = model + muted(" (⚡"+m.app.LightModel.Id+")")
+				model = model + muted(" (⚡"+m.app.LightProvider.Name+"/"+m.app.LightModel.Name+")")
 			}
 		}
 	}

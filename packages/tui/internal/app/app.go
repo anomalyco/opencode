@@ -297,7 +297,6 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) CompactSession(ctx context.Context) tea.Cmd {
-	// Use lightweight model for summarization if available
 	providerID := a.MainProvider.Id
 	modelID := a.MainModel.Id
 	if a.LightProvider != nil && a.LightModel != nil {
