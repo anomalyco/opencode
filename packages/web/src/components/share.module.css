@@ -659,12 +659,12 @@
   }
 
   &[data-expanded="true"] {
-    [data-elment-markdown] {
+    [data-element-markdown] {
       display: block;
     }
   }
   &[data-expanded="false"] {
-    [data-elment-markdown] {
+    [data-element-markdown] {
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 3;

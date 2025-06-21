@@ -444,7 +444,7 @@ function MarkdownPart(props: MarkdownPartProps) {
       {...rest}
     >
       <MarkdownView
-        data-elment-markdown
+        data-element-markdown
         markdown={local.text}
         ref={(el) => (divEl = el)}
       />
@@ -726,7 +726,7 @@ export default function Share(props: {
     for (let i = 0; i < messages().length; i++) {
       const msg = messages()[i]
 
-      // TODO: Cleaup
+      // TODO: Cleanup
       // const system = result.messages.length === 0 && msg.role === "system"
       const assistant = msg.metadata?.assistant
 

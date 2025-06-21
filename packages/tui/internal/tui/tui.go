@@ -117,7 +117,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			updated, cmd := a.completions.Update(
-				app.CompletionDialogTriggerdMsg{
+				app.CompletionDialogTriggeredMsg{
 					InitialValue: initialValue,
 				},
 			)
@@ -178,7 +178,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 7. Fallback to editor. This is for other characters
-		// likek backspace, tab, etc.
+		// like backspace, tab, etc.
 		updatedEditor, cmd := a.editor.Update(msg)
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd
