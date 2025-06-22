@@ -46,7 +46,10 @@ export namespace Config {
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
-      headers: z.record(z.string(), z.string()).optional().describe("HTTP headers to send with requests to the remote MCP server"),
+      headers: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe("HTTP headers to send with requests to the remote MCP server"),
     })
     .strict()
     .openapi({
