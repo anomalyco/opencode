@@ -38,6 +38,8 @@ For more info on how to configure opencode [**head over to our docs**](https://o
 
 ### Contributing
 
+For any new features we'd appreciate it if you could open an issue first to discuss what you'd like to implement. We're pretty responsive there and it'll save you from working on something that we don't end up using. No need to do this for simpler fixes.
+
 To run opencode locally you need.
 
 - Bun
