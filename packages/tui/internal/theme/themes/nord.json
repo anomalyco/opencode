@@ -48,11 +48,11 @@
       "light": "nord10"
     },
     "text": {
-      "dark": "nord4",
+      "dark": "nord6",
       "light": "nord0"
     },
     "textMuted": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord1"
     },
     "background": {
@@ -64,7 +64,7 @@
       "light": "nord5"
     },
     "backgroundElement": {
-      "dark": "nord1",
+      "dark": "nord2",
       "light": "nord4"
     },
     "border": {
@@ -88,11 +88,11 @@
       "light": "nord11"
     },
     "diffContext": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord3"
     },
     "diffHunkHeader": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord3"
     },
     "diffHighlightAdded": {
@@ -148,7 +148,7 @@
       "light": "nord14"
     },
     "markdownBlockQuote": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord3"
     },
     "markdownEmph": {
@@ -160,7 +160,7 @@
       "light": "nord13"
     },
     "markdownHorizontalRule": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord3"
     },
     "markdownListItem": {
@@ -184,7 +184,7 @@
       "light": "nord0"
     },
     "syntaxComment": {
-      "dark": "nord3",
+      "dark": "#8B95A7",
       "light": "nord3"
     },
     "syntaxKeyword": {
