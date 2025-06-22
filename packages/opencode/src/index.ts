@@ -10,6 +10,7 @@ import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { ScrapCommand } from "./cli/cmd/scrap"
+import { GitCommitMsgCommand } from "./cli/cmd/git-commit-msg"
 import { Log } from "./util/log"
 import { AuthCommand, AuthLoginCommand } from "./cli/cmd/auth"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
@@ -120,6 +121,7 @@ const cli = yargs(hideBin(process.argv))
   .command(RunCommand)
   .command(GenerateCommand)
   .command(ScrapCommand)
+  .command(GitCommitMsgCommand)
   .command(AuthCommand)
   .command(UpgradeCommand)
   .fail((msg) => {
