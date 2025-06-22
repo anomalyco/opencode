@@ -46,7 +46,7 @@ export namespace App {
     const data = path.join(
       Global.Path.data,
       "project",
-      git ? git.split(path.sep).join("-") : "global",
+      git ? projectDirectoryName(git) : "global",
     )
     const stateFile = Bun.file(path.join(data, APP_JSON))
     const state = (await stateFile.json().catch(() => ({}))) as {
@@ -133,4 +133,10 @@ export namespace App {
       }),
     )
   }
+}
+
+function projectDirectoryName(path: string): string {
+  // Prefix prevents collision with "global" and with magic file names like "NIL" on Windows.
+  // TODO: Hash the path to prevent collisions.
+  return "_" + path.replace(/[^A-Za-z0-9_]/g, "-")
 }
