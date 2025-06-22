@@ -284,6 +284,13 @@
               "url": {
                 "type": "string",
                 "description": "URL of the remote MCP server"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "HTTP headers to send with requests to the remote MCP server"
               }
             },
             "required": [

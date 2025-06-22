@@ -44,8 +44,13 @@ Add a remote MCP servers under `mcp.remotemcp`.
   "mcp": {
     "remotemcp": {
       "type": "remote",
-      "url": "https://my-mcp-server.com"
+      "url": "https://my-mcp-server.com",
+      "headers": {
+        "Authorization": "Bearer $MYTOKEN"
+      }
     }
   }
 }
 ```
+
+You can use environment variables in the headers or URL of the request.
