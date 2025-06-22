@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
@@ -175,6 +176,8 @@ func (s StringItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.BaseStyle()
 
+	truncatedStr := truncate.StringWithTail(string(s), uint(width-1), "...")
+
 	var itemStyle lipgloss.Style
 	if selected {
 		itemStyle = baseStyle.
@@ -187,7 +190,7 @@ func (s StringItem) Render(selected bool, width int) string {
 			PaddingLeft(1)
 	}
 
-	return itemStyle.Render(string(s))
+	return itemStyle.Render(truncatedStr)
 }
 
 // NewStringList creates a new list component with string items

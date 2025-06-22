@@ -8,8 +8,6 @@ import (
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
-	"github.com/sst/opencode/internal/styles"
-	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 	"github.com/sst/opencode/pkg/client"
 )
@@ -19,33 +17,12 @@ type SessionDialog interface {
 	layout.Modal
 }
 
-type sessionItem client.SessionInfo
-
-func (s sessionItem) Render(selected bool, width int) string {
-	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle().
-		Width(width - 4).
-		Background(t.BackgroundElement())
-
-	if selected {
-		baseStyle = baseStyle.
-			Background(t.Primary()).
-			Foreground(t.BackgroundElement()).
-			Bold(true)
-	} else {
-		baseStyle = baseStyle.
-			Foreground(t.Text())
-	}
-
-	return baseStyle.Padding(0, 1).Render(s.Title)
-}
-
 type sessionDialog struct {
-	width             int
-	height            int
-	modal             *modal.Modal
-	selectedSessionID string
-	list              list.List[sessionItem]
+	width    int
+	height   int
+	modal    *modal.Modal
+	sessions []client.SessionInfo
+	list     list.List[list.StringItem]
 }
 
 func (s *sessionDialog) Init() tea.Cmd {
@@ -61,11 +38,11 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "enter":
-			if item, idx := s.list.GetSelectedItem(); idx >= 0 {
-				s.selectedSessionID = item.Id
+			if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
+				selectedSession := s.sessions[idx]
 				return s, tea.Sequence(
 					util.CmdHandler(modal.CloseModalMsg{}),
-					util.CmdHandler(app.SessionSelectedMsg(&item)),
+					util.CmdHandler(app.SessionSelectedMsg(&selectedSession)),
 				)
 			}
 		}
@@ -73,7 +50,7 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	listModel, cmd := s.list.Update(msg)
-	s.list = listModel.(list.List[sessionItem])
+	s.list = listModel.(list.List[list.StringItem])
 	return s, cmd
 }
 
@@ -89,23 +66,30 @@ func (s *sessionDialog) Close() tea.Cmd {
 func NewSessionDialog(app *app.App) SessionDialog {
 	sessions, _ := app.ListSessions(context.Background())
 
-	var sessionItems []sessionItem
+	var filteredSessions []client.SessionInfo
+	var sessionTitles []string
 	for _, sess := range sessions {
 		if sess.ParentID != nil {
 			continue
 		}
-		sessionItems = append(sessionItems, sessionItem(sess))
+		filteredSessions = append(filteredSessions, sess)
+		sessionTitles = append(sessionTitles, sess.Title)
 	}
 
-	list := list.NewListComponent(
-		sessionItems,
+	list := list.NewStringList(
+		sessionTitles,
 		10, // maxVisibleSessions
 		"No sessions available",
 		true, // useAlphaNumericKeys
 	)
+	list.SetMaxWidth(layout.Current.Container.Width - 12)
 
 	return &sessionDialog{
-		list:  list,
-		modal: modal.New(modal.WithTitle("Switch Session"), modal.WithMaxWidth(80)),
+		sessions: filteredSessions,
+		list:     list,
+		modal: modal.New(
+			modal.WithTitle("Switch Session"),
+			modal.WithMaxWidth(layout.Current.Container.Width-8),
+		),
 	}
 }

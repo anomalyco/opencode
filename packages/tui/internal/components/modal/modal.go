@@ -103,13 +103,13 @@ func (m *Modal) Render(contentView string, background string) string {
 			Bold(true).
 			Padding(0, 1)
 
-		escStyle := baseStyle.Foreground(t.TextMuted()).Bold(false)
+		escStyle := baseStyle.Foreground(t.TextMuted())
 		escText := escStyle.Render("esc")
 
 		// Calculate position for esc text
 		titleWidth := lipgloss.Width(m.title)
 		escWidth := lipgloss.Width(escText)
-		spacesNeeded := max(0, innerWidth-titleWidth-escWidth-3)
+		spacesNeeded := max(0, innerWidth-titleWidth-escWidth-2)
 		spacer := strings.Repeat(" ", spacesNeeded)
 		titleLine := m.title + spacer + escText
 		titleLine = titleStyle.Render(titleLine)
