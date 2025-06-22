@@ -44,7 +44,7 @@ type SendMsg struct {
 	Text        string
 	Attachments []Attachment
 }
-type CompletionDialogTriggerdMsg struct {
+type CompletionDialogTriggeredMsg struct {
 	InitialValue string
 }
 

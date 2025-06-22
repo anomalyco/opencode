@@ -5,8 +5,8 @@ package image
 import (
 	"bytes"
 	"fmt"
-	"image"
 	"github.com/atotto/clipboard"
+	"image"
 )
 
 func GetImageFromClipboard() ([]byte, string, error) {
@@ -28,8 +28,6 @@ func GetImageFromClipboard() ([]byte, string, error) {
 
 }
 
-
-
 func binaryToImage(data []byte) ([]byte, error) {
 	reader := bytes.NewReader(data)
 	img, _, err := image.Decode(reader)
@@ -39,7 +37,6 @@ func binaryToImage(data []byte) ([]byte, error) {
 
 	return ImageToBytes(img)
 }
-
 
 func min(a, b int) int {
 	if a < b {

@@ -133,4 +133,3 @@ func TestLoadThemesFromDirectories(t *testing.T) {
 		t.Error("Override theme not properly loaded")
 	}
 }
-

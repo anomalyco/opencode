@@ -116,7 +116,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case []CompletionItemI:
 		c.list.SetItems(msg)
-	case app.CompletionDialogTriggerdMsg:
+	case app.CompletionDialogTriggeredMsg:
 		c.pseudoSearchTextArea.SetValue(msg.InitialValue)
 	case tea.KeyMsg:
 		if c.pseudoSearchTextArea.Focused() {
