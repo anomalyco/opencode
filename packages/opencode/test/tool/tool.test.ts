@@ -14,7 +14,7 @@ describe("tool.glob", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       let result = await GlobTool.execute(
         {
-          pattern: "./node_modules/**/*",
+          pattern: "../../node_modules/**/*",
           path: undefined,
         },
         ctx,
@@ -33,7 +33,7 @@ describe("tool.glob", () => {
       )
       expect(result.metadata).toMatchObject({
         truncated: false,
-        count: 2,
+        count: 3,
       })
     })
   })
