@@ -63,10 +63,18 @@ export const BashTool = Tool.define({
       metadata: {
         stderr,
         stdout,
+        exit: process.exitCode,
         description: params.description,
         title: params.command,
       },
-      output: stdout.replaceAll(/\x1b\[[0-9;]*m/g, ""),
+      output: [
+        `<stdout>`,
+        stdout ?? "",
+        `</stdout>`,
+        `<stderr>`,
+        stderr ?? "",
+        `</stderr>`,
+      ].join("\n"),
     }
   },
 })
