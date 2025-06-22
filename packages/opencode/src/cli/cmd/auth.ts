@@ -70,10 +70,6 @@ export const AuthLoginCommand = cmd({
           })),
         ),
         {
-          value: "github-copilot",
-          label: "GitHub Copilot",
-        },
-        {
           value: "other",
           label: "Other",
         },
