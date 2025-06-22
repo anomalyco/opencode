@@ -25,6 +25,7 @@ type commandsComponent struct {
 	app           *app.App
 	width, height int
 	showKeybinds  bool
+	showAll       bool
 	background    *compat.AdaptiveColor
 	limit         *int
 }
@@ -75,17 +76,32 @@ func (c *commandsComponent) View() string {
 		keybindStyle = keybindStyle.Background(*c.background)
 	}
 
-	var commandsWithTriggers []commands.Command
+	var commandsToShow []commands.Command
+	var triggeredCommands []commands.Command
+	var untriggeredCommands []commands.Command
+
 	for _, cmd := range c.app.Commands.Sorted() {
-		if cmd.Trigger != "" {
-			commandsWithTriggers = append(commandsWithTriggers, cmd)
+		if c.showAll || cmd.Trigger != "" {
+			if cmd.Trigger != "" {
+				triggeredCommands = append(triggeredCommands, cmd)
+			} else if c.showAll {
+				untriggeredCommands = append(untriggeredCommands, cmd)
+			}
 		}
 	}
-	if c.limit != nil && len(commandsWithTriggers) > *c.limit {
-		commandsWithTriggers = commandsWithTriggers[:*c.limit]
+
+	// Combine triggered commands first, then untriggered
+	commandsToShow = append(commandsToShow, triggeredCommands...)
+	commandsToShow = append(commandsToShow, untriggeredCommands...)
+
+	if c.limit != nil && len(commandsToShow) > *c.limit {
+		commandsToShow = commandsToShow[:*c.limit]
 	}
 
-	if len(commandsWithTriggers) == 0 {
+	if len(commandsToShow) == 0 {
+		if c.showAll {
+			return styles.Muted().Render("No commands available")
+		}
 		return styles.Muted().Render("No commands with triggers available")
 	}
 
@@ -101,10 +117,15 @@ func (c *commandsComponent) View() string {
 		keybinds    string
 	}
 
-	rows := make([]commandRow, 0, len(commandsWithTriggers))
+	rows := make([]commandRow, 0, len(commandsToShow))
 
-	for _, cmd := range commandsWithTriggers {
-		trigger := "/" + cmd.Trigger
+	for _, cmd := range commandsToShow {
+		trigger := ""
+		if cmd.Trigger != "" {
+			trigger = "/" + cmd.Trigger
+		} else {
+			trigger = string(cmd.Name)
+		}
 		description := cmd.Description
 
 		// Format keybindings
@@ -144,6 +165,7 @@ func (c *commandsComponent) View() string {
 	// Build the output
 	var output strings.Builder
 
+	maxWidth := 0
 	for _, row := range rows {
 		// Pad each column to align properly
 		trigger := fmt.Sprintf("%-*s", maxTriggerWidth, row.trigger)
@@ -160,10 +182,14 @@ func (c *commandsComponent) View() string {
 		}
 
 		output.WriteString(line + "\n")
+		maxWidth = max(maxWidth, lipgloss.Width(line))
 	}
 
 	// Remove trailing newline
 	result := strings.TrimSuffix(output.String(), "\n")
+	if c.background != nil {
+		result = lipgloss.NewStyle().Background(c.background).Width(maxWidth).Render(result)
+	}
 
 	return result
 }
@@ -188,11 +214,18 @@ func WithLimit(limit int) Option {
 	}
 }
 
+func WithShowAll(showAll bool) Option {
+	return func(c *commandsComponent) {
+		c.showAll = showAll
+	}
+}
+
 func New(app *app.App, opts ...Option) CommandsComponent {
 	c := &commandsComponent{
 		app:          app,
 		background:   nil,
 		showKeybinds: true,
+		showAll:      false,
 	}
 	for _, opt := range opts {
 		opt(c)
