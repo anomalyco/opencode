@@ -1,4 +1,5 @@
 import { AuthAnthropic } from "../../auth/anthropic"
+import { AuthGithubCopilot } from "../../auth/github-copilot"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -16,7 +17,7 @@ export const AuthCommand = cmd({
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .demandCommand(),
-  async handler() { },
+  async handler() {},
 })
 
 export const AuthListCommand = cmd({
@@ -47,8 +48,9 @@ export const AuthLoginCommand = cmd({
     const providers = await ModelsDev.get()
     const priority: Record<string, number> = {
       anthropic: 0,
-      openai: 1,
-      google: 2,
+      "github-copilot": 1,
+      openai: 2,
+      google: 3,
     }
     let provider = await prompts.select({
       message: "Select provider",
@@ -67,6 +69,10 @@ export const AuthLoginCommand = cmd({
             hint: priority[x.id] === 0 ? "recommended" : undefined,
           })),
         ),
+        {
+          value: "github-copilot",
+          label: "GitHub Copilot",
+        },
         {
           value: "other",
           label: "Other",
@@ -144,6 +150,37 @@ export const AuthLoginCommand = cmd({
         prompts.outro("Done")
         return
       }
+    }
+
+    if (provider === "github-copilot") {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      const deviceInfo = await AuthGithubCopilot.authorize()
+
+      prompts.note(
+        `Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`,
+      )
+
+      const spinner = prompts.spinner()
+      spinner.start("Waiting for authorization...")
+
+      while (true) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, deviceInfo.interval * 1000),
+        )
+        const status = await AuthGithubCopilot.poll(deviceInfo.device)
+        if (status === "pending") continue
+        if (status === "complete") {
+          spinner.stop("Login successful")
+          break
+        }
+        if (status === "failed") {
+          spinner.stop("Failed to authorize", 1)
+          break
+        }
+      }
+
+      prompts.outro("Done")
+      return
     }
 
     const key = await prompts.password({

@@ -19,6 +19,7 @@ import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
+import { AuthGithubCopilot } from "../auth/github-copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -56,6 +57,41 @@ export namespace Provider {
               ...init.headers,
               authorization: `Bearer ${access}`,
               "anthropic-beta": "oauth-2025-04-20",
+            }
+            delete headers["x-api-key"]
+            return fetch(input, {
+              ...init,
+              headers,
+            })
+          },
+        },
+      }
+    },
+    "github-copilot": async (provider) => {
+      const info = await AuthGithubCopilot.access()
+      if (!info) return false
+
+      if (provider && provider.models) {
+        for (const model of Object.values(provider.models)) {
+          model.cost = {
+            input: 0,
+            output: 0,
+          }
+        }
+      }
+
+      return {
+        options: {
+          apiKey: "",
+          async fetch(input: any, init: any) {
+            const token = await AuthGithubCopilot.access()
+            if (!token) throw new Error("GitHub Copilot authentication expired")
+            const headers = {
+              ...init.headers,
+              Authorization: `Bearer ${token}`,
+              "User-Agent": "GithubCopilot/1.155.0",
+              "Editor-Version": "vscode/1.85.1",
+              "Editor-Plugin-Version": "copilot/1.155.0",
             }
             delete headers["x-api-key"]
             return fetch(input, {
@@ -208,8 +244,9 @@ export namespace Provider {
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
       if (disabled.has(providerID)) continue
       const result = await fn(database[providerID])
-      if (result)
+      if (result) {
         mergeProvider(providerID, result.options, "custom", result.getModel)
+      }
     }
 
     // load config
