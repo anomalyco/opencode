@@ -189,6 +189,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.messages.Update(msg)
 		a.messages = updated.(chat.MessagesComponent)
 		cmds = append(cmds, cmd)
+  return a, tea.Batch(cmds...)
 	case tea.BackgroundColorMsg:
 		styles.Terminal = &styles.TerminalInfo{
 			BackgroundIsDark: msg.IsDark(),
