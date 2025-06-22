@@ -1,25 +1,24 @@
 package dialog
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/sst/opencode/internal/commands"
+	"github.com/sst/opencode/internal/app"
+	commandsComponent "github.com/sst/opencode/internal/components/commands"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/theme"
 )
 
 type helpDialog struct {
-	width    int
-	height   int
-	modal    *modal.Modal
-	commands []commands.Command
+	width             int
+	height            int
+	modal             *modal.Modal
+	app               *app.App
+	commandsComponent commandsComponent.CommandsComponent
 }
 
 func (h *helpDialog) Init() tea.Cmd {
-	return nil
+	return h.commandsComponent.Init()
 }
 
 func (h *helpDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -27,45 +26,17 @@ func (h *helpDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		h.width = msg.Width
 		h.height = msg.Height
+		h.commandsComponent.SetSize(msg.Width, msg.Height)
 	}
-	return h, nil
+	
+	_, cmd := h.commandsComponent.Update(msg)
+	return h, cmd
 }
 
 func (h *helpDialog) View() string {
 	t := theme.CurrentTheme()
-	keyStyle := lipgloss.NewStyle().
-		Background(t.BackgroundElement()).
-		Foreground(t.Text()).
-		Bold(true)
-	descStyle := lipgloss.NewStyle().
-		Background(t.BackgroundElement()).
-		Foreground(t.TextMuted())
-	contentStyle := lipgloss.NewStyle().
-		PaddingLeft(1).Background(t.BackgroundElement())
-
-	lines := []string{}
-	for _, b := range h.commands {
-		// Only interested in slash commands
-		if b.Trigger == "" {
-			continue
-		}
-
-		content := keyStyle.Render("/" + b.Trigger)
-		content += descStyle.Render(" " + b.Description)
-		// for i, key := range b.Keybindings {
-		// 	if i == 0 {
-		// keyString := " (" + key.Key + ")"
-		// space := max(h.width-lipgloss.Width(content)-lipgloss.Width(keyString), 0)
-		// spacer := strings.Repeat(" ", space)
-		// content += descStyle.Render(spacer)
-		// content += descStyle.Render(keyString)
-		// 	}
-		// }
-
-		lines = append(lines, contentStyle.Render(content))
-	}
-
-	return strings.Join(lines, "\n")
+	h.commandsComponent.SetBackgroundColor(t.BackgroundElement())
+	return h.commandsComponent.View()
 }
 
 func (h *helpDialog) Render(background string) string {
@@ -80,9 +51,10 @@ type HelpDialog interface {
 	layout.Modal
 }
 
-func NewHelpDialog(commands []commands.Command) HelpDialog {
+func NewHelpDialog(app *app.App) HelpDialog {
 	return &helpDialog{
-		commands: commands,
-		modal:    modal.New(modal.WithTitle("Help")),
+		app:               app,
+		commandsComponent: commandsComponent.New(app, commandsComponent.WithBackground(theme.CurrentTheme().BackgroundElement())),
+		modal:             modal.New(modal.WithTitle("Help")),
 	}
 }

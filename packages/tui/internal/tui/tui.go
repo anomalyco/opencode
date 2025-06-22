@@ -363,7 +363,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	}
 	switch command.Name {
 	case commands.AppHelpCommand:
-		helpDialog := dialog.NewHelpDialog(a.app.Commands.Sorted())
+		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
 	case commands.EditorOpenCommand:
 		if a.app.IsBusy() {
