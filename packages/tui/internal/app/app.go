@@ -252,17 +252,19 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) CompactSession(ctx context.Context) tea.Cmd {
-	response, err := a.Client.PostSessionSummarizeWithResponse(ctx, client.PostSessionSummarizeJSONRequestBody{
-		SessionID:  a.Session.Id,
-		ProviderID: a.Provider.Id,
-		ModelID:    a.Model.Id,
-	})
-	if err != nil {
-		slog.Error("Failed to compact session", "error", err)
-	}
-	if response != nil && response.StatusCode() != 200 {
-		slog.Error("Failed to compact session", "error", response.StatusCode)
-	}
+	go func() {
+		response, err := a.Client.PostSessionSummarizeWithResponse(ctx, client.PostSessionSummarizeJSONRequestBody{
+			SessionID:  a.Session.Id,
+			ProviderID: a.Provider.Id,
+			ModelID:    a.Model.Id,
+		})
+		if err != nil {
+			slog.Error("Failed to compact session", "error", err)
+		}
+		if response != nil && response.StatusCode() != 200 {
+			slog.Error("Failed to compact session", "error", response.StatusCode)
+		}
+	}()
 	return nil
 }
 

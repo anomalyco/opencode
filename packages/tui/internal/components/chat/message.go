@@ -25,6 +25,8 @@ import (
 func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
 	r := styles.GetMarkdownRenderer(width, backgroundColor)
 	content = strings.ReplaceAll(content, app.RootPath+"/", "")
+	content = strings.ReplaceAll(content, "<", "\\<")
+	content = strings.ReplaceAll(content, ">", "\\>")
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")
 
@@ -44,7 +46,6 @@ func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor)
 			}
 		}
 	}
-
 	content = strings.Join(lines, "\n")
 	return strings.TrimSuffix(content, "\n")
 }
