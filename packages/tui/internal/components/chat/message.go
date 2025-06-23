@@ -25,8 +25,6 @@ import (
 func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
 	r := styles.GetMarkdownRenderer(width, backgroundColor)
 	content = strings.ReplaceAll(content, app.RootPath+"/", "")
-	content = strings.ReplaceAll(content, "<", "\\<")
-	content = strings.ReplaceAll(content, ">", "\\>")
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")
 
@@ -229,6 +227,10 @@ func renderText(message client.MessageInfo, text string, author string) string {
 	markdownWidth := min(textWidth, width-padding-4) // -4 for the border and padding
 	if message.Role == client.Assistant {
 		markdownWidth = width - padding - 4 - 2
+	}
+	if message.Role == client.User {
+		text = strings.ReplaceAll(text, "<", "\\<")
+		text = strings.ReplaceAll(text, ">", "\\>")
 	}
 	content := toMarkdown(text, markdownWidth, t.BackgroundPanel())
 	content = strings.Join([]string{content, info}, "\n")
