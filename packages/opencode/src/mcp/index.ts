@@ -3,8 +3,22 @@ import { Experimental_StdioMCPTransport } from "ai/mcp-stdio"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import { substituteEnvVars, substituteEnvVarsInHeaders, substituteEnvVarsInObject } from "../util/env-substitution"
+import { Log } from "../util/log"
+import { NamedError } from "../util/error"
+import { z } from "zod"
+import { Session } from "../session"
+import { Bus } from "../bus"
 
 export namespace MCP {
+  const log = Log.create({ service: "mcp" })
+
+  export const Failed = NamedError.create(
+    "MCPFailed",
+    z.object({
+      name: z.string(),
+    }),
+  )
+
   const state = App.state(
     "mcp",
     async () => {
@@ -13,33 +27,62 @@ export namespace MCP {
         [name: string]: Awaited<ReturnType<typeof experimental_createMCPClient>>
       } = {}
       for (const [key, mcp] of Object.entries(cfg.mcp ?? {})) {
+        log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
           const url = substituteEnvVars(mcp.url)
           const headers = substituteEnvVarsInHeaders(mcp.headers)
           
-          clients[key] = await experimental_createMCPClient({
+          const client = await experimental_createMCPClient({
             name: key,
             transport: {
               type: "sse",
               url,
               headers,
             },
-          })
+          }).catch(() => {})
+          if (!client) {
+            Bus.publish(Session.Event.Error, {
+              error: {
+                name: "UnknownError",
+                data: {
+                  message: `MCP server ${key} failed to start`,
+                },
+              },
+            })
+            continue
+          }
+          clients[key] = client
         }
 
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command.map(arg => substituteEnvVars(arg))
           const environment = mcp.environment ? substituteEnvVarsInObject(mcp.environment) : undefined
           
-          clients[key] = await experimental_createMCPClient({
+          const client = await experimental_createMCPClient({
             name: key,
             transport: new Experimental_StdioMCPTransport({
               stderr: "ignore",
               command: cmd,
               args,
-              env: environment,
+              env: {
+                ...process.env,
+                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+                ...environment,
+              },
             }),
-          })
+          }).catch(() => {})
+          if (!client) {
+            Bus.publish(Session.Event.Error, {
+              error: {
+                name: "UnknownError",
+                data: {
+                  message: `MCP server ${key} failed to start`,
+                },
+              },
+            })
+            continue
+          }
+          clients[key] = client
         }
       }
 

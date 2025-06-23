@@ -20,6 +20,9 @@ import { Bus } from "./bus"
 import { Config } from "./config/config"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
+import { MCP } from "./mcp"
+
+const cancel = new AbortController()
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
@@ -72,6 +75,7 @@ const cli = yargs(hideBin(process.argv))
           }
           const proc = Bun.spawn({
             cmd: [...cmd, ...process.argv.slice(2)],
+            signal: cancel.signal,
             cwd,
             stdout: "inherit",
             stderr: "inherit",
@@ -157,3 +161,5 @@ try {
       "Unexpected error, check log file at " + Log.file() + " for more details",
     )
 }
+
+cancel.abort()
