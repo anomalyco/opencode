@@ -189,7 +189,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.messages.Update(msg)
 		a.messages = updated.(chat.MessagesComponent)
 		cmds = append(cmds, cmd)
-  return a, tea.Batch(cmds...)
+		return a, tea.Batch(cmds...)
 	case tea.BackgroundColorMsg:
 		styles.Terminal = &styles.TerminalInfo{
 			BackgroundIsDark: msg.IsDark(),
@@ -487,6 +487,11 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
 	case commands.InputNewlineCommand:
+		cmds = append(cmds, toast.NewInfoToast("Press enter to submit"))
+		cmds = append(cmds, toast.NewWarningToast("Press shift+enter to submit and create a new line"))
+		cmds = append(cmds, toast.NewErrorToast("Press shift+enter to submit and create a new line"))
+		cmds = append(cmds, toast.NewSuccessToast("Press shift+enter to submit and create a new line"))
+
 		updated, cmd := a.editor.Newline()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)

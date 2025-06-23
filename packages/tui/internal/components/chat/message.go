@@ -228,7 +228,7 @@ func renderText(message client.MessageInfo, text string, author string) string {
 	textWidth := max(lipgloss.Width(text), lipgloss.Width(info))
 	markdownWidth := min(textWidth, width-padding-4) // -4 for the border and padding
 	if message.Role == client.Assistant {
-		markdownWidth = width - padding - 4
+		markdownWidth = width - padding - 4 - 2
 	}
 	content := toMarkdown(text, markdownWidth, t.BackgroundPanel())
 	content = strings.Join([]string{content, info}, "\n")
