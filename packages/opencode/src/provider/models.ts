@@ -57,7 +57,7 @@ export namespace ModelsDev {
     }
     refresh()
     const json = await data()
-    return JSON.parse(json)
+    return JSON.parse(json) as Record<string, Provider>
   }
 
   async function refresh() {
