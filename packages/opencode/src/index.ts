@@ -20,7 +20,6 @@ import { Bus } from "./bus"
 import { Config } from "./config/config"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
-import { MCP } from "./mcp"
 
 const cancel = new AbortController()
 

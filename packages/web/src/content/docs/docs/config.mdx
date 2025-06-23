@@ -89,3 +89,21 @@ You can configure MCP servers you want to use through the `mcp` option.
 ```
 
 [Learn more here](/docs/mcp-servers).
+
+---
+
+### Disabled providers
+
+You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
+- It won't be loaded even if environment variables are set
+- It won't be loaded even if API keys are configured through `opencode auth login`
+- The provider's models won't appear in the model selection list
