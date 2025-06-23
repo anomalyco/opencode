@@ -22,21 +22,18 @@ import (
 	"golang.org/x/text/language"
 )
 
-// processInlineCode handles escaping of angle brackets outside of inline code blocks
 func processInlineCode(line string) string {
 	var result strings.Builder
 	inCode := false
 	
 	for i := 0; i < len(line); i++ {
 		if i < len(line)-1 && line[i] == '`' && line[i+1] != '`' {
-			// Toggle inline code state
+			// Switching in or out of inline code
 			inCode = !inCode
 			result.WriteByte('`')
 		} else if line[i] == '<' && !inCode {
-			// Escape < only if not in inline code
 			result.WriteString("\\<")
 		} else if line[i] == '>' && !inCode {
-			// Escape > only if not in inline code
 			result.WriteString("\\>")
 		} else {
 			result.WriteByte(line[i])
@@ -46,35 +43,27 @@ func processInlineCode(line string) string {
 	return result.String()
 }
 
-func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
-	r := styles.GetMarkdownRenderer(width, backgroundColor)
-	content = strings.ReplaceAll(content, app.RootPath+"/", "")
-	
-	// Process content to escape HTML tags only outside of code blocks
+func processContentForAngleBrackets(content string) string {
 	var processed strings.Builder
 	inCodeBlock := false
 	codeBlockMarker := ""
 	
-	// Split content by lines to process code blocks
 	contentLines := strings.Split(content, "\n")
 	for i, line := range contentLines {
 		// Check for code block markers (``` or ~~~)
 		if strings.HasPrefix(strings.TrimSpace(line), "```") || strings.HasPrefix(strings.TrimSpace(line), "~~~") {
 			marker := line[:3]
 			if !inCodeBlock {
-				// Start of code block
 				inCodeBlock = true
 				codeBlockMarker = marker
 			} else if strings.HasPrefix(strings.TrimSpace(line), codeBlockMarker) {
-				// End of code block
 				inCodeBlock = false
 			}
 			processed.WriteString(line)
 		} else if inCodeBlock {
-			// Inside code block - don't escape angle brackets
 			processed.WriteString(line)
 		} else {
-			// Outside code block - handle inline code and escape angle brackets
+			// Outside code block - handle inline code and escape any non-backticked-enclosed angle brackets
 			processedLine := processInlineCode(line)
 			processed.WriteString(processedLine)
 		}
@@ -85,7 +74,14 @@ func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor)
 		}
 	}
 	
-	content = processed.String()
+	return processed.String()
+}
+
+func toMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
+	r := styles.GetMarkdownRenderer(width, backgroundColor)
+	content = strings.ReplaceAll(content, app.RootPath+"/", "")
+	content = processContentForAngleBrackets(content)
+	
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")
 
