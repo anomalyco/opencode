@@ -89,9 +89,11 @@ export namespace Provider {
             const headers = {
               ...init.headers,
               Authorization: `Bearer ${token}`,
-              "User-Agent": "GithubCopilot/1.155.0",
-              "Editor-Version": "vscode/1.85.1",
-              "Editor-Plugin-Version": "copilot/1.155.0",
+              "User-Agent": "GitHubCopilotChat/0.26.7",
+              "Editor-Version": "vscode/1.99.3",
+              "Editor-Plugin-Version": "copilot-chat/0.26.7",
+              "Copilot-Integration-Id": "vscode-chat",
+              "Openai-Intent": "conversation-edits",
             }
             delete headers["x-api-key"]
             return fetch(input, {
