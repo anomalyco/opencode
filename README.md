@@ -34,7 +34,7 @@ paru -S opencode-bin               # Arch Linux
 
 ### Documentation
 
-For more info on how to configure opencode [**head over to our docs**](https://opencode.ai/docs).
+For more info on how to configure opencode, including details on providers, models, MCP servers, and more, [**head over to our docs**](https://opencode.ai/docs).
 
 ### Contributing
 
