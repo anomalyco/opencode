@@ -10,14 +10,14 @@ import { map, pipe, sortBy, values } from "remeda"
 
 export const AuthCommand = cmd({
   command: "auth",
-  describe: "Manage credentials",
+  describe: "manage credentials",
   builder: (yargs) =>
     yargs
       .command(AuthLoginCommand)
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const AuthListCommand = cmd({
@@ -41,7 +41,7 @@ export const AuthListCommand = cmd({
 
 export const AuthLoginCommand = cmd({
   command: "login",
-  describe: "login to a provider",
+  describe: "log in to a provider",
   async handler() {
     UI.empty()
     prompts.intro("Add credential")
@@ -195,7 +195,7 @@ export const AuthLoginCommand = cmd({
 
 export const AuthLogoutCommand = cmd({
   command: "logout",
-  describe: "logout from a configured provider",
+  describe: "log out from a configured provider",
   async handler() {
     UI.empty()
     const credentials = await Auth.all().then((x) => Object.entries(x))

@@ -25,7 +25,7 @@ const TOOL: Record<string, [string, string]> = {
 
 export const RunCommand = cmd({
   command: "run [message..]",
-  describe: "Run opencode with a message",
+  describe: "run opencode with a message",
   builder: (yargs: Argv) => {
     return yargs
       .positional("message", {
@@ -36,12 +36,12 @@ export const RunCommand = cmd({
       })
       .option("continue", {
         alias: ["c"],
-        describe: "Continue the last session",
+        describe: "continue the last session",
         type: "boolean",
       })
       .option("session", {
         alias: ["s"],
-        describe: "Session ID to continue",
+        describe: "session id to continue",
         type: "string",
       })
       .option("share", {
@@ -51,7 +51,7 @@ export const RunCommand = cmd({
       .option("model", {
         type: "string",
         alias: ["m"],
-        describe: "Model to use in the format of provider/model",
+        describe: "model to use in the format of provider/model",
       })
   },
   handler: async (args) => {
