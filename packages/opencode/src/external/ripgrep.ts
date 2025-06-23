@@ -116,14 +116,17 @@ export namespace Ripgrep {
   export async function files(input: {
     cwd: string
     query?: string
+    glob?: string
     limit?: number
   }) {
-    const commands = [`${await filepath()} --files --hidden --glob='!.git/*'`]
+    const commands = [
+      `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
+    ]
     if (input.query)
       commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
     if (input.limit) commands.push(`head -n ${input.limit}`)
     const joined = commands.join(" | ")
-    const result = await $`${{ raw: joined }}`.cwd(input.cwd).text()
+    const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
     return result.split("\n").filter(Boolean)
   }
 }

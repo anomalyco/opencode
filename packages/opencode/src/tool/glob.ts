@@ -3,6 +3,7 @@ import path from "path"
 import { Tool } from "./tool"
 import { App } from "../app/app"
 import DESCRIPTION from "./glob.txt"
+import { Ripgrep } from "../external/ripgrep"
 
 export const GlobTool = Tool.define({
   id: "glob",
@@ -24,10 +25,12 @@ export const GlobTool = Tool.define({
       : path.resolve(app.path.cwd, search)
 
     const limit = 100
-    const glob = new Bun.Glob(params.pattern)
     const files = []
     let truncated = false
-    for await (const file of glob.scan({ cwd: search, dot: true })) {
+    for (const file of await Ripgrep.files({
+      cwd: search,
+      glob: params.pattern,
+    })) {
       if (files.length >= limit) {
         truncated = true
         break
