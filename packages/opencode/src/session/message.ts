@@ -135,53 +135,55 @@ export namespace Message {
       id: z.string(),
       role: z.enum(["user", "assistant"]),
       parts: z.array(Part),
-      metadata: z.object({
-        time: z.object({
-          created: z.number(),
-          completed: z.number().optional(),
-        }),
-        error: z
-          .discriminatedUnion("name", [
-            Provider.AuthError.Schema,
-            NamedError.Unknown.Schema,
-          ])
-          .optional(),
-        sessionID: z.string(),
-        tool: z.record(
-          z.string(),
-          z
+      metadata: z
+        .object({
+          time: z.object({
+            created: z.number(),
+            completed: z.number().optional(),
+          }),
+          error: z
+            .discriminatedUnion("name", [
+              Provider.AuthError.Schema,
+              NamedError.Unknown.Schema,
+            ])
+            .optional(),
+          sessionID: z.string(),
+          tool: z.record(
+            z.string(),
+            z
+              .object({
+                title: z.string(),
+                time: z.object({
+                  start: z.number(),
+                  end: z.number(),
+                }),
+              })
+              .catchall(z.any()),
+          ),
+          assistant: z
             .object({
-              title: z.string(),
-              time: z.object({
-                start: z.number(),
-                end: z.number(),
+              system: z.string().array(),
+              modelID: z.string(),
+              providerID: z.string(),
+              path: z.object({
+                cwd: z.string(),
+                root: z.string(),
+              }),
+              cost: z.number(),
+              summary: z.boolean().optional(),
+              tokens: z.object({
+                input: z.number(),
+                output: z.number(),
+                reasoning: z.number(),
+                cache: z.object({
+                  read: z.number(),
+                  write: z.number(),
+                }),
               }),
             })
-            .catchall(z.any()),
-        ),
-        assistant: z
-          .object({
-            system: z.string().array(),
-            modelID: z.string(),
-            providerID: z.string(),
-            path: z.object({
-              cwd: z.string(),
-              root: z.string(),
-            }),
-            cost: z.number(),
-            summary: z.boolean().optional(),
-            tokens: z.object({
-              input: z.number(),
-              output: z.number(),
-              reasoning: z.number(),
-              cache: z.object({
-                read: z.number(),
-                write: z.number(),
-              }),
-            }),
-          })
-          .optional(),
-      }),
+            .optional(),
+        })
+        .openapi({ ref: "Message.Metadata" }),
     })
     .openapi({
       ref: "Message.Info",

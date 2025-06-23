@@ -78,9 +78,11 @@ type ConfigInfo struct {
 				Context float32 `json:"context"`
 				Output  float32 `json:"output"`
 			} `json:"limit,omitempty"`
-			Name        *string `json:"name,omitempty"`
-			Reasoning   *bool   `json:"reasoning,omitempty"`
-			Temperature *bool   `json:"temperature,omitempty"`
+			Name        *string                 `json:"name,omitempty"`
+			Options     *map[string]interface{} `json:"options,omitempty"`
+			Reasoning   *bool                   `json:"reasoning,omitempty"`
+			Temperature *bool                   `json:"temperature,omitempty"`
+			ToolCall    *bool                   `json:"tool_call,omitempty"`
 		} `json:"models"`
 		Name    *string                 `json:"name,omitempty"`
 		Npm     *string                 `json:"npm,omitempty"`
@@ -290,47 +292,53 @@ type InstallationInfo struct {
 
 // MessageInfo defines model for Message.Info.
 type MessageInfo struct {
-	Id       string `json:"id"`
-	Metadata struct {
-		Assistant *struct {
-			Cost    float32 `json:"cost"`
-			ModelID string  `json:"modelID"`
-			Path    struct {
-				Cwd  string `json:"cwd"`
-				Root string `json:"root"`
-			} `json:"path"`
-			ProviderID string   `json:"providerID"`
-			Summary    *bool    `json:"summary,omitempty"`
-			System     []string `json:"system"`
-			Tokens     struct {
-				Cache struct {
-					Read  float32 `json:"read"`
-					Write float32 `json:"write"`
-				} `json:"cache"`
-				Input     float32 `json:"input"`
-				Output    float32 `json:"output"`
-				Reasoning float32 `json:"reasoning"`
-			} `json:"tokens"`
-		} `json:"assistant,omitempty"`
-		Error     *MessageInfo_Metadata_Error `json:"error,omitempty"`
-		SessionID string                      `json:"sessionID"`
-		Time      struct {
-			Completed *float32 `json:"completed,omitempty"`
-			Created   float32  `json:"created"`
-		} `json:"time"`
-		Tool map[string]MessageInfo_Metadata_Tool_AdditionalProperties `json:"tool"`
-	} `json:"metadata"`
-	Parts []MessagePart   `json:"parts"`
-	Role  MessageInfoRole `json:"role"`
+	Id       string          `json:"id"`
+	Metadata MessageMetadata `json:"metadata"`
+	Parts    []MessagePart   `json:"parts"`
+	Role     MessageInfoRole `json:"role"`
 }
 
-// MessageInfo_Metadata_Error defines model for MessageInfo.Metadata.Error.
-type MessageInfo_Metadata_Error struct {
+// MessageInfoRole defines model for MessageInfo.Role.
+type MessageInfoRole string
+
+// MessageMetadata defines model for Message.Metadata.
+type MessageMetadata struct {
+	Assistant *struct {
+		Cost    float32 `json:"cost"`
+		ModelID string  `json:"modelID"`
+		Path    struct {
+			Cwd  string `json:"cwd"`
+			Root string `json:"root"`
+		} `json:"path"`
+		ProviderID string   `json:"providerID"`
+		Summary    *bool    `json:"summary,omitempty"`
+		System     []string `json:"system"`
+		Tokens     struct {
+			Cache struct {
+				Read  float32 `json:"read"`
+				Write float32 `json:"write"`
+			} `json:"cache"`
+			Input     float32 `json:"input"`
+			Output    float32 `json:"output"`
+			Reasoning float32 `json:"reasoning"`
+		} `json:"tokens"`
+	} `json:"assistant,omitempty"`
+	Error     *MessageMetadata_Error `json:"error,omitempty"`
+	SessionID string                 `json:"sessionID"`
+	Time      struct {
+		Completed *float32 `json:"completed,omitempty"`
+		Created   float32  `json:"created"`
+	} `json:"time"`
+	Tool map[string]MessageMetadata_Tool_AdditionalProperties `json:"tool"`
+}
+
+// MessageMetadata_Error defines model for MessageMetadata.Error.
+type MessageMetadata_Error struct {
 	union json.RawMessage
 }
 
-// MessageInfo_Metadata_Tool_AdditionalProperties defines model for MessageInfo.Metadata.Tool.AdditionalProperties.
-type MessageInfo_Metadata_Tool_AdditionalProperties struct {
+// MessageMetadata_Tool_AdditionalProperties defines model for Message.Metadata.tool.AdditionalProperties.
+type MessageMetadata_Tool_AdditionalProperties struct {
 	Time struct {
 		End   float32 `json:"end"`
 		Start float32 `json:"start"`
@@ -338,9 +346,6 @@ type MessageInfo_Metadata_Tool_AdditionalProperties struct {
 	Title                string                 `json:"title"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
-
-// MessageInfoRole defines model for MessageInfo.Role.
-type MessageInfoRole string
 
 // MessagePart defines model for Message.Part.
 type MessagePart struct {
@@ -435,9 +440,11 @@ type ModelInfo struct {
 		Context float32 `json:"context"`
 		Output  float32 `json:"output"`
 	} `json:"limit"`
-	Name        string `json:"name"`
-	Reasoning   bool   `json:"reasoning"`
-	Temperature bool   `json:"temperature"`
+	Name        string                 `json:"name"`
+	Options     map[string]interface{} `json:"options"`
+	Reasoning   bool                   `json:"reasoning"`
+	Temperature bool                   `json:"temperature"`
+	ToolCall    bool                   `json:"tool_call"`
 }
 
 // ProviderInfo defines model for Provider.Info.
@@ -535,6 +542,11 @@ type PostSessionSummarizeJSONBody struct {
 	SessionID  string `json:"sessionID"`
 }
 
+// PostSessionUnshareJSONBody defines parameters for PostSessionUnshare.
+type PostSessionUnshareJSONBody struct {
+	SessionID string `json:"sessionID"`
+}
+
 // PostFileSearchJSONRequestBody defines body for PostFileSearch for application/json ContentType.
 type PostFileSearchJSONRequestBody PostFileSearchJSONBody
 
@@ -556,25 +568,28 @@ type PostSessionShareJSONRequestBody PostSessionShareJSONBody
 // PostSessionSummarizeJSONRequestBody defines body for PostSessionSummarize for application/json ContentType.
 type PostSessionSummarizeJSONRequestBody PostSessionSummarizeJSONBody
 
-// Getter for additional properties for MessageInfo_Metadata_Tool_AdditionalProperties. Returns the specified
+// PostSessionUnshareJSONRequestBody defines body for PostSessionUnshare for application/json ContentType.
+type PostSessionUnshareJSONRequestBody PostSessionUnshareJSONBody
+
+// Getter for additional properties for MessageMetadata_Tool_AdditionalProperties. Returns the specified
 // element and whether it was found
-func (a MessageInfo_Metadata_Tool_AdditionalProperties) Get(fieldName string) (value interface{}, found bool) {
+func (a MessageMetadata_Tool_AdditionalProperties) Get(fieldName string) (value interface{}, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
 	return
 }
 
-// Setter for additional properties for MessageInfo_Metadata_Tool_AdditionalProperties
-func (a *MessageInfo_Metadata_Tool_AdditionalProperties) Set(fieldName string, value interface{}) {
+// Setter for additional properties for MessageMetadata_Tool_AdditionalProperties
+func (a *MessageMetadata_Tool_AdditionalProperties) Set(fieldName string, value interface{}) {
 	if a.AdditionalProperties == nil {
 		a.AdditionalProperties = make(map[string]interface{})
 	}
 	a.AdditionalProperties[fieldName] = value
 }
 
-// Override default JSON handling for MessageInfo_Metadata_Tool_AdditionalProperties to handle AdditionalProperties
-func (a *MessageInfo_Metadata_Tool_AdditionalProperties) UnmarshalJSON(b []byte) error {
+// Override default JSON handling for MessageMetadata_Tool_AdditionalProperties to handle AdditionalProperties
+func (a *MessageMetadata_Tool_AdditionalProperties) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
 	err := json.Unmarshal(b, &object)
 	if err != nil {
@@ -603,7 +618,7 @@ func (a *MessageInfo_Metadata_Tool_AdditionalProperties) UnmarshalJSON(b []byte)
 			var fieldVal interface{}
 			err := json.Unmarshal(fieldBuf, &fieldVal)
 			if err != nil {
-				return fmt.Errorf("error unmarshalling field %s: %w", fieldName, err)
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
 			a.AdditionalProperties[fieldName] = fieldVal
 		}
@@ -611,8 +626,8 @@ func (a *MessageInfo_Metadata_Tool_AdditionalProperties) UnmarshalJSON(b []byte)
 	return nil
 }
 
-// Override default JSON handling for MessageInfo_Metadata_Tool_AdditionalProperties to handle AdditionalProperties
-func (a MessageInfo_Metadata_Tool_AdditionalProperties) MarshalJSON() ([]byte, error) {
+// Override default JSON handling for MessageMetadata_Tool_AdditionalProperties to handle AdditionalProperties
+func (a MessageMetadata_Tool_AdditionalProperties) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
@@ -1082,23 +1097,23 @@ func (t *EventSessionError_Properties_Error) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsProviderAuthError returns the union data inside the MessageInfo_Metadata_Error as a ProviderAuthError
-func (t MessageInfo_Metadata_Error) AsProviderAuthError() (ProviderAuthError, error) {
+// AsProviderAuthError returns the union data inside the MessageMetadata_Error as a ProviderAuthError
+func (t MessageMetadata_Error) AsProviderAuthError() (ProviderAuthError, error) {
 	var body ProviderAuthError
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromProviderAuthError overwrites any union data inside the MessageInfo_Metadata_Error as the provided ProviderAuthError
-func (t *MessageInfo_Metadata_Error) FromProviderAuthError(v ProviderAuthError) error {
+// FromProviderAuthError overwrites any union data inside the MessageMetadata_Error as the provided ProviderAuthError
+func (t *MessageMetadata_Error) FromProviderAuthError(v ProviderAuthError) error {
 	v.Name = "ProviderAuthError"
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeProviderAuthError performs a merge with any union data inside the MessageInfo_Metadata_Error, using the provided ProviderAuthError
-func (t *MessageInfo_Metadata_Error) MergeProviderAuthError(v ProviderAuthError) error {
+// MergeProviderAuthError performs a merge with any union data inside the MessageMetadata_Error, using the provided ProviderAuthError
+func (t *MessageMetadata_Error) MergeProviderAuthError(v ProviderAuthError) error {
 	v.Name = "ProviderAuthError"
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -1110,23 +1125,23 @@ func (t *MessageInfo_Metadata_Error) MergeProviderAuthError(v ProviderAuthError)
 	return err
 }
 
-// AsUnknownError returns the union data inside the MessageInfo_Metadata_Error as a UnknownError
-func (t MessageInfo_Metadata_Error) AsUnknownError() (UnknownError, error) {
+// AsUnknownError returns the union data inside the MessageMetadata_Error as a UnknownError
+func (t MessageMetadata_Error) AsUnknownError() (UnknownError, error) {
 	var body UnknownError
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromUnknownError overwrites any union data inside the MessageInfo_Metadata_Error as the provided UnknownError
-func (t *MessageInfo_Metadata_Error) FromUnknownError(v UnknownError) error {
+// FromUnknownError overwrites any union data inside the MessageMetadata_Error as the provided UnknownError
+func (t *MessageMetadata_Error) FromUnknownError(v UnknownError) error {
 	v.Name = "UnknownError"
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeUnknownError performs a merge with any union data inside the MessageInfo_Metadata_Error, using the provided UnknownError
-func (t *MessageInfo_Metadata_Error) MergeUnknownError(v UnknownError) error {
+// MergeUnknownError performs a merge with any union data inside the MessageMetadata_Error, using the provided UnknownError
+func (t *MessageMetadata_Error) MergeUnknownError(v UnknownError) error {
 	v.Name = "UnknownError"
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -1138,7 +1153,7 @@ func (t *MessageInfo_Metadata_Error) MergeUnknownError(v UnknownError) error {
 	return err
 }
 
-func (t MessageInfo_Metadata_Error) Discriminator() (string, error) {
+func (t MessageMetadata_Error) Discriminator() (string, error) {
 	var discriminator struct {
 		Discriminator string `json:"name"`
 	}
@@ -1146,7 +1161,7 @@ func (t MessageInfo_Metadata_Error) Discriminator() (string, error) {
 	return discriminator.Discriminator, err
 }
 
-func (t MessageInfo_Metadata_Error) ValueByDiscriminator() (interface{}, error) {
+func (t MessageMetadata_Error) ValueByDiscriminator() (interface{}, error) {
 	discriminator, err := t.Discriminator()
 	if err != nil {
 		return nil, err
@@ -1161,12 +1176,12 @@ func (t MessageInfo_Metadata_Error) ValueByDiscriminator() (interface{}, error) 
 	}
 }
 
-func (t MessageInfo_Metadata_Error) MarshalJSON() ([]byte, error) {
+func (t MessageMetadata_Error) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *MessageInfo_Metadata_Error) UnmarshalJSON(b []byte) error {
+func (t *MessageMetadata_Error) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -1633,6 +1648,11 @@ type ClientInterface interface {
 	PostSessionSummarizeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostSessionSummarize(ctx context.Context, body PostSessionSummarizeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostSessionUnshareWithBody request with any body
+	PostSessionUnshareWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostSessionUnshare(ctx context.Context, body PostSessionUnshareJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) PostAppInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -1901,6 +1921,30 @@ func (c *Client) PostSessionSummarizeWithBody(ctx context.Context, contentType s
 
 func (c *Client) PostSessionSummarize(ctx context.Context, body PostSessionSummarizeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostSessionSummarizeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionUnshareWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionUnshareRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionUnshare(ctx context.Context, body PostSessionUnshareJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionUnshareRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2434,6 +2478,46 @@ func NewPostSessionSummarizeRequestWithBody(server string, contentType string, b
 	return req, nil
 }
 
+// NewPostSessionUnshareRequest calls the generic PostSessionUnshare builder with application/json body
+func NewPostSessionUnshareRequest(server string, body PostSessionUnshareJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSessionUnshareRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostSessionUnshareRequestWithBody generates requests for PostSessionUnshare with any type of body
+func NewPostSessionUnshareRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/session_unshare")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -2538,6 +2622,11 @@ type ClientWithResponsesInterface interface {
 	PostSessionSummarizeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionSummarizeResponse, error)
 
 	PostSessionSummarizeWithResponse(ctx context.Context, body PostSessionSummarizeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionSummarizeResponse, error)
+
+	// PostSessionUnshareWithBodyWithResponse request with any body
+	PostSessionUnshareWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionUnshareResponse, error)
+
+	PostSessionUnshareWithResponse(ctx context.Context, body PostSessionUnshareJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionUnshareResponse, error)
 }
 
 type PostAppInfoResponse struct {
@@ -2901,6 +2990,28 @@ func (r PostSessionSummarizeResponse) StatusCode() int {
 	return 0
 }
 
+type PostSessionUnshareResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SessionInfo
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSessionUnshareResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSessionUnshareResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // PostAppInfoWithResponse request returning *PostAppInfoResponse
 func (c *ClientWithResponses) PostAppInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAppInfoResponse, error) {
 	rsp, err := c.PostAppInfo(ctx, reqEditors...)
@@ -3099,6 +3210,23 @@ func (c *ClientWithResponses) PostSessionSummarizeWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParsePostSessionSummarizeResponse(rsp)
+}
+
+// PostSessionUnshareWithBodyWithResponse request with arbitrary body returning *PostSessionUnshareResponse
+func (c *ClientWithResponses) PostSessionUnshareWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionUnshareResponse, error) {
+	rsp, err := c.PostSessionUnshareWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionUnshareResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostSessionUnshareWithResponse(ctx context.Context, body PostSessionUnshareJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionUnshareResponse, error) {
+	rsp, err := c.PostSessionUnshare(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionUnshareResponse(rsp)
 }
 
 // ParsePostAppInfoResponse parses an HTTP response from a PostAppInfoWithResponse call
@@ -3522,6 +3650,32 @@ func ParsePostSessionSummarizeResponse(rsp *http.Response) (*PostSessionSummariz
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest bool
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostSessionUnshareResponse parses an HTTP response from a PostSessionUnshareWithResponse call
+func ParsePostSessionUnshareResponse(rsp *http.Response) (*PostSessionUnshareResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSessionUnshareResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SessionInfo
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

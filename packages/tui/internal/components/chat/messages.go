@@ -58,6 +58,12 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 		m.tail = true
 		return m, nil
+	case app.OptimisticMessageAddedMsg:
+		m.renderView()
+		if m.tail {
+			m.viewport.GotoBottom()
+		}
+		return m, nil
 	case dialog.ThemeSelectedMsg:
 		m.cache.Clear()
 		return m, m.Reload()
@@ -171,7 +177,7 @@ func (m *messagesComponent) renderView() {
 				isLastToolInvocation := slices.Contains(lastToolIndices, i)
 				toolInvocationPart := part.(client.MessagePartToolInvocation)
 				toolCall, _ := toolInvocationPart.ToolInvocation.AsMessageToolInvocationToolCall()
-				metadata := client.MessageInfo_Metadata_Tool_AdditionalProperties{}
+				metadata := client.MessageMetadata_Tool_AdditionalProperties{}
 				if _, ok := message.Metadata.Tool[toolCall.ToolCallId]; ok {
 					metadata = message.Metadata.Tool[toolCall.ToolCallId]
 				}

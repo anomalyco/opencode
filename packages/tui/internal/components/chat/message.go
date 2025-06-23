@@ -253,7 +253,7 @@ func renderText(message client.MessageInfo, text string, author string) string {
 func renderToolInvocation(
 	toolCall client.MessageToolInvocationToolCall,
 	result *string,
-	metadata client.MessageInfo_Metadata_Tool_AdditionalProperties,
+	metadata client.MessageMetadata_Tool_AdditionalProperties,
 	showDetails bool,
 	isLast bool,
 	contentOnly bool,
@@ -466,7 +466,7 @@ func renderToolInvocation(
 
 						if metadata, ok := call["metadata"].(map[string]any); ok {
 							data, _ = json.Marshal(metadata)
-							var toolMetadata client.MessageInfo_Metadata_Tool_AdditionalProperties
+							var toolMetadata client.MessageMetadata_Tool_AdditionalProperties
 							_ = json.Unmarshal(data, &toolMetadata)
 
 							step := renderToolInvocation(

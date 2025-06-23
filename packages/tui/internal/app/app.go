@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode/internal/commands"
+	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -46,6 +48,9 @@ type SendMsg struct {
 }
 type CompletionDialogTriggeredMsg struct {
 	InitialValue string
+}
+type OptimisticMessageAddedMsg struct {
+	Message client.MessageInfo
 }
 
 func New(
@@ -297,17 +302,10 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 	if a.Session.Id == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
-			// status.Error(err.Error())
-			return nil
+			return toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
 		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
-	}
-
-	// TODO: Handle attachments when API supports them
-	if len(attachments) > 0 {
-		// For now, ignore attachments
-		// return "", fmt.Errorf("attachments not supported yet")
 	}
 
 	part := client.MessagePart{}
@@ -317,7 +315,26 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 	})
 	parts := []client.MessagePart{part}
 
-	go func() {
+	optimisticMessage := client.MessageInfo{
+		Id:    fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
+		Role:  client.User,
+		Parts: parts,
+		Metadata: client.MessageMetadata{
+			SessionID: a.Session.Id,
+			Time: struct {
+				Completed *float32 `json:"completed,omitempty"`
+				Created   float32  `json:"created"`
+			}{
+				Created: float32(time.Now().Unix()),
+			},
+			Tool: make(map[string]client.MessageMetadata_Tool_AdditionalProperties),
+		},
+	}
+
+	a.Messages = append(a.Messages, optimisticMessage)
+	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
+
+	cmds = append(cmds, func() tea.Msg {
 		response, err := a.Client.PostSessionChat(ctx, client.PostSessionChatJSONRequestBody{
 			SessionID:  a.Session.Id,
 			Parts:      parts,
@@ -325,14 +342,17 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 			ModelID:    a.Model.Id,
 		})
 		if err != nil {
-			slog.Error("Failed to send message", "error", err)
-			// status.Error(err.Error())
+			errormsg := fmt.Sprintf("failed to send message: %v", err)
+			slog.Error(errormsg)
+			return toast.NewErrorToast(errormsg)()
 		}
 		if response != nil && response.StatusCode != 200 {
-			slog.Error("Failed to send message", "error", fmt.Sprintf("failed to send message: %d", response.StatusCode))
-			// status.Error(fmt.Sprintf("failed to send message: %d", response.StatusCode))
+			errormsg := fmt.Sprintf("failed to send message: %d", response.StatusCode)
+			slog.Error(errormsg)
+			return toast.NewErrorToast(errormsg)()
 		}
-	}()
+		return nil
+	})
 
 	// The actual response will come through SSE
 	// For now, just return success

@@ -230,12 +230,33 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case client.EventMessageUpdated:
 		if msg.Properties.Info.Metadata.SessionID == a.app.Session.Id {
 			exists := false
-			for i, m := range a.app.Messages {
-				if m.Id == msg.Properties.Info.Id {
-					a.app.Messages[i] = msg.Properties.Info
-					exists = true
+			optimisticReplaced := false
+			
+			// First check if this is replacing an optimistic message
+			if msg.Properties.Info.Role == client.User {
+				// Look for optimistic messages to replace
+				for i, m := range a.app.Messages {
+					if strings.HasPrefix(m.Id, "optimistic-") && m.Role == client.User {
+						// Replace the optimistic message with the real one
+						a.app.Messages[i] = msg.Properties.Info
+						exists = true
+						optimisticReplaced = true
+						break
+					}
 				}
 			}
+			
+			// If not replacing optimistic, check for existing message with same ID
+			if !optimisticReplaced {
+				for i, m := range a.app.Messages {
+					if m.Id == msg.Properties.Info.Id {
+						a.app.Messages[i] = msg.Properties.Info
+						exists = true
+						break
+					}
+				}
+			}
+			
 			if !exists {
 				a.app.Messages = append(a.app.Messages, msg.Properties.Info)
 			}
