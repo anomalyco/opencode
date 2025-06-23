@@ -111,8 +111,14 @@ func PlaceOverlay(
 			fgLineWidth := ansi.PrintableRuneWidth(fgLine)
 
 			// Extract the styles at the border positions
-			leftStyle := getStyleAtPosition(bgLine, pos)
-			rightStyle := getStyleAtPosition(bgLine, pos+1+fgLineWidth)
+			// We need to get the style just before the border position to preserve background
+			leftStyle := ansiStyle{}
+			if pos > 0 {
+				leftStyle = getStyleAtPosition(bgLine, pos-1)
+			} else {
+				leftStyle = getStyleAtPosition(bgLine, pos)
+			}
+			rightStyle := getStyleAtPosition(bgLine, pos+fgLineWidth)
 
 			// Left border - combine background from original with border foreground
 			leftSeq := combineStyles(leftStyle, options.borderColor)
@@ -120,7 +126,9 @@ func PlaceOverlay(
 				b.WriteString(leftSeq)
 			}
 			b.WriteString("┃")
-			b.WriteString("\x1b[0m") // Reset all styles
+			if leftSeq != "" {
+				b.WriteString("\x1b[0m") // Reset all styles only if we applied any
+			}
 			pos++
 
 			// Content
@@ -133,7 +141,9 @@ func PlaceOverlay(
 				b.WriteString(rightSeq)
 			}
 			b.WriteString("┃")
-			b.WriteString("\x1b[0m") // Reset all styles
+			if rightSeq != "" {
+				b.WriteString("\x1b[0m") // Reset all styles only if we applied any
+			}
 			pos++
 		} else {
 			// No border, just render the content
@@ -188,7 +198,9 @@ func parseANSISequence(seq string) ansiStyle {
 	for i < len(parts) {
 		switch parts[i] {
 		case "0": // Reset
-			style = ansiStyle{}
+			// Mark this as a reset by adding it to attrs
+			style.attrs = append(style.attrs, "0")
+			// Don't clear the style here, let the caller handle it
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9": // Various attributes
 			style.attrs = append(style.attrs, parts[i])
 		case "38": // Foreground color
@@ -244,11 +256,9 @@ func combineStyles(bgStyle ansiStyle, fgColor *compat.AdaptiveColor) string {
 
 	// Add foreground color if specified
 	if fgColor != nil {
-		// Use the light color (could be improved to detect terminal background)
-		color := (*fgColor).Light
-
-		// Use RGBA to get color components
-		r, g, b, _ := color.RGBA()
+		// Use the adaptive color which automatically selects based on terminal background
+		// The RGBA method already handles light/dark selection
+		r, g, b, _ := fgColor.RGBA()
 		// RGBA returns 16-bit values, we need 8-bit
 		parts = append(parts, fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8))
 	}
@@ -276,15 +286,21 @@ func getStyleAtPosition(s string, targetPos int) ansiStyle {
 			seq := s[i : i+match[1]]
 			parsedStyle := parseANSISequence(seq)
 
-			// Update current style (merge with existing)
-			if parsedStyle.fgColor != "" {
-				currentStyle.fgColor = parsedStyle.fgColor
-			}
-			if parsedStyle.bgColor != "" {
-				currentStyle.bgColor = parsedStyle.bgColor
-			}
-			if len(parsedStyle.attrs) > 0 {
-				currentStyle.attrs = parsedStyle.attrs
+			// Check if this is a reset sequence
+			if len(parsedStyle.attrs) > 0 && parsedStyle.attrs[0] == "0" {
+				// Reset all styles
+				currentStyle = ansiStyle{}
+			} else {
+				// Update current style (merge with existing)
+				if parsedStyle.fgColor != "" {
+					currentStyle.fgColor = parsedStyle.fgColor
+				}
+				if parsedStyle.bgColor != "" {
+					currentStyle.bgColor = parsedStyle.bgColor
+				}
+				if len(parsedStyle.attrs) > 0 {
+					currentStyle.attrs = parsedStyle.attrs
+				}
 			}
 
 			i += match[1]

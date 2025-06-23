@@ -487,11 +487,6 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
 	case commands.InputNewlineCommand:
-		cmds = append(cmds, toast.NewInfoToast("Press enter to submit"))
-		cmds = append(cmds, toast.NewWarningToast("Press shift+enter to submit and create a new line"))
-		cmds = append(cmds, toast.NewErrorToast("Press shift+enter to submit and create a new line"))
-		cmds = append(cmds, toast.NewSuccessToast("Press shift+enter to submit and create a new line"))
-
 		updated, cmd := a.editor.Newline()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
