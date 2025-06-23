@@ -39,10 +39,10 @@ When the user asks you to create a new git commit, follow these steps carefully:
 
 1. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following bash commands in parallel, each using the Bash tool:
    - Run a git status command to see all untracked files.
-   - Run a git diff command to see both staged and unstaged changes that will be committed.
+   - Run a git diff command to see staged changes that will be committed.
    - Run a git log command to see recent commit messages, so that you can follow this repository's commit message style.
 
-2. Analyze all staged changes (both previously staged and newly added) and draft a commit message. Wrap your analysis process in <commit_analysis> tags:
+2. Analyze all staged changes and draft a commit message. Wrap your analysis process in <commit_analysis> tags:
 
 <commit_analysis>
 - List the files that have been changed or added
@@ -58,17 +58,11 @@ When the user asks you to create a new git commit, follow these steps carefully:
 </commit_analysis>
 
 3. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following commands in parallel:
-   - Add relevant untracked files to the staging area.
-   - Create the commit with a message ending with:
-   🤖 Generated with [opencode](https://opencode.ai)
-
-   Co-Authored-By: opencode <noreply@opencode.ai>
-   - Run git status to make sure the commit succeeded.
+   - Create the commit with a message
 
 4. If the commit fails due to pre-commit hook changes, retry the commit ONCE to include these automated changes. If it fails again, it usually means a pre-commit hook is preventing the commit. If the commit succeeds but you notice that files were modified by the pre-commit hook, you MUST amend your commit to include them.
 
 Important notes:
-- Use the git context at the start of this conversation to determine which files are relevant to your commit. Be careful not to stage and commit files (e.g. with `git add .`) that aren't relevant to your commit.
 - NEVER update the git config
 - DO NOT run additional commands to read or explore code, beyond what is available in the git context
 - DO NOT push to the remote repository
@@ -81,9 +75,6 @@ Important notes:
 git commit -m "$(cat <<'EOF'
    Commit message here.
 
-   🤖 Generated with [opencode](https://opencode.ai)
-
-   Co-Authored-By: opencode <noreply@opencode.ai>
    EOF
    )"
 </example>
@@ -95,7 +86,7 @@ IMPORTANT: When the user asks you to create a pull request, follow these steps c
 
 1. You have the capability to call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following bash commands in parallel using the Bash tool, in order to understand the current state of the branch since it diverged from the main branch:
    - Run a git status command to see all untracked files
-   - Run a git diff command to see both staged and unstaged changes that will be committed
+   - Run a git diff command to see staged changes that will be committed
    - Check if the current branch tracks a remote branch and is up to date with the remote, so you know if you need to push to the remote
    - Run a git log command and `git diff main...HEAD` to understand the full commit history for the current branch (from the time it diverged from the `main` branch)
 
