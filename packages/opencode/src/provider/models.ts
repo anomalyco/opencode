@@ -2,6 +2,7 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import { z } from "zod"
+import { data } from "./models-macro" with { type: "macro" }
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -54,16 +55,15 @@ export namespace ModelsDev {
       refresh()
       return result as Record<string, Provider>
     }
-    await refresh()
-    return get()
+    refresh()
+    const json = await data()
+    return JSON.parse(json)
   }
 
   async function refresh() {
     const file = Bun.file(filepath)
     log.info("refreshing")
-    const result = await fetch("https://models.dev/api.json")
-    if (!result.ok)
-      throw new Error(`Failed to fetch models.dev: ${result.statusText}`)
-    await Bun.write(file, result)
+    const result = await fetch("https://models.dev/api.json").catch(() => {})
+    if (result && result.ok) await Bun.write(file, result)
   }
 }
