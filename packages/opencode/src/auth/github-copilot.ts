@@ -46,11 +46,11 @@ export namespace AuthGithubCopilot {
     })
     const deviceData: DeviceCodeResponse = await deviceResponse.json()
     return {
-      device: deviceData.device_code,
-      user: deviceData.user_code,
-      verification: deviceData.verification_uri,
+      deviceCode: deviceData.device_code,
+      userCode: deviceData.user_code,
+      verificationUri: deviceData.verification_uri,
       interval: deviceData.interval || 5,
-      expiry: deviceData.expires_in,
+      expiryIn: deviceData.expires_in,
     }
   }
 

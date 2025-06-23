@@ -184,20 +184,26 @@ export const AuthLoginCommand = cmd({
     const copilot = await AuthCopilot()
     if (provider === "github-copilot" && copilot) {
       await new Promise((resolve) => setTimeout(resolve, 10))
-      const deviceInfo = await copilot.authorize()
+      const { userCode, deviceCode, verificationUri, interval } =
+        await copilot.authorize()
 
-      prompts.note(
-        `Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`,
-      )
+      prompts.note(`Enter the following code: ${userCode} when prompted`)
+      prompts.note("Trying to open browser...")
+      try {
+        await open(verificationUri)
+      } catch (e) {
+        prompts.log.error(
+          "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
+        )
+      }
+      prompts.log.info(verificationUri)
 
       const spinner = prompts.spinner()
       spinner.start("Waiting for authorization...")
 
       while (true) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, deviceInfo.interval * 1000),
-        )
-        const response = await copilot.poll(deviceInfo.device)
+        await new Promise((resolve) => setTimeout(resolve, interval * 1000))
+        const response = await copilot.poll(deviceCode)
         if (response.status === "pending") continue
         if (response.status === "success") {
           await Auth.set("github-copilot", {
