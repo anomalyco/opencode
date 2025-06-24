@@ -98,21 +98,21 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 3. Handle completions trigger
-		if keyString == "/" && !a.showCompletionDialog {
+		if (keyString == "/" || keyString == "@") && !a.showCompletionDialog {
 			a.showCompletionDialog = true
 
-			initialValue := "/"
+			initialValue := keyString
 			currentInput := a.editor.Value()
 
 			// if the input doesn't end with a space,
 			// then we want to include the last word
-			// (ie, `packages/`)
+			// (ie, `packages/` or `src/file@`)
 			if !strings.HasSuffix(currentInput, " ") {
 				words := strings.Split(a.editor.Value(), " ")
 				if len(words) > 0 {
 					lastWord := words[len(words)-1]
 					lastWord = strings.TrimSpace(lastWord)
-					initialValue = lastWord + "/"
+					initialValue = lastWord + keyString
 				}
 			}
 

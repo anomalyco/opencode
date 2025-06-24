@@ -16,6 +16,7 @@ func NewCompletionManager(app *app.App) *CompletionManager {
 		providers: map[string]dialog.CompletionProvider{
 			"files":    NewFileAndFolderContextGroup(app),
 			"commands": NewCommandCompletionProvider(app),
+			"at-files": NewAtFileProvider(app),
 		},
 	}
 }
@@ -27,6 +28,9 @@ func (m *CompletionManager) DefaultProvider() dialog.CompletionProvider {
 func (m *CompletionManager) GetProvider(input string) dialog.CompletionProvider {
 	if strings.HasPrefix(input, "/") {
 		return m.providers["commands"]
+	}
+	if strings.HasPrefix(input, "@") {
+		return m.providers["at-files"]
 	}
 	return m.providers["files"]
 }

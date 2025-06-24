@@ -11,6 +11,7 @@ import { Flag } from "../../flag/flag"
 import { Config } from "../../config/config"
 
 const TOOL: Record<string, [string, string]> = {
+  filematch: ["FileMatch", UI.Style.TEXT_HIGHLIGHT_BOLD],
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
   todoread: ["Todo", UI.Style.TEXT_WARNING_BOLD],
   bash: ["Bash", UI.Style.TEXT_DANGER_BOLD],
