@@ -20,6 +20,7 @@ beforeEach(async () => {
   await fs.promises.mkdir(testConfigDir, { recursive: true })
 
   // Mock Global.Path.config to use test directory
+  // @ts-expect-error
   Global.Path.config = testConfigDir
 
   // Create empty config
@@ -41,6 +42,8 @@ describe("mcp command", () => {
       transport: "stdio" as const,
       env: ["NODE_ENV=test", "PORT=3000"],
       header: [],
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddCommand.handler(args)
@@ -68,6 +71,8 @@ describe("mcp command", () => {
       transport: "sse" as const,
       env: [],
       header: ["Authorization: Bearer token123"],
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddCommand.handler(args)
@@ -92,6 +97,8 @@ describe("mcp command", () => {
       transport: "sse" as const,
       env: [],
       header: ["X-API-Key: abc123", "Content-Type: application/json"],
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddCommand.handler(args)
@@ -124,10 +131,14 @@ describe("mcp command", () => {
       transport: "stdio" as const,
       env: [],
       header: [],
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddCommand.handler(args)
-    expect(errorMessage).toContain("stdio transport requires a command, not a URL")
+    expect(errorMessage).toContain(
+      "stdio transport requires a command, not a URL",
+    )
 
     UI.error = originalError
   })
@@ -141,6 +152,8 @@ describe("mcp command", () => {
       transport: "stdio" as const,
       env: ["DEBUG=true"],
       header: [],
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddCommand.handler(args)
@@ -175,7 +188,12 @@ describe("mcp command", () => {
       ),
     )
 
-    const args = { name: "test-server", scope: "project" as const }
+    const args = {
+      name: "test-server",
+      scope: "project" as const,
+      _: [],
+      $0: "opencode",
+    }
     await McpRemoveCommand.handler(args)
 
     const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
@@ -200,7 +218,12 @@ describe("mcp command", () => {
       ),
     )
 
-    const args = { name: "user-test-server", scope: "user" as const }
+    const args = {
+      name: "user-test-server",
+      scope: "user" as const,
+      _: [],
+      $0: "opencode",
+    }
     await McpRemoveCommand.handler(args)
 
     const config = await Config.global()
@@ -214,10 +237,17 @@ describe("mcp command", () => {
       errorMessage = msg
     }
 
-    const args = { name: "non-existent", scope: "project" as const }
+    const args = {
+      name: "non-existent",
+      scope: "project" as const,
+      _: [],
+      $0: "opencode",
+    }
     await McpRemoveCommand.handler(args)
 
-    expect(errorMessage).toContain('MCP server "non-existent" not found in project config')
+    expect(errorMessage).toContain(
+      'MCP server "non-existent" not found in project config',
+    )
 
     UI.error = originalError
   })
@@ -231,6 +261,8 @@ describe("mcp command", () => {
         command: ["bun", "run", "mcp-server.ts"],
         environment: { DEBUG: "true" },
       }),
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddJsonCommand.handler(args)
@@ -251,8 +283,10 @@ describe("mcp command", () => {
       json: JSON.stringify({
         type: "remote",
         url: "https://example.com/mcp",
-        headers: { "Authorization": "Bearer token" },
+        headers: { Authorization: "Bearer token" },
       }),
+      _: [],
+      $0: "opencode",
     }
 
     await McpAddJsonCommand.handler(args)
@@ -261,7 +295,7 @@ describe("mcp command", () => {
     expect(config.mcp!["user-json-server"]).toMatchObject({
       type: "remote",
       url: "https://example.com/mcp",
-      headers: { "Authorization": "Bearer token" },
+      headers: { Authorization: "Bearer token" },
     })
   })
 
@@ -270,7 +304,7 @@ describe("mcp command", () => {
     const logs: string[] = []
     UI.println = (...messages: string[]) => logs.push(messages.join(" "))
 
-    await McpListCommand.handler()
+    await McpListCommand.handler({ $0: "opencode", _: [] })
 
     UI.println = originalPrintln
     expect(logs.some((log) => log.includes("No MCP servers configured"))).toBe(
@@ -301,7 +335,11 @@ describe("mcp command", () => {
     const logs: string[] = []
     UI.println = (...messages: string[]) => logs.push(messages.join(" "))
 
-    const args = { name: "detail-server" }
+    const args = {
+      name: "detail-server",
+      _: [],
+      $0: "opencode",
+    }
     await McpGetCommand.handler(args)
 
     UI.println = originalPrintln
