@@ -305,27 +305,49 @@ export const McpGetCommand = cmd({
         demandOption: true,
       }),
   handler: async (args) => {
-    const config = await Config.global()
-    
-    if (!config.mcp || !config.mcp[args.name]) {
+    const globalConfig = await Config.global()
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    const projectConfig = await loadProjectConfig(projectConfigPath)
+
+    let foundConfig: Config.Mcp | null = null
+    let foundScope: string | null = null
+
+    // Check project config first (takes priority)
+    if (projectConfig.mcp && projectConfig.mcp[args.name]) {
+      foundConfig = projectConfig.mcp[args.name]
+      foundScope = "project"
+    }
+    // Then check global config
+    else if (globalConfig.mcp && globalConfig.mcp[args.name]) {
+      foundConfig = globalConfig.mcp[args.name]
+      foundScope = "user"
+    }
+
+    if (!foundConfig || !foundScope) {
       UI.error(`MCP server "${args.name}" not found`)
       return
     }
 
-    const mcpConfig = config.mcp[args.name]
     UI.println(`MCP Server: ${args.name}`)
-    UI.println(`Type: ${mcpConfig.type}`)
+    UI.println(`Scope: ${foundScope}`)
+    UI.println(`Type: ${foundConfig.type}`)
     
-    if (mcpConfig.type === "local") {
-      UI.println(`Command: ${mcpConfig.command.join(" ")}`)
-      if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
+    if (foundConfig.type === "local") {
+      UI.println(`Command: ${foundConfig.command.join(" ")}`)
+      if (foundConfig.environment && Object.keys(foundConfig.environment).length > 0) {
         UI.println(`Environment variables:`)
-        for (const [key, value] of Object.entries(mcpConfig.environment)) {
+        for (const [key, value] of Object.entries(foundConfig.environment)) {
           UI.println(`  ${key}=${value}`)
         }
       }
     } else {
-      UI.println(`URL: ${mcpConfig.url}`)
+      UI.println(`URL: ${foundConfig.url}`)
+      if (foundConfig.headers && Object.keys(foundConfig.headers).length > 0) {
+        UI.println(`Headers:`)
+        for (const [key, value] of Object.entries(foundConfig.headers)) {
+          UI.println(`  ${key}: ${value}`)
+        }
+      }
     }
   },
 })

@@ -365,8 +365,8 @@ describe("mcp command", () => {
     expect(logs.some((log) => log.includes("project-server"))).toBe(true)
   })
 
-  test("get MCP server details", async () => {
-    // Add a server first
+  test("get MCP server details from user scope", async () => {
+    // Add a server to user config
     await Bun.write(
       testConfigPath,
       JSON.stringify(
@@ -396,9 +396,98 @@ describe("mcp command", () => {
     await McpGetCommand.handler(args)
 
     UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("MCP Server: detail-server"))).toBe(
-      true,
-    )
+    expect(logs.some((log) => log.includes("MCP Server: detail-server"))).toBe(true)
+    expect(logs.some((log) => log.includes("Scope: user"))).toBe(true)
     expect(logs.some((log) => log.includes("Type: local"))).toBe(true)
+  })
+
+  test("get MCP server details from project scope", async () => {
+    // Add a server to project config
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "project-server": {
+              type: "remote",
+              url: "https://example.com/mcp",
+              headers: { "Authorization": "Bearer token" },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const originalPrintln = UI.println
+    const logs: string[] = []
+    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+
+    const args = {
+      name: "project-server",
+      _: [],
+      $0: "opencode",
+    }
+    await McpGetCommand.handler(args)
+
+    UI.println = originalPrintln
+    expect(logs.some((log) => log.includes("MCP Server: project-server"))).toBe(true)
+    expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
+    expect(logs.some((log) => log.includes("Type: remote"))).toBe(true)
+    expect(logs.some((log) => log.includes("Headers:"))).toBe(true)
+  })
+
+  test("get MCP server prioritizes project over user scope", async () => {
+    // Add server with same name to both configs
+    await Bun.write(
+      testConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "shared-server": {
+              type: "local",
+              command: ["node", "user-server.js"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "shared-server": {
+              type: "local",
+              command: ["node", "project-server.js"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const originalPrintln = UI.println
+    const logs: string[] = []
+    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+
+    const args = {
+      name: "shared-server",
+      _: [],
+      $0: "opencode",
+    }
+    await McpGetCommand.handler(args)
+
+    UI.println = originalPrintln
+    expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
+    expect(logs.some((log) => log.includes("project-server.js"))).toBe(true)
+    expect(logs.some((log) => log.includes("user-server.js"))).toBe(false)
   })
 })
