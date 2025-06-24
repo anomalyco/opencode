@@ -325,7 +325,36 @@ export const McpAddJsonCommand = cmd({
   handler: async (args) => {
     try {
       const jsonConfig = JSON.parse(args.json)
-      const mcpConfig = Config.Mcp.parse(jsonConfig)
+      
+      // Infer type and transform to match schema
+      let mcpConfig
+      if ('command' in jsonConfig) {
+        // Transform stdio transport format
+        const { type, command, args, env, ...rest } = jsonConfig
+        
+        // Build command array
+        const commandArray = Array.isArray(command) ? command : [command]
+        if (args && Array.isArray(args)) {
+          commandArray.push(...args)
+        }
+        
+        mcpConfig = Config.Mcp.parse({
+          type: 'local',
+          command: commandArray,
+          ...(env && { environment: env }),
+          ...rest
+        })
+      } else if ('url' in jsonConfig) {
+        // Transform sse transport format
+        const { type, ...rest } = jsonConfig
+        mcpConfig = Config.Mcp.parse({
+          type: 'remote',
+          ...rest
+        })
+      } else {
+        UI.error("Invalid MCP configuration: Unable to determine transport type from JSON. Must include either 'command' for stdio or 'url' for sse.")
+        return
+      }
 
       // Determine config path based on scope
       const configPath = args.scope === "user" 
