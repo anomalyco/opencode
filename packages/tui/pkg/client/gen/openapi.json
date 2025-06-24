@@ -1505,6 +1505,25 @@
             "$ref": "#/components/schemas/Config.Keybinds",
             "description": "Custom keybind configurations"
           },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "description"
+              ]
+            },
+            "description": "Custom commands from local files"
+          },
           "autoshare": {
             "type": "boolean",
             "description": "Share newly created sessions automatically"

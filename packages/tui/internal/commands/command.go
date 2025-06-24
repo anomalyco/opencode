@@ -30,6 +30,7 @@ type Command struct {
 	Description string
 	Keybindings []Keybinding
 	Trigger     string
+	Default     bool
 }
 
 func (c Command) Keys() []string {
@@ -123,159 +124,172 @@ func parseBindings(bindings ...string) []Keybinding {
 	return parsedBindings
 }
 
+var defaults = []Command{
+	{
+		Name:        AppHelpCommand,
+		Description: "show help",
+		Keybindings: parseBindings("<leader>h"),
+		Trigger:     "help",
+	},
+	{
+		Name:        EditorOpenCommand,
+		Description: "open editor",
+		Keybindings: parseBindings("<leader>e"),
+		Trigger:     "editor",
+	},
+	{
+		Name:        SessionNewCommand,
+		Description: "new session",
+		Keybindings: parseBindings("<leader>n"),
+		Trigger:     "new",
+	},
+	{
+		Name:        SessionListCommand,
+		Description: "list sessions",
+		Keybindings: parseBindings("<leader>l"),
+		Trigger:     "sessions",
+	},
+	{
+		Name:        SessionShareCommand,
+		Description: "share session",
+		Keybindings: parseBindings("<leader>s"),
+		Trigger:     "share",
+	},
+	{
+		Name:        SessionInterruptCommand,
+		Description: "interrupt session",
+		Keybindings: parseBindings("esc"),
+	},
+	{
+		Name:        SessionCompactCommand,
+		Description: "compact the session",
+		Keybindings: parseBindings("<leader>c"),
+		Trigger:     "compact",
+	},
+	{
+		Name:        ToolDetailsCommand,
+		Description: "toggle tool details",
+		Keybindings: parseBindings("<leader>d"),
+		Trigger:     "details",
+	},
+	{
+		Name:        ModelListCommand,
+		Description: "list models",
+		Keybindings: parseBindings("<leader>m"),
+		Trigger:     "models",
+	},
+	{
+		Name:        ThemeListCommand,
+		Description: "list themes",
+		Keybindings: parseBindings("<leader>t"),
+		Trigger:     "themes",
+	},
+	{
+		Name:        ProjectInitCommand,
+		Description: "create/update AGENTS.md",
+		Keybindings: parseBindings("<leader>i"),
+		Trigger:     "init",
+	},
+	{
+		Name:        InputClearCommand,
+		Description: "clear input",
+		Keybindings: parseBindings("ctrl+c"),
+	},
+	{
+		Name:        InputPasteCommand,
+		Description: "paste content",
+		Keybindings: parseBindings("ctrl+v"),
+	},
+	{
+		Name:        InputSubmitCommand,
+		Description: "submit message",
+		Keybindings: parseBindings("enter"),
+	},
+	{
+		Name:        InputNewlineCommand,
+		Description: "insert newline",
+		Keybindings: parseBindings("shift+enter", "ctrl+j"),
+	},
+	// {
+	// 	Name:        HistoryPreviousCommand,
+	// 	Description: "previous prompt",
+	// 	Keybindings: parseBindings("up"),
+	// },
+	// {
+	// 	Name:        HistoryNextCommand,
+	// 	Description: "next prompt",
+	// 	Keybindings: parseBindings("down"),
+	// },
+	{
+		Name:        MessagesPageUpCommand,
+		Description: "page up",
+		Keybindings: parseBindings("pgup"),
+	},
+	{
+		Name:        MessagesPageDownCommand,
+		Description: "page down",
+		Keybindings: parseBindings("pgdown"),
+	},
+	{
+		Name:        MessagesHalfPageUpCommand,
+		Description: "half page up",
+		Keybindings: parseBindings("ctrl+alt+u"),
+	},
+	{
+		Name:        MessagesHalfPageDownCommand,
+		Description: "half page down",
+		Keybindings: parseBindings("ctrl+alt+d"),
+	},
+	{
+		Name:        MessagesPreviousCommand,
+		Description: "previous message",
+		Keybindings: parseBindings("ctrl+alt+k"),
+	},
+	{
+		Name:        MessagesNextCommand,
+		Description: "next message",
+		Keybindings: parseBindings("ctrl+alt+j"),
+	},
+	{
+		Name:        MessagesFirstCommand,
+		Description: "first message",
+		Keybindings: parseBindings("ctrl+g"),
+	},
+	{
+		Name:        MessagesLastCommand,
+		Description: "last message",
+		Keybindings: parseBindings("ctrl+alt+g"),
+	},
+	{
+		Name:        AppExitCommand,
+		Description: "exit the app",
+		Keybindings: parseBindings("ctrl+c", "<leader>q"),
+		Trigger:     "exit",
+	},
+}
+
 func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
-	defaults := []Command{
-		{
-			Name:        AppHelpCommand,
-			Description: "show help",
-			Keybindings: parseBindings("<leader>h"),
-			Trigger:     "help",
-		},
-		{
-			Name:        EditorOpenCommand,
-			Description: "open editor",
-			Keybindings: parseBindings("<leader>e"),
-			Trigger:     "editor",
-		},
-		{
-			Name:        SessionNewCommand,
-			Description: "new session",
-			Keybindings: parseBindings("<leader>n"),
-			Trigger:     "new",
-		},
-		{
-			Name:        SessionListCommand,
-			Description: "list sessions",
-			Keybindings: parseBindings("<leader>l"),
-			Trigger:     "sessions",
-		},
-		{
-			Name:        SessionShareCommand,
-			Description: "share session",
-			Keybindings: parseBindings("<leader>s"),
-			Trigger:     "share",
-		},
-		{
-			Name:        SessionInterruptCommand,
-			Description: "interrupt session",
-			Keybindings: parseBindings("esc"),
-		},
-		{
-			Name:        SessionCompactCommand,
-			Description: "compact the session",
-			Keybindings: parseBindings("<leader>c"),
-			Trigger:     "compact",
-		},
-		{
-			Name:        ToolDetailsCommand,
-			Description: "toggle tool details",
-			Keybindings: parseBindings("<leader>d"),
-			Trigger:     "details",
-		},
-		{
-			Name:        ModelListCommand,
-			Description: "list models",
-			Keybindings: parseBindings("<leader>m"),
-			Trigger:     "models",
-		},
-		{
-			Name:        ThemeListCommand,
-			Description: "list themes",
-			Keybindings: parseBindings("<leader>t"),
-			Trigger:     "themes",
-		},
-		{
-			Name:        ProjectInitCommand,
-			Description: "create/update AGENTS.md",
-			Keybindings: parseBindings("<leader>i"),
-			Trigger:     "init",
-		},
-		{
-			Name:        InputClearCommand,
-			Description: "clear input",
-			Keybindings: parseBindings("ctrl+c"),
-		},
-		{
-			Name:        InputPasteCommand,
-			Description: "paste content",
-			Keybindings: parseBindings("ctrl+v"),
-		},
-		{
-			Name:        InputSubmitCommand,
-			Description: "submit message",
-			Keybindings: parseBindings("enter"),
-		},
-		{
-			Name:        InputNewlineCommand,
-			Description: "insert newline",
-			Keybindings: parseBindings("shift+enter", "ctrl+j"),
-		},
-		// {
-		// 	Name:        HistoryPreviousCommand,
-		// 	Description: "previous prompt",
-		// 	Keybindings: parseBindings("up"),
-		// },
-		// {
-		// 	Name:        HistoryNextCommand,
-		// 	Description: "next prompt",
-		// 	Keybindings: parseBindings("down"),
-		// },
-		{
-			Name:        MessagesPageUpCommand,
-			Description: "page up",
-			Keybindings: parseBindings("pgup"),
-		},
-		{
-			Name:        MessagesPageDownCommand,
-			Description: "page down",
-			Keybindings: parseBindings("pgdown"),
-		},
-		{
-			Name:        MessagesHalfPageUpCommand,
-			Description: "half page up",
-			Keybindings: parseBindings("ctrl+alt+u"),
-		},
-		{
-			Name:        MessagesHalfPageDownCommand,
-			Description: "half page down",
-			Keybindings: parseBindings("ctrl+alt+d"),
-		},
-		{
-			Name:        MessagesPreviousCommand,
-			Description: "previous message",
-			Keybindings: parseBindings("ctrl+alt+k"),
-		},
-		{
-			Name:        MessagesNextCommand,
-			Description: "next message",
-			Keybindings: parseBindings("ctrl+alt+j"),
-		},
-		{
-			Name:        MessagesFirstCommand,
-			Description: "first message",
-			Keybindings: parseBindings("ctrl+g"),
-		},
-		{
-			Name:        MessagesLastCommand,
-			Description: "last message",
-			Keybindings: parseBindings("ctrl+alt+g"),
-		},
-		{
-			Name:        AppExitCommand,
-			Description: "exit the app",
-			Keybindings: parseBindings("ctrl+c", "<leader>q"),
-			Trigger:     "exit",
-		},
-	}
 	registry := make(CommandRegistry)
 	keybinds := map[string]string{}
 	marshalled, _ := json.Marshal(*config.Keybinds)
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
+		command.Default = true
 		if keybind, ok := keybinds[string(command.Name)]; ok {
 			command.Keybindings = parseBindings(keybind)
 		}
 		registry[command.Name] = command
 	}
+
+	for _, command := range *config.Commands {
+		name := CommandName(command.Name)
+		registry[name] = Command{
+			Name:        name,
+			Description: command.Description,
+			Keybindings: nil,
+			Trigger:     command.Name,
+		}
+	}
+
 	return registry
 }

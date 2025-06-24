@@ -22,6 +22,9 @@ export namespace Config {
       }
     }
     log.info("loaded", result)
+
+    // TODO: load custom commands from the filesystem
+
     return result
   })
 
@@ -136,6 +139,15 @@ export namespace Config {
         .optional()
         .describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      commands: z.
+        array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Custom commands from local files"),
       autoshare: z
         .boolean()
         .optional()

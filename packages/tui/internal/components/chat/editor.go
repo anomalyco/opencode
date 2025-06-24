@@ -73,11 +73,19 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		if msg.IsCommand {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
-			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
-			return m, tea.Batch(cmds...)
+			command := m.app.Commands[commands.CommandName(commandName)]
+			if command.Default {
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				cmds = append(cmds, cmd)
+				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(command)))
+				return m, tea.Batch(cmds...)
+			} else {
+				// Custom commands can get additional arguments, so add the full command back to the text area; the
+				// substitution happens on the server side after this is sent as a regular chat message.
+				m.textarea.SetValue("/" + msg.CompletionValue + " ")
+				return m, nil
+			}
 		} else {
 			existingValue := m.textarea.Value()
 			

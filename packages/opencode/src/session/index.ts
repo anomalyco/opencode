@@ -298,6 +298,8 @@ export namespace Session {
       }
     }
 
+    // TODO: translate the command into parts
+
     using abort = lock(input.sessionID)
 
     const lastSummary = msgs.findLast(

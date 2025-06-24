@@ -50,6 +50,12 @@ type ConfigInfo struct {
 	// Autoupdate Automatically update to the latest version
 	Autoupdate *bool `json:"autoupdate,omitempty"`
 
+	// Commands Custom commands from local files
+	Commands *[]struct {
+		Description string `json:"description"`
+		Name        string `json:"name"`
+	} `json:"commands,omitempty"`
+
 	// DisabledProviders Disable providers that are loaded automatically
 	DisabledProviders *[]string       `json:"disabled_providers,omitempty"`
 	Keybinds          *ConfigKeybinds `json:"keybinds,omitempty"`
