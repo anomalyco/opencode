@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -71,6 +72,9 @@ func New(
 	configInfo := configResponse.JSON200
 	if configInfo.Keybinds == nil {
 		leader := "ctrl+x"
+		if runtime.GOOS == "darwin" {
+			leader = "cmd+x"
+		}
 		keybinds := client.ConfigKeybinds{
 			Leader: &leader,
 		}
