@@ -9,6 +9,7 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
+import { Commands } from "../command/command.ts"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -23,7 +24,11 @@ export namespace Config {
     }
     log.info("loaded", result)
 
-    // TODO: load custom commands from the filesystem
+    // Also add the custom commands from the filesystem
+    result.commands = [
+      ...result.commands ?? [],
+      ...Commands.state()
+    ]
 
     return result
   })
@@ -139,13 +144,8 @@ export namespace Config {
         .optional()
         .describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      commands: z.
-        array(
-          z.object({
-            name: z.string(),
-            description: z.string(),
-          }),
-        )
+      commands: z
+        .array(Commands.Info)
         .optional()
         .describe("Custom commands from local files"),
       autoshare: z

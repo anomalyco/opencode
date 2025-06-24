@@ -3,7 +3,8 @@
   "commands": [
     {
       "name": "project:custom:test",
-      "description": "custom test command"
+      "description": "custom test command",
+      "prompt": "Fix the following issue following our coding standards:\n\nIssue: $ARGUMENTS\n\nPlease:\n1. Identify the root cause\n2. Implement a minimal fix\n3. Add appropriate tests\n4. Update documentation if needed"
     }
   ]
 }
