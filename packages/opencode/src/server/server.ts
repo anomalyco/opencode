@@ -391,6 +391,33 @@ export namespace Server {
         },
       )
       .post(
+        "/session_delete",
+        describeRoute({
+          description: "Delete a session and all its data",
+          responses: {
+            200: {
+              description: "Successfully deleted session",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            sessionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid("json")
+          await Session.remove(body.sessionID)
+          return c.json(true)
+        },
+      )
+      .post(
         "/session_summarize",
         describeRoute({
           description: "Summarize the session",

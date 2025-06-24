@@ -18,6 +18,7 @@ import {
 } from "ai"
 import { z, ZodSchema } from "zod"
 import { Decimal } from "decimal.js"
+import fs from "fs/promises"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
@@ -68,6 +69,12 @@ export namespace Session {
   export const Event = {
     Updated: Bus.event(
       "session.updated",
+      z.object({
+        info: Info,
+      }),
+    ),
+    Deleted: Bus.event(
+      "session.deleted",
       z.object({
         info: Info,
       }),
@@ -206,12 +213,45 @@ export namespace Session {
     }
   }
 
+  export async function children(parentID: string) {
+    const result = [] as Session.Info[]
+    for await (const item of Storage.list("session/info")) {
+      const sessionID = path.basename(item, ".json")
+      const session = await get(sessionID)
+      if (session.parentID !== parentID) continue
+      result.push(session)
+    }
+    return result
+  }
+
   export function abort(sessionID: string) {
     const controller = state().pending.get(sessionID)
     if (!controller) return false
     controller.abort()
     state().pending.delete(sessionID)
     return true
+  }
+
+  export async function remove(sessionID: string, emitEvent = true) {
+    try {
+      abort(sessionID)
+      const session = await get(sessionID)
+      for (const child of await children(sessionID)) {
+        await remove(child.id, false)
+      }
+      await unshare(sessionID).catch(() => {})
+      await Storage.remove(`session/info/${sessionID}`).catch(() => {})
+      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
+      state().sessions.delete(sessionID)
+      state().messages.delete(sessionID)
+      if (emitEvent) {
+        Bus.publish(Event.Deleted, {
+          info: session,
+        })
+      }
+    } catch (e) {
+      log.error(e)
+    }
   }
 
   async function updateMessage(msg: Message.Info) {
@@ -248,7 +288,7 @@ export namespace Session {
       if (
         model.info.limit.context &&
         tokens >
-        (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
+          (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
       ) {
         await summarize({
           sessionID: input.sessionID,
@@ -295,7 +335,7 @@ export namespace Session {
               draft.title = result.text
             })
         })
-        .catch(() => { })
+        .catch(() => {})
     }
     const msg: Message.Info = {
       role: "user",
@@ -572,7 +612,7 @@ export namespace Session {
           case "tool-call": {
             const [match] = next.parts.flatMap((p) =>
               p.type === "tool-invocation" &&
-                p.toolInvocation.toolCallId === value.toolCallId
+              p.toolInvocation.toolCallId === value.toolCallId
                 ? [p]
                 : [],
             )
