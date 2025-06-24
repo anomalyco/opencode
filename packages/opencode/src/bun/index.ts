@@ -26,7 +26,9 @@ export namespace BunProc {
       },
     })
     const code = await result.exited
+    // @ts-ignore
     const stdout = await result.stdout.text()
+    // @ts-ignore
     const stderr = await result.stderr.text()
     log.info("done", {
       code,
