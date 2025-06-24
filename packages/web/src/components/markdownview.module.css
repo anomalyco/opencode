@@ -37,16 +37,26 @@
     margin-bottom: 0;
   }
 
+  pre {
+    white-space: pre-wrap;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
   code {
     font-weight: 500;
 
-    &::before {
-      content: "`";
-      font-weight: 600;
-    }
-    &::after {
-      content: "`";
-      font-weight: 600;
+    &:not(pre code) {
+      &::before {
+        content: "`";
+        font-weight: 700;
+      }
+      &::after {
+        content: "`";
+        font-weight: 700;
+      }
     }
   }
 }
