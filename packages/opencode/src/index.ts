@@ -67,7 +67,11 @@ const cli = yargs(hideBin(process.argv))
           let cwd = url.fileURLToPath(new URL("../../tui/cmd/opencode", import.meta.url))
           if (Bun.embeddedFiles.length > 0) {
             const blob = Bun.embeddedFiles[0] as File
-            const binary = path.join(Global.Path.cache, "tui", blob.name)
+            let binaryName = blob.name
+            if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
+              binaryName += ".exe"
+            }
+            const binary = path.join(Global.Path.cache, "tui", binaryName)
             const file = Bun.file(binary)
             if (!(await file.exists())) {
               await Bun.write(file, blob, { mode: 0o755 })
