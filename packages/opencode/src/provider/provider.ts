@@ -230,7 +230,11 @@ export namespace Provider {
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      if (provider.env.some((item) => process.env[item])) {
+      if (
+        (provider as ModelsDev.Provider).env.some(
+          (item: string) => process.env[item],
+        )
+      ) {
         mergeProvider(providerID, {}, "env")
       }
     }
