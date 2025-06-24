@@ -30,6 +30,10 @@ beforeEach(async () => {
 afterEach(async () => {
   // Clean up test config
   await fs.promises.rm(testConfigDir, { recursive: true, force: true })
+
+  // Clean up project config files created during tests
+  const projectConfigPath = path.join(process.cwd(), "opencode.json")
+  await fs.promises.rm(projectConfigPath, { force: true })
 })
 
 describe("mcp command", () => {
