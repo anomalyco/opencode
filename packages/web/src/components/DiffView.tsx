@@ -113,29 +113,83 @@ const DiffView: Component<DiffViewProps> = (props) => {
 
   return (
     <div class={`${styles.diff} ${props.class ?? ""}`}>
-      <div class={styles.column}>
-        {rows().map((r) => (
-          <CodeBlock
-            code={r.left}
-            lang={props.lang}
-            data-section="cell"
-            data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}
-          />
-        ))}
-      </div>
+      {rows().map((r) => (
+        <div class={styles.row}>
+          <div class={styles.beforeColumn}>
+            <CodeBlock
+              code={r.left}
+              lang={props.lang}
+              data-section="cell"
+              data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}
+              data-display-mobile={r.type === "added" && !r.left ? "false" : undefined}
+            />
+            {(r.type === "added" || r.type === "modified") && r.right !== undefined && (
+              <CodeBlock
+                code={r.right}
+                lang={props.lang}
+                data-section="cell"
+                data-diff-type="added"
+                data-display-mobile="true"
+              />
+            )}
+          </div>
 
-      <div class={styles.column}>
-        {rows().map((r) => (
-          <CodeBlock
-            code={r.right}
-            lang={props.lang}
-            data-section="cell"
-            data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}
-          />
-        ))}
-      </div>
+          <div class={styles.afterColumn}>
+            <CodeBlock
+              code={r.right}
+              lang={props.lang}
+              data-section="cell"
+              data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
 
 export default DiffView
+
+// String to test diff viewer with
+const testDiff = `--- combined_before.txt	2025-06-24 16:38:08
++++ combined_after.txt	2025-06-24 16:38:12
+@@ -1,21 +1,25 @@
+ unchanged line
+-deleted line
+-old content
++added line
++new content
+ 
+-removed empty line below
++added empty line above
+ 
+-	tab indented
+-trailing spaces   
+-very long line that will definitely wrap in most editors and cause potential alignment issues when displayed in a two column diff view
+-unicode content: 🚀 ✨ 中文
+-mixed	content with	tabs and spaces
++    space indented
++no trailing spaces
++short line
++very long replacement line that will also wrap and test how the diff viewer handles long line additions after short line removals
++different unicode: 🎉 💻 日本語
++normalized content with consistent spacing
++newline to content
+ 
+-content to remove
+-whitespace only:    	  
+-multiple
+-consecutive
+-deletions
+-single deletion
++    	  
++single addition
++first addition
++second addition
++third addition
+ line before addition
++first added line
++
++third added line
+ line after addition
+ final unchanged line`
