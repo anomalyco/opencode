@@ -1,8 +1,134 @@
-Please analyze this codebase and create an AGENTS.md file containing:
-1. Build/lint/test commands - especially for running a single test
-2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
+## Primary Objective
+Your goal is to comprehensively explore the current workspace and create or intelligently update the top-level AGENTS.md file with meticulously analyzed information that will serve as the definitive operational guide for AI coding assistants working on this project. This file must function as the authoritative configuration reference that enables immediate, context-aware, and architecturally consistent code contributions.
 
-The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 20 lines long.
-If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.
+## Mandatory Pre-Analysis & Discovery Phase
 
-If there's already an AGENTS.md, improve it if it's located in ${path}
+### Comprehensive Codebase Intelligence Gathering
+Before generating any content, perform exhaustive workspace analysis through these critical dimensions:
+
+#### Technology Stack Archaeological Investigation
+- **Language Ecosystem Identification**: Detect all programming languages, their versions, and interoperability patterns
+- **Framework Architecture Mapping**: Identify primary frameworks, meta-frameworks, and their specific configuration patterns
+- **Runtime Environment Profiling**: Analyze Node.js versions, Python interpreters, Rust toolchains, Go versions, container configurations
+- **Dependency Tree Analysis**: Examine package.json, requirements.txt, Cargo.toml, go.mod, pyproject.toml, and identify dependency management strategies
+
+#### Build System Deep Dive
+- **Build Configuration Discovery**: Locate and parse all build configuration files (webpack.config.js, vite.config.ts, tsconfig.json, Makefile, build.gradle, etc.)
+- **Script Ecosystem Mapping**: Analyze package.json scripts, Makefile targets, justfile commands, and custom build automation
+- **Development Server Configurations**: Identify dev server setups, hot reload configurations, and local development patterns
+- **Production Build Strategies**: Document production optimization, bundling strategies, and deployment preparation commands
+
+#### Development Toolchain Forensics
+- **Code Quality Infrastructure**: Identify linters (ESLint, Pylint, clippy, golangci-lint), formatters (Prettier, Black, rustfmt), and their configurations
+- **Testing Architecture**: Map test frameworks (Jest, Vitest, pytest, cargo test, go test), test organization patterns, and coverage requirements
+- **Type System Integration**: Analyze TypeScript configurations, Python type checking (mypy, pyright), and static analysis setups
+- **Development Workflow Tools**: Document pre-commit hooks, husky configurations, and automated quality gates
+
+#### Project Architecture Deconstruction
+- **Module Organization Patterns**: Understand directory structures, import/export conventions, and architectural boundaries
+- **Code Organization Philosophy**: Identify monorepo vs. polyrepo structures, microfrontend patterns, service architectures
+- **Convention Over Configuration Analysis**: Document established naming conventions, file organization principles, and architectural decisions
+- **Cross-Module Dependency Mapping**: Analyze internal module relationships and coupling patterns
+
+#### Existing Agent Configuration Archaeological Dig
+Systematically search for and integrate existing AI assistant configurations:
+- **Primary Configuration Files**: .cursorrules, .cursor/rules/*.mdc, CLAUDE.md, CLAUDE.local.md, .cursorrules.md
+- **Legacy Configuration Systems**: codex.md, .codex/*.md, rules.md, .rules.md, .github/copilot-instructions.md
+- **Custom Agent Instructions**: Any project-specific AI assistant guidance, team coding standards documents
+- **Documentation Integration**: README sections about development practices, CONTRIBUTING.md guidelines
+
+## AGENTS.md Content Architecture Requirements
+
+### Essential Structural Components (Non-Negotiable)
+
+#### Immediate Action Command Reference
+- **Dependency Installation**: Exact commands with preferred package managers (prioritize modern tools: bun > npm, uv > pip, cargo, go mod)
+- **Development Environment Activation**: Environment setup, virtual environment creation, and service startup sequences
+- **Build Process Execution**: Development builds, production builds, and incremental compilation strategies
+- **Development Server Orchestration**: Local server startup with all required services and dependencies
+
+#### Comprehensive Testing Command Matrix
+- **Full Test Suite Execution**: Commands for running complete test batteries with proper environment setup
+- **Granular Test Targeting**: Specific commands for individual test files, test suites, and test categories
+- **Test Environment Management**: Test database setup, mock service configuration, and test data management
+- **Coverage Analysis**: Code coverage generation and reporting command sequences
+
+#### Code Quality & Style Enforcement Framework
+- **Import Organization Standards**: Language-specific import sorting, grouping conventions, and dependency organization
+- **Naming Convention Codification**: Function, variable, class, file, and directory naming standards with concrete examples
+- **Architectural Pattern Documentation**: Module organization principles, separation of concerns, and structural conventions
+- **Type Safety & Error Handling Protocols**: Explicit type annotation requirements, error propagation patterns, and safety mechanisms
+- **Documentation Standards**: Comment strategies, API documentation requirements, and inline documentation patterns
+
+#### Development Workflow Orchestration
+- **Version Control Integration**: Git workflow patterns, branch naming strategies, and commit message conventions
+- **Code Review Protocols**: Pull request standards, review criteria, and approval processes
+- **Continuous Integration Alignment**: CI/CD pipeline integration points and automated quality gates
+- **Deployment Preparation**: Production readiness checklists and deployment command sequences
+
+#### Modern Toolchain Preferences Declaration
+- **Package Manager Hierarchy**: Explicit preferences (bun > pnpm > yarn > npm for Node.js, uv > poetry > pip for Python)
+- **Development Tool Selection**: Preferred linters, formatters, test runners, and development utilities
+- **Editor Configuration Standards**: EditorConfig requirements, language server preferences, and IDE-specific optimizations
+
+### Advanced Integration & Migration Requirements
+
+#### Intelligent Configuration Preservation
+- **Existing Rule Integration**: If .cursorrules, .cursor/rules/, or similar files exist, seamlessly integrate their guidelines without losing institutional knowledge
+- **Enhancement Over Replacement**: When AGENTS.md already exists at the target path, perform intelligent enhancement rather than wholesale replacement
+- **Configuration Conflict Resolution**: Harmonize conflicting standards across multiple existing configuration sources
+- **Legacy Pattern Modernization**: Update outdated practices while preserving functional architectural decisions
+
+#### Path-Aware Contextual Processing
+- **Location Intelligence**: Always check ${path} for existing AGENTS.md and use it as the foundation for improvements rather than creating from scratch
+- **Directory Structure Awareness**: Adapt recommendations based on monorepo vs. single-project structures discovered at ${path}
+- **Cross-Project Pattern Recognition**: Identify and leverage established team patterns across multiple repositories within the ${path} workspace context
+- **Variable-Driven Analysis**: Use ${path} as the primary workspace root for all file system operations, configuration discovery, and architectural analysis
+
+#### Consistency Validation Framework
+- **Pattern Alignment Verification**: Ensure all guidelines align with observed project patterns and established conventions
+- **Toolchain Compatibility Checking**: Verify recommended tools are compatible with existing infrastructure
+- **Team Standard Integration**: Harmonize individual project requirements with organizational coding standards
+
+## Output Specification & Quality Standards
+
+### Technical Formatting Requirements
+- **Optimal Length**: 20-35 lines of highly concentrated, immediately actionable directives
+- **Markdown Structure**: Clean sectioning with executable code blocks, proper syntax highlighting, and clear hierarchical organization
+- **Command Precision**: Exact, copy-paste-ready commands with no generic placeholders or abstract instructions
+- **Contextual Specificity**: Project-specific implementations rather than universal generic advice
+
+### Content Quality Metrics
+- **Immediate Actionability**: Every directive must enable an AI agent to begin productive contributions within minutes
+- **Command Accuracy**: All build, test, and development commands must be project-specific and functionally correct
+- **Style Guideline Authenticity**: Code style guidelines must reflect actual observed project conventions, not theoretical standards
+- **Toolchain Modernization**: Clear articulation of preferred modern tooling with explicit upgrade paths from legacy systems
+
+### Architectural Coherence Standards
+- **Modularity Principles**: Organize information for easy reference, selective application, and incremental updates
+- **Cross-Reference Integration**: Ensure internal consistency across all sections and recommendations
+- **Extensibility Design**: Structure content to accommodate future project evolution and toolchain updates
+- **Clarity Optimization**: Write specifically for AI agents requiring precise, unambiguous operational instructions
+
+## Comprehensive Quality Validation Protocol
+
+### AI Agent Readiness Assessment
+Validate the generated AGENTS.md against these critical success criteria:
+
+- **Immediate Contribution Capability**: Can an AI agent with no prior project knowledge immediately begin making meaningful contributions?
+- **Command Functional Verification**: Are all build, test, and development commands project-specific, accurate, and immediately executable?
+- **Style Guide Implementation**: Do the documented guidelines directly reflect actual project conventions observed in the codebase?
+- **Modern Toolchain Integration**: Are contemporary tool preferences clearly specified with concrete implementation guidance?
+- **Completeness Validation**: Does the file provide comprehensive coverage without informational gaps that would impede AI agent effectiveness?
+
+### Architectural Integrity Verification
+- **Pattern Consistency**: Do all recommendations maintain harmony with established project architectural decisions?
+- **Scalability Considerations**: Will the guidelines remain effective as the project grows and evolves?
+- **Cross-Platform Compatibility**: Are the guidelines applicable across different development environments and team configurations?
+- **Future-Proofing**: Does the configuration anticipate and accommodate likely technological evolution paths?
+
+## Final Execution Directive
+
+Generate the AGENTS.md file with meticulous attention to these comprehensive requirements, ensuring it functions as the definitive, authoritative reference for any AI coding assistant working within this repository. The file must enable immediate, confident, and architecturally consistent contributions while respecting existing project patterns and institutional knowledge.
+
+**Critical Reminder**: This is a living document that should evolve with the project while maintaining its core function as the primary AI agent operational configuration.
