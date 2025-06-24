@@ -115,7 +115,9 @@ export namespace Installation {
         case "bun":
           return $`bun install -g opencode-ai@${target}`
         case "brew":
-          return $`brew install sst/tap/opencode`
+          return $`brew install sst/tap/opencode`.env({
+            HOMEBREW_NO_AUTO_UPDATE: "1",
+          })
         default:
           throw new Error(`Unknown method: ${method}`)
       }
