@@ -4,6 +4,7 @@ import { Server } from "./server/server"
 import fs from "fs/promises"
 import path from "path"
 import { Share } from "./share/share"
+import url from "node:url"
 import { Global } from "./global"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
@@ -63,7 +64,7 @@ const cli = yargs(hideBin(process.argv))
           const server = Server.listen()
 
           let cmd = ["go", "run", "./main.go"]
-          let cwd = new URL("../../tui/cmd/opencode", import.meta.url).pathname
+          let cwd = url.fileURLToPath(new URL("../../tui/cmd/opencode", import.meta.url))
           if (Bun.embeddedFiles.length > 0) {
             const blob = Bun.embeddedFiles[0] as File
             const binary = path.join(Global.Path.cache, "tui", blob.name)
