@@ -70,11 +70,9 @@ const McpAddCommand = cmd({
         default: [],
       }),
   handler: async (args) => {
-    const { name, commandOrUrl, args: cmdArgs, type, env } = args
-
     // Parse environment variables
     const environment: Record<string, string> = {}
-    for (const envVar of env) {
+    for (const envVar of args.env) {
       const [key, ...valueParts] = envVar.split("=")
       if (!key || valueParts.length === 0) {
         UI.error(`Invalid environment variable format: ${envVar}. Use KEY=VALUE format.`)
@@ -84,17 +82,12 @@ const McpAddCommand = cmd({
     }
 
     // Auto-detect type if not specified
-    let serverType = type
-    if (!serverType) {
-      serverType = commandOrUrl.startsWith("http://") || commandOrUrl.startsWith("https://") 
-        ? "remote" 
-        : "local"
-    }
+    const isRemote = args.commandOrUrl.startsWith("http://") || args.commandOrUrl.startsWith("https://")
+    const serverType = args.type || (isRemote ? "remote" : "local")
 
-    // Validate inputs
-    let mcpConfig: Config.Mcp
+    // Validate remote server constraints
     if (serverType === "remote") {
-      if (cmdArgs.length > 0) {
+      if (args.args.length > 0) {
         UI.error("Remote MCP servers don't accept additional arguments")
         return
       }
@@ -102,35 +95,34 @@ const McpAddCommand = cmd({
         UI.error("Remote MCP servers don't support environment variables")
         return
       }
-      mcpConfig = {
-        type: "remote",
-        url: commandOrUrl,
-      }
-    } else {
-      mcpConfig = {
-        type: "local",
-        command: [commandOrUrl, ...cmdArgs],
-        ...(Object.keys(environment).length > 0 && { environment }),
-      }
     }
 
-    // Load current config
+    // Create config
+    const mcpConfig: Config.Mcp = serverType === "remote" 
+      ? {
+          type: "remote",
+          url: args.commandOrUrl,
+        }
+      : {
+          type: "local",
+          command: [args.commandOrUrl, ...args.args],
+          ...(Object.keys(environment).length > 0 && { environment }),
+        }
+
     const configPath = path.join(Global.Path.config, "config.json")
     const currentConfig = await Config.global()
 
-    // Add the new MCP server
     const updatedConfig = {
       ...currentConfig,
       mcp: {
         ...currentConfig.mcp,
-        [name]: mcpConfig,
+        [args.name]: mcpConfig,
       },
     }
 
-    // Save config
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
     
-    UI.println(`Added MCP server "${name}" (${serverType})`)
+    UI.println(`Added MCP server "${args.name}" (${serverType})`)
   },
 })
 
@@ -145,28 +137,23 @@ const McpRemoveCommand = cmd({
         demandOption: true,
       }),
   handler: async (args) => {
-    const { name } = args
-
-    // Load current config
     const configPath = path.join(Global.Path.config, "config.json")
     const currentConfig = await Config.global()
 
-    if (!currentConfig.mcp || !currentConfig.mcp[name]) {
-      UI.error(`MCP server "${name}" not found`)
+    if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
+      UI.error(`MCP server "${args.name}" not found`)
       return
     }
 
-    // Remove the MCP server
-    const { [name]: removed, ...remainingMcp } = currentConfig.mcp
+    const { [args.name]: removed, ...remainingMcp } = currentConfig.mcp
     const updatedConfig = {
       ...currentConfig,
       mcp: Object.keys(remainingMcp).length > 0 ? remainingMcp : undefined,
     }
 
-    // Save config
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
     
-    UI.println(`Removed MCP server "${name}"`)
+    UI.println(`Removed MCP server "${args.name}"`)
   },
 })
 
@@ -213,16 +200,15 @@ const McpGetCommand = cmd({
         demandOption: true,
       }),
   handler: async (args) => {
-    const { name } = args
     const config = await Config.global()
     
-    if (!config.mcp || !config.mcp[name]) {
-      UI.error(`MCP server "${name}" not found`)
+    if (!config.mcp || !config.mcp[args.name]) {
+      UI.error(`MCP server "${args.name}" not found`)
       return
     }
 
-    const mcpConfig = config.mcp[name]
-    UI.println(`MCP Server: ${name}`)
+    const mcpConfig = config.mcp[args.name]
+    UI.println(`MCP Server: ${args.name}`)
     UI.println(`Type: ${mcpConfig.type}`)
     
     if (mcpConfig.type === "local") {
@@ -255,43 +241,37 @@ const McpAddJsonCommand = cmd({
         demandOption: true,
       }),
   handler: async (args) => {
-    const { name, json } = args
-
     try {
-      // Parse the JSON
-      const jsonConfig = JSON.parse(json)
-      
-      // Validate against the MCP schema
+      const jsonConfig = JSON.parse(args.json)
       const mcpConfig = Config.Mcp.parse(jsonConfig)
 
-      // Load current config
       const configPath = path.join(Global.Path.config, "config.json")
       const currentConfig = await Config.global()
 
-      // Add the new MCP server
       const updatedConfig = {
         ...currentConfig,
         mcp: {
           ...currentConfig.mcp,
-          [name]: mcpConfig,
+          [args.name]: mcpConfig,
         },
       }
 
-      // Save config
       await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
       
-      UI.println(`Added MCP server "${name}" (${mcpConfig.type})`)
+      UI.println(`Added MCP server "${args.name}" (${mcpConfig.type})`)
     } catch (error) {
       if (error instanceof SyntaxError) {
         UI.error(`Invalid JSON: ${error.message}`)
-      } else if (error instanceof z.ZodError) {
+        return
+      }
+      if (error instanceof z.ZodError) {
         UI.error(`Invalid MCP configuration:`)
         for (const issue of error.issues) {
           UI.error(`  ${issue.path.join(".")}: ${issue.message}`)
         }
-      } else {
-        UI.error(`Failed to add MCP server: ${error}`)
+        return
       }
+      UI.error(`Failed to add MCP server: ${error}`)
     }
   },
 })
