@@ -33,6 +33,7 @@ export namespace MCP {
             transport: {
               type: "sse",
               url: mcp.url,
+              ...(mcp.headers && { headers: mcp.headers }),
             },
           }).catch(() => {})
           if (!client) {
