@@ -15,7 +15,7 @@ export namespace BunProc {
       cmd: [which(), ...cmd],
       ...options,
     })
-    const result = Bun.spawnSync([which(), ...cmd], {
+    const result = Bun.spawn([which(), ...cmd], {
       ...options,
       stdout: "pipe",
       stderr: "pipe",
@@ -25,9 +25,9 @@ export namespace BunProc {
         BUN_BE_BUN: "1",
       },
     })
-    const stdout = result.stdout!.toString()
-    const stderr = result.stderr!.toString()
-    const code = result.exitCode
+    const code = await result.exited
+    const stdout = await result.stdout.text()
+    const stderr = await result.stderr.text()
     log.info("done", {
       code,
       stdout,
