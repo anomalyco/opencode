@@ -1,5 +1,5 @@
 import { AuthAnthropic } from "../../auth/anthropic"
-import { AuthGithubCopilot } from "../../auth/github-copilot"
+import { AuthCopilot } from "../../auth/copilot"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -17,7 +17,7 @@ export const AuthCommand = cmd({
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .demandCommand(),
-  async handler() { },
+  async handler() {},
 })
 
 export const AuthListCommand = cmd({
@@ -148,9 +148,10 @@ export const AuthLoginCommand = cmd({
       }
     }
 
-    if (provider === "github-copilot") {
+    const copilot = await AuthCopilot()
+    if (provider === "github-copilot" && copilot) {
       await new Promise((resolve) => setTimeout(resolve, 10))
-      const deviceInfo = await AuthGithubCopilot.authorize()
+      const deviceInfo = await copilot.authorize()
 
       prompts.note(
         `Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`,
@@ -163,13 +164,19 @@ export const AuthLoginCommand = cmd({
         await new Promise((resolve) =>
           setTimeout(resolve, deviceInfo.interval * 1000),
         )
-        const status = await AuthGithubCopilot.poll(deviceInfo.device)
-        if (status === "pending") continue
-        if (status === "complete") {
+        const response = await copilot.poll(deviceInfo.device)
+        if (response.status === "pending") continue
+        if (response.status === "success") {
+          await Auth.set("github-copilot", {
+            type: "oauth",
+            refresh: response.refresh,
+            access: response.access,
+            expires: response.expires,
+          })
           spinner.stop("Login successful")
           break
         }
-        if (status === "failed") {
+        if (response.status === "failed") {
           spinner.stop("Failed to authorize", 1)
           break
         }

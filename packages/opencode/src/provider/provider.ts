@@ -19,7 +19,7 @@ import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
-import { AuthGithubCopilot } from "../auth/github-copilot"
+import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -68,8 +68,10 @@ export namespace Provider {
       }
     },
     "github-copilot": async (provider) => {
-      const info = await AuthGithubCopilot.access()
-      if (!info) return false
+      const copilot = await AuthCopilot()
+      if (!copilot) return false
+      let info = await Auth.get("github-copilot")
+      if (!info || info.type !== "oauth") return false
 
       if (provider && provider.models) {
         for (const model of Object.values(provider.models)) {
@@ -84,15 +86,22 @@ export namespace Provider {
         options: {
           apiKey: "",
           async fetch(input: any, init: any) {
-            const token = await AuthGithubCopilot.access()
-            if (!token) throw new Error("GitHub Copilot authentication expired")
+            let info = await Auth.get("github-copilot")
+            if (!info || info.type !== "oauth") return
+            if (!info.access || info.expires < Date.now()) {
+              const tokens = await copilot.access(info.refresh)
+              if (!tokens)
+                throw new Error("GitHub Copilot authentication expired")
+              info = {
+                type: "oauth",
+                ...tokens,
+              }
+              await Auth.set("github-copilot", info)
+            }
             const headers = {
               ...init.headers,
-              Authorization: `Bearer ${token}`,
-              "User-Agent": "GitHubCopilotChat/0.26.7",
-              "Editor-Version": "vscode/1.99.3",
-              "Editor-Plugin-Version": "copilot-chat/0.26.7",
-              "Copilot-Integration-Id": "vscode-chat",
+              ...copilot.HEADERS,
+              Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
             }
             delete headers["x-api-key"]
