@@ -2,6 +2,10 @@
   pre {
     --shiki-dark-bg: var(--sl-color-bg-surface) !important;
     background-color: var(--sl-color-bg-surface) !important;
+
+    span {
+      white-space: break-spaces;
+    }
   }
 }
 
