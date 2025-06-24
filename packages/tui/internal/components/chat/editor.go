@@ -3,6 +3,8 @@ package chat
 import (
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
@@ -68,6 +70,15 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea = createTextArea(&m.textarea)
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, textarea.Blink)
+	case FileContentLoadedMsg:
+		if msg.Error != nil {
+			slog.Error("Failed to read file", "error", msg.Error, "path", msg.FilePath)
+			return m, nil
+		}
+		// Insert the file content at the current cursor position
+		currentValue := m.textarea.Value()
+		m.textarea.SetValue(currentValue + msg.Content)
+		return m, nil
 	case dialog.CompletionSelectedMsg:
 		if msg.IsCommand {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
@@ -75,6 +86,19 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
 			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+			return m, tea.Batch(cmds...)
+		} else if strings.HasPrefix(msg.SearchString, "@") {
+			// Handle @ file selections - read file content and insert into message
+			existingValue := m.textarea.Value()
+			// Remove the @filename part
+			modifiedValue := strings.Replace(existingValue, msg.SearchString, "", 1)
+			
+			// Read file content asynchronously and insert it
+			cmds = append(cmds, func() tea.Msg {
+				return m.readFileContent(msg.CompletionValue)
+			})
+			
+			m.textarea.SetValue(modifiedValue)
 			return m, tea.Batch(cmds...)
 		} else {
 			existingValue := m.textarea.Value()
@@ -304,6 +328,40 @@ func createSpinner() spinner.Model {
 				Background(theme.CurrentTheme().Background()).
 				Width(3)),
 	)
+}
+
+type FileContentLoadedMsg struct {
+	FilePath string
+	Content  string
+	Error    error
+}
+
+func (m *editorComponent) readFileContent(filePath string) tea.Msg {
+	// Make path absolute if it's relative
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return FileContentLoadedMsg{
+			FilePath: filePath,
+			Error:    err,
+		}
+	}
+
+	// Format content similar to read tool but simpler for chat
+	relPath := filePath
+	if rel, err := filepath.Rel(m.app.Info.Path.Root, filePath); err == nil {
+		relPath = rel
+	}
+
+	formattedContent := fmt.Sprintf("\n\n<file path=\"%s\">\n%s\n</file>\n\n", relPath, string(content))
+
+	return FileContentLoadedMsg{
+		FilePath: filePath,
+		Content:  formattedContent,
+	}
 }
 
 func NewEditorComponent(app *app.App) EditorComponent {
