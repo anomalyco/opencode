@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -25,6 +26,19 @@ import (
 	"github.com/sst/opencode/pkg/client"
 )
 
+// InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
+type InterruptDebounceTimeoutMsg struct{}
+
+// InterruptKeyState tracks the state of interrupt key presses for debouncing
+type InterruptKeyState int
+
+const (
+	InterruptKeyIdle InterruptKeyState = iota
+	InterruptKeyFirstPress
+)
+
+const interruptDebounceTimeout = 1 * time.Second
+
 type appModel struct {
 	width, height        int
 	app                  *app.App
@@ -40,6 +54,7 @@ type appModel struct {
 	leaderBinding        *key.Binding
 	isLeaderSequence     bool
 	toastManager         *toast.ToastManager
+	interruptKeyState    InterruptKeyState
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -171,9 +186,32 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-		// 6. Check again for commands that don't require leader
+		// 6. Handle interrupt key debounce for session interrupt
+		interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
+		if interruptCommand.Matches(msg, a.isLeaderSequence) && a.app.IsBusy() {
+			switch a.interruptKeyState {
+			case InterruptKeyIdle:
+				// First interrupt key press - start debounce timer
+				a.interruptKeyState = InterruptKeyFirstPress
+				a.editor.SetInterruptKeyInDebounce(true)
+				return a, tea.Tick(interruptDebounceTimeout, func(t time.Time) tea.Msg {
+					return InterruptDebounceTimeoutMsg{}
+				})
+			case InterruptKeyFirstPress:
+				// Second interrupt key press within timeout - actually interrupt
+				a.interruptKeyState = InterruptKeyIdle
+				a.editor.SetInterruptKeyInDebounce(false)
+				return a, util.CmdHandler(commands.ExecuteCommandMsg(interruptCommand))
+			}
+		}
+
+		// 7. Check again for commands that don't require leader (excluding interrupt when busy)
 		matches := a.app.Commands.Matches(msg, a.isLeaderSequence)
 		if len(matches) > 0 {
+			// Skip interrupt key if we're in debounce mode and app is busy
+			if interruptCommand.Matches(msg, a.isLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
+				return a, nil
+			}
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
@@ -305,6 +343,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tm, cmd := a.toastManager.Update(msg)
 		a.toastManager = tm
 		cmds = append(cmds, cmd)
+	case InterruptDebounceTimeoutMsg:
+		// Reset interrupt key state after timeout
+		a.interruptKeyState = InterruptKeyIdle
+		a.editor.SetInterruptKeyInDebounce(false)
 	}
 
 	// update status bar
@@ -597,6 +639,7 @@ func NewModel(app *app.App) tea.Model {
 		showCompletionDialog: false,
 		editorContainer:      editorContainer,
 		toastManager:         toast.NewToastManager(),
+		interruptKeyState:    InterruptKeyIdle,
 		layout: layout.NewFlexLayout(
 			[]tea.ViewModel{messagesContainer, editorContainer},
 			layout.WithDirection(layout.FlexDirectionVertical),

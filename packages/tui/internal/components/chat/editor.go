@@ -32,17 +32,19 @@ type EditorComponent interface {
 	Newline() (tea.Model, tea.Cmd)
 	Previous() (tea.Model, tea.Cmd)
 	Next() (tea.Model, tea.Cmd)
+	SetInterruptKeyInDebounce(inDebounce bool)
 }
 
 type editorComponent struct {
-	app            *app.App
-	width, height  int
-	textarea       textarea.Model
-	attachments    []app.Attachment
-	history        []string
-	historyIndex   int
-	currentMessage string
-	spinner        spinner.Model
+	app                    *app.App
+	width, height          int
+	textarea               textarea.Model
+	attachments            []app.Attachment
+	history                []string
+	historyIndex           int
+	currentMessage         string
+	spinner                spinner.Model
+	interruptKeyInDebounce bool
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -115,9 +117,14 @@ func (m *editorComponent) Content() string {
 		Background(t.BackgroundElement()).
 		Render(textarea)
 
-	hint := base("enter") + muted(" send   ")
+	hint := base(m.getSubmitKeyText()) + muted(" send   ")
 	if m.app.IsBusy() {
-		hint = muted("working") + m.spinner.View() + muted("  ") + base("esc") + muted(" interrupt")
+		keyText := m.getInterruptKeyText()
+		if m.interruptKeyInDebounce {
+			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText+" again") + muted(" interrupt")
+		} else {
+			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText) + muted(" interrupt")
+		}
 	}
 
 	model := ""
@@ -263,6 +270,18 @@ func (m *editorComponent) Next() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
+	m.interruptKeyInDebounce = inDebounce
+}
+
+func (m *editorComponent) getInterruptKeyText() string {
+	return m.app.Commands[commands.SessionInterruptCommand].Keys()[0]
+}
+
+func (m *editorComponent) getSubmitKeyText() string {
+	return m.app.Commands[commands.InputSubmitCommand].Keys()[0]
+}
+
 func createTextArea(existing *textarea.Model) textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
@@ -311,11 +330,12 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta := createTextArea(nil)
 
 	return &editorComponent{
-		app:            app,
-		textarea:       ta,
-		history:        []string{},
-		historyIndex:   0,
-		currentMessage: "",
-		spinner:        s,
+		app:                    app,
+		textarea:               ta,
+		history:                []string{},
+		historyIndex:           0,
+		currentMessage:         "",
+		spinner:                s,
+		interruptKeyInDebounce: false,
 	}
 }
