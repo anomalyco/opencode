@@ -86,17 +86,17 @@ export namespace Provider {
         options: {
           apiKey: "",
           async fetch(input: any, init: any) {
-            let info = await Auth.get("github-copilot")
+            const info = await Auth.get("github-copilot")
             if (!info || info.type !== "oauth") return
             if (!info.access || info.expires < Date.now()) {
               const tokens = await copilot.access(info.refresh)
               if (!tokens)
                 throw new Error("GitHub Copilot authentication expired")
-              info = {
+              await Auth.set("github-copilot", {
                 type: "oauth",
                 ...tokens,
-              }
-              await Auth.set("github-copilot", info)
+              })
+              info.access = tokens.access
             }
             const headers = {
               ...init.headers,
