@@ -60,7 +60,7 @@ export const McpAddCommand = cmd({
       })
       .positional("commandOrUrl", {
         type: "string",
-        describe: "Command to run (for stdio) or URL (for SSE/HTTP)",
+        describe: "Command to run (for stdio) or URL (for SSE)",
         demandOption: true,
       })
       .positional("args", {
@@ -94,7 +94,7 @@ export const McpAddCommand = cmd({
         alias: "H",
         type: "string",
         array: true,
-        describe: "Set HTTP headers for SSE and HTTP transports (e.g. -H \"X-Api-Key: abc123\")",
+        describe: "Set HTTP headers for SSE transport (e.g. -H \"X-Api-Key: abc123\")",
         default: [],
       }),
   handler: async (args) => {
@@ -135,7 +135,7 @@ export const McpAddCommand = cmd({
         return
       }
     } else {
-      // sse or http transport
+      // sse transport
       if (!isUrl) {
         UI.error(`${args.transport} transport requires a URL`)
         return
