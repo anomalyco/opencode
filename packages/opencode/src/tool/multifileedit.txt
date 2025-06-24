@@ -1,0 +1,32 @@
+Performs exact string replacements across multiple files in a single operation. This is more efficient than calling the edit tool multiple times when you need to make changes across several files.
+
+Usage:
+- Provide an array of edit operations in the edits parameter
+- Each edit operation contains:
+  - filePath: The absolute path to the file to modify (can be relative, will be resolved from cwd)
+  - oldString: The text to replace (must match exactly, including whitespace)
+  - newString: The text to replace it with
+  - replaceAll: (optional) Replace all occurrences of oldString (default false)
+
+Requirements:
+- You must use the Read or MultiRead tool at least once in the conversation before editing
+- When editing text from Read tool output, preserve exact indentation as it appears AFTER the line number prefix
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required
+- Only use emojis if the user explicitly requests it
+
+Behavior:
+- The edit will FAIL if oldString is not unique in a file (unless replaceAll is true)
+- Either provide larger string with more context to make it unique or use replaceAll
+- Use replaceAll for replacing and renaming strings across files (useful for variable renaming)
+- All edits are processed independently - if some fail, others may still succeed
+- Permission is requested for each file before any edits are made
+- Diagnostics are checked after all edits to catch any syntax errors
+- Results include diffs for each successfully edited file
+
+This tool is ideal when you need to:
+- Refactor code across multiple files
+- Rename variables/functions across a codebase
+- Apply similar changes to multiple configuration files
+- Update imports/exports across files
+
+The tool will attempt all edits and report successes and failures separately, allowing you to see which changes were applied and which need attention.

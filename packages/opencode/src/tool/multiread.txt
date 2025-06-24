@@ -1,0 +1,21 @@
+Reads multiple files from the local filesystem in a single operation. This is more efficient than calling the read tool multiple times when you need to examine several files.
+
+Usage:
+- Provide an array of file paths in the filePaths parameter
+- File paths can be absolute or relative (relative paths are resolved from current working directory)
+- By default, reads up to 2000 lines starting from the beginning of each file
+- You can optionally specify a line offset and limit that applies to ALL files
+- Any lines longer than 2000 characters will be truncated
+- Results are returned using cat -n format, with line numbers starting at 1
+- Each file's content is wrapped in <file path="..."></file> tags for clear separation
+- If some files cannot be read (missing, too large, etc.), the tool will continue with other files and report errors at the end
+- Maximum file size is 250KB per file
+- Image files are not supported - use individual read tool for images
+
+This tool is ideal when you need to:
+- Review multiple related files at once
+- Compare code across several files
+- Get an overview of a project's structure
+- Read configuration files and their related code files
+
+The tool will attempt to read all provided files and return successful reads along with any errors encountered.

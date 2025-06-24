@@ -15,6 +15,9 @@ import { LspDiagnosticTool } from "../tool/lsp-diagnostics"
 import { LspHoverTool } from "../tool/lsp-hover"
 import { PatchTool } from "../tool/patch"
 import { ReadTool } from "../tool/read"
+import { MultiReadTool } from "../tool/multiread"
+import { MultiEditTool } from "../tool/multiedit"
+import { MultiFileEditTool } from "../tool/multifileedit"
 import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
@@ -389,6 +392,8 @@ export namespace Provider {
   const TOOLS = [
     BashTool,
     EditTool,
+    MultiEditTool,
+    MultiFileEditTool,
     WebFetchTool,
     GlobTool,
     GrepTool,
@@ -397,8 +402,7 @@ export namespace Provider {
     LspHoverTool,
     PatchTool,
     ReadTool,
-    EditTool,
-    // MultiEditTool,
+    MultiReadTool,
     WriteTool,
     TodoWriteTool,
     TaskTool,
