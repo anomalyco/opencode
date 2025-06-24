@@ -13,6 +13,7 @@ import { ScrapCommand } from "./cli/cmd/scrap"
 import { Log } from "./util/log"
 import { AuthCommand, AuthLoginCommand } from "./cli/cmd/auth"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
+import { McpCommand } from "./cli/cmd/mcp"
 import { Provider } from "./provider/provider"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
@@ -129,6 +130,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ScrapCommand)
   .command(AuthCommand)
   .command(UpgradeCommand)
+  .command(McpCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
