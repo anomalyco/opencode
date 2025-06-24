@@ -316,6 +316,55 @@ describe("mcp command", () => {
     )
   })
 
+  test("list global and project MCP servers", async () => {
+    // Add a server to user config
+    await Bun.write(
+      testConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "global-server": {
+              type: "local",
+              command: ["node", "global-server.js"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    // Add a server to project config
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "project-server": {
+              type: "remote",
+              url: "https://example.com/mcp",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const originalPrintln = UI.println
+    const logs: string[] = []
+    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+
+    await McpListCommand.handler({ $0: "opencode", _: [] })
+
+    UI.println = originalPrintln
+    expect(logs.some((log) => log.includes("Global MCP servers:"))).toBe(true)
+    expect(logs.some((log) => log.includes("Project MCP servers:"))).toBe(true)
+    expect(logs.some((log) => log.includes("global-server"))).toBe(true)
+    expect(logs.some((log) => log.includes("project-server"))).toBe(true)
+  })
+
   test("get MCP server details", async () => {
     // Add a server first
     await Bun.write(

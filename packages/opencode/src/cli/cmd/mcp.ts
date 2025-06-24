@@ -236,30 +236,60 @@ export const McpListCommand = cmd({
   command: "list",
   describe: "List configured MCP servers",
   handler: async () => {
-    const config = await Config.global()
+    const globalConfig = await Config.global()
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    const projectConfig = await loadProjectConfig(projectConfigPath)
     
-    if (!config.mcp || Object.keys(config.mcp).length === 0) {
+    const hasGlobalServers = globalConfig.mcp && Object.keys(globalConfig.mcp).length > 0
+    const hasProjectServers = projectConfig.mcp && Object.keys(projectConfig.mcp).length > 0
+    
+    if (!hasGlobalServers && !hasProjectServers) {
       UI.println("No MCP servers configured")
       return
     }
 
-    UI.println("Configured MCP servers:")
-    UI.empty()
-    
-    for (const [name, mcpConfig] of Object.entries(config.mcp)) {
-      UI.println(`  ${name} (${mcpConfig.type})`)
-      if (mcpConfig.type === "local") {
-        UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
-        if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
-          UI.println(`    Environment:`)
-          for (const [key, value] of Object.entries(mcpConfig.environment)) {
-            UI.println(`      ${key}=${value}`)
-          }
-        }
-      } else {
-        UI.println(`    URL: ${mcpConfig.url}`)
-      }
+    // Display global servers
+    if (hasGlobalServers) {
+      UI.println("Global MCP servers:")
       UI.empty()
+      
+      for (const [name, mcpConfig] of Object.entries(globalConfig.mcp!)) {
+        UI.println(`  ${name} (${mcpConfig.type})`)
+        if (mcpConfig.type === "local") {
+          UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
+          if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
+            UI.println(`    Environment:`)
+            for (const [key, value] of Object.entries(mcpConfig.environment)) {
+              UI.println(`      ${key}=${value}`)
+            }
+          }
+        } else {
+          UI.println(`    URL: ${mcpConfig.url}`)
+        }
+        UI.empty()
+      }
+    }
+
+    // Display project servers
+    if (hasProjectServers) {
+      UI.println("Project MCP servers:")
+      UI.empty()
+      
+      for (const [name, mcpConfig] of Object.entries(projectConfig.mcp!)) {
+        UI.println(`  ${name} (${mcpConfig.type})`)
+        if (mcpConfig.type === "local") {
+          UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
+          if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
+            UI.println(`    Environment:`)
+            for (const [key, value] of Object.entries(mcpConfig.environment)) {
+              UI.println(`      ${key}=${value}`)
+            }
+          }
+        } else {
+          UI.println(`    URL: ${mcpConfig.url}`)
+        }
+        UI.empty()
+      }
     }
   },
 })
