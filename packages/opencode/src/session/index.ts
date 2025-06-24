@@ -248,7 +248,7 @@ export namespace Session {
       if (
         model.info.limit.context &&
         tokens >
-        (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
+          (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
       ) {
         await summarize({
           sessionID: input.sessionID,
@@ -295,7 +295,7 @@ export namespace Session {
               draft.title = result.text
             })
         })
-        .catch(() => { })
+        .catch(() => {})
     }
     const msg: Message.Info = {
       role: "user",
@@ -433,24 +433,6 @@ export namespace Session {
     }
 
     let text: Message.TextPart | undefined
-    await Bun.write(
-      "/tmp/message.json",
-      JSON.stringify(
-        [
-          ...system.map(
-            (x): CoreMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...convertToCoreMessages(
-            msgs.map(toUIMessage).filter((x) => x.parts.length > 0),
-          ),
-        ],
-        null,
-        2,
-      ),
-    )
     const result = streamText({
       onStepFinish: async (step) => {
         log.info("step finish", { finishReason: step.finishReason })
@@ -572,7 +554,7 @@ export namespace Session {
           case "tool-call": {
             const [match] = next.parts.flatMap((p) =>
               p.type === "tool-invocation" &&
-                p.toolInvocation.toolCallId === value.toolCallId
+              p.toolInvocation.toolCallId === value.toolCallId
                 ? [p]
                 : [],
             )
