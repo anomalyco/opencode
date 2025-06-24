@@ -363,6 +363,42 @@
         }
       }
     },
+    "/session_delete": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Successfully deleted session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postSession_delete",
+        "parameters": [],
+        "description": "Delete a session and all its data",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sessionID"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/session_summarize": {
       "post": {
         "responses": {
@@ -580,6 +616,9 @@
             "$ref": "#/components/schemas/Event.session.updated"
           },
           {
+            "$ref": "#/components/schemas/Event.session.deleted"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.error"
           }
         ],
@@ -593,6 +632,7 @@
             "message.updated": "#/components/schemas/Event.message.updated",
             "message.part.updated": "#/components/schemas/Event.message.part.updated",
             "session.updated": "#/components/schemas/Event.session.updated",
+            "session.deleted": "#/components/schemas/Event.session.deleted",
             "session.error": "#/components/schemas/Event.session.error"
           }
         }
@@ -1337,6 +1377,30 @@
           "title",
           "version",
           "time"
+        ]
+      },
+      "Event.session.deleted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.deleted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/session.info"
+              }
+            },
+            "required": [
+              "info"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
         ]
       },
       "Event.session.error": {

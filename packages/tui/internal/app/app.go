@@ -396,6 +396,19 @@ func (a *App) ListSessions(ctx context.Context) ([]client.SessionInfo, error) {
 	return sessions, nil
 }
 
+func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
+	resp, err := a.Client.PostSessionDeleteWithResponse(ctx, client.PostSessionDeleteJSONRequestBody{
+		SessionID: sessionID,
+	})
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != 200 {
+		return fmt.Errorf("failed to delete session: %d", resp.StatusCode())
+	}
+	return nil
+}
+
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]client.MessageInfo, error) {
 	resp, err := a.Client.PostSessionMessagesWithResponse(ctx, client.PostSessionMessagesJSONRequestBody{SessionID: sessionId})
 	if err != nil {

@@ -261,6 +261,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
+	case client.EventSessionDeleted:
+		if a.app.Session != nil && msg.Properties.Info.Id == a.app.Session.Id {
+			a.app.Session = &client.SessionInfo{}
+			a.app.Messages = []client.MessageInfo{}
+		}
+		return a, toast.NewSuccessToast("Session deleted successfully")
 	case client.EventSessionUpdated:
 		if msg.Properties.Info.Id == a.app.Session.Id {
 			a.app.Session = &msg.Properties.Info
@@ -269,7 +275,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Properties.Info.Metadata.SessionID == a.app.Session.Id {
 			exists := false
 			optimisticReplaced := false
-			
+
 			// First check if this is replacing an optimistic message
 			if msg.Properties.Info.Role == client.User {
 				// Look for optimistic messages to replace
@@ -283,7 +289,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			
+
 			// If not replacing optimistic, check for existing message with same ID
 			if !optimisticReplaced {
 				for i, m := range a.app.Messages {
@@ -294,7 +300,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			
+
 			if !exists {
 				a.app.Messages = append(a.app.Messages, msg.Properties.Info)
 			}

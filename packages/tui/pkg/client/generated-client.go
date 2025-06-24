@@ -254,6 +254,14 @@ type EventPermissionUpdated struct {
 	Type       string         `json:"type"`
 }
 
+// EventSessionDeleted defines model for Event.session.deleted.
+type EventSessionDeleted struct {
+	Properties struct {
+		Info SessionInfo `json:"info"`
+	} `json:"properties"`
+	Type string `json:"type"`
+}
+
 // EventSessionError defines model for Event.session.error.
 type EventSessionError struct {
 	Properties struct {
@@ -518,6 +526,11 @@ type PostSessionChatJSONBody struct {
 	SessionID  string        `json:"sessionID"`
 }
 
+// PostSessionDeleteJSONBody defines parameters for PostSessionDelete.
+type PostSessionDeleteJSONBody struct {
+	SessionID string `json:"sessionID"`
+}
+
 // PostSessionInitializeJSONBody defines parameters for PostSessionInitialize.
 type PostSessionInitializeJSONBody struct {
 	ModelID    string `json:"modelID"`
@@ -555,6 +568,9 @@ type PostSessionAbortJSONRequestBody PostSessionAbortJSONBody
 
 // PostSessionChatJSONRequestBody defines body for PostSessionChat for application/json ContentType.
 type PostSessionChatJSONRequestBody PostSessionChatJSONBody
+
+// PostSessionDeleteJSONRequestBody defines body for PostSessionDelete for application/json ContentType.
+type PostSessionDeleteJSONRequestBody PostSessionDeleteJSONBody
 
 // PostSessionInitializeJSONRequestBody defines body for PostSessionInitialize for application/json ContentType.
 type PostSessionInitializeJSONRequestBody PostSessionInitializeJSONBody
@@ -935,6 +951,34 @@ func (t *Event) MergeEventSessionUpdated(v EventSessionUpdated) error {
 	return err
 }
 
+// AsEventSessionDeleted returns the union data inside the Event as a EventSessionDeleted
+func (t Event) AsEventSessionDeleted() (EventSessionDeleted, error) {
+	var body EventSessionDeleted
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventSessionDeleted overwrites any union data inside the Event as the provided EventSessionDeleted
+func (t *Event) FromEventSessionDeleted(v EventSessionDeleted) error {
+	v.Type = "session.deleted"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventSessionDeleted performs a merge with any union data inside the Event, using the provided EventSessionDeleted
+func (t *Event) MergeEventSessionDeleted(v EventSessionDeleted) error {
+	v.Type = "session.deleted"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsEventSessionError returns the union data inside the Event as a EventSessionError
 func (t Event) AsEventSessionError() (EventSessionError, error) {
 	var body EventSessionError
@@ -987,6 +1031,8 @@ func (t Event) ValueByDiscriminator() (interface{}, error) {
 		return t.AsEventMessageUpdated()
 	case "permission.updated":
 		return t.AsEventPermissionUpdated()
+	case "session.deleted":
+		return t.AsEventSessionDeleted()
 	case "session.error":
 		return t.AsEventSessionError()
 	case "session.updated":
@@ -1626,6 +1672,11 @@ type ClientInterface interface {
 	// PostSessionCreate request
 	PostSessionCreate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostSessionDeleteWithBody request with any body
+	PostSessionDeleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostSessionDelete(ctx context.Context, body PostSessionDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostSessionInitializeWithBody request with any body
 	PostSessionInitializeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1813,6 +1864,30 @@ func (c *Client) PostSessionChat(ctx context.Context, body PostSessionChatJSONRe
 
 func (c *Client) PostSessionCreate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostSessionCreateRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionDeleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionDeleteRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostSessionDelete(ctx context.Context, body PostSessionDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostSessionDeleteRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2291,6 +2366,46 @@ func NewPostSessionCreateRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPostSessionDeleteRequest calls the generic PostSessionDelete builder with application/json body
+func NewPostSessionDeleteRequest(server string, body PostSessionDeleteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostSessionDeleteRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostSessionDeleteRequestWithBody generates requests for PostSessionDelete with any type of body
+func NewPostSessionDeleteRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/session_delete")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostSessionInitializeRequest calls the generic PostSessionInitialize builder with application/json body
 func NewPostSessionInitializeRequest(server string, body PostSessionInitializeJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2600,6 +2715,11 @@ type ClientWithResponsesInterface interface {
 	// PostSessionCreateWithResponse request
 	PostSessionCreateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostSessionCreateResponse, error)
 
+	// PostSessionDeleteWithBodyWithResponse request with any body
+	PostSessionDeleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionDeleteResponse, error)
+
+	PostSessionDeleteWithResponse(ctx context.Context, body PostSessionDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionDeleteResponse, error)
+
 	// PostSessionInitializeWithBodyWithResponse request with any body
 	PostSessionInitializeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionInitializeResponse, error)
 
@@ -2880,6 +3000,28 @@ func (r PostSessionCreateResponse) StatusCode() int {
 	return 0
 }
 
+type PostSessionDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *bool
+}
+
+// Status returns HTTPResponse.Status
+func (r PostSessionDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostSessionDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostSessionInitializeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3133,6 +3275,23 @@ func (c *ClientWithResponses) PostSessionCreateWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParsePostSessionCreateResponse(rsp)
+}
+
+// PostSessionDeleteWithBodyWithResponse request with arbitrary body returning *PostSessionDeleteResponse
+func (c *ClientWithResponses) PostSessionDeleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostSessionDeleteResponse, error) {
+	rsp, err := c.PostSessionDeleteWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionDeleteResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostSessionDeleteWithResponse(ctx context.Context, body PostSessionDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*PostSessionDeleteResponse, error) {
+	rsp, err := c.PostSessionDelete(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostSessionDeleteResponse(rsp)
 }
 
 // PostSessionInitializeWithBodyWithResponse request with arbitrary body returning *PostSessionInitializeResponse
@@ -3524,6 +3683,32 @@ func ParsePostSessionCreateResponse(rsp *http.Response) (*PostSessionCreateRespo
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostSessionDeleteResponse parses an HTTP response from a PostSessionDeleteWithResponse call
+func ParsePostSessionDeleteResponse(rsp *http.Response) (*PostSessionDeleteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostSessionDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest bool
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 
