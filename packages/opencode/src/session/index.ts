@@ -18,7 +18,6 @@ import {
 } from "ai"
 import { z, ZodSchema } from "zod"
 import { Decimal } from "decimal.js"
-import fs from "fs/promises"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
