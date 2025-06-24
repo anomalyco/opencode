@@ -109,6 +109,124 @@ opencode upgrade v0.1.48
 
 ---
 
+### mcp
+
+Manage Model Context Protocol (MCP) servers for enhanced AI capabilities.
+
+```bash
+opencode mcp [command]
+```
+
+#### add
+
+Add a new MCP server configuration.
+
+```bash
+opencode mcp add <name> [command]
+```
+
+**Examples:**
+
+```bash
+# Add a local MCP server using stdio transport
+opencode mcp add file-server npx @modelcontextprotocol/server-filesystem /path/to/files
+
+# Add a remote MCP server using SSE transport
+opencode mcp add weather-server --transport sse --url https://api.weather.com/mcp
+
+# Add server to global config (default is project scope)
+opencode mcp add git-server git-mcp-server --scope user
+
+# Add server with environment variables
+opencode mcp add db-server db-mcp-server -e DB_HOST=localhost -e DB_PORT=5432
+
+# Add remote server with custom headers
+opencode mcp add api-server --transport sse --url https://api.example.com/mcp -H "Authorization: Bearer token"
+```
+
+**Flags:**
+
+| Flag              | Short | Description |
+| ----------------- | ----- | --------------------- |
+| `--scope`         | `-s`  | Configuration scope: `user` (global) or `project` (default) |
+| `--transport`     | `-t`  | Transport type: `stdio` (default) or `sse` |
+| `--url`           | `-u`  | Server URL (required for SSE transport) |
+| `--env`           | `-e`  | Environment variable (can be used multiple times) |
+| `--header`        | `-H`  | HTTP header for SSE transport (can be used multiple times) |
+
+#### remove
+
+Remove an MCP server configuration.
+
+```bash
+opencode mcp remove <name>
+```
+
+**Examples:**
+
+```bash
+# Remove server from project config
+opencode mcp remove file-server
+
+# Remove server from global config
+opencode mcp remove weather-server --scope user
+```
+
+**Flags:**
+
+| Flag              | Short | Description |
+| ----------------- | ----- | --------------------- |
+| `--scope`         | `-s`  | Configuration scope: `user` (global) or `project` (default) |
+
+#### list
+
+List all configured MCP servers from both global and project configurations.
+
+```bash
+opencode mcp list
+```
+
+Shows servers from both scopes with their transport type and configuration details.
+
+#### get
+
+Get details for a specific MCP server. Checks both global and project configurations, with project taking priority.
+
+```bash
+opencode mcp get <name>
+```
+
+Displays the server configuration including transport type, command/URL, environment variables, and headers.
+
+#### add-json
+
+Add an MCP server using JSON configuration. Automatically determines if the server is local or remote based on the provided configuration.
+
+```bash
+opencode mcp add-json <name> <json>
+```
+
+**Examples:**
+
+```bash
+# Add local server via JSON
+opencode mcp add-json files '{"command": "npx @modelcontextprotocol/server-filesystem", "args": ["/path"]}'
+
+# Add remote server via JSON
+opencode mcp add-json weather '{"url": "https://api.weather.com/mcp", "headers": {"Auth": "token"}}'
+
+# Add to global scope
+opencode mcp add-json api-server '{"url": "https://api.com/mcp"}' --scope user
+```
+
+**Flags:**
+
+| Flag              | Short | Description |
+| ----------------- | ----- | --------------------- |
+| `--scope`         | `-s`  | Configuration scope: `user` (global) or `project` (default) |
+
+---
+
 ## Flags
 
 The opencode CLI takes the following flags.
