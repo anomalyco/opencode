@@ -29,7 +29,7 @@ const targets = [
   ["linux", "x64"],
   ["darwin", "x64"],
   ["darwin", "arm64"],
-  // ["windows", "x64"],
+  ["windows", "x64"],
 ]
 
 await $`rm -rf dist`
