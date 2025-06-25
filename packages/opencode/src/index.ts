@@ -170,7 +170,7 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (!formatted)
+  if (formatted === undefined)
     UI.error(
       "Unexpected error, check log file at " + Log.file() + " for more details",
     )
