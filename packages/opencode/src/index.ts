@@ -54,7 +54,12 @@ const cli = yargs(hideBin(process.argv))
     handler: async (args) => {
       while (true) {
         const cwd = args.project ? path.resolve(args.project) : process.cwd()
-        process.chdir(cwd)
+        try {
+          process.chdir(cwd)
+        } catch (e) {
+          UI.error("Failed to change directory to " + cwd)
+          return
+        }
         const result = await App.provide({ cwd }, async (app) => {
           const providers = await Provider.list()
           if (Object.keys(providers).length === 0) {
