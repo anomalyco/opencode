@@ -3,7 +3,7 @@ import { App } from "./app/app"
 import { Server } from "./server/server"
 import fs from "fs/promises"
 import path from "path"
-import { Share } from "./share/share"
+
 import url from "node:url"
 import { Global } from "./global"
 import yargs from "yargs"
@@ -60,7 +60,7 @@ const cli = yargs(hideBin(process.argv))
             return "needs_provider"
           }
 
-          await Share.init()
+
           const server = Server.listen()
 
           let cmd = ["go", "run", "./main.go"]

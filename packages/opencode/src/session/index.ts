@@ -21,7 +21,7 @@ import { Decimal } from "decimal.js"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
-import { Share } from "../share/share"
+
 import { Message } from "./message"
 import { Bus } from "../bus"
 import { Provider } from "../provider/provider"
@@ -29,10 +29,10 @@ import { MCP } from "../mcp"
 import { NamedError } from "../util/error"
 import type { Tool } from "../tool/tool"
 import { SystemPrompt } from "./system"
-import { Flag } from "../flag/flag"
+
 import type { ModelsDev } from "../provider/models"
 import { Installation } from "../installation"
-import { Config } from "../config/config"
+
 import { ProviderTransform } from "../provider/transform"
 
 export namespace Session {
@@ -42,11 +42,6 @@ export namespace Session {
     .object({
       id: Identifier.schema("session"),
       parentID: Identifier.schema("session").optional(),
-      share: z
-        .object({
-          url: z.string(),
-        })
-        .optional(),
       title: z.string(),
       version: z.string(),
       time: z.object({
@@ -59,11 +54,7 @@ export namespace Session {
     })
   export type Info = z.output<typeof Info>
 
-  export const ShareInfo = z.object({
-    secret: z.string(),
-    url: z.string(),
-  })
-  export type ShareInfo = z.output<typeof ShareInfo>
+
 
   export const Event = {
     Updated: Bus.event(
@@ -122,13 +113,6 @@ export namespace Session {
     log.info("created", result)
     state().sessions.set(result.id, result)
     await Storage.writeJSON("session/info/" + result.id, result)
-    const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.autoshare))
-      share(result.id).then((share) => {
-        update(result.id, (draft) => {
-          draft.share = share
-        })
-      })
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -145,34 +129,7 @@ export namespace Session {
     return read as Info
   }
 
-  export async function getShare(id: string) {
-    return Storage.readJSON<ShareInfo>("session/share/" + id)
-  }
 
-  export async function share(id: string) {
-    const session = await get(id)
-    if (session.share) return session.share
-    const share = await Share.create(id)
-    await update(id, (draft) => {
-      draft.share = {
-        url: share.url,
-      }
-    })
-    await Storage.writeJSON<ShareInfo>("session/share/" + id, share)
-    await Share.sync("session/info/" + id, session)
-    for (const msg of await messages(id)) {
-      await Share.sync("session/message/" + id + "/" + msg.id, msg)
-    }
-    return share
-  }
-
-  export async function unshare(id: string) {
-    await Storage.remove("session/share/" + id)
-    await update(id, (draft) => {
-      draft.share = undefined
-    })
-    await Share.remove(id)
-  }
 
   export async function update(id: string, editor: (session: Info) => void) {
     const { sessions } = state()
@@ -238,7 +195,6 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id, false)
       }
-      await unshare(sessionID).catch(() => {})
       await Storage.remove(`session/info/${sessionID}`).catch(() => {})
       await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
       state().sessions.delete(sessionID)

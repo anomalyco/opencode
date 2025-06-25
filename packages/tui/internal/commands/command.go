@@ -74,7 +74,6 @@ const (
 	EditorOpenCommand           CommandName = "editor_open"
 	SessionNewCommand           CommandName = "session_new"
 	SessionListCommand          CommandName = "session_list"
-	SessionShareCommand         CommandName = "session_share"
 	SessionInterruptCommand     CommandName = "session_interrupt"
 	SessionCompactCommand       CommandName = "session_compact"
 	ToolDetailsCommand          CommandName = "tool_details"
@@ -148,12 +147,6 @@ func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
 			Description: "list sessions",
 			Keybindings: parseBindings("<leader>l"),
 			Trigger:     "sessions",
-		},
-		{
-			Name:        SessionShareCommand,
-			Description: "share session",
-			Keybindings: parseBindings("<leader>s"),
-			Trigger:     "share",
 		},
 		{
 			Name:        SessionInterruptCommand,

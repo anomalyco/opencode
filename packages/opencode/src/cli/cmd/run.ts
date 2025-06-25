@@ -3,12 +3,9 @@ import { App } from "../../app/app"
 import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
-import { Share } from "../../share/share"
 import { Message } from "../../session/message"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { Flag } from "../../flag/flag"
-import { Config } from "../../config/config"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -44,10 +41,6 @@ export const RunCommand = cmd({
         describe: "session id to continue",
         type: "string",
       })
-      .option("share", {
-        type: "boolean",
-        describe: "share the session",
-      })
       .option("model", {
         type: "string",
         alias: ["m"],
@@ -61,7 +54,6 @@ export const RunCommand = cmd({
         cwd: process.cwd(),
       },
       async () => {
-        await Share.init()
         const session = await (async () => {
           if (args.continue) {
             const first = await Session.list().next()
@@ -85,15 +77,6 @@ export const RunCommand = cmd({
         UI.println(UI.Style.TEXT_NORMAL_BOLD + "> ", message)
         UI.empty()
 
-        const cfg = await Config.get()
-        if (cfg.autoshare || Flag.OPENCODE_AUTO_SHARE || args.share) {
-          await Session.share(session.id)
-          UI.println(
-            UI.Style.TEXT_INFO_BOLD +
-            "~  https://opencode.ai/s/" +
-            session.id.slice(-8),
-          )
-        }
         UI.empty()
 
         const { providerID, modelID } = args.model

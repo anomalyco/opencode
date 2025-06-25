@@ -494,25 +494,6 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
 		a.modal = sessionDialog
-	case commands.SessionShareCommand:
-		if a.app.Session.Id == "" {
-			return a, nil
-		}
-		response, err := a.app.Client.PostSessionShareWithResponse(
-			context.Background(),
-			client.PostSessionShareJSONRequestBody{
-				SessionID: a.app.Session.Id,
-			},
-		)
-		if err != nil {
-			slog.Error("Failed to share session", "error", err)
-			return a, toast.NewErrorToast("Failed to share session")
-		}
-		if response.JSON200 != nil && response.JSON200.Share != nil {
-			shareUrl := response.JSON200.Share.Url
-			cmds = append(cmds, tea.SetClipboard(shareUrl))
-			cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
-		}
 	case commands.SessionInterruptCommand:
 		if a.app.Session.Id == "" {
 			return a, nil

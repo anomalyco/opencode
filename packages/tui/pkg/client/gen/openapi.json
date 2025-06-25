@@ -194,78 +194,6 @@
         "description": "Create a new session"
       }
     },
-    "/session_share": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Successfully shared session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/session.info"
-                }
-              }
-            }
-          }
-        },
-        "operationId": "postSession_share",
-        "parameters": [],
-        "description": "Share the session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "sessionID": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "sessionID"
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    "/session_unshare": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Successfully unshared session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/session.info"
-                }
-              }
-            }
-          }
-        },
-        "operationId": "postSession_unshare",
-        "parameters": [],
-        "description": "Unshare the session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "sessionID": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "sessionID"
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
     "/session_messages": {
       "post": {
         "responses": {
@@ -598,9 +526,6 @@
             "$ref": "#/components/schemas/Event.storage.write"
           },
           {
-            "$ref": "#/components/schemas/Event.installation.updated"
-          },
-          {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
           },
           {
@@ -611,6 +536,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.message.part.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
             "$ref": "#/components/schemas/Event.session.updated"
@@ -626,11 +554,11 @@
           "propertyName": "type",
           "mapping": {
             "storage.write": "#/components/schemas/Event.storage.write",
-            "installation.updated": "#/components/schemas/Event.installation.updated",
             "lsp.client.diagnostics": "#/components/schemas/Event.lsp.client.diagnostics",
             "permission.updated": "#/components/schemas/Event.permission.updated",
             "message.updated": "#/components/schemas/Event.message.updated",
             "message.part.updated": "#/components/schemas/Event.message.part.updated",
+            "installation.updated": "#/components/schemas/Event.installation.updated",
             "session.updated": "#/components/schemas/Event.session.updated",
             "session.deleted": "#/components/schemas/Event.session.deleted",
             "session.error": "#/components/schemas/Event.session.error"
@@ -654,30 +582,6 @@
             },
             "required": [
               "key"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "version"
             ]
           }
         },
@@ -1304,6 +1208,30 @@
           "properties"
         ]
       },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "version"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.session.updated": {
         "type": "object",
         "properties": {
@@ -1338,17 +1266,6 @@
           "parentID": {
             "type": "string",
             "pattern": "^ses"
-          },
-          "share": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "url"
-            ]
           },
           "title": {
             "type": "string"

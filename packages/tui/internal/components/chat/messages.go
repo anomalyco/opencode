@@ -260,15 +260,8 @@ func (m *messagesComponent) header() string {
 
 	t := theme.CurrentTheme()
 	width := layout.Current.Container.Width
-	base := styles.BaseStyle().Background(t.Background()).Render
-	muted := styles.Muted().Background(t.Background()).Render
 	headerLines := []string{}
 	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
-	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
-		headerLines = append(headerLines, muted(m.app.Session.Share.Url))
-	} else {
-		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
-	}
 	header := strings.Join(headerLines, "\n")
 
 	header = styles.BaseStyle().
