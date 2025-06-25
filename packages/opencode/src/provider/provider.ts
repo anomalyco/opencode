@@ -113,14 +113,6 @@ export namespace Provider {
         },
       }
     },
-    openai: async () => {
-      return {
-        async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
-        },
-        options: {},
-      }
-    },
     "amazon-bedrock": async () => {
       if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"])
         return false
