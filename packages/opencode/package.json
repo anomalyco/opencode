@@ -8,6 +8,9 @@
     "typecheck": "tsc --noEmit",
     "dev": "bun run ./src/index.ts"
   },
+  "bin": {
+    "opencode": "./bin/opencode"
+  },
   "exports": {
     "./*": "./src/*.ts"
   },

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -42,7 +43,7 @@ func LoadThemesFromJSON() error {
 			continue
 		}
 		themeName := strings.TrimSuffix(entry.Name(), ".json")
-		data, err := themesFS.ReadFile(filepath.Join("themes", entry.Name()))
+		data, err := themesFS.ReadFile(path.Join("themes", entry.Name()))
 		if err != nil {
 			return fmt.Errorf("failed to read theme file %s: %w", entry.Name(), err)
 		}

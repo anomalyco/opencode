@@ -46,7 +46,7 @@ export namespace App {
     const data = path.join(
       Global.Path.data,
       "project",
-      git ? git.split(path.sep).filter(Boolean).join("-") : "global",
+      git ? directory(git) : "global",
     )
     const stateFile = Bun.file(path.join(data, APP_JSON))
     const state = (await stateFile.json().catch(() => ({}))) as {
@@ -133,4 +133,13 @@ export namespace App {
       }),
     )
   }
+
+  function directory(input: string): string {
+    return input
+      .split(path.sep)
+      .filter(Boolean)
+      .join("-")
+      .replace(/[^A-Za-z0-9_]/g, "-")
+  }
 }
+

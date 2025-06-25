@@ -4,6 +4,7 @@ import { Server } from "./server/server"
 import fs from "fs/promises"
 import path from "path"
 import { Share } from "./share/share"
+import url from "node:url"
 import { Global } from "./global"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
@@ -13,6 +14,7 @@ import { ScrapCommand } from "./cli/cmd/scrap"
 import { Log } from "./util/log"
 import { AuthCommand, AuthLoginCommand } from "./cli/cmd/auth"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
+import { ModelsCommand } from "./cli/cmd/models"
 import { McpCommand } from "./cli/cmd/mcp"
 import { Provider } from "./provider/provider"
 import { UI } from "./cli/ui"
@@ -21,13 +23,13 @@ import { Bus } from "./bus"
 import { Config } from "./config/config"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
+import { ServeCommand } from "./cli/cmd/serve"
 
 const cancel = new AbortController()
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
   .help("help", "show help")
-  .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
   .option("print-logs", {
@@ -53,7 +55,12 @@ const cli = yargs(hideBin(process.argv))
     handler: async (args) => {
       while (true) {
         const cwd = args.project ? path.resolve(args.project) : process.cwd()
-        process.chdir(cwd)
+        try {
+          process.chdir(cwd)
+        } catch (e) {
+          UI.error("Failed to change directory to " + cwd)
+          return
+        }
         const result = await App.provide({ cwd }, async (app) => {
           const providers = await Provider.list()
           if (Object.keys(providers).length === 0) {
@@ -61,13 +68,22 @@ const cli = yargs(hideBin(process.argv))
           }
 
           await Share.init()
-          const server = Server.listen()
+          const server = Server.listen({
+            port: 0,
+            hostname: "127.0.0.1",
+          })
 
           let cmd = ["go", "run", "./main.go"]
-          let cwd = new URL("../../tui/cmd/opencode", import.meta.url).pathname
+          let cwd = url.fileURLToPath(
+            new URL("../../tui/cmd/opencode", import.meta.url),
+          )
           if (Bun.embeddedFiles.length > 0) {
             const blob = Bun.embeddedFiles[0] as File
-            const binary = path.join(Global.Path.cache, "tui", blob.name)
+            let binaryName = blob.name
+            if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
+              binaryName += ".exe"
+            }
+            const binary = path.join(Global.Path.cache, "tui", binaryName)
             const file = Bun.file(binary)
             if (!(await file.exists())) {
               await Bun.write(file, blob, { mode: 0o755 })
@@ -130,6 +146,8 @@ const cli = yargs(hideBin(process.argv))
   .command(ScrapCommand)
   .command(AuthCommand)
   .command(UpgradeCommand)
+  .command(ServeCommand)
+  .command(ModelsCommand)
   .command(McpCommand)
   .fail((msg) => {
     if (
@@ -161,7 +179,7 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (!formatted)
+  if (formatted === undefined)
     UI.error(
       "Unexpected error, check log file at " + Log.file() + " for more details",
     )
