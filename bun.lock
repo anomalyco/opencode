@@ -20,6 +20,9 @@
     "packages/opencode": {
       "name": "opencode",
       "version": "0.0.0",
+      "bin": {
+        "opencode": "./bin/opencode",
+      },
       "dependencies": {
         "@clack/prompts": "0.11.0",
         "@flystorage/file-storage": "1.1.0",
