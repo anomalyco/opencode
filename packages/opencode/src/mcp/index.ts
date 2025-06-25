@@ -2,12 +2,12 @@ import { experimental_createMCPClient, type Tool } from "ai"
 import { Experimental_StdioMCPTransport } from "ai/mcp-stdio"
 import { App } from "../app/app"
 import { Config } from "../config/config"
-import { substituteEnvVars, substituteEnvVarsInHeaders, substituteEnvVarsInObject } from "../util/env-substitution"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
+import { substituteEnvVars, substituteEnvVarsInHeaders, substituteEnvVarsInObject } from "../util/env-substitution"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -31,7 +31,7 @@ export namespace MCP {
         if (mcp.type === "remote") {
           const url = substituteEnvVars(mcp.url)
           const headers = substituteEnvVarsInHeaders(mcp.headers)
-          
+
           const client = await experimental_createMCPClient({
             name: key,
             transport: {
@@ -57,7 +57,7 @@ export namespace MCP {
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command.map(arg => substituteEnvVars(arg))
           const environment = mcp.environment ? substituteEnvVarsInObject(mcp.environment) : undefined
-          
+
           const client = await experimental_createMCPClient({
             name: key,
             transport: new Experimental_StdioMCPTransport({
