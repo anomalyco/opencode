@@ -4,6 +4,8 @@ import { App } from "../app/app.ts"
 import { z } from "zod"
 import fs from "fs"
 import yaml from "js-yaml"
+import { Message } from "../session/message.ts"
+import type { Tool } from "../tool/tool.ts"
 
 export namespace Commands {
   export const Info = z
@@ -19,18 +21,34 @@ export namespace Commands {
     })
   export type Info = z.output<typeof Info>
 
-  export const transform = (msg: string) => {
-    if (!msg.startsWith("/")) {
-      return msg
-    }
-    const [command, ...args] = msg.slice(1).split(" ")
+  export const transform = (msg: {
+    sessionID: string
+    providerID: string
+    modelID: string
+    parts: Message.Part[]
+    system?: string[]
+    tools?: Tool.Info[]
+  }) => {
+    msg.parts = msg.parts.map((p) => {
+      if (p.type != "text") {
+        return p
+      }
+      const txt = p.text.trim()
+      if (!txt.startsWith("/")) {
+        return p
+      }
+      const [command, ...args] = txt.slice(1).split(" ")
 
-    const cmd = state().find(x => x.name == command)
-    if (!cmd) {
-      return msg
-    }
+      const cmd = state().find(x => x.name == command)
+      if (!cmd) {
+        return p
+      }
 
-    return cmd.prompt.replaceAll("$ARGUMENTS", args.join(" "))
+      p.text = cmd.prompt.replaceAll("$ARGUMENTS", args.join(" "))
+
+      return p
+    })
+    return msg
   }
 
   export const state = App.state("commands", (app: App.Info) => {

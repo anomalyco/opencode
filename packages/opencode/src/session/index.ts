@@ -34,6 +34,7 @@ import type { ModelsDev } from "../provider/models"
 import { Installation } from "../installation"
 import { Config } from "../config/config"
 import { ProviderTransform } from "../provider/transform"
+import { Commands } from "../command/command.ts"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -298,7 +299,8 @@ export namespace Session {
       }
     }
 
-    // TODO: translate the command into parts
+    // Translate the command (if any) into the full prompt
+    input = Commands.transform(input)
 
     using abort = lock(input.sessionID)
 
