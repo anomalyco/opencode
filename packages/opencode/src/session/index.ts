@@ -287,7 +287,10 @@ export namespace Session {
       if (
         model.info.limit.context &&
         tokens >
-          (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
+          Math.max(
+            (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9,
+            0,
+          )
       ) {
         await summarize({
           sessionID: input.sessionID,
