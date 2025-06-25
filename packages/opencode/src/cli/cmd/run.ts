@@ -134,7 +134,7 @@ export const RunCommand = cmd({
               part.toolInvocation.toolName,
               UI.Style.TEXT_INFO_BOLD,
             ]
-            printEvent(color, tool, metadata.title)
+            printEvent(color, tool, metadata?.title || 'Unknown')
           }
 
           if (part.type === "text") {
