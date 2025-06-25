@@ -63,6 +63,7 @@ const cli = yargs(hideBin(process.argv))
           await Share.init()
           const server = Server.listen({
             port: 0,
+            hostname: "127.0.0.1",
           })
 
           let cmd = ["go", "run", "./main.go"]
