@@ -124,10 +124,6 @@
       "additionalProperties": false,
       "description": "Custom keybind configurations"
     },
-    "autoshare": {
-      "type": "boolean",
-      "description": "Share newly created sessions automatically"
-    },
     "disabled_providers": {
       "type": "array",
       "items": {

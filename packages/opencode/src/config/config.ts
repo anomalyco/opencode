@@ -136,10 +136,6 @@ export namespace Config {
         .optional()
         .describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("Share newly created sessions automatically"),
       disabled_providers: z
         .array(z.string())
         .optional()
