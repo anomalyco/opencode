@@ -14,6 +14,7 @@ import { ScrapCommand } from "./cli/cmd/scrap"
 import { Log } from "./util/log"
 import { AuthCommand, AuthLoginCommand } from "./cli/cmd/auth"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
+import { ModelsCommand } from "./cli/cmd/models"
 import { Provider } from "./provider/provider"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
@@ -140,6 +141,7 @@ const cli = yargs(hideBin(process.argv))
   .command(AuthCommand)
   .command(UpgradeCommand)
   .command(ServeCommand)
+  .command(ModelsCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
