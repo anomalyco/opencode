@@ -80,8 +80,15 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		} else {
 			existingValue := m.textarea.Value()
-			modifiedValue := strings.Replace(existingValue, msg.SearchString, msg.CompletionValue, 1)
-			m.textarea.SetValue(modifiedValue + " ")
+			
+			// Replace the current token (after last space)
+			lastSpaceIndex := strings.LastIndex(existingValue, " ")
+			if lastSpaceIndex == -1 {
+				m.textarea.SetValue(msg.CompletionValue + " ")
+			} else {
+				modifiedValue := existingValue[:lastSpaceIndex+1] + msg.CompletionValue
+				m.textarea.SetValue(modifiedValue + " ")
+			}
 			return m, nil
 		}
 	}

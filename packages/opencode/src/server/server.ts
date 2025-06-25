@@ -579,10 +579,10 @@ export namespace Server {
     return result
   }
 
-  export function listen() {
+  export function listen(opts: { port: number; hostname: string }) {
     const server = Bun.serve({
-      port: 0,
-      hostname: "0.0.0.0",
+      port: opts.port,
+      hostname: opts.hostname,
       idleTimeout: 0,
       fetch: app().fetch,
     })

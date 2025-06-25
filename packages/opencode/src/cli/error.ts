@@ -1,5 +1,6 @@
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
+import { UI } from "./ui"
 
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
@@ -13,4 +14,6 @@ export function FormatError(input: unknown) {
         (issue) => "↳ " + issue.message + " " + issue.path.join("."),
       ) ?? []),
     ].join("\n")
+
+  if (UI.CancelledError.isInstance(input)) return ""
 }

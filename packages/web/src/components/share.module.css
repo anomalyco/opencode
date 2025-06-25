@@ -616,6 +616,13 @@
     }
   }
 
+  [data-section="error"] {
+    pre {
+      color: var(--sl-color-red) !important;
+      --shiki-dark: var(--sl-color-red) !important;
+    }
+  }
+
   &[data-expanded="true"] {
     pre {
       display: block;

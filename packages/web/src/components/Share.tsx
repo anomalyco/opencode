@@ -463,6 +463,7 @@ function MarkdownPart(props: MarkdownPartProps) {
 
 interface TerminalPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
   command: string
+  error?: string
   result?: string
   desc?: string
   expand?: boolean
@@ -470,6 +471,7 @@ interface TerminalPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
 function TerminalPart(props: TerminalPartProps) {
   const [local, rest] = splitProps(props, [
     "command",
+    "error",
     "result",
     "desc",
     "expand",
@@ -508,12 +510,25 @@ function TerminalPart(props: TerminalPartProps) {
         </div>
         <div data-section="content">
           <CodeBlock lang="bash" code={local.command} />
-          <CodeBlock
-            lang="console"
-            onRendered={checkOverflow}
-            ref={(el) => (preEl = el)}
-            code={local.result || ""}
-          />
+          <Switch>
+            <Match when={local.error}>
+              <CodeBlock
+                data-section="error"
+                lang="text"
+                onRendered={checkOverflow}
+                ref={(el) => (preEl = el)}
+                code={local.error || ""}
+              />
+            </Match>
+            <Match when={local.result}>
+              <CodeBlock
+                lang="console"
+                onRendered={checkOverflow}
+                ref={(el) => (preEl = el)}
+                code={local.result || ""}
+              />
+            </Match>
+          </Switch>
         </div>
       </div>
       {((!local.expand && overflowed()) || expanded()) && (
@@ -1601,8 +1616,10 @@ export default function Share(props: {
                           }
                         >
                           {(_part) => {
-                            const command = () => toolData()?.args.command
-                            const desc = () => toolData()?.args.description
+                            const command = () => toolData()?.metadata?.title
+                            const desc = () => toolData()?.metadata?.description
+                            const result = () => toolData()?.metadata?.stdout
+                            const error = () => toolData()?.metadata?.stderr
 
                             return (
                               <div
@@ -1617,14 +1634,17 @@ export default function Share(props: {
                                   <div></div>
                                 </div>
                                 <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <TerminalPart
-                                      desc={desc()}
-                                      data-size="sm"
-                                      command={command()}
-                                      result={toolData()?.result}
-                                    />
-                                  </div>
+                                  {command() && (
+                                    <div data-part-tool-body>
+                                      <TerminalPart
+                                        desc={desc()}
+                                        data-size="sm"
+                                        command={command()!}
+                                        result={result()}
+                                        error={error()}
+                                      />
+                                    </div>
+                                  )}
                                   <ToolFooter
                                     time={toolData()?.duration || 0}
                                   />
