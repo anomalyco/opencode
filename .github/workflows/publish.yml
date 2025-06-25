@@ -7,6 +7,9 @@ on:
       - dev
     tags:
       - "*"
+  pull_request:
+    branches:
+      - main
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -34,20 +37,6 @@ jobs:
         with:
           bun-version: 1.2.17
 
-      - name: Install makepkg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
-
-      - name: Setup SSH for AUR
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-
       - name: Publish
         run: |
           bun install
@@ -57,7 +46,55 @@ jobs:
             ./script/publish.ts --snapshot
           fi
         working-directory: ./packages/opencode
-        env:
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          AUR_KEY: ${{ secrets.AUR_KEY }}
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Upload darwin-arm64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-darwin-arm64
+          path: ./packages/opencode/dist/opencode-darwin-arm64
+
+      - name: Upload darwin-x64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-darwin-x64
+          path: ./packages/opencode/dist/opencode-darwin-x64
+
+      - name: Upload linux-arm64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-linux-arm64
+          path: ./packages/opencode/dist/opencode-linux-arm64
+
+      - name: Upload linux-x64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-linux-x64
+          path: ./packages/opencode/dist/opencode-linux-x64
+
+      - name: Upload windows-x64 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-windows-x64
+          path: ./packages/opencode/dist/opencode-windows-x64
+
+  release:
+    name: Release
+    needs: [publish]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        id: downloads
+        uses: actions/download-artifact@v4
+
+      - name: List Files
+        run: ls -R ${{ steps.downloads.outputs.download-path }}
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.downloads.outputs.download-path }}/opencode*/bin/opencode*
