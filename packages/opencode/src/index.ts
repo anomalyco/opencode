@@ -21,13 +21,13 @@ import { Bus } from "./bus"
 import { Config } from "./config/config"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
+import { ServeCommand } from "./cli/cmd/serve"
 
 const cancel = new AbortController()
 
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
   .help("help", "show help")
-  .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
   .option("print-logs", {
@@ -61,10 +61,14 @@ const cli = yargs(hideBin(process.argv))
           }
 
           await Share.init()
-          const server = Server.listen()
+          const server = Server.listen({
+            port: 0,
+          })
 
           let cmd = ["go", "run", "./main.go"]
-          let cwd = url.fileURLToPath(new URL("../../tui/cmd/opencode", import.meta.url))
+          let cwd = url.fileURLToPath(
+            new URL("../../tui/cmd/opencode", import.meta.url),
+          )
           if (Bun.embeddedFiles.length > 0) {
             const blob = Bun.embeddedFiles[0] as File
             let binaryName = blob.name
@@ -134,6 +138,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ScrapCommand)
   .command(AuthCommand)
   .command(UpgradeCommand)
+  .command(ServeCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
