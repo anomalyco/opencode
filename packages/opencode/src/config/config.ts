@@ -140,10 +140,6 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("Share newly created sessions automatically"),
-      autoupdate: z
-        .boolean()
-        .optional()
-        .describe("Automatically update to the latest version"),
       disabled_providers: z
         .array(z.string())
         .optional()

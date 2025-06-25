@@ -47,9 +47,6 @@ type ConfigInfo struct {
 	// Autoshare Share newly created sessions automatically
 	Autoshare *bool `json:"autoshare,omitempty"`
 
-	// Autoupdate Automatically update to the latest version
-	Autoupdate *bool `json:"autoupdate,omitempty"`
-
 	// DisabledProviders Disable providers that are loaded automatically
 	DisabledProviders *[]string       `json:"disabled_providers,omitempty"`
 	Keybinds          *ConfigKeybinds `json:"keybinds,omitempty"`
@@ -294,7 +291,6 @@ type EventStorageWrite struct {
 
 // InstallationInfo defines model for InstallationInfo.
 type InstallationInfo struct {
-	Latest  string `json:"latest"`
 	Version string `json:"version"`
 }
 

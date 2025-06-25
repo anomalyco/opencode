@@ -1,17 +1,13 @@
 import path from "path"
 import { $ } from "bun"
 import { z } from "zod"
-import { NamedError } from "../util/error"
 import { Bus } from "../bus"
-import { Log } from "../util/log"
 
 declare global {
   const OPENCODE_VERSION: string
 }
 
 export namespace Installation {
-  const log = Log.create({ service: "installation" })
-
   export type Method = Awaited<ReturnType<typeof method>>
 
   export const Event = {
@@ -26,7 +22,6 @@ export namespace Installation {
   export const Info = z
     .object({
       version: z.string(),
-      latest: z.string(),
     })
     .openapi({
       ref: "InstallationInfo",
@@ -36,7 +31,6 @@ export namespace Installation {
   export async function info() {
     return {
       version: VERSION,
-      latest: await latest(),
     }
   }
 
@@ -93,54 +87,8 @@ export namespace Installation {
     return "unknown"
   }
 
-  export const UpgradeFailedError = NamedError.create(
-    "UpgradeFailedError",
-    z.object({
-      stderr: z.string(),
-    }),
-  )
 
-  export async function upgrade(method: Method, target: string) {
-    const cmd = (() => {
-      switch (method) {
-        case "curl":
-          return $`curl -fsSL https://opencode.ai/install | bash`.env({
-            ...process.env,
-            VERSION: target,
-          })
-        case "npm":
-          return $`npm install -g opencode-ai@${target}`
-        case "pnpm":
-          return $`pnpm install -g opencode-ai@${target}`
-        case "bun":
-          return $`bun install -g opencode-ai@${target}`
-        case "brew":
-          return $`brew install sst/tap/opencode`.env({
-            HOMEBREW_NO_AUTO_UPDATE: "1",
-          })
-        default:
-          throw new Error(`Unknown method: ${method}`)
-      }
-    })()
-    const result = await cmd.quiet().throws(false)
-    log.info("upgraded", {
-      method,
-      target,
-      stdout: result.stdout.toString(),
-      stderr: result.stderr.toString(),
-    })
-    if (result.exitCode !== 0)
-      throw new UpgradeFailedError({
-        stderr: result.stderr.toString("utf8"),
-      })
-  }
 
   export const VERSION =
     typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "dev"
-
-  export async function latest() {
-    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
-      .then((res) => res.json())
-      .then((data) => data.tag_name.slice(1) as string)
-  }
 }

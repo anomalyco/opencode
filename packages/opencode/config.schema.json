@@ -128,10 +128,6 @@
       "type": "boolean",
       "description": "Share newly created sessions automatically"
     },
-    "autoupdate": {
-      "type": "boolean",
-      "description": "Automatically update to the latest version"
-    },
     "disabled_providers": {
       "type": "array",
       "items": {
