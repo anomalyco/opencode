@@ -141,7 +141,18 @@ export namespace Provider {
       // For OAuth, we need to use the Cloud Code internal API
       const CLOUD_CODE_ENDPOINT = process.env["CODE_ASSIST_ENDPOINT"] || "https://cloudcode-pa.googleapis.com"
       const CLOUD_CODE_API_VERSION = "v1internal"
-      const PROJECT_ID = "elegant-machine-vq6tl" // TODO: make this configurable
+      
+      // Get or setup project ID through Code Assist API
+      let PROJECT_ID: string
+      try {
+        PROJECT_ID = await AuthGoogle.getProjectId()
+      } catch (error: any) {
+        log.warn("Failed to setup Code Assist project:", { error })
+        if (!process.env["GOOGLE_CLOUD_PROJECT"]) {
+          throw new Error("GOOGLE_CLOUD_PROJECT is not set")
+        }
+        PROJECT_ID = process.env["GOOGLE_CLOUD_PROJECT"]!
+      }
       
       return {
         autoload: true,
