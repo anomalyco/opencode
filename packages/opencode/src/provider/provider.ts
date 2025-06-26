@@ -138,141 +138,154 @@ export namespace Provider {
         }
       }
       
-      // For OAuth, we need to use the Cloud Code internal API endpoint
+      // For OAuth, we need to use the Cloud Code internal API
+      const CLOUD_CODE_ENDPOINT = process.env["CODE_ASSIST_ENDPOINT"] || "https://cloudcode-pa.googleapis.com"
+      const CLOUD_CODE_API_VERSION = "v1internal"
+      const PROJECT_ID = "elegant-machine-vq6tl" // TODO: make this configurable
+      
       return {
         autoload: true,
         options: {
-          apiKey: "dummy-key-for-oauth", // SDK requires an API key, but we'll override
-          baseURL: "https://cloudcode-pa.googleapis.com",
-          // Custom fetch to rewrite requests for OAuth
+          apiKey: "dummy-key-for-oauth", // SDK requires an API key
+          baseURL: CLOUD_CODE_ENDPOINT,
+          // Custom fetch to handle Cloud Code API
           fetch: async (url: any, init: any) => {
             const accessToken = await AuthGoogle.access()
             if (!accessToken) throw new Error("Google OAuth token expired")
             
-            // Parse the URL to modify it
             const urlObj = new URL(url)
             
-            // Replace the standard API with Cloud Code API
-            if (urlObj.hostname === "generativelanguage.googleapis.com") {
-              urlObj.hostname = "cloudcode-pa.googleapis.com"
-              // Always use the same endpoint regardless of model
-              urlObj.pathname = "/v1internal:generateContent"
-            } else if (urlObj.hostname === "cloudcode-pa.googleapis.com") {
-              // If already using cloudcode, ensure correct path
-              urlObj.pathname = "/v1internal:generateContent"
-            }
+            // Extract the method from the URL (generateContent, streamGenerateContent, etc)
+            const methodMatch = urlObj.pathname.match(/models\/[^:]+:(\w+)/)
+            const method = methodMatch ? methodMatch[1] : "generateContent"
             
-            // Clone headers and add OAuth
+            // Use Cloud Code API endpoint
+            urlObj.hostname = new URL(CLOUD_CODE_ENDPOINT).hostname
+            urlObj.pathname = `/${CLOUD_CODE_API_VERSION}:${method}`
+            
+            // Set up headers
             const headers = new Headers(init.headers || {})
             headers.delete("x-goog-api-key")
             headers.set("Authorization", `Bearer ${accessToken}`)
-            headers.set("User-Agent", `GeminiCLI/v22.15.0 (${process.platform}; ${process.arch}) google-api-nodejs-client/9.15.1`)
-            headers.set("x-goog-api-client", "gl-node/22.15.0")
-            headers.set("Accept", "application/json")
             headers.set("Content-Type", "application/json")
             
-            // Parse and modify the body to match Cloud Code API format
+            // Transform the request body
             let body = init.body
             if (body && typeof body === "string") {
               try {
-                const originalBody = JSON.parse(body)
+                const originalRequest = JSON.parse(body)
                 
-                // Extract model name from the URL path
+                // Extract model name from the original URL
                 const modelMatch = url.match(/models\/([^:]+)/)
                 const modelName = modelMatch ? modelMatch[1] : "gemini-2.5-flash"
                 
-                // Wrap the original request in the Cloud Code format
-                const cloudCodeBody = {
+                // Wrap in Cloud Code API format
+                const cloudCodeRequest = {
                   model: modelName,
-                  // TODO: figure out how to get/generate the project ID
-                  project: "elegant-machine-vq6tl",
-                  request: originalBody  // The original request goes inside "request"
+                  project: PROJECT_ID,
+                  request: originalRequest
                 }
                 
-                body = JSON.stringify(cloudCodeBody)
+                body = JSON.stringify(cloudCodeRequest)
               } catch (e) {
                 // If not JSON, leave as is
               }
             }
             
+            // Make the request
             const response = await fetch(urlObj.toString(), {
               ...init,
               headers,
               body,
             })
             
-            // Clone the response to read the body
-            const responseClone = response.clone()
-            
-            // Check if this is a streaming response
-            const isSSE = urlObj.searchParams.get("alt") === "sse"
-            
-            if (isSSE) {
-              // For SSE responses, we need to unwrap each data chunk
-              const originalBody = response.body
-              if (!originalBody) return response
-              
-              const reader = originalBody.getReader()
-              const decoder = new TextDecoder()
-              
-              const stream = new ReadableStream({
-                async start(controller) {
-                  try {
-                    while (true) {
-                      const { done, value } = await reader.read()
-                      if (done) break
-                      
-                      const chunk = decoder.decode(value, { stream: true })
-                      const lines = chunk.split('\n')
-                      
-                      for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                          const data = line.slice(6)
-                          if (data.trim()) {
-                            try {
-                              const parsed = JSON.parse(data)
-                              // Unwrap the response field
-                              const unwrapped = parsed.response || parsed
-                              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(unwrapped)}\n\n`))
-                            } catch (e) {
-                              // If not JSON, pass through
-                              controller.enqueue(value)
-                            }
-                          }
-                        } else if (line.trim()) {
-                          controller.enqueue(new TextEncoder().encode(line + '\n'))
-                        }
-                      }
-                    }
-                  } finally {
-                    controller.close()
-                  }
-                }
-              })
-              
-              return new Response(stream, {
-                headers: response.headers,
-                status: response.status,
-                statusText: response.statusText,
-              })
-            } else {
-              // For non-SSE responses, unwrap the response field
-              try {
-                const responseData = await response.json()
-                const unwrappedData = responseData.response || responseData
-                
-                return new Response(JSON.stringify(unwrappedData), {
-                  headers: response.headers,
-                  status: response.status,
-                  statusText: response.statusText,
-                })
-              } catch (e) {
-                // If not JSON or parsing fails, return original
-                return responseClone
-              }
+            // Handle streaming responses (SSE)
+            if (urlObj.searchParams.get("alt") === "sse") {
+              return transformSSEResponse(response)
             }
+            
+            // Handle regular JSON responses
+            return transformJSONResponse(response)
           },
         },
+      }
+      
+      // Helper function to transform JSON responses
+      async function transformJSONResponse(response: Response): Promise<Response> {
+        if (!response.ok) return response
+        
+        try {
+          const data = await response.json()
+          // Cloud Code API returns {response: actualResponse}, unwrap it
+          const unwrapped = data.response || data
+          
+          return new Response(JSON.stringify(unwrapped), {
+            headers: response.headers,
+            status: response.status,
+            statusText: response.statusText,
+          })
+        } catch {
+          return response
+        }
+      }
+      
+      // Helper function to transform SSE responses
+      function transformSSEResponse(response: Response): Response {
+        if (!response.body) return response
+        
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        const encoder = new TextEncoder()
+        
+        const stream = new ReadableStream({
+          async start(controller) {
+            let buffer = ""
+            
+            try {
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                
+                buffer += decoder.decode(value, { stream: true })
+                const lines = buffer.split('\n')
+                buffer = lines.pop() || ""
+                
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim()
+                    if (data) {
+                      try {
+                        const parsed = JSON.parse(data)
+                        // Cloud Code API returns {response: actualResponse}
+                        const unwrapped = parsed.response || parsed
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(unwrapped)}\n\n`))
+                      } catch {
+                        // If not JSON, pass through
+                        controller.enqueue(encoder.encode(line + '\n'))
+                      }
+                    }
+                  } else if (line === '') {
+                    // Empty line separates SSE events
+                    controller.enqueue(encoder.encode('\n'))
+                  }
+                }
+              }
+              
+              // Handle any remaining buffer
+              if (buffer.trim()) {
+                controller.enqueue(encoder.encode(buffer))
+              }
+            } finally {
+              controller.close()
+            }
+          }
+        })
+        
+        return new Response(stream, {
+          headers: response.headers,
+          status: response.status,
+          statusText: response.statusText,
+        })
       }
     },
     "amazon-bedrock": async () => {
