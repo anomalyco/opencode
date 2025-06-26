@@ -1,5 +1,6 @@
 import { AuthAnthropic } from "../../auth/anthropic"
 import { AuthCopilot } from "../../auth/copilot"
+import { AuthGoogle } from "../../auth/google"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -176,6 +177,69 @@ export const AuthLoginCommand = cmd({
           .catch(() => {
             prompts.log.error("Invalid code")
           })
+        prompts.outro("Done")
+        return
+      }
+    }
+
+    if (provider === "google") {
+      const method = await prompts.select({
+        message: "Login method",
+        options: [
+          {
+            label: "OAuth (Gemini CLI)",
+            value: "oauth",
+          },
+          {
+            label: "API Key",
+            value: "api",
+          },
+        ],
+      })
+      if (prompts.isCancel(method)) throw new UI.CancelledError()
+
+      if (method === "oauth") {
+        // some weird bug where program exits without this
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const { url, state, port, redirectUri } = await AuthGoogle.authorize()
+        
+        const spinner = prompts.spinner()
+        spinner.start("Waiting for authorization...")
+        
+        // Start callback server and open browser
+        const codePromise = AuthGoogle.waitForCallback(state, port)
+        
+        try {
+          await open(url)
+        } catch (e) {
+          prompts.log.warn(
+            "Failed to open browser, please open the following URL manually:",
+          )
+          prompts.log.info(url)
+        }
+        
+        try {
+          const { code } = await codePromise
+          spinner.stop()
+          
+          await AuthGoogle.exchange(code, redirectUri)
+            .then(async () => {
+              prompts.log.success("Login successful")
+              // Small delay to ensure server cleanup
+              await new Promise(resolve => setTimeout(resolve, 500))
+            })
+            .catch((err) => {
+              prompts.log.error("Authentication failed: " + err.message)
+            })
+        } catch (err) {
+          spinner.stop()
+          if (err instanceof Error && err.message === "OAuth callback timeout") {
+            prompts.log.error("Authentication timed out")
+          } else {
+            prompts.log.error("Authentication failed")
+          }
+        }
+        
         prompts.outro("Done")
         return
       }

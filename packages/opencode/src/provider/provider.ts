@@ -20,6 +20,7 @@ import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
+import { AuthGoogle } from "../auth/google"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -123,6 +124,155 @@ export namespace Provider {
           return sdk.responses(modelID)
         },
         options: {},
+      }
+    },
+    google: async (provider) => {
+      const access = await AuthGoogle.access()
+      if (!access) return { autoload: false }
+      
+      // Set cost to 0 for OAuth authenticated requests
+      for (const model of Object.values(provider.models)) {
+        model.cost = {
+          input: 0,
+          output: 0,
+        }
+      }
+      
+      // For OAuth, we need to use the Cloud Code internal API endpoint
+      return {
+        autoload: true,
+        options: {
+          apiKey: "dummy-key-for-oauth", // SDK requires an API key, but we'll override
+          baseURL: "https://cloudcode-pa.googleapis.com",
+          // Custom fetch to rewrite requests for OAuth
+          fetch: async (url: any, init: any) => {
+            const accessToken = await AuthGoogle.access()
+            if (!accessToken) throw new Error("Google OAuth token expired")
+            
+            // Parse the URL to modify it
+            const urlObj = new URL(url)
+            
+            // Replace the standard API with Cloud Code API
+            if (urlObj.hostname === "generativelanguage.googleapis.com") {
+              urlObj.hostname = "cloudcode-pa.googleapis.com"
+              // Always use the same endpoint regardless of model
+              urlObj.pathname = "/v1internal:generateContent"
+            } else if (urlObj.hostname === "cloudcode-pa.googleapis.com") {
+              // If already using cloudcode, ensure correct path
+              urlObj.pathname = "/v1internal:generateContent"
+            }
+            
+            // Clone headers and add OAuth
+            const headers = new Headers(init.headers || {})
+            headers.delete("x-goog-api-key")
+            headers.set("Authorization", `Bearer ${accessToken}`)
+            headers.set("User-Agent", `GeminiCLI/v22.15.0 (${process.platform}; ${process.arch}) google-api-nodejs-client/9.15.1`)
+            headers.set("x-goog-api-client", "gl-node/22.15.0")
+            headers.set("Accept", "application/json")
+            headers.set("Content-Type", "application/json")
+            
+            // Parse and modify the body to match Cloud Code API format
+            let body = init.body
+            if (body && typeof body === "string") {
+              try {
+                const originalBody = JSON.parse(body)
+                
+                // Extract model name from the URL path
+                const modelMatch = url.match(/models\/([^:]+)/)
+                const modelName = modelMatch ? modelMatch[1] : "gemini-2.5-flash"
+                
+                // Wrap the original request in the Cloud Code format
+                const cloudCodeBody = {
+                  model: modelName,
+                  // TODO: figure out how to get/generate the project ID
+                  project: "elegant-machine-vq6tl",
+                  request: originalBody  // The original request goes inside "request"
+                }
+                
+                body = JSON.stringify(cloudCodeBody)
+              } catch (e) {
+                // If not JSON, leave as is
+              }
+            }
+            
+            const response = await fetch(urlObj.toString(), {
+              ...init,
+              headers,
+              body,
+            })
+            
+            // Clone the response to read the body
+            const responseClone = response.clone()
+            
+            // Check if this is a streaming response
+            const isSSE = urlObj.searchParams.get("alt") === "sse"
+            
+            if (isSSE) {
+              // For SSE responses, we need to unwrap each data chunk
+              const originalBody = response.body
+              if (!originalBody) return response
+              
+              const reader = originalBody.getReader()
+              const decoder = new TextDecoder()
+              
+              const stream = new ReadableStream({
+                async start(controller) {
+                  try {
+                    while (true) {
+                      const { done, value } = await reader.read()
+                      if (done) break
+                      
+                      const chunk = decoder.decode(value, { stream: true })
+                      const lines = chunk.split('\n')
+                      
+                      for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                          const data = line.slice(6)
+                          if (data.trim()) {
+                            try {
+                              const parsed = JSON.parse(data)
+                              // Unwrap the response field
+                              const unwrapped = parsed.response || parsed
+                              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(unwrapped)}\n\n`))
+                            } catch (e) {
+                              // If not JSON, pass through
+                              controller.enqueue(value)
+                            }
+                          }
+                        } else if (line.trim()) {
+                          controller.enqueue(new TextEncoder().encode(line + '\n'))
+                        }
+                      }
+                    }
+                  } finally {
+                    controller.close()
+                  }
+                }
+              })
+              
+              return new Response(stream, {
+                headers: response.headers,
+                status: response.status,
+                statusText: response.statusText,
+              })
+            } else {
+              // For non-SSE responses, unwrap the response field
+              try {
+                const responseData = await response.json()
+                const unwrappedData = responseData.response || responseData
+                
+                return new Response(JSON.stringify(unwrappedData), {
+                  headers: response.headers,
+                  status: response.status,
+                  statusText: response.statusText,
+                })
+              } catch (e) {
+                // If not JSON or parsing fails, return original
+                return responseClone
+              }
+            }
+          },
+        },
       }
     },
     "amazon-bedrock": async () => {
