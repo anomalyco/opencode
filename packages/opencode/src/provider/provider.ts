@@ -20,6 +20,7 @@ import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
+import { AuthGoogle } from "../auth/google"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -112,6 +113,110 @@ export namespace Provider {
               ...init,
               headers,
             })
+          },
+        },
+      }
+    },
+    google: async (provider) => {
+      const access = await AuthGoogle.access()
+      if (!access) return { autoload: false }
+
+      // Set cost to 0 for Google account users
+      if (provider && provider.models) {
+        for (const model of Object.values(provider.models)) {
+          model.cost = {
+            input: 0,
+            output: 0,
+          }
+        }
+      }
+
+      return {
+        autoload: true,
+        options: {
+          apiKey: "",
+          baseURL: "https://cloudcode-pa.googleapis.com/v1internal",
+          async fetch(input: any, init: any) {
+            const access = await AuthGoogle.access()
+
+            // Transform the request to Code Assist format
+            let body = init.body
+            if (body && typeof body === "string") {
+              try {
+                const parsed = JSON.parse(body)
+                if (parsed.messages || parsed.contents) {
+                  // This is a chat completion request, transform it
+                  const transformedBody = {
+                    model: parsed.model || "gemini-2.0-flash",
+                    request: {
+                      contents:
+                        parsed.contents ||
+                        parsed.messages?.map((msg: any) => ({
+                          role: msg.role === "assistant" ? "model" : msg.role,
+                          parts: [
+                            { text: msg.content || msg.parts?.[0]?.text },
+                          ],
+                        })),
+                      generationConfig: parsed.generationConfig || {},
+                    },
+                  }
+                  body = JSON.stringify(transformedBody)
+                }
+              } catch (e) {
+                // If parsing fails, use original body
+              }
+            }
+
+            // Transform URL to use generateContent method
+            let url = input
+            if (typeof url === "string" && url.includes("/chat/completions")) {
+              url = url.replace(/\/chat\/completions.*/, ":generateContent")
+            }
+
+            const headers = {
+              ...init.headers,
+              authorization: `Bearer ${access}`,
+              "Content-Type": "application/json",
+            }
+            delete headers["x-api-key"]
+
+            const response = await fetch(url, {
+              ...init,
+              headers,
+              body,
+            })
+
+            // Transform response back to expected format
+            if (response.ok) {
+              const data = await response.json()
+              if (data.candidates) {
+                // Transform Code Assist response to standard format
+                const transformed = {
+                  choices: data.candidates.map((candidate: any) => ({
+                    message: {
+                      role: "assistant",
+                      content: candidate.content?.parts?.[0]?.text || "",
+                    },
+                    finish_reason:
+                      candidate.finishReason === "STOP" ? "stop" : "length",
+                  })),
+                  usage: data.usageMetadata
+                    ? {
+                        prompt_tokens: data.usageMetadata.promptTokenCount || 0,
+                        completion_tokens:
+                          data.usageMetadata.candidatesTokenCount || 0,
+                        total_tokens: data.usageMetadata.totalTokenCount || 0,
+                      }
+                    : undefined,
+                }
+                return new Response(JSON.stringify(transformed), {
+                  status: response.status,
+                  headers: response.headers,
+                })
+              }
+            }
+
+            return response
           },
         },
       }

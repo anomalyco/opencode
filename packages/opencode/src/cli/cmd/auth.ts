@@ -1,5 +1,6 @@
 import { AuthAnthropic } from "../../auth/anthropic"
 import { AuthCopilot } from "../../auth/copilot"
+import { AuthGoogle } from "../../auth/google"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -176,6 +177,61 @@ export const AuthLoginCommand = cmd({
           .catch(() => {
             prompts.log.error("Invalid code")
           })
+        prompts.outro("Done")
+        return
+      }
+    }
+
+    if (provider === "google") {
+      const method = await prompts.select({
+        message: "Login method",
+        options: [
+          {
+            label: "Login with Google",
+            value: "oauth",
+          },
+          {
+            label: "API Key",
+            value: "api",
+          },
+        ],
+      })
+      if (prompts.isCancel(method)) throw new UI.CancelledError()
+
+      if (method === "oauth") {
+        // some weird bug where program exits without this
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const { url, verifier, port } = await AuthGoogle.authorize()
+        
+        prompts.note("Starting local server for OAuth callback...")
+        
+        // Start the callback server before opening the browser
+        const codePromise = AuthGoogle.startCallbackServer(port, verifier)
+        
+        prompts.note("Opening browser for authentication...")
+        try {
+          await open(url)
+        } catch (e) {
+          prompts.log.error(
+            "Failed to open browser. Please open the following URL manually:",
+          )
+        }
+        prompts.log.info(url)
+        
+        const spinner = prompts.spinner()
+        spinner.start("Waiting for Google authentication...")
+        
+        try {
+          const code = await codePromise
+          spinner.stop("Authentication received")
+          
+          await AuthGoogle.exchange(code, port, verifier)
+          prompts.log.success("Login successful")
+        } catch (error) {
+          spinner.stop("Authentication failed", 1)
+          prompts.log.error(error instanceof Error ? error.message : String(error))
+        }
+        
         prompts.outro("Done")
         return
       }
