@@ -275,9 +275,6 @@ export namespace Provider {
                         controller.enqueue(encoder.encode(line + '\n'))
                       }
                     }
-                  } else if (line === '') {
-                    // Empty line separates SSE events
-                    controller.enqueue(encoder.encode('\n'))
                   }
                 }
               }
