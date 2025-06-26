@@ -173,7 +173,7 @@ type StringItem string
 
 func (s StringItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle().Foreground(t.Text())
+	baseStyle := styles.NewStyle()
 
 	truncatedStr := truncate.StringWithTail(string(s), uint(width-1), "...")
 
@@ -186,6 +186,7 @@ func (s StringItem) Render(selected bool, width int) string {
 			PaddingLeft(1)
 	} else {
 		itemStyle = baseStyle.
+			Foreground(t.TextMuted()).
 			PaddingLeft(1)
 	}
 

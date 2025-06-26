@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
@@ -33,7 +32,7 @@ type sessionItem struct {
 
 func (s sessionItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle()
 
 	var text string
 	if s.isDeleteConfirming {
@@ -44,7 +43,7 @@ func (s sessionItem) Render(selected bool, width int) string {
 
 	truncatedStr := truncate.StringWithTail(text, uint(width-1), "...")
 
-	var itemStyle lipgloss.Style
+	var itemStyle styles.Style
 	if selected {
 		if s.isDeleteConfirming {
 			// Red background for delete confirmation
@@ -151,9 +150,9 @@ func (s *sessionDialog) Render(background string) string {
 	listView := s.list.View()
 
 	t := theme.CurrentTheme()
-	helpStyle := styles.BaseStyle().PaddingLeft(1).PaddingTop(1)
-	helpText := styles.BaseStyle().Foreground(t.Text()).Render("x/del")
-	helpText = helpText + styles.BaseStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render(" delete session")
+	helpStyle := styles.NewStyle().PaddingLeft(1).PaddingTop(1)
+	helpText := styles.NewStyle().Foreground(t.Text()).Render("x/del")
+	helpText = helpText + styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render(" delete session")
 	helpText = helpStyle.Render(helpText)
 
 	content := strings.Join([]string{listView, helpText}, "\n")
