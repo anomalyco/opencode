@@ -25,7 +25,7 @@
     "luxon": "3.6.1",
     "marked": "15.0.12",
     "rehype-autolink-headings": "7.1.0",
-    "sharp": "0.32.5",
+    "sharp": "0.32.6",
     "shiki": "3.4.2",
     "solid-js": "1.9.7",
     "toolbeam-docs-theme": "0.3.0"
