@@ -199,15 +199,9 @@ export const AuthLoginCommand = cmd({
       if (prompts.isCancel(method)) throw new UI.CancelledError()
 
       if (method === "oauth") {
-        // some weird bug where program exits without this
-        await new Promise((resolve) => setTimeout(resolve, 10))
-        const { url, state, port, redirectUri } = await AuthGoogle.authorize()
+        const { url, state, port, redirectUri, client } = await AuthGoogle.authorize()
         
-        const spinner = prompts.spinner()
-        spinner.start("Waiting for authorization...")
-        
-        // Start callback server and open browser
-        const codePromise = AuthGoogle.waitForCallback(state, port)
+        prompts.log.info("Opening browser for authentication...")
         
         try {
           await open(url)
@@ -218,23 +212,17 @@ export const AuthLoginCommand = cmd({
           prompts.log.info(url)
         }
         
+        const spinner = prompts.spinner()
+        spinner.start("Waiting for authorization...")
+        
         try {
-          const { code } = await codePromise
+          await AuthGoogle.waitForCallback(state, port, redirectUri, client)
           spinner.stop()
-          
-          await AuthGoogle.exchange(code, redirectUri)
-            .then(async () => {
-              prompts.log.success("Login successful")
-              // Small delay to ensure server cleanup
-              await new Promise(resolve => setTimeout(resolve, 500))
-            })
-            .catch((err) => {
-              prompts.log.error("Authentication failed: " + err.message)
-            })
+          prompts.log.success("Login successful")
         } catch (err) {
           spinner.stop()
-          if (err instanceof Error && err.message === "OAuth callback timeout") {
-            prompts.log.error("Authentication timed out")
+          if (err instanceof Error) {
+            prompts.log.error(err.message)
           } else {
             prompts.log.error("Authentication failed")
           }

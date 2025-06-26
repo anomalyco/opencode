@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-    	   "version": "0.0.5",  "name": "opencode",
+  "version": "0.0.5",
+  "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
@@ -34,6 +35,7 @@
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
     "env-paths": "3.0.0",
+    "google-auth-library": "10.1.0",
     "hono": "4.7.10",
     "hono-openapi": "0.4.8",
     "open": "10.1.2",

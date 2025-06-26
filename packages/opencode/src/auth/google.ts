@@ -1,4 +1,7 @@
+import { OAuth2Client } from "google-auth-library"
 import { Auth } from "./index.js"
+import * as http from "http"
+import * as url from "url"
 import crypto from "crypto"
 
 export namespace AuthGoogle {
@@ -10,40 +13,66 @@ export namespace AuthGoogle {
     "https://www.googleapis.com/auth/userinfo.profile"
   ]
 
-  interface OAuthCallbackResult {
-    code: string
-    state: string
+  let oauthClient: OAuth2Client | null = null
+
+  export async function getOAuthClient(): Promise<OAuth2Client> {
+    if (!oauthClient) {
+      oauthClient = new OAuth2Client({
+        clientId: CLIENT_ID,
+        clientSecret: CLIENT_SECRET,
+      })
+    }
+
+    // Check if we have cached credentials
+    const savedAuth = await Auth.get("google")
+    if (savedAuth && savedAuth.type === "oauth") {
+      oauthClient.setCredentials({
+        access_token: savedAuth.access,
+        refresh_token: savedAuth.refresh,
+        expiry_date: savedAuth.expires,
+      })
+      
+      // Verify the credentials are still valid
+      try {
+        const { token } = await oauthClient.getAccessToken()
+        if (token) {
+          return oauthClient
+        }
+      } catch {
+        // Token invalid, will proceed with new auth
+      }
+    }
+
+    return oauthClient
   }
 
   export async function authorize() {
-    // Find an available port
+    const client = await getOAuthClient()
     const port = await findAvailablePort()
     const redirectUri = `http://localhost:${port}/oauth2callback`
-    
-    // Generate a random state for CSRF protection
     const state = crypto.randomBytes(32).toString('hex')
     
-    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-    url.searchParams.set("client_id", CLIENT_ID)
-    url.searchParams.set("redirect_uri", redirectUri)
-    url.searchParams.set("response_type", "code")
-    url.searchParams.set("scope", SCOPES.join(" "))
-    url.searchParams.set("access_type", "offline")
-    url.searchParams.set("state", state)
-    url.searchParams.set("prompt", "consent") // Force consent to ensure refresh token
-    
+    const authUrl = client.generateAuthUrl({
+      redirect_uri: redirectUri,
+      access_type: 'offline',
+      scope: SCOPES,
+      state,
+      prompt: 'consent', // Force consent to ensure refresh token
+    })
+
     return {
-      url: url.toString(),
+      url: authUrl,
       state,
       port,
-      redirectUri
+      redirectUri,
+      client
     }
   }
 
   async function findAvailablePort(): Promise<number> {
     return new Promise((resolve) => {
       const server = Bun.serve({
-        port: 0, // Let Bun choose an available port
+        port: 0,
         fetch() {
           return new Response("Port check")
         },
@@ -54,142 +83,98 @@ export namespace AuthGoogle {
     })
   }
 
-  export async function waitForCallback(state: string, port: number): Promise<OAuthCallbackResult> {
+  export async function waitForCallback(
+    state: string, 
+    port: number, 
+    redirectUri: string,
+    client: OAuth2Client
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const server = Bun.serve({
-        port,
-        fetch(req) {
-          const url = new URL(req.url)
-          if (url.pathname === "/oauth2callback") {
-            const code = url.searchParams.get("code")
-            const receivedState = url.searchParams.get("state")
-            
-            if (code && receivedState === state) {
-              setTimeout(() => {
-                server.stop()
-                resolve({ code, state: receivedState })
-              }, 100)
-              
-              return Response.redirect("https://opencode.ai/docs/", 302)
-            } else {              
-              return new Response(JSON.stringify({ error: "Invalid or missing authorization code" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json" },
-              })
-            }
+      const server = http.createServer(async (req, res) => {
+        try {
+          if (!req.url?.includes('/oauth2callback')) {
+            res.writeHead(404)
+            res.end()
+            return
+          }
+
+          const qs = new url.URL(req.url!, `http://localhost:${port}`).searchParams
+          
+          if (qs.get('error')) {
+            res.writeHead(302, { Location: 'https://opencode.ai/docs' })
+            res.end()
+            reject(new Error(`OAuth error: ${qs.get('error')}`))
+            return
           }
           
-          return new Response("Not Found", { status: 404 })
-        },
+          if (qs.get('state') !== state) {
+            res.writeHead(400)
+            res.end('State mismatch')
+            reject(new Error('State mismatch - possible CSRF attack'))
+            return
+          }
+          
+          const code = qs.get('code')
+          if (!code) {
+            res.writeHead(400)
+            res.end('No code found')
+            reject(new Error('No authorization code received'))
+            return
+          }
+
+          const { tokens } = await client.getToken({
+            code,
+            redirect_uri: redirectUri,
+          })
+          
+          client.setCredentials(tokens)
+          
+          // Save to our auth system
+          await Auth.set("google", {
+            type: "oauth",
+            refresh: tokens.refresh_token!,
+            access: tokens.access_token!,
+            expires: tokens.expiry_date!,
+          })
+
+          res.writeHead(302, { Location: 'https://opencode.ai/docs' })
+          res.end()
+          
+
+          setTimeout(() => {
+            server.close(() => {
+              resolve()
+            })
+          }, 100)
+        } catch (error) {
+          server.close(() => {
+            reject(error)
+          })
+        }
       })
       
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        server.stop()
-        reject(new Error("OAuth callback timeout"))
+      server.listen(port)
+
+      const timeout = setTimeout(() => {
+        server.close(() => {
+          reject(new Error("OAuth callback timeout"))
+        })
       }, 5 * 60 * 1000)
+      
+      server.on('close', () => {
+        clearTimeout(timeout)
+      })
     })
   }
 
-  export async function exchange(code: string, redirectUri: string) {
-    const params = new URLSearchParams({
-      code,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    })
+  export async function access(): Promise<string | undefined> {
+    const client = await getOAuthClient()
     
-    const result = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    })
-    
-    if (!result.ok) {
-      const error = await result.text()
-      console.error("Google OAuth exchange failed:", error)
-      throw new ExchangeFailed()
-    }
-    
-    const json = await result.json()
-    
-    // Validate the token
-    const tokenInfo = await validateToken(json.access_token)
-    if (!tokenInfo) {
-      throw new Error("Failed to validate access token")
-    }
-    
-    await Auth.set("google", {
-      type: "oauth",
-      refresh: json.refresh_token as string,
-      access: json.access_token as string,
-      expires: Date.now() + json.expires_in * 1000,
-    })
-  }
-
-  async function validateToken(accessToken: string): Promise<any> {
-    const response = await fetch("https://oauth2.googleapis.com/tokeninfo", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    })
-    
-    if (!response.ok) {
-      return null
-    }
-    
-    return response.json()
-  }
-
-  export async function access() {
-    const info = await Auth.get("google")
-    if (!info || info.type !== "oauth") return
-    
-    // Return access token if it's still valid (with 5 minute buffer)
-    if (info.access && info.expires > Date.now() + 5 * 60 * 1000) {
-      return info.access
-    }
-    
-    // Refresh the token
-    const params = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: info.refresh,
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-    })
-    
-    const response = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    })
-    
-    if (!response.ok) {
-      console.error("Failed to refresh Google token")
-      return
-    }
-    
-    const json = await response.json()
-    await Auth.set("google", {
-      type: "oauth",
-      refresh: info.refresh, // Keep the same refresh token
-      access: json.access_token as string,
-      expires: Date.now() + json.expires_in * 1000,
-    })
-    
-    return json.access_token as string
-  }
-
-  export class ExchangeFailed extends Error {
-    constructor() {
-      super("Exchange failed")
+    try {
+      const { token } = await client.getAccessToken()
+      return token || undefined
+    } catch {
+      return undefined
     }
   }
 }
