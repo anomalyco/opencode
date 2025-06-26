@@ -112,7 +112,7 @@ interface OnboardUserResponse {
   }
 }
 
-export namespace AuthGoogle {
+export namespace AuthGoogleCloudCode {
   const CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
   const CLIENT_SECRET = "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"
   const SCOPES = [
@@ -136,7 +136,7 @@ export namespace AuthGoogle {
     }
 
     // Check if we have cached credentials
-    const savedAuth = await Auth.get("google")
+    const savedAuth = await Auth.get("google-vertex")
     if (savedAuth && savedAuth.type === "oauth") {
       oauthClient.setCredentials({
         access_token: savedAuth.access,
@@ -241,7 +241,7 @@ export namespace AuthGoogle {
           
           client.setCredentials(tokens)
 
-          await Auth.set("google", {
+          await Auth.set("google-vertex", {
             type: "oauth",
             refresh: tokens.refresh_token!,
             access: tokens.access_token!,

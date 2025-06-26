@@ -1,6 +1,6 @@
 import { AuthAnthropic } from "../../auth/anthropic"
 import { AuthCopilot } from "../../auth/copilot"
-import { AuthGoogle } from "../../auth/google"
+import { AuthGoogleCloudCode } from "../../auth/google-cloud-code"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
@@ -84,7 +84,7 @@ export const AuthLoginCommand = cmd({
       anthropic: 0,
       "github-copilot": 1,
       openai: 2,
-      google: 3,
+      "google-vertex": 3,
     }
     let provider = await prompts.select({
       message: "Select provider",
@@ -182,7 +182,7 @@ export const AuthLoginCommand = cmd({
       }
     }
 
-    if (provider === "google") {
+    if (provider === "google-vertex") {
       const method = await prompts.select({
         message: "Login method",
         options: [
@@ -196,10 +196,12 @@ export const AuthLoginCommand = cmd({
           },
         ],
       })
+      
       if (prompts.isCancel(method)) throw new UI.CancelledError()
 
       if (method === "oauth") {
-        const { url, state, port, redirectUri, client } = await AuthGoogle.authorize()
+
+        const { url, state, port, redirectUri, client } = await AuthGoogleCloudCode.authorize()
         
         prompts.log.info("Opening browser for authentication...")
         
@@ -216,9 +218,10 @@ export const AuthLoginCommand = cmd({
         spinner.start("Waiting for authorization...")
         
         try {
-          await AuthGoogle.waitForCallback(state, port, redirectUri, client)
+          await AuthGoogleCloudCode.waitForCallback(state, port, redirectUri, client)
           spinner.stop()
           prompts.log.success("Login successful")
+          prompts.log.info("You can now use Google Vertex models with free Gemini access")
         } catch (err) {
           spinner.stop()
           if (err instanceof Error) {
@@ -232,6 +235,7 @@ export const AuthLoginCommand = cmd({
         return
       }
     }
+
 
     const copilot = await AuthCopilot()
     if (provider === "github-copilot" && copilot) {

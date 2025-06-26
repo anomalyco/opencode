@@ -20,7 +20,7 @@ import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
-import { AuthGoogle } from "../auth/google"
+import { AuthGoogleCloudCode } from "../auth/google-cloud-code"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -126,8 +126,8 @@ export namespace Provider {
         options: {},
       }
     },
-    google: async (provider) => {
-      const access = await AuthGoogle.access()
+    "google-vertex": async (provider) => {
+      const access = await AuthGoogleCloudCode.access()
       if (!access) return { autoload: false }
       
       // Set cost to 0 for OAuth authenticated requests
@@ -145,7 +145,7 @@ export namespace Provider {
       // Get or setup project ID through Code Assist API
       let PROJECT_ID: string
       try {
-        PROJECT_ID = await AuthGoogle.getProjectId()
+        PROJECT_ID = await AuthGoogleCloudCode.getProjectId()
       } catch (error: any) {
         log.warn("Failed to setup Code Assist project:", { error })
         if (!process.env["GOOGLE_CLOUD_PROJECT"]) {
@@ -157,143 +157,98 @@ export namespace Provider {
       return {
         autoload: true,
         options: {
-          apiKey: "dummy-key-for-oauth", // SDK requires an API key
-          baseURL: CLOUD_CODE_ENDPOINT,
+          project: PROJECT_ID,
+          location: "us-central1", // TODO: if this get used, make this configurable
           // Custom fetch to handle Cloud Code API
           fetch: async (url: any, init: any) => {
-            const accessToken = await AuthGoogle.access()
+            const accessToken = await AuthGoogleCloudCode.access()
             if (!accessToken) throw new Error("Google OAuth token expired")
             
             const urlObj = new URL(url)
+            const method = urlObj.pathname.match(/:(\w+)$/)?.[1] || 'generateContent'
+            const isStreaming = method === "streamGenerateContent"
             
-            // Extract the method from the URL (generateContent, streamGenerateContent, etc)
-            const methodMatch = urlObj.pathname.match(/models\/[^:]+:(\w+)/)
-            const method = methodMatch ? methodMatch[1] : "generateContent"
-            
-            // Use Cloud Code API endpoint
+            // Configure Cloud Code API endpoint
             urlObj.hostname = new URL(CLOUD_CODE_ENDPOINT).hostname
             urlObj.pathname = `/${CLOUD_CODE_API_VERSION}:${method}`
+            if (isStreaming) urlObj.searchParams.set("alt", "sse")
             
-            // Set up headers
-            const headers = new Headers(init.headers || {})
-            headers.delete("x-goog-api-key")
-            headers.set("Authorization", `Bearer ${accessToken}`)
-            headers.set("Content-Type", "application/json")
-            
-            // Transform the request body
+            // Transform request body to Cloud Code format
             let body = init.body
             if (body && typeof body === "string") {
               try {
-                const originalRequest = JSON.parse(body)
-                
-                // Extract model name from the original URL
-                const modelMatch = url.match(/models\/([^:]+)/)
-                const modelName = modelMatch ? modelMatch[1] : "gemini-2.5-flash"
-                
-                // Wrap in Cloud Code API format
-                const cloudCodeRequest = {
-                  model: modelName,
+                body = JSON.stringify({
+                  model: url.match(/models\/([^:\/]+)/)?.[1] || "gemini-2.5-flash",
                   project: PROJECT_ID,
-                  request: originalRequest
-                }
-                
-                body = JSON.stringify(cloudCodeRequest)
-              } catch (e) {
-                // If not JSON, leave as is
-              }
+                  request: JSON.parse(body)
+                })
+              } catch {}
             }
             
-            // Make the request
+            // Make request with auth headers
             const response = await fetch(urlObj.toString(), {
               ...init,
-              headers,
+              headers: {
+                ...init.headers,
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              },
               body,
             })
             
-            // Handle streaming responses (SSE)
-            if (urlObj.searchParams.get("alt") === "sse") {
-              return transformSSEResponse(response)
-            }
-            
-            // Handle regular JSON responses
-            return transformJSONResponse(response)
+            return response.ok 
+              ? transformResponse(response, isStreaming)
+              : response
           },
         },
       }
       
-      // Helper function to transform JSON responses
-      async function transformJSONResponse(response: Response): Promise<Response> {
-        if (!response.ok) return response
-        
-        try {
-          const data = await response.json()
-          // Cloud Code API returns {response: actualResponse}, unwrap it
-          const unwrapped = data.response || data
-          
-          return new Response(JSON.stringify(unwrapped), {
-            headers: response.headers,
-            status: response.status,
-            statusText: response.statusText,
-          })
-        } catch {
-          return response
-        }
+      // Helper to unwrap Cloud Code API responses
+      function unwrapResponse(data: any) {
+        return data.response || data
       }
       
-      // Helper function to transform SSE responses
-      function transformSSEResponse(response: Response): Response {
+      // Transform responses from Cloud Code API format
+      async function transformResponse(response: Response, isSSE: boolean): Promise<Response> {
+        if (!isSSE) {
+          const data = await response.json()
+          return Response.json(unwrapResponse(data))
+        }
+        
+        // SSE response
         if (!response.body) return response
         
         const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        const encoder = new TextEncoder()
-        
         const stream = new ReadableStream({
           async start(controller) {
+            const decoder = new TextDecoder()
+            const encoder = new TextEncoder()
             let buffer = ""
             
-            try {
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                
-                buffer += decoder.decode(value, { stream: true })
-                const lines = buffer.split('\n')
-                buffer = lines.pop() || ""
-                
-                for (const line of lines) {
-                  if (line.startsWith('data: ')) {
-                    const data = line.slice(6).trim()
-                    if (data) {
-                      try {
-                        const parsed = JSON.parse(data)
-                        // Cloud Code API returns {response: actualResponse}
-                        const unwrapped = parsed.response || parsed
-                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(unwrapped)}\n\n`))
-                      } catch {
-                        // If not JSON, pass through
-                        controller.enqueue(encoder.encode(line + '\n'))
-                      }
-                    }
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || ""
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6))
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(unwrapResponse(data))}\n\n`))
+                  } catch {
+                    controller.enqueue(encoder.encode(line + '\n'))
                   }
                 }
               }
-              
-              // Handle any remaining buffer
-              if (buffer.trim()) {
-                controller.enqueue(encoder.encode(buffer))
-              }
-            } finally {
-              controller.close()
             }
+            controller.close()
           }
         })
         
-        return new Response(stream, {
-          headers: response.headers,
-          status: response.status,
-          statusText: response.statusText,
-        })
+        return new Response(stream, { headers: response.headers })
       }
     },
     "amazon-bedrock": async () => {
@@ -597,6 +552,7 @@ export namespace Provider {
       parameters: optionalToNullable(t.parameters),
     })),
     google: TOOLS,
+    "google-vertex": TOOLS,
   }
 
   export async function tools(providerID: string) {
