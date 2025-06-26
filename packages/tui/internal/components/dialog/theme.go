@@ -103,7 +103,7 @@ func NewThemeDialog() ThemeDialog {
 
 	// Set the initial selection to the current theme
 	list.SetSelectedIndex(selectedIdx)
-	
+
 	// Set the max width for the list to match the modal width
 	list.SetMaxWidth(36) // 40 (modal max width) - 4 (modal padding)
 

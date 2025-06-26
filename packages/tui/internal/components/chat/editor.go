@@ -26,6 +26,9 @@ type EditorComponent interface {
 	Content() string
 	Lines() int
 	Value() string
+	Focused() bool
+	Focus() (tea.Model, tea.Cmd)
+	Blur()
 	Submit() (tea.Model, tea.Cmd)
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
@@ -48,7 +51,7 @@ type editorComponent struct {
 }
 
 func (m *editorComponent) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, m.spinner.Tick, tea.EnableReportFocus)
+	return tea.Batch(m.textarea.Focus(), m.spinner.Tick, tea.EnableReportFocus)
 }
 
 func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -69,7 +72,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.ThemeSelectedMsg:
 		m.textarea = createTextArea(&m.textarea)
 		m.spinner = createSpinner()
-		return m, tea.Batch(m.spinner.Tick, textarea.Blink)
+		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
 		if msg.IsCommand {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
@@ -104,12 +107,11 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) Content() string {
 	t := theme.CurrentTheme()
-	base := styles.BaseStyle().Background(t.Background()).Render
-	muted := styles.Muted().Background(t.Background()).Render
-	promptStyle := lipgloss.NewStyle().
+	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
+	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	promptStyle := styles.NewStyle().Foreground(t.Primary()).
 		Padding(0, 0, 0, 1).
-		Bold(true).
-		Foreground(t.Primary())
+		Bold(true)
 	prompt := promptStyle.Render(">")
 
 	textarea := lipgloss.JoinHorizontal(
@@ -117,11 +119,11 @@ func (m *editorComponent) Content() string {
 		prompt,
 		m.textarea.View(),
 	)
-	textarea = styles.BaseStyle().
+	textarea = styles.NewStyle().
+		Background(t.BackgroundElement()).
 		Width(m.width).
 		PaddingTop(1).
 		PaddingBottom(1).
-		Background(t.BackgroundElement()).
 		Render(textarea)
 
 	hint := base(m.getSubmitKeyText()) + muted(" send   ")
@@ -140,10 +142,10 @@ func (m *editorComponent) Content() string {
 	}
 
 	space := m.width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
-	spacer := lipgloss.NewStyle().Background(t.Background()).Width(space).Render("")
+	spacer := styles.NewStyle().Background(t.Background()).Width(space).Render("")
 
 	info := hint + spacer + model
-	info = styles.Padded().Background(t.Background()).Render(info)
+	info = styles.NewStyle().Background(t.Background()).Padding(0, 1).Render(info)
 
 	content := strings.Join([]string{"", textarea, info}, "\n")
 	return content
@@ -154,6 +156,18 @@ func (m *editorComponent) View() string {
 		return ""
 	}
 	return m.Content()
+}
+
+func (m *editorComponent) Focused() bool {
+	return m.textarea.Focused()
+}
+
+func (m *editorComponent) Focus() (tea.Model, tea.Cmd) {
+	return m, m.textarea.Focus()
+}
+
+func (m *editorComponent) Blur() {
+	m.textarea.Blur()
 }
 
 func (m *editorComponent) GetSize() (width, height int) {
@@ -297,14 +311,14 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 
 	ta := textarea.New()
 
-	ta.Styles.Blurred.Base = lipgloss.NewStyle().Background(bgColor).Foreground(textColor)
-	ta.Styles.Blurred.CursorLine = lipgloss.NewStyle().Background(bgColor)
-	ta.Styles.Blurred.Placeholder = lipgloss.NewStyle().Background(bgColor).Foreground(textMutedColor)
-	ta.Styles.Blurred.Text = lipgloss.NewStyle().Background(bgColor).Foreground(textColor)
-	ta.Styles.Focused.Base = lipgloss.NewStyle().Background(bgColor).Foreground(textColor)
-	ta.Styles.Focused.CursorLine = lipgloss.NewStyle().Background(bgColor)
-	ta.Styles.Focused.Placeholder = lipgloss.NewStyle().Background(bgColor).Foreground(textMutedColor)
-	ta.Styles.Focused.Text = lipgloss.NewStyle().Background(bgColor).Foreground(textColor)
+	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
 
 	ta.Prompt = " "
@@ -317,18 +331,21 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 		ta.SetHeight(existing.Height())
 	}
 
-	ta.Focus()
+	// ta.Focus()
 	return ta
 }
 
 func createSpinner() spinner.Model {
+	t := theme.CurrentTheme()
 	return spinner.New(
 		spinner.WithSpinner(spinner.Ellipsis),
 		spinner.WithStyle(
-			styles.
-				Muted().
-				Background(theme.CurrentTheme().Background()).
-				Width(3)),
+			styles.NewStyle().
+				Foreground(t.Background()).
+				Foreground(t.TextMuted()).
+				Width(3).
+				Lipgloss(),
+		),
 	)
 }
 

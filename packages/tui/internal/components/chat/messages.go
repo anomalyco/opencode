@@ -245,7 +245,7 @@ func (m *messagesComponent) renderView() {
 			m.width,
 			lipgloss.Center,
 			block,
-			lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+			styles.WhitespaceStyle(t.Background()),
 		))
 	}
 
@@ -260,8 +260,8 @@ func (m *messagesComponent) header() string {
 
 	t := theme.CurrentTheme()
 	width := layout.Current.Container.Width
-	base := styles.BaseStyle().Background(t.Background()).Render
-	muted := styles.Muted().Background(t.Background()).Render
+	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
+	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 	headerLines := []string{}
 	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
 	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
@@ -271,11 +271,11 @@ func (m *messagesComponent) header() string {
 	}
 	header := strings.Join(headerLines, "\n")
 
-	header = styles.BaseStyle().
+	header = styles.NewStyle().
+		Background(t.Background()).
 		Width(width).
 		PaddingLeft(2).
 		PaddingRight(2).
-		Background(t.Background()).
 		BorderLeft(true).
 		BorderRight(true).
 		BorderBackground(t.Background()).
@@ -306,7 +306,7 @@ func (m *messagesComponent) View() string {
 			m.width,
 			lipgloss.Center,
 			m.header(),
-			lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+			styles.WhitespaceStyle(t.Background()),
 		),
 		m.viewport.View(),
 	)
@@ -314,9 +314,9 @@ func (m *messagesComponent) View() string {
 
 func (m *messagesComponent) home() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle().Background(t.Background())
+	baseStyle := styles.NewStyle().Background(t.Background())
 	base := baseStyle.Render
-	muted := styles.Muted().Background(t.Background()).Render
+	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 
 	open := `
 █▀▀█ █▀▀█ █▀▀ █▀▀▄ 
@@ -335,9 +335,9 @@ func (m *messagesComponent) home() string {
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
 
-	versionStyle := lipgloss.NewStyle().
-		Background(t.Background()).
+	versionStyle := styles.NewStyle().
 		Foreground(t.TextMuted()).
+		Background(t.Background()).
 		Width(lipgloss.Width(logo)).
 		Align(lipgloss.Right)
 	version := versionStyle.Render(m.app.Version)
@@ -347,14 +347,14 @@ func (m *messagesComponent) home() string {
 		m.width,
 		lipgloss.Center,
 		logoAndVersion,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 	m.commands.SetBackgroundColor(t.Background())
 	commands := lipgloss.PlaceHorizontal(
 		m.width,
 		lipgloss.Center,
 		m.commands.View(),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 
 	lines := []string{}
@@ -372,7 +372,7 @@ func (m *messagesComponent) home() string {
 		lipgloss.Center,
 		lipgloss.Center,
 		baseStyle.Render(strings.Join(lines, "\n")),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 }
 

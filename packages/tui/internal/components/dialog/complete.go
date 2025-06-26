@@ -26,7 +26,7 @@ type CompletionItemI interface {
 
 func (ci *CompletionItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle().Foreground(t.Text())
 
 	itemStyle := baseStyle.
 		Background(t.BackgroundElement()).
@@ -185,7 +185,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (c *completionDialogComponent) View() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle().Foreground(t.Text())
 
 	maxWidth := 40
 	completions := c.list.GetItems()

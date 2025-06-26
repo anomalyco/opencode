@@ -22,6 +22,7 @@ import (
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 	"github.com/sst/opencode/pkg/client"
 )
@@ -230,9 +231,19 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(cmds...)
 	case tea.BackgroundColorMsg:
 		styles.Terminal = &styles.TerminalInfo{
+			Background:       msg.Color,
 			BackgroundIsDark: msg.IsDark(),
 		}
-		slog.Debug("Background color", "isDark", msg.IsDark())
+		slog.Debug("Background color", "color", msg.String(), "isDark", msg.IsDark())
+		return a, func() tea.Msg {
+			theme.UpdateSystemTheme(
+				styles.Terminal.Background,
+				styles.Terminal.BackgroundIsDark,
+			)
+			return dialog.ThemeSelectedMsg{
+				ThemeName: theme.CurrentThemeName(),
+			}
+		}
 	case modal.CloseModalMsg:
 		var cmd tea.Cmd
 		if a.modal != nil {
@@ -424,6 +435,9 @@ func (a appModel) View() string {
 
 	appView = a.toastManager.RenderOverlay(appView)
 
+	if theme.CurrentThemeUsesAnsiColors() {
+		appView = util.ConvertRGBToAnsi16Colors(appView)
+	}
 	return appView
 }
 

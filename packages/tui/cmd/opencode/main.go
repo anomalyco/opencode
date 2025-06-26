@@ -66,6 +66,7 @@ func main() {
 
 	program := tea.NewProgram(
 		tui.NewModel(app_),
+		// tea.WithColorProfile(colorprofile.ANSI),
 		tea.WithAltScreen(),
 		tea.WithKeyboardEnhancements(),
 		tea.WithMouseCellMotion(),

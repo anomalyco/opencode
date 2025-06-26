@@ -158,7 +158,7 @@ func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 	}
 
 	t := theme.CurrentTheme()
-	return styles.BaseStyle().
+	return styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Width(maxWidth).
 		Align(lipgloss.Right).

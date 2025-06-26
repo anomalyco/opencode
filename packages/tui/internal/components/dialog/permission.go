@@ -145,7 +145,7 @@ func (p *permissionDialogComponent) selectCurrentOption() tea.Cmd {
 
 func (p *permissionDialogComponent) renderButtons() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle().Foreground(t.Text())
 
 	allowStyle := baseStyle
 	allowSessionStyle := baseStyle
@@ -355,8 +355,7 @@ func (p *permissionDialogComponent) renderDefaultContent() string {
 
 func (p *permissionDialogComponent) styleViewport() string {
 	t := theme.CurrentTheme()
-	contentStyle := lipgloss.NewStyle().
-		Background(t.Background())
+	contentStyle := styles.NewStyle().Background(t.Background())
 
 	return contentStyle.Render(p.contentViewPort.View())
 }

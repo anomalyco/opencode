@@ -60,15 +60,9 @@ func (c *commandsComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (c *commandsComponent) View() string {
 	t := theme.CurrentTheme()
 
-	triggerStyle := lipgloss.NewStyle().
-		Foreground(t.Primary()).
-		Bold(true)
-
-	descriptionStyle := lipgloss.NewStyle().
-		Foreground(t.Text())
-
-	keybindStyle := lipgloss.NewStyle().
-		Foreground(t.TextMuted())
+	triggerStyle := styles.NewStyle().Foreground(t.Primary()).Bold(true)
+	descriptionStyle := styles.NewStyle().Foreground(t.Text())
+	keybindStyle := styles.NewStyle().Foreground(t.TextMuted())
 
 	if c.background != nil {
 		triggerStyle = triggerStyle.Background(*c.background)
@@ -99,10 +93,11 @@ func (c *commandsComponent) View() string {
 	}
 
 	if len(commandsToShow) == 0 {
+		muted := styles.NewStyle().Foreground(theme.CurrentTheme().TextMuted())
 		if c.showAll {
-			return styles.Muted().Render("No commands available")
+			return muted.Render("No commands available")
 		}
-		return styles.Muted().Render("No commands with triggers available")
+		return muted.Render("No commands with triggers available")
 	}
 
 	// Calculate column widths
@@ -188,7 +183,7 @@ func (c *commandsComponent) View() string {
 	// Remove trailing newline
 	result := strings.TrimSuffix(output.String(), "\n")
 	if c.background != nil {
-		result = lipgloss.NewStyle().Background(c.background).Width(maxWidth).Render(result)
+		result = styles.NewStyle().Background(*c.background).Width(maxWidth).Render(result)
 	}
 
 	return result

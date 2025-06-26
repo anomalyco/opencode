@@ -129,15 +129,13 @@ func renderContentBlock(content string, options ...renderingOption) string {
 		option(renderer)
 	}
 
-	style := styles.BaseStyle().
+	style := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).
 		// MarginTop(renderer.marginTop).
 		// MarginBottom(renderer.marginBottom).
 		PaddingTop(renderer.paddingTop).
 		PaddingBottom(renderer.paddingBottom).
 		PaddingLeft(renderer.paddingLeft).
 		PaddingRight(renderer.paddingRight).
-		Background(t.BackgroundPanel()).
-		Foreground(t.TextMuted()).
 		BorderStyle(lipgloss.ThickBorder())
 
 	align := lipgloss.Left
@@ -179,13 +177,13 @@ func renderContentBlock(content string, options ...renderingOption) string {
 		layout.Current.Container.Width,
 		align,
 		content,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 	content = lipgloss.PlaceHorizontal(
 		layout.Current.Viewport.Width,
 		lipgloss.Center,
 		content,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 	if renderer.marginTop > 0 {
 		for range renderer.marginTop {
@@ -226,7 +224,7 @@ func renderText(message client.MessageInfo, text string, author string) string {
 	textWidth := max(lipgloss.Width(text), lipgloss.Width(info))
 	markdownWidth := min(textWidth, width-padding-4) // -4 for the border and padding
 	if message.Role == client.Assistant {
-		markdownWidth = width - padding - 4 - 2
+		markdownWidth = width - padding - 4 - 3
 	}
 	if message.Role == client.User {
 		text = strings.ReplaceAll(text, "<", "\\<")
@@ -275,9 +273,10 @@ func renderToolInvocation(
 	}
 
 	t := theme.CurrentTheme()
-	style := styles.Muted().
-		Width(outerWidth).
+	style := styles.NewStyle().
+		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
+		Width(outerWidth).
 		PaddingTop(paddingTop).
 		PaddingBottom(paddingBottom).
 		PaddingLeft(2).
@@ -293,7 +292,9 @@ func renderToolInvocation(
 		if !showDetails {
 			title = "∟ " + title
 			padding := calculatePadding()
-			style := lipgloss.NewStyle().Width(outerWidth - padding - 4).Background(t.BackgroundPanel())
+			style := styles.NewStyle().
+				Background(t.BackgroundPanel()).
+				Width(outerWidth - padding - 4 - 3)
 			return renderContentBlock(style.Render(title),
 				WithAlign(lipgloss.Left),
 				WithBorderColor(t.Accent()),
@@ -334,9 +335,9 @@ func renderToolInvocation(
 	if e, ok := metadata.Get("error"); ok && e.(bool) == true {
 		if m, ok := metadata.Get("message"); ok {
 			style = style.BorderLeftForeground(t.Error())
-			error = styles.BaseStyle().
-				Background(t.BackgroundPanel()).
+			error = styles.NewStyle().
 				Foreground(t.Error()).
+				Background(t.BackgroundPanel()).
 				Render(m.(string))
 			error = renderContentBlock(
 				error,
@@ -374,7 +375,7 @@ func renderToolInvocation(
 					formattedDiff, _ = diff.FormatDiff(filename, patch, diff.WithTotalWidth(diffWidth))
 				}
 				formattedDiff = strings.TrimSpace(formattedDiff)
-				formattedDiff = lipgloss.NewStyle().
+				formattedDiff = styles.NewStyle().
 					BorderStyle(lipgloss.ThickBorder()).
 					BorderBackground(t.Background()).
 					BorderForeground(t.BackgroundPanel()).
@@ -394,7 +395,7 @@ func renderToolInvocation(
 					lipgloss.Center,
 					lipgloss.Top,
 					body,
-					lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+					styles.WhitespaceStyle(t.Background()),
 				)
 			}
 		}
@@ -506,7 +507,7 @@ func renderToolInvocation(
 	if !showDetails {
 		title = "∟ " + title
 		padding := calculatePadding()
-		style := lipgloss.NewStyle().Width(outerWidth - padding - 4).Background(t.BackgroundPanel())
+		style := styles.NewStyle().Background(t.BackgroundPanel()).Width(outerWidth - padding - 4 - 3)
 		paddingBottom := 0
 		if isLast {
 			paddingBottom = 1
@@ -530,7 +531,7 @@ func renderToolInvocation(
 		layout.Current.Viewport.Width,
 		lipgloss.Center,
 		content,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 	if showDetails && body != "" && error == "" {
 		content += "\n" + body

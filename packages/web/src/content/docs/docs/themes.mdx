@@ -2,7 +2,7 @@
 title: Themes
 ---
 
-opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
+opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily. 
 
 ## Theme Loading Hierarchy
 
@@ -37,6 +37,7 @@ Themes use a flexible JSON format with support for:
 - **ANSI colors**: `3` (0-255)
 - **Color references**: `"primary"` or custom definitions
 - **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
+- **No color**: `"none"` - Uses the terminal's default color (transparent)
 
 ### Example Theme
 
@@ -270,10 +271,30 @@ Themes use a flexible JSON format with support for:
 
 The `defs` section (optional) allows you to define reusable colors that can be referenced in the theme.
 
+### Using "none" for Terminal Defaults
+
+The special value `\"none\"` can be used for any color to inherit the terminal's default color. This is particularly useful for creating themes that blend seamlessly with your terminal's color scheme:
+
+- `\"text\": \"none\"` - Uses terminal's default foreground color
+- `\"background\": \"none\"` - Uses terminal's default background color
+
+## The System Theme
+
+The `system` theme is opencode's default theme, designed to automatically adapt to your terminal's color scheme. Unlike traditional themes that use fixed colors, the system theme:
+
+- **Generates gray scale**: Creates a custom gray scale based on your terminal's background color, ensuring optimal contrast
+- **Uses ANSI colors**: Leverages standard ANSI colors (0-15) for syntax highlighting and UI elements, which respect your terminal's color palette
+- **Preserves terminal defaults**: Uses `none` for text and background colors to maintain your terminal's native appearance
+
+The system theme is ideal for users who:
+- Want opencode to match their terminal's appearance
+- Use custom terminal color schemes
+- Prefer a consistent look across all terminal applications
+
 ## Built-in Themes
 
 opencode comes with several built-in themes:
-- `opencode` - Default opencode theme
+- `system` - Default theme that dynamically adapts to your terminal's background color
 - `tokyonight` - Tokyonight theme
 - `everforest` - Everforest theme
 - `ayu` - Ayu dark theme
@@ -281,7 +302,8 @@ opencode comes with several built-in themes:
 - `gruvbox` - Gruvbox theme
 - `kanagawa` - Kanagawa theme
 - `nord` - Nord theme
-- and more (see ./packages/tui/internal/theme/themes)
+- `matrix` - Hacker-style green on black theme
+- `one-dark` - Atom One Dark inspired theme
 
 ## Using a Theme
 

@@ -441,84 +441,84 @@ func SyntaxHighlight(w io.Writer, source, fileName, formatter string, bg color.C
 	<entry type="TextWhitespace" style="%s"/>
 </style>
 `,
-		getColor(t.BackgroundPanel()), // Background
-		getColor(t.Text()),            // Text
-		getColor(t.Text()),            // Other
-		getColor(t.Error()),           // Error
+		getChromaColor(t.BackgroundPanel()), // Background
+		getChromaColor(t.Text()),            // Text
+		getChromaColor(t.Text()),            // Other
+		getChromaColor(t.Error()),           // Error
 
-		getColor(t.SyntaxKeyword()), // Keyword
-		getColor(t.SyntaxKeyword()), // KeywordConstant
-		getColor(t.SyntaxKeyword()), // KeywordDeclaration
-		getColor(t.SyntaxKeyword()), // KeywordNamespace
-		getColor(t.SyntaxKeyword()), // KeywordPseudo
-		getColor(t.SyntaxKeyword()), // KeywordReserved
-		getColor(t.SyntaxType()),    // KeywordType
+		getChromaColor(t.SyntaxKeyword()), // Keyword
+		getChromaColor(t.SyntaxKeyword()), // KeywordConstant
+		getChromaColor(t.SyntaxKeyword()), // KeywordDeclaration
+		getChromaColor(t.SyntaxKeyword()), // KeywordNamespace
+		getChromaColor(t.SyntaxKeyword()), // KeywordPseudo
+		getChromaColor(t.SyntaxKeyword()), // KeywordReserved
+		getChromaColor(t.SyntaxType()),    // KeywordType
 
-		getColor(t.Text()),           // Name
-		getColor(t.SyntaxVariable()), // NameAttribute
-		getColor(t.SyntaxType()),     // NameBuiltin
-		getColor(t.SyntaxVariable()), // NameBuiltinPseudo
-		getColor(t.SyntaxType()),     // NameClass
-		getColor(t.SyntaxVariable()), // NameConstant
-		getColor(t.SyntaxFunction()), // NameDecorator
-		getColor(t.SyntaxVariable()), // NameEntity
-		getColor(t.SyntaxType()),     // NameException
-		getColor(t.SyntaxFunction()), // NameFunction
-		getColor(t.Text()),           // NameLabel
-		getColor(t.SyntaxType()),     // NameNamespace
-		getColor(t.SyntaxVariable()), // NameOther
-		getColor(t.SyntaxKeyword()),  // NameTag
-		getColor(t.SyntaxVariable()), // NameVariable
-		getColor(t.SyntaxVariable()), // NameVariableClass
-		getColor(t.SyntaxVariable()), // NameVariableGlobal
-		getColor(t.SyntaxVariable()), // NameVariableInstance
+		getChromaColor(t.Text()),           // Name
+		getChromaColor(t.SyntaxVariable()), // NameAttribute
+		getChromaColor(t.SyntaxType()),     // NameBuiltin
+		getChromaColor(t.SyntaxVariable()), // NameBuiltinPseudo
+		getChromaColor(t.SyntaxType()),     // NameClass
+		getChromaColor(t.SyntaxVariable()), // NameConstant
+		getChromaColor(t.SyntaxFunction()), // NameDecorator
+		getChromaColor(t.SyntaxVariable()), // NameEntity
+		getChromaColor(t.SyntaxType()),     // NameException
+		getChromaColor(t.SyntaxFunction()), // NameFunction
+		getChromaColor(t.Text()),           // NameLabel
+		getChromaColor(t.SyntaxType()),     // NameNamespace
+		getChromaColor(t.SyntaxVariable()), // NameOther
+		getChromaColor(t.SyntaxKeyword()),  // NameTag
+		getChromaColor(t.SyntaxVariable()), // NameVariable
+		getChromaColor(t.SyntaxVariable()), // NameVariableClass
+		getChromaColor(t.SyntaxVariable()), // NameVariableGlobal
+		getChromaColor(t.SyntaxVariable()), // NameVariableInstance
 
-		getColor(t.SyntaxString()), // Literal
-		getColor(t.SyntaxString()), // LiteralDate
-		getColor(t.SyntaxString()), // LiteralString
-		getColor(t.SyntaxString()), // LiteralStringBacktick
-		getColor(t.SyntaxString()), // LiteralStringChar
-		getColor(t.SyntaxString()), // LiteralStringDoc
-		getColor(t.SyntaxString()), // LiteralStringDouble
-		getColor(t.SyntaxString()), // LiteralStringEscape
-		getColor(t.SyntaxString()), // LiteralStringHeredoc
-		getColor(t.SyntaxString()), // LiteralStringInterpol
-		getColor(t.SyntaxString()), // LiteralStringOther
-		getColor(t.SyntaxString()), // LiteralStringRegex
-		getColor(t.SyntaxString()), // LiteralStringSingle
-		getColor(t.SyntaxString()), // LiteralStringSymbol
+		getChromaColor(t.SyntaxString()), // Literal
+		getChromaColor(t.SyntaxString()), // LiteralDate
+		getChromaColor(t.SyntaxString()), // LiteralString
+		getChromaColor(t.SyntaxString()), // LiteralStringBacktick
+		getChromaColor(t.SyntaxString()), // LiteralStringChar
+		getChromaColor(t.SyntaxString()), // LiteralStringDoc
+		getChromaColor(t.SyntaxString()), // LiteralStringDouble
+		getChromaColor(t.SyntaxString()), // LiteralStringEscape
+		getChromaColor(t.SyntaxString()), // LiteralStringHeredoc
+		getChromaColor(t.SyntaxString()), // LiteralStringInterpol
+		getChromaColor(t.SyntaxString()), // LiteralStringOther
+		getChromaColor(t.SyntaxString()), // LiteralStringRegex
+		getChromaColor(t.SyntaxString()), // LiteralStringSingle
+		getChromaColor(t.SyntaxString()), // LiteralStringSymbol
 
-		getColor(t.SyntaxNumber()), // LiteralNumber
-		getColor(t.SyntaxNumber()), // LiteralNumberBin
-		getColor(t.SyntaxNumber()), // LiteralNumberFloat
-		getColor(t.SyntaxNumber()), // LiteralNumberHex
-		getColor(t.SyntaxNumber()), // LiteralNumberInteger
-		getColor(t.SyntaxNumber()), // LiteralNumberIntegerLong
-		getColor(t.SyntaxNumber()), // LiteralNumberOct
+		getChromaColor(t.SyntaxNumber()), // LiteralNumber
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberBin
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberFloat
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberHex
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberInteger
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberIntegerLong
+		getChromaColor(t.SyntaxNumber()), // LiteralNumberOct
 
-		getColor(t.SyntaxOperator()),    // Operator
-		getColor(t.SyntaxKeyword()),     // OperatorWord
-		getColor(t.SyntaxPunctuation()), // Punctuation
+		getChromaColor(t.SyntaxOperator()),    // Operator
+		getChromaColor(t.SyntaxKeyword()),     // OperatorWord
+		getChromaColor(t.SyntaxPunctuation()), // Punctuation
 
-		getColor(t.SyntaxComment()), // Comment
-		getColor(t.SyntaxComment()), // CommentHashbang
-		getColor(t.SyntaxComment()), // CommentMultiline
-		getColor(t.SyntaxComment()), // CommentSingle
-		getColor(t.SyntaxComment()), // CommentSpecial
-		getColor(t.SyntaxKeyword()), // CommentPreproc
+		getChromaColor(t.SyntaxComment()), // Comment
+		getChromaColor(t.SyntaxComment()), // CommentHashbang
+		getChromaColor(t.SyntaxComment()), // CommentMultiline
+		getChromaColor(t.SyntaxComment()), // CommentSingle
+		getChromaColor(t.SyntaxComment()), // CommentSpecial
+		getChromaColor(t.SyntaxKeyword()), // CommentPreproc
 
-		getColor(t.Text()),      // Generic
-		getColor(t.Error()),     // GenericDeleted
-		getColor(t.Text()),      // GenericEmph
-		getColor(t.Error()),     // GenericError
-		getColor(t.Text()),      // GenericHeading
-		getColor(t.Success()),   // GenericInserted
-		getColor(t.TextMuted()), // GenericOutput
-		getColor(t.Text()),      // GenericPrompt
-		getColor(t.Text()),      // GenericStrong
-		getColor(t.Text()),      // GenericSubheading
-		getColor(t.Error()),     // GenericTraceback
-		getColor(t.Text()),      // TextWhitespace
+		getChromaColor(t.Text()),      // Generic
+		getChromaColor(t.Error()),     // GenericDeleted
+		getChromaColor(t.Text()),      // GenericEmph
+		getChromaColor(t.Error()),     // GenericError
+		getChromaColor(t.Text()),      // GenericHeading
+		getChromaColor(t.Success()),   // GenericInserted
+		getChromaColor(t.TextMuted()), // GenericOutput
+		getChromaColor(t.Text()),      // GenericPrompt
+		getChromaColor(t.Text()),      // GenericStrong
+		getChromaColor(t.Text()),      // GenericSubheading
+		getChromaColor(t.Error()),     // GenericTraceback
+		getChromaColor(t.Text()),      // TextWhitespace
 	)
 
 	r := strings.NewReader(syntaxThemeXml)
@@ -527,6 +527,9 @@ func SyntaxHighlight(w io.Writer, source, fileName, formatter string, bg color.C
 	// Modify the style to use the provided background
 	s, err := style.Builder().Transform(
 		func(t chroma.StyleEntry) chroma.StyleEntry {
+			if _, ok := bg.(lipgloss.NoColor); ok {
+				return t
+			}
 			r, g, b, _ := bg.RGBA()
 			t.Background = chroma.NewColour(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 			return t
@@ -546,8 +549,16 @@ func SyntaxHighlight(w io.Writer, source, fileName, formatter string, bg color.C
 }
 
 // getColor returns the appropriate hex color string based on terminal background
-func getColor(adaptiveColor compat.AdaptiveColor) string {
+func getColor(adaptiveColor compat.AdaptiveColor) *string {
 	return stylesi.AdaptiveColorToString(adaptiveColor)
+}
+
+func getChromaColor(adaptiveColor compat.AdaptiveColor) string {
+	color := stylesi.AdaptiveColorToString(adaptiveColor)
+	if color == nil {
+		return ""
+	}
+	return *color
 }
 
 // highlightLine applies syntax highlighting to a single line
@@ -561,11 +572,11 @@ func highlightLine(fileName string, line string, bg color.Color) string {
 }
 
 // createStyles generates the lipgloss styles needed for rendering diffs
-func createStyles(t theme.Theme) (removedLineStyle, addedLineStyle, contextLineStyle, lineNumberStyle lipgloss.Style) {
-	removedLineStyle = lipgloss.NewStyle().Background(t.DiffRemovedBg())
-	addedLineStyle = lipgloss.NewStyle().Background(t.DiffAddedBg())
-	contextLineStyle = lipgloss.NewStyle().Background(t.DiffContextBg())
-	lineNumberStyle = lipgloss.NewStyle().Background(t.DiffLineNumber()).Foreground(t.TextMuted())
+func createStyles(t theme.Theme) (removedLineStyle, addedLineStyle, contextLineStyle, lineNumberStyle stylesi.Style) {
+	removedLineStyle = stylesi.NewStyle().Background(t.DiffRemovedBg())
+	addedLineStyle = stylesi.NewStyle().Background(t.DiffAddedBg())
+	contextLineStyle = stylesi.NewStyle().Background(t.DiffContextBg())
+	lineNumberStyle = stylesi.NewStyle().Foreground(t.TextMuted()).Background(t.DiffLineNumber())
 	return
 }
 
@@ -613,9 +624,17 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 	currentPos := 0
 
 	// Get the appropriate color based on terminal background
-	bgColor := lipgloss.Color(getColor(highlightBg))
-	fgColor := lipgloss.Color(getColor(theme.CurrentTheme().BackgroundPanel()))
+	bg := getColor(highlightBg)
+	fg := getColor(theme.CurrentTheme().BackgroundPanel())
+	var bgColor color.Color
+	var fgColor color.Color
 
+	if bg != nil {
+		bgColor = lipgloss.Color(*bg)
+	}
+	if fg != nil {
+		fgColor = lipgloss.Color(*fg)
+	}
 	for i := 0; i < len(content); {
 		// Check if we're at an ANSI sequence
 		isAnsi := false
@@ -651,12 +670,20 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 			currentStyle := ansiSequences[currentPos]
 
 			// Apply foreground and background highlight
-			sb.WriteString("\x1b[38;2;")
-			r, g, b, _ := fgColor.RGBA()
-			sb.WriteString(fmt.Sprintf("%d;%d;%dm", r>>8, g>>8, b>>8))
-			sb.WriteString("\x1b[48;2;")
-			r, g, b, _ = bgColor.RGBA()
-			sb.WriteString(fmt.Sprintf("%d;%d;%dm", r>>8, g>>8, b>>8))
+			if fgColor != nil {
+				sb.WriteString("\x1b[38;2;")
+				r, g, b, _ := fgColor.RGBA()
+				sb.WriteString(fmt.Sprintf("%d;%d;%dm", r>>8, g>>8, b>>8))
+			} else {
+				sb.WriteString("\x1b[49m")
+			}
+			if bgColor != nil {
+				sb.WriteString("\x1b[48;2;")
+				r, g, b, _ := bgColor.RGBA()
+				sb.WriteString(fmt.Sprintf("%d;%d;%dm", r>>8, g>>8, b>>8))
+			} else {
+				sb.WriteString("\x1b[39m")
+			}
 			sb.WriteString(char)
 
 			// Full reset of all attributes to ensure clean state
@@ -677,16 +704,16 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 }
 
 // renderLinePrefix renders the line number and marker prefix for a diff line
-func renderLinePrefix(dl DiffLine, lineNum string, marker string, lineNumberStyle lipgloss.Style, t theme.Theme) string {
+func renderLinePrefix(dl DiffLine, lineNum string, marker string, lineNumberStyle stylesi.Style, t theme.Theme) string {
 	// Style the marker based on line type
 	var styledMarker string
 	switch dl.Kind {
 	case LineRemoved:
-		styledMarker = lipgloss.NewStyle().Background(t.DiffRemovedBg()).Foreground(t.DiffRemoved()).Render(marker)
+		styledMarker = stylesi.NewStyle().Foreground(t.DiffRemoved()).Background(t.DiffRemovedBg()).Render(marker)
 	case LineAdded:
-		styledMarker = lipgloss.NewStyle().Background(t.DiffAddedBg()).Foreground(t.DiffAdded()).Render(marker)
+		styledMarker = stylesi.NewStyle().Foreground(t.DiffAdded()).Background(t.DiffAddedBg()).Render(marker)
 	case LineContext:
-		styledMarker = lipgloss.NewStyle().Background(t.DiffContextBg()).Foreground(t.TextMuted()).Render(marker)
+		styledMarker = stylesi.NewStyle().Foreground(t.TextMuted()).Background(t.DiffContextBg()).Render(marker)
 	default:
 		styledMarker = marker
 	}
@@ -695,7 +722,7 @@ func renderLinePrefix(dl DiffLine, lineNum string, marker string, lineNumberStyl
 }
 
 // renderLineContent renders the content of a diff line with syntax and intra-line highlighting
-func renderLineContent(fileName string, dl DiffLine, bgStyle lipgloss.Style, highlightColor compat.AdaptiveColor, width int, t theme.Theme) string {
+func renderLineContent(fileName string, dl DiffLine, bgStyle stylesi.Style, highlightColor compat.AdaptiveColor, width int) string {
 	// Apply syntax highlighting
 	content := highlightLine(fileName, dl.Content, bgStyle.GetBackground())
 
@@ -714,7 +741,9 @@ func renderLineContent(fileName string, dl DiffLine, bgStyle lipgloss.Style, hig
 		ansi.Truncate(
 			content,
 			width,
-			lipgloss.NewStyle().Background(bgStyle.GetBackground()).Foreground(t.TextMuted()).Render("..."),
+			"...",
+			// stylesi.NewStyleWithColors(t.TextMuted(), bgStyle.GetBackground()).Render("..."),
+			// stylesi.WithForeground(stylesi.NewStyle().Background(bgStyle.GetBackground()), t.TextMuted()).Render("..."),
 		),
 	)
 }
@@ -725,7 +754,7 @@ func renderUnifiedLine(fileName string, dl DiffLine, width int, t theme.Theme) s
 
 	// Determine line style and marker based on line type
 	var marker string
-	var bgStyle lipgloss.Style
+	var bgStyle stylesi.Style
 	var lineNum string
 	var highlightColor compat.AdaptiveColor
 
@@ -733,8 +762,8 @@ func renderUnifiedLine(fileName string, dl DiffLine, width int, t theme.Theme) s
 	case LineRemoved:
 		marker = "-"
 		bgStyle = removedLineStyle
-		lineNumberStyle = lineNumberStyle.Foreground(t.DiffRemoved()).Background(t.DiffRemovedLineNumberBg())
-		highlightColor = t.DiffHighlightRemoved()
+		lineNumberStyle = lineNumberStyle.Background(t.DiffRemovedLineNumberBg()).Foreground(t.DiffRemoved())
+		highlightColor = t.DiffHighlightRemoved() // TODO: handle "none"
 		if dl.OldLineNo > 0 {
 			lineNum = fmt.Sprintf("%6d       ", dl.OldLineNo)
 		} else {
@@ -743,8 +772,8 @@ func renderUnifiedLine(fileName string, dl DiffLine, width int, t theme.Theme) s
 	case LineAdded:
 		marker = "+"
 		bgStyle = addedLineStyle
-		lineNumberStyle = lineNumberStyle.Foreground(t.DiffAdded()).Background(t.DiffAddedLineNumberBg())
-		highlightColor = t.DiffHighlightAdded()
+		lineNumberStyle = lineNumberStyle.Background(t.DiffAddedLineNumberBg()).Foreground(t.DiffAdded())
+		highlightColor = t.DiffHighlightAdded() // TODO: handle "none"
 		if dl.NewLineNo > 0 {
 			lineNum = fmt.Sprintf("      %7d", dl.NewLineNo)
 		} else {
@@ -766,7 +795,7 @@ func renderUnifiedLine(fileName string, dl DiffLine, width int, t theme.Theme) s
 	// Render the content
 	prefixWidth := ansi.StringWidth(prefix)
 	contentWidth := width - prefixWidth
-	content := renderLineContent(fileName, dl, bgStyle, highlightColor, contentWidth, t)
+	content := renderLineContent(fileName, dl, bgStyle, highlightColor, contentWidth)
 
 	return prefix + content
 }
@@ -780,7 +809,7 @@ func renderDiffColumnLine(
 	t theme.Theme,
 ) string {
 	if dl == nil {
-		contextLineStyle := lipgloss.NewStyle().Background(t.DiffContextBg())
+		contextLineStyle := stylesi.NewStyle().Background(t.DiffContextBg())
 		return contextLineStyle.Width(colWidth).Render("")
 	}
 
@@ -788,7 +817,7 @@ func renderDiffColumnLine(
 
 	// Determine line style based on line type and column
 	var marker string
-	var bgStyle lipgloss.Style
+	var bgStyle stylesi.Style
 	var lineNum string
 	var highlightColor compat.AdaptiveColor
 
@@ -798,8 +827,8 @@ func renderDiffColumnLine(
 		case LineRemoved:
 			marker = "-"
 			bgStyle = removedLineStyle
-			lineNumberStyle = lineNumberStyle.Foreground(t.DiffRemoved()).Background(t.DiffRemovedLineNumberBg())
-			highlightColor = t.DiffHighlightRemoved()
+			lineNumberStyle = lineNumberStyle.Background(t.DiffRemovedLineNumberBg()).Foreground(t.DiffRemoved())
+			highlightColor = t.DiffHighlightRemoved() // TODO: handle "none"
 		case LineAdded:
 			marker = "?"
 			bgStyle = contextLineStyle
@@ -818,7 +847,7 @@ func renderDiffColumnLine(
 		case LineAdded:
 			marker = "+"
 			bgStyle = addedLineStyle
-			lineNumberStyle = lineNumberStyle.Foreground(t.DiffAdded()).Background(t.DiffAddedLineNumberBg())
+			lineNumberStyle = lineNumberStyle.Background(t.DiffAddedLineNumberBg()).Foreground(t.DiffAdded())
 			highlightColor = t.DiffHighlightAdded()
 		case LineRemoved:
 			marker = "?"
@@ -849,7 +878,7 @@ func renderDiffColumnLine(
 	// Render the content
 	prefixWidth := ansi.StringWidth(prefix)
 	contentWidth := colWidth - prefixWidth
-	content := renderLineContent(fileName, *dl, bgStyle, highlightColor, contentWidth, t)
+	content := renderLineContent(fileName, *dl, bgStyle, highlightColor, contentWidth)
 
 	return prefix + content
 }

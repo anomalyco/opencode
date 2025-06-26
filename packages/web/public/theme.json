@@ -22,6 +22,11 @@
               "minimum": 0,
               "maximum": 255,
               "description": "ANSI color code (0-255)"
+            },
+            {
+              "type": "string",
+              "enum": ["none"],
+              "description": "No color (uses terminal default)"
             }
           ]
         }
@@ -112,6 +117,11 @@
         },
         {
           "type": "string",
+          "enum": ["none"],
+          "description": "No color (uses terminal default)"
+        },
+        {
+          "type": "string",
           "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
           "description": "Reference to another color in the theme or defs"
         },
@@ -133,6 +143,11 @@
                 },
                 {
                   "type": "string",
+                  "enum": ["none"],
+                  "description": "No color (uses terminal default)"
+                },
+                {
+                  "type": "string",
                   "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
                   "description": "Reference to another color for dark mode"
                 }
@@ -150,6 +165,11 @@
                   "minimum": 0,
                   "maximum": 255,
                   "description": "ANSI color code for light mode"
+                },
+                {
+                  "type": "string",
+                  "enum": ["none"],
+                  "description": "No color (uses terminal default)"
                 },
                 {
                   "type": "string",
