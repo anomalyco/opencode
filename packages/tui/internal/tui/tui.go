@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -114,13 +116,42 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 3. Handle completions trigger
+		// 3. Handle completions trigger and quick provider switching
 		if keyString == "/" && !a.showCompletionDialog {
+			currentInput := a.editor.Value()
+			
+			// Check if this is a numeric quick switch (e.g., typing /1, /2, etc.)
+			if strings.HasSuffix(currentInput, "/") || (len(currentInput) > 0 && !strings.HasSuffix(currentInput, " ")) {
+				// Look for trailing "/digits" pattern
+				words := strings.Split(currentInput, " ")
+				if len(words) > 0 {
+					lastWord := strings.TrimSpace(words[len(words)-1])
+					if strings.HasPrefix(lastWord, "/") && len(lastWord) > 1 {
+						// Check if the rest is all digits
+						numStr := lastWord[1:]
+						if len(numStr) > 0 {
+							allDigits := true
+							for _, r := range numStr {
+								if r < '0' || r > '9' {
+									allDigits = false
+									break
+								}
+							}
+							if allDigits {
+								// This could be a quick switch command
+								// Let the completion system handle it, but don't start completion dialog yet
+								updated, cmd := a.editor.Update(msg)
+								a.editor = updated.(chat.EditorComponent)
+								return a, cmd
+							}
+						}
+					}
+				}
+			}
+			
 			a.showCompletionDialog = true
 
 			initialValue := "/"
-			currentInput := a.editor.Value()
-
 			// if the input doesn't end with a space,
 			// then we want to include the last word
 			// (ie, `packages/`)
@@ -154,7 +185,45 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.showCompletionDialog {
 			switch keyString {
-			case "tab", "enter", "esc", "ctrl+c":
+			case "enter":
+				// Check if this is a numeric quick switch command
+				input := strings.TrimSpace(a.editor.Value())
+				if strings.HasPrefix(input, "/") && len(input) > 1 {
+					numStr := input[1:]
+					// Check if it's all digits
+					allDigits := true
+					for _, r := range numStr {
+						if r < '0' || r > '9' {
+							allDigits = false
+							break
+						}
+					}
+					if allDigits && len(numStr) > 0 {
+						// This is a quick switch command, close completion dialog and handle it
+						a.showCompletionDialog = false
+						
+						// Parse the number and execute quick switch
+						num := 0
+						for _, r := range numStr {
+							num = num*10 + int(r-'0')
+						}
+						if num >= 0 {
+							// Clear the input and execute quick switch
+							updated, cmd := a.editor.Clear()
+							a.editor = updated.(chat.EditorComponent)
+							cmds = append(cmds, cmd)
+							cmds = append(cmds, a.quickSwitchProvider(num))
+							return a, tea.Batch(cmds...)
+						}
+					}
+				}
+				
+				// Not a quick switch, handle as normal completion
+				updated, cmd := a.updateCompletions(msg)
+				a.completions = updated.(dialog.CompletionDialog)
+				cmds = append(cmds, cmd)
+				return a, tea.Batch(cmds...)
+			case "tab", "esc", "ctrl+c":
 				updated, cmd := a.updateCompletions(msg)
 				a.completions = updated.(dialog.CompletionDialog)
 				cmds = append(cmds, cmd)
@@ -268,6 +337,29 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
+	case dialog.CompletionSelectedMsg:
+		a.showCompletionDialog = false
+		
+		// Check if this is a hotkey quick switch completion
+		if msg.IsCommand && strings.HasPrefix(msg.CompletionValue, "provider_quick_switch_") {
+			// Extract the hotkey number from the value
+			hotkeyStr := strings.TrimPrefix(msg.CompletionValue, "provider_quick_switch_")
+			num := 0
+			for _, r := range hotkeyStr {
+				if r >= '0' && r <= '9' {
+					num = num*10 + int(r-'0')
+				} else {
+					break
+				}
+			}
+			
+			// Clear the input and execute quick switch
+			updated, cmd := a.editor.Clear()
+			a.editor = updated.(chat.EditorComponent)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, a.quickSwitchProvider(num))
+			return a, tea.Batch(cmds...)
+		}
 	case client.EventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -396,6 +488,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return dialog.ShowProviderDialogMsg{}
 			},
 		)
+	case dialog.MoveProviderMsg:
+		// Update provider order
+		return a, a.moveProvider(msg.ProviderID, msg.Direction)
 	case dialog.StartAuthFlowMsg:
 		// Start the appropriate auth flow based on provider type
 		if msg.Provider.Id == "anthropic" {
@@ -436,6 +531,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Show the provider dialog (used after adding a new provider)
 		providerDialog := dialog.NewProviderDialog(a.app)
 		a.modal = providerDialog
+	case dialog.ShowHotkeysDialogMsg:
+		// Show the hotkeys dialog
+		hotkeysDialog := dialog.NewHotkeysDialog(a.app)
+		a.modal = hotkeysDialog
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		a.app.SaveState()
@@ -640,6 +739,13 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		// Open provider dialog for switching providers
 		providerDialog := dialog.NewProviderDialog(a.app)
 		a.modal = providerDialog
+	case commands.ProviderHotkeysCommand:
+		// Open hotkeys dialog
+		hotkeysDialog := dialog.NewHotkeysDialog(a.app)
+		a.modal = hotkeysDialog
+	case commands.ProviderQuickSwitchCommand:
+		// This is handled dynamically in the completion system
+		return a, nil
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog
@@ -657,6 +763,35 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
 	case commands.InputSubmitCommand:
+		// Check if this is a quick switch command (/number)
+		input := strings.TrimSpace(a.editor.Value())
+		if strings.HasPrefix(input, "/") && len(input) > 1 {
+			numStr := input[1:]
+			// Check if it's all digits
+			allDigits := true
+			for _, r := range numStr {
+				if r < '0' || r > '9' {
+					allDigits = false
+					break
+				}
+			}
+			if allDigits && len(numStr) > 0 {
+				// Parse the number and execute quick switch
+				num := 0
+				for _, r := range numStr {
+					num = num*10 + int(r-'0')
+				}
+				if num >= 0 {
+					// Clear the input and execute quick switch (use hotkey number directly)
+					updated, cmd := a.editor.Clear()
+					a.editor = updated.(chat.EditorComponent)
+					cmds = append(cmds, cmd)
+					cmds = append(cmds, a.quickSwitchProvider(num))
+					return a, tea.Batch(cmds...)
+				}
+			}
+		}
+		
 		updated, cmd := a.editor.Submit()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
@@ -715,6 +850,174 @@ func (a appModel) updateCompletions(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.completions.SetProvider(provider)
 	}
 	return a.completions.Update(msg)
+}
+
+func (a appModel) moveProvider(providerID string, direction int) tea.Cmd {
+	// Get current authenticated providers
+	providers, err := a.app.ListProviders(context.Background())
+	if err != nil {
+		return toast.NewErrorToast("Failed to list providers")
+	}
+	
+	// Get auth status to filter only authenticated providers
+	authProviders := make(map[string]bool)
+	authProviderList, _ := a.app.ListAuthProviders(context.Background())
+	for _, authProvider := range authProviderList {
+		authProviders[authProvider.Id] = authProvider.Authenticated
+	}
+	
+	// Build list of authenticated provider IDs
+	var providerIDs []string
+	for _, provider := range providers {
+		if authenticated, exists := authProviders[provider.Id]; exists && authenticated {
+			providerIDs = append(providerIDs, provider.Id)
+		}
+	}
+	
+	// Apply current order if exists
+	if a.app.State.ProviderOrder != nil && len(a.app.State.ProviderOrder) > 0 {
+		// Create ordered list based on saved order
+		var orderedIDs []string
+		orderMap := make(map[string]bool)
+		
+		// First add providers in saved order
+		for _, id := range a.app.State.ProviderOrder {
+			for _, pid := range providerIDs {
+				if id == pid {
+					orderedIDs = append(orderedIDs, id)
+					orderMap[id] = true
+					break
+				}
+			}
+		}
+		
+		// Then add any new providers not in saved order
+		for _, id := range providerIDs {
+			if !orderMap[id] {
+				orderedIDs = append(orderedIDs, id)
+			}
+		}
+		
+		providerIDs = orderedIDs
+	} else {
+		// Sort alphabetically by default
+		slices.Sort(providerIDs)
+	}
+	
+	// Find the provider to move
+	currentIndex := -1
+	for i, id := range providerIDs {
+		if id == providerID {
+			currentIndex = i
+			break
+		}
+	}
+	
+	if currentIndex == -1 {
+		return nil
+	}
+	
+	// Calculate new index
+	newIndex := currentIndex + direction
+	if newIndex < 0 || newIndex >= len(providerIDs) {
+		return nil // Can't move beyond bounds
+	}
+	
+	// Swap positions
+	providerIDs[currentIndex], providerIDs[newIndex] = providerIDs[newIndex], providerIDs[currentIndex]
+	
+	// Save the new order
+	a.app.State.ProviderOrder = providerIDs
+	a.app.SaveState()
+	
+	// Refresh the provider dialog
+	return func() tea.Msg {
+		return dialog.ShowProviderDialogMsg{}
+	}
+}
+
+func (a appModel) quickSwitchProvider(hotkeyNum int) tea.Cmd {
+	// Check if we have hotkey assignments
+	if a.app.State.ProviderHotkeys == nil {
+		return toast.NewWarningToast(fmt.Sprintf("No provider assigned to hotkey /%d", hotkeyNum))
+	}
+	
+	// Find provider with this hotkey number
+	var targetProviderID string
+	for providerID, assignedHotkey := range a.app.State.ProviderHotkeys {
+		if assignedHotkey == hotkeyNum {
+			targetProviderID = providerID
+			break
+		}
+	}
+	
+	if targetProviderID == "" {
+		return toast.NewWarningToast(fmt.Sprintf("No provider assigned to hotkey /%d", hotkeyNum))
+	}
+	
+	// Get the list of authenticated providers
+	providers, err := a.app.ListProviders(context.Background())
+	if err != nil {
+		return toast.NewErrorToast("Failed to list providers")
+	}
+	
+	// Get auth status to filter only authenticated providers
+	authProviders := make(map[string]bool)
+	authProviderList, _ := a.app.ListAuthProviders(context.Background())
+	for _, authProvider := range authProviderList {
+		authProviders[authProvider.Id] = authProvider.Authenticated
+	}
+	
+	// Find the target provider and verify it's authenticated
+	var selectedProvider client.ProviderInfo
+	found := false
+	for _, provider := range providers {
+		if provider.Id == targetProviderID {
+			if authenticated, exists := authProviders[provider.Id]; exists && authenticated {
+				selectedProvider = provider
+				found = true
+			} else {
+				return toast.NewWarningToast(fmt.Sprintf("Provider %s is not authenticated", provider.Name))
+			}
+			break
+		}
+	}
+	
+	if !found {
+		return toast.NewWarningToast(fmt.Sprintf("Provider not found for hotkey /%d", hotkeyNum))
+	}
+	
+	// Get the models for this provider
+	models := slices.SortedFunc(maps.Values(selectedProvider.Models), func(a, b client.ModelInfo) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	
+	if len(models) == 0 {
+		return toast.NewErrorToast("Provider has no models")
+	}
+	
+	// Check if we have a saved model for this provider
+	var selectedModel client.ModelInfo
+	if savedModelId, exists := a.app.State.ProviderModels[selectedProvider.Id]; exists {
+		// Look for the saved model
+		for _, model := range models {
+			if model.Id == savedModelId {
+				selectedModel = model
+				break
+			}
+		}
+	}
+	
+	// If no saved model found, use the first model as default
+	if selectedModel.Id == "" {
+		selectedModel = models[0]
+	}
+	
+	// Return the model selected message
+	return util.CmdHandler(app.ModelSelectedMsg{
+		Provider: selectedProvider,
+		Model:    selectedModel,
+	})
 }
 
 func NewModel(app *app.App) tea.Model {

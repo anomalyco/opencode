@@ -35,6 +35,12 @@ type RemoveProviderRequestMsg struct{}
 // ShowProviderDialogMsg is sent to show the provider dialog
 type ShowProviderDialogMsg struct{}
 
+// MoveProviderMsg is sent to reorder providers
+type MoveProviderMsg struct {
+	ProviderID string
+	Direction  int // -1 for up, 1 for down
+}
+
 // ProviderDialog interface for the provider selection dialog
 type ProviderDialog interface {
 	layout.Modal
@@ -51,8 +57,10 @@ type providerDialog struct {
 }
 
 type providerKeyMap struct {
-	Enter  key.Binding
-	Escape key.Binding
+	Enter    key.Binding
+	Escape   key.Binding
+	MoveUp   key.Binding
+	MoveDown key.Binding
 }
 
 var providerKeys = providerKeyMap{
@@ -64,6 +72,14 @@ var providerKeys = providerKeyMap{
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "close"),
 	),
+	MoveUp: key.NewBinding(
+		key.WithKeys("shift+up", "K"),
+		key.WithHelp("shift+↑/K", "move up"),
+	),
+	MoveDown: key.NewBinding(
+		key.WithKeys("shift+down", "J"),
+		key.WithHelp("shift+↓/J", "move down"),
+	),
 }
 
 func (p *providerDialog) Init() tea.Cmd {
@@ -74,6 +90,32 @@ func (p *providerDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
+		case key.Matches(msg, providerKeys.MoveUp):
+			_, idx := p.providerList.GetSelectedItem()
+			if idx <= 0 || idx >= len(p.availableProviders) {
+				return p, nil
+			}
+			
+			// Move provider up in the order
+			selectedProvider := p.availableProviders[idx]
+			return p, util.CmdHandler(MoveProviderMsg{
+				ProviderID: selectedProvider.Id,
+				Direction:  -1,
+			})
+			
+		case key.Matches(msg, providerKeys.MoveDown):
+			_, idx := p.providerList.GetSelectedItem()
+			if idx == -1 || idx >= len(p.availableProviders)-1 {
+				return p, nil
+			}
+			
+			// Move provider down in the order
+			selectedProvider := p.availableProviders[idx]
+			return p, util.CmdHandler(MoveProviderMsg{
+				ProviderID: selectedProvider.Id,
+				Direction:  1,
+			})
+			
 		case key.Matches(msg, providerKeys.Enter):
 			_, idx := p.providerList.GetSelectedItem()
 			if idx == -1 {
@@ -187,10 +229,35 @@ func NewProviderDialog(app *app.App) ProviderDialog {
 		authProviders[authProvider.Id] = authProvider.Authenticated
 	}
 	
-	// Sort providers by name
-	slices.SortFunc(availableProviders, func(a, b client.ProviderInfo) int {
-		return strings.Compare(a.Name, b.Name)
-	})
+	// Sort providers by custom order or by name
+	if app.State.ProviderOrder != nil && len(app.State.ProviderOrder) > 0 {
+		// Create a map for quick lookup of order positions
+		orderMap := make(map[string]int)
+		for i, id := range app.State.ProviderOrder {
+			orderMap[id] = i
+		}
+		
+		// Sort by custom order, putting unknown providers at the end
+		slices.SortFunc(availableProviders, func(a, b client.ProviderInfo) int {
+			aPos, aExists := orderMap[a.Id]
+			bPos, bExists := orderMap[b.Id]
+			
+			if aExists && bExists {
+				return aPos - bPos
+			} else if aExists {
+				return -1 // a comes before b
+			} else if bExists {
+				return 1 // b comes before a
+			}
+			// Neither exists in order, sort by name
+			return strings.Compare(a.Name, b.Name)
+		})
+	} else {
+		// No custom order, sort by name
+		slices.SortFunc(availableProviders, func(a, b client.ProviderInfo) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+	}
 	
 	// Create provider names list with model count and auth status
 	providerNames := make([]string, len(availableProviders)+2)  // +2 for "Add new provider" and "Remove provider"
@@ -205,7 +272,11 @@ func NewProviderDialog(app *app.App) ProviderDialog {
 			// Hollow dot for unauthenticated providers
 			authStatus = lipgloss.NewStyle().Foreground(t.TextMuted()).Render("○ ")
 		}
-		providerNames[i] = fmt.Sprintf("%s%s (%d models)", authStatus, provider.Name, modelCount)
+		// Add position number for quick reference
+		position := lipgloss.NewStyle().
+			Foreground(t.TextMuted()).
+			Render(fmt.Sprintf("%d. ", i+1))
+		providerNames[i] = fmt.Sprintf("%s%s%s (%d models)", position, authStatus, provider.Name, modelCount)
 	}
 	// Add the "Add new provider" option at the end
 	providerNames[len(availableProviders)] = "→ Add new provider..."

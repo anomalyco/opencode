@@ -11,16 +11,20 @@ import (
 )
 
 type State struct {
-	Theme         string            `toml:"theme"`
-	Provider      string            `toml:"provider"`
-	Model         string            `toml:"model"`
-	ProviderModels map[string]string `toml:"provider_models"` // Maps provider ID to last selected model
+	Theme             string            `toml:"theme"`
+	Provider          string            `toml:"provider"`
+	Model             string            `toml:"model"`
+	ProviderModels    map[string]string `toml:"provider_models"` // Maps provider ID to last selected model
+	FavoriteProviders []string          `toml:"favorite_providers"` // List of favorite provider IDs for quick access
+	ProviderOrder     []string          `toml:"provider_order"` // Custom order of provider IDs
+	ProviderHotkeys   map[string]int    `toml:"provider_hotkeys"` // Maps provider ID to hotkey number
 }
 
 func NewState() *State {
 	return &State{
-		Theme:          "opencode",
-		ProviderModels: make(map[string]string),
+		Theme:           "opencode",
+		ProviderModels:  make(map[string]string),
+		ProviderHotkeys: make(map[string]int),
 	}
 }
 
@@ -66,6 +70,10 @@ func LoadState(filePath string) (*State, error) {
 	// Initialize ProviderModels map if it's nil
 	if state.ProviderModels == nil {
 		state.ProviderModels = make(map[string]string)
+	}
+	// Initialize ProviderHotkeys map if it's nil
+	if state.ProviderHotkeys == nil {
+		state.ProviderHotkeys = make(map[string]int)
 	}
 	return &state, nil
 }

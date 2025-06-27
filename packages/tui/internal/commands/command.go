@@ -79,8 +79,10 @@ const (
 	SessionCompactCommand       CommandName = "session_compact"
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
-	ProviderListCommand         CommandName = "provider_list"
-	ThemeListCommand            CommandName = "theme_list"
+	ProviderListCommand      CommandName = "provider_list"
+	ProviderHotkeysCommand   CommandName = "provider_hotkeys"
+	ProviderQuickSwitchCommand CommandName = "provider_quick_switch"
+	ThemeListCommand         CommandName = "theme_list"
 	ProjectInitCommand          CommandName = "project_init"
 	InputClearCommand           CommandName = "input_clear"
 	InputPasteCommand           CommandName = "input_paste"
@@ -184,6 +186,12 @@ func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
 			Description: "switch provider",
 			Keybindings: parseBindings("<leader>p"),
 			Trigger:     "providers",
+		},
+		{
+			Name:        ProviderHotkeysCommand,
+			Description: "manage provider hotkeys",
+			Keybindings: parseBindings("<leader>k"),
+			Trigger:     "hotkeys",
 		},
 		{
 			Name:        ThemeListCommand,
