@@ -1,9 +1,11 @@
 import { App } from "../app/app"
-import { BunProc } from "../bun"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
+
+import type { Definition } from "./definition"
+import {readdir} from "fs/promises";
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -62,104 +64,29 @@ export namespace Format {
     })
   }
 
-  interface Definition {
-    name: string
-    command: string[]
-    environment?: Record<string, string>
-    extensions: string[]
-    enabled(): Promise<boolean>
-  }
 
-  const FORMATTERS: Definition[] = [
-    {
-      name: "prettier",
-      command: [BunProc.which(), "run", "prettier", "--write", "$FILE"],
-      environment: {
-        BUN_BE_BUN: "1",
-      },
-      extensions: [
-        ".js",
-        ".jsx",
-        ".mjs",
-        ".cjs",
-        ".ts",
-        ".tsx",
-        ".mts",
-        ".cts",
-        ".html",
-        ".htm",
-        ".css",
-        ".scss",
-        ".sass",
-        ".less",
-        ".vue",
-        ".svelte",
-        ".json",
-        ".jsonc",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".xml",
-        ".md",
-        ".mdx",
-        ".graphql",
-        ".gql",
-      ],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: [BunProc.which(), "run", "prettier", "--version"],
-            cwd: App.info().path.cwd,
-            env: {
-              BUN_BE_BUN: "1",
-            },
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-    {
-      name: "mix",
-      command: ["mix", "format", "$FILE"],
-      extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["mix", "--version"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-    {
-      name: "gofmt",
-      command: ["gofmt", "-w", "$FILE"],
-      extensions: [".go"],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["gofmt", "-h"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-  ]
+  const FORMATTERS: Definition[] = []
+  const formattersPath = path.join(__dirname, "formatters")
+  async function loadFormatters() {
+      log.info("Loading formatters", {formattersPath} )
+      const files = await readdir(formattersPath, { withFileTypes: true })
+      for (const file of files) {
+          const modulePath = path.join(formattersPath, file.name)
+            if (file.isFile() && file.name.endsWith(".ts")) {
+                log.info("Loading formatter", { modulePath })
+                const module = await import(modulePath)
+                if (module && module.default) {
+                    const formatter: Definition = module.default
+                    FORMATTERS.push(formatter)
+                    log.info("Loaded formatter", { name: formatter.name, command: formatter.command })
+                } else {
+                    log.warn("No default export found in formatter module", { modulePath })
+                }
+            }
+      }
+
+  }
+  loadFormatters().catch((err) => {
+      log.error("Failed to load formatters", { error: err })
+  })
 }
