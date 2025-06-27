@@ -70,6 +70,22 @@ export namespace Format {
     enabled(): Promise<boolean>
   }
 
+  const isProgramPresent = async (cmd: string[]): Promise<boolean> => {
+      try {
+          const proc = Bun.spawn({
+              cmd: cmd,
+              cwd: App.info().path.cwd,
+              stdout: "ignore",
+              stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+      } catch {
+          return false
+      }
+  }
+
+
   const FORMATTERS: Definition[] = [
     {
       name: "prettier",
@@ -128,18 +144,7 @@ export namespace Format {
       command: ["mix", "format", "$FILE"],
       extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
       async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["mix", "--version"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
+          return await isProgramPresent(["mix", "--version"])
       },
     },
     {
@@ -147,18 +152,29 @@ export namespace Format {
       command: ["gofmt", "-w", "$FILE"],
       extensions: [".go"],
       async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["gofmt", "-h"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
+          return await isProgramPresent(["gofmt", "-h"])
+      },
+    },
+    {
+      name: "clang-format",
+      command: ["clang-format", "-i", "$FILE"],
+      extensions: [
+        ".c",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".c++",
+        ".h",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".h++",
+        ".ino",
+        ".C",
+        ".H",
+      ],
+      async enabled() {
+        return await isProgramPresent(["clang-format", "--version"])
       },
     },
   ]
