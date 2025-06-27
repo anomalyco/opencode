@@ -70,19 +70,8 @@ export namespace Format {
     enabled(): Promise<boolean>
   }
 
-  const isCommandAvailable = async (cmd: string[]): Promise<boolean> => {
-      try {
-          const proc = Bun.spawn({
-              cmd: cmd,
-              cwd: App.info().path.cwd,
-              stdout: "ignore",
-              stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-      } catch {
-          return false
-      }
+  const isCommandAvailable = (cmd: string): boolean => {
+      return Bun.which(cmd) !== null
   }
 
 
@@ -144,7 +133,7 @@ export namespace Format {
       command: ["mix", "format", "$FILE"],
       extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
       async enabled() {
-          return await isCommandAvailable(["mix", "--version"])
+          return isCommandAvailable("mix")
       },
     },
     {
@@ -152,7 +141,7 @@ export namespace Format {
       command: ["gofmt", "-w", "$FILE"],
       extensions: [".go"],
       async enabled() {
-          return await isCommandAvailable(["gofmt", "-h"])
+          return isCommandAvailable("gofmt")
       },
     },
     {
@@ -174,7 +163,7 @@ export namespace Format {
         ".H",
       ],
       async enabled() {
-        return await isCommandAvailable(["clang-format", "--version"])
+        return isCommandAvailable("clang-format")
       },
     },
   ]
