@@ -33,7 +33,7 @@ export namespace MCP {
         }
         log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
-          let transport: any
+          let transport: StreamableHTTPClientTransport | { type: "sse"; url: string }
 
           if (mcp.transport === "http-streaming") {
             transport = new StreamableHTTPClientTransport(new URL(mcp.url))
