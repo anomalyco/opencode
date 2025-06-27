@@ -142,5 +142,24 @@ export namespace Format {
         }
       },
     },
+    {
+      name: "gofmt",
+      command: ["gofmt", "-w", "$FILE"],
+      extensions: [".go"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["gofmt", "-h"],
+            cwd: App.info().path.cwd,
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+        } catch {
+          return false
+        }
+      },
+    },
   ]
 }
