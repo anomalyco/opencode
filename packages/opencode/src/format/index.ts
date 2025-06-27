@@ -70,7 +70,7 @@ export namespace Format {
     enabled(): Promise<boolean>
   }
 
-  const isProgramPresent = async (cmd: string[]): Promise<boolean> => {
+  const isCommandAvailable = async (cmd: string[]): Promise<boolean> => {
       try {
           const proc = Bun.spawn({
               cmd: cmd,
@@ -144,7 +144,7 @@ export namespace Format {
       command: ["mix", "format", "$FILE"],
       extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
       async enabled() {
-          return await isProgramPresent(["mix", "--version"])
+          return await isCommandAvailable(["mix", "--version"])
       },
     },
     {
@@ -152,7 +152,7 @@ export namespace Format {
       command: ["gofmt", "-w", "$FILE"],
       extensions: [".go"],
       async enabled() {
-          return await isProgramPresent(["gofmt", "-h"])
+          return await isCommandAvailable(["gofmt", "-h"])
       },
     },
     {
@@ -174,7 +174,7 @@ export namespace Format {
         ".H",
       ],
       async enabled() {
-        return await isProgramPresent(["clang-format", "--version"])
+        return await isCommandAvailable(["clang-format", "--version"])
       },
     },
   ]
