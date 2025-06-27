@@ -742,6 +742,37 @@ export namespace Server {
         },
       )
       .post(
+        "/auth/remove",
+        describeRoute({
+          description: "Remove authentication for a provider",
+          responses: {
+            200: {
+              description: "Authentication removed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            providerId: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { providerId } = c.req.valid("json")
+          await Auth.remove(providerId)
+          return c.json({ success: true })
+        },
+      )
+      .post(
         "/file_search",
         describeRoute({
           description: "Search for files",

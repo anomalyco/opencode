@@ -564,6 +564,11 @@ type PostAuthPollJSONBody struct {
 	DeviceCode string `json:"deviceCode"`
 }
 
+// PostAuthRemoveJSONBody defines parameters for PostAuthRemove.
+type PostAuthRemoveJSONBody struct {
+	ProviderId string `json:"providerId"`
+}
+
 // PostAuthStartJSONBody defines parameters for PostAuthStart.
 type PostAuthStartJSONBody struct {
 	ProviderId string `json:"providerId"`
@@ -629,6 +634,9 @@ type PostAuthExchangeJSONRequestBody PostAuthExchangeJSONBody
 
 // PostAuthPollJSONRequestBody defines body for PostAuthPoll for application/json ContentType.
 type PostAuthPollJSONRequestBody PostAuthPollJSONBody
+
+// PostAuthRemoveJSONRequestBody defines body for PostAuthRemove for application/json ContentType.
+type PostAuthRemoveJSONRequestBody PostAuthRemoveJSONBody
 
 // PostAuthStartJSONRequestBody defines body for PostAuthStart for application/json ContentType.
 type PostAuthStartJSONRequestBody PostAuthStartJSONBody
@@ -1850,6 +1858,11 @@ type ClientInterface interface {
 	// PostAuthProviders request
 	PostAuthProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostAuthRemoveWithBody request with any body
+	PostAuthRemoveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthRemove(ctx context.Context, body PostAuthRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostAuthStartWithBody request with any body
 	PostAuthStartWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2020,6 +2033,30 @@ func (c *Client) PostAuthPoll(ctx context.Context, body PostAuthPollJSONRequestB
 
 func (c *Client) PostAuthProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAuthProvidersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthRemoveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRemoveRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthRemove(ctx context.Context, body PostAuthRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRemoveRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2551,6 +2588,46 @@ func NewPostAuthProvidersRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostAuthRemoveRequest calls the generic PostAuthRemove builder with application/json body
+func NewPostAuthRemoveRequest(server string, body PostAuthRemoveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthRemoveRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthRemoveRequestWithBody generates requests for PostAuthRemove with any type of body
+func NewPostAuthRemoveRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/remove")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -3211,6 +3288,11 @@ type ClientWithResponsesInterface interface {
 	// PostAuthProvidersWithResponse request
 	PostAuthProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthProvidersResponse, error)
 
+	// PostAuthRemoveWithBodyWithResponse request with any body
+	PostAuthRemoveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRemoveResponse, error)
+
+	PostAuthRemoveWithResponse(ctx context.Context, body PostAuthRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRemoveResponse, error)
+
 	// PostAuthStartWithBodyWithResponse request with any body
 	PostAuthStartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error)
 
@@ -3422,6 +3504,30 @@ func (r PostAuthProvidersResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAuthProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Success bool `json:"success"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthRemoveResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3892,6 +3998,23 @@ func (c *ClientWithResponses) PostAuthProvidersWithResponse(ctx context.Context,
 	return ParsePostAuthProvidersResponse(rsp)
 }
 
+// PostAuthRemoveWithBodyWithResponse request with arbitrary body returning *PostAuthRemoveResponse
+func (c *ClientWithResponses) PostAuthRemoveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRemoveResponse, error) {
+	rsp, err := c.PostAuthRemoveWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthRemoveResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthRemoveWithResponse(ctx context.Context, body PostAuthRemoveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRemoveResponse, error) {
+	rsp, err := c.PostAuthRemove(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthRemoveResponse(rsp)
+}
+
 // PostAuthStartWithBodyWithResponse request with arbitrary body returning *PostAuthStartResponse
 func (c *ClientWithResponses) PostAuthStartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error) {
 	rsp, err := c.PostAuthStartWithBody(ctx, contentType, body, reqEditors...)
@@ -4281,6 +4404,34 @@ func ParsePostAuthProvidersResponse(rsp *http.Response) (*PostAuthProvidersRespo
 			Authenticated bool                         `json:"authenticated"`
 			Id            string                       `json:"id"`
 			Name          string                       `json:"name"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthRemoveResponse parses an HTTP response from a PostAuthRemoveWithResponse call
+func ParsePostAuthRemoveResponse(rsp *http.Response) (*PostAuthRemoveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Success bool `json:"success"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

@@ -379,6 +379,23 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Show the provider selection dialog for unauthenticated providers
 		authSelectDialog := dialog.NewAuthProviderSelectDialog(a.app)
 		a.modal = authSelectDialog
+	case dialog.RemoveProviderRequestMsg:
+		// Show the remove provider dialog
+		removeDialog := dialog.NewRemoveProviderDialog(a.app)
+		a.modal = removeDialog
+	case dialog.ShowConfirmRemoveMsg:
+		// Show confirmation dialog for removing provider
+		confirmDialog := dialog.NewConfirmRemoveProviderDialog(a.app, msg.Provider)
+		a.modal = confirmDialog
+	case dialog.ProviderRemovedMsg:
+		// Provider was successfully removed
+		return a, tea.Sequence(
+			toast.NewSuccessToast(fmt.Sprintf("Provider removed successfully")),
+			// Show the provider dialog again with updated list
+			func() tea.Msg {
+				return dialog.ShowProviderDialogMsg{}
+			},
+		)
 	case dialog.StartAuthFlowMsg:
 		// Start the appropriate auth flow based on provider type
 		if msg.Provider.Id == "anthropic" {

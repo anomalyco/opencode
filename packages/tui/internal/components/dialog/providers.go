@@ -29,6 +29,9 @@ const (
 // AddProviderRequestMsg is sent when user wants to add a new provider
 type AddProviderRequestMsg struct{}
 
+// RemoveProviderRequestMsg is sent when user wants to remove a provider
+type RemoveProviderRequestMsg struct{}
+
 // ShowProviderDialogMsg is sent to show the provider dialog
 type ShowProviderDialogMsg struct{}
 
@@ -82,6 +85,14 @@ func (p *providerDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return p, tea.Sequence(
 					util.CmdHandler(modal.CloseModalMsg{}),
 					util.CmdHandler(AddProviderRequestMsg{}),
+				)
+			}
+			
+			// Check if "Remove provider" was selected
+			if idx == len(p.availableProviders)+1 {
+				return p, tea.Sequence(
+					util.CmdHandler(modal.CloseModalMsg{}),
+					util.CmdHandler(RemoveProviderRequestMsg{}),
 				)
 			}
 			
@@ -182,7 +193,7 @@ func NewProviderDialog(app *app.App) ProviderDialog {
 	})
 	
 	// Create provider names list with model count and auth status
-	providerNames := make([]string, len(availableProviders)+1)  // +1 for "Add new provider"
+	providerNames := make([]string, len(availableProviders)+2)  // +2 for "Add new provider" and "Remove provider"
 	t := theme.CurrentTheme()
 	for i, provider := range availableProviders {
 		modelCount := len(provider.Models)
@@ -198,6 +209,8 @@ func NewProviderDialog(app *app.App) ProviderDialog {
 	}
 	// Add the "Add new provider" option at the end
 	providerNames[len(availableProviders)] = "→ Add new provider..."
+	// Add the "Remove provider" option after that
+	providerNames[len(availableProviders)+1] = "→ Remove provider..."
 	
 	providerList := list.NewStringList(providerNames, numVisibleProviders, "No providers available", true)
 	providerList.SetMaxWidth(maxProviderDialogWidth)

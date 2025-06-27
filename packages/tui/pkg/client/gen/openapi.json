@@ -773,6 +773,50 @@
         }
       }
     },
+    "/auth/remove": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Authentication removed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthRemove",
+        "parameters": [],
+        "description": "Remove authentication for a provider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/file_search": {
       "post": {
         "responses": {
