@@ -143,6 +143,25 @@ export namespace Format {
       },
     },
     {
+      name: "zigfmt",
+      command: ["zig", "fmt", "$FILE"],
+      extensions: [".zig", ".zon"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["zig", "version"],
+            cwd: App.info().path.cwd,
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+        } catch {
+          return false
+        }
+      },
+    },
+    {
       name: "gofmt",
       command: ["gofmt", "-w", "$FILE"],
       extensions: [".go"],
