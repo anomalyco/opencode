@@ -68,17 +68,14 @@ export namespace Format {
   const FORMATTERS: Definition[] = []
   const formattersPath = path.join(__dirname, "formatters")
   async function loadFormatters() {
-      log.info("Loading formatters", {formattersPath} )
       const files = await readdir(formattersPath, { withFileTypes: true })
       for (const file of files) {
           const modulePath = path.join(formattersPath, file.name)
             if (file.isFile() && file.name.endsWith(".ts")) {
-                log.info("Loading formatter", { modulePath })
                 const module = await import(modulePath)
                 if (module && module.default) {
                     const formatter: Definition = module.default
                     FORMATTERS.push(formatter)
-                    log.info("Loaded formatter", { name: formatter.name, command: formatter.command })
                 } else {
                     log.warn("No default export found in formatter module", { modulePath })
                 }
