@@ -172,19 +172,32 @@ const cli = yargs(hideBin(process.argv))
 try {
   await cli.parse()
 } catch (e) {
-  const data: Record<string, any> = {}
+  let data: Record<string, any> = {}
   if (e instanceof NamedError) {
     const obj = e.toObject()
     Object.assign(data, {
       ...obj.data,
     })
   }
+  
   if (e instanceof Error) {
     Object.assign(data, {
       name: e.name,
       message: e.message,
       cause: e.cause?.toString(),
     })
+  } 
+  
+  if (e instanceof ResolveMessage) {
+    Object.assign(data, {
+      name: e.name,
+      message: e.message,
+      code: e.code,
+      specifier: e.specifier,
+      referrer: e.referrer,
+      position: e.position,
+      importKind: e.importKind,
+    });
   }
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
