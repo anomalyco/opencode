@@ -15,6 +15,7 @@ import (
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
+	"github.com/sst/opencode/internal/util"
 	"github.com/sst/opencode/pkg/client"
 )
 
@@ -121,9 +122,13 @@ func (m *messagesComponent) renderView() {
 		return
 	}
 
+	measure := util.Measure("messages.renderView")
+	defer measure("messageCount", len(m.app.Messages))
+
 	t := theme.CurrentTheme()
 	blocks := make([]string, 0)
 	previousBlockType := none
+
 	for _, message := range m.app.Messages {
 		var content string
 		var cached bool

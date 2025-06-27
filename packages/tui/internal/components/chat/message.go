@@ -409,7 +409,7 @@ func renderToolInvocation(
 			title = fmt.Sprintf("WRITE %s", relative(filename))
 			if content, ok := toolArgsMap["content"].(string); ok {
 				body = renderFile(filename, content)
-				
+
 				// Add diagnostics at the bottom if they exist
 				if diagnostics := renderDiagnostics(metadata, filename); diagnostics != "" {
 					body += "\n" + renderContentBlock(diagnostics, WithFullWidth(), WithBorderColor(t.Error()))
@@ -753,7 +753,7 @@ func renderDiagnostics(metadata client.MessageMetadata_Tool_AdditionalProperties
 			continue
 		}
 
-		line := diag.Range.Start.Line + 1      // 1-based
+		line := diag.Range.Start.Line + 1        // 1-based
 		column := diag.Range.Start.Character + 1 // 1-based
 		errorDiagnostics = append(errorDiagnostics, fmt.Sprintf("Error [%d:%d] %s", line, column, diag.Message))
 	}
