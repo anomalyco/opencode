@@ -149,20 +149,25 @@ func (m *modelDialog) View() string {
 }
 
 func (m *modelDialog) getScrollIndicators(maxWidth int) string {
-	var indicator string
-	if m.hScrollPossible {
-		indicator = "← → (switch provider) "
-	}
-	if indicator == "" {
-		return ""
-	}
-
 	t := theme.CurrentTheme()
-	return styles.NewStyle().
-		Foreground(t.TextMuted()).
-		Width(maxWidth).
-		Align(lipgloss.Right).
-		Render(indicator)
+	
+	// Show current provider position
+	providerInfo := ""
+	if m.hScrollPossible {
+		providerInfo = fmt.Sprintf("Provider %d/%d", m.hScrollOffset+1, len(m.availableProviders))
+		indicator := "← → (switch provider)"
+		
+		// Combine provider info and navigation help
+		fullText := fmt.Sprintf("%s  %s", providerInfo, indicator)
+		
+		return styles.NewStyle().
+			Foreground(t.TextMuted()).
+			Width(maxWidth).
+			Align(lipgloss.Right).
+			Render(fullText)
+	}
+	
+	return ""
 }
 
 func (m *modelDialog) setupModelsForProvider(providerId string) {

@@ -177,9 +177,23 @@ func (a *App) InitializeProvider() tea.Cmd {
 			if provider.Id == a.State.Provider {
 				currentProvider = &provider
 
-				for _, model := range provider.Models {
-					if model.Id == a.State.Model {
-						currentModel = &model
+				// First check if we have a saved model for this provider
+				if savedModelId, exists := a.State.ProviderModels[provider.Id]; exists {
+					for _, model := range provider.Models {
+						if model.Id == savedModelId {
+							currentModel = &model
+							break
+						}
+					}
+				}
+				
+				// If no saved model found, use the current global model
+				if currentModel == nil {
+					for _, model := range provider.Models {
+						if model.Id == a.State.Model {
+							currentModel = &model
+							break
+						}
 					}
 				}
 			}
@@ -445,6 +459,31 @@ func (a *App) ListProviders(ctx context.Context) ([]client.ProviderInfo, error) 
 
 	providers := *resp.JSON200
 	return providers.Providers, nil
+}
+
+func (a *App) ListAuthProviders(ctx context.Context) ([]struct {
+	AuthType      client.PostAuthProviders200AuthType `json:"authType"`
+	Authenticated bool                                `json:"authenticated"`
+	Id            string                              `json:"id"`
+	Name          string                              `json:"name"`
+}, error) {
+	resp, err := a.Client.PostAuthProvidersWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != 200 {
+		return nil, fmt.Errorf("failed to list auth providers: %d", resp.StatusCode())
+	}
+	if resp.JSON200 == nil {
+		return []struct {
+			AuthType      client.PostAuthProviders200AuthType `json:"authType"`
+			Authenticated bool                                `json:"authenticated"`
+			Id            string                              `json:"id"`
+			Name          string                              `json:"name"`
+		}{}, nil
+	}
+
+	return *resp.JSON200, nil
 }
 
 // func (a *App) loadCustomKeybinds() {

@@ -34,8 +34,7 @@ type AppInfo struct {
 		Root   string `json:"root"`
 		State  string `json:"state"`
 	} `json:"path"`
-	Project string `json:"project"`
-	Time    struct {
+	Time struct {
 		Initialized *float32 `json:"initialized,omitempty"`
 	} `json:"time"`
 	User string `json:"user"`
@@ -174,6 +173,9 @@ type ConfigKeybinds struct {
 	// ProjectInit Initialize project configuration
 	ProjectInit *string `json:"project_init,omitempty"`
 
+	// ProviderList Switch provider
+	ProviderList *string `json:"provider_list,omitempty"`
+
 	// SessionCompact Toggle compact mode for session
 	SessionCompact *string `json:"session_compact,omitempty"`
 
@@ -225,6 +227,14 @@ type Error struct {
 // Event defines model for Event.
 type Event struct {
 	union json.RawMessage
+}
+
+// EventFileEdited defines model for Event.file.edited.
+type EventFileEdited struct {
+	Properties struct {
+		File string `json:"file"`
+	} `json:"properties"`
+	Type string `json:"type"`
 }
 
 // EventInstallationUpdated defines model for Event.installation.updated.
@@ -287,6 +297,14 @@ type EventSessionError struct {
 // EventSessionError_Properties_Error defines model for EventSessionError.Properties.Error.
 type EventSessionError_Properties_Error struct {
 	union json.RawMessage
+}
+
+// EventSessionIdle defines model for Event.session.idle.
+type EventSessionIdle struct {
+	Properties struct {
+		SessionID string `json:"sessionID"`
+	} `json:"properties"`
+	Type string `json:"type"`
 }
 
 // EventSessionUpdated defines model for Event.session.updated.
@@ -528,6 +546,29 @@ type SessionInfo struct {
 	Version string `json:"version"`
 }
 
+// PostAuthApikeyJSONBody defines parameters for PostAuthApikey.
+type PostAuthApikeyJSONBody struct {
+	ApiKey     string `json:"apiKey"`
+	ProviderId string `json:"providerId"`
+}
+
+// PostAuthExchangeJSONBody defines parameters for PostAuthExchange.
+type PostAuthExchangeJSONBody struct {
+	Code       string  `json:"code"`
+	ProviderId string  `json:"providerId"`
+	Verifier   *string `json:"verifier,omitempty"`
+}
+
+// PostAuthPollJSONBody defines parameters for PostAuthPoll.
+type PostAuthPollJSONBody struct {
+	DeviceCode string `json:"deviceCode"`
+}
+
+// PostAuthStartJSONBody defines parameters for PostAuthStart.
+type PostAuthStartJSONBody struct {
+	ProviderId string `json:"providerId"`
+}
+
 // PostFileSearchJSONBody defines parameters for PostFileSearch.
 type PostFileSearchJSONBody struct {
 	Query string `json:"query"`
@@ -579,6 +620,18 @@ type PostSessionSummarizeJSONBody struct {
 type PostSessionUnshareJSONBody struct {
 	SessionID string `json:"sessionID"`
 }
+
+// PostAuthApikeyJSONRequestBody defines body for PostAuthApikey for application/json ContentType.
+type PostAuthApikeyJSONRequestBody PostAuthApikeyJSONBody
+
+// PostAuthExchangeJSONRequestBody defines body for PostAuthExchange for application/json ContentType.
+type PostAuthExchangeJSONRequestBody PostAuthExchangeJSONBody
+
+// PostAuthPollJSONRequestBody defines body for PostAuthPoll for application/json ContentType.
+type PostAuthPollJSONRequestBody PostAuthPollJSONBody
+
+// PostAuthStartJSONRequestBody defines body for PostAuthStart for application/json ContentType.
+type PostAuthStartJSONRequestBody PostAuthStartJSONBody
 
 // PostFileSearchJSONRequestBody defines body for PostFileSearch for application/json ContentType.
 type PostFileSearchJSONRequestBody PostFileSearchJSONBody
@@ -775,62 +828,6 @@ func (t *ConfigInfo_Mcp_AdditionalProperties) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// AsEventStorageWrite returns the union data inside the Event as a EventStorageWrite
-func (t Event) AsEventStorageWrite() (EventStorageWrite, error) {
-	var body EventStorageWrite
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromEventStorageWrite overwrites any union data inside the Event as the provided EventStorageWrite
-func (t *Event) FromEventStorageWrite(v EventStorageWrite) error {
-	v.Type = "storage.write"
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeEventStorageWrite performs a merge with any union data inside the Event, using the provided EventStorageWrite
-func (t *Event) MergeEventStorageWrite(v EventStorageWrite) error {
-	v.Type = "storage.write"
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsEventInstallationUpdated returns the union data inside the Event as a EventInstallationUpdated
-func (t Event) AsEventInstallationUpdated() (EventInstallationUpdated, error) {
-	var body EventInstallationUpdated
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromEventInstallationUpdated overwrites any union data inside the Event as the provided EventInstallationUpdated
-func (t *Event) FromEventInstallationUpdated(v EventInstallationUpdated) error {
-	v.Type = "installation.updated"
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeEventInstallationUpdated performs a merge with any union data inside the Event, using the provided EventInstallationUpdated
-func (t *Event) MergeEventInstallationUpdated(v EventInstallationUpdated) error {
-	v.Type = "installation.updated"
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
 // AsEventLspClientDiagnostics returns the union data inside the Event as a EventLspClientDiagnostics
 func (t Event) AsEventLspClientDiagnostics() (EventLspClientDiagnostics, error) {
 	var body EventLspClientDiagnostics
@@ -877,6 +874,90 @@ func (t *Event) FromEventPermissionUpdated(v EventPermissionUpdated) error {
 // MergeEventPermissionUpdated performs a merge with any union data inside the Event, using the provided EventPermissionUpdated
 func (t *Event) MergeEventPermissionUpdated(v EventPermissionUpdated) error {
 	v.Type = "permission.updated"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventFileEdited returns the union data inside the Event as a EventFileEdited
+func (t Event) AsEventFileEdited() (EventFileEdited, error) {
+	var body EventFileEdited
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventFileEdited overwrites any union data inside the Event as the provided EventFileEdited
+func (t *Event) FromEventFileEdited(v EventFileEdited) error {
+	v.Type = "file.edited"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventFileEdited performs a merge with any union data inside the Event, using the provided EventFileEdited
+func (t *Event) MergeEventFileEdited(v EventFileEdited) error {
+	v.Type = "file.edited"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventStorageWrite returns the union data inside the Event as a EventStorageWrite
+func (t Event) AsEventStorageWrite() (EventStorageWrite, error) {
+	var body EventStorageWrite
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventStorageWrite overwrites any union data inside the Event as the provided EventStorageWrite
+func (t *Event) FromEventStorageWrite(v EventStorageWrite) error {
+	v.Type = "storage.write"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventStorageWrite performs a merge with any union data inside the Event, using the provided EventStorageWrite
+func (t *Event) MergeEventStorageWrite(v EventStorageWrite) error {
+	v.Type = "storage.write"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEventInstallationUpdated returns the union data inside the Event as a EventInstallationUpdated
+func (t Event) AsEventInstallationUpdated() (EventInstallationUpdated, error) {
+	var body EventInstallationUpdated
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventInstallationUpdated overwrites any union data inside the Event as the provided EventInstallationUpdated
+func (t *Event) FromEventInstallationUpdated(v EventInstallationUpdated) error {
+	v.Type = "installation.updated"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventInstallationUpdated performs a merge with any union data inside the Event, using the provided EventInstallationUpdated
+func (t *Event) MergeEventInstallationUpdated(v EventInstallationUpdated) error {
+	v.Type = "installation.updated"
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -999,6 +1080,34 @@ func (t *Event) MergeEventSessionDeleted(v EventSessionDeleted) error {
 	return err
 }
 
+// AsEventSessionIdle returns the union data inside the Event as a EventSessionIdle
+func (t Event) AsEventSessionIdle() (EventSessionIdle, error) {
+	var body EventSessionIdle
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEventSessionIdle overwrites any union data inside the Event as the provided EventSessionIdle
+func (t *Event) FromEventSessionIdle(v EventSessionIdle) error {
+	v.Type = "session.idle"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeEventSessionIdle performs a merge with any union data inside the Event, using the provided EventSessionIdle
+func (t *Event) MergeEventSessionIdle(v EventSessionIdle) error {
+	v.Type = "session.idle"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsEventSessionError returns the union data inside the Event as a EventSessionError
 func (t Event) AsEventSessionError() (EventSessionError, error) {
 	var body EventSessionError
@@ -1041,6 +1150,8 @@ func (t Event) ValueByDiscriminator() (interface{}, error) {
 		return nil, err
 	}
 	switch discriminator {
+	case "file.edited":
+		return t.AsEventFileEdited()
 	case "installation.updated":
 		return t.AsEventInstallationUpdated()
 	case "lsp.client.diagnostics":
@@ -1055,6 +1166,8 @@ func (t Event) ValueByDiscriminator() (interface{}, error) {
 		return t.AsEventSessionDeleted()
 	case "session.error":
 		return t.AsEventSessionError()
+	case "session.idle":
+		return t.AsEventSessionIdle()
 	case "session.updated":
 		return t.AsEventSessionUpdated()
 	case "storage.write":
@@ -1719,6 +1832,29 @@ type ClientInterface interface {
 	// PostAppInitialize request
 	PostAppInitialize(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostAuthApikeyWithBody request with any body
+	PostAuthApikeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthApikey(ctx context.Context, body PostAuthApikeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthExchangeWithBody request with any body
+	PostAuthExchangeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthExchange(ctx context.Context, body PostAuthExchangeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthPollWithBody request with any body
+	PostAuthPollWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthPoll(ctx context.Context, body PostAuthPollJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthProviders request
+	PostAuthProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthStartWithBody request with any body
+	PostAuthStartWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthStart(ctx context.Context, body PostAuthStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostConfigGet request
 	PostConfigGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1800,6 +1936,114 @@ func (c *Client) PostAppInfo(ctx context.Context, reqEditors ...RequestEditorFn)
 
 func (c *Client) PostAppInitialize(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAppInitializeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthApikeyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthApikeyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthApikey(ctx context.Context, body PostAuthApikeyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthApikeyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthExchangeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthExchangeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthExchange(ctx context.Context, body PostAuthExchangeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthExchangeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthPollWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthPollRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthPoll(ctx context.Context, body PostAuthPollJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthPollRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthProviders(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthProvidersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthStartWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthStartRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthStart(ctx context.Context, body PostAuthStartJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthStartRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2160,6 +2404,193 @@ func NewPostAppInitializeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPostAuthApikeyRequest calls the generic PostAuthApikey builder with application/json body
+func NewPostAuthApikeyRequest(server string, body PostAuthApikeyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthApikeyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthApikeyRequestWithBody generates requests for PostAuthApikey with any type of body
+func NewPostAuthApikeyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/apikey")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthExchangeRequest calls the generic PostAuthExchange builder with application/json body
+func NewPostAuthExchangeRequest(server string, body PostAuthExchangeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthExchangeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthExchangeRequestWithBody generates requests for PostAuthExchange with any type of body
+func NewPostAuthExchangeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/exchange")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthPollRequest calls the generic PostAuthPoll builder with application/json body
+func NewPostAuthPollRequest(server string, body PostAuthPollJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthPollRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthPollRequestWithBody generates requests for PostAuthPoll with any type of body
+func NewPostAuthPollRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/poll")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostAuthProvidersRequest generates requests for PostAuthProviders
+func NewPostAuthProvidersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/providers")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAuthStartRequest calls the generic PostAuthStart builder with application/json body
+func NewPostAuthStartRequest(server string, body PostAuthStartJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthStartRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthStartRequestWithBody generates requests for PostAuthStart with any type of body
+func NewPostAuthStartRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/auth/start")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2762,6 +3193,29 @@ type ClientWithResponsesInterface interface {
 	// PostAppInitializeWithResponse request
 	PostAppInitializeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAppInitializeResponse, error)
 
+	// PostAuthApikeyWithBodyWithResponse request with any body
+	PostAuthApikeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthApikeyResponse, error)
+
+	PostAuthApikeyWithResponse(ctx context.Context, body PostAuthApikeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthApikeyResponse, error)
+
+	// PostAuthExchangeWithBodyWithResponse request with any body
+	PostAuthExchangeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthExchangeResponse, error)
+
+	PostAuthExchangeWithResponse(ctx context.Context, body PostAuthExchangeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthExchangeResponse, error)
+
+	// PostAuthPollWithBodyWithResponse request with any body
+	PostAuthPollWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPollResponse, error)
+
+	PostAuthPollWithResponse(ctx context.Context, body PostAuthPollJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPollResponse, error)
+
+	// PostAuthProvidersWithResponse request
+	PostAuthProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthProvidersResponse, error)
+
+	// PostAuthStartWithBodyWithResponse request with any body
+	PostAuthStartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error)
+
+	PostAuthStartWithResponse(ctx context.Context, body PostAuthStartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error)
+
 	// PostConfigGetWithResponse request
 	PostConfigGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostConfigGetResponse, error)
 
@@ -2867,6 +3321,132 @@ func (r PostAppInitializeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostAppInitializeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthApikeyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Success bool `json:"success"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthApikeyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthApikeyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthExchangeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Success bool `json:"success"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthExchangeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthExchangeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthPollResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Status PostAuthPoll200Status `json:"status"`
+	}
+}
+type PostAuthPoll200Status string
+
+// Status returns HTTPResponse.Status
+func (r PostAuthPollResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthPollResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthProvidersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]struct {
+		AuthType      PostAuthProviders200AuthType `json:"authType"`
+		Authenticated bool                         `json:"authenticated"`
+		Id            string                       `json:"id"`
+		Name          string                       `json:"name"`
+	}
+}
+type PostAuthProviders200AuthType string
+
+// Status returns HTTPResponse.Status
+func (r PostAuthProvidersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthProvidersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthStartResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Url      string  `json:"url"`
+		Verifier *string `json:"verifier,omitempty"`
+	}
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthStartResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthStartResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3252,6 +3832,83 @@ func (c *ClientWithResponses) PostAppInitializeWithResponse(ctx context.Context,
 	return ParsePostAppInitializeResponse(rsp)
 }
 
+// PostAuthApikeyWithBodyWithResponse request with arbitrary body returning *PostAuthApikeyResponse
+func (c *ClientWithResponses) PostAuthApikeyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthApikeyResponse, error) {
+	rsp, err := c.PostAuthApikeyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthApikeyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthApikeyWithResponse(ctx context.Context, body PostAuthApikeyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthApikeyResponse, error) {
+	rsp, err := c.PostAuthApikey(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthApikeyResponse(rsp)
+}
+
+// PostAuthExchangeWithBodyWithResponse request with arbitrary body returning *PostAuthExchangeResponse
+func (c *ClientWithResponses) PostAuthExchangeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthExchangeResponse, error) {
+	rsp, err := c.PostAuthExchangeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthExchangeResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthExchangeWithResponse(ctx context.Context, body PostAuthExchangeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthExchangeResponse, error) {
+	rsp, err := c.PostAuthExchange(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthExchangeResponse(rsp)
+}
+
+// PostAuthPollWithBodyWithResponse request with arbitrary body returning *PostAuthPollResponse
+func (c *ClientWithResponses) PostAuthPollWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPollResponse, error) {
+	rsp, err := c.PostAuthPollWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthPollResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthPollWithResponse(ctx context.Context, body PostAuthPollJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPollResponse, error) {
+	rsp, err := c.PostAuthPoll(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthPollResponse(rsp)
+}
+
+// PostAuthProvidersWithResponse request returning *PostAuthProvidersResponse
+func (c *ClientWithResponses) PostAuthProvidersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthProvidersResponse, error) {
+	rsp, err := c.PostAuthProviders(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthProvidersResponse(rsp)
+}
+
+// PostAuthStartWithBodyWithResponse request with arbitrary body returning *PostAuthStartResponse
+func (c *ClientWithResponses) PostAuthStartWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error) {
+	rsp, err := c.PostAuthStartWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthStartResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthStartWithResponse(ctx context.Context, body PostAuthStartJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthStartResponse, error) {
+	rsp, err := c.PostAuthStart(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthStartResponse(rsp)
+}
+
 // PostConfigGetWithResponse request returning *PostConfigGetResponse
 func (c *ClientWithResponses) PostConfigGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostConfigGetResponse, error) {
 	rsp, err := c.PostConfigGet(ctx, reqEditors...)
@@ -3510,6 +4167,150 @@ func ParsePostAppInitializeResponse(rsp *http.Response) (*PostAppInitializeRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest bool
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthApikeyResponse parses an HTTP response from a PostAuthApikeyWithResponse call
+func ParsePostAuthApikeyResponse(rsp *http.Response) (*PostAuthApikeyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthApikeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Success bool `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthExchangeResponse parses an HTTP response from a PostAuthExchangeWithResponse call
+func ParsePostAuthExchangeResponse(rsp *http.Response) (*PostAuthExchangeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthExchangeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Success bool `json:"success"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthPollResponse parses an HTTP response from a PostAuthPollWithResponse call
+func ParsePostAuthPollResponse(rsp *http.Response) (*PostAuthPollResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthPollResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Status PostAuthPoll200Status `json:"status"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthProvidersResponse parses an HTTP response from a PostAuthProvidersWithResponse call
+func ParsePostAuthProvidersResponse(rsp *http.Response) (*PostAuthProvidersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthProvidersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []struct {
+			AuthType      PostAuthProviders200AuthType `json:"authType"`
+			Authenticated bool                         `json:"authenticated"`
+			Id            string                       `json:"id"`
+			Name          string                       `json:"name"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthStartResponse parses an HTTP response from a PostAuthStartWithResponse call
+func ParsePostAuthStartResponse(rsp *http.Response) (*PostAuthStartResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthStartResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Url      string  `json:"url"`
+			Verifier *string `json:"verifier,omitempty"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

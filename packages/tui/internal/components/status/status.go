@@ -87,6 +87,16 @@ func (m statusComponent) View() string {
 
 	logo := m.logo()
 
+	// Add provider/model info
+	providerModel := ""
+	if m.app.Provider != nil && m.app.Model != nil {
+		providerModel = styles.NewStyle().
+			Foreground(t.Primary()).
+			Background(t.BackgroundElement()).
+			Padding(0, 1).
+			Render(fmt.Sprintf("%s/%s", m.app.Provider.Id, m.app.Model.Id))
+	}
+
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
@@ -124,11 +134,11 @@ func (m statusComponent) View() string {
 
 	space := max(
 		0,
-		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(sessionInfo),
+		m.width-lipgloss.Width(logo)-lipgloss.Width(providerModel)-lipgloss.Width(cwd)-lipgloss.Width(sessionInfo),
 	)
 	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
 
-	status := logo + cwd + spacer + sessionInfo
+	status := logo + providerModel + cwd + spacer + sessionInfo
 
 	blank := styles.NewStyle().Background(t.Background()).Width(m.width).Render("")
 	return blank + "\n" + status

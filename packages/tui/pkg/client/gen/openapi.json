@@ -531,6 +531,248 @@
         "description": "List all providers"
       }
     },
+    "/auth/providers": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "List of providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "authType": {
+                        "type": "string",
+                        "enum": [
+                          "oauth",
+                          "api",
+                          "env"
+                        ]
+                      },
+                      "authenticated": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "authType",
+                      "authenticated"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthProviders",
+        "parameters": [],
+        "description": "List providers available for authentication"
+      }
+    },
+    "/auth/start": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OAuth authorization URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "verifier": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthStart",
+        "parameters": [],
+        "description": "Start OAuth authentication flow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/exchange": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthExchange",
+        "parameters": [],
+        "description": "Exchange OAuth code for tokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "verifier": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerId",
+                  "code"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/poll": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Poll status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "success",
+                        "failed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthPoll",
+        "parameters": [],
+        "description": "Poll GitHub Copilot device flow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "deviceCode": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "deviceCode"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/apikey": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "API key set successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postAuthApikey",
+        "parameters": [],
+        "description": "Set API key for a provider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string"
+                  },
+                  "apiKey": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "providerId",
+                  "apiKey"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/file_search": {
       "post": {
         "responses": {
@@ -595,16 +837,19 @@
       "Event": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/Event.storage.write"
-          },
-          {
-            "$ref": "#/components/schemas/Event.installation.updated"
-          },
-          {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
           },
           {
             "$ref": "#/components/schemas/Event.permission.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.file.edited"
+          },
+          {
+            "$ref": "#/components/schemas/Event.storage.write"
+          },
+          {
+            "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -619,72 +864,28 @@
             "$ref": "#/components/schemas/Event.session.deleted"
           },
           {
+            "$ref": "#/components/schemas/Event.session.idle"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.error"
           }
         ],
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "storage.write": "#/components/schemas/Event.storage.write",
-            "installation.updated": "#/components/schemas/Event.installation.updated",
             "lsp.client.diagnostics": "#/components/schemas/Event.lsp.client.diagnostics",
             "permission.updated": "#/components/schemas/Event.permission.updated",
+            "file.edited": "#/components/schemas/Event.file.edited",
+            "storage.write": "#/components/schemas/Event.storage.write",
+            "installation.updated": "#/components/schemas/Event.installation.updated",
             "message.updated": "#/components/schemas/Event.message.updated",
             "message.part.updated": "#/components/schemas/Event.message.part.updated",
             "session.updated": "#/components/schemas/Event.session.updated",
             "session.deleted": "#/components/schemas/Event.session.deleted",
+            "session.idle": "#/components/schemas/Event.session.idle",
             "session.error": "#/components/schemas/Event.session.error"
           }
         }
-      },
-      "Event.storage.write": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "storage.write"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "key": {
-                "type": "string"
-              },
-              "content": {}
-            },
-            "required": [
-              "key"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
-      },
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "version"
-            ]
-          }
-        },
-        "required": [
-          "type",
-          "properties"
-        ]
       },
       "Event.lsp.client.diagnostics": {
         "type": "object",
@@ -764,6 +965,79 @@
           "title",
           "metadata",
           "time"
+        ]
+      },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "file"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.storage.write": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "storage.write"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "content": {}
+            },
+            "required": [
+              "key"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "version"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
         ]
       },
       "Event.message.updated": {
@@ -1423,6 +1697,30 @@
           "properties"
         ]
       },
+      "Event.session.idle": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session.idle"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sessionID"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "properties"
+        ]
+      },
       "Event.session.error": {
         "type": "object",
         "properties": {
@@ -1465,9 +1763,6 @@
       "App.Info": {
         "type": "object",
         "properties": {
-          "project": {
-            "type": "string"
-          },
           "user": {
             "type": "string"
           },
@@ -1514,7 +1809,6 @@
           }
         },
         "required": [
-          "project",
           "user",
           "hostname",
           "git",
@@ -1781,6 +2075,10 @@
           "model_list": {
             "type": "string",
             "description": "List available models"
+          },
+          "provider_list": {
+            "type": "string",
+            "description": "Switch provider"
           },
           "theme_list": {
             "type": "string",

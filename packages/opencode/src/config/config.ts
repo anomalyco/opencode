@@ -77,6 +77,7 @@ export namespace Config {
         .describe("Toggle compact mode for session"),
       tool_details: z.string().optional().describe("Show tool details"),
       model_list: z.string().optional().describe("List available models"),
+      provider_list: z.string().optional().describe("Switch provider"),
       theme_list: z.string().optional().describe("List available themes"),
       project_init: z
         .string()

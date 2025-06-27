@@ -11,14 +11,16 @@ import (
 )
 
 type State struct {
-	Theme    string `toml:"theme"`
-	Provider string `toml:"provider"`
-	Model    string `toml:"model"`
+	Theme         string            `toml:"theme"`
+	Provider      string            `toml:"provider"`
+	Model         string            `toml:"model"`
+	ProviderModels map[string]string `toml:"provider_models"` // Maps provider ID to last selected model
 }
 
 func NewState() *State {
 	return &State{
-		Theme: "opencode",
+		Theme:          "opencode",
+		ProviderModels: make(map[string]string),
 	}
 }
 
@@ -60,6 +62,10 @@ func LoadState(filePath string) (*State, error) {
 			return nil, fmt.Errorf("state file not found at %s: %w", filePath, statErr)
 		}
 		return nil, fmt.Errorf("failed to decode TOML from file %s: %w", filePath, err)
+	}
+	// Initialize ProviderModels map if it's nil
+	if state.ProviderModels == nil {
+		state.ProviderModels = make(map[string]string)
 	}
 	return &state, nil
 }

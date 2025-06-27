@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -344,11 +345,80 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Session = msg
 		a.app.Messages = messages
 	case app.ModelSelectedMsg:
+		// Store previous provider for comparison
+		previousProvider := ""
+		if a.app.Provider != nil {
+			previousProvider = a.app.Provider.Id
+		}
+		
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
 		a.app.State.Provider = msg.Provider.Id
 		a.app.State.Model = msg.Model.Id
+		
+		// Save the selected model for this provider
+		if a.app.State.ProviderModels == nil {
+			a.app.State.ProviderModels = make(map[string]string)
+		}
+		a.app.State.ProviderModels[msg.Provider.Id] = msg.Model.Id
+		
 		a.app.SaveState()
+		
+		// Show toast notification about provider/model change
+		if previousProvider != msg.Provider.Id && previousProvider != "" {
+			return a, toast.NewSuccessToast(
+				fmt.Sprintf("Switched to %s/%s", msg.Provider.Id, msg.Model.Id),
+				toast.WithTitle("Provider changed"),
+			)
+		} else {
+			return a, toast.NewInfoToast(
+				fmt.Sprintf("Selected %s/%s", msg.Provider.Id, msg.Model.Id),
+			)
+		}
+	case dialog.AddProviderRequestMsg:
+		// Show the provider selection dialog for unauthenticated providers
+		authSelectDialog := dialog.NewAuthProviderSelectDialog(a.app)
+		a.modal = authSelectDialog
+	case dialog.StartAuthFlowMsg:
+		// Start the appropriate auth flow based on provider type
+		if msg.Provider.Id == "anthropic" {
+			// Anthropic needs method selection first
+			methodDialog := dialog.NewAuthMethodSelectDialog(a.app, msg.Provider)
+			a.modal = methodDialog
+		} else {
+			switch msg.Provider.AuthType {
+			case "api":
+				apiKeyDialog := dialog.NewAuthAPIKeyDialog(a.app, msg.Provider)
+				a.modal = apiKeyDialog
+				return a, apiKeyDialog.Init()
+			case "oauth":
+				oauthDialog := dialog.NewAuthOAuthDialog(a.app, msg.Provider)
+				a.modal = oauthDialog
+				return a, oauthDialog.Init()
+			}
+		}
+	case dialog.StartOAuthFlowMsg:
+		// Start OAuth flow (from Anthropic method selection)
+		oauthDialog := dialog.NewAuthOAuthDialog(a.app, msg.Provider)
+		a.modal = oauthDialog
+		return a, oauthDialog.Init()
+	case dialog.StartAPIKeyFlowMsg:
+		// Start API key flow (from Anthropic method selection)
+		apiKeyDialog := dialog.NewAuthAPIKeyDialog(a.app, msg.Provider)
+		a.modal = apiKeyDialog
+		return a, apiKeyDialog.Init()
+	case dialog.AuthSuccessMsg:
+		// Refresh provider list after successful auth
+		// Note: Due to provider caching on the server side, the new provider
+		// may not appear until the app is restarted
+		return a, tea.Sequence(
+			a.app.InitializeProvider(),
+			toast.NewSuccessToast("Provider added! Restart the app to see it in the list"),
+		)
+	case dialog.ShowProviderDialogMsg:
+		// Show the provider dialog (used after adding a new provider)
+		providerDialog := dialog.NewProviderDialog(a.app)
+		a.modal = providerDialog
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		a.app.SaveState()
@@ -549,6 +619,10 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.ModelListCommand:
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
+	case commands.ProviderListCommand:
+		// Open provider dialog for switching providers
+		providerDialog := dialog.NewProviderDialog(a.app)
+		a.modal = providerDialog
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog
@@ -672,3 +746,4 @@ func NewModel(app *app.App) tea.Model {
 
 	return model
 }
+

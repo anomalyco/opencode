@@ -79,6 +79,7 @@ const (
 	SessionCompactCommand       CommandName = "session_compact"
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
+	ProviderListCommand         CommandName = "provider_list"
 	ThemeListCommand            CommandName = "theme_list"
 	ProjectInitCommand          CommandName = "project_init"
 	InputClearCommand           CommandName = "input_clear"
@@ -177,6 +178,12 @@ func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
 			Description: "list models",
 			Keybindings: parseBindings("<leader>m"),
 			Trigger:     "models",
+		},
+		{
+			Name:        ProviderListCommand,
+			Description: "switch provider",
+			Keybindings: parseBindings("<leader>p"),
+			Trigger:     "providers",
 		},
 		{
 			Name:        ThemeListCommand,

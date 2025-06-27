@@ -16,6 +16,9 @@ import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../external/ripgrep"
 import { Installation } from "../installation"
 import { Config } from "../config/config"
+import { Auth } from "../auth"
+import { AuthAnthropic } from "../auth/anthropic"
+import { AuthCopilot } from "../auth/copilot"
 
 const ERRORS = {
   400: {
@@ -507,6 +510,235 @@ export namespace Server {
               (item) => Provider.sort(Object.values(item.models))[0].id,
             ),
           })
+        },
+      )
+      .post(
+        "/auth/providers",
+        describeRoute({
+          description: "List providers available for authentication",
+          responses: {
+            200: {
+              description: "List of providers",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.array(
+                      z.object({
+                        id: z.string(),
+                        name: z.string(),
+                        authType: z.enum(["oauth", "api", "env"]),
+                        authenticated: z.boolean(),
+                      }),
+                    ),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const providers = await ModelsDev.get()
+          const authData = await Auth.all()
+          const priority: Record<string, number> = {
+            anthropic: 0,
+            "github-copilot": 1,
+            openai: 2,
+            google: 3,
+          }
+          
+          const authProviders = Object.entries(providers)
+            .filter(([id]) => id !== "amazon-bedrock") // Special case handled differently
+            .map(([id, provider]) => {
+              let authType: "oauth" | "api" | "env" = "api"
+              if (id === "anthropic" || id === "github-copilot") {
+                authType = "oauth"
+              } else if (id === "amazon-bedrock") {
+                authType = "env"
+              }
+              return {
+                id,
+                name: provider.name || id,
+                authType,
+                authenticated: !!authData[id],
+                priority: priority[id] ?? 99,
+              }
+            })
+            .sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name))
+            .map(({ priority, ...rest }) => rest)
+          
+          return c.json(authProviders)
+        },
+      )
+      .post(
+        "/auth/start",
+        describeRoute({
+          description: "Start OAuth authentication flow",
+          responses: {
+            200: {
+              description: "OAuth authorization URL",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      url: z.string(),
+                      verifier: z.string().optional(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            providerId: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { providerId } = c.req.valid("json")
+          
+          if (providerId === "anthropic") {
+            const result = await AuthAnthropic.authorize()
+            return c.json(result)
+          }
+          
+          if (providerId === "github-copilot") {
+            const copilot = await AuthCopilot()
+            if (!copilot) {
+              throw new Error("GitHub Copilot auth not available")
+            }
+            const deviceInfo = await copilot.authorize()
+            return c.json({
+              url: deviceInfo.verification,
+              verifier: deviceInfo.user,
+              deviceCode: deviceInfo.device,
+              interval: deviceInfo.interval,
+            })
+          }
+          
+          throw new Error(`OAuth not supported for provider: ${providerId}`)
+        },
+      )
+      .post(
+        "/auth/exchange",
+        describeRoute({
+          description: "Exchange OAuth code for tokens",
+          responses: {
+            200: {
+              description: "Authentication successful",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            providerId: z.string(),
+            code: z.string(),
+            verifier: z.string().optional(),
+          }),
+        ),
+        async (c) => {
+          const { providerId, code, verifier } = c.req.valid("json")
+          
+          if (providerId === "anthropic") {
+            if (!verifier) {
+              throw new Error("Verifier required for Anthropic OAuth")
+            }
+            await AuthAnthropic.exchange(code, verifier)
+            return c.json({ success: true })
+          }
+          
+          throw new Error(`OAuth exchange not supported for provider: ${providerId}`)
+        },
+      )
+      .post(
+        "/auth/poll",
+        describeRoute({
+          description: "Poll GitHub Copilot device flow",
+          responses: {
+            200: {
+              description: "Poll status",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      status: z.enum(["pending", "success", "failed"]),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            deviceCode: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { deviceCode } = c.req.valid("json")
+          const copilot = await AuthCopilot()
+          if (!copilot) {
+            throw new Error("GitHub Copilot auth not available")
+          }
+          
+          const response = await copilot.poll(deviceCode)
+          if (response.status === "success") {
+            await Auth.set("github-copilot", {
+              type: "oauth",
+              refresh: response.refresh,
+              access: response.access,
+              expires: response.expires,
+            })
+          }
+          
+          return c.json({ status: response.status })
+        },
+      )
+      .post(
+        "/auth/apikey",
+        describeRoute({
+          description: "Set API key for a provider",
+          responses: {
+            200: {
+              description: "API key set successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            providerId: z.string(),
+            apiKey: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { providerId, apiKey } = c.req.valid("json")
+          await Auth.set(providerId, {
+            type: "api",
+            key: apiKey,
+          })
+          return c.json({ success: true })
         },
       )
       .post(
