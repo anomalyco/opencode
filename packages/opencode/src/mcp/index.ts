@@ -1,5 +1,6 @@
 import { experimental_createMCPClient, type Tool } from "ai"
 import { Experimental_StdioMCPTransport } from "ai/mcp-stdio"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
@@ -32,12 +33,21 @@ export namespace MCP {
         }
         log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: {
+          let transport: any
+
+          if (mcp.transport === "http-streaming") {
+            transport = new StreamableHTTPClientTransport(new URL(mcp.url))
+          } else {
+            // Default to SSE
+            transport = {
               type: "sse",
               url: mcp.url,
-            },
+            }
+          }
+
+          const client = await experimental_createMCPClient({
+            name: key,
+            transport,
           }).catch(() => {})
           if (!client) {
             Bus.publish(Session.Event.Error, {

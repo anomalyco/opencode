@@ -55,6 +55,11 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("Enable or disable the MCP server on startup"),
+      transport: z
+        .enum(["sse", "http-streaming"])
+        .optional()
+        .default("sse")
+        .describe("Transport protocol to use (sse or http-streaming)"),
     })
     .strict()
     .openapi({

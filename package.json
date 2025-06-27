@@ -32,7 +32,8 @@
     "semi": false
   },
   "overrides": {
-    "zod": "3.24.2"
+    "zod": "3.24.2",
+    "@modelcontextprotocol/sdk": "1.13.2"
   },
   "trustedDependencies": [
     "esbuild",
