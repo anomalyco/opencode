@@ -161,5 +161,43 @@ export namespace Format {
         }
       },
     },
+    {
+      name: "ktlint",
+      command: ["ktlint", "-F", "$FILE"],
+      extensions: [".kt",".kts"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["ktlint", "-h"],
+            cwd: App.info().path.cwd,
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+        } catch {
+          return false
+        }
+      },
+    },
+    {
+      name: "clang-format",
+      command: ["clang-format", "-i", "$FILE"],
+      extensions: [".java"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["clang-format", "--version"],
+            cwd: App.info().path.cwd,
+            stdout: "ignore",
+            stderr: "ignore",
+          });
+          const exit = await proc.exited;
+          return exit === 0;
+        } catch {
+          return false;
+        }
+      },
+    },
   ]
 }
