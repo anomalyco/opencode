@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/muesli/reflow/truncate"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
@@ -16,7 +17,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 // SessionDialog interface for the session switching dialog
@@ -79,7 +79,7 @@ type sessionDialog struct {
 	width              int
 	height             int
 	modal              *modal.Modal
-	sessions           []client.SessionInfo
+	sessions           []opencode.Session
 	list               list.List[sessionItem]
 	app                *app.App
 	deleteConfirmation int // -1 means no confirmation, >= 0 means confirming deletion of session at this index
@@ -122,7 +122,7 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							s.updateListItems()
 							return nil
 						},
-						s.deleteSession(sessionToDelete.Id),
+						s.deleteSession(sessionToDelete.ID),
 					)
 				} else {
 					// First press - enter delete confirmation mode
@@ -193,10 +193,10 @@ func (s *sessionDialog) Close() tea.Cmd {
 func NewSessionDialog(app *app.App) SessionDialog {
 	sessions, _ := app.ListSessions(context.Background())
 
-	var filteredSessions []client.SessionInfo
+	var filteredSessions []opencode.Session
 	var items []sessionItem
 	for _, sess := range sessions {
-		if sess.ParentID != nil {
+		if sess.ParentID != "" {
 			continue
 		}
 		filteredSessions = append(filteredSessions, sess)

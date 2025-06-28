@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/sst/opencode-sdk-go"
 )
 
-func (c *Client) Event(ctx context.Context) (<-chan any, error) {
+func Event(c *opencode.Client, url string, ctx context.Context) (<-chan any, error) {
 	events := make(chan any)
-	req, err := http.NewRequestWithContext(ctx, "GET", c.Server+"event", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url+"event", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -31,15 +33,12 @@ func (c *Client) Event(ctx context.Context) (<-chan any, error) {
 			if strings.HasPrefix(line, "data: ") {
 				data := strings.TrimPrefix(line, "data: ")
 
-				var event Event
+				var event opencode.EventListResponse
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
 					continue
 				}
 
-				val, err := event.ValueByDiscriminator()
-				if err != nil {
-					continue
-				}
+				val := event.AsUnion()
 
 				select {
 				case events <- val:

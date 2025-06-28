@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://app.stainless.com/config.schema.json
+
+organization:
+  name: opencode
+  docs: "https://opencode.ai/docs"
+  contact: "support@sst.dev"
+
+targets:
+  typescript:
+    package_name: "@opencode-ai/sdk"
+    production_repo: "sst/opencode-sdk-js"
+    publish:
+      npm: true
+    skip: false
+  go:
+    package_name: opencode
+    production_repo: sst/opencode-sdk-go
+    skip: false
+  python:
+    project_name: opencode-ai
+    package_name: opencode_ai
+    production_repo: sst/opencode-sdk-python
+    publish:
+      pypi: true
+    skip: false
+
+environments:
+  production: http://localhost:54321
+
+resources:
+  $shared:
+    models:
+      unknownError: UnknownError
+      providerAuthError: ProviderAuthError
+
+  event:
+    methods:
+      list: get /event
+
+  app:
+    models:
+      app: App
+    methods:
+      get: get /app
+      init: post /app/init
+
+  file:
+    methods:
+      search: get /file
+
+  config:
+    models:
+      config: Config
+      keybinds: KeybindsConfig
+      mcpLocal: McpLocalConfig
+      mcpRemote: McpRemoteConfig
+      provider: Provider
+      model: Model
+    methods:
+      get: get /config
+      providers: get /config/providers
+
+  session:
+    models:
+      session: Session
+      message: Message
+      toolCall: ToolCall
+      toolPartialCall: ToolPartialCall
+      toolResult: ToolResult
+      textPart: TextPart
+      reasoningPart: ReasoningPart
+      toolInvocationPart: ToolInvocationPart
+      sourceUrlPart: SourceUrlPart
+      filePart: FilePart
+      stepStartPart: StepStartPart
+      messagePart: MessagePart
+    methods:
+      list: get /session
+      create: post /session
+      delete: delete /session/{id}
+      init: post /session/{id}/init
+      abort: post /session/{id}/abort
+      share: post /session/{id}/share
+      unshare: delete /session/{id}/share
+      summarize: post /session/{id}/summarize
+      messages: get /session/{id}/message
+      chat: post /session/{id}/message
+
+settings:
+  disable_mock_tests: true
+  license: Apache-2.0
+
+security:
+  - {}
+
+readme:
+  example_requests:
+    default:
+      type: request
+      endpoint: get /event
+      params: {}
+    headline:
+      type: request
+      endpoint: get /event
+      params: {}

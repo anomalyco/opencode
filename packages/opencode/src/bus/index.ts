@@ -49,7 +49,7 @@ export namespace Bus {
     )
   }
 
-  export function publish<Definition extends EventDefinition>(
+  export async function publish<Definition extends EventDefinition>(
     def: Definition,
     properties: z.output<Definition["properties"]>,
   ) {
@@ -60,12 +60,14 @@ export namespace Bus {
     log.info("publishing", {
       type: def.type,
     })
+    const pending = []
     for (const key of [def.type, "*"]) {
       const match = state().subscriptions.get(key)
       for (const sub of match ?? []) {
-        sub(payload)
+        pending.push(sub(payload))
       }
     }
+    return Promise.all(pending)
   }
 
   export function subscribe<Definition extends EventDefinition>(

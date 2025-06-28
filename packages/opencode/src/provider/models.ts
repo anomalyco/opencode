@@ -29,7 +29,7 @@ export namespace ModelsDev {
       options: z.record(z.any()),
     })
     .openapi({
-      ref: "Model.Info",
+      ref: "Model",
     })
   export type Model = z.infer<typeof Model>
 
@@ -43,7 +43,7 @@ export namespace ModelsDev {
       models: z.record(Model),
     })
     .openapi({
-      ref: "Provider.Info",
+      ref: "Provider",
     })
 
   export type Provider = z.infer<typeof Provider>

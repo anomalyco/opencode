@@ -8,12 +8,11 @@ import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 
-const url = "https://opencode.ai"
 const github = "https://github.com/sst/opencode"
 
 // https://astro.build/config
 export default defineConfig({
-  site: url,
+  site: config.url,
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
@@ -41,20 +40,6 @@ export default defineConfig({
             href: "/favicon.svg",
           },
         },
-        {
-          tag: "meta",
-          attrs: {
-            property: "og:image",
-            content: `${url}/social-share.png`,
-          },
-        },
-        {
-          tag: "meta",
-          attrs: {
-            property: "twitter:image",
-            content: `${url}/social-share.png`,
-          },
-        },
       ],
       editLink: {
         baseUrl: `${github}/edit/master/www/`,
@@ -80,6 +65,7 @@ export default defineConfig({
       ],
       components: {
         Hero: "./src/components/Hero.astro",
+        Head: "./src/components/Head.astro",
         Header: "./src/components/Header.astro",
       },
       plugins: [

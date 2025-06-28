@@ -128,7 +128,7 @@ func (c *commandsComponent) View() string {
 		if c.showKeybinds {
 			for _, kb := range cmd.Keybindings {
 				if kb.RequiresLeader {
-					keybindStrs = append(keybindStrs, *c.app.Config.Keybinds.Leader+" "+kb.Key)
+					keybindStrs = append(keybindStrs, c.app.Config.Keybinds.Leader+" "+kb.Key)
 				} else {
 					keybindStrs = append(keybindStrs, kb.Key)
 				}

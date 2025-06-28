@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
@@ -17,7 +18,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 const (
@@ -32,8 +32,8 @@ type ModelDialog interface {
 
 type modelDialog struct {
 	app                *app.App
-	availableProviders []client.ProviderInfo
-	provider           client.ProviderInfo
+	availableProviders []opencode.Provider
+	provider           opencode.Provider
 	width              int
 	height             int
 	hScrollOffset      int
@@ -69,7 +69,7 @@ var modelKeys = modelKeyMap{
 }
 
 func (m *modelDialog) Init() tea.Cmd {
-	m.setupModelsForProvider(m.provider.Id)
+	m.setupModelsForProvider(m.provider.ID)
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, modelKeys.Enter):
 			selectedItem, _ := m.modelList.GetSelectedItem()
 			models := m.models()
-			var selectedModel client.ModelInfo
+			var selectedModel opencode.Model
 			for _, model := range models {
 				if model.Name == string(selectedItem) {
 					selectedModel = model
@@ -119,8 +119,8 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *modelDialog) models() []client.ModelInfo {
-	models := slices.SortedFunc(maps.Values(m.provider.Models), func(a, b client.ModelInfo) int {
+func (m *modelDialog) models() []opencode.Model {
+	models := slices.SortedFunc(maps.Values(m.provider.Models), func(a, b opencode.Model) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	return models
@@ -139,7 +139,7 @@ func (m *modelDialog) switchProvider(offset int) {
 	m.hScrollOffset = newOffset
 	m.provider = m.availableProviders[m.hScrollOffset]
 	m.modal.SetTitle(fmt.Sprintf("Select %s Model", m.provider.Name))
-	m.setupModelsForProvider(m.provider.Id)
+	m.setupModelsForProvider(m.provider.ID)
 }
 
 func (m *modelDialog) View() string {
@@ -175,9 +175,9 @@ func (m *modelDialog) setupModelsForProvider(providerId string) {
 	m.modelList = list.NewStringList(modelNames, numVisibleModels, "No models available", true)
 	m.modelList.SetMaxWidth(maxDialogWidth)
 
-	if m.app.Provider != nil && m.app.Model != nil && m.app.Provider.Id == providerId {
+	if m.app.Provider != nil && m.app.Model != nil && m.app.Provider.ID == providerId {
 		for i, model := range models {
-			if model.Id == m.app.Model.Id {
+			if model.ID == m.app.Model.ID {
 				m.modelList.SetSelectedIndex(i)
 				break
 			}
@@ -200,7 +200,7 @@ func NewModelDialog(app *app.App) ModelDialog {
 	hScrollOffset := 0
 	if app.Provider != nil {
 		for i, provider := range availableProviders {
-			if provider.Id == app.Provider.Id {
+			if provider.ID == app.Provider.ID {
 				currentProvider = provider
 				hScrollOffset = i
 				break
@@ -220,6 +220,6 @@ func NewModelDialog(app *app.App) ModelDialog {
 		),
 	}
 
-	dialog.setupModelsForProvider(currentProvider.Id)
+	dialog.setupModelsForProvider(currentProvider.ID)
 	return dialog
 }

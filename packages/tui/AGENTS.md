@@ -5,7 +5,6 @@
 - **Build**: `go build ./cmd/opencode` (builds main binary)
 - **Test**: `go test ./...` (runs all tests)
 - **Single test**: `go test ./internal/theme -run TestLoadThemesFromJSON` (specific test)
-- **Generate client**: `go generate ./pkg/client/` (after server endpoint changes)
 - **Release build**: Uses `.goreleaser.yml` configuration
 
 ## Code Style

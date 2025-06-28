@@ -142,7 +142,7 @@ if (!snapshot) {
     "# Maintainer: dax",
     "# Maintainer: adam",
     "",
-    "pkgname='opencode-bin'",
+    "pkgname='${pkg}'",
     `pkgver=${version.split("-")[0]}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
@@ -166,14 +166,17 @@ if (!snapshot) {
     "",
   ].join("\n")
 
-  await $`rm -rf ./dist/aur-opencode-bin`
-
-  await $`git clone ssh://aur@aur.archlinux.org/opencode-bin.git ./dist/aur-opencode-bin`
-  await Bun.file("./dist/aur-opencode-bin/PKGBUILD").write(pkgbuild)
-  await $`cd ./dist/aur-opencode-bin && makepkg --printsrcinfo > .SRCINFO`
-  await $`cd ./dist/aur-opencode-bin && git add PKGBUILD .SRCINFO`
-  await $`cd ./dist/aur-opencode-bin && git commit -m "Update to v${version}"`
-  if (!dry) await $`cd ./dist/aur-opencode-bin && git push`
+  for (const pkg of ["opencode", "opencode-bin"]) {
+    await $`rm -rf ./dist/aur-${pkg}`
+    await $`git clone ssh://aur@aur.archlinux.org/opencode-bin.git ./dist/aur-${pkg}`
+    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(
+      pkgbuild.replace("${pkg}", pkg),
+    )
+    await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
+    await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
+    await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
+    if (!dry) await $`cd ./dist/aur-${pkg} && git push`
+  }
 
   // Homebrew formula
   const homebrewFormula = [

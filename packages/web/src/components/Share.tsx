@@ -23,7 +23,6 @@ import {
 } from "./icons/custom"
 import {
   IconFolder,
-  IconCpuChip,
   IconHashtag,
   IconSparkles,
   IconGlobeAlt,
@@ -40,6 +39,7 @@ import {
   IconMagnifyingGlass,
   IconWrenchScrewdriver,
   IconDocumentMagnifyingGlass,
+  IconArrowDown,
 } from "./icons"
 import DiffView from "./DiffView"
 import CodeBlock from "./CodeBlock"
@@ -85,7 +85,7 @@ function scrollToAnchor(id: string) {
   el.scrollIntoView({ behavior: "smooth" })
 }
 
-function stripWorkingDirectory(filePath: string, workingDir?: string) {
+function stripWorkingDirectory(filePath?: string, workingDir?: string) {
   if (filePath === undefined || workingDir === undefined) return filePath
 
   const prefix = workingDir.endsWith("/") ? workingDir : workingDir + "/"
@@ -102,10 +102,7 @@ function stripWorkingDirectory(filePath: string, workingDir?: string) {
 }
 
 function getShikiLang(filename: string) {
-  const ext = filename
-    .split('.')
-    .pop()
-    ?.toLowerCase() ?? ''
+  const ext = filename.split(".").pop()?.toLowerCase() ?? ""
 
   // map.languages(ext) returns an array of matching Linguist language names (e.g. ['TypeScript'])
   const langs = map.languages(ext)
@@ -113,12 +110,10 @@ function getShikiLang(filename: string) {
 
   // Overrride any specific language mappings
   const overrides: Record<string, string> = {
-    "conf": "shellscript"
+    conf: "shellscript",
   }
 
-  return type
-    ? overrides[type] ?? type
-    : 'plaintext'
+  return type ? (overrides[type] ?? type) : "plaintext"
 }
 
 function formatDuration(ms: number): string {
@@ -600,11 +595,16 @@ export default function Share(props: {
   info: Session.Info
   messages: Record<string, Message.Info>
 }) {
+  let lastScrollY = 0
   let hasScrolled = false
+  let scrollTimeout: number | undefined
 
   const id = props.id
   const params = new URLSearchParams(window.location.search)
   const debug = params.get("debug") === "true"
+
+  const [showScrollButton, setShowScrollButton] = createSignal(false)
+  const [isButtonHovered, setIsButtonHovered] = createSignal(false)
 
   const anchorId = createMemo<string | null>(() => {
     const raw = window.location.hash.slice(1)
@@ -721,6 +721,54 @@ export default function Share(props: {
     })
   })
 
+  function checkScrollNeed() {
+    const currentScrollY = window.scrollY
+    const isScrollingDown = currentScrollY > lastScrollY
+    const scrolled = currentScrollY > 200 // Show after scrolling 200px
+    const isNearBottom = window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
+
+    // Only show when scrolling down, scrolled enough, and not near bottom
+    const shouldShow = isScrollingDown && scrolled && !isNearBottom
+
+    // Update last scroll position
+    lastScrollY = currentScrollY
+
+    if (shouldShow) {
+      setShowScrollButton(true)
+      // Clear existing timeout
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
+      // Hide button after 3 seconds of no scrolling (unless hovered)
+      scrollTimeout = window.setTimeout(() => {
+        if (!isButtonHovered()) {
+          setShowScrollButton(false)
+        }
+      }, 3000)
+    } else if (!isButtonHovered()) {
+      // Only hide if not hovered (to prevent disappearing while user is about to click)
+      setShowScrollButton(false)
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout)
+      }
+    }
+  }
+
+  onMount(() => {
+    lastScrollY = window.scrollY // Initialize scroll position
+    checkScrollNeed()
+    window.addEventListener("scroll", checkScrollNeed)
+    window.addEventListener("resize", checkScrollNeed)
+  })
+
+  onCleanup(() => {
+    window.removeEventListener("scroll", checkScrollNeed)
+    window.removeEventListener("resize", checkScrollNeed)
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout)
+    }
+  })
+
   const data = createMemo(() => {
     const result = {
       rootDir: undefined as string | undefined,
@@ -787,59 +835,15 @@ export default function Share(props: {
           <h1>{store.info?.title}</h1>
         </div>
         <div data-section="row">
-          <ul data-section="stats">
-            <li>
-              <span data-element-label>Cost</span>
-              {data().cost !== undefined ? (
-                <span>${data().cost.toFixed(2)}</span>
-              ) : (
-                <span data-placeholder>&mdash;</span>
-              )}
-            </li>
-            <li>
-              <span data-element-label>Input Tokens</span>
-              {data().tokens.input ? (
-                <span>{data().tokens.input}</span>
-              ) : (
-                <span data-placeholder>&mdash;</span>
-              )}
-            </li>
-            <li>
-              <span data-element-label>Output Tokens</span>
-              {data().tokens.output ? (
-                <span>{data().tokens.output}</span>
-              ) : (
-                <span data-placeholder>&mdash;</span>
-              )}
-            </li>
-            <li>
-              <span data-element-label>Reasoning Tokens</span>
-              {data().tokens.reasoning ? (
-                <span>{data().tokens.reasoning}</span>
-              ) : (
-                <span data-placeholder>&mdash;</span>
-              )}
-            </li>
-          </ul>
-          <Show when={data().rootDir}>
-            <ul data-section="stats" data-section-root>
-              <li title="Project root">
-                <div data-stat-icon>
-                  <IconFolder width={16} height={16} />
-                </div>
-                <span>{data().rootDir}</span>
-              </li>
-              <li title="opencode version">
-                <div data-stat-icon title="opencode">
-                  <IconOpencode width={16} height={16} />
-                </div>
-                <Show when={store.info?.version} fallback="v0.0.1">
-                  <span>v{store.info?.version}</span>
-                </Show>
-              </li>
-            </ul>
-          </Show>
           <ul data-section="stats" data-section-models>
+            <li title="opencode version">
+              <div data-stat-icon title="opencode">
+                <IconOpencode width={16} height={16} />
+              </div>
+              <Show when={store.info?.version} fallback="v0.0.1">
+                <span>v{store.info?.version}</span>
+              </Show>
+            </li>
             {Object.values(data().models).length > 0 ? (
               <For each={Object.values(data().models)}>
                 {([provider, model]) => (
@@ -875,6 +879,7 @@ export default function Share(props: {
               </span>
             )}
           </div>
+
         </div>
       </div>
 
@@ -1008,13 +1013,6 @@ export default function Share(props: {
                           }
                         >
                           {(assistant) => {
-                            const system = createMemo(() => {
-                              const prompts = assistant().system || []
-                              return prompts.filter(
-                                (p: string) =>
-                                  !p.startsWith("You are Claude"),
-                              )
-                            })
                             return (
                               <div
                                 id={anchor()}
@@ -1040,67 +1038,13 @@ export default function Share(props: {
                                     <span data-part-model>
                                       {assistant().modelID}
                                     </span>
-                                    <Show when={system().length > 0}>
-                                      <div data-part-tool-result>
-                                        <ResultsButton
-                                          showCopy="Show system prompt"
-                                          hideCopy="Hide system prompt"
-                                          results={showResults()}
-                                          onClick={() =>
-                                            setShowResults((e) => !e)
-                                          }
-                                        />
-                                        <Show when={showResults()}>
-                                          <TextPart
-                                            expand
-                                            data-size="sm"
-                                            data-color="dimmed"
-                                            text={system().join("\n\n").trim()}
-                                          />
-                                        </Show>
-                                      </div>
-                                    </Show>
                                   </div>
                                 </div>
                               </div>
                             )
                           }}
                         </Match>
-                        {/* System text */}
-                        <Match
-                          when={
-                            msg.role === "system" &&
-                            part.type === "text" &&
-                            part
-                          }
-                        >
-                          {(part) => (
-                            <div
-                              id={anchor()}
-                              data-section="part"
-                              data-part-type="system-text"
-                            >
-                              <div data-section="decoration">
-                                <AnchorIcon id={anchor()}>
-                                  <IconCpuChip width={18} height={18} />
-                                </AnchorIcon>
-                                <div></div>
-                              </div>
-                              <div data-section="content">
-                                <div data-part-tool-body>
-                                  <div data-part-title>
-                                    <span data-element-label>System</span>
-                                  </div>
-                                  <TextPart
-                                    data-size="sm"
-                                    text={part().text}
-                                    data-color="dimmed"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </Match>
+
                         {/* Grep tool */}
                         <Match
                           when={
@@ -1293,12 +1237,12 @@ export default function Share(props: {
                         >
                           {(_part) => {
                             const path = createMemo(() =>
-                              toolData()?.args.path !== data().rootDir
+                              toolData()?.args?.path !== data().rootDir
                                 ? stripWorkingDirectory(
-                                  toolData()?.args.path,
+                                  toolData()?.args?.path,
                                   data().rootDir,
                                 )
-                                : toolData()?.args.path,
+                                : toolData()?.args?.path,
                             )
 
                             return (
@@ -1320,7 +1264,9 @@ export default function Share(props: {
                                   <div data-part-tool-body>
                                     <div data-part-title>
                                       <span data-element-label>LS</span>
-                                      <b>{path()}</b>
+                                      <b title={toolData()?.args?.path}>
+                                        {path()}
+                                      </b>
                                     </div>
                                     <Switch>
                                       <Match when={toolData()?.result}>
@@ -1363,7 +1309,7 @@ export default function Share(props: {
                           {(_part) => {
                             const filePath = createMemo(() =>
                               stripWorkingDirectory(
-                                toolData()?.args.filePath,
+                                toolData()?.args?.filePath,
                                 data().rootDir,
                               ),
                             )
@@ -1386,7 +1332,9 @@ export default function Share(props: {
                                   <div data-part-tool-body>
                                     <div data-part-title>
                                       <span data-element-label>Read</span>
-                                      <b>{filePath()}</b>
+                                      <b title={toolData()?.args?.filePath}>
+                                        {filePath()}
+                                      </b>
                                     </div>
                                     <Switch>
                                       <Match when={hasError()}>
@@ -1458,7 +1406,7 @@ export default function Share(props: {
                           {(_part) => {
                             const filePath = createMemo(() =>
                               stripWorkingDirectory(
-                                toolData()?.args.filePath,
+                                toolData()?.args?.filePath,
                                 data().rootDir,
                               ),
                             )
@@ -1487,7 +1435,9 @@ export default function Share(props: {
                                   <div data-part-tool-body>
                                     <div data-part-title>
                                       <span data-element-label>Write</span>
-                                      <b>{filePath()}</b>
+                                      <b title={toolData()?.args?.filePath}>
+                                        {filePath()}
+                                      </b>
                                     </div>
                                     <Show when={diagnostics().length > 0}>
                                       <ErrorPart>{diagnostics()}</ErrorPart>
@@ -1497,7 +1447,7 @@ export default function Share(props: {
                                         <div data-part-tool-result>
                                           <ErrorPart>
                                             {formatErrorString(
-                                              toolData()?.result,
+                                              toolData()?.result
                                             )}
                                           </ErrorPart>
                                         </div>
@@ -1516,7 +1466,7 @@ export default function Share(props: {
                                             <div data-part-tool-code>
                                               <CodeBlock
                                                 lang={getShikiLang(filePath())}
-                                                code={args.content}
+                                                code={toolData()?.args?.content}
                                               />
                                             </div>
                                           </Show>
@@ -1574,7 +1524,9 @@ export default function Share(props: {
                                   <div data-part-tool-body>
                                     <div data-part-title>
                                       <span data-element-label>Edit</span>
-                                      <b>{filePath()}</b>
+                                      <b title={toolData()?.args?.filePath}>
+                                        {filePath()}
+                                      </b>
                                     </div>
                                     <Switch>
                                       <Match when={hasError()}>
@@ -1658,8 +1610,7 @@ export default function Share(props: {
                           when={
                             msg.role === "assistant" &&
                             part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName ===
-                            "todowrite" &&
+                            part.toolInvocation.toolName === "todowrite" &&
                             part
                           }
                         >
@@ -1724,8 +1675,7 @@ export default function Share(props: {
                           when={
                             msg.role === "assistant" &&
                             part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName ===
-                            "webfetch" &&
+                            part.toolInvocation.toolName === "webfetch" &&
                             part
                           }
                         >
@@ -1899,9 +1849,7 @@ export default function Share(props: {
                                   >
                                     <IconSparkles width={18} height={18} />
                                   </Match>
-                                  <Match when={msg.role === "system"}>
-                                    <IconCpuChip width={18} height={18} />
-                                  </Match>
+
                                   <Match when={msg.role === "user"}>
                                     <IconUserCircle width={18} height={18} />
                                   </Match>
@@ -1927,13 +1875,47 @@ export default function Share(props: {
                 </For>
               )}
             </For>
-            <div data-section="part" data-part-type="connection-status">
+            <div data-section="part" data-part-type="summary">
               <div data-section="decoration">
                 <span data-status={connectionStatus()[0]}></span>
                 <div></div>
               </div>
               <div data-section="content">
-                <span>{getStatusText(connectionStatus())}</span>
+                <p data-section="copy">{getStatusText(connectionStatus())}</p>
+                <ul data-section="stats">
+                  <li>
+                    <span data-element-label>Cost</span>
+                    {data().cost !== undefined ? (
+                      <span>${data().cost.toFixed(2)}</span>
+                    ) : (
+                      <span data-placeholder>&mdash;</span>
+                    )}
+                  </li>
+                  <li>
+                    <span data-element-label>Input Tokens</span>
+                    {data().tokens.input ? (
+                      <span>{data().tokens.input}</span>
+                    ) : (
+                      <span data-placeholder>&mdash;</span>
+                    )}
+                  </li>
+                  <li>
+                    <span data-element-label>Output Tokens</span>
+                    {data().tokens.output ? (
+                      <span>{data().tokens.output}</span>
+                    ) : (
+                      <span data-placeholder>&mdash;</span>
+                    )}
+                  </li>
+                  <li>
+                    <span data-element-label>Reasoning Tokens</span>
+                    {data().tokens.reasoning ? (
+                      <span>{data().tokens.reasoning}</span>
+                    ) : (
+                      <span data-placeholder>&mdash;</span>
+                    )}
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
@@ -1974,6 +1956,36 @@ export default function Share(props: {
             </Show>
           </div>
         </div>
+      </Show>
+
+      <Show when={showScrollButton()}>
+        <button
+          type="button"
+          class={styles["scroll-button"]}
+          onClick={() =>
+            document.body.scrollIntoView({ behavior: "smooth", block: "end" })
+          }
+          onMouseEnter={() => {
+            setIsButtonHovered(true)
+            if (scrollTimeout) {
+              clearTimeout(scrollTimeout)
+            }
+          }}
+          onMouseLeave={() => {
+            setIsButtonHovered(false)
+            if (showScrollButton()) {
+              scrollTimeout = window.setTimeout(() => {
+                if (!isButtonHovered()) {
+                  setShowScrollButton(false)
+                }
+              }, 3000)
+            }
+          }}
+          title="Scroll to bottom"
+          aria-label="Scroll to bottom"
+        >
+          <IconArrowDown width={20} height={20} />
+        </button>
       </Show>
     </main>
   )

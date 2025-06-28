@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode-sdk-go"
+	"github.com/sst/opencode-sdk-go/option"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/pkg/client"
@@ -25,7 +27,7 @@ func main() {
 	url := os.Getenv("OPENCODE_SERVER")
 
 	appInfoStr := os.Getenv("OPENCODE_APP_INFO")
-	var appInfo client.AppInfo
+	var appInfo opencode.App
 	err := json.Unmarshal([]byte(appInfoStr), &appInfo)
 	if err != nil {
 		slog.Error("Failed to unmarshal app info", "error", err)
@@ -49,7 +51,12 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(file, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
 
-	httpClient, err := client.NewClientWithResponses(url)
+	slog.Debug("TUI launched", "app", appInfo)
+
+	httpClient := opencode.NewClient(
+		option.WithBaseURL(url),
+	)
+
 	if err != nil {
 		slog.Error("Failed to create client", "error", err)
 		os.Exit(1)
@@ -66,19 +73,12 @@ func main() {
 
 	program := tea.NewProgram(
 		tui.NewModel(app_),
-		// tea.WithColorProfile(colorprofile.ANSI),
 		tea.WithAltScreen(),
 		tea.WithKeyboardEnhancements(),
 		tea.WithMouseCellMotion(),
 	)
 
-	eventClient, err := client.NewClient(url)
-	if err != nil {
-		slog.Error("Failed to create event client", "error", err)
-		os.Exit(1)
-	}
-
-	evts, err := eventClient.Event(ctx)
+	evts, err := client.Event(httpClient, url, ctx)
 	if err != nil {
 		slog.Error("Failed to subscribe to events", "error", err)
 		os.Exit(1)

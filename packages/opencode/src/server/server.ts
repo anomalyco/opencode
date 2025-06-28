@@ -9,12 +9,10 @@ import { z } from "zod"
 import { Message } from "../session/message"
 import { Provider } from "../provider/provider"
 import { App } from "../app/app"
-import { Global } from "../global"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../external/ripgrep"
-import { Installation } from "../installation"
 import { Config } from "../config/config"
 
 const ERRORS = {
@@ -70,12 +68,12 @@ export namespace Server {
         })
       })
       .get(
-        "/openapi",
+        "/doc",
         openAPISpecs(app, {
           documentation: {
             info: {
               title: "opencode",
-              version: "1.0.0",
+              version: "0.0.2",
               description: "opencode api",
             },
             openapi: "3.0.0",
@@ -122,8 +120,8 @@ export namespace Server {
           })
         },
       )
-      .post(
-        "/app_info",
+      .get(
+        "/app",
         describeRoute({
           description: "Get app info",
           responses: {
@@ -142,26 +140,7 @@ export namespace Server {
         },
       )
       .post(
-        "/config_get",
-        describeRoute({
-          description: "Get config info",
-          responses: {
-            200: {
-              description: "Get config info",
-              content: {
-                "application/json": {
-                  schema: resolver(Config.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(await Config.get())
-        },
-      )
-      .post(
-        "/app_initialize",
+        "/app/init",
         describeRoute({
           description: "Initialize the app",
           responses: {
@@ -180,172 +159,27 @@ export namespace Server {
           return c.json(true)
         },
       )
-      .post(
-        "/session_initialize",
+      .get(
+        "/config",
         describeRoute({
-          description: "Analyze the app and create an AGENTS.md file",
+          description: "Get config info",
           responses: {
             200: {
-              description: "200",
+              description: "Get config info",
               content: {
                 "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-            providerID: z.string(),
-            modelID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const body = c.req.valid("json")
-          await Session.initialize(body)
-          return c.json(true)
-        },
-      )
-      .post(
-        "/path_get",
-        describeRoute({
-          description: "Get paths",
-          responses: {
-            200: {
-              description: "200",
-              content: {
-                "application/json": {
-                  schema: resolver(
-                    z.object({
-                      root: z.string(),
-                      data: z.string(),
-                      cwd: z.string(),
-                      config: z.string(),
-                    }),
-                  ),
+                  schema: resolver(Config.Info),
                 },
               },
             },
           },
         }),
         async (c) => {
-          const app = App.info()
-          return c.json({
-            root: app.path.root,
-            data: app.path.data,
-            cwd: app.path.cwd,
-            config: Global.Path.data,
-          })
+          return c.json(await Config.get())
         },
       )
-      .post(
-        "/session_create",
-        describeRoute({
-          description: "Create a new session",
-          responses: {
-            ...ERRORS,
-            200: {
-              description: "Successfully created session",
-              content: {
-                "application/json": {
-                  schema: resolver(Session.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const session = await Session.create()
-          return c.json(session)
-        },
-      )
-      .post(
-        "/session_share",
-        describeRoute({
-          description: "Share the session",
-          responses: {
-            200: {
-              description: "Successfully shared session",
-              content: {
-                "application/json": {
-                  schema: resolver(Session.Info),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const body = c.req.valid("json")
-          await Session.share(body.sessionID)
-          const session = await Session.get(body.sessionID)
-          return c.json(session)
-        },
-      )
-      .post(
-        "/session_unshare",
-        describeRoute({
-          description: "Unshare the session",
-          responses: {
-            200: {
-              description: "Successfully unshared session",
-              content: {
-                "application/json": {
-                  schema: resolver(Session.Info),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const body = c.req.valid("json")
-          await Session.unshare(body.sessionID)
-          const session = await Session.get(body.sessionID)
-          return c.json(session)
-        },
-      )
-      .post(
-        "/session_messages",
-        describeRoute({
-          description: "Get messages for a session",
-          responses: {
-            200: {
-              description: "Successfully created session",
-              content: {
-                "application/json": {
-                  schema: resolver(Message.Info.array()),
-                },
-              },
-            },
-          },
-        }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
-        async (c) => {
-          const messages = await Session.messages(c.req.valid("json").sessionID)
-          return c.json(messages)
-        },
-      )
-      .post(
-        "/session_list",
+      .get(
+        "/session",
         describeRoute({
           description: "List all sessions",
           responses: {
@@ -365,33 +199,28 @@ export namespace Server {
         },
       )
       .post(
-        "/session_abort",
+        "/session",
         describeRoute({
-          description: "Abort a session",
+          description: "Create a new session",
           responses: {
+            ...ERRORS,
             200: {
-              description: "Aborted session",
+              description: "Successfully created session",
               content: {
                 "application/json": {
-                  schema: resolver(z.boolean()),
+                  schema: resolver(Session.Info),
                 },
               },
             },
           },
         }),
-        zValidator(
-          "json",
-          z.object({
-            sessionID: z.string(),
-          }),
-        ),
         async (c) => {
-          const body = c.req.valid("json")
-          return c.json(Session.abort(body.sessionID))
+          const session = await Session.create()
+          return c.json(session)
         },
       )
-      .post(
-        "/session_delete",
+      .delete(
+        "/session/:id",
         describeRoute({
           description: "Delete a session and all its data",
           responses: {
@@ -406,24 +235,23 @@ export namespace Server {
           },
         }),
         zValidator(
-          "json",
+          "param",
           z.object({
-            sessionID: z.string(),
+            id: z.string(),
           }),
         ),
         async (c) => {
-          const body = c.req.valid("json")
-          await Session.remove(body.sessionID)
+          await Session.remove(c.req.valid("param").id)
           return c.json(true)
         },
       )
       .post(
-        "/session_summarize",
+        "/session/:id/init",
         describeRoute({
-          description: "Summarize the session",
+          description: "Analyze the app and create an AGENTS.md file",
           responses: {
             200: {
-              description: "Summarize the session",
+              description: "200",
               content: {
                 "application/json": {
                   schema: resolver(z.boolean()),
@@ -433,26 +261,174 @@ export namespace Server {
           },
         }),
         zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+          }),
+        ),
+        zValidator(
           "json",
           z.object({
-            sessionID: z.string(),
             providerID: z.string(),
             modelID: z.string(),
           }),
         ),
         async (c) => {
+          const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          await Session.summarize(body)
+          await Session.initialize({ ...body, sessionID })
           return c.json(true)
         },
       )
       .post(
-        "/session_chat",
+        "/session/:id/abort",
         describeRoute({
-          description: "Chat with a model",
+          description: "Abort a session",
           responses: {
             200: {
-              description: "Chat with a model",
+              description: "Aborted session",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          return c.json(Session.abort(c.req.valid("param").id))
+        },
+      )
+      .post(
+        "/session/:id/share",
+        describeRoute({
+          description: "Share a session",
+          responses: {
+            200: {
+              description: "Successfully shared session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          await Session.share(id)
+          const session = await Session.get(id)
+          return c.json(session)
+        },
+      )
+      .delete(
+        "/session/:id/share",
+        describeRoute({
+          description: "Unshare the session",
+          responses: {
+            200: {
+              description: "Successfully unshared session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          await Session.unshare(id)
+          const session = await Session.get(id)
+          return c.json(session)
+        },
+      )
+      .post(
+        "/session/:id/summarize",
+        describeRoute({
+          description: "Summarize the session",
+          responses: {
+            200: {
+              description: "Summarized session",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+          }),
+        ),
+        zValidator(
+          "json",
+          z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const body = c.req.valid("json")
+          await Session.summarize({ ...body, sessionID: id })
+          return c.json(true)
+        },
+      )
+      .get(
+        "/session/:id/message",
+        describeRoute({
+          description: "List messages for a session",
+          responses: {
+            200: {
+              description: "List of messages",
+              content: {
+                "application/json": {
+                  schema: resolver(Message.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const messages = await Session.messages(c.req.valid("param").id)
+          return c.json(messages)
+        },
+      )
+      .post(
+        "/session/:id/message",
+        describeRoute({
+          description: "Create and send a new message to a session",
+          responses: {
+            200: {
+              description: "Created message",
               content: {
                 "application/json": {
                   schema: resolver(Message.Info),
@@ -462,22 +438,28 @@ export namespace Server {
           },
         }),
         zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+          }),
+        ),
+        zValidator(
           "json",
           z.object({
-            sessionID: z.string(),
             providerID: z.string(),
             modelID: z.string(),
-            parts: Message.Part.array(),
+            parts: Message.MessagePart.array(),
           }),
         ),
         async (c) => {
+          const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.chat(body)
+          const msg = await Session.chat({ ...body, sessionID })
           return c.json(msg)
         },
       )
-      .post(
-        "/provider_list",
+      .get(
+        "/config/providers",
         describeRoute({
           description: "List all providers",
           responses: {
@@ -509,8 +491,8 @@ export namespace Server {
           })
         },
       )
-      .post(
-        "/file_search",
+      .get(
+        "/file",
         describeRoute({
           description: "Search for files",
           responses: {
@@ -525,39 +507,20 @@ export namespace Server {
           },
         }),
         zValidator(
-          "json",
+          "query",
           z.object({
             query: z.string(),
           }),
         ),
         async (c) => {
-          const body = c.req.valid("json")
+          const query = c.req.valid("query").query
           const app = App.info()
           const result = await Ripgrep.files({
             cwd: app.path.cwd,
-            query: body.query,
+            query,
             limit: 10,
           })
           return c.json(result)
-        },
-      )
-      .post(
-        "installation_info",
-        describeRoute({
-          description: "Get installation info",
-          responses: {
-            200: {
-              description: "Get installation info",
-              content: {
-                "application/json": {
-                  schema: resolver(Installation.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(Installation.info())
         },
       )
 

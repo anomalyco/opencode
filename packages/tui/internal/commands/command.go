@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/sst/opencode/pkg/client"
+	"github.com/sst/opencode-sdk-go"
 )
 
 type ExecuteCommandMsg Command
@@ -123,7 +123,7 @@ func parseBindings(bindings ...string) []Keybinding {
 	return parsedBindings
 }
 
-func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
+func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	defaults := []Command{
 		{
 			Name:        AppHelpCommand,
@@ -269,10 +269,10 @@ func LoadFromConfig(config *client.ConfigInfo) CommandRegistry {
 	}
 	registry := make(CommandRegistry)
 	keybinds := map[string]string{}
-	marshalled, _ := json.Marshal(*config.Keybinds)
+	marshalled, _ := json.Marshal(config.Keybinds)
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
-		if keybind, ok := keybinds[string(command.Name)]; ok {
+		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {
 			command.Keybindings = parseBindings(keybind)
 		}
 		registry[command.Name] = command

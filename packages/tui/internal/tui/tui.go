@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
 
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/completions"
@@ -24,7 +25,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
@@ -74,7 +74,7 @@ func (a appModel) Init() tea.Cmd {
 
 	// Check if we should show the init dialog
 	cmds = append(cmds, func() tea.Msg {
-		shouldShow := a.app.Info.Git && a.app.Info.Time.Initialized == nil
+		shouldShow := a.app.Info.Git && a.app.Info.Time.Initialized > 0
 		return dialog.ShowInitDialogMsg{Show: shouldShow}
 	})
 
@@ -267,31 +267,31 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
-	case client.EventInstallationUpdated:
+	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
-	case client.EventSessionDeleted:
-		if a.app.Session != nil && msg.Properties.Info.Id == a.app.Session.Id {
-			a.app.Session = &client.SessionInfo{}
-			a.app.Messages = []client.MessageInfo{}
+	case opencode.EventListResponseEventSessionDeleted:
+		if a.app.Session != nil && msg.Properties.Info.ID == a.app.Session.ID {
+			a.app.Session = &opencode.Session{}
+			a.app.Messages = []opencode.Message{}
 		}
 		return a, toast.NewSuccessToast("Session deleted successfully")
-	case client.EventSessionUpdated:
-		if msg.Properties.Info.Id == a.app.Session.Id {
+	case opencode.EventListResponseEventSessionUpdated:
+		if msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &msg.Properties.Info
 		}
-	case client.EventMessageUpdated:
-		if msg.Properties.Info.Metadata.SessionID == a.app.Session.Id {
+	case opencode.EventListResponseEventMessageUpdated:
+		if msg.Properties.Info.Metadata.SessionID == a.app.Session.ID {
 			exists := false
 			optimisticReplaced := false
 
 			// First check if this is replacing an optimistic message
-			if msg.Properties.Info.Role == client.User {
+			if msg.Properties.Info.Role == opencode.MessageRoleUser {
 				// Look for optimistic messages to replace
 				for i, m := range a.app.Messages {
-					if strings.HasPrefix(m.Id, "optimistic-") && m.Role == client.User {
+					if strings.HasPrefix(m.ID, "optimistic-") && m.Role == opencode.MessageRoleUser {
 						// Replace the optimistic message with the real one
 						a.app.Messages[i] = msg.Properties.Info
 						exists = true
@@ -304,7 +304,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If not replacing optimistic, check for existing message with same ID
 			if !optimisticReplaced {
 				for i, m := range a.app.Messages {
-					if m.Id == msg.Properties.Info.Id {
+					if m.ID == msg.Properties.Info.ID {
 						a.app.Messages[i] = msg.Properties.Info
 						exists = true
 						break
@@ -316,11 +316,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.app.Messages = append(a.app.Messages, msg.Properties.Info)
 			}
 		}
-	case client.EventSessionError:
-		unknownError, err := msg.Properties.Error.AsUnknownError()
-		if err == nil {
-			slog.Error("Server error", "name", unknownError.Name, "message", unknownError.Data.Message)
-			return a, toast.NewErrorToast(unknownError.Data.Message, toast.WithTitle(unknownError.Name))
+	case opencode.EventListResponseEventSessionError:
+		switch err := msg.Properties.Error.AsUnion().(type) {
+		case nil:
+		case opencode.UnknownError:
+			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
+			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
 		}
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
@@ -336,7 +337,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.layout.SetSize(a.width, a.height)
 	case app.SessionSelectedMsg:
-		messages, err := a.app.ListMessages(context.Background(), msg.Id)
+		messages, err := a.app.ListMessages(context.Background(), msg.ID)
 		if err != nil {
 			slog.Error("Failed to list messages", "error", err)
 			return a, toast.NewErrorToast("Failed to open session")
@@ -346,8 +347,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
-		a.app.State.Provider = msg.Provider.Id
-		a.app.State.Model = msg.Model.Id
+		a.app.State.Provider = msg.Provider.ID
+		a.app.State.Model = msg.Model.ID
 		a.app.SaveState()
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
@@ -499,42 +500,32 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		})
 		cmds = append(cmds, cmd)
 	case commands.SessionNewCommand:
-		if a.app.Session.Id == "" {
+		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		a.app.Session = &client.SessionInfo{}
-		a.app.Messages = []client.MessageInfo{}
+		a.app.Session = &opencode.Session{}
+		a.app.Messages = []opencode.Message{}
 		cmds = append(cmds, util.CmdHandler(app.SessionClearedMsg{}))
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
 		a.modal = sessionDialog
 	case commands.SessionShareCommand:
-		if a.app.Session.Id == "" {
+		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		response, err := a.app.Client.PostSessionShareWithResponse(
-			context.Background(),
-			client.PostSessionShareJSONRequestBody{
-				SessionID: a.app.Session.Id,
-			},
-		)
+		_, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID)
 		if err != nil {
 			slog.Error("Failed to share session", "error", err)
 			return a, toast.NewErrorToast("Failed to share session")
 		}
-		if response.JSON200 != nil && response.JSON200.Share != nil {
-			shareUrl := response.JSON200.Share.Url
-			cmds = append(cmds, tea.SetClipboard(shareUrl))
-			cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
-		}
 	case commands.SessionInterruptCommand:
-		if a.app.Session.Id == "" {
+		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		a.app.Cancel(context.Background(), a.app.Session.Id)
+		a.app.Cancel(context.Background(), a.app.Session.ID)
 		return a, nil
 	case commands.SessionCompactCommand:
-		if a.app.Session.Id == "" {
+		if a.app.Session.ID == "" {
 			return a, nil
 		}
 		// TODO: block until compaction is complete
@@ -642,8 +633,8 @@ func NewModel(app *app.App) tea.Model {
 	messagesContainer := layout.NewContainer(messages)
 
 	var leaderBinding *key.Binding
-	if (*app.Config.Keybinds).Leader != nil {
-		binding := key.NewBinding(key.WithKeys(*app.Config.Keybinds.Leader))
+	if app.Config.Keybinds.Leader != "" {
+		binding := key.NewBinding(key.WithKeys(app.Config.Keybinds.Leader))
 		leaderBinding = &binding
 	}
 

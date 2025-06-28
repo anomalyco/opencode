@@ -1,0 +1,38 @@
+---
+import { Base64 } from "js-base64";
+import type { Props } from '@astrojs/starlight/props'
+import Default from '@astrojs/starlight/components/Head.astro'
+import config from '../../config.mjs'
+
+const slug = Astro.url.pathname.replace(/^\//, "").replace(/\/$/, "");
+const {
+  entry: {
+    data: { title },
+  },
+} = Astro.locals.starlightRoute;
+const isDocs = slug.startsWith("docs")
+
+let encodedTitle = '';
+let ogImage = `${config.url}/social-share.png`;
+
+if (isDocs) {
+  // Truncate to fit S3's max key size
+  encodedTitle = encodeURIComponent(
+    Base64.encode(
+      // Convert to ASCII
+      encodeURIComponent(
+        // Truncate to fit S3's max key size
+        title.substring(0, 700)
+      )
+    )
+  );
+  ogImage = `${config.socialCard}/opencode-docs/${encodedTitle}.png`;
+}
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+{ (isDocs || !slug.startsWith("s")) && (
+  <meta property="og:image" content={ogImage} />
+  <meta property="twitter:image" content={ogImage} />
+)}

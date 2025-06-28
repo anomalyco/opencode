@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
-	"github.com/sst/opencode/pkg/client"
 )
 
 type State struct {
@@ -20,13 +19,6 @@ func NewState() *State {
 	return &State{
 		Theme: "opencode",
 	}
-}
-
-func MergeState(state *State, config *client.ConfigInfo) *client.ConfigInfo {
-	if config.Theme == nil {
-		config.Theme = &state.Theme
-	}
-	return config
 }
 
 // SaveState writes the provided Config struct to the specified TOML file.

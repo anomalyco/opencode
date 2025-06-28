@@ -18,16 +18,19 @@ function CodeBlock(props: CodeBlockProps) {
   const [local, rest] = splitProps(props, ["code", "lang", "onRendered"])
   let containerRef!: HTMLDivElement
 
-  const [html] = createResource(() => [local.code, local.lang], async ([code, lang]) => {
-    return (await codeToHtml(code || "", {
-      lang: lang || "text",
-      themes: {
-        light: "github-light",
-        dark: "github-dark",
-      },
-      transformers: [transformerNotationDiff()],
-    })) as string
-  })
+  const [html] = createResource(
+    () => [local.code, local.lang],
+    async ([code, lang]) => {
+      return (await codeToHtml(code || "", {
+        lang: lang || "text",
+        themes: {
+          light: "github-light",
+          dark: "github-dark",
+        },
+        transformers: [transformerNotationDiff()],
+      })) as string
+    },
+  )
 
   onCleanup(() => {
     if (containerRef) containerRef.innerHTML = ""
@@ -41,7 +44,13 @@ function CodeBlock(props: CodeBlockProps) {
     }
   })
 
-  return <div ref={containerRef} class={styles.codeblock} {...rest}></div>
+  return (
+    <>
+      {html() ? (
+        <div ref={containerRef} class={styles.codeblock} {...rest}></div>
+      ) : null}
+    </>
+  )
 }
 
 export default CodeBlock

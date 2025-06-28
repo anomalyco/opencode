@@ -48,7 +48,7 @@ func (m statusComponent) logo() string {
 		Render(open + code + version)
 }
 
-func formatTokensAndCost(tokens float32, contextWindow float32, cost float32) string {
+func formatTokensAndCost(tokens float64, contextWindow float64, cost float64) string {
 	// Format tokens in human-readable format (e.g., 110K, 1.2M)
 	var formattedTokens string
 	switch {
@@ -77,7 +77,7 @@ func formatTokensAndCost(tokens float32, contextWindow float32, cost float32) st
 
 func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
-	if m.app.Session.Id == "" {
+	if m.app.Session.ID == "" {
 		return styles.NewStyle().
 			Background(t.Background()).
 			Width(m.width).
@@ -94,13 +94,13 @@ func (m statusComponent) View() string {
 		Render(m.app.Info.Path.Cwd)
 
 	sessionInfo := ""
-	if m.app.Session.Id != "" {
-		tokens := float32(0)
-		cost := float32(0)
+	if m.app.Session.ID != "" {
+		tokens := float64(0)
+		cost := float64(0)
 		contextWindow := m.app.Model.Limit.Context
 
 		for _, message := range m.app.Messages {
-			if message.Metadata.Assistant != nil {
+			if message.Metadata.Assistant.Cost > 0 {
 				cost += message.Metadata.Assistant.Cost
 				usage := message.Metadata.Assistant.Tokens
 				if usage.Output > 0 {

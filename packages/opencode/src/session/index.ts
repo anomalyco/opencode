@@ -55,14 +55,18 @@ export namespace Session {
       }),
     })
     .openapi({
-      ref: "session.info",
+      ref: "Session",
     })
   export type Info = z.output<typeof Info>
 
-  export const ShareInfo = z.object({
-    secret: z.string(),
-    url: z.string(),
-  })
+  export const ShareInfo = z
+    .object({
+      secret: z.string(),
+      url: z.string(),
+    })
+    .openapi({
+      ref: "SessionShare",
+    })
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
@@ -76,6 +80,12 @@ export namespace Session {
       "session.deleted",
       z.object({
         info: Info,
+      }),
+    ),
+    Idle: Bus.event(
+      "session.idle",
+      z.object({
+        sessionID: z.string(),
       }),
     ),
     Error: Bus.event(
@@ -267,7 +277,7 @@ export namespace Session {
     sessionID: string
     providerID: string
     modelID: string
-    parts: Message.Part[]
+    parts: Message.MessagePart[]
     system?: string[]
     tools?: Tool.Info[]
   }) {
@@ -537,6 +547,7 @@ export namespace Session {
       //   return step
       // },
       toolCallStreaming: true,
+      maxTokens: model.info.limit.output || undefined,
       abortSignal: abort.signal,
       maxSteps: 1000,
       providerOptions: model.info.options,
@@ -853,16 +864,8 @@ export namespace Session {
       [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
-        Config.get().then((cfg) => {
-          if (cfg.experimental?.hook?.session_completed) {
-            for (const item of cfg.experimental.hook.session_completed) {
-              Bun.spawn({
-                cmd: item.command,
-                cwd: App.info().path.cwd,
-                env: item.environment,
-              })
-            }
-          }
+        Bus.publish(Event.Idle, {
+          sessionID,
         })
       },
     }
@@ -952,7 +955,7 @@ function toUIMessage(msg: Message.Info): UIMessage {
   throw new Error("not implemented")
 }
 
-function toParts(parts: Message.Part[]): UIMessage["parts"] {
+function toParts(parts: Message.MessagePart[]): UIMessage["parts"] {
   const result: UIMessage["parts"] = []
   for (const part of parts) {
     switch (part.type) {

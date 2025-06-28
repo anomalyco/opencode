@@ -1,75 +1,68 @@
 import { App } from "../app/app"
 import { BunProc } from "../bun"
-import { Config } from "../config/config"
+import { Bus } from "../bus"
+import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
 
-  const state = App.state("format", async () => {
-    const hooks: Record<string, Hook[]> = {}
-    for (const item of FORMATTERS) {
-      if (await item.enabled()) {
-        for (const ext of item.extensions) {
-          const list = hooks[ext] ?? []
-          list.push({
-            command: item.command,
-            environment: item.environment,
-          })
-          hooks[ext] = list
-        }
-      }
-    }
-
-    const cfg = await Config.get()
-    for (const [file, items] of Object.entries(
-      cfg.experimental?.hook?.file_edited ?? {},
-    )) {
-      for (const item of items) {
-        const list = hooks[file] ?? []
-        list.push({
-          command: item.command,
-          environment: item.environment,
-        })
-        hooks[file] = list
-      }
-    }
+  const state = App.state("format", () => {
+    const enabled: Record<string, boolean> = {}
 
     return {
-      hooks,
+      enabled,
     }
   })
 
-  export async function run(file: string) {
-    log.info("formatting", { file })
-    const { hooks } = await state()
-    const ext = path.extname(file)
-    const match = hooks[ext]
-    if (!match) return
-
-    for (const item of match) {
-      log.info("running", { command: item.command })
-      const proc = Bun.spawn({
-        cmd: item.command.map((x) => x.replace("$FILE", file)),
-        cwd: App.info().path.cwd,
-        env: item.environment,
-      })
-      const exit = await proc.exited
-      if (exit !== 0)
-        log.error("failed", {
-          command: item.command,
-          ...item.environment,
-        })
+  async function isEnabled(item: Definition) {
+    const s = state()
+    let status = s.enabled[item.name]
+    if (status === undefined) {
+      status = await item.enabled()
+      s.enabled[item.name] = status
     }
+    return status
   }
 
-  interface Hook {
-    command: string[]
-    environment?: Record<string, string>
+  async function getFormatter(ext: string) {
+    const result = []
+    for (const item of FORMATTERS) {
+      if (!item.extensions.includes(ext)) continue
+      if (!isEnabled(item)) continue
+      result.push(item)
+    }
+    return result
   }
 
-  interface Native {
+  export function init() {
+    log.info("init")
+    Bus.subscribe(File.Event.Edited, async (payload) => {
+      const file = payload.properties.file
+      log.info("formatting", { file })
+      const ext = path.extname(file)
+
+      for (const item of await getFormatter(ext)) {
+        log.info("running", { command: item.command })
+        const proc = Bun.spawn({
+          cmd: item.command.map((x) => x.replace("$FILE", file)),
+          cwd: App.info().path.cwd,
+          env: item.environment,
+          stdout: "ignore",
+          stderr: "ignore",
+        })
+        const exit = await proc.exited
+        if (exit !== 0)
+          log.error("failed", {
+            command: item.command,
+            ...item.environment,
+          })
+      }
+    })
+  }
+
+  interface Definition {
     name: string
     command: string[]
     environment?: Record<string, string>
@@ -77,7 +70,7 @@ export namespace Format {
     enabled(): Promise<boolean>
   }
 
-  const FORMATTERS: Native[] = [
+  const FORMATTERS: Definition[] = [
     {
       name: "prettier",
       command: [BunProc.which(), "run", "prettier", "--write", "$FILE"],
@@ -109,15 +102,6 @@ export namespace Format {
         ".xml",
         ".md",
         ".mdx",
-        ".php",
-        ".rb",
-        ".java",
-        ".go",
-        ".rs",
-        ".swift",
-        ".kt",
-        ".kts",
-        ".sol",
         ".graphql",
         ".gql",
       ],
@@ -129,6 +113,44 @@ export namespace Format {
             env: {
               BUN_BE_BUN: "1",
             },
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+        } catch {
+          return false
+        }
+      },
+    },
+    {
+      name: "mix",
+      command: ["mix", "format", "$FILE"],
+      extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["mix", "--version"],
+            cwd: App.info().path.cwd,
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          return exit === 0
+        } catch {
+          return false
+        }
+      },
+    },
+    {
+      name: "gofmt",
+      command: ["gofmt", "-w", "$FILE"],
+      extensions: [".go"],
+      async enabled() {
+        try {
+          const proc = Bun.spawn({
+            cmd: ["gofmt", "-h"],
+            cwd: App.info().path.cwd,
             stdout: "ignore",
             stderr: "ignore",
           })

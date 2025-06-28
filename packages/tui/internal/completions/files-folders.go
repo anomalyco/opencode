@@ -3,9 +3,9 @@ package completions
 import (
 	"context"
 
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/dialog"
-	"github.com/sst/opencode/pkg/client"
 )
 
 type filesAndFoldersContextGroup struct {
@@ -29,17 +29,14 @@ func (cg *filesAndFoldersContextGroup) GetEmptyMessage() string {
 }
 
 func (cg *filesAndFoldersContextGroup) getFiles(query string) ([]string, error) {
-	response, err := cg.app.Client.PostFileSearchWithResponse(context.Background(), client.PostFileSearchJSONRequestBody{
-		Query: query,
-	})
+	files, err := cg.app.Client.File.Search(
+		context.Background(),
+		opencode.FileSearchParams{Query: opencode.F(query)},
+	)
 	if err != nil {
 		return []string{}, err
 	}
-	if response.JSON200 == nil {
-		return []string{}, nil
-	}
-
-	return *response.JSON200, nil
+	return *files, nil
 }
 
 func (cg *filesAndFoldersContextGroup) GetChildEntries(query string) ([]dialog.CompletionItemI, error) {

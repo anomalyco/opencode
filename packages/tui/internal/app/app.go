@@ -11,35 +11,35 @@ import (
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 var RootPath string
 
 type App struct {
-	Info      client.AppInfo
+	Info      opencode.App
 	Version   string
 	StatePath string
-	Config    *client.ConfigInfo
-	Client    *client.ClientWithResponses
+	Config    *opencode.Config
+	Client    *opencode.Client
 	State     *config.State
-	Provider  *client.ProviderInfo
-	Model     *client.ModelInfo
-	Session   *client.SessionInfo
-	Messages  []client.MessageInfo
+	Provider  *opencode.Provider
+	Model     *opencode.Model
+	Session   *opencode.Session
+	Messages  []opencode.Message
 	Commands  commands.CommandRegistry
 }
 
-type SessionSelectedMsg = *client.SessionInfo
+type SessionSelectedMsg = *opencode.Session
 type ModelSelectedMsg struct {
-	Provider client.ProviderInfo
-	Model    client.ModelInfo
+	Provider opencode.Provider
+	Model    opencode.Model
 }
 type SessionClearedMsg struct{}
 type CompactSessionMsg struct{}
@@ -51,31 +51,24 @@ type CompletionDialogTriggeredMsg struct {
 	InitialValue string
 }
 type OptimisticMessageAddedMsg struct {
-	Message client.MessageInfo
+	Message opencode.Message
 }
 
 func New(
 	ctx context.Context,
 	version string,
-	appInfo client.AppInfo,
-	httpClient *client.ClientWithResponses,
+	appInfo opencode.App,
+	httpClient *opencode.Client,
 ) (*App, error) {
 	RootPath = appInfo.Path.Root
 
-	configResponse, err := httpClient.PostConfigGetWithResponse(ctx)
+	configInfo, err := httpClient.Config.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if configResponse.StatusCode() != 200 || configResponse.JSON200 == nil {
-		return nil, fmt.Errorf("failed to get config: %d", configResponse.StatusCode())
-	}
-	configInfo := configResponse.JSON200
-	if configInfo.Keybinds == nil {
-		leader := "ctrl+x"
-		keybinds := client.ConfigKeybinds{
-			Leader: &leader,
-		}
-		configInfo.Keybinds = &keybinds
+
+	if configInfo.Keybinds.Leader == "" {
+		configInfo.Keybinds.Leader = "ctrl+x"
 	}
 
 	appStatePath := filepath.Join(appInfo.Path.State, "tui")
@@ -85,16 +78,16 @@ func New(
 		config.SaveState(appStatePath, appState)
 	}
 
-	if configInfo.Theme != nil {
-		appState.Theme = *configInfo.Theme
+	if configInfo.Theme != "" {
+		appState.Theme = configInfo.Theme
 	}
-	if configInfo.Model != nil {
-		splits := strings.Split(*configInfo.Model, "/")
+
+	if configInfo.Model != "" {
+		splits := strings.Split(configInfo.Model, "/")
 		appState.Provider = splits[0]
 		appState.Model = strings.Join(splits[1:], "/")
 	}
 
-	// Load themes from all directories
 	if err := theme.LoadThemesFromDirectories(
 		appInfo.Path.Config,
 		appInfo.Path.Root,
@@ -122,8 +115,8 @@ func New(
 		Config:    configInfo,
 		State:     appState,
 		Client:    httpClient,
-		Session:   &client.SessionInfo{},
-		Messages:  []client.MessageInfo{},
+		Session:   &opencode.Session{},
+		Messages:  []opencode.Message{},
 		Commands:  commands.LoadFromConfig(configInfo),
 	}
 
@@ -132,23 +125,19 @@ func New(
 
 func (a *App) InitializeProvider() tea.Cmd {
 	return func() tea.Msg {
-		providersResponse, err := a.Client.PostProviderListWithResponse(context.Background())
+		providersResponse, err := a.Client.Config.Providers(context.Background())
 		if err != nil {
 			slog.Error("Failed to list providers", "error", err)
 			// TODO: notify user
 			return nil
 		}
-		if providersResponse != nil && providersResponse.StatusCode() != 200 {
-			slog.Error("failed to retrieve providers", "status", providersResponse.StatusCode(), "message", string(providersResponse.Body))
-			return nil
-		}
-		providers := []client.ProviderInfo{}
-		var defaultProvider *client.ProviderInfo
-		var defaultModel *client.ModelInfo
+		providers := providersResponse.Providers
+		var defaultProvider *opencode.Provider
+		var defaultModel *opencode.Model
 
-		var anthropic *client.ProviderInfo
-		for _, provider := range providersResponse.JSON200.Providers {
-			if provider.Id == "anthropic" {
+		var anthropic *opencode.Provider
+		for _, provider := range providers {
+			if provider.ID == "anthropic" {
 				anthropic = &provider
 			}
 		}
@@ -159,7 +148,7 @@ func (a *App) InitializeProvider() tea.Cmd {
 			defaultModel = getDefaultModel(providersResponse, *anthropic)
 		}
 
-		for _, provider := range providersResponse.JSON200.Providers {
+		for _, provider := range providers {
 			if defaultProvider == nil || defaultModel == nil {
 				defaultProvider = &provider
 				defaultModel = getDefaultModel(providersResponse, provider)
@@ -171,14 +160,14 @@ func (a *App) InitializeProvider() tea.Cmd {
 			return nil
 		}
 
-		var currentProvider *client.ProviderInfo
-		var currentModel *client.ModelInfo
+		var currentProvider *opencode.Provider
+		var currentModel *opencode.Model
 		for _, provider := range providers {
-			if provider.Id == a.State.Provider {
+			if provider.ID == a.State.Provider {
 				currentProvider = &provider
 
 				for _, model := range provider.Models {
-					if model.Id == a.State.Model {
+					if model.ID == a.State.Model {
 						currentModel = &model
 					}
 				}
@@ -189,7 +178,6 @@ func (a *App) InitializeProvider() tea.Cmd {
 			currentModel = defaultModel
 		}
 
-		// TODO: handle no provider or model setup, yet
 		return ModelSelectedMsg{
 			Provider: *currentProvider,
 			Model:    *currentModel,
@@ -197,8 +185,8 @@ func (a *App) InitializeProvider() tea.Cmd {
 	}
 }
 
-func getDefaultModel(response *client.PostProviderListResponse, provider client.ProviderInfo) *client.ModelInfo {
-	if match, ok := response.JSON200.Default[provider.Id]; ok {
+func getDefaultModel(response *opencode.ConfigProvidersResponse, provider opencode.Provider) *opencode.Model {
+	if match, ok := response.Default[provider.ID]; ok {
 		model := provider.Models[match]
 		return &model
 	} else {
@@ -222,7 +210,7 @@ func (a *App) IsBusy() bool {
 	}
 
 	lastMessage := a.Messages[len(a.Messages)-1]
-	return lastMessage.Metadata.Time.Completed == nil
+	return lastMessage.Metadata.Time.Completed == 0
 }
 
 func (a *App) SaveState() {
@@ -245,18 +233,13 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 	cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
 
 	go func() {
-		response, err := a.Client.PostSessionInitialize(ctx, client.PostSessionInitializeJSONRequestBody{
-			SessionID:  a.Session.Id,
-			ProviderID: a.Provider.Id,
-			ModelID:    a.Model.Id,
+		_, err := a.Client.Session.Init(ctx, a.Session.ID, opencode.SessionInitParams{
+			ProviderID: opencode.F(a.Provider.ID),
+			ModelID:    opencode.F(a.Model.ID),
 		})
 		if err != nil {
 			slog.Error("Failed to initialize project", "error", err)
 			// status.Error(err.Error())
-		}
-		if response != nil && response.StatusCode != 200 {
-			slog.Error("Failed to initialize project", "error", response.StatusCode)
-			// status.Error(fmt.Sprintf("failed to initialize project: %d", response.StatusCode))
 		}
 	}()
 
@@ -265,48 +248,37 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 
 func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 	go func() {
-		response, err := a.Client.PostSessionSummarizeWithResponse(ctx, client.PostSessionSummarizeJSONRequestBody{
-			SessionID:  a.Session.Id,
-			ProviderID: a.Provider.Id,
-			ModelID:    a.Model.Id,
+		_, err := a.Client.Session.Summarize(ctx, a.Session.ID, opencode.SessionSummarizeParams{
+			ProviderID: opencode.F(a.Provider.ID),
+			ModelID:    opencode.F(a.Model.ID),
 		})
 		if err != nil {
 			slog.Error("Failed to compact session", "error", err)
-		}
-		if response != nil && response.StatusCode() != 200 {
-			slog.Error("Failed to compact session", "error", response.StatusCode)
 		}
 	}()
 	return nil
 }
 
 func (a *App) MarkProjectInitialized(ctx context.Context) error {
-	response, err := a.Client.PostAppInitialize(ctx)
+	_, err := a.Client.App.Init(ctx)
 	if err != nil {
 		slog.Error("Failed to mark project as initialized", "error", err)
 		return err
 	}
-	if response != nil && response.StatusCode != 200 {
-		return fmt.Errorf("failed to initialize project: %d", response.StatusCode)
-	}
 	return nil
 }
 
-func (a *App) CreateSession(ctx context.Context) (*client.SessionInfo, error) {
-	resp, err := a.Client.PostSessionCreateWithResponse(ctx)
+func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
+	session, err := a.Client.Session.New(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if resp != nil && resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("failed to create session: %d", resp.StatusCode())
-	}
-	session := resp.JSON200
 	return session, nil
 }
 
 func (a *App) SendChatMessage(ctx context.Context, text string, attachments []Attachment) tea.Cmd {
 	var cmds []tea.Cmd
-	if a.Session.Id == "" {
+	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
 			return toast.NewErrorToast(err.Error())
@@ -315,26 +287,18 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
 	}
 
-	part := client.MessagePart{}
-	part.FromMessagePartText(client.MessagePartText{
-		Type: "text",
-		Text: text,
-	})
-	parts := []client.MessagePart{part}
-
-	optimisticMessage := client.MessageInfo{
-		Id:    fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role:  client.User,
-		Parts: parts,
-		Metadata: client.MessageMetadata{
-			SessionID: a.Session.Id,
-			Time: struct {
-				Completed *float32 `json:"completed,omitempty"`
-				Created   float32  `json:"created"`
-			}{
-				Created: float32(time.Now().Unix()),
+	optimisticMessage := opencode.Message{
+		ID:   fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
+		Role: opencode.MessageRoleUser,
+		Parts: []opencode.MessagePart{{
+			Type: opencode.MessagePartTypeText,
+			Text: text,
+		}},
+		Metadata: opencode.MessageMetadata{
+			SessionID: a.Session.ID,
+			Time: opencode.MessageMetadataTime{
+				Created: float64(time.Now().Unix()),
 			},
-			Tool: make(map[string]client.MessageMetadata_Tool_AdditionalProperties),
 		},
 	}
 
@@ -342,19 +306,18 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
 
 	cmds = append(cmds, func() tea.Msg {
-		response, err := a.Client.PostSessionChat(ctx, client.PostSessionChatJSONRequestBody{
-			SessionID:  a.Session.Id,
-			Parts:      parts,
-			ProviderID: a.Provider.Id,
-			ModelID:    a.Model.Id,
+		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
+			Parts: opencode.F([]opencode.MessagePartUnionParam{
+				opencode.TextPartParam{
+					Type: opencode.F(opencode.TextPartTypeText),
+					Text: opencode.F(text),
+				},
+			}),
+			ProviderID: opencode.F(a.Provider.ID),
+			ModelID:    opencode.F(a.Model.ID),
 		})
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
-			slog.Error(errormsg)
-			return toast.NewErrorToast(errormsg)()
-		}
-		if response != nil && response.StatusCode != 200 {
-			errormsg := fmt.Sprintf("failed to send message: %d", response.StatusCode)
 			slog.Error(errormsg)
 			return toast.NewErrorToast(errormsg)()
 		}
@@ -367,83 +330,61 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {
-	response, err := a.Client.PostSessionAbort(ctx, client.PostSessionAbortJSONRequestBody{
-		SessionID: sessionID,
-	})
+	_, err := a.Client.Session.Abort(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
 		// status.Error(err.Error())
 		return err
 	}
-	if response != nil && response.StatusCode != 200 {
-		slog.Error("Failed to cancel session", "error", fmt.Sprintf("failed to cancel session: %d", response.StatusCode))
-		// status.Error(fmt.Sprintf("failed to cancel session: %d", response.StatusCode))
-		return fmt.Errorf("failed to cancel session: %d", response.StatusCode)
-	}
 	return nil
 }
 
-func (a *App) ListSessions(ctx context.Context) ([]client.SessionInfo, error) {
-	resp, err := a.Client.PostSessionListWithResponse(ctx)
+func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
+	response, err := a.Client.Session.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("failed to list sessions: %d", resp.StatusCode())
+	if response == nil {
+		return []opencode.Session{}, nil
 	}
-	if resp.JSON200 == nil {
-		return []client.SessionInfo{}, nil
-	}
-	sessions := *resp.JSON200
-
+	sessions := *response
 	sort.Slice(sessions, func(i, j int) bool {
 		return sessions[i].Time.Created-sessions[j].Time.Created > 0
 	})
-
 	return sessions, nil
 }
 
 func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
-	resp, err := a.Client.PostSessionDeleteWithResponse(ctx, client.PostSessionDeleteJSONRequestBody{
-		SessionID: sessionID,
-	})
+	_, err := a.Client.Session.Delete(ctx, sessionID)
 	if err != nil {
+		slog.Error("Failed to delete session", "error", err)
 		return err
-	}
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("failed to delete session: %d", resp.StatusCode())
 	}
 	return nil
 }
 
-func (a *App) ListMessages(ctx context.Context, sessionId string) ([]client.MessageInfo, error) {
-	resp, err := a.Client.PostSessionMessagesWithResponse(ctx, client.PostSessionMessagesJSONRequestBody{SessionID: sessionId})
+func (a *App) ListMessages(ctx context.Context, sessionId string) ([]opencode.Message, error) {
+	response, err := a.Client.Session.Messages(ctx, sessionId)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("failed to list messages: %d", resp.StatusCode())
+	if response == nil {
+		return []opencode.Message{}, nil
 	}
-	if resp.JSON200 == nil {
-		return []client.MessageInfo{}, nil
-	}
-	messages := *resp.JSON200
+	messages := *response
 	return messages, nil
 }
 
-func (a *App) ListProviders(ctx context.Context) ([]client.ProviderInfo, error) {
-	resp, err := a.Client.PostProviderListWithResponse(ctx)
+func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
+	response, err := a.Client.Config.Providers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode() != 200 {
-		return nil, fmt.Errorf("failed to list sessions: %d", resp.StatusCode())
-	}
-	if resp.JSON200 == nil {
-		return []client.ProviderInfo{}, nil
+	if response == nil {
+		return []opencode.Provider{}, nil
 	}
 
-	providers := *resp.JSON200
+	providers := *response
 	return providers.Providers, nil
 }
 
