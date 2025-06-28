@@ -163,11 +163,11 @@ func renderContentBlock(content string, options ...renderingOption) string {
 		style = style.
 			BorderRight(true).
 			BorderLeft(true).
-			AlignHorizontal(align).
-			BorderRightForeground(borderColor).
-			BorderRightBackground(t.Background()).
-			BorderLeftForeground(t.BackgroundPanel()).
-			BorderLeftBackground(t.Background())
+			AlignHorizontal(lipgloss.Left).
+			BorderLeftForeground(borderColor).
+			BorderLeftBackground(t.Background()).
+			BorderRightForeground(t.BackgroundPanel()).
+			BorderRightBackground(t.Background())
 	}
 
 	if renderer.fullWidth {
@@ -213,7 +213,6 @@ func calculatePadding() int {
 func renderText(message opencode.Message, text string, author string) string {
 	t := theme.CurrentTheme()
 	width := layout.Current.Container.Width
-	padding := calculatePadding()
 
 	timestamp := time.UnixMilli(int64(message.Metadata.Time.Created)).Local().Format("02 Jan 2006 03:04 PM")
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
@@ -222,19 +221,11 @@ func renderText(message opencode.Message, text string, author string) string {
 	}
 	info := fmt.Sprintf("%s (%s)", author, timestamp)
 
-	textWidth := max(lipgloss.Width(text), lipgloss.Width(info))
-	markdownWidth := min(textWidth, width-padding-4) // -4 for the border and padding
-	if message.Role == opencode.MessageRoleAssistant {
-		markdownWidth = width - padding - 4 - 3
-	}
-	minWidth := max(markdownWidth, (width-4)/2)
+	markdownWidth := width - 6 // 2 for padding l/r, 2 for border l/r
 	messageStyle := styles.NewStyle().
-		Width(minWidth).
 		Background(t.BackgroundPanel()).
 		Foreground(t.Text())
-	if textWidth < minWidth {
-		messageStyle = messageStyle.AlignHorizontal(lipgloss.Right)
-	}
+
 	content := messageStyle.Render(text)
 	if message.Role == opencode.MessageRoleAssistant {
 		content = toMarkdown(text, markdownWidth, t.BackgroundPanel())
@@ -246,11 +237,13 @@ func renderText(message opencode.Message, text string, author string) string {
 		return renderContentBlock(content,
 			WithAlign(lipgloss.Right),
 			WithBorderColor(t.Secondary()),
+			WithFullWidth(),
 		)
 	case opencode.MessageRoleAssistant:
 		return renderContentBlock(content,
 			WithAlign(lipgloss.Left),
 			WithBorderColor(t.Accent()),
+			WithFullWidth(),
 		)
 	}
 	return ""
