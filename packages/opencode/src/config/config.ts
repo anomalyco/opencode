@@ -49,24 +49,23 @@ export namespace Config {
 
   export const McpRemote = z
     .object({
-      type: z.literal("remote").describe("Type of MCP server connection"),
+      type: z
+        .enum(["remote", "sse", "http"])
+        .describe(
+          "Type of MCP server connection and transport protocol (remote is alias for sse)",
+        ),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z
         .boolean()
         .optional()
         .describe("Enable or disable the MCP server on startup"),
-      transport: z
-        .enum(["sse", "http-streaming"])
-        .optional()
-        .default("sse")
-        .describe("Transport protocol to use (sse or http-streaming)"),
     })
     .strict()
     .openapi({
       ref: "McpRemoteConfig",
     })
 
-  export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
+  export const Mcp = z.union([McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
   export const Keybinds = z

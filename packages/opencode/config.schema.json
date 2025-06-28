@@ -202,7 +202,10 @@
                       "type": "number"
                     }
                   },
-                  "required": ["input", "output"],
+                  "required": [
+                    "input",
+                    "output"
+                  ],
                   "additionalProperties": false
                 },
                 "limit": {
@@ -215,7 +218,10 @@
                       "type": "number"
                     }
                   },
-                  "required": ["context", "output"],
+                  "required": [
+                    "context",
+                    "output"
+                  ],
                   "additionalProperties": false
                 },
                 "id": {
@@ -234,7 +240,9 @@
             "additionalProperties": {}
           }
         },
-        "required": ["models"],
+        "required": [
+          "models"
+        ],
         "additionalProperties": false
       },
       "description": "Custom provider configurations and model overrides"
@@ -270,7 +278,10 @@
                 "description": "Enable or disable the MCP server on startup"
               }
             },
-            "required": ["type", "command"],
+            "required": [
+              "type",
+              "command"
+            ],
             "additionalProperties": false
           },
           {
@@ -278,8 +289,12 @@
             "properties": {
               "type": {
                 "type": "string",
-                "const": "remote",
-                "description": "Type of MCP server connection"
+                "enum": [
+                  "remote",
+                  "sse",
+                  "http"
+                ],
+                "description": "Type of MCP server connection and transport protocol (remote is alias for sse)"
               },
               "url": {
                 "type": "string",
@@ -290,7 +305,10 @@
                 "description": "Enable or disable the MCP server on startup"
               }
             },
-            "required": ["type", "url"],
+            "required": [
+              "type",
+              "url"
+            ],
             "additionalProperties": false
           }
         ]
@@ -323,7 +341,9 @@
                       }
                     }
                   },
-                  "required": ["command"],
+                  "required": [
+                    "command"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -346,7 +366,9 @@
                     }
                   }
                 },
-                "required": ["command"],
+                "required": [
+                  "command"
+                ],
                 "additionalProperties": false
               }
             }

@@ -32,13 +32,20 @@ export namespace MCP {
           continue
         }
         log.info("found", { key, type: mcp.type })
-        if (mcp.type === "remote") {
-          let transport: StreamableHTTPClientTransport | { type: "sse"; url: string }
 
-          if (mcp.transport === "http-streaming") {
+        if (
+          mcp.type === "remote" ||
+          mcp.type === "sse" ||
+          mcp.type === "http"
+        ) {
+          let transport:
+            | StreamableHTTPClientTransport
+            | { type: "sse"; url: string }
+
+          if (mcp.type === "http") {
             transport = new StreamableHTTPClientTransport(new URL(mcp.url))
           } else {
-            // Default to SSE
+            // SSE transport (for both "remote" and "sse")
             transport = {
               type: "sse",
               url: mcp.url,
@@ -92,7 +99,6 @@ export namespace MCP {
           clients[key] = client
         }
       }
-
       return {
         clients,
       }
