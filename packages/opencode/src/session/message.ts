@@ -4,6 +4,11 @@ import { Provider } from "../provider/provider"
 import { NamedError } from "../util/error"
 
 export namespace Message {
+  export const OutputLengthError = NamedError.create(
+    "MessageOutputLengthError",
+    z.object({}),
+  )
+
   export const ToolCall = z
     .object({
       state: z.literal("call"),
@@ -13,7 +18,7 @@ export namespace Message {
       args: z.custom<Required<unknown>>(),
     })
     .openapi({
-      ref: "Message.ToolInvocation.ToolCall",
+      ref: "ToolCall",
     })
   export type ToolCall = z.infer<typeof ToolCall>
 
@@ -26,7 +31,7 @@ export namespace Message {
       args: z.custom<Required<unknown>>(),
     })
     .openapi({
-      ref: "Message.ToolInvocation.ToolPartialCall",
+      ref: "ToolPartialCall",
     })
   export type ToolPartialCall = z.infer<typeof ToolPartialCall>
 
@@ -40,14 +45,14 @@ export namespace Message {
       result: z.string(),
     })
     .openapi({
-      ref: "Message.ToolInvocation.ToolResult",
+      ref: "ToolResult",
     })
   export type ToolResult = z.infer<typeof ToolResult>
 
   export const ToolInvocation = z
     .discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult])
     .openapi({
-      ref: "Message.ToolInvocation",
+      ref: "ToolInvocation",
     })
   export type ToolInvocation = z.infer<typeof ToolInvocation>
 
@@ -57,7 +62,7 @@ export namespace Message {
       text: z.string(),
     })
     .openapi({
-      ref: "Message.Part.Text",
+      ref: "TextPart",
     })
   export type TextPart = z.infer<typeof TextPart>
 
@@ -68,7 +73,7 @@ export namespace Message {
       providerMetadata: z.record(z.any()).optional(),
     })
     .openapi({
-      ref: "Message.Part.Reasoning",
+      ref: "ReasoningPart",
     })
   export type ReasoningPart = z.infer<typeof ReasoningPart>
 
@@ -78,7 +83,7 @@ export namespace Message {
       toolInvocation: ToolInvocation,
     })
     .openapi({
-      ref: "Message.Part.ToolInvocation",
+      ref: "ToolInvocationPart",
     })
   export type ToolInvocationPart = z.infer<typeof ToolInvocationPart>
 
@@ -91,7 +96,7 @@ export namespace Message {
       providerMetadata: z.record(z.any()).optional(),
     })
     .openapi({
-      ref: "Message.Part.SourceUrl",
+      ref: "SourceUrlPart",
     })
   export type SourceUrlPart = z.infer<typeof SourceUrlPart>
 
@@ -103,7 +108,7 @@ export namespace Message {
       url: z.string(),
     })
     .openapi({
-      ref: "Message.Part.File",
+      ref: "FilePart",
     })
   export type FilePart = z.infer<typeof FilePart>
 
@@ -112,11 +117,11 @@ export namespace Message {
       type: z.literal("step-start"),
     })
     .openapi({
-      ref: "Message.Part.StepStart",
+      ref: "StepStartPart",
     })
   export type StepStartPart = z.infer<typeof StepStartPart>
 
-  export const Part = z
+  export const MessagePart = z
     .discriminatedUnion("type", [
       TextPart,
       ReasoningPart,
@@ -126,15 +131,15 @@ export namespace Message {
       StepStartPart,
     ])
     .openapi({
-      ref: "Message.Part",
+      ref: "MessagePart",
     })
-  export type Part = z.infer<typeof Part>
+  export type MessagePart = z.infer<typeof MessagePart>
 
   export const Info = z
     .object({
       id: z.string(),
       role: z.enum(["user", "assistant"]),
-      parts: z.array(Part),
+      parts: z.array(MessagePart),
       metadata: z
         .object({
           time: z.object({
@@ -145,6 +150,7 @@ export namespace Message {
             .discriminatedUnion("name", [
               Provider.AuthError.Schema,
               NamedError.Unknown.Schema,
+              OutputLengthError.Schema,
             ])
             .optional(),
           sessionID: z.string(),
@@ -183,10 +189,10 @@ export namespace Message {
             })
             .optional(),
         })
-        .openapi({ ref: "Message.Metadata" }),
+        .openapi({ ref: "MessageMetadata" }),
     })
     .openapi({
-      ref: "Message.Info",
+      ref: "Message",
     })
   export type Info = z.infer<typeof Info>
 
@@ -199,7 +205,11 @@ export namespace Message {
     ),
     PartUpdated: Bus.event(
       "message.part.updated",
-      z.object({ part: Part, sessionID: z.string(), messageID: z.string() }),
+      z.object({
+        part: MessagePart,
+        sessionID: z.string(),
+        messageID: z.string(),
+      }),
     ),
   }
 }

@@ -2,34 +2,96 @@
 title: Themes
 ---
 
-opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
+With opencode you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
 
-## Theme Loading Hierarchy
+By default, opencode uses our own `opencode` theme.
 
-Themes are loaded from multiple directories in the following order (later directories override earlier ones):
+---
 
-1. **Built-in themes** - Embedded in the binary
-2. **User config directory** - `~/.config/opencode/themes/*.json` (or `$XDG_CONFIG_HOME/opencode/themes/*.json`)
-3. **Project root directory** - `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - `./.opencode/themes/*.json`
+## Built-in themes
+
+opencode comes with several built-in themes.
+
+| Name | Description |
+| --- | --- |
+| `system` | Adapts to your terminal's background color |
+| `tokyonight` | Based on the Tokyonight theme |
+| `everforest` | Based on the Everforest theme |
+| `ayu` | Based on the Ayu dark theme |
+| `catppuccin` | Based on the Catppuccin theme |
+| `gruvbox` | Based on the Gruvbox theme |
+| `kanagawa` | Based on the Kanagawa theme |
+| `nord` | Based on the Nord theme |
+| `matrix` | Hacker-style green on black theme |
+| `one-dark` | Based on the Atom One Dark theme |
+
+And more, we are constantly adding new themes.
+
+---
+
+## System theme
+
+The `system` theme is designed to automatically adapt to your terminal's color scheme. Unlike traditional themes that use fixed colors, the _system_ theme:
+
+- **Generates gray scale**: Creates a custom gray scale based on your terminal's background color, ensuring optimal contrast.
+- **Uses ANSI colors**: Leverages standard ANSI colors (0-15) for syntax highlighting and UI elements, which respect your terminal's color palette.
+- **Preserves terminal defaults**: Uses `none` for text and background colors to maintain your terminal's native appearance.
+
+The system theme is for users who:
+
+- Want opencode to match their terminal's appearance
+- Use custom terminal color schemes
+- Prefer a consistent look across all terminal applications
+
+---
+
+## Using a theme
+
+You can select a theme by bringing up the theme select with the `/theme` command. Or you can specify it in your [config](/docs/config).
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": "tokyonight"
+}
+```
+
+---
+
+## Custom themes
+
+opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily. 
+
+### Hierarchy
+
+Themes are loaded from multiple directories in the following order where later directories override earlier ones:
+
+1. **Built-in themes** - These are embedded in the binary
+2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
+4. **Current working directory** - Defined in `./.opencode/themes/*.json`
 
 If multiple directories contain a theme with the same name, the theme from the directory with higher priority will be used.
 
-## Creating a Custom Theme
+### Creating a theme
 
-To create a custom theme, create a JSON file in one of the theme directories:
+To create a custom theme, create a JSON file in one of the theme directories.
+
+For user-wide themes:
 
 ```bash no-frame
-# For user-wide themes
 mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
+```
 
-# For project-specific themes
+And for project-specific themes.
+
+```bash no-frame
 mkdir -p .opencode/themes
 vim .opencode/themes/my-theme.json
 ```
 
-## Theme JSON Format
+### JSON format
 
 Themes use a flexible JSON format with support for:
 
@@ -37,10 +99,13 @@ Themes use a flexible JSON format with support for:
 - **ANSI colors**: `3` (0-255)
 - **Color references**: `"primary"` or custom definitions
 - **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
+- **No color**: `"none"` - Uses the terminal's default color or transparent
 
-### Example Theme
+### Example
 
-```json no-frame
+Here's an example of a custom theme:
+
+```json title="my-theme.json"
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
@@ -266,30 +331,13 @@ Themes use a flexible JSON format with support for:
 }
 ```
 
-### Color Definitions
+### Color definitions
 
-The `defs` section (optional) allows you to define reusable colors that can be referenced in the theme.
+The `defs` section is optional and it allows you to define reusable colors that can be referenced in the theme.
 
-## Built-in Themes
+### Terminal defaults
 
-opencode comes with several built-in themes:
-- `opencode` - Default opencode theme
-- `tokyonight` - Tokyonight theme
-- `everforest` - Everforest theme
-- `ayu` - Ayu dark theme
-- `catppuccin` - Catppuccin theme
-- `gruvbox` - Gruvbox theme
-- `kanagawa` - Kanagawa theme
-- `nord` - Nord theme
-- and more (see ./packages/tui/internal/theme/themes)
+The special value `\"none\"` can be used for any color to inherit the terminal's default color. This is particularly useful for creating themes that blend seamlessly with your terminal's color scheme:
 
-## Using a Theme
-
-To use a theme, set it in your opencode configuration or select it from the theme dialog in the TUI.
-
-```json title="opencode.json" {3}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "theme": "tokyonight"
-}
-```
+- `"text": "none"` - Uses terminal's default foreground color
+- `"background": "none"` - Uses terminal's default background color

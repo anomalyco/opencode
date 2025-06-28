@@ -2,7 +2,7 @@ import { z } from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
-import { FileTimes } from "./util/file-times"
+import { FileTime } from "../file/time"
 import DESCRIPTION from "./patch.txt"
 
 const PatchParams = z.object({
@@ -244,7 +244,7 @@ export const PatchTool = Tool.define({
         absPath = path.resolve(process.cwd(), absPath)
       }
 
-      await FileTimes.assert(ctx.sessionID, absPath)
+      await FileTime.assert(ctx.sessionID, absPath)
 
       try {
         const stats = await fs.stat(absPath)
@@ -351,7 +351,7 @@ export const PatchTool = Tool.define({
       totalAdditions += additions
       totalRemovals += removals
 
-      FileTimes.read(ctx.sessionID, absPath)
+      FileTime.read(ctx.sessionID, absPath)
     }
 
     const result = `Patch applied successfully. ${changedFiles.length} files changed, ${totalAdditions} additions, ${totalRemovals} removals`

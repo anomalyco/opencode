@@ -9,13 +9,13 @@ import (
 	"github.com/charmbracelet/bubbles/v2/viewport"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
-	"github.com/sst/opencode/pkg/client"
 )
 
 type MessagesComponent interface {
@@ -83,7 +83,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tail {
 			m.viewport.GotoBottom()
 		}
-	case client.EventSessionUpdated, client.EventMessageUpdated:
+	case opencode.EventListResponseEventSessionUpdated, opencode.EventListResponseEventMessageUpdated:
 		m.renderView()
 		if m.tail {
 			m.viewport.GotoBottom()
@@ -130,90 +130,97 @@ func (m *messagesComponent) renderView() {
 		lastToolIndex := 0
 		lastToolIndices := []int{}
 		for i, p := range message.Parts {
-			part, _ := p.ValueByDiscriminator()
-			switch part.(type) {
-			case client.MessagePartText:
+			switch p.Type {
+			case opencode.MessagePartTypeText:
 				lastToolIndices = append(lastToolIndices, lastToolIndex)
-			case client.MessagePartToolInvocation:
+			case opencode.MessagePartTypeToolInvocation:
 				lastToolIndex = i
 			}
 		}
 
 		author := ""
 		switch message.Role {
-		case client.User:
+		case opencode.MessageRoleUser:
 			author = m.app.Info.User
-		case client.Assistant:
+		case opencode.MessageRoleAssistant:
 			author = message.Metadata.Assistant.ModelID
 		}
 
 		for i, p := range message.Parts {
-			part, err := p.ValueByDiscriminator()
-			if err != nil {
-				continue //TODO: handle error?
-			}
-
-			switch part.(type) {
+			switch part := p.AsUnion().(type) {
 			// case client.MessagePartStepStart:
 			// 	messages = append(messages, "")
-			case client.MessagePartText:
-				text := part.(client.MessagePartText)
-				key := m.cache.GenerateKey(message.Id, text.Text, layout.Current.Viewport.Width)
+			case opencode.TextPart:
+				key := m.cache.GenerateKey(message.ID, p.Text, layout.Current.Viewport.Width)
 				content, cached = m.cache.Get(key)
 				if !cached {
-					content = renderText(message, text.Text, author)
+					content = renderText(message, p.Text, author)
 					m.cache.Set(key, content)
 				}
 				if previousBlockType != none {
 					blocks = append(blocks, "")
 				}
 				blocks = append(blocks, content)
-				if message.Role == client.User {
+				if message.Role == opencode.MessageRoleUser {
 					previousBlockType = userTextBlock
-				} else if message.Role == client.Assistant {
+				} else if message.Role == opencode.MessageRoleAssistant {
 					previousBlockType = assistantTextBlock
 				}
-			case client.MessagePartToolInvocation:
+			case opencode.ToolInvocationPart:
 				isLastToolInvocation := slices.Contains(lastToolIndices, i)
-				toolInvocationPart := part.(client.MessagePartToolInvocation)
-				toolCall, _ := toolInvocationPart.ToolInvocation.AsMessageToolInvocationToolCall()
-				metadata := client.MessageMetadata_Tool_AdditionalProperties{}
-				if _, ok := message.Metadata.Tool[toolCall.ToolCallId]; ok {
-					metadata = message.Metadata.Tool[toolCall.ToolCallId]
-				}
-				var result *string
-				resultPart, resultError := toolInvocationPart.ToolInvocation.AsMessageToolInvocationToolResult()
-				if resultError == nil {
-					result = &resultPart.Result
+				metadata := opencode.MessageMetadataTool{}
+
+				toolCallID := part.ToolInvocation.ToolCallID
+				// var toolCallID string
+				// var result *string
+				// switch toolCall := part.ToolInvocation.AsUnion().(type) {
+				// case opencode.ToolCall:
+				// 	toolCallID = toolCall.ToolCallID
+				// case opencode.ToolPartialCall:
+				// 	toolCallID = toolCall.ToolCallID
+				// case opencode.ToolResult:
+				// 	toolCallID = toolCall.ToolCallID
+				// 	result = &toolCall.Result
+				// }
+
+				if _, ok := message.Metadata.Tool[toolCallID]; ok {
+					metadata = message.Metadata.Tool[toolCallID]
 				}
 
-				if toolCall.State == "result" {
-					key := m.cache.GenerateKey(message.Id,
-						toolCall.ToolCallId,
+				var result *string
+				if part.ToolInvocation.Result != "" {
+					result = &part.ToolInvocation.Result
+				}
+
+				if part.ToolInvocation.State == "result" {
+					key := m.cache.GenerateKey(message.ID,
+						part.ToolInvocation.ToolCallID,
 						m.showToolDetails,
 						layout.Current.Viewport.Width,
 					)
 					content, cached = m.cache.Get(key)
 					if !cached {
 						content = renderToolInvocation(
-							toolCall,
+							part,
 							result,
 							metadata,
 							m.showToolDetails,
 							isLastToolInvocation,
 							false,
+							message.Metadata,
 						)
 						m.cache.Set(key, content)
 					}
 				} else {
 					// if the tool call isn't finished, don't cache
 					content = renderToolInvocation(
-						toolCall,
+						part,
 						result,
 						metadata,
 						m.showToolDetails,
 						isLastToolInvocation,
 						false,
+						message.Metadata,
 					)
 				}
 
@@ -226,16 +233,17 @@ func (m *messagesComponent) renderView() {
 		}
 
 		error := ""
-		if message.Metadata.Error != nil {
-			errorValue, _ := message.Metadata.Error.ValueByDiscriminator()
-			switch errorValue.(type) {
-			case client.UnknownError:
-				clientError := errorValue.(client.UnknownError)
-				error = clientError.Data.Message
-				error = renderContentBlock(error, WithBorderColor(t.Error()), WithFullWidth(), WithMarginTop(1), WithMarginBottom(1))
-				blocks = append(blocks, error)
-				previousBlockType = errorBlock
-			}
+		switch err := message.Metadata.Error.AsUnion().(type) {
+		case nil:
+		default:
+			clientError := err.(opencode.UnknownError)
+			error = clientError.Data.Message
+		}
+
+		if error != "" {
+			error = renderContentBlock(error, WithBorderColor(t.Error()), WithFullWidth(), WithMarginTop(1), WithMarginBottom(1))
+			blocks = append(blocks, error)
+			previousBlockType = errorBlock
 		}
 	}
 
@@ -245,7 +253,7 @@ func (m *messagesComponent) renderView() {
 			m.width,
 			lipgloss.Center,
 			block,
-			lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+			styles.WhitespaceStyle(t.Background()),
 		))
 	}
 
@@ -254,28 +262,28 @@ func (m *messagesComponent) renderView() {
 }
 
 func (m *messagesComponent) header() string {
-	if m.app.Session.Id == "" {
+	if m.app.Session.ID == "" {
 		return ""
 	}
 
 	t := theme.CurrentTheme()
 	width := layout.Current.Container.Width
-	base := styles.BaseStyle().Background(t.Background()).Render
-	muted := styles.Muted().Background(t.Background()).Render
+	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
+	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 	headerLines := []string{}
 	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
-	if m.app.Session.Share != nil && m.app.Session.Share.Url != "" {
-		headerLines = append(headerLines, muted(m.app.Session.Share.Url))
+	if m.app.Session.Share.URL != "" {
+		headerLines = append(headerLines, muted(m.app.Session.Share.URL))
 	} else {
 		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
 	}
 	header := strings.Join(headerLines, "\n")
 
-	header = styles.BaseStyle().
+	header = styles.NewStyle().
+		Background(t.Background()).
 		Width(width).
 		PaddingLeft(2).
 		PaddingRight(2).
-		Background(t.Background()).
 		BorderLeft(true).
 		BorderRight(true).
 		BorderBackground(t.Background()).
@@ -306,7 +314,7 @@ func (m *messagesComponent) View() string {
 			m.width,
 			lipgloss.Center,
 			m.header(),
-			lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+			styles.WhitespaceStyle(t.Background()),
 		),
 		m.viewport.View(),
 	)
@@ -314,9 +322,9 @@ func (m *messagesComponent) View() string {
 
 func (m *messagesComponent) home() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle().Background(t.Background())
+	baseStyle := styles.NewStyle().Background(t.Background())
 	base := baseStyle.Render
-	muted := styles.Muted().Background(t.Background()).Render
+	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 
 	open := `
 █▀▀█ █▀▀█ █▀▀ █▀▀▄ 
@@ -335,9 +343,9 @@ func (m *messagesComponent) home() string {
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
 
-	versionStyle := lipgloss.NewStyle().
-		Background(t.Background()).
+	versionStyle := styles.NewStyle().
 		Foreground(t.TextMuted()).
+		Background(t.Background()).
 		Width(lipgloss.Width(logo)).
 		Align(lipgloss.Right)
 	version := versionStyle.Render(m.app.Version)
@@ -347,14 +355,14 @@ func (m *messagesComponent) home() string {
 		m.width,
 		lipgloss.Center,
 		logoAndVersion,
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 	m.commands.SetBackgroundColor(t.Background())
 	commands := lipgloss.PlaceHorizontal(
 		m.width,
 		lipgloss.Center,
 		m.commands.View(),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 
 	lines := []string{}
@@ -372,7 +380,7 @@ func (m *messagesComponent) home() string {
 		lipgloss.Center,
 		lipgloss.Center,
 		baseStyle.Render(strings.Join(lines, "\n")),
-		lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+		styles.WhitespaceStyle(t.Background()),
 	)
 }
 

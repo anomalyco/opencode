@@ -3,6 +3,7 @@ package layout
 import (
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
 
@@ -66,7 +67,7 @@ func (f *flexLayout) View() string {
 				alignment,
 				child.View(),
 				// TODO: make configurable WithBackgroundStyle
-				lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+				lipgloss.WithWhitespaceStyle(styles.NewStyle().Background(t.Background()).Lipgloss()),
 			)
 			views = append(views, view)
 		} else {
@@ -78,7 +79,7 @@ func (f *flexLayout) View() string {
 				alignment,
 				child.View(),
 				// TODO: make configurable WithBackgroundStyle
-				lipgloss.WithWhitespaceStyle(lipgloss.NewStyle().Background(t.Background())),
+				lipgloss.WithWhitespaceStyle(styles.NewStyle().Background(t.Background()).Lipgloss()),
 			)
 			views = append(views, view)
 		}

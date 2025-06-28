@@ -5,7 +5,7 @@ import type { Props } from '@astrojs/starlight/props';
 
 import CopyIcon from "../assets/lander/copy.svg";
 import CheckIcon from "../assets/lander/check.svg";
-import Screenshot from "../assets/themes/tokyonight.png";
+import Screenshot from "../assets/lander/screenshot-splash.png";
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, image, actions = [] } = data.hero || {};
@@ -19,8 +19,10 @@ const imageAttrs = {
 
 const github = config.social.filter(s => s.icon === 'github')[0];
 
-const command = "npm i -g";
-const pkg = "opencode-ai";
+const command = "curl -fsSL"
+const protocol = "https://"
+const url = "opencode.ai/install"
+const bash = "| bash"
 
 let darkImage: ImageMetadata | undefined;
 let lightImage: ImageMetadata | undefined;
@@ -51,11 +53,13 @@ if (image) {
 
     <section class="cta">
       <div class="col1">
-        <a href="/docs">View the docs</a>
+        <a href="/docs">Docs</a>
       </div>
       <div class="col2">
-        <button class="command" data-command={`${command} ${pkg}`}>
-          <code>{command}&nbsp;<span class="highlight">{pkg}</span></code>
+      <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
+          <code>
+            <span>{command}&nbsp;</span><span class="protocol">{protocol}</span><span class="highlight">{url}</span>&nbsp;{bash}
+          </code>
           <span class="copy">
             <CopyIcon />
             <CheckIcon />
@@ -63,7 +67,7 @@ if (image) {
         </button>
       </div>
       <div class="col3">
-        <a href={github.href}>Star on GitHub</a>
+        <a href={github.href}>GitHub</a>
       </div>
     </section>
 
@@ -133,39 +137,43 @@ section.top {
 section.cta {
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: flex-start;
+  align-items: stretch;
   border-top: 2px solid var(--sl-color-border);
 
-  @media (max-width: 40rem) {
+  @media (max-width: 50rem) {
     flex-direction: column;
+
+    & > div.col1 { order: 1; }
+    & > div.col3 { order: 2; }
+    & > div.col2 { order: 3; }
   }
 
   & > div {
-    flex: 1;
     line-height: 1.4;
-    padding: calc(var(--padding) / 2) 0.5rem;
-
-    @media (max-width: 40rem) {
-      padding-bottom: calc(var(--padding) / 2 + 4px);
-    }
+    padding: calc(var(--padding) / 2) 1rem;
 
     a {
       font-size: 1rem;
     }
   }
-  & > div.col2 {
-    @media (max-width: 50rem) {
-      flex: 0 0 auto;
-    }
-  }
-  & > div:not(.col2) {
+  & > div.col1, & > div.col3 {
+    flex: 1 1 auto;
     text-align: center;
     text-transform: uppercase;
+
+    @media (max-width: 50rem) {
+      padding-bottom: calc(var(--padding) / 2 + 4px);
+    }
+  }
+  & > div.col2 {
+    flex: 0 0 auto;
   }
 
   & > div + div {
     border-left: 2px solid var(--sl-color-border);
-    @media (max-width: 40rem) {
+
+    @media (max-width: 50rem) {
       border-left: none;
       border-top: 2px solid var(--sl-color-border);
     }
@@ -183,6 +191,21 @@ section.cta {
     code {
       color: var(--sl-color-text-secondary);
       font-size: 1.125rem;
+
+      @media (max-width: 24rem) {
+        font-size: 0.875rem;
+      }
+      @media (max-width: 30rem) {
+        span.protocol {
+          display: none;
+        }
+      }
+      @media (max-width: 43rem) {
+        text-align: center;
+        span:first-child {
+          display: block;
+        }
+      }
     }
     code .highlight {
       color: var(--sl-color-text);
@@ -192,6 +215,9 @@ section.cta {
     .copy {
       line-height: 1;
       padding: 0;
+      @media (max-width: 43rem) {
+        display: none;
+      }
     }
     .copy svg {
       width: 1rem;

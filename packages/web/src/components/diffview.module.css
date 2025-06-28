@@ -6,6 +6,19 @@
   border-radius: 0.25rem;
 }
 
+.desktopView {
+  display: block;
+}
+
+.mobileView {
+  display: none;
+}
+
+.mobileBlock {
+  display: flex;
+  flex-direction: column;
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -98,25 +111,11 @@
 }
 
 @media (max-width: 40rem) {
-  .row {
-    grid-template-columns: 1fr;
-  }
-
-  .afterColumn {
+  .desktopView {
     display: none;
   }
 
-  .beforeColumn {
-    border-right: none;
-  }
-
-  [data-section="cell"] {
-    &[data-display-mobile="true"] {
-      display: flex;
-    }
-
-    &[data-display-mobile="false"] {
-      display: none;
-    }
+  .mobileView {
+    display: block;
   }
 }

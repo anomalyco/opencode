@@ -9,6 +9,7 @@ import (
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
+	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
 
@@ -37,7 +38,7 @@ func (c *CommandCompletionProvider) GetEmptyMessage() string {
 
 func getCommandCompletionItem(cmd commands.Command, space int, t theme.Theme) dialog.CompletionItemI {
 	spacer := strings.Repeat(" ", space)
-	title := "  /" + cmd.Trigger + lipgloss.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
+	title := "  /" + cmd.Trigger + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
 	value := string(cmd.Name)
 	return dialog.NewCompletionItem(dialog.CompletionItem{
 		Title: title,

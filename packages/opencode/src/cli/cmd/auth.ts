@@ -31,7 +31,7 @@ export const AuthListCommand = cmd({
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
-    const displayPath = authPath.startsWith(homedir) 
+    const displayPath = authPath.startsWith(homedir)
       ? authPath.replace(homedir, "~")
       : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
@@ -46,14 +46,14 @@ export const AuthListCommand = cmd({
     prompts.outro(`${results.length} credentials`)
 
     // Environment variables section
-    const activeEnvVars: Array<{ provider: string, envVar: string }> = []
-    
+    const activeEnvVars: Array<{ provider: string; envVar: string }> = []
+
     for (const [providerID, provider] of Object.entries(database)) {
       for (const envVar of provider.env) {
         if (process.env[envVar]) {
-          activeEnvVars.push({ 
-            provider: provider.name || providerID, 
-            envVar 
+          activeEnvVars.push({
+            provider: provider.name || providerID,
+            envVar,
           })
         }
       }
@@ -62,11 +62,11 @@ export const AuthListCommand = cmd({
     if (activeEnvVars.length > 0) {
       UI.empty()
       prompts.intro("Environment")
-      
+
       for (const { provider, envVar } of activeEnvVars) {
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
-      
+
       prompts.outro(`${activeEnvVars.length} environment variables`)
     }
   },

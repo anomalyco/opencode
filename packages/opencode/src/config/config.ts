@@ -22,6 +22,7 @@ export namespace Config {
       }
     }
     log.info("loaded", result)
+
     return result
   })
 
@@ -39,7 +40,7 @@ export namespace Config {
     })
     .strict()
     .openapi({
-      ref: "Config.McpLocal",
+      ref: "McpLocalConfig",
     })
 
   export const McpRemote = z
@@ -53,7 +54,7 @@ export namespace Config {
     })
     .strict()
     .openapi({
-      ref: "Config.McpRemote",
+      ref: "McpRemoteConfig",
     })
 
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
@@ -127,7 +128,7 @@ export namespace Config {
     })
     .strict()
     .openapi({
-      ref: "Config.Keybinds",
+      ref: "KeybindsConfig",
     })
   export const Info = z
     .object({
@@ -171,10 +172,36 @@ export namespace Config {
         .record(z.string(), Mcp)
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
+      experimental: z
+        .object({
+          hook: z
+            .object({
+              file_edited: z
+                .record(
+                  z.string(),
+                  z
+                    .object({
+                      command: z.string().array(),
+                      environment: z.record(z.string(), z.string()).optional(),
+                    })
+                    .array(),
+                )
+                .optional(),
+              session_completed: z
+                .object({
+                  command: z.string().array(),
+                  environment: z.record(z.string(), z.string()).optional(),
+                })
+                .array()
+                .optional(),
+            })
+            .optional(),
+        })
+        .optional(),
     })
     .strict()
     .openapi({
-      ref: "Config.Info",
+      ref: "Config",
     })
 
   export type Info = z.output<typeof Info>

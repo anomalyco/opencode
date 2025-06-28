@@ -55,14 +55,18 @@ export namespace Session {
       }),
     })
     .openapi({
-      ref: "session.info",
+      ref: "Session",
     })
   export type Info = z.output<typeof Info>
 
-  export const ShareInfo = z.object({
-    secret: z.string(),
-    url: z.string(),
-  })
+  export const ShareInfo = z
+    .object({
+      secret: z.string(),
+      url: z.string(),
+    })
+    .openapi({
+      ref: "SessionShare",
+    })
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
@@ -76,6 +80,12 @@ export namespace Session {
       "session.deleted",
       z.object({
         info: Info,
+      }),
+    ),
+    Idle: Bus.event(
+      "session.idle",
+      z.object({
+        sessionID: z.string(),
       }),
     ),
     Error: Bus.event(
@@ -267,7 +277,7 @@ export namespace Session {
     sessionID: string
     providerID: string
     modelID: string
-    parts: Message.Part[]
+    parts: Message.MessagePart[]
     system?: string[]
     tools?: Tool.Info[]
   }) {
@@ -287,7 +297,10 @@ export namespace Session {
       if (
         model.info.limit.context &&
         tokens >
-          (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9
+          Math.max(
+            (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9,
+            0,
+          )
       ) {
         await summarize({
           sessionID: input.sessionID,
@@ -534,6 +547,7 @@ export namespace Session {
       //   return step
       // },
       toolCallStreaming: true,
+      maxTokens: model.info.limit.output || undefined,
       abortSignal: abort.signal,
       maxSteps: 1000,
       providerOptions: model.info.options,
@@ -657,6 +671,21 @@ export namespace Session {
             }
             break
 
+          case "finish":
+            log.info("message finish", {
+              reason: value.finishReason,
+            })
+            const assistant = next.metadata!.assistant!
+            const usage = getUsage(
+              model.info,
+              value.usage,
+              value.providerMetadata,
+            )
+            assistant.cost = usage.cost
+            await updateMessage(next)
+            if (value.finishReason === "length")
+              throw new Message.OutputLengthError({})
+            break
           default:
             l.info("unhandled", {
               type: value.type,
@@ -670,6 +699,9 @@ export namespace Session {
         error: e,
       })
       switch (true) {
+        case Message.OutputLengthError.isInstance(e):
+          next.metadata.error = e
+          break
         case LoadAPIKeyError.isInstance(e):
           next.metadata.error = new Provider.AuthError(
             {
@@ -832,6 +864,9 @@ export namespace Session {
       [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
+        Bus.publish(Event.Idle, {
+          sessionID,
+        })
       },
     }
   }
@@ -920,7 +955,7 @@ function toUIMessage(msg: Message.Info): UIMessage {
   throw new Error("not implemented")
 }
 
-function toParts(parts: Message.Part[]): UIMessage["parts"] {
+function toParts(parts: Message.MessagePart[]): UIMessage["parts"] {
   const result: UIMessage["parts"] = []
   for (const part of parts) {
     switch (part.type) {

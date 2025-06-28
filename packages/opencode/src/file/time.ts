@@ -1,6 +1,6 @@
-import { App } from "../../app/app"
+import { App } from "../app/app"
 
-export namespace FileTimes {
+export namespace FileTime {
   export const state = App.state("tool.filetimes", () => {
     const read: {
       [sessionID: string]: {

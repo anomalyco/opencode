@@ -1,9 +1,9 @@
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
-      <source srcset="packages/web/src/assets/logo-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/web/src/assets/logo-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/web/src/assets/logo-light.svg" alt="opencode logo">
+      <source srcset="packages/web/src/assets/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
+      <source srcset="packages/web/src/assets/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
+      <img src="packages/web/src/assets/logo-ornate-light.svg" alt="opencode logo">
     </picture>
   </a>
 </p>
@@ -14,7 +14,7 @@
   <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
-[![opencode Terminal UI](packages/web/src/assets/themes/opencode.png)](https://opencode.ai)
+[![opencode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
 
@@ -54,14 +54,7 @@ $ bun run packages/opencode/src/index.ts
 
 #### Development Notes
 
-**API Client Generation**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you need to regenerate the Go client and OpenAPI specification:
-
-```bash
-$ cd packages/tui
-$ go generate ./pkg/client/
-```
-
-This updates the generated Go client code that the TUI uses to communicate with the backend server.
+**API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.
 
 ### FAQ
 

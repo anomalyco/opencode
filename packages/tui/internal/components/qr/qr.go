@@ -3,7 +3,7 @@ package qr
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"rsc.io/qr"
 )
@@ -23,9 +23,7 @@ func Generate(text string) (string, int, error) {
 	}
 
 	// Create lipgloss style for QR code with theme colors
-	qrStyle := lipgloss.NewStyle().
-		Foreground(t.Text()).
-		Background(t.Background())
+	qrStyle := styles.NewStyleWithColors(t.Text(), t.Background())
 
 	var result strings.Builder
 

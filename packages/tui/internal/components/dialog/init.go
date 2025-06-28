@@ -94,7 +94,7 @@ func (m InitDialogCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View implements tea.Model.
 func (m InitDialogCmp) View() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle().Foreground(t.Text())
 
 	// Calculate width needed for content
 	maxWidth := 60 // Width for explanation text

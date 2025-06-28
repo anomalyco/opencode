@@ -19,7 +19,10 @@ export namespace Log {
     await fs.mkdir(dir, { recursive: true })
     cleanup(dir)
     if (options.print) return
-    logpath = path.join(dir, new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log")
+    logpath = path.join(
+      dir,
+      new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
+    )
     const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()

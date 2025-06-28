@@ -36,18 +36,19 @@ func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m statusComponent) logo() string {
 	t := theme.CurrentTheme()
-	base := lipgloss.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render
-	emphasis := lipgloss.NewStyle().Bold(true).Background(t.BackgroundElement()).Foreground(t.Text()).Render
+	base := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
+	emphasis := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundElement()).Bold(true).Render
 
 	open := base("open")
 	code := emphasis("code ")
 	version := base(m.app.Version)
-	return styles.Padded().
+	return styles.NewStyle().
 		Background(t.BackgroundElement()).
+		Padding(0, 1).
 		Render(open + code + version)
 }
 
-func formatTokensAndCost(tokens float32, contextWindow float32, cost float32) string {
+func formatTokensAndCost(tokens float64, contextWindow float64, cost float64) string {
 	// Format tokens in human-readable format (e.g., 110K, 1.2M)
 	var formattedTokens string
 	switch {
@@ -76,8 +77,8 @@ func formatTokensAndCost(tokens float32, contextWindow float32, cost float32) st
 
 func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
-	if m.app.Session.Id == "" {
-		return styles.BaseStyle().
+	if m.app.Session.ID == "" {
+		return styles.NewStyle().
 			Background(t.Background()).
 			Width(m.width).
 			Height(2).
@@ -86,19 +87,20 @@ func (m statusComponent) View() string {
 
 	logo := m.logo()
 
-	cwd := styles.Padded().
+	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
+		Padding(0, 1).
 		Render(m.app.Info.Path.Cwd)
 
 	sessionInfo := ""
-	if m.app.Session.Id != "" {
-		tokens := float32(0)
-		cost := float32(0)
+	if m.app.Session.ID != "" {
+		tokens := float64(0)
+		cost := float64(0)
 		contextWindow := m.app.Model.Limit.Context
 
 		for _, message := range m.app.Messages {
-			if message.Metadata.Assistant != nil {
+			if message.Metadata.Assistant.Cost > 0 {
 				cost += message.Metadata.Assistant.Cost
 				usage := message.Metadata.Assistant.Tokens
 				if usage.Output > 0 {
@@ -111,9 +113,10 @@ func (m statusComponent) View() string {
 			}
 		}
 
-		sessionInfo = styles.Padded().
-			Background(t.BackgroundElement()).
+		sessionInfo = styles.NewStyle().
 			Foreground(t.TextMuted()).
+			Background(t.BackgroundElement()).
+			Padding(0, 1).
 			Render(formatTokensAndCost(tokens, contextWindow, cost))
 	}
 
@@ -123,11 +126,11 @@ func (m statusComponent) View() string {
 		0,
 		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(sessionInfo),
 	)
-	spacer := lipgloss.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
+	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
 
 	status := logo + cwd + spacer + sessionInfo
 
-	blank := styles.BaseStyle().Background(t.Background()).Width(m.width).Render("")
+	blank := styles.NewStyle().Background(t.Background()).Width(m.width).Render("")
 	return blank + "\n" + status
 }
 

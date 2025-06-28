@@ -1,0 +1,74 @@
+---
+title: Rules
+---
+
+You can provide custom instructions to opencode by creating an `AGENTS.md` file. This is similar to `CLAUDE.md` or Cursor's rules. It contains instructions that will be included in the LLM's context to customize its behavior for your specific project.
+
+---
+
+## Initialize
+
+To create a new `AGENTS.md` file, you can run the `/init` command in opencode.
+
+:::tip
+You should commit your project's `AGENTS.md` file to Git.
+:::
+
+This will scan your project and all its contents to understand what the project is about and generate an `AGENTS.md` file with it. This helps opencode to navigate the project better.
+
+If you have an existing `AGENTS.md` file, this will try to add to it.
+
+---
+
+## Example
+
+You can also just create this file manually. Here's an example of some things you can put into an `AGENTS.md` file.
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+We are adding project-specific instructions here and this will be shared across your team.
+
+---
+
+## Types
+
+opencode also supports reading the `AGENTS.md` file from multiple locations. And this serves different purposes.
+
+### Project
+
+The ones we have seen above, where the `AGENTS.md` is placed in the project root, are project-specific rules. These only apply when you are working in this directory or its sub-directories.
+
+### Global
+
+You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This gets applied across all opencode sessions.
+
+Since this isn't committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
+
+---
+
+## Precedence
+
+So when opencode starts, it looks for:
+
+1. **Local files** by traversing up from the current directory
+2. **Global file** by checking `~/.config/opencode/AGENTS.md`
+
+If you have both global and project-specific rules, opencode will combine them together.

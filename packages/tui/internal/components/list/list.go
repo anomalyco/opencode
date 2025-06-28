@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -174,19 +173,20 @@ type StringItem string
 
 func (s StringItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle()
 
 	truncatedStr := truncate.StringWithTail(string(s), uint(width-1), "...")
 
-	var itemStyle lipgloss.Style
+	var itemStyle styles.Style
 	if selected {
 		itemStyle = baseStyle.
 			Background(t.Primary()).
-			Foreground(t.Background()).
+			Foreground(t.BackgroundElement()).
 			Width(width).
 			PaddingLeft(1)
 	} else {
 		itemStyle = baseStyle.
+			Foreground(t.TextMuted()).
 			PaddingLeft(1)
 	}
 

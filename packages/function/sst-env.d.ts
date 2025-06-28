@@ -6,18 +6,18 @@
 import "sst"
 declare module "sst" {
   export interface Resource {
-    "Web": {
-      "type": "sst.cloudflare.Astro"
-      "url": string
+    Web: {
+      type: "sst.cloudflare.Astro"
+      url: string
     }
   }
 }
-// cloudflare 
-import * as cloudflare from "@cloudflare/workers-types";
+// cloudflare
+import * as cloudflare from "@cloudflare/workers-types"
 declare module "sst" {
   export interface Resource {
-    "Api": cloudflare.Service
-    "Bucket": cloudflare.R2Bucket
+    Api: cloudflare.Service
+    Bucket: cloudflare.R2Bucket
   }
 }
 

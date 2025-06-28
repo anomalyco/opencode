@@ -90,12 +90,8 @@ func (m *Modal) Render(contentView string, background string) string {
 
 	innerWidth := outerWidth - 4
 
-	// Base style for the modal
-	baseStyle := styles.BaseStyle().
-		Background(t.BackgroundElement()).
-		Foreground(t.TextMuted())
+	baseStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement())
 
-	// Add title if provided
 	var finalContent string
 	if m.title != "" {
 		titleStyle := baseStyle.

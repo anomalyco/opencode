@@ -7,8 +7,8 @@ import (
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/muesli/reflow/truncate"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
@@ -17,7 +17,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/pkg/client"
 )
 
 // SessionDialog interface for the session switching dialog
@@ -33,7 +32,7 @@ type sessionItem struct {
 
 func (s sessionItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.BaseStyle()
+	baseStyle := styles.NewStyle()
 
 	var text string
 	if s.isDeleteConfirming {
@@ -44,20 +43,20 @@ func (s sessionItem) Render(selected bool, width int) string {
 
 	truncatedStr := truncate.StringWithTail(text, uint(width-1), "...")
 
-	var itemStyle lipgloss.Style
+	var itemStyle styles.Style
 	if selected {
 		if s.isDeleteConfirming {
 			// Red background for delete confirmation
 			itemStyle = baseStyle.
 				Background(t.Error()).
-				Foreground(t.Background()).
+				Foreground(t.BackgroundElement()).
 				Width(width).
 				PaddingLeft(1)
 		} else {
 			// Normal selection
 			itemStyle = baseStyle.
 				Background(t.Primary()).
-				Foreground(t.Background()).
+				Foreground(t.BackgroundElement()).
 				Width(width).
 				PaddingLeft(1)
 		}
@@ -80,7 +79,7 @@ type sessionDialog struct {
 	width              int
 	height             int
 	modal              *modal.Modal
-	sessions           []client.SessionInfo
+	sessions           []opencode.Session
 	list               list.List[sessionItem]
 	app                *app.App
 	deleteConfirmation int // -1 means no confirmation, >= 0 means confirming deletion of session at this index
@@ -123,7 +122,7 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							s.updateListItems()
 							return nil
 						},
-						s.deleteSession(sessionToDelete.Id),
+						s.deleteSession(sessionToDelete.ID),
 					)
 				} else {
 					// First press - enter delete confirmation mode
@@ -151,9 +150,9 @@ func (s *sessionDialog) Render(background string) string {
 	listView := s.list.View()
 
 	t := theme.CurrentTheme()
-	helpStyle := styles.BaseStyle().PaddingLeft(1).PaddingTop(1)
-	helpText := styles.BaseStyle().Foreground(t.Text()).Render("x/del")
-	helpText = helpText + styles.BaseStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render(" delete session")
+	helpStyle := styles.NewStyle().PaddingLeft(1).PaddingTop(1)
+	helpText := styles.NewStyle().Foreground(t.Text()).Render("x/del")
+	helpText = helpText + styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render(" delete session")
 	helpText = helpStyle.Render(helpText)
 
 	content := strings.Join([]string{listView, helpText}, "\n")
@@ -194,10 +193,10 @@ func (s *sessionDialog) Close() tea.Cmd {
 func NewSessionDialog(app *app.App) SessionDialog {
 	sessions, _ := app.ListSessions(context.Background())
 
-	var filteredSessions []client.SessionInfo
+	var filteredSessions []opencode.Session
 	var items []sessionItem
 	for _, sess := range sessions {
-		if sess.ParentID != nil {
+		if sess.ParentID != "" {
 			continue
 		}
 		filteredSessions = append(filteredSessions, sess)

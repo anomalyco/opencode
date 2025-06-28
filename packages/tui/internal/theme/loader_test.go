@@ -21,7 +21,7 @@ func TestLoadThemesFromJSON(t *testing.T) {
 	}
 
 	// Check for expected themes
-	expectedThemes := []string{"tokyonight", "opencode", "everforest", "ayu", "example"}
+	expectedThemes := []string{"tokyonight", "opencode", "everforest", "ayu"}
 	for _, expected := range expectedThemes {
 		found := slices.Contains(themes, expected)
 		if !found {
@@ -43,22 +43,28 @@ func TestLoadThemesFromJSON(t *testing.T) {
 }
 
 func TestColorReferenceResolution(t *testing.T) {
-	// Test the example theme which uses references
-	example := GetTheme("example")
-	if example == nil {
-		t.Fatal("Failed to get example theme")
+	// Load themes first
+	err := LoadThemesFromJSON()
+	if err != nil {
+		t.Fatalf("Failed to load themes: %v", err)
 	}
 
-	// Check that brandBlue reference was resolved
-	primary := example.Primary()
+	// Test a theme that uses references (e.g., solarized uses color definitions)
+	solarized := GetTheme("solarized")
+	if solarized == nil {
+		t.Fatal("Failed to get solarized theme")
+	}
+
+	// Check that color references were resolved
+	primary := solarized.Primary()
 	if primary.Dark == nil || primary.Light == nil {
-		t.Error("Primary color (brandBlue reference) not resolved")
+		t.Error("Primary color reference not resolved")
 	}
 
-	// Check that nested reference (borderActive -> primary -> brandBlue) works
-	borderActive := example.BorderActive()
-	if borderActive.Dark == nil || borderActive.Light == nil {
-		t.Error("BorderActive color (nested reference) not resolved")
+	// Check that all colors are properly resolved
+	text := solarized.Text()
+	if text.Dark == nil || text.Light == nil {
+		t.Error("Text color reference not resolved")
 	}
 }
 

@@ -7,12 +7,9 @@ export const ScrapCommand = cmd({
   builder: (yargs) =>
     yargs.positional("file", { type: "string", demandOption: true }),
   async handler(args) {
-    await App.provide(
-      { cwd: process.cwd() },
-      async () => {
-        await LSP.touchFile(args.file, true)
-        console.log(await LSP.diagnostics())
-      },
-    )
+    await App.provide({ cwd: process.cwd() }, async () => {
+      await LSP.touchFile(args.file, true)
+      console.log(await LSP.diagnostics())
+    })
   },
 })

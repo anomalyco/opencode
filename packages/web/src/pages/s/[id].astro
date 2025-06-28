@@ -2,6 +2,7 @@
 import { Base64 } from "js-base64";
 import config from "virtual:starlight/user-config";
 
+import config from '../../../config.mjs'
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Share from "../../components/Share.tsx";
 
@@ -38,7 +39,7 @@ const encodedTitle = encodeURIComponent(
   )
 );
 
-const ogImage = `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${Array.from(models).join(",")}&version=${version}&id=${id}`;
+const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${Array.from(models).join(",")}&version=${version}&id=${id}`;
 
 ---
 <StarlightPage

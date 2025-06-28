@@ -171,7 +171,7 @@ func (r *colorResolver) resolveColor(key string, value any) (any, error) {
 
 	switch v := value.(type) {
 	case string:
-		if strings.HasPrefix(v, "#") {
+		if strings.HasPrefix(v, "#") || v == "none" {
 			return v, nil
 		}
 		return r.resolveReference(v)
@@ -205,7 +205,7 @@ func (r *colorResolver) resolveColor(key string, value any) (any, error) {
 func (r *colorResolver) resolveColorValue(value any) (any, error) {
 	switch v := value.(type) {
 	case string:
-		if strings.HasPrefix(v, "#") {
+		if strings.HasPrefix(v, "#") || v == "none" {
 			return v, nil
 		}
 		return r.resolveReference(v)
@@ -240,6 +240,12 @@ func (r *colorResolver) resolveReference(ref string) (any, error) {
 func parseResolvedColor(value any) (compat.AdaptiveColor, error) {
 	switch v := value.(type) {
 	case string:
+		if v == "none" {
+			return compat.AdaptiveColor{
+				Dark:  lipgloss.NoColor{},
+				Light: lipgloss.NoColor{},
+			}, nil
+		}
 		return compat.AdaptiveColor{
 			Dark:  lipgloss.Color(v),
 			Light: lipgloss.Color(v),
@@ -277,6 +283,9 @@ func parseResolvedColor(value any) (compat.AdaptiveColor, error) {
 func parseColorValue(value any) (color.Color, error) {
 	switch v := value.(type) {
 	case string:
+		if v == "none" {
+			return lipgloss.NoColor{}, nil
+		}
 		return lipgloss.Color(v), nil
 	case float64:
 		return lipgloss.Color(fmt.Sprintf("%d", int(v))), nil
