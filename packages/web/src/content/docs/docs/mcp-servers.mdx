@@ -17,13 +17,13 @@ You can define MCP servers in your opencode config under `mcp`.
 
 ### Local
 
-Add a local MCP servers under `mcp.localmcp`.
+Add local MCP servers under `mcp` with `type` set to `local`, e.g.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "localmcp": {
+    "mylocalmcp": {
       "type": "local",
       "command": ["bun", "x", "my-mcp-command"],
       "environment": {
@@ -36,13 +36,13 @@ Add a local MCP servers under `mcp.localmcp`.
 
 ### Remote
 
-Add a remote MCP servers under `mcp.remotemcp`.
+Add remote MCP servers under `mcp` with `type` set to `remote`, e.g.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "remotemcp": {
+    "myremotemcp": {
       "type": "remote",
       "url": "https://my-mcp-server.com"
     }
