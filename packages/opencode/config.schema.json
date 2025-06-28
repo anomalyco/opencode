@@ -264,6 +264,10 @@
                   "type": "string"
                 },
                 "description": "Environment variables to set when running the MCP server"
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable or disable the MCP server on startup"
               }
             },
             "required": ["type", "command"],
@@ -280,6 +284,10 @@
               "url": {
                 "type": "string",
                 "description": "URL of the remote MCP server"
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable or disable the MCP server on startup"
               }
             },
             "required": ["type", "url"],
