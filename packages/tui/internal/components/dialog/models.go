@@ -269,11 +269,11 @@ func NewModelDialog(app *app.App) ModelDialog {
 		hScrollOffset:      hScrollOffset,
 		hScrollPossible:    len(providers) > 1,
 		provider:           currentProvider,
+		modal: modal.New(
+			modal.WithTitle(fmt.Sprintf("Select %s Model", currentProvider.Name)),
+			modal.WithMaxWidth(maxDialogWidth+4),
+		),
 	}
-	dialog.modal = modal.New(
-		modal.WithTitle(fmt.Sprintf("Select %s Model", currentProvider.Name)),
-		modal.WithMaxWidth(maxDialogWidth+4),
-	)
 
 	dialog.setupModelsForProvider(currentProvider.ID)
 	return dialog
