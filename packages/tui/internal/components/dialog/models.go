@@ -32,11 +32,13 @@ type ModelDialog interface {
 
 type modelDialog struct {
 	app                *app.App
+	favoriteModels     []opencode.Model
 	availableProviders []opencode.Provider
 	provider           opencode.Provider
 	width              int
 	height             int
 	hScrollOffset      int
+	isFavorites        bool
 	hScrollPossible    bool
 	modal              *modal.Modal
 	modelList          list.List[list.StringItem]
@@ -97,6 +99,16 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			if m.isFavorites {
+				for _, p := range m.availableProviders {
+					for _, model := range p.Models {
+						if model.ID == selectedModel.ID {
+							m.provider = p
+							break
+						}
+					}
+				}
+			}
 			return m, tea.Sequence(
 				util.CmdHandler(modal.CloseModalMsg{}),
 				util.CmdHandler(
@@ -120,6 +132,9 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *modelDialog) models() []opencode.Model {
+	if m.isFavorites {
+		return m.favoriteModels
+	}
 	models := slices.SortedFunc(maps.Values(m.provider.Models), func(a, b opencode.Model) int {
 		return strings.Compare(a.Name, b.Name)
 	})
@@ -127,6 +142,11 @@ func (m *modelDialog) models() []opencode.Model {
 }
 
 func (m *modelDialog) switchProvider(offset int) {
+	if m.isFavorites {
+		m.isFavorites = false
+		m.hScrollOffset = -1
+	}
+
 	newOffset := m.hScrollOffset + offset
 
 	if newOffset < 0 {
@@ -150,7 +170,9 @@ func (m *modelDialog) View() string {
 
 func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 	var indicator string
-	if m.hScrollPossible {
+	if m.isFavorites {
+		indicator = "← → (switch to providers) "
+	} else if m.hScrollPossible {
 		indicator = "← → (switch provider) "
 	}
 	if indicator == "" {
@@ -166,6 +188,9 @@ func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 }
 
 func (m *modelDialog) setupModelsForProvider(providerId string) {
+	if m.isFavorites {
+		m.hScrollPossible = len(m.availableProviders) > 0
+	}
 	models := m.models()
 	modelNames := make([]string, len(models))
 	for i, model := range models {
@@ -214,10 +239,52 @@ func NewModelDialog(app *app.App) ModelDialog {
 		hScrollOffset:      hScrollOffset,
 		hScrollPossible:    len(availableProviders) > 1,
 		provider:           currentProvider,
-		modal: modal.New(
-			modal.WithTitle(fmt.Sprintf("Select %s Model", currentProvider.Name)),
-			modal.WithMaxWidth(maxDialogWidth+4),
-		),
+	}
+	dialog.modal = modal.New(
+		modal.WithTitle(fmt.Sprintf("Select %s Model", currentProvider.Name)),
+		modal.WithMaxWidth(maxDialogWidth+4),
+	)
+
+	if len(app.Config.FavoriteModels) > 0 {
+		for _, p := range availableProviders {
+			for _, m := range p.Models {
+				for _, fav := range app.Config.FavoriteModels {
+					if fav == m.ID {
+						dialog.favoriteModels = append(dialog.favoriteModels, m)
+					}
+				}
+			}
+		}
+	}
+
+	if len(dialog.favoriteModels) > 0 {
+		dialog.isFavorites = true
+		dialog.provider = opencode.Provider{
+			ID:   "favorites",
+			Name: "Favorites",
+		}
+		dialog.modal.SetTitle("Select a Favorite Model")
+	}
+
+	if len(app.Config.FavoriteModels) > 0 {
+		for _, p := range availableProviders {
+			for _, m := range p.Models {
+				for _, fav := range app.Config.FavoriteModels {
+					if fav == m.ID {
+						dialog.favoriteModels = append(dialog.favoriteModels, m)
+					}
+				}
+			}
+		}
+	}
+
+	if len(dialog.favoriteModels) > 0 {
+		dialog.isFavorites = true
+		dialog.provider = opencode.Provider{
+			ID:   "favorites",
+			Name: "Favorites",
+		}
+		dialog.modal.SetTitle("Select a Favorite Model")
 	}
 
 	dialog.setupModelsForProvider(currentProvider.ID)

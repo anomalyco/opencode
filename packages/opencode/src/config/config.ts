@@ -157,6 +157,12 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Disable providers that are loaded automatically"),
+      favoriteModels: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "An array of favorite models to be displayed first in the list",
+        ),
       model: z
         .string()
         .describe(
