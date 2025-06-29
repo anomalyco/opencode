@@ -5,7 +5,10 @@ import { Log } from "../util/log"
 import path from "path"
 
 import type { Definition } from "./definition"
-import {readdir} from "fs/promises";
+
+import prettier from "./formatters/prettier"
+import mix from "./formatters/mix"
+import gofmt from "./formatters/gofmt"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -64,26 +67,9 @@ export namespace Format {
     })
   }
 
-
-  const FORMATTERS: Definition[] = []
-  const formattersPath = path.join(__dirname, "formatters")
-  async function loadFormatters() {
-      const files = await readdir(formattersPath, { withFileTypes: true })
-      for (const file of files) {
-          const modulePath = path.join(formattersPath, file.name)
-            if (file.isFile() && file.name.endsWith(".ts")) {
-                const module = await import(modulePath)
-                if (module && module.default) {
-                    const formatter: Definition = module.default
-                    FORMATTERS.push(formatter)
-                } else {
-                    log.warn("No default export found in formatter module", { modulePath })
-                }
-            }
-      }
-
-  }
-  loadFormatters().catch((err) => {
-      log.error("Failed to load formatters", { error: err })
-  })
+  const FORMATTERS: Definition[] = [
+    prettier,
+    mix,
+    gofmt,
+  ]
 }
