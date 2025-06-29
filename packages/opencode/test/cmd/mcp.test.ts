@@ -16,26 +16,36 @@ import fs from "fs"
 
 const testConfigDir = path.join(process.cwd(), "test-config")
 const testConfigPath = path.join(testConfigDir, "config.json")
+const testProjectDir = path.join(process.cwd(), "test-project")
+const testProjectConfigPath = path.join(testProjectDir, "opencode.json")
+
+let originalCwd: string
 
 beforeEach(async () => {
-  // Create test config directory
+  // Create test directories
   await fs.promises.mkdir(testConfigDir, { recursive: true })
+  await fs.promises.mkdir(testProjectDir, { recursive: true })
 
   // Mock Global.Path.config to use test directory
   // @ts-expect-error
   Global.Path.config = testConfigDir
 
-  // Create empty config
+  // Mock process.cwd to use test project directory
+  originalCwd = process.cwd()
+  process.cwd = () => testProjectDir
+
+  // Create empty configs
   await Bun.write(testConfigPath, JSON.stringify({}, null, 2))
+  await Bun.write(testProjectConfigPath, JSON.stringify({}, null, 2))
 })
 
 afterEach(async () => {
-  // Clean up test config
-  await fs.promises.rm(testConfigDir, { recursive: true, force: true })
+  // Restore original process.cwd
+  process.cwd = () => originalCwd
 
-  // Clean up project config files created during tests
-  const projectConfigPath = path.join(process.cwd(), "opencode.json")
-  await fs.promises.rm(projectConfigPath, { force: true })
+  // Clean up test directories
+  await fs.promises.rm(testConfigDir, { recursive: true, force: true })
+  await fs.promises.rm(testProjectDir, { recursive: true, force: true })
 })
 
 describe("mcp command", () => {
@@ -55,8 +65,9 @@ describe("mcp command", () => {
     await McpAddCommand.handler(args)
 
     // Read project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp).toBeDefined()
     expect(projectConfig.mcp["test-server"]).toMatchObject({
       type: "local",
@@ -109,8 +120,9 @@ describe("mcp command", () => {
 
     await McpAddCommand.handler(args)
 
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp["sse-server"]).toMatchObject({
       type: "remote",
       url: "http://localhost:8080/mcp",
@@ -177,9 +189,8 @@ describe("mcp command", () => {
 
   test("remove MCP server from project scope", async () => {
     // First add a server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -202,7 +213,9 @@ describe("mcp command", () => {
     }
     await McpRemoveCommand.handler(args)
 
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp).toBeUndefined()
   })
 
@@ -273,8 +286,9 @@ describe("mcp command", () => {
 
     await McpAddJsonCommand.handler(args)
 
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp["json-server"]).toMatchObject({
       type: "local",
       command: ["bun", "run", "mcp-server.ts"],
@@ -337,9 +351,8 @@ describe("mcp command", () => {
     )
 
     // Add a server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -408,9 +421,8 @@ describe("mcp command", () => {
 
   test("get MCP server details from project scope", async () => {
     // Add a server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -465,9 +477,8 @@ describe("mcp command", () => {
       ),
     )
 
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -501,9 +512,8 @@ describe("mcp command", () => {
 
   test("enable MCP server in project scope", async () => {
     // First add a disabled server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -527,7 +537,9 @@ describe("mcp command", () => {
     }
     await McpEnableCommand.handler(args)
 
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp["disabled-server"].enabled).toBe(true)
   })
 
@@ -564,9 +576,8 @@ describe("mcp command", () => {
 
   test("disable MCP server in project scope", async () => {
     // First add an enabled server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
@@ -590,7 +601,9 @@ describe("mcp command", () => {
     }
     await McpDisableCommand.handler(args)
 
-    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    const projectConfig = JSON.parse(
+      await Bun.file(testProjectConfigPath).text(),
+    )
     expect(projectConfig.mcp["enabled-server"].enabled).toBe(false)
   })
 
@@ -717,9 +730,8 @@ describe("mcp command", () => {
 
   test("get shows enabled status for MCP servers", async () => {
     // Add a disabled server to project config
-    const projectConfigPath = path.join(process.cwd(), "opencode.json")
     await Bun.write(
-      projectConfigPath,
+      testProjectConfigPath,
       JSON.stringify(
         {
           mcp: {
