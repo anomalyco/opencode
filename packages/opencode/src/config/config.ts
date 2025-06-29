@@ -161,7 +161,7 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe(
-          "An array of favorite models to be displayed first in the list",
+          "An array of favorite models to be displayed first in the the models list",
         ),
       model: z
         .string()
