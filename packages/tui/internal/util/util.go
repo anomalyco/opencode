@@ -1,8 +1,10 @@
 package util
 
 import (
+	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
@@ -34,4 +36,12 @@ func IsWsl() bool {
 	}
 
 	return false
+}
+
+func Measure(tag string) func(...any) {
+	startTime := time.Now()
+	return func(tags ...any) {
+		args := append([]any{"timeTakenMs", time.Since(startTime).Milliseconds()}, tags...)
+		slog.Info(tag, args...)
+	}
 }

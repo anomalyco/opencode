@@ -56,6 +56,7 @@ type appModel struct {
 	isLeaderSequence     bool
 	toastManager         *toast.ToastManager
 	interruptKeyState    InterruptKeyState
+	lastScroll           time.Time
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -81,12 +82,32 @@ func (a appModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+var BUGGED_SCROLL_KEYS = map[string]bool{
+	"0": true,
+	"1": true,
+	"2": true,
+	"3": true,
+	"4": true,
+	"5": true,
+	"6": true,
+	"7": true,
+	"8": true,
+	"9": true,
+	"M": true,
+	"m": true,
+	"[": true,
+	";": true,
+}
+
 func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
+		if time.Since(a.lastScroll) < time.Millisecond*100 && BUGGED_SCROLL_KEYS[keyString] {
+			return a, nil
+		}
 
 		// 1. Handle active modal
 		if a.modal != nil {
@@ -222,6 +243,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd
 	case tea.MouseWheelMsg:
+		a.lastScroll = time.Now()
 		if a.modal != nil {
 			return a, nil
 		}
@@ -319,6 +341,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventSessionError:
 		switch err := msg.Properties.Error.AsUnion().(type) {
 		case nil:
+		case opencode.ProviderAuthError:
+			slog.Error("Failed to authenticate with provider", "error", err.Data.Message)
+			return a, toast.NewErrorToast("Provider error: " + err.Data.Message)
 		case opencode.UnknownError:
 			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
 			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
@@ -513,11 +538,14 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		_, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID)
+		response, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID)
 		if err != nil {
 			slog.Error("Failed to share session", "error", err)
 			return a, toast.NewErrorToast("Failed to share session")
 		}
+		shareUrl := response.Share.URL
+		cmds = append(cmds, tea.SetClipboard(shareUrl))
+		cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
 	case commands.SessionInterruptCommand:
 		if a.app.Session.ID == "" {
 			return a, nil

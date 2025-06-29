@@ -26,6 +26,10 @@ export namespace MCP {
         [name: string]: Awaited<ReturnType<typeof experimental_createMCPClient>>
       } = {}
       for (const [key, mcp] of Object.entries(cfg.mcp ?? {})) {
+        if (mcp.enabled === false) {
+          log.info("mcp server disabled", { key })
+          continue
+        }
         log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
           const client = await experimental_createMCPClient({

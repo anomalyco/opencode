@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -19,6 +20,7 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 	stylesi "github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
+	"github.com/sst/opencode/internal/util"
 )
 
 // -------------------------------------------------------------------------
@@ -939,11 +941,22 @@ func RenderSideBySideHunk(fileName string, h Hunk, opts ...SideBySideOption) str
 	leftWidth := colWidth
 	rightWidth := config.TotalWidth - colWidth
 	var sb strings.Builder
-	for _, p := range pairs {
-		leftStr := renderLeftColumn(fileName, p.left, leftWidth)
-		rightStr := renderRightColumn(fileName, p.right, rightWidth)
-		sb.WriteString(leftStr + rightStr + "\n")
-	}
+
+	util.WriteStringsPar(&sb, pairs, func(p linePair) string {
+		wg := &sync.WaitGroup{}
+		var leftStr, rightStr string
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			leftStr = renderLeftColumn(fileName, p.left, leftWidth)
+		}()
+		go func() {
+			defer wg.Done()
+			rightStr = renderRightColumn(fileName, p.right, rightWidth)
+		}()
+		wg.Wait()
+		return leftStr + rightStr + "\n"
+	})
 
 	return sb.String()
 }
@@ -957,7 +970,8 @@ func FormatUnifiedDiff(filename string, diffText string, opts ...UnifiedOption) 
 
 	var sb strings.Builder
 	for _, h := range diffResult.Hunks {
-		sb.WriteString(RenderUnifiedHunk(filename, h, opts...))
+		unifiedDiff := RenderUnifiedHunk(filename, h, opts...)
+		sb.WriteString(unifiedDiff)
 	}
 
 	return sb.String(), nil
@@ -973,7 +987,7 @@ func FormatDiff(filename string, diffText string, opts ...SideBySideOption) (str
 
 	var sb strings.Builder
 	// config := NewSideBySideConfig(opts...)
-	for _, h := range diffResult.Hunks {
+	util.WriteStringsPar(&sb, diffResult.Hunks, func(h Hunk) string {
 		// sb.WriteString(
 		// 	lipgloss.NewStyle().
 		// 		Background(t.DiffHunkHeader()).
@@ -981,8 +995,8 @@ func FormatDiff(filename string, diffText string, opts ...SideBySideOption) (str
 		// 		Width(config.TotalWidth).
 		// 		Render(h.Header) + "\n",
 		// )
-		sb.WriteString(RenderSideBySideHunk(filename, h, opts...))
-	}
+		return RenderSideBySideHunk(filename, h, opts...)
+	})
 
 	return sb.String(), nil
 }
