@@ -26,6 +26,8 @@ export const McpCommand = cmd({
       .command(McpListCommand)
       .command(McpGetCommand)
       .command(McpAddJsonCommand)
+      .command(McpEnableCommand)
+      .command(McpDisableCommand)
       .help()
     
     return configured
@@ -44,7 +46,9 @@ Commands:
   remove [options] <name>                        Remove an MCP server
   list                                           List configured MCP servers
   get <name>                                     Get details about an MCP server
-  add-json [options] <name> <json>               Add an MCP server (stdio or SSE) with a JSON string`)
+  add-json [options] <name> <json>               Add an MCP server (stdio or SSE) with a JSON string
+  enable [options] <name>                        Enable an MCP server
+  disable [options] <name>                       Disable an MCP server`)
   },
 })
 
@@ -254,7 +258,8 @@ export const McpListCommand = cmd({
       UI.empty()
       
       for (const [name, mcpConfig] of Object.entries(globalConfig.mcp!)) {
-        UI.println(`  ${name} (${mcpConfig.type})`)
+        const status = mcpConfig.enabled === false ? " (disabled)" : ""
+        UI.println(`  ${name} (${mcpConfig.type})${status}`)
         if (mcpConfig.type === "local") {
           UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
           if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
@@ -276,7 +281,8 @@ export const McpListCommand = cmd({
       UI.empty()
       
       for (const [name, mcpConfig] of Object.entries(projectConfig.mcp!)) {
-        UI.println(`  ${name} (${mcpConfig.type})`)
+        const status = mcpConfig.enabled === false ? " (disabled)" : ""
+        UI.println(`  ${name} (${mcpConfig.type})${status}`)
         if (mcpConfig.type === "local") {
           UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
           if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
@@ -331,6 +337,7 @@ export const McpGetCommand = cmd({
     UI.println(`MCP Server: ${args.name}`)
     UI.println(`Scope: ${foundScope}`)
     UI.println(`Type: ${foundConfig.type}`)
+    UI.println(`Enabled: ${foundConfig.enabled !== false ? "true" : "false"}`)
     
     if (foundConfig.type === "local") {
       UI.println(`Command: ${foundConfig.command.join(" ")}`)
@@ -443,5 +450,105 @@ export const McpAddJsonCommand = cmd({
       }
       UI.error(`Failed to add MCP server: ${error}`)
     }
+  },
+})
+
+export const McpEnableCommand = cmd({
+  command: "enable <name>",
+  describe: "Enable an MCP server",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        type: "string",
+        describe: "Name of the MCP server to enable",
+        demandOption: true,
+      })
+      .option("scope", {
+        alias: "s",
+        type: "string",
+        choices: ["user", "project"] as const,
+        default: "project",
+        describe: "Configuration scope (user, or project)",
+      }),
+  handler: async (args) => {
+    // Determine config path based on scope
+    const configPath = args.scope === "user" 
+      ? path.join(Global.Path.config, "config.json")
+      : path.join(process.cwd(), "opencode.json")
+
+    // Load current config
+    const currentConfig = args.scope === "user" 
+      ? await Config.global()
+      : await loadProjectConfig(configPath)
+
+    if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
+      UI.error(`MCP server "${args.name}" not found in ${args.scope} config`)
+      return
+    }
+
+    const updatedConfig = {
+      ...currentConfig,
+      mcp: {
+        ...currentConfig.mcp,
+        [args.name]: {
+          ...currentConfig.mcp[args.name],
+          enabled: true,
+        },
+      },
+    }
+
+    await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
+    
+    UI.println(`Enabled MCP server "${args.name}" in ${args.scope} config`)
+  },
+})
+
+export const McpDisableCommand = cmd({
+  command: "disable <name>",
+  describe: "Disable an MCP server",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        type: "string",
+        describe: "Name of the MCP server to disable",
+        demandOption: true,
+      })
+      .option("scope", {
+        alias: "s",
+        type: "string",
+        choices: ["user", "project"] as const,
+        default: "project",
+        describe: "Configuration scope (user, or project)",
+      }),
+  handler: async (args) => {
+    // Determine config path based on scope
+    const configPath = args.scope === "user" 
+      ? path.join(Global.Path.config, "config.json")
+      : path.join(process.cwd(), "opencode.json")
+
+    // Load current config
+    const currentConfig = args.scope === "user" 
+      ? await Config.global()
+      : await loadProjectConfig(configPath)
+
+    if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
+      UI.error(`MCP server "${args.name}" not found in ${args.scope} config`)
+      return
+    }
+
+    const updatedConfig = {
+      ...currentConfig,
+      mcp: {
+        ...currentConfig.mcp,
+        [args.name]: {
+          ...currentConfig.mcp[args.name],
+          enabled: false,
+        },
+      },
+    }
+
+    await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
+    
+    UI.println(`Disabled MCP server "${args.name}" in ${args.scope} config`)
   },
 })

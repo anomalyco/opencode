@@ -5,6 +5,8 @@ import {
   McpListCommand,
   McpGetCommand,
   McpAddJsonCommand,
+  McpEnableCommand,
+  McpDisableCommand,
 } from "../../src/cli/cmd/mcp"
 import { Config } from "../../src/config/config"
 import { Global } from "../../src/global"
@@ -396,9 +398,12 @@ describe("mcp command", () => {
     await McpGetCommand.handler(args)
 
     UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("MCP Server: detail-server"))).toBe(true)
+    expect(logs.some((log) => log.includes("MCP Server: detail-server"))).toBe(
+      true,
+    )
     expect(logs.some((log) => log.includes("Scope: user"))).toBe(true)
     expect(logs.some((log) => log.includes("Type: local"))).toBe(true)
+    expect(logs.some((log) => log.includes("Enabled: true"))).toBe(true)
   })
 
   test("get MCP server details from project scope", async () => {
@@ -412,7 +417,7 @@ describe("mcp command", () => {
             "project-server": {
               type: "remote",
               url: "https://example.com/mcp",
-              headers: { "Authorization": "Bearer token" },
+              headers: { Authorization: "Bearer token" },
             },
           },
         },
@@ -433,9 +438,12 @@ describe("mcp command", () => {
     await McpGetCommand.handler(args)
 
     UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("MCP Server: project-server"))).toBe(true)
+    expect(logs.some((log) => log.includes("MCP Server: project-server"))).toBe(
+      true,
+    )
     expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
     expect(logs.some((log) => log.includes("Type: remote"))).toBe(true)
+    expect(logs.some((log) => log.includes("Enabled: true"))).toBe(true)
     expect(logs.some((log) => log.includes("Headers:"))).toBe(true)
   })
 
@@ -489,5 +497,256 @@ describe("mcp command", () => {
     expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
     expect(logs.some((log) => log.includes("project-server.js"))).toBe(true)
     expect(logs.some((log) => log.includes("user-server.js"))).toBe(false)
+  })
+
+  test("enable MCP server in project scope", async () => {
+    // First add a disabled server to project config
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "disabled-server": {
+              type: "local",
+              command: ["node", "server.js"],
+              enabled: false,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const args = {
+      name: "disabled-server",
+      scope: "project" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpEnableCommand.handler(args)
+
+    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    expect(projectConfig.mcp["disabled-server"].enabled).toBe(true)
+  })
+
+  test("enable MCP server in user scope", async () => {
+    // First add a disabled server to user config
+    await Bun.write(
+      testConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "user-disabled-server": {
+              type: "remote",
+              url: "https://example.com/mcp",
+              enabled: false,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const args = {
+      name: "user-disabled-server",
+      scope: "user" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpEnableCommand.handler(args)
+
+    const config = await Config.global()
+    expect(config.mcp!["user-disabled-server"].enabled).toBe(true)
+  })
+
+  test("disable MCP server in project scope", async () => {
+    // First add an enabled server to project config
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "enabled-server": {
+              type: "local",
+              command: ["node", "server.js"],
+              enabled: true,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const args = {
+      name: "enabled-server",
+      scope: "project" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpDisableCommand.handler(args)
+
+    const projectConfig = JSON.parse(await Bun.file(projectConfigPath).text())
+    expect(projectConfig.mcp["enabled-server"].enabled).toBe(false)
+  })
+
+  test("disable MCP server in user scope", async () => {
+    // First add an enabled server to user config
+    await Bun.write(
+      testConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "user-enabled-server": {
+              type: "remote",
+              url: "https://example.com/mcp",
+              enabled: true,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const args = {
+      name: "user-enabled-server",
+      scope: "user" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpDisableCommand.handler(args)
+
+    const config = await Config.global()
+    expect(config.mcp!["user-enabled-server"].enabled).toBe(false)
+  })
+
+  test("enable non-existent MCP server shows error", async () => {
+    const originalError = UI.error
+    let errorMessage = ""
+    UI.error = (msg: string) => {
+      errorMessage = msg
+    }
+
+    const args = {
+      name: "non-existent",
+      scope: "project" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpEnableCommand.handler(args)
+
+    expect(errorMessage).toContain(
+      'MCP server "non-existent" not found in project config',
+    )
+
+    UI.error = originalError
+  })
+
+  test("disable non-existent MCP server shows error", async () => {
+    const originalError = UI.error
+    let errorMessage = ""
+    UI.error = (msg: string) => {
+      errorMessage = msg
+    }
+
+    const args = {
+      name: "non-existent",
+      scope: "user" as const,
+      _: [],
+      $0: "opencode",
+    }
+    await McpDisableCommand.handler(args)
+
+    expect(errorMessage).toContain(
+      'MCP server "non-existent" not found in user config',
+    )
+
+    UI.error = originalError
+  })
+
+  test("list shows disabled status for MCP servers", async () => {
+    // Add servers with different enabled states
+    await Bun.write(
+      testConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "enabled-server": {
+              type: "local",
+              command: ["node", "enabled.js"],
+              enabled: true,
+            },
+            "disabled-server": {
+              type: "local",
+              command: ["node", "disabled.js"],
+              enabled: false,
+            },
+            "default-server": {
+              type: "local",
+              command: ["node", "default.js"],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const originalPrintln = UI.println
+    const logs: string[] = []
+    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+
+    await McpListCommand.handler({ $0: "opencode", _: [] })
+
+    UI.println = originalPrintln
+    expect(logs.some((log) => log.includes("enabled-server (local)"))).toBe(
+      true,
+    )
+    expect(
+      logs.some((log) => log.includes("disabled-server (local) (disabled)")),
+    ).toBe(true)
+    expect(logs.some((log) => log.includes("default-server (local)"))).toBe(
+      true,
+    )
+  })
+
+  test("get shows enabled status for MCP servers", async () => {
+    // Add a disabled server to project config
+    const projectConfigPath = path.join(process.cwd(), "opencode.json")
+    await Bun.write(
+      projectConfigPath,
+      JSON.stringify(
+        {
+          mcp: {
+            "status-server": {
+              type: "local",
+              command: ["node", "server.js"],
+              enabled: false,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    )
+
+    const originalPrintln = UI.println
+    const logs: string[] = []
+    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+
+    const args = {
+      name: "status-server",
+      _: [],
+      $0: "opencode",
+    }
+    await McpGetCommand.handler(args)
+
+    UI.println = originalPrintln
+    expect(logs.some((log) => log.includes("Enabled: false"))).toBe(true)
   })
 })
