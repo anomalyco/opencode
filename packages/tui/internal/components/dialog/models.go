@@ -146,6 +146,7 @@ func (m *modelDialog) models() []opencode.Model {
 
 func (m *modelDialog) switchProvider(offset int) {
 	newOffset := m.hScrollOffset + offset
+
 	if newOffset < 0 {
 		newOffset = len(m.availableProviders) - 1
 	}
@@ -183,7 +184,6 @@ func (m *modelDialog) getScrollIndicators(maxWidth int) string {
 }
 
 func (m *modelDialog) setupModelsForProvider(providerId string) {
-	m.hScrollPossible = len(m.availableProviders) > 1
 	models := m.models()
 	modelNames := make([]string, len(models))
 	for i, model := range models {
