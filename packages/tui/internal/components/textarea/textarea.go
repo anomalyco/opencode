@@ -33,6 +33,45 @@ const (
 	maxLines = 10000
 )
 
+func keypadToChar(keyString string) string {
+	switch keyString {
+	case "kp0":
+		return "0"
+	case "kp1":
+		return "1"
+	case "kp2":
+		return "2"
+	case "kp3":
+		return "3"
+	case "kp4":
+		return "4"
+	case "kp5":
+		return "5"
+	case "kp6":
+		return "6"
+	case "kp7":
+		return "7"
+	case "kp8":
+		return "8"
+	case "kp9":
+		return "9"
+	case "kpplus":
+		return "+"
+	case "kpminus":
+		return "-"
+	case "kpmul":
+		return "*"
+	case "kpdiv":
+		return "/"
+	case "kpperiod":
+		return "."
+	case "kpequal":
+		return "="
+	default:
+		return ""
+	}
+}
+
 // Helper functions for converting between runes and any slices
 
 // runesToInterfaces converts a slice of runes to a slice of interfaces
@@ -1673,7 +1712,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.transposeLeft()
 
 		default:
-			m.InsertRunesFromUserInput([]rune(msg.Text))
+			// Handle keypad keys by converting them to their character equivalents
+			if msg.Text == "" {
+				if char := keypadToChar(msg.String()); char != "" {
+					m.InsertRunesFromUserInput([]rune(char))
+				}
+			} else {
+				m.InsertRunesFromUserInput([]rune(msg.Text))
+			}
 		}
 
 	case pasteMsg:

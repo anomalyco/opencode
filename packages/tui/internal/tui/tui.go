@@ -105,6 +105,17 @@ func (a Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func isKeypadKey(keyString string) bool {
+	switch keyString {
+	case "kp0", "kp1", "kp2", "kp3", "kp4",
+		"kp5", "kp6", "kp7", "kp8", "kp9",
+		"kpplus", "kpminus", "kpmul", "kpdiv",
+		"kpperiod", "kpenter", "kpequal":
+		return true
+	default:
+		return false
+	}
+}
 func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -267,8 +278,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 
-		// 4. Maximize editor responsiveness for printable characters
-		if msg.Text != "" {
+		// 4. Maximize editor responsiveness for printable characters and keypad keys
+		if msg.Text != "" || isKeypadKey(keyString) {
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
 			cmds = append(cmds, cmd)
