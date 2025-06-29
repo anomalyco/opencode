@@ -213,32 +213,33 @@ func (s *modelDialog) Close() tea.Cmd {
 
 func NewModelDialog(app *app.App) ModelDialog {
 	// MOCK: Using a hardcoded list of favorite models for testing
-	mockFavoriteModels := []string{"openai/o3", "google/gemini-2.5-pro"} // e.g. "openai/gpt-4-turbo"
+	favoriteModels := []string{"openai/o3", "google/gemini-2.5-pro"}
+	// favoriteModels := app.Config.FavoriteModels
 	allProviders, _ := app.ListProviders(context.Background())
 
 	var providers []opencode.Provider
-	if len(mockFavoriteModels) > 0 {
-		var favoriteModels []opencode.Model
+	if len(favoriteModels) > 0 {
+		var models []opencode.Model
 		for _, p := range allProviders {
 			for _, m := range p.Models {
-				for _, fav := range mockFavoriteModels {
+				for _, fav := range favoriteModels {
 					if fav == fmt.Sprintf("%s/%s", p.ID, m.ID) {
 						newModel := m
 						newModel.ID = fmt.Sprintf("%s/%s", p.ID, m.ID)
 						newModel.Name = fmt.Sprintf("%s (%s)", m.Name, p.Name)
-						favoriteModels = append(favoriteModels, newModel)
+						models = append(models, newModel)
 					}
 				}
 			}
 		}
 
-		if len(favoriteModels) > 0 {
+		if len(models) > 0 {
 			favoritesProvider := opencode.Provider{
 				ID:     "favorites",
 				Name:   "Favorites",
 				Models: make(map[string]opencode.Model),
 			}
-			for _, m := range favoriteModels {
+			for _, m := range models {
 				favoritesProvider.Models[m.ID] = m
 			}
 			providers = append(providers, favoritesProvider)
