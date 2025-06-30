@@ -39,13 +39,13 @@ func (m statusComponent) logo() string {
 	base := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
 	emphasis := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundElement()).Bold(true).Render
 
-	open := base("open")
-	code := emphasis("code ")
+	ch := base("ch")
+	ai := emphasis("ai ")
 	version := base(m.app.Version)
 	return styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Padding(0, 1).
-		Render(open + code + version)
+		Render(ch + ai + version)
 }
 
 func formatTokensAndCost(tokens float64, contextWindow float64, cost float64) string {

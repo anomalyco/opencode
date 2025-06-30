@@ -331,19 +331,24 @@ func (m *messagesComponent) home() string {
 	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 
-	open := `
-█▀▀█ █▀▀█ █▀▀ █▀▀▄ 
-█░░█ █░░█ █▀▀ █░░█ 
-▀▀▀▀ █▀▀▀ ▀▀▀ ▀  ▀ `
-	code := `
-█▀▀ █▀▀█ █▀▀▄ █▀▀
-█░░ █░░█ █░░█ █▀▀
-▀▀▀ ▀▀▀▀ ▀▀▀  ▀▀▀`
+	chai := `
+ ██████ ██   ██       █████  ██ 
+██      ██   ██      ██   ██ ██ 
+██      ███████ ████ ███████ ██ 
+██      ██   ██      ██   ██ ██ 
+ ██████ ██   ██      ██   ██ ██ `
+	runtime := `
+██████  ██    ██ ███    ██ ████████ ██ ███    ███ ███████
+██   ██ ██    ██ ████   ██    ██    ██ ████  ████ ██     
+██████  ██    ██ ██ ██  ██    ██    ██ ██ ████ ██ █████  
+██   ██ ██    ██ ██  ██ ██    ██    ██ ██  ██  ██ ██     
+██   ██  ██████  ██   ████    ██    ██ ██      ██ ███████`
 
 	logo := lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		muted(open),
-		base(code),
+		muted(chai),
+		base("  "), // Add space between CH-AI and RUNTIME
+		base(runtime),
 	)
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
