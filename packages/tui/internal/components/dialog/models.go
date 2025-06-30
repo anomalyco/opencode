@@ -52,11 +52,9 @@ type ModelItem struct {
 func (m ModelItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
 
-	// Create the display text
-	displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
-
 	if selected {
-		// When selected, use the standard selection styling
+		// When selected, use uniform selection styling for the entire item
+		displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
 		return styles.NewStyle().
 			Background(t.Primary()).
 			Foreground(t.BackgroundElement()).
@@ -64,11 +62,25 @@ func (m ModelItem) Render(selected bool, width int) string {
 			PaddingLeft(1).
 			Render(displayText)
 	} else {
-		// When not selected, use normal text styling (same as StringItem)
-		return styles.NewStyle().
+		// When not selected, use mixed styling with modal background
+		// This matches the pattern used in commands component
+		modelStyle := styles.NewStyle().
 			Foreground(t.Text()).
+			Background(t.BackgroundElement())
+		providerStyle := styles.NewStyle().
+			Foreground(t.TextMuted()).
+			Background(t.BackgroundElement())
+
+		// Render each part with its own style
+		modelPart := modelStyle.Render(m.ModelName)
+		providerPart := providerStyle.Render(fmt.Sprintf(" (%s)", m.ProviderName))
+
+		// Combine the styled parts and add padding
+		combinedText := modelPart + providerPart
+		return styles.NewStyle().
+			Background(t.BackgroundElement()).
 			PaddingLeft(1).
-			Render(displayText)
+			Render(combinedText)
 	}
 }
 
