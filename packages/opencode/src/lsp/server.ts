@@ -128,40 +128,18 @@ export namespace LSPServer {
     id: "pyright",
     extensions: [".py", ".pyi"],
     async spawn() {
-      let bin = Bun.which("pyright-langserver", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
-      })
-      if (!bin) {
-        const npm = Bun.which("npm")
-        if (!npm) {
-          log.info("npm not found, please install Node.js first")
-          return
-        }
-        log.info("installing pyright")
-        const proc = Bun.spawn({
-          cmd: ["npm", "install", "-g", "pyright"],
-          stdout: "pipe",
-          stderr: "pipe",
-          stdin: "pipe",
-        })
-        const exit = await proc.exited
-        if (exit !== 0) {
-          log.error("Failed to install pyright")
-          return
-        }
-        bin = Bun.which("pyright-langserver", {
-          PATH: process.env["PATH"] + ":" + Global.Path.bin,
-        })
-        if (!bin) {
-          log.error("pyright-langserver not found after installation")
-          return
-        }
-        log.info(`installed pyright`, {
-          bin,
-        })
-      }
+      const proc = spawn(
+        BunProc.which(),
+        ["x", "pyright-langserver", "--stdio"],
+        {
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        },
+      )
       return {
-        process: spawn(bin!, ["--stdio"]),
+        process: proc,
       }
     },
   }
