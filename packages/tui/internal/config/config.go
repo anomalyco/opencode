@@ -37,9 +37,7 @@ func (s *State) UpdateModelUsage(providerID, modelID string) {
 	// Check if this model is already in the list
 	for i, usage := range s.RecentlyUsedModels {
 		if usage.ProviderID == providerID && usage.ModelID == modelID {
-			// Move to front and update timestamp
 			s.RecentlyUsedModels[i].LastUsed = now
-			// Move to front of slice
 			usage := s.RecentlyUsedModels[i]
 			copy(s.RecentlyUsedModels[1:i+1], s.RecentlyUsedModels[0:i])
 			s.RecentlyUsedModels[0] = usage
@@ -47,7 +45,6 @@ func (s *State) UpdateModelUsage(providerID, modelID string) {
 		}
 	}
 
-	// Add new usage at the front
 	newUsage := ModelUsage{
 		ProviderID: providerID,
 		ModelID:    modelID,
