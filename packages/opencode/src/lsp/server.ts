@@ -143,4 +143,21 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Aiken: Info = {
+    id: "aiken",
+    extensions: [".ak"],
+    async spawn() {
+      // Simply use bun x to run aiken lsp, just like TypeScript
+      const proc = spawn(BunProc.which(), ["x", "@aiken-lang/aiken", "lsp"], {
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
 }
