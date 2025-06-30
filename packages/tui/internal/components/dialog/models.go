@@ -53,7 +53,6 @@ func (m ModelItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
 
 	if selected {
-		// When selected, use uniform selection styling for the entire item
 		displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
 		return styles.NewStyle().
 			Background(t.Primary()).
@@ -62,8 +61,6 @@ func (m ModelItem) Render(selected bool, width int) string {
 			PaddingLeft(1).
 			Render(displayText)
 	} else {
-		// When not selected, use mixed styling with modal background
-		// This matches the pattern used in commands component
 		modelStyle := styles.NewStyle().
 			Foreground(t.Text()).
 			Background(t.BackgroundElement())
@@ -71,11 +68,9 @@ func (m ModelItem) Render(selected bool, width int) string {
 			Foreground(t.TextMuted()).
 			Background(t.BackgroundElement())
 
-		// Render each part with its own style
 		modelPart := modelStyle.Render(m.ModelName)
 		providerPart := providerStyle.Render(fmt.Sprintf(" (%s)", m.ProviderName))
 
-		// Combine the styled parts and add padding
 		combinedText := modelPart + providerPart
 		return styles.NewStyle().
 			Background(t.BackgroundElement()).
@@ -153,7 +148,6 @@ func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
 		}
 	}
 
-	// Ensure we don't exceed the maximum width
 	if maxWidth > maxDialogWidth {
 		maxWidth = maxDialogWidth
 	}
@@ -162,10 +156,8 @@ func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
 }
 
 func (m *modelDialog) setupAllModels() {
-	// Get all available providers
 	providers, _ := m.app.ListProviders(context.Background())
 
-	// Collect all models from all providers
 	m.allModels = make([]ModelWithProvider, 0)
 	for _, provider := range providers {
 		for _, model := range provider.Models {
@@ -176,10 +168,8 @@ func (m *modelDialog) setupAllModels() {
 		}
 	}
 
-	// Sort models by recently used first, then by release date desc (if available)
 	m.sortModels()
 
-	// Create ModelItem objects for the list
 	modelItems := make([]ModelItem, len(m.allModels))
 	for i, modelWithProvider := range m.allModels {
 		modelItems[i] = ModelItem{
@@ -188,7 +178,6 @@ func (m *modelDialog) setupAllModels() {
 		}
 	}
 
-	// Calculate optimal width based on content
 	m.dialogWidth = m.calculateOptimalWidth(modelItems)
 
 	m.modelList = list.NewListComponent(modelItems, numVisibleModels, "No models available", true)
@@ -206,7 +195,6 @@ func (m *modelDialog) sortModels() {
 		modelA := m.allModels[i]
 		modelB := m.allModels[j]
 
-		// Get usage timestamps for both models
 		usageA := m.getModelUsageTime(modelA.Provider.ID, modelA.Model.ID)
 		usageB := m.getModelUsageTime(modelB.Provider.ID, modelB.Model.ID)
 
@@ -224,10 +212,43 @@ func (m *modelDialog) sortModels() {
 		}
 
 		// If neither has usage time, sort by release date desc if available
-		// For now, we'll fall back to alphabetical sorting by name
-		// TODO: Add release date sorting when the field becomes available in the SDK
+		if modelA.Model.ReleaseDate != "" && modelB.Model.ReleaseDate != "" {
+			dateA := m.parseReleaseDate(modelA.Model.ReleaseDate)
+			dateB := m.parseReleaseDate(modelB.Model.ReleaseDate)
+			if !dateA.IsZero() && !dateB.IsZero() {
+				return dateA.After(dateB)
+			}
+		}
+
+		// If only one has release date, it goes first
+		if modelA.Model.ReleaseDate != "" && modelB.Model.ReleaseDate == "" {
+			return true
+		}
+		if modelA.Model.ReleaseDate == "" && modelB.Model.ReleaseDate != "" {
+			return false
+		}
+
+		// If neither has usage time nor release date, fall back to alphabetical sorting
 		return modelA.Model.Name < modelB.Model.Name
 	})
+}
+
+func (m *modelDialog) parseReleaseDate(dateStr string) time.Time {
+	formats := []string{
+		"2006-01-02",           // ISO date format
+		"2006-01-02T15:04:05Z", // ISO datetime format
+		"January 2, 2006",      // Human readable format
+		"Jan 2, 2006",          // Short human readable format
+		"2006/01/02",           // Alternative date format
+	}
+
+	for _, format := range formats {
+		if parsed, err := time.Parse(format, dateStr); err == nil {
+			return parsed
+		}
+	}
+
+	return time.Time{}
 }
 
 func (m *modelDialog) getModelUsageTime(providerID, modelID string) time.Time {
@@ -252,13 +273,11 @@ func NewModelDialog(app *app.App) ModelDialog {
 		app: app,
 	}
 
-	// Setup models first to calculate optimal width
 	dialog.setupAllModels()
 
-	// Create modal with calculated width
 	dialog.modal = modal.New(
 		modal.WithTitle("Select Model"),
-		modal.WithMaxWidth(dialog.dialogWidth+4), // Add padding for modal borders
+		modal.WithMaxWidth(dialog.dialogWidth+4),
 	)
 
 	return dialog
