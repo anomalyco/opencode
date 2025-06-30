@@ -5,7 +5,6 @@ import { z } from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
-import { $ } from "bun"
 
 export namespace Fzf {
   const log = Log.create({ service: "fzf" })
@@ -114,25 +113,5 @@ export namespace Fzf {
   export async function filepath() {
     const { filepath } = await state()
     return filepath
-  }
-
-  export async function search(input: {
-    cwd: string
-    query: string
-    limit?: number
-  }) {
-    const results = await $`${await filepath()} --filter=${input.query}`
-      .quiet()
-      .throws(false)
-      .cwd(input.cwd)
-      .text()
-    const split = results
-      .trim()
-      .split("\n")
-      .filter((line) => line.length > 0)
-    log.info("results", {
-      count: split.length,
-    })
-    return split
   }
 }

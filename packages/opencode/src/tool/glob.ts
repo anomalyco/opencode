@@ -3,7 +3,7 @@ import path from "path"
 import { Tool } from "./tool"
 import { App } from "../app/app"
 import DESCRIPTION from "./glob.txt"
-import { Ripgrep } from "../external/ripgrep"
+import { Ripgrep } from "../file/ripgrep"
 
 export const GlobTool = Tool.define({
   id: "glob",

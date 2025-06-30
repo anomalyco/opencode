@@ -185,7 +185,7 @@ export namespace LSPClient {
         log.info("shutting down")
         connection.end()
         connection.dispose()
-        server.process.kill("SIGKILL")
+        server.process.kill("SIGTERM")
       },
     }
 

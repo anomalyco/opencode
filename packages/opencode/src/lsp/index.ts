@@ -3,6 +3,7 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
+import { Ripgrep } from "../file/ripgrep"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -25,6 +26,23 @@ export namespace LSP {
     },
   )
 
+  export async function init() {
+    log.info("init")
+    const app = App.info()
+    const result = Object.values(LSPServer).map(async (x) => {
+      for (const extension of x.extensions) {
+        const [file] = await Ripgrep.files({
+          cwd: app.path.cwd,
+          glob: "*" + extension,
+        })
+        if (!file) continue
+        await LSP.touchFile(file, true)
+        break
+      }
+    })
+    return Promise.all(result)
+  }
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     const extension = path.parse(input).ext
     const s = await state()
@@ -32,14 +50,12 @@ export namespace LSP {
       x.extensions.includes(extension),
     )
     for (const match of matches) {
-      if (s.skip.has(match.id)) continue
       const existing = s.clients.get(match.id)
       if (existing) continue
+      if (s.skip.has(match.id)) continue
+      s.skip.add(match.id)
       const handle = await match.spawn(App.info())
-      if (!handle) {
-        s.skip.add(match.id)
-        continue
-      }
+      if (!handle) continue
       const client = await LSPClient.create(match.id, handle).catch(() => {})
       if (!client) {
         s.skip.add(match.id)
@@ -84,6 +100,14 @@ export namespace LSP {
         },
       })
     })
+  }
+
+  export async function workspaceSymbol(query: string) {
+    return run((client) =>
+      client.connection.sendRequest("workspace/symbol", {
+        query,
+      }),
+    )
   }
 
   async function run<T>(

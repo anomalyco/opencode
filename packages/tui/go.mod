@@ -14,9 +14,8 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
-	github.com/oapi-codegen/runtime v1.1.1
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
-	github.com/sst/opencode-sdk-go v0.1.0-alpha.5
+	github.com/sst/opencode-sdk-go v0.1.0-alpha.7
 	github.com/tidwall/gjson v1.14.4
 	rsc.io/qr v0.2.0
 )
@@ -25,7 +24,6 @@ require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/atombender/go-jsonschema v0.20.0 // indirect
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
@@ -37,7 +35,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
