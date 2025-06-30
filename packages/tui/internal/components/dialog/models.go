@@ -234,18 +234,8 @@ func (m *modelDialog) sortModels() {
 }
 
 func (m *modelDialog) parseReleaseDate(dateStr string) time.Time {
-	formats := []string{
-		"2006-01-02",           // ISO date format
-		"2006-01-02T15:04:05Z", // ISO datetime format
-		"January 2, 2006",      // Human readable format
-		"Jan 2, 2006",          // Short human readable format
-		"2006/01/02",           // Alternative date format
-	}
-
-	for _, format := range formats {
-		if parsed, err := time.Parse(format, dateStr); err == nil {
-			return parsed
-		}
+	if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
+		return parsed
 	}
 
 	return time.Time{}
