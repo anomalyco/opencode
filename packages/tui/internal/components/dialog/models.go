@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	numVisibleModels = 6
-	maxDialogWidth   = 40
+	numVisibleModels = 10
+	minDialogWidth   = 40
+	maxDialogWidth   = 80
 )
 
 // ModelDialog interface for the model selection dialog
@@ -29,12 +30,13 @@ type ModelDialog interface {
 }
 
 type modelDialog struct {
-	app       *app.App
-	allModels []ModelWithProvider
-	width     int
-	height    int
-	modal     *modal.Modal
-	modelList list.List[ModelItem]
+	app         *app.App
+	allModels   []ModelWithProvider
+	width       int
+	height      int
+	modal       *modal.Modal
+	modelList   list.List[ModelItem]
+	dialogWidth int
 }
 
 type ModelWithProvider struct {
@@ -127,6 +129,26 @@ func (m *modelDialog) View() string {
 	return m.modelList.View()
 }
 
+func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
+	maxWidth := minDialogWidth
+
+	for _, item := range modelItems {
+		// Calculate the width needed for this item: "ModelName (ProviderName)"
+		// Add 4 for the parentheses, space, and some padding
+		itemWidth := len(item.ModelName) + len(item.ProviderName) + 4
+		if itemWidth > maxWidth {
+			maxWidth = itemWidth
+		}
+	}
+
+	// Ensure we don't exceed the maximum width
+	if maxWidth > maxDialogWidth {
+		maxWidth = maxDialogWidth
+	}
+
+	return maxWidth
+}
+
 func (m *modelDialog) setupAllModels() {
 	// Get all available providers
 	providers, _ := m.app.ListProviders(context.Background())
@@ -154,8 +176,11 @@ func (m *modelDialog) setupAllModels() {
 		}
 	}
 
+	// Calculate optimal width based on content
+	m.dialogWidth = m.calculateOptimalWidth(modelItems)
+
 	m.modelList = list.NewListComponent(modelItems, numVisibleModels, "No models available", true)
-	m.modelList.SetMaxWidth(maxDialogWidth)
+	m.modelList.SetMaxWidth(m.dialogWidth)
 
 	// Set the selected index to current model if it exists
 	if m.app.Provider != nil && m.app.Model != nil {
@@ -217,12 +242,16 @@ func (s *modelDialog) Close() tea.Cmd {
 func NewModelDialog(app *app.App) ModelDialog {
 	dialog := &modelDialog{
 		app: app,
-		modal: modal.New(
-			modal.WithTitle("Select Model"),
-			modal.WithMaxWidth(maxDialogWidth+4),
-		),
 	}
 
+	// Setup models first to calculate optimal width
 	dialog.setupAllModels()
+
+	// Create modal with calculated width
+	dialog.modal = modal.New(
+		modal.WithTitle("Select Model"),
+		modal.WithMaxWidth(dialog.dialogWidth+4), // Add padding for modal borders
+	)
+
 	return dialog
 }
