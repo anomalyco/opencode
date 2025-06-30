@@ -1,9 +1,10 @@
 import { App } from "../app/app"
-import { BunProc } from "../bun"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
 import path from "path"
+
+import * as Formatter from "./formatter"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -16,7 +17,7 @@ export namespace Format {
     }
   })
 
-  async function isEnabled(item: Definition) {
+  async function isEnabled(item: Formatter.Info) {
     const s = state()
     let status = s.enabled[item.name]
     if (status === undefined) {
@@ -28,7 +29,7 @@ export namespace Format {
 
   async function getFormatter(ext: string) {
     const result = []
-    for (const item of FORMATTERS) {
+    for (const item of Object.values(Formatter)) {
       if (!item.extensions.includes(ext)) continue
       if (!isEnabled(item)) continue
       result.push(item)
@@ -61,105 +62,4 @@ export namespace Format {
       }
     })
   }
-
-  interface Definition {
-    name: string
-    command: string[]
-    environment?: Record<string, string>
-    extensions: string[]
-    enabled(): Promise<boolean>
-  }
-
-  const FORMATTERS: Definition[] = [
-    {
-      name: "prettier",
-      command: [BunProc.which(), "run", "prettier", "--write", "$FILE"],
-      environment: {
-        BUN_BE_BUN: "1",
-      },
-      extensions: [
-        ".js",
-        ".jsx",
-        ".mjs",
-        ".cjs",
-        ".ts",
-        ".tsx",
-        ".mts",
-        ".cts",
-        ".html",
-        ".htm",
-        ".css",
-        ".scss",
-        ".sass",
-        ".less",
-        ".vue",
-        ".svelte",
-        ".json",
-        ".jsonc",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".xml",
-        ".md",
-        ".mdx",
-        ".graphql",
-        ".gql",
-      ],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: [BunProc.which(), "run", "prettier", "--version"],
-            cwd: App.info().path.cwd,
-            env: {
-              BUN_BE_BUN: "1",
-            },
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-    {
-      name: "mix",
-      command: ["mix", "format", "$FILE"],
-      extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["mix", "--version"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-    {
-      name: "gofmt",
-      command: ["gofmt", "-w", "$FILE"],
-      extensions: [".go"],
-      async enabled() {
-        try {
-          const proc = Bun.spawn({
-            cmd: ["gofmt", "-h"],
-            cwd: App.info().path.cwd,
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          return exit === 0
-        } catch {
-          return false
-        }
-      },
-    },
-  ]
 }

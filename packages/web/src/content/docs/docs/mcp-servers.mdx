@@ -26,13 +26,15 @@ Add a local MCP servers under `mcp.localmcp`.
     "localmcp": {
       "type": "local",
       "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true,
       "environment": {
         "MY_ENV_VAR": "my_env_var_value"
-      }
     }
   }
 }
 ```
+
+You can also disable a server by setting `enabled` to `false`. This is useful if you want to temporarily disable a server without removing it from your config.
 
 ### Remote
 
@@ -44,7 +46,8 @@ Add a remote MCP servers under `mcp.remotemcp`.
   "mcp": {
     "remotemcp": {
       "type": "remote",
-      "url": "https://my-mcp-server.com"
+      "url": "https://my-mcp-server.com",
+      "enabled": true
     }
   }
 }

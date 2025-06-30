@@ -185,6 +185,7 @@ export namespace Provider {
           source,
           info,
           options,
+          getModel,
         }
         return
       }

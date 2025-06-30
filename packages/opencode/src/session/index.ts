@@ -502,15 +502,6 @@ export namespace Session {
         }
         text = undefined
       },
-      async onFinish(input) {
-        log.info("message finish", {
-          reason: input.finishReason,
-        })
-        const assistant = next.metadata!.assistant!
-        const usage = getUsage(model.info, input.usage, input.providerMetadata)
-        assistant.cost = usage.cost
-        await updateMessage(next)
-      },
       onError(err) {
         log.error("callback error", err)
         switch (true) {
@@ -681,7 +672,7 @@ export namespace Session {
               value.usage,
               value.providerMetadata,
             )
-            assistant.cost = usage.cost
+            assistant.cost += usage.cost
             await updateMessage(next)
             if (value.finishReason === "length")
               throw new Message.OutputLengthError({})
@@ -830,7 +821,7 @@ export namespace Session {
       async onFinish(input) {
         const assistant = next.metadata!.assistant!
         const usage = getUsage(model.info, input.usage, input.providerMetadata)
-        assistant.cost = usage.cost
+        assistant.cost += usage.cost
         assistant.tokens = usage.tokens
         next.metadata!.time.completed = Date.now()
         await updateMessage(next)
@@ -882,8 +873,12 @@ export namespace Session {
       reasoning: 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
           0) as number,
         read: (metadata?.["anthropic"]?.["cacheReadInputTokens"] ??
+          // @ts-expect-error
+          metadata?.["bedrock"]?.["usage"]?.["cacheReadInputTokens"] ??
           0) as number,
       },
     }

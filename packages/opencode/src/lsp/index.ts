@@ -28,7 +28,7 @@ export namespace LSP {
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     const extension = path.parse(input).ext
     const s = await state()
-    const matches = LSPServer.All.filter((x) =>
+    const matches = Object.values(LSPServer).filter((x) =>
       x.extensions.includes(extension),
     )
     for (const match of matches) {
