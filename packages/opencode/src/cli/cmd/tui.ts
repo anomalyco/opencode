@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
+import { CLIUtils } from "../../util/cli-utils"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -99,13 +100,7 @@ export const TuiCommand = cmd({
       if (result === "needs_provider") {
         UI.empty()
         UI.println(UI.logo("   "))
-        const result = await Bun.spawn({
-          cmd: [process.execPath, "auth", "login"],
-          cwd: process.cwd(),
-          stdout: "inherit",
-          stderr: "inherit",
-          stdin: "inherit",
-        }).exited
+        const result = await CLIUtils.spawnSelf(["auth", "login"])
         if (result !== 0) return
         UI.empty()
       }
