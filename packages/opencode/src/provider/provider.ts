@@ -11,8 +11,6 @@ import { WebFetchTool } from "../tool/webfetch"
 import { GlobTool } from "../tool/glob"
 import { GrepTool } from "../tool/grep"
 import { ListTool } from "../tool/ls"
-import { LspDiagnosticTool } from "../tool/lsp-diagnostics"
-import { LspHoverTool } from "../tool/lsp-hover"
 import { PatchTool } from "../tool/patch"
 import { ReadTool } from "../tool/read"
 import type { Tool } from "../tool/tool"
@@ -23,6 +21,7 @@ import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
+// import { TaskTool } from "../tool/task"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -403,16 +402,16 @@ export namespace Provider {
     GlobTool,
     GrepTool,
     ListTool,
-    LspDiagnosticTool,
-    LspHoverTool,
+    // LspDiagnosticTool,
+    // LspHoverTool,
     PatchTool,
     ReadTool,
     EditTool,
     // MultiEditTool,
     WriteTool,
     TodoWriteTool,
-    // TaskTool,
     TodoReadTool,
+    // TaskTool,
   ]
 
   const TOOL_MAPPING: Record<string, Tool.Info[]> = {
