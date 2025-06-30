@@ -194,14 +194,10 @@ func (m *modelDialog) setupAllModels() {
 	m.modelList = list.NewListComponent(modelItems, numVisibleModels, "No models available", true)
 	m.modelList.SetMaxWidth(m.dialogWidth)
 
-	// Set the selected index to current model if it exists
-	if m.app.Provider != nil && m.app.Model != nil {
-		for i, modelWithProvider := range m.allModels {
-			if modelWithProvider.Provider.ID == m.app.Provider.ID && modelWithProvider.Model.ID == m.app.Model.ID {
-				m.modelList.SetSelectedIndex(i)
-				break
-			}
-		}
+	// Auto-select the second model (index 1) if available, since the current model
+	// will be at the top (index 0) due to recent usage sorting
+	if len(m.allModels) > 1 {
+		m.modelList.SetSelectedIndex(1)
 	}
 }
 
