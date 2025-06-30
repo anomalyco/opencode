@@ -374,6 +374,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Model = &msg.Model
 		a.app.State.Provider = msg.Provider.ID
 		a.app.State.Model = msg.Model.ID
+		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		a.app.SaveState()
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
