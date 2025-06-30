@@ -11,13 +11,76 @@ Once added, MCP tools are automatically available to the LLM alongside built-in 
 
 ---
 
-## Configure
+## Configuring MCP Servers
 
-You can define MCP servers in your opencode config under `mcp`.
+You can define MCP servers in your opencode config under `mcp`. The `opencode.json` file can be placed in your project root (this is useful for project-specific tools and can be checked into Git) or globally at `~/.config/opencode/config.json` (for tools you want to use across all projects).
 
-### Local
+If both files exist, opencode will use the configuration from the project root.
 
-Add a local MCP servers under `mcp.localmcp`.
+Below is a comprehensive example of an `opencode.json` file configuring both local and remote MCP servers. You can adapt this structure for your specific needs.
+
+```json title="opencode.json (Example with multiple MCPs)"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-tool": {
+      "type": "local",
+      "command": ["python", "path/to/my/local_tool_server.py"],
+      "environment": {
+        "TOOL_API_KEY": "your_local_tool_api_key"
+      }
+    },
+    "my-remote-service": {
+      "type": "remote",
+      "url": "https://api.myremoteservice.com/mcp"
+    }
+  }
+}
+```
+
+---
+
+## Example: Configuring MetaMCP
+
+[MetaMCP](https://github.com/metatool-ai/metatool-app) is a unified middleware MCP that allows you to manage multiple MCP servers through a GUI application and a local MCP proxy.
+
+To use MetaMCP with opencode, you'll typically configure it as a local MCP server. First, ensure you have MetaMCP installed and running. You can usually start its proxy server using an npx command.
+
+Here's how you can configure it in your `opencode.json`:
+
+```json title="opencode.json (with MetaMCP)"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "metamcp": {
+      "type": "local",
+      "command": ["npx", "-y", "@metamcp/mcp-server-metamcp@latest"],
+      "environment": {
+        "METAMCP_API_KEY": "your_metamcp_api_key",
+        "METAMCP_API_BASE_URL": "http://localhost:12005"
+      }
+    }
+  }
+}
+```
+
+**Explanation:**
+
+- `"metamcp"`: This is the identifier for your MetaMCP server within opencode. You can name it anything you like.
+- `"type": "local"`:  Indicates this is a locally running MCP server.
+- `"command": ["npx", "-y", "@metamcp/mcp-server-metamcp@latest"]`: This is the command opencode will use to start the MetaMCP proxy.
+    - `npx -y @metamcp/mcp-server-metamcp@latest` ensures you're using the latest version of the MetaMCP server.
+- `"environment"`: This object allows you to set environment variables required by the MetaMCP server.
+    - `METAMCP_API_KEY`: You'll need to replace `"your_metamcp_api_key"` with your actual API key obtained from the MetaMCP App.
+    - `METAMCP_API_BASE_URL`: This is typically the URL where your MetaMCP App is running (default is `http://localhost:12005`).
+
+After configuring, opencode will be able to communicate with your MetaMCP instance, allowing you to access any tools or resources managed by MetaMCP.
+
+Refer to the [MetaMCP documentation](https://github.com/metatool-ai/metatool-app) for more details on obtaining API keys and other configuration options.
+
+### Local Servers
+
+Add local MCP servers by defining them within the `mcp` object. Each key under `mcp` will be the identifier for that server.
 
 ```json title="opencode.json"
 {
@@ -34,9 +97,9 @@ Add a local MCP servers under `mcp.localmcp`.
 }
 ```
 
-### Remote
+### Remote Servers
 
-Add a remote MCP servers under `mcp.remotemcp`.
+Add remote MCP servers similarly by defining them within the `mcp` object.
 
 ```json title="opencode.json"
 {

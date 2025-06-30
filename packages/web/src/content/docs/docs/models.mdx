@@ -36,6 +36,33 @@ You can add custom providers by specifying the npm package for the provider and 
 }
 ```
 
+### Google Gemini
+
+To configure Google Gemini models, such as Gemini 2.5-flash, you'll need to ensure you have authenticated with Google Cloud CLI and set up the necessary environment variables. Typically, this involves setting `GOOGLE_API_KEY` or `GOOGLE_APPLICATION_CREDENTIALS`.
+
+Here's an example of how to configure Gemini 2.5-flash in your `opencode.json`:
+
+```json title="opencode.json" {5,9-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "google": {
+      "npm": "@ai-sdk/google",
+      "name": "Google",
+      "options": {},
+      "models": {
+        "gemini-2.5-flash": {
+          "name": "Gemini 2.5 Flash"
+        }
+      }
+    }
+  },
+  "model": "google/gemini-2.5-flash"
+}
+```
+
+Make sure to replace `"google/gemini-2.5-flash"` with the specific model ID if you're using a different Gemini model. You can find more information about available models and authentication in the [official Google AI documentation](https://ai.google.dev/docs).
+
 ### Local
 
 To configure a local model, specify the npm package to use and the `baseURL`.
