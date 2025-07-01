@@ -4,18 +4,20 @@ import fs from "fs/promises"
 import { z } from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
-import { $ } from "bun"
-import { Fzf } from "./fzf"
+import { Log } from "../util/log"
 
-export namespace Ripgrep {
+export namespace Fzf {
+  const log = Log.create({ service: "fzf" })
+
+  const VERSION = "0.62.0"
   const PLATFORM = {
-    darwin: { platform: "apple-darwin", extension: "tar.gz" },
-    linux: { platform: "unknown-linux-musl", extension: "tar.gz" },
-    win32: { platform: "pc-windows-msvc", extension: "zip" },
+    darwin: { extension: "tar.gz" },
+    linux: { extension: "tar.gz" },
+    win32: { extension: "zip" },
   } as const
 
   export const ExtractionFailedError = NamedError.create(
-    "RipgrepExtractionFailedError",
+    "FzfExtractionFailedError",
     z.object({
       filepath: z.string(),
       stderr: z.string(),
@@ -23,14 +25,14 @@ export namespace Ripgrep {
   )
 
   export const UnsupportedPlatformError = NamedError.create(
-    "RipgrepUnsupportedPlatformError",
+    "FzfUnsupportedPlatformError",
     z.object({
       platform: z.string(),
     }),
   )
 
   export const DownloadFailedError = NamedError.create(
-    "RipgrepDownloadFailedError",
+    "FzfDownloadFailedError",
     z.object({
       url: z.string(),
       status: z.number(),
@@ -38,25 +40,30 @@ export namespace Ripgrep {
   )
 
   const state = lazy(async () => {
-    let filepath = Bun.which("rg")
-    if (filepath) return { filepath }
+    let filepath = Bun.which("fzf")
+    if (filepath) {
+      log.info("found", { filepath })
+      return { filepath }
+    }
     filepath = path.join(
       Global.Path.bin,
-      "rg" + (process.platform === "win32" ? ".exe" : ""),
+      "fzf" + (process.platform === "win32" ? ".exe" : ""),
     )
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
-      const archMap = { x64: "x86_64", arm64: "aarch64" } as const
-      const arch = archMap[process.arch as keyof typeof archMap] ?? process.arch
+      const archMap = { x64: "amd64", arm64: "arm64" } as const
+      const arch = archMap[process.arch as keyof typeof archMap] ?? "amd64"
 
       const config = PLATFORM[process.platform as keyof typeof PLATFORM]
       if (!config)
         throw new UnsupportedPlatformError({ platform: process.platform })
 
-      const version = "14.1.1"
-      const filename = `ripgrep-${version}-${arch}-${config.platform}.${config.extension}`
-      const url = `https://github.com/BurntSushi/ripgrep/releases/download/${version}/${filename}`
+      const version = VERSION
+      const platformName =
+        process.platform === "win32" ? "windows" : process.platform
+      const filename = `fzf-${version}-${platformName}_${arch}.${config.extension}`
+      const url = `https://github.com/junegunn/fzf/releases/download/v${version}/${filename}`
 
       const response = await fetch(url)
       if (!response.ok)
@@ -66,12 +73,7 @@ export namespace Ripgrep {
       const archivePath = path.join(Global.Path.bin, filename)
       await Bun.write(archivePath, buffer)
       if (config.extension === "tar.gz") {
-        const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
-
-        if (process.platform === "darwin") args.push("--include=*/rg")
-        if (process.platform === "linux") args.push("--wildcards", "*/rg")
-
-        const proc = Bun.spawn(args, {
+        const proc = Bun.spawn(["tar", "-xzf", archivePath, "fzf"], {
           cwd: Global.Path.bin,
           stderr: "pipe",
           stdout: "pipe",
@@ -85,7 +87,7 @@ export namespace Ripgrep {
       }
       if (config.extension === "zip") {
         const proc = Bun.spawn(
-          ["unzip", "-j", archivePath, "*/rg.exe", "-d", Global.Path.bin],
+          ["unzip", "-j", archivePath, "fzf.exe", "-d", Global.Path.bin],
           {
             cwd: Global.Path.bin,
             stderr: "pipe",
@@ -111,22 +113,5 @@ export namespace Ripgrep {
   export async function filepath() {
     const { filepath } = await state()
     return filepath
-  }
-
-  export async function files(input: {
-    cwd: string
-    query?: string
-    glob?: string
-    limit?: number
-  }) {
-    const commands = [
-      `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
-    ]
-    if (input.query)
-      commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
-    if (input.limit) commands.push(`head -n ${input.limit}`)
-    const joined = commands.join(" | ")
-    const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
-    return result.split("\n").filter(Boolean)
   }
 }

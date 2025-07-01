@@ -3,19 +3,36 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
+import { Ripgrep } from "../file/ripgrep"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
   const state = App.state(
     "lsp",
-    async () => {
+    async (app) => {
       log.info("initializing")
       const clients = new Map<string, LSPClient.Info>()
-      const skip = new Set<string>()
+      for (const server of Object.values(LSPServer)) {
+        for (const extension of server.extensions) {
+          const [file] = await Ripgrep.files({
+            cwd: app.path.cwd,
+            glob: "*" + extension,
+          })
+          if (!file) continue
+          const handle = await server.spawn(App.info())
+          if (!handle) break
+          const client = await LSPClient.create(server.id, handle).catch(
+            () => {},
+          )
+          if (!client) break
+          clients.set(server.id, client)
+          break
+        }
+      }
+      log.info("initialized")
       return {
         clients,
-        skip,
       }
     },
     async (state) => {
@@ -25,35 +42,23 @@ export namespace LSP {
     },
   )
 
+  export async function init() {
+    return state()
+  }
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     const extension = path.parse(input).ext
-    const s = await state()
-    const matches = Object.values(LSPServer).filter((x) =>
-      x.extensions.includes(extension),
-    )
-    for (const match of matches) {
-      if (s.skip.has(match.id)) continue
-      const existing = s.clients.get(match.id)
-      if (existing) continue
-      const handle = await match.spawn(App.info())
-      if (!handle) {
-        s.skip.add(match.id)
-        continue
-      }
-      const client = await LSPClient.create(match.id, handle).catch(() => {})
-      if (!client) {
-        s.skip.add(match.id)
-        continue
-      }
-      s.clients.set(match.id, client)
-    }
-    if (waitForDiagnostics) {
-      await run(async (client) => {
-        const wait = client.waitForDiagnostics({ path: input })
-        await client.notify.open({ path: input })
-        return wait
-      })
-    }
+    const matches = Object.values(LSPServer)
+      .filter((x) => x.extensions.includes(extension))
+      .map((x) => x.id)
+    await run(async (client) => {
+      if (!matches.includes(client.serverID)) return
+      const wait = waitForDiagnostics
+        ? client.waitForDiagnostics({ path: input })
+        : Promise.resolve()
+      await client.notify.open({ path: input })
+      return wait
+    })
   }
 
   export async function diagnostics() {
@@ -84,6 +89,14 @@ export namespace LSP {
         },
       })
     })
+  }
+
+  export async function workspaceSymbol(query: string) {
+    return run((client) =>
+      client.connection.sendRequest("workspace/symbol", {
+        query,
+      }),
+    )
   }
 
   async function run<T>(

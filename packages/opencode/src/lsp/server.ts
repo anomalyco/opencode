@@ -123,4 +123,24 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Pyright: Info = {
+    id: "pyright",
+    extensions: [".py", ".pyi"],
+    async spawn() {
+      const proc = spawn(
+        BunProc.which(),
+        ["x", "pyright-langserver", "--stdio"],
+        {
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        },
+      )
+      return {
+        process: proc,
+      }
+    },
+  }
 }

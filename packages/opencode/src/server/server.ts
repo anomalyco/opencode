@@ -12,7 +12,7 @@ import { App } from "../app/app"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
 import { ModelsDev } from "../provider/models"
-import { Ripgrep } from "../external/ripgrep"
+import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
 
 const ERRORS = {

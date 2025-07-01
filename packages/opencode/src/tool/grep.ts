@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { Tool } from "./tool"
 import { App } from "../app/app"
-import { Ripgrep } from "../external/ripgrep"
+import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 

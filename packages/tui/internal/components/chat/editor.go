@@ -22,7 +22,7 @@ import (
 type EditorComponent interface {
 	tea.Model
 	tea.ViewModel
-	layout.Sizeable
+	SetSize(width, height int) tea.Cmd
 	Content() string
 	Lines() int
 	Value() string
@@ -158,7 +158,15 @@ func (m *editorComponent) Content() string {
 
 func (m *editorComponent) View() string {
 	if m.Lines() > 1 {
-		return ""
+		t := theme.CurrentTheme()
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			"",
+			styles.WhitespaceStyle(t.Background()),
+		)
 	}
 	return m.Content()
 }

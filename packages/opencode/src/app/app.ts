@@ -96,13 +96,16 @@ export namespace App {
     }
 
     return ctx.provide(app, async () => {
-      const result = await cb(app.info)
-      for (const [key, entry] of app.services.entries()) {
-        if (!entry.shutdown) continue
-        log.info("shutdown", { name: key })
-        await entry.shutdown?.(await entry.state)
+      try {
+        const result = await cb(app.info)
+        return result
+      } finally {
+        for (const [key, entry] of app.services.entries()) {
+          if (!entry.shutdown) continue
+          log.info("shutdown", { name: key })
+          await entry.shutdown?.(await entry.state)
+        }
       }
-      return result
     })
   }
 

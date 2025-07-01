@@ -11,8 +11,6 @@ import { WebFetchTool } from "../tool/webfetch"
 import { GlobTool } from "../tool/glob"
 import { GrepTool } from "../tool/grep"
 import { ListTool } from "../tool/ls"
-import { LspDiagnosticTool } from "../tool/lsp-diagnostics"
-import { LspHoverTool } from "../tool/lsp-hover"
 import { PatchTool } from "../tool/patch"
 import { ReadTool } from "../tool/read"
 import type { Tool } from "../tool/tool"
@@ -23,6 +21,7 @@ import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
+// import { TaskTool } from "../tool/task"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -140,10 +139,54 @@ export namespace Provider {
           credentialProvider: fromNodeProviderChain(),
         },
         async getModel(sdk: any, modelID: string) {
-          if (modelID.includes("claude")) {
-            const prefix = region.split("-")[0]
-            modelID = `${prefix}.${modelID}`
+          let regionPrefix = region.split("-")[0]
+
+          switch (regionPrefix) {
+            case "us": {
+              const modelRequiresPrefix = ["claude", "deepseek"].some((m) =>
+                modelID.includes(m),
+              )
+              if (modelRequiresPrefix) {
+                modelID = `${regionPrefix}.${modelID}`
+              }
+              break
+            }
+            case "eu": {
+              const regionRequiresPrefix = [
+                "eu-west-1",
+                "eu-west-3",
+                "eu-north-1",
+                "eu-central-1",
+                "eu-south-1",
+                "eu-south-2",
+              ].some((r) => region.includes(r))
+              const modelRequiresPrefix = [
+                "claude",
+                "nova-lite",
+                "nova-micro",
+                "llama3",
+                "pixtral",
+              ].some((m) => modelID.includes(m))
+              if (regionRequiresPrefix && modelRequiresPrefix) {
+                modelID = `${regionPrefix}.${modelID}`
+              }
+              break
+            }
+            case "ap": {
+              const modelRequiresPrefix = [
+                "claude",
+                "nova-lite",
+                "nova-micro",
+                "nova-pro",
+              ].some((m) => modelID.includes(m))
+              if (modelRequiresPrefix) {
+                regionPrefix = "apac"
+                modelID = `${regionPrefix}.${modelID}`
+              }
+              break
+            }
           }
+
           return sdk.languageModel(modelID)
         },
       }
@@ -203,6 +246,7 @@ export namespace Provider {
         npm: provider.npm ?? existing?.npm,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
+        api: provider.api ?? existing?.api,
         models: existing?.models ?? {},
       }
 
@@ -211,6 +255,7 @@ export namespace Provider {
         const parsedModel: ModelsDev.Model = {
           id: modelID,
           name: model.name ?? existing?.name ?? modelID,
+          release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
           temperature: model.temperature ?? existing?.temperature ?? false,
@@ -244,9 +289,14 @@ export namespace Provider {
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      if (provider.env.some((item) => process.env[item])) {
-        mergeProvider(providerID, {}, "env")
-      }
+      const apiKey = provider.env.map((item) => process.env[item]).at(0)
+      if (!apiKey) continue
+      mergeProvider(
+        providerID,
+        // only include apiKey if there's only one potential option
+        provider.env.length === 1 ? { apiKey } : {},
+        "env",
+      )
     }
 
     // load apikeys
@@ -403,16 +453,15 @@ export namespace Provider {
     GlobTool,
     GrepTool,
     ListTool,
-    LspDiagnosticTool,
-    LspHoverTool,
+    // LspDiagnosticTool,
+    // LspHoverTool,
     PatchTool,
     ReadTool,
-    EditTool,
     // MultiEditTool,
     WriteTool,
     TodoWriteTool,
-    // TaskTool,
     TodoReadTool,
+    // TaskTool,
   ]
 
   const TOOL_MAPPING: Record<string, Tool.Info[]> = {
