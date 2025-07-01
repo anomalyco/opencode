@@ -241,13 +241,18 @@ export namespace Provider {
 
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
+      
+      // Check if onlyConfigModels is enabled (per-provider setting takes precedence over global)
+      const onlyConfigModels = provider.onlyConfigModels ?? config.onlyConfigModels ?? false
+      
       const parsed: ModelsDev.Provider = {
         id: providerID,
         npm: provider.npm ?? existing?.npm,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
         api: provider.api ?? existing?.api,
-        models: existing?.models ?? {},
+        // If onlyConfigModels is true, start with empty models, otherwise use database models
+        models: onlyConfigModels ? {} : (existing?.models ?? {}),
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {

@@ -204,6 +204,7 @@ export namespace Config {
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      onlyConfigModels: z.boolean().optional().describe("Only show models that are explicitly defined in the config (global setting)"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: z
         .string()
@@ -242,6 +243,10 @@ export namespace Config {
                 })
                 .catchall(z.any())
                 .optional(),
+            onlyConfigModels: z
+              .boolean()
+              .optional()
+              .describe("Only show models that are explicitly defined in the config for this provider"),
             })
             .strict(),
         )
