@@ -123,11 +123,42 @@ func parseMarkdownMetadata(filePath string) string {
 }
 
 func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, error) {
-	commandsDir := filepath.Join(c.app.Info.Path.Config, "commands")
-
 	var commands []CustomCommandFile
 
-	err := filepath.WalkDir(commandsDir, func(path string, d fs.DirEntry, err error) error {
+	// Get global commands from ~/.config/opencode/commands
+	globalCommandsDir := filepath.Join(c.app.Info.Path.Config, "commands")
+	globalCommands, err := c.scanCommandsDirectory(globalCommandsDir, "")
+	if err != nil {
+		// Log error but continue with project commands
+		globalCommands = []CustomCommandFile{}
+	}
+	commands = append(commands, globalCommands...)
+
+	// Get project-level commands from $PWD/.opencode/commands
+	cwd, err := os.Getwd()
+	if err == nil {
+		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
+		projectCommands, err := c.scanCommandsDirectory(projectCommandsDir, "")
+		if err == nil {
+			commands = append(commands, projectCommands...)
+		}
+	}
+
+	// Sort commands alphabetically
+	sort.Slice(commands, func(i, j int) bool {
+		return commands[i].Name < commands[j].Name
+	})
+
+	return commands, nil
+}
+
+// scanCommandsDirectory recursively scans a directory for markdown command files
+func (c *CommandCompletionProvider) scanCommandsDirectory(baseDir, relativePath string) ([]CustomCommandFile, error) {
+	var commands []CustomCommandFile
+
+	currentDir := filepath.Join(baseDir, relativePath)
+
+	err := filepath.WalkDir(currentDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// If the commands directory doesn't exist, just return empty list
 			if strings.Contains(err.Error(), "no such file or directory") {
@@ -144,7 +175,17 @@ func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, er
 			return nil
 		}
 
-		name := strings.TrimSuffix(d.Name(), ".md")
+		// Calculate relative path from base commands directory
+		relPath, err := filepath.Rel(baseDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Convert file path to command name with colon notation
+		// e.g., "foo/bar.md" -> "foo:bar"
+		name := strings.TrimSuffix(relPath, ".md")
+		name = strings.ReplaceAll(name, string(filepath.Separator), ":")
+
 		description := parseMarkdownMetadata(path)
 		commands = append(commands, CustomCommandFile{
 			Name:        name,
@@ -159,11 +200,6 @@ func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, er
 	if err != nil {
 		return nil, err
 	}
-
-	// Sort commands alphabetically
-	sort.Slice(commands, func(i, j int) bool {
-		return commands[i].Name < commands[j].Name
-	})
 
 	return commands, nil
 }

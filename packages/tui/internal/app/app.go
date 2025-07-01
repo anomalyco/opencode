@@ -419,6 +419,20 @@ description: An example custom command for demonstration
 
 This is an example command file. You can create markdown files in the commands directory to define custom commands.
 
+## Command Locations
+
+Commands can be stored in two locations:
+1. Global: ~/.config/opencode/commands/ (available in all projects)
+2. Project: $PWD/.opencode/commands/ (specific to current project)
+
+Project-level commands take precedence over global commands with the same name.
+
+## Nested Commands
+
+You can organize commands in subdirectories. For example:
+- commands/git/commit.md becomes /git:commit
+- commands/docker/build.md becomes /docker:build
+
 ## Metadata
 
 You can add YAML frontmatter at the top of your markdown files to provide metadata:

@@ -746,15 +746,40 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 }
 
 func (a appModel) executeCustomCommand(commandName string) (tea.Model, tea.Cmd) {
-	// Read the custom command file content
-	commandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
-	commandFile := filepath.Join(commandsDir, commandName+".md")
+	// Convert colon notation back to file path
+	// e.g., "foo:bar" -> "foo/bar.md"
+	filePath := strings.ReplaceAll(commandName, ":", string(filepath.Separator)) + ".md"
 
-	content, err := os.ReadFile(commandFile)
+	var commandFile string
+	var content []byte
+	var err error
+
+	// Try project-level commands first ($PWD/.opencode/commands)
+	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
+		projectCommandFile := filepath.Join(projectCommandsDir, filePath)
+		content, err = os.ReadFile(projectCommandFile)
+		if err == nil {
+			commandFile = projectCommandFile
+		}
+	}
+
+	// If not found in project, try global commands (~/.config/opencode/commands)
+	if err != nil {
+		globalCommandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
+		globalCommandFile := filepath.Join(globalCommandsDir, filePath)
+		content, err = os.ReadFile(globalCommandFile)
+		if err == nil {
+			commandFile = globalCommandFile
+		}
+	}
+
 	if err != nil {
 		slog.Error("Failed to read custom command file", "command", commandName, "error", err)
 		return a, toast.NewErrorToast("Failed to read custom command: " + commandName)
 	}
+
+	slog.Debug("Executing custom command", "command", commandName, "file", commandFile)
 
 	// Send the command content as a message to the LLM
 	cmd := a.app.SendChatMessage(context.Background(), string(content), []app.Attachment{})
