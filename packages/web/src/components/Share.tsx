@@ -1616,7 +1616,7 @@ export default function Share(props: {
                         >
                           {(_part) => {
                             const todos = createMemo(() =>
-                              sortTodosByStatus(toolData()?.args.todos),
+                              sortTodosByStatus(toolData()?.args?.todos ?? []),
                             )
                             const starting = () =>
                               todos().every((t) => t.status === "pending")
