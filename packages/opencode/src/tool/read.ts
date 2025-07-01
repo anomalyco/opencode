@@ -47,7 +47,29 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const isImage = isImageFile(filePath)
-    if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
+    
+    if (isImage) {
+      // Handle image files by returning them as base64 data URL
+      const buffer = await file.arrayBuffer()
+      const base64 = Buffer.from(buffer).toString("base64")
+      const mimeType = getMimeType(isImage)
+      const dataUrl = `data:${mimeType};base64,${base64}`
+      
+      const output = `<image>\n${dataUrl}\n</image>`
+      const preview = `Image file: ${path.basename(filePath)} (${isImage})`
+      
+      // just warms the lsp client
+      await LSP.touchFile(filePath, true)
+      FileTime.read(ctx.sessionID, filePath)
+      
+      return {
+        output,
+        metadata: {
+          preview,
+          title: path.relative(App.info().path.root, filePath),
+        },
+      }
+    }
     const lines = await file.text().then((text) => text.split("\n"))
     const raw = lines.slice(offset, offset + limit).map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
@@ -97,5 +119,24 @@ function isImageFile(filePath: string): string | false {
       return "WebP"
     default:
       return false
+  }
+}
+
+function getMimeType(imageType: string): string {
+  switch (imageType) {
+    case "JPEG":
+      return "image/jpeg"
+    case "PNG":
+      return "image/png"
+    case "GIF":
+      return "image/gif"
+    case "BMP":
+      return "image/bmp"
+    case "SVG":
+      return "image/svg+xml"
+    case "WebP":
+      return "image/webp"
+    default:
+      return "application/octet-stream"
   }
 }
