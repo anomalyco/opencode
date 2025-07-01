@@ -411,13 +411,24 @@ func (a *App) ensureCommandsDirectory() {
 
 		// Create an example command file
 		examplePath := filepath.Join(commandsDir, "example.md")
-		exampleContent := `# Example Command
+		exampleContent := `---
+description: An example custom command for demonstration
+---
+
+# Example Command
 
 This is an example command file. You can create markdown files in the commands directory to define custom commands.
 
+## Metadata
+
+You can add YAML frontmatter at the top of your markdown files to provide metadata:
+- description: A brief description that will appear in command autocompletion
+
+Alternatively, if no frontmatter is provided, the first heading will be used as the description.
+
 ## Usage
 
-When you type ` + "`/example`" + ` in the chat, this content will be sent to the LLM as context.
+When you type /example in the chat, this content will be sent to the LLM as context.
 
 ## Features
 
