@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -121,6 +122,9 @@ func New(
 		Messages:  []opencode.Message{},
 		Commands:  commands.LoadFromConfig(configInfo),
 	}
+
+	// Create example command file if commands directory doesn't exist
+	app.ensureCommandsDirectory()
 
 	return app, nil
 }
@@ -393,3 +397,50 @@ func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
 // func (a *App) loadCustomKeybinds() {
 //
 // }
+
+func (a *App) ensureCommandsDirectory() {
+	commandsDir := filepath.Join(a.Info.Path.Config, "commands")
+
+	// Check if commands directory exists
+	if _, err := os.Stat(commandsDir); os.IsNotExist(err) {
+		// Create the commands directory
+		if err := os.MkdirAll(commandsDir, 0755); err != nil {
+			slog.Error("Failed to create commands directory", "error", err)
+			return
+		}
+
+		// Create an example command file
+		examplePath := filepath.Join(commandsDir, "example.md")
+		exampleContent := `# Example Command
+
+This is an example command file. You can create markdown files in the commands directory to define custom commands.
+
+## Usage
+
+When you type ` + "`/example`" + ` in the chat, this content will be sent to the LLM as context.
+
+## Features
+
+- Use markdown formatting
+- Include code examples
+- Add instructions for the LLM
+- Create reusable prompts
+
+## Example Code
+
+` + "```typescript" + `
+function example() {
+  console.log("This is an example");
+}
+` + "```" + `
+
+You can customize this file or create new ones with different names.
+`
+
+		if err := os.WriteFile(examplePath, []byte(exampleContent), 0644); err != nil {
+			slog.Error("Failed to create example command file", "error", err)
+		} else {
+			slog.Info("Created example command file at", "path", examplePath)
+		}
+	}
+}

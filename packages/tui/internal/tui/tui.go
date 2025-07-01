@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -274,6 +275,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	case commands.ExecuteCommandMsg:
 		updated, cmd := a.executeCommand(commands.Command(msg))
+		return updated, cmd
+	case chat.CustomCommandExecuteMsg:
+		updated, cmd := a.executeCustomCommand(msg.Name)
 		return updated, cmd
 	case commands.ExecuteCommandsMsg:
 		for _, command := range msg {
@@ -739,6 +743,22 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		return a, tea.Quit
 	}
 	return a, tea.Batch(cmds...)
+}
+
+func (a appModel) executeCustomCommand(commandName string) (tea.Model, tea.Cmd) {
+	// Read the custom command file content
+	commandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
+	commandFile := filepath.Join(commandsDir, commandName+".md")
+
+	content, err := os.ReadFile(commandFile)
+	if err != nil {
+		slog.Error("Failed to read custom command file", "command", commandName, "error", err)
+		return a, toast.NewErrorToast("Failed to read custom command: " + commandName)
+	}
+
+	// Send the command content as a message to the LLM
+	cmd := a.app.SendChatMessage(context.Background(), string(content), []app.Attachment{})
+	return a, cmd
 }
 
 func (a appModel) updateCompletions(msg tea.Msg) (tea.Model, tea.Cmd) {

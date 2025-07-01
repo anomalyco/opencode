@@ -1,6 +1,8 @@
 package completions
 
 import (
+	"io/fs"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -12,6 +14,12 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
+
+type CustomCommandFile struct {
+	Name     string `json:"name"`
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
 
 type CommandCompletionProvider struct {
 	app *app.App
@@ -46,29 +54,105 @@ func getCommandCompletionItem(cmd commands.Command, space int, t theme.Theme) di
 	})
 }
 
+func getCustomCommandCompletionItem(cmd CustomCommandFile, space int, t theme.Theme) dialog.CompletionItemI {
+	spacer := strings.Repeat(" ", space)
+	title := "  /" + cmd.Name + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+"custom command")
+	value := "custom:" + cmd.Name
+	return dialog.NewCompletionItem(dialog.CompletionItem{
+		Title: title,
+		Value: value,
+	})
+}
+
+func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, error) {
+	commandsDir := filepath.Join(c.app.Info.Path.Config, "commands")
+
+	var commands []CustomCommandFile
+
+	err := filepath.WalkDir(commandsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			// If the commands directory doesn't exist, just return empty list
+			if strings.Contains(err.Error(), "no such file or directory") {
+				return nil
+			}
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+
+		name := strings.TrimSuffix(d.Name(), ".md")
+		commands = append(commands, CustomCommandFile{
+			Name:     name,
+			Filename: d.Name(),
+			Content:  "", // We don't need content for completion
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort commands alphabetically
+	sort.Slice(commands, func(i, j int) bool {
+		return commands[i].Name < commands[j].Name
+	})
+
+	return commands, nil
+}
+
 func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.CompletionItemI, error) {
 	t := theme.CurrentTheme()
 	commands := c.app.Commands
 
+	// Get custom commands
+	customCommands, err := c.getCustomCommands()
+	if err != nil {
+		// Log error but continue with built-in commands
+		customCommands = []CustomCommandFile{}
+	}
+
+	// Calculate spacing for alignment
 	space := 1
 	for _, cmd := range c.app.Commands {
 		if lipgloss.Width(cmd.Trigger) > space {
 			space = lipgloss.Width(cmd.Trigger)
 		}
 	}
+	for _, cmd := range customCommands {
+		if lipgloss.Width(cmd.Name) > space {
+			space = lipgloss.Width(cmd.Name)
+		}
+	}
 	space += 2
 
 	sorted := commands.Sorted()
 	if query == "" {
-		// If no query, return all commands
+		// If no query, return all commands (built-in + custom)
 		items := []dialog.CompletionItemI{}
+
+		// Add built-in commands
 		for _, cmd := range sorted {
 			if cmd.Trigger == "" {
 				continue
 			}
-			space := space - lipgloss.Width(cmd.Trigger)
-			items = append(items, getCommandCompletionItem(cmd, space, t))
+			cmdSpace := space - lipgloss.Width(cmd.Trigger)
+			items = append(items, getCommandCompletionItem(cmd, cmdSpace, t))
 		}
+
+		// Add custom commands
+		for _, cmd := range customCommands {
+			cmdSpace := space - lipgloss.Width(cmd.Name)
+			items = append(items, getCustomCommandCompletionItem(cmd, cmdSpace, t))
+		}
+
 		return items, nil
 	}
 
@@ -76,13 +160,21 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 	var commandNames []string
 	commandMap := make(map[string]dialog.CompletionItemI)
 
+	// Add built-in commands
 	for _, cmd := range sorted {
 		if cmd.Trigger == "" {
 			continue
 		}
-		space := space - lipgloss.Width(cmd.Trigger)
+		cmdSpace := space - lipgloss.Width(cmd.Trigger)
 		commandNames = append(commandNames, cmd.Trigger)
-		commandMap[cmd.Trigger] = getCommandCompletionItem(cmd, space, t)
+		commandMap[cmd.Trigger] = getCommandCompletionItem(cmd, cmdSpace, t)
+	}
+
+	// Add custom commands
+	for _, cmd := range customCommands {
+		cmdSpace := space - lipgloss.Width(cmd.Name)
+		commandNames = append(commandNames, cmd.Name)
+		commandMap[cmd.Name] = getCustomCommandCompletionItem(cmd, cmdSpace, t)
 	}
 
 	// Find fuzzy matches

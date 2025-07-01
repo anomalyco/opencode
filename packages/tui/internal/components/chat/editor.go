@@ -19,6 +19,10 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
+type CustomCommandExecuteMsg struct {
+	Name string
+}
+
 type EditorComponent interface {
 	tea.Model
 	// tea.ViewModel
@@ -77,11 +81,22 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		if msg.IsCommand {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
-			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
-			return m, tea.Batch(cmds...)
+
+			// Check if this is a custom command
+			if strings.HasPrefix(msg.CompletionValue, "custom:") {
+				customCommandName := strings.TrimPrefix(msg.CompletionValue, "custom:")
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				cmds = append(cmds, cmd)
+				cmds = append(cmds, util.CmdHandler(CustomCommandExecuteMsg{Name: customCommandName}))
+				return m, tea.Batch(cmds...)
+			} else {
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				cmds = append(cmds, cmd)
+				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+				return m, tea.Batch(cmds...)
+			}
 		} else {
 			existingValue := m.textarea.Value()
 
