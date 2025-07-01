@@ -521,7 +521,7 @@ export namespace Provider {
       for (const [key, value] of Object.entries(shape)) {
         const zodValue = value as z.ZodTypeAny
         if (zodValue instanceof z.ZodOptional) {
-          newShape[key] = zodValue.unwrap().nullable()
+          newShape[key] = zodValue.unwrap().nullable().optional()
         } else {
           newShape[key] = optionalToNullable(zodValue)
         }
