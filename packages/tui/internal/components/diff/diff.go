@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"image/color"
@@ -148,101 +149,87 @@ func WithWidth(width int) UnifiedOption {
 func ParseUnifiedDiff(diff string) (DiffResult, error) {
 	var result DiffResult
 	var currentHunk *Hunk
+	result.Hunks = make([]Hunk, 0, 10) // Pre-allocate with a reasonable capacity
 
-	hunkHeaderRe := regexp.MustCompile(`^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@`)
-	lines := strings.Split(diff, "\n")
-
+	scanner := bufio.NewScanner(strings.NewReader(diff))
 	var oldLine, newLine int
 	inFileHeader := true
 
-	for _, line := range lines {
-		// Parse file headers
+	for scanner.Scan() {
+		line := scanner.Text()
+
 		if inFileHeader {
 			if strings.HasPrefix(line, "--- a/") {
-				result.OldFile = strings.TrimPrefix(line, "--- a/")
+				result.OldFile = line[6:]
 				continue
 			}
 			if strings.HasPrefix(line, "+++ b/") {
-				result.NewFile = strings.TrimPrefix(line, "+++ b/")
+				result.NewFile = line[6:]
 				inFileHeader = false
 				continue
 			}
 		}
 
-		// Parse hunk headers
-		if matches := hunkHeaderRe.FindStringSubmatch(line); matches != nil {
+		if strings.HasPrefix(line, "@@") {
 			if currentHunk != nil {
 				result.Hunks = append(result.Hunks, *currentHunk)
 			}
 			currentHunk = &Hunk{
 				Header: line,
-				Lines:  []DiffLine{},
+				Lines:  make([]DiffLine, 0, 10), // Pre-allocate
 			}
 
-			oldStart, _ := strconv.Atoi(matches[1])
-			newStart, _ := strconv.Atoi(matches[3])
-			oldLine = oldStart
-			newLine = newStart
+			// Manual parsing of hunk header is faster than regex
+			parts := strings.Split(line, " ")
+			if len(parts) > 2 {
+				oldRange := strings.Split(parts[1][1:], ",")
+				newRange := strings.Split(parts[2][1:], ",")
+				oldLine, _ = strconv.Atoi(oldRange[0])
+				newLine, _ = strconv.Atoi(newRange[0])
+			}
 			continue
 		}
 
-		// Ignore "No newline at end of file" markers
-		if strings.HasPrefix(line, "\\ No newline at end of file") {
+		if strings.HasPrefix(line, "\\ No newline at end of file") || currentHunk == nil {
 			continue
 		}
 
-		if currentHunk == nil {
-			continue
-		}
-
-		// Process the line based on its prefix
+		var dl DiffLine
+		dl.Content = line
 		if len(line) > 0 {
 			switch line[0] {
 			case '+':
-				currentHunk.Lines = append(currentHunk.Lines, DiffLine{
-					OldLineNo: 0,
-					NewLineNo: newLine,
-					Kind:      LineAdded,
-					Content:   line[1:],
-				})
+				dl.Kind = LineAdded
+				dl.NewLineNo = newLine
+				dl.Content = line[1:]
 				newLine++
 			case '-':
-				currentHunk.Lines = append(currentHunk.Lines, DiffLine{
-					OldLineNo: oldLine,
-					NewLineNo: 0,
-					Kind:      LineRemoved,
-					Content:   line[1:],
-				})
+				dl.Kind = LineRemoved
+				dl.OldLineNo = oldLine
+				dl.Content = line[1:]
 				oldLine++
-			default:
-				currentHunk.Lines = append(currentHunk.Lines, DiffLine{
-					OldLineNo: oldLine,
-					NewLineNo: newLine,
-					Kind:      LineContext,
-					Content:   line,
-				})
+			default: // context line
+				dl.Kind = LineContext
+				dl.OldLineNo = oldLine
+				dl.NewLineNo = newLine
 				oldLine++
 				newLine++
 			}
-		} else {
-			// Handle empty lines
-			currentHunk.Lines = append(currentHunk.Lines, DiffLine{
-				OldLineNo: oldLine,
-				NewLineNo: newLine,
-				Kind:      LineContext,
-				Content:   "",
-			})
+		} else { // empty context line
+			dl.Kind = LineContext
+			dl.OldLineNo = oldLine
+			dl.NewLineNo = newLine
 			oldLine++
 			newLine++
 		}
+		currentHunk.Lines = append(currentHunk.Lines, dl)
 	}
 
-	// Add the last hunk if there is one
 	if currentHunk != nil {
 		result.Hunks = append(result.Hunks, *currentHunk)
 	}
 
-	return result, nil
+	return result, scanner.Err()
 }
 
 // HighlightIntralineChanges updates lines in a hunk to show character-level differences
@@ -744,8 +731,6 @@ func renderLineContent(fileName string, dl DiffLine, bgStyle stylesi.Style, high
 			content,
 			width,
 			"...",
-			// stylesi.NewStyleWithColors(t.TextMuted(), bgStyle.GetBackground()).Render("..."),
-			// stylesi.WithForeground(stylesi.NewStyle().Background(bgStyle.GetBackground()), t.TextMuted()).Render("..."),
 		),
 	)
 }
@@ -912,10 +897,11 @@ func RenderUnifiedHunk(fileName string, h Hunk, opts ...UnifiedOption) string {
 	HighlightIntralineChanges(&hunkCopy)
 
 	var sb strings.Builder
-	for _, line := range hunkCopy.Lines {
-		sb.WriteString(renderUnifiedLine(fileName, line, config.Width, theme.CurrentTheme()))
-		sb.WriteString("\n")
-	}
+	sb.Grow(len(hunkCopy.Lines) * config.Width)
+
+	util.WriteStringsPar(&sb, hunkCopy.Lines, func(line DiffLine) string {
+		return renderUnifiedLine(fileName, line, config.Width, theme.CurrentTheme()) + "\n"
+	})
 
 	return sb.String()
 }
@@ -969,32 +955,22 @@ func FormatUnifiedDiff(filename string, diffText string, opts ...UnifiedOption) 
 	}
 
 	var sb strings.Builder
-	for _, h := range diffResult.Hunks {
-		unifiedDiff := RenderUnifiedHunk(filename, h, opts...)
-		sb.WriteString(unifiedDiff)
-	}
+	util.WriteStringsPar(&sb, diffResult.Hunks, func(h Hunk) string {
+		return RenderUnifiedHunk(filename, h, opts...)
+	})
 
 	return sb.String(), nil
 }
 
 // FormatDiff creates a side-by-side formatted view of a diff
 func FormatDiff(filename string, diffText string, opts ...SideBySideOption) (string, error) {
-	// t := theme.CurrentTheme()
 	diffResult, err := ParseUnifiedDiff(diffText)
 	if err != nil {
 		return "", err
 	}
 
 	var sb strings.Builder
-	// config := NewSideBySideConfig(opts...)
 	util.WriteStringsPar(&sb, diffResult.Hunks, func(h Hunk) string {
-		// sb.WriteString(
-		// 	lipgloss.NewStyle().
-		// 		Background(t.DiffHunkHeader()).
-		// 		Foreground(t.Background()).
-		// 		Width(config.TotalWidth).
-		// 		Render(h.Header) + "\n",
-		// )
 		return RenderSideBySideHunk(filename, h, opts...)
 	})
 

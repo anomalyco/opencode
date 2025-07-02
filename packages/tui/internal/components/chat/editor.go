@@ -21,9 +21,10 @@ import (
 
 type EditorComponent interface {
 	tea.Model
-	tea.ViewModel
-	layout.Sizeable
-	Content() string
+	// tea.ViewModel
+	SetSize(width, height int) tea.Cmd
+	View(width int, align lipgloss.Position) string
+	Content(width int, align lipgloss.Position) string
 	Lines() int
 	Value() string
 	Focused() bool
@@ -105,7 +106,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *editorComponent) Content() string {
+func (m *editorComponent) Content(width int, align lipgloss.Position) string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
@@ -121,7 +122,7 @@ func (m *editorComponent) Content() string {
 	)
 	textarea = styles.NewStyle().
 		Background(t.BackgroundElement()).
-		Width(m.width).
+		Width(width).
 		PaddingTop(1).
 		PaddingBottom(1).
 		BorderStyle(lipgloss.ThickBorder()).
@@ -156,11 +157,19 @@ func (m *editorComponent) Content() string {
 	return content
 }
 
-func (m *editorComponent) View() string {
+func (m *editorComponent) View(width int, align lipgloss.Position) string {
 	if m.Lines() > 1 {
-		return ""
+		t := theme.CurrentTheme()
+		return lipgloss.Place(
+			width,
+			m.height,
+			align,
+			lipgloss.Center,
+			"",
+			styles.WhitespaceStyle(t.Background()),
+		)
 	}
-	return m.Content()
+	return m.Content(width, align)
 }
 
 func (m *editorComponent) Focused() bool {
@@ -335,7 +344,6 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 		ta.SetHeight(existing.Height())
 	}
 
-	// ta.Focus()
 	return ta
 }
 

@@ -188,6 +188,11 @@ export namespace Message {
               }),
             })
             .optional(),
+          user: z
+            .object({
+              snapshot: z.string().optional(),
+            })
+            .optional(),
         })
         .openapi({ ref: "MessageMetadata" }),
     })

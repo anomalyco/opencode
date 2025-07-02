@@ -110,6 +110,7 @@ if (!snapshot) {
       return (
         !lower.includes("ignore:") &&
         !lower.includes("ci:") &&
+        !lower.includes("wip:") &&
         !lower.includes("docs:") &&
         !lower.includes("doc:")
       )

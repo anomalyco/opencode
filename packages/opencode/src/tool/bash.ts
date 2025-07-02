@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
+import { App } from "../app/app"
 
 const MAX_OUTPUT_LENGTH = 30000
 const BANNED_COMMANDS = [
@@ -49,6 +50,7 @@ export const BashTool = Tool.define({
 
     const process = Bun.spawn({
       cmd: ["bash", "-c", params.command],
+      cwd: App.info().path.cwd,
       maxBuffer: MAX_OUTPUT_LENGTH,
       signal: ctx.abort,
       timeout: timeout,

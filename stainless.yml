@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://app.stainless.com/config.schema.json
+# yaml-language-server: $schema=https://app.stainless.com/config-internal.schema.json
 
 organization:
   name: opencode
@@ -11,21 +11,23 @@ targets:
     production_repo: "sst/opencode-sdk-js"
     publish:
       npm: true
-    skip: false
   go:
     package_name: opencode
     production_repo: sst/opencode-sdk-go
-    skip: false
   python:
     project_name: opencode-ai
     package_name: opencode_ai
     production_repo: sst/opencode-sdk-python
     publish:
       pypi: true
-    skip: false
 
 environments:
   production: http://localhost:54321
+
+streaming:
+  on_event:
+    - kind: fallthrough
+      handle: yield
 
 resources:
   $shared:
@@ -35,7 +37,12 @@ resources:
 
   event:
     methods:
-      list: get /event
+      list:
+        endpoint: get /event
+        paginated: false
+        streaming:
+          # This method is always streaming.
+          param_discriminator: null
 
   app:
     models:

@@ -1,5 +1,5 @@
 import { App } from "../app/app"
-import { Ripgrep } from "../external/ripgrep"
+import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
@@ -27,55 +27,6 @@ export namespace SystemPrompt {
 
   export async function environment() {
     const app = App.info()
-
-    ;async () => {
-      const files = await Ripgrep.files({
-        cwd: app.path.cwd,
-      })
-      type Node = {
-        children: Record<string, Node>
-      }
-      const root: Node = {
-        children: {},
-      }
-      for (const file of files) {
-        const parts = file.split("/")
-        let node = root
-        for (const part of parts) {
-          const existing = node.children[part]
-          if (existing) {
-            node = existing
-            continue
-          }
-          node.children[part] = {
-            children: {},
-          }
-          node = node.children[part]
-        }
-      }
-
-      function render(path: string[], node: Node): string {
-        // if (path.length === 3) return "\t".repeat(path.length) + "..."
-        const lines: string[] = []
-        const entries = Object.entries(node.children).sort(([a], [b]) =>
-          a.localeCompare(b),
-        )
-
-        for (const [name, child] of entries) {
-          const currentPath = [...path, name]
-          const indent = "\t".repeat(path.length)
-          const hasChildren = Object.keys(child.children).length > 0
-          lines.push(`${indent}${name}` + (hasChildren ? "/" : ""))
-
-          if (hasChildren) lines.push(render(currentPath, child))
-        }
-
-        return lines.join("\n")
-      }
-      const result = render([], root)
-      return result
-    }
-
     return [
       [
         `Here is some useful information about the environment you are running in:`,
@@ -85,9 +36,16 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        // `<project>`,
-        // `  ${app.git ? await tree() : ""}`,
-        // `</project>`,
+        `<project>`,
+        `  ${
+          app.git
+            ? await Ripgrep.tree({
+                cwd: app.path.cwd,
+                limit: 200,
+              })
+            : ""
+        }`,
+        `</project>`,
       ].join("\n"),
     ]
   }

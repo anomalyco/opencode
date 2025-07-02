@@ -37,6 +37,7 @@
     "env-paths": "3.0.0",
     "hono": "4.7.10",
     "hono-openapi": "0.4.8",
+    "isomorphic-git": "1.32.1",
     "open": "10.1.2",
     "remeda": "2.22.3",
     "ts-lsp-client": "1.0.3",
