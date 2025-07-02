@@ -107,6 +107,25 @@ var BUGGED_SCROLL_KEYS = map[string]bool{
 	";": true,
 }
 
+func isScrollRelatedInput(keyString string) bool {
+	if len(keyString) == 0 {
+		return false
+	}
+	
+	for _, char := range keyString {
+		charStr := string(char)
+		if !BUGGED_SCROLL_KEYS[charStr] {
+			return false
+		}
+	}
+	
+	if len(keyString) > 3 && (keyString[len(keyString)-1] == 'M' || keyString[len(keyString)-1] == 'm') {
+		return true
+	}
+	
+	return len(keyString) > 1
+}
+
 func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -114,7 +133,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
-		if time.Since(a.lastScroll) < time.Millisecond*100 && BUGGED_SCROLL_KEYS[keyString] {
+		if time.Since(a.lastScroll) < time.Millisecond*100 && (BUGGED_SCROLL_KEYS[keyString] || isScrollRelatedInput(keyString)) {
 			return a, nil
 		}
 
