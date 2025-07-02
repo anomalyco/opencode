@@ -109,7 +109,7 @@ func (m *messagesComponent) renderView() {
 	width := layout.Current.Container.Width
 
 	sb := strings.Builder{}
-	util.WriteStringsPar(&sb, m.app.Messages, func(message opencode.Message) string {
+	util.MapReducePar(m.app.Messages, &sb, func(message opencode.Message) func(*strings.Builder) *strings.Builder {
 		var content string
 		var cached bool
 		blocks := make([]string, 0)
@@ -248,7 +248,14 @@ func (m *messagesComponent) renderView() {
 			blocks = append(blocks, error)
 		}
 
-		return strings.Join(blocks, "\n\n")
+		str := strings.Join(blocks, "\n\n")
+		return func(sbdr *strings.Builder) *strings.Builder {
+			if sbdr.Len() > 0 && str != "" {
+				sbdr.WriteString("\n\n")
+			}
+			sbdr.WriteString(str)
+			return sbdr
+		}
 	})
 
 	content := sb.String()
