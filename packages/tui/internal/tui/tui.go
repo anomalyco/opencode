@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -836,9 +838,131 @@ func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (t
 	contentStr := string(content)
 	contentStr = strings.ReplaceAll(contentStr, "$ARGUMENTS", arguments)
 
+	// Process bash commands if any exist
+	processedContent, err := a.processBashCommands(contentStr)
+	if err != nil {
+		slog.Error("Failed to process bash commands", "error", err)
+		return a, toast.NewErrorToast("Failed to process bash commands: " + err.Error())
+	}
+
 	// Send the processed command content as a message to the LLM
-	cmd := a.app.SendChatMessage(context.Background(), contentStr, []app.Attachment{})
+	cmd := a.app.SendChatMessage(context.Background(), processedContent, []app.Attachment{})
 	return a, cmd
+}
+
+// processBashCommands processes bash commands prefixed with ! in the content
+func (a appModel) processBashCommands(content string) (string, error) {
+	lines := strings.Split(content, "\n")
+	var commands []string
+	var cleanLines []string
+
+	// Parse bash commands and clean content
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "!") {
+			command := strings.TrimSpace(trimmed[1:])
+			if command != "" {
+				commands = append(commands, command)
+			}
+		} else {
+			cleanLines = append(cleanLines, line)
+		}
+	}
+
+	// If no bash commands found, return original content
+	if len(commands) == 0 {
+		return content, nil
+	}
+
+	slog.Info("Processing bash commands", "count", len(commands))
+
+	// Execute bash commands and collect results
+	var contextSection strings.Builder
+	contextSection.WriteString("\n\n## Command Context\n\n")
+	contextSection.WriteString("The following bash commands were executed to gather context:\n\n")
+
+	for _, command := range commands {
+		result, err := a.executeBashCommand(command)
+		if err != nil {
+			slog.Error("Failed to execute bash command", "command", command, "error", err)
+			contextSection.WriteString(fmt.Sprintf("### Command: `%s`\n\n", command))
+			contextSection.WriteString(fmt.Sprintf("*Command failed: %s*\n\n", err.Error()))
+			continue
+		}
+
+		contextSection.WriteString(fmt.Sprintf("### Command: `%s`\n\n", command))
+		if result.ExitCode == 0 {
+			if strings.TrimSpace(result.Stdout) != "" {
+				contextSection.WriteString("```\n")
+				contextSection.WriteString(strings.TrimSpace(result.Stdout))
+				contextSection.WriteString("\n```\n\n")
+			} else {
+				contextSection.WriteString("*No output*\n\n")
+			}
+		} else {
+			contextSection.WriteString(fmt.Sprintf("*Command failed with exit code %d*\n\n", result.ExitCode))
+			if strings.TrimSpace(result.Stderr) != "" {
+				contextSection.WriteString("```\n")
+				contextSection.WriteString(strings.TrimSpace(result.Stderr))
+				contextSection.WriteString("\n```\n\n")
+			}
+		}
+	}
+
+	// Combine clean content with command context
+	cleanContent := strings.Join(cleanLines, "\n")
+	return cleanContent + contextSection.String(), nil
+}
+
+// BashCommandResult represents the result of executing a bash command
+type BashCommandResult struct {
+	Command  string
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
+// executeBashCommand executes a single bash command and returns the result
+func (a appModel) executeBashCommand(command string) (*BashCommandResult, error) {
+	// List of banned commands for security
+	bannedCommands := []string{
+		"alias", "curl", "curlie", "wget", "axel", "aria2c", "nc", "telnet",
+		"lynx", "w3m", "links", "httpie", "xh", "http-prompt", "chrome", "firefox", "safari",
+	}
+
+	// Check if command is banned
+	for _, banned := range bannedCommands {
+		if strings.HasPrefix(command, banned) {
+			return nil, fmt.Errorf("command '%s' is not allowed", command)
+		}
+	}
+
+	// Execute the command
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		} else {
+			return nil, fmt.Errorf("failed to execute command: %w", err)
+		}
+	}
+
+	return &BashCommandResult{
+		Command:  command,
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+		ExitCode: exitCode,
+	}, nil
 }
 
 // getAvailableCustomCommands returns a list of available custom commands
