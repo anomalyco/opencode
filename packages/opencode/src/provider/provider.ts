@@ -193,15 +193,11 @@ export namespace Provider {
     },
     openrouter: async (provider) => {
       return {
-        autoload: true,
+        autoload: false,
         options: {
-          async fetch(input: any, init: any) {
-            const headers = {
-              ...init.headers,
-              "HTTP-Referer": "https://opencode.ai/",
-              "X-Title": "opencode",
-            }
-            return fetch(input, { ...init, headers })
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
           },
         },
       }
