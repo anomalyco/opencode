@@ -105,10 +105,6 @@ export namespace Provider {
                 typeof init.body === "string"
                   ? JSON.parse(init.body)
                   : init.body
-              let m
-              for (m of body.messages) {
-                Log.Default.warn("role", { role: m.role })
-              }
               if (body?.messages) {
                 isAgentCall = body.messages.some(
                   (msg: any) =>
@@ -116,7 +112,6 @@ export namespace Provider {
                 )
               }
             } catch {}
-            Log.Default.warn("isAgentCall", { isAgentCall })
             const headers = {
               ...init.headers,
               ...copilot.HEADERS,
