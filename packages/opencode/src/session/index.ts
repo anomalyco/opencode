@@ -34,6 +34,7 @@ import type { ModelsDev } from "../provider/models"
 import { Installation } from "../installation"
 import { Config } from "../config/config"
 import { ProviderTransform } from "../provider/transform"
+import { FileReference } from "../util/file-reference"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -318,6 +319,20 @@ export namespace Session {
     )
     if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
 
+    // Process file references in text parts
+    const processedParts = await Promise.all(
+      input.parts.map(async (part) => {
+        if (part.type === "text") {
+          const { processedText } = await FileReference.resolve(part.text)
+          return {
+            ...part,
+            text: processedText
+          }
+        }
+        return part
+      })
+    )
+
     const app = App.info()
     const session = await get(input.sessionID)
     if (msgs.length === 0 && !session.parentID) {
@@ -352,7 +367,7 @@ export namespace Session {
     const msg: Message.Info = {
       role: "user",
       id: Identifier.ascending("message"),
-      parts: input.parts,
+      parts: processedParts,
       metadata: {
         time: {
           created: Date.now(),
