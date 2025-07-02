@@ -49,7 +49,7 @@ else
     done
     
     if [ -z "$resolved" ]; then
-        printf "It seems that your package manager failed to install the right version of the OpenCode CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
+        printf "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
         exit 1
     fi
 fi

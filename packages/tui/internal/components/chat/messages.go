@@ -2,9 +2,7 @@ package chat
 
 import (
 	"strings"
-	"time"
 
-	"github.com/charmbracelet/bubbles/v2/spinner"
 	"github.com/charmbracelet/bubbles/v2/viewport"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -20,6 +18,7 @@ import (
 type MessagesComponent interface {
 	tea.Model
 	tea.ViewModel
+	// View(width int) string
 	SetSize(width, height int) tea.Cmd
 	PageUp() (tea.Model, tea.Cmd)
 	PageDown() (tea.Model, tea.Cmd)
@@ -36,7 +35,6 @@ type messagesComponent struct {
 	width, height   int
 	app             *app.App
 	viewport        viewport.Model
-	spinner         spinner.Model
 	attachments     viewport.Model
 	cache           *MessageCache
 	rendering       bool
@@ -47,7 +45,7 @@ type renderFinishedMsg struct{}
 type ToggleToolDetailsMsg struct{}
 
 func (m *messagesComponent) Init() tea.Cmd {
-	return tea.Batch(m.viewport.Init(), m.spinner.Tick)
+	return tea.Batch(m.viewport.Init())
 }
 
 func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -94,10 +92,6 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.tail = m.viewport.AtBottom()
 	cmds = append(cmds, cmd)
 
-	spinner, cmd := m.spinner.Update(msg)
-	m.spinner = spinner
-	cmds = append(cmds, cmd)
-
 	return m, tea.Batch(cmds...)
 }
 
@@ -110,14 +104,15 @@ func (m *messagesComponent) renderView() {
 	defer measure("messageCount", len(m.app.Messages))
 
 	t := theme.CurrentTheme()
-	blocks := make([]string, 0)
 
 	align := lipgloss.Center
 	width := layout.Current.Container.Width
 
-	for _, message := range m.app.Messages {
+	sb := strings.Builder{}
+	util.MapReducePar(m.app.Messages, &sb, func(message opencode.Message) func(*strings.Builder) *strings.Builder {
 		var content string
 		var cached bool
+		blocks := make([]string, 0)
 
 		switch message.Role {
 		case opencode.MessageRoleUser:
@@ -230,7 +225,6 @@ func (m *messagesComponent) renderView() {
 					}
 				}
 			}
-
 		}
 
 		error := ""
@@ -253,20 +247,21 @@ func (m *messagesComponent) renderView() {
 			)
 			blocks = append(blocks, error)
 		}
-	}
 
-	centered := []string{}
-	for _, block := range blocks {
-		centered = append(centered, lipgloss.PlaceHorizontal(
-			m.width,
-			lipgloss.Center,
-			block+"\n",
-			styles.WhitespaceStyle(t.Background()),
-		))
-	}
+		str := strings.Join(blocks, "\n\n")
+		return func(sbdr *strings.Builder) *strings.Builder {
+			if sbdr.Len() > 0 && str != "" {
+				sbdr.WriteString("\n\n")
+			}
+			sbdr.WriteString(str)
+			return sbdr
+		}
+	})
+
+	content := sb.String()
 
 	m.viewport.SetHeight(m.height - lipgloss.Height(m.header()) + 1)
-	m.viewport.SetContent("\n" + strings.Join(centered, "\n"))
+	m.viewport.SetContent("\n" + content)
 }
 
 func (m *messagesComponent) header() string {
@@ -307,10 +302,10 @@ func (m *messagesComponent) View() string {
 	if m.rendering {
 		return lipgloss.Place(
 			m.width,
-			m.height,
+			m.height+1,
 			lipgloss.Center,
 			lipgloss.Center,
-			"Loading session...",
+			styles.NewStyle().Background(t.Background()).Render("Loading session..."),
 			styles.WhitespaceStyle(t.Background()),
 		)
 	}
@@ -392,12 +387,6 @@ func (m *messagesComponent) ToolDetailsVisible() bool {
 }
 
 func NewMessagesComponent(app *app.App) MessagesComponent {
-	customSpinner := spinner.Spinner{
-		Frames: []string{" ", "┃", "┃"},
-		FPS:    time.Second / 3,
-	}
-	s := spinner.New(spinner.WithSpinner(customSpinner))
-
 	vp := viewport.New()
 	attachments := viewport.New()
 	vp.KeyMap = viewport.KeyMap{}
@@ -405,7 +394,6 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 	return &messagesComponent{
 		app:             app,
 		viewport:        vp,
-		spinner:         s,
 		attachments:     attachments,
 		showToolDetails: true,
 		cache:           NewMessageCache(),

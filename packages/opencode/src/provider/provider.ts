@@ -99,11 +99,25 @@ export namespace Provider {
               })
               info.access = tokens.access
             }
+            let isAgentCall = false
+            try {
+              const body =
+                typeof init.body === "string"
+                  ? JSON.parse(init.body)
+                  : init.body
+              if (body?.messages) {
+                isAgentCall = body.messages.some(
+                  (msg: any) =>
+                    msg.role && ["tool", "assistant"].includes(msg.role),
+                )
+              }
+            } catch {}
             const headers = {
               ...init.headers,
               ...copilot.HEADERS,
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
+              "X-Initiator": isAgentCall ? "agent" : "user",
             }
             delete headers["x-api-key"]
             return fetch(input, {
@@ -188,6 +202,17 @@ export namespace Provider {
           }
 
           return sdk.languageModel(modelID)
+        },
+      }
+    },
+    openrouter: async (provider) => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
         },
       }
     },

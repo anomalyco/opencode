@@ -378,6 +378,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Model = &msg.Model
 		a.app.State.Provider = msg.Provider.ID
 		a.app.State.Model = msg.Model.ID
+		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		a.app.SaveState()
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
@@ -428,7 +429,19 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a appModel) View() string {
-	editorView := a.editor.View()
+	mainLayout := a.chat(layout.Current.Container.Width, lipgloss.Center)
+	if a.modal != nil {
+		mainLayout = a.modal.Render(mainLayout)
+	}
+	mainLayout = a.toastManager.RenderOverlay(mainLayout)
+	if theme.CurrentThemeUsesAnsiColors() {
+		mainLayout = util.ConvertRGBToAnsi16Colors(mainLayout)
+	}
+	return mainLayout + "\n" + a.status.View()
+}
+
+func (a appModel) chat(width int, align lipgloss.Position) string {
+	editorView := a.editor.View(width, align)
 	lines := a.editor.Lines()
 	messagesView := a.messages.View()
 	if a.app.Session.ID == "" {
@@ -439,7 +452,7 @@ func (a appModel) View() string {
 	t := theme.CurrentTheme()
 	centeredEditorView := lipgloss.PlaceHorizontal(
 		a.width,
-		lipgloss.Center,
+		align,
 		editorView,
 		styles.WhitespaceStyle(t.Background()),
 	)
@@ -458,10 +471,6 @@ func (a appModel) View() string {
 			View:      centeredEditorView,
 			FixedSize: 5,
 		},
-		// layout.FlexItem{
-		// 	View:      a.status.View(),
-		// 	FixedSize: 1,
-		// },
 	)
 
 	if lines > 1 {
@@ -471,7 +480,7 @@ func (a appModel) View() string {
 		mainLayout = layout.PlaceOverlay(
 			editorX,
 			editorY,
-			a.editor.Content(),
+			a.editor.Content(width, align),
 			mainLayout,
 		)
 	}
@@ -492,14 +501,7 @@ func (a appModel) View() string {
 		)
 	}
 
-	if a.modal != nil {
-		mainLayout = a.modal.Render(mainLayout)
-	}
-	mainLayout = a.toastManager.RenderOverlay(mainLayout)
-	if theme.CurrentThemeUsesAnsiColors() {
-		mainLayout = util.ConvertRGBToAnsi16Colors(mainLayout)
-	}
-	return mainLayout + "\n" + a.status.View()
+	return mainLayout
 }
 
 func (a appModel) home() string {

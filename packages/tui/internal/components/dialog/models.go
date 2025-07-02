@@ -3,13 +3,11 @@ package dialog
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
-	"strings"
+	"sort"
+	"time"
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
@@ -21,8 +19,9 @@ import (
 )
 
 const (
-	numVisibleModels = 6
-	maxDialogWidth   = 40
+	numVisibleModels = 10
+	minDialogWidth   = 40
+	maxDialogWidth   = 80
 )
 
 // ModelDialog interface for the model selection dialog
@@ -31,33 +30,61 @@ type ModelDialog interface {
 }
 
 type modelDialog struct {
-	app                *app.App
-	availableProviders []opencode.Provider
-	provider           opencode.Provider
-	width              int
-	height             int
-	hScrollOffset      int
-	hScrollPossible    bool
-	modal              *modal.Modal
-	modelList          list.List[list.StringItem]
+	app         *app.App
+	allModels   []ModelWithProvider
+	width       int
+	height      int
+	modal       *modal.Modal
+	modelList   list.List[ModelItem]
+	dialogWidth int
+}
+
+type ModelWithProvider struct {
+	Model    opencode.Model
+	Provider opencode.Provider
+}
+
+type ModelItem struct {
+	ModelName    string
+	ProviderName string
+}
+
+func (m ModelItem) Render(selected bool, width int) string {
+	t := theme.CurrentTheme()
+
+	if selected {
+		displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
+		return styles.NewStyle().
+			Background(t.Primary()).
+			Foreground(t.BackgroundElement()).
+			Width(width).
+			PaddingLeft(1).
+			Render(displayText)
+	} else {
+		modelStyle := styles.NewStyle().
+			Foreground(t.Text()).
+			Background(t.BackgroundElement())
+		providerStyle := styles.NewStyle().
+			Foreground(t.TextMuted()).
+			Background(t.BackgroundElement())
+
+		modelPart := modelStyle.Render(m.ModelName)
+		providerPart := providerStyle.Render(fmt.Sprintf(" (%s)", m.ProviderName))
+
+		combinedText := modelPart + providerPart
+		return styles.NewStyle().
+			Background(t.BackgroundElement()).
+			PaddingLeft(1).
+			Render(combinedText)
+	}
 }
 
 type modelKeyMap struct {
-	Left   key.Binding
-	Right  key.Binding
 	Enter  key.Binding
 	Escape key.Binding
 }
 
 var modelKeys = modelKeyMap{
-	Left: key.NewBinding(
-		key.WithKeys("left", "h"),
-		key.WithHelp("←", "scroll left"),
-	),
-	Right: key.NewBinding(
-		key.WithKeys("right", "l"),
-		key.WithHelp("→", "scroll right"),
-	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "select model"),
@@ -69,7 +96,7 @@ var modelKeys = modelKeyMap{
 }
 
 func (m *modelDialog) Init() tea.Cmd {
-	m.setupModelsForProvider(m.provider.ID)
+	m.setupAllModels()
 	return nil
 }
 
@@ -77,34 +104,20 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, modelKeys.Left):
-			if m.hScrollPossible {
-				m.switchProvider(-1)
-			}
-			return m, nil
-		case key.Matches(msg, modelKeys.Right):
-			if m.hScrollPossible {
-				m.switchProvider(1)
-			}
-			return m, nil
 		case key.Matches(msg, modelKeys.Enter):
-			selectedItem, _ := m.modelList.GetSelectedItem()
-			models := m.models()
-			var selectedModel opencode.Model
-			for _, model := range models {
-				if model.Name == string(selectedItem) {
-					selectedModel = model
-					break
-				}
+			_, selectedIndex := m.modelList.GetSelectedItem()
+			if selectedIndex >= 0 && selectedIndex < len(m.allModels) {
+				selectedModel := m.allModels[selectedIndex]
+				return m, tea.Sequence(
+					util.CmdHandler(modal.CloseModalMsg{}),
+					util.CmdHandler(
+						app.ModelSelectedMsg{
+							Provider: selectedModel.Provider,
+							Model:    selectedModel.Model,
+						}),
+				)
 			}
-			return m, tea.Sequence(
-				util.CmdHandler(modal.CloseModalMsg{}),
-				util.CmdHandler(
-					app.ModelSelectedMsg{
-						Provider: m.provider,
-						Model:    selectedModel,
-					}),
-			)
+			return m, util.CmdHandler(modal.CloseModalMsg{})
 		case key.Matches(msg, modelKeys.Escape):
 			return m, util.CmdHandler(modal.CloseModalMsg{})
 		}
@@ -115,74 +128,124 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Update the list component
 	updatedList, cmd := m.modelList.Update(msg)
-	m.modelList = updatedList.(list.List[list.StringItem])
+	m.modelList = updatedList.(list.List[ModelItem])
 	return m, cmd
 }
 
-func (m *modelDialog) models() []opencode.Model {
-	models := slices.SortedFunc(maps.Values(m.provider.Models), func(a, b opencode.Model) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	return models
-}
-
-func (m *modelDialog) switchProvider(offset int) {
-	newOffset := m.hScrollOffset + offset
-
-	if newOffset < 0 {
-		newOffset = len(m.availableProviders) - 1
-	}
-	if newOffset >= len(m.availableProviders) {
-		newOffset = 0
-	}
-
-	m.hScrollOffset = newOffset
-	m.provider = m.availableProviders[m.hScrollOffset]
-	m.modal.SetTitle(fmt.Sprintf("Select %s Model", m.provider.Name))
-	m.setupModelsForProvider(m.provider.ID)
-}
-
 func (m *modelDialog) View() string {
-	listView := m.modelList.View()
-	scrollIndicator := m.getScrollIndicators(maxDialogWidth)
-	return strings.Join([]string{listView, scrollIndicator}, "\n")
+	return m.modelList.View()
 }
 
-func (m *modelDialog) getScrollIndicators(maxWidth int) string {
-	var indicator string
-	if m.hScrollPossible {
-		indicator = "← → (switch provider) "
-	}
-	if indicator == "" {
-		return ""
-	}
+func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
+	maxWidth := minDialogWidth
 
-	t := theme.CurrentTheme()
-	return styles.NewStyle().
-		Foreground(t.TextMuted()).
-		Width(maxWidth).
-		Align(lipgloss.Right).
-		Render(indicator)
-}
-
-func (m *modelDialog) setupModelsForProvider(providerId string) {
-	models := m.models()
-	modelNames := make([]string, len(models))
-	for i, model := range models {
-		modelNames[i] = model.Name
-	}
-
-	m.modelList = list.NewStringList(modelNames, numVisibleModels, "No models available", true)
-	m.modelList.SetMaxWidth(maxDialogWidth)
-
-	if m.app.Provider != nil && m.app.Model != nil && m.app.Provider.ID == providerId {
-		for i, model := range models {
-			if model.ID == m.app.Model.ID {
-				m.modelList.SetSelectedIndex(i)
-				break
-			}
+	for _, item := range modelItems {
+		// Calculate the width needed for this item: "ModelName (ProviderName)"
+		// Add 4 for the parentheses, space, and some padding
+		itemWidth := len(item.ModelName) + len(item.ProviderName) + 4
+		if itemWidth > maxWidth {
+			maxWidth = itemWidth
 		}
 	}
+
+	if maxWidth > maxDialogWidth {
+		maxWidth = maxDialogWidth
+	}
+
+	return maxWidth
+}
+
+func (m *modelDialog) setupAllModels() {
+	providers, _ := m.app.ListProviders(context.Background())
+
+	m.allModels = make([]ModelWithProvider, 0)
+	for _, provider := range providers {
+		for _, model := range provider.Models {
+			m.allModels = append(m.allModels, ModelWithProvider{
+				Model:    model,
+				Provider: provider,
+			})
+		}
+	}
+
+	m.sortModels()
+
+	modelItems := make([]ModelItem, len(m.allModels))
+	for i, modelWithProvider := range m.allModels {
+		modelItems[i] = ModelItem{
+			ModelName:    modelWithProvider.Model.Name,
+			ProviderName: modelWithProvider.Provider.Name,
+		}
+	}
+
+	m.dialogWidth = m.calculateOptimalWidth(modelItems)
+
+	m.modelList = list.NewListComponent(modelItems, numVisibleModels, "No models available", true)
+	m.modelList.SetMaxWidth(m.dialogWidth)
+
+	if len(m.allModels) > 0 {
+		m.modelList.SetSelectedIndex(0)
+	}
+}
+
+func (m *modelDialog) sortModels() {
+	sort.Slice(m.allModels, func(i, j int) bool {
+		modelA := m.allModels[i]
+		modelB := m.allModels[j]
+
+		usageA := m.getModelUsageTime(modelA.Provider.ID, modelA.Model.ID)
+		usageB := m.getModelUsageTime(modelB.Provider.ID, modelB.Model.ID)
+
+		// If both have usage times, sort by most recent first
+		if !usageA.IsZero() && !usageB.IsZero() {
+			return usageA.After(usageB)
+		}
+
+		// If only one has usage time, it goes first
+		if !usageA.IsZero() && usageB.IsZero() {
+			return true
+		}
+		if usageA.IsZero() && !usageB.IsZero() {
+			return false
+		}
+
+		// If neither has usage time, sort by release date desc if available
+		if modelA.Model.ReleaseDate != "" && modelB.Model.ReleaseDate != "" {
+			dateA := m.parseReleaseDate(modelA.Model.ReleaseDate)
+			dateB := m.parseReleaseDate(modelB.Model.ReleaseDate)
+			if !dateA.IsZero() && !dateB.IsZero() {
+				return dateA.After(dateB)
+			}
+		}
+
+		// If only one has release date, it goes first
+		if modelA.Model.ReleaseDate != "" && modelB.Model.ReleaseDate == "" {
+			return true
+		}
+		if modelA.Model.ReleaseDate == "" && modelB.Model.ReleaseDate != "" {
+			return false
+		}
+
+		// If neither has usage time nor release date, fall back to alphabetical sorting
+		return modelA.Model.Name < modelB.Model.Name
+	})
+}
+
+func (m *modelDialog) parseReleaseDate(dateStr string) time.Time {
+	if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
+		return parsed
+	}
+
+	return time.Time{}
+}
+
+func (m *modelDialog) getModelUsageTime(providerID, modelID string) time.Time {
+	for _, usage := range m.app.State.RecentlyUsedModels {
+		if usage.ProviderID == providerID && usage.ModelID == modelID {
+			return usage.LastUsed
+		}
+	}
+	return time.Time{}
 }
 
 func (m *modelDialog) Render(background string) string {
@@ -194,32 +257,16 @@ func (s *modelDialog) Close() tea.Cmd {
 }
 
 func NewModelDialog(app *app.App) ModelDialog {
-	availableProviders, _ := app.ListProviders(context.Background())
-
-	currentProvider := availableProviders[0]
-	hScrollOffset := 0
-	if app.Provider != nil {
-		for i, provider := range availableProviders {
-			if provider.ID == app.Provider.ID {
-				currentProvider = provider
-				hScrollOffset = i
-				break
-			}
-		}
-	}
-
 	dialog := &modelDialog{
-		app:                app,
-		availableProviders: availableProviders,
-		hScrollOffset:      hScrollOffset,
-		hScrollPossible:    len(availableProviders) > 1,
-		provider:           currentProvider,
-		modal: modal.New(
-			modal.WithTitle(fmt.Sprintf("Select %s Model", currentProvider.Name)),
-			modal.WithMaxWidth(maxDialogWidth+4),
-		),
+		app: app,
 	}
 
-	dialog.setupModelsForProvider(currentProvider.ID)
+	dialog.setupAllModels()
+
+	dialog.modal = modal.New(
+		modal.WithTitle("Select Model"),
+		modal.WithMaxWidth(dialog.dialogWidth+4),
+	)
+
 	return dialog
 }
