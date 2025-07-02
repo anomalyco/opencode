@@ -273,6 +273,32 @@ export namespace Session {
     })
   }
 
+  function hasValidContent(msg: UIMessage): boolean {
+    return (
+      (msg.parts?.length ?? 0) > 0 &&
+      msg.parts.some((part) => {
+        switch (part.type) {
+          case "text":
+            return part.text && part.text.trim().length > 0
+          case "file":
+            return part.data && part.data.length > 0
+          case "tool-invocation":
+            return true
+          case "reasoning":
+            return true
+          case "source":
+            return true
+          case "step-start":
+            // Start Step Part - indicates start of a step (UI metadata only)
+            // See: https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol#start-step-part
+            return false
+          default:
+            return false // all known types handled above
+        }
+      })
+    )
+  }
+
   export async function chat(input: {
     sessionID: string
     providerID: string
@@ -367,6 +393,9 @@ export namespace Session {
     const system = input.system ?? SystemPrompt.provider(input.providerID)
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+
+    const filteredMessages = msgs.map(toUIMessage).filter(hasValidContent)
+    const coreMessages = convertToCoreMessages(filteredMessages)
 
     const next: Message.Info = {
       id: Identifier.ascending("message"),
@@ -549,9 +578,7 @@ export namespace Session {
             content: x,
           }),
         ),
-        ...convertToCoreMessages(
-          msgs.map(toUIMessage).filter((x) => x.parts.length > 0),
-        ),
+        ...coreMessages,
       ],
       temperature: model.info.temperature ? 0 : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
