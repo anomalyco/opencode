@@ -99,11 +99,30 @@ export namespace Provider {
               })
               info.access = tokens.access
             }
+            let isAgentCall = false
+            try {
+              const body =
+                typeof init.body === "string"
+                  ? JSON.parse(init.body)
+                  : init.body
+              let m
+              for (m of body.messages) {
+                Log.Default.warn("role", { role: m.role })
+              }
+              if (body?.messages) {
+                isAgentCall = body.messages.some(
+                  (msg: any) =>
+                    msg.role && ["tool", "assistant"].includes(msg.role),
+                )
+              }
+            } catch {}
+            Log.Default.warn("isAgentCall", { isAgentCall })
             const headers = {
               ...init.headers,
               ...copilot.HEADERS,
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
+              "X-Initiator": isAgentCall ? "agent" : "user",
             }
             delete headers["x-api-key"]
             return fetch(input, {
