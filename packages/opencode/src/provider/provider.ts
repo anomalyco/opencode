@@ -192,13 +192,9 @@ export namespace Provider {
       }
     },
     openrouter: async (provider) => {
-      const apiKey = provider.env.map((item) => process.env[item]).at(0)
-      if (!apiKey) return { autoload: false }
-
       return {
         autoload: true,
         options: {
-          apiKey,
           async fetch(input: any, init: any) {
             const headers = {
               ...init.headers,
