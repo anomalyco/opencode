@@ -1346,7 +1346,8 @@ export default function Share(props: {
                                           </ErrorPart>
                                         </div>
                                       </Match>
-                                      <Match when={preview()}>
+                                      {/* Always try to show CodeBlock if preview is available (even if empty string) */}
+                                      <Match when={typeof preview() === 'string'}>
                                         <div data-part-tool-result>
                                           <ResultsButton
                                             showCopy="Show preview"
@@ -1366,7 +1367,8 @@ export default function Share(props: {
                                           </Show>
                                         </div>
                                       </Match>
-                                      <Match when={toolData()?.result}>
+                                      {/* Fallback to TextPart if preview is not a string (e.g. undefined) AND result exists */}
+                                      <Match when={typeof preview() !== 'string' && toolData()?.result}>
                                         <div data-part-tool-result>
                                           <ResultsButton
                                             results={showResults()}
