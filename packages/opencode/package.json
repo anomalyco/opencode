@@ -125,6 +125,7 @@
     "@solid-primitives/scheduled": "1.5.2",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
+    "@xhayper/discord-rpc": "1.2.2",
     "ai": "catalog:",
     "ai-gateway-provider": "3.1.2",
     "bonjour-service": "1.3.0",

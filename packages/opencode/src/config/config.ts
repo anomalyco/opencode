@@ -42,6 +42,7 @@ import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import { Npm } from "@/npm"
 
+
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
   const PluginOptions = z.record(z.string(), z.unknown())
@@ -1037,6 +1038,33 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      discord: z
+        .object({
+          enabled: z.boolean().default(false).describe("Enable Discord Rich Presence"),
+          applicationId: z
+            .string()
+            .optional()
+            .describe("Discord application ID for Rich Presence"),
+          showModel: z
+            .boolean()
+            .default(true)
+            .describe("Show current AI model in presence"),
+          showProject: z
+            .boolean()
+            .default(true)
+            .describe("Show current project name in presence"),
+          showSession: z
+            .boolean()
+            .default(true)
+            .describe("Show session information in presence"),
+          customStatus: z
+            .string()
+            .optional()
+            .describe("Custom status text to display"),
+        })
+        .strict()
+        .optional()
+        .describe("Discord Rich Presence configuration"),
     })
     .strict()
     .meta({
