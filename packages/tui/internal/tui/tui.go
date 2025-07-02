@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -31,6 +32,14 @@ import (
 
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
+
+// CustomCommandFile represents a custom command file
+type CustomCommandFile struct {
+	Name        string `json:"name"`
+	Filename    string `json:"filename"`
+	Content     string `json:"content"`
+	Description string `json:"description"`
+}
 
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
@@ -277,7 +286,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.executeCommand(commands.Command(msg))
 		return updated, cmd
 	case chat.CustomCommandExecuteMsg:
-		updated, cmd := a.executeCustomCommand(msg.Name)
+		updated, cmd := a.executeCustomCommandWithArgs(msg.Name, msg.Arguments)
 		return updated, cmd
 	case commands.ExecuteCommandsMsg:
 		for _, command := range msg {
@@ -290,6 +299,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, toast.NewErrorToast(msg.Error())
 	case app.SendMsg:
 		a.showCompletionDialog = false
+
+		// Check if the message is a custom command with arguments
+		if strings.HasPrefix(msg.Text, "/") {
+			if commandName, arguments, isCustomCommand := a.parseCustomCommand(msg.Text); isCustomCommand {
+				// Execute custom command with arguments
+				updated, cmd := a.executeCustomCommandWithArgs(commandName, arguments)
+				return updated, cmd
+			}
+		}
+
 		cmd := a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
@@ -745,9 +764,41 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	return a, tea.Batch(cmds...)
 }
 
-func (a appModel) executeCustomCommand(commandName string) (tea.Model, tea.Cmd) {
+// parseCustomCommand checks if the input is a custom command and extracts name and arguments
+func (a appModel) parseCustomCommand(input string) (commandName, arguments string, isCustomCommand bool) {
+	if !strings.HasPrefix(input, "/") {
+		return "", "", false
+	}
+
+	// Remove the leading slash
+	input = strings.TrimPrefix(input, "/")
+
+	// Split by first space to separate command from arguments
+	parts := strings.SplitN(input, " ", 2)
+	commandName = parts[0]
+
+	if len(parts) > 1 {
+		arguments = parts[1]
+	}
+
+	// Check if this command exists as a custom command
+	customCommands, err := a.getAvailableCustomCommands()
+	if err != nil {
+		return "", "", false
+	}
+
+	for _, cmd := range customCommands {
+		if cmd.Name == commandName {
+			return commandName, arguments, true
+		}
+	}
+
+	return "", "", false
+}
+
+// executeCustomCommandWithArgs executes a custom command with arguments
+func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (tea.Model, tea.Cmd) {
 	// Convert colon notation back to file path
-	// e.g., "foo:bar" -> "foo/bar.md"
 	filePath := strings.ReplaceAll(commandName, ":", string(filepath.Separator)) + ".md"
 
 	var commandFile string
@@ -779,11 +830,89 @@ func (a appModel) executeCustomCommand(commandName string) (tea.Model, tea.Cmd) 
 		return a, toast.NewErrorToast("Failed to read custom command: " + commandName)
 	}
 
-	slog.Debug("Executing custom command", "command", commandName, "file", commandFile)
+	slog.Debug("Executing custom command with arguments", "command", commandName, "file", commandFile, "arguments", arguments)
 
-	// Send the command content as a message to the LLM
-	cmd := a.app.SendChatMessage(context.Background(), string(content), []app.Attachment{})
+	// Replace $ARGUMENTS placeholder with actual arguments
+	contentStr := string(content)
+	contentStr = strings.ReplaceAll(contentStr, "$ARGUMENTS", arguments)
+
+	// Send the processed command content as a message to the LLM
+	cmd := a.app.SendChatMessage(context.Background(), contentStr, []app.Attachment{})
 	return a, cmd
+}
+
+// getAvailableCustomCommands returns a list of available custom commands
+func (a appModel) getAvailableCustomCommands() ([]CustomCommandFile, error) {
+	var commands []CustomCommandFile
+
+	// Get global commands from ~/.config/opencode/commands
+	globalCommandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
+	globalCommands, err := a.scanCommandsDirectory(globalCommandsDir, "")
+	if err != nil {
+		globalCommands = []CustomCommandFile{}
+	}
+	commands = append(commands, globalCommands...)
+
+	// Get project-level commands from $PWD/.opencode/commands
+	cwd, err := os.Getwd()
+	if err == nil {
+		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
+		projectCommands, err := a.scanCommandsDirectory(projectCommandsDir, "")
+		if err == nil {
+			commands = append(commands, projectCommands...)
+		}
+	}
+
+	return commands, nil
+}
+
+// scanCommandsDirectory recursively scans a directory for markdown command files
+func (a appModel) scanCommandsDirectory(baseDir, relativePath string) ([]CustomCommandFile, error) {
+	var commands []CustomCommandFile
+
+	currentDir := filepath.Join(baseDir, relativePath)
+
+	err := filepath.WalkDir(currentDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if strings.Contains(err.Error(), "no such file or directory") {
+				return nil
+			}
+			return err
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+
+		// Calculate relative path from base commands directory
+		relPath, err := filepath.Rel(baseDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Convert file path to command name with colon notation
+		name := strings.TrimSuffix(relPath, ".md")
+		name = strings.ReplaceAll(name, string(filepath.Separator), ":")
+
+		commands = append(commands, CustomCommandFile{
+			Name:        name,
+			Filename:    d.Name(),
+			Content:     "",
+			Description: "",
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return commands, nil
 }
 
 func (a appModel) updateCompletions(msg tea.Msg) (tea.Model, tea.Cmd) {

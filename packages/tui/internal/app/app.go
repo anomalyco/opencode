@@ -419,6 +419,10 @@ description: An example custom command for demonstration
 
 This is an example command file. You can create markdown files in the commands directory to define custom commands.
 
+User request: $ARGUMENTS
+
+Please help the user with their request above. If no specific request was provided, give general guidance about this example command.
+
 ## Command Locations
 
 Commands can be stored in two locations:
@@ -443,6 +447,16 @@ Alternatively, if no frontmatter is provided, the first heading will be used as 
 ## Usage
 
 When you type /example in the chat, this content will be sent to the LLM as context.
+
+## Arguments
+
+You can pass arguments to commands using the $ARGUMENTS placeholder:
+
+Example usage:
+- /example hello world
+- /example "some text with spaces"
+
+The $ARGUMENTS placeholder will be replaced with everything after the command name.
 
 ## Features
 

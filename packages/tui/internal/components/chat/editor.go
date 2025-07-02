@@ -20,7 +20,8 @@ import (
 )
 
 type CustomCommandExecuteMsg struct {
-	Name string
+	Name      string
+	Arguments string
 }
 
 type EditorComponent interface {
@@ -88,7 +89,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				updated, cmd := m.Clear()
 				m = updated.(*editorComponent)
 				cmds = append(cmds, cmd)
-				cmds = append(cmds, util.CmdHandler(CustomCommandExecuteMsg{Name: customCommandName}))
+				cmds = append(cmds, util.CmdHandler(CustomCommandExecuteMsg{Name: customCommandName, Arguments: ""}))
 				return m, tea.Batch(cmds...)
 			} else {
 				updated, cmd := m.Clear()
