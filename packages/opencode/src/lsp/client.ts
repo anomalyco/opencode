@@ -163,10 +163,12 @@ export namespace LSPClient {
               }
             })
           }),
-          5000,
-        ).finally(() => {
-          unsub?.()
-        })
+          3000,
+        )
+          .catch(() => {})
+          .finally(() => {
+            unsub?.()
+          })
       },
       async shutdown() {
         log.info("shutting down", { serverID })

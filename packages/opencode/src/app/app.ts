@@ -36,12 +36,15 @@ export namespace App {
     services: Map<any, { state: any; shutdown?: (input: any) => Promise<void> }>
   }>("app")
 
+  export const use = ctx.use
+
   const APP_JSON = "app.json"
 
   export type Input = {
     cwd: string
   }
 
+  export const provideExisting = ctx.provide
   export async function provide<T>(
     input: Input,
     cb: (app: App.Info) => Promise<T>,

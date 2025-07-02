@@ -86,9 +86,14 @@ export namespace Ripgrep {
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
   const PLATFORM = {
-    darwin: { platform: "apple-darwin", extension: "tar.gz" },
-    linux: { platform: "unknown-linux-musl", extension: "tar.gz" },
-    win32: { platform: "pc-windows-msvc", extension: "zip" },
+    "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
+    "arm64-linux": {
+      platform: "aarch64-unknown-linux-gnu",
+      extension: "tar.gz",
+    },
+    "x64-darwin": { platform: "x86_64-apple-darwin", extension: "tar.gz" },
+    "x64-linux": { platform: "x86_64-unknown-linux-musl", extension: "tar.gz" },
+    "x64-win32": { platform: "x86_64-pc-windows-msvc", extension: "zip" },
   } as const
 
   export const ExtractionFailedError = NamedError.create(
@@ -124,15 +129,13 @@ export namespace Ripgrep {
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
-      const archMap = { x64: "x86_64", arm64: "aarch64" } as const
-      const arch = archMap[process.arch as keyof typeof archMap] ?? process.arch
-
-      const config = PLATFORM[process.platform as keyof typeof PLATFORM]
-      if (!config)
-        throw new UnsupportedPlatformError({ platform: process.platform })
+      const platformKey =
+        `${process.arch}-${process.platform}` as keyof typeof PLATFORM
+      const config = PLATFORM[platformKey]
+      if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
 
       const version = "14.1.1"
-      const filename = `ripgrep-${version}-${arch}-${config.platform}.${config.extension}`
+      const filename = `ripgrep-${version}-${config.platform}.${config.extension}`
       const url = `https://github.com/BurntSushi/ripgrep/releases/download/${version}/${filename}`
 
       const response = await fetch(url)
@@ -145,8 +148,8 @@ export namespace Ripgrep {
       if (config.extension === "tar.gz") {
         const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
 
-        if (process.platform === "darwin") args.push("--include=*/rg")
-        if (process.platform === "linux") args.push("--wildcards", "*/rg")
+        if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
+        if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
 
         const proc = Bun.spawn(args, {
           cwd: Global.Path.bin,
@@ -177,7 +180,7 @@ export namespace Ripgrep {
           })
       }
       await fs.unlink(archivePath)
-      if (process.platform !== "win32") await fs.chmod(filepath, 0o755)
+      if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)
     }
 
     return {
