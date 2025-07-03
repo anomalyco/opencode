@@ -926,8 +926,7 @@ type BashCommandResult struct {
 func (a appModel) executeBashCommand(command string) (*BashCommandResult, error) {
 	// List of banned commands for security
 	bannedCommands := []string{
-		"alias", "curl", "curlie", "wget", "axel", "aria2c", "nc", "telnet",
-		"lynx", "w3m", "links", "httpie", "xh", "http-prompt", "chrome", "firefox", "safari",
+		"axel", "aria2c", "nc", "telnet", "lynx", "w3m", "links", "xh", "chrome", "firefox", "safari",
 	}
 
 	// Check if command is banned
@@ -1031,7 +1030,6 @@ func (a appModel) scanCommandsDirectory(baseDir, relativePath string) ([]CustomC
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
