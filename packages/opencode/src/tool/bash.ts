@@ -48,6 +48,28 @@ export const BashTool = Tool.define({
     if (BANNED_COMMANDS.some((item) => params.command.startsWith(item)))
       throw new Error(`Command '${params.command}' is not allowed`)
 
+    // Check if command requires sudo
+    const trimmedCommand = params.command.trim()
+    if (trimmedCommand.startsWith("sudo ") || trimmedCommand === "sudo") {
+      throw new Error(
+        `Sudo commands are not supported as they require interactive password input. ` +
+        `Consider alternative approaches that don't require elevated privileges.`
+      )
+    }
+    
+    // Also check for sudo after common command separators
+    const sudoPatterns = [
+      /(?:^|;|&&|\|\|)\s*sudo(?:\s|$)/,  // sudo at start or after ;, &&, ||
+      /\|\s*sudo(?:\s|$)/,               // sudo after pipe
+    ]
+    
+    if (sudoPatterns.some(pattern => pattern.test(params.command))) {
+      throw new Error(
+        `Sudo commands are not supported as they require interactive password input. ` +
+        `Consider alternative approaches that don't require elevated privileges.`
+      )
+    }
+
     const process = Bun.spawn({
       cmd: ["bash", "-c", params.command],
       cwd: App.info().path.cwd,

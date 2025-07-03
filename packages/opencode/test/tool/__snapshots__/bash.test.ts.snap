@@ -1,0 +1,3 @@
+// Bun Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`tool.bash sudo detection error message format 1`] = `"Sudo commands are not supported as they require interactive password input. Consider alternative approaches that don't require elevated privileges."`;
