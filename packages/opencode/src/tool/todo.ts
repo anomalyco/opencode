@@ -2,18 +2,8 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { App } from "../app/app"
+import { TodoInfo } from "../util/schema"
 
-const TodoInfo = z.object({
-  content: z.string().min(1).describe("Brief description of the task"),
-  status: z
-    .enum(["pending", "in_progress", "completed"])
-    .describe("Current status of the task"),
-  priority: z
-    .enum(["high", "medium", "low"])
-    .describe("Priority level of the task"),
-  id: z.string().describe("Unique identifier for the todo item"),
-})
-type TodoInfo = z.infer<typeof TodoInfo>
 
 const state = App.state("todo-tool", () => {
   const todos: {
