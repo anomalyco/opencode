@@ -111,18 +111,18 @@ func isScrollRelatedInput(keyString string) bool {
 	if len(keyString) == 0 {
 		return false
 	}
-	
+
 	for _, char := range keyString {
 		charStr := string(char)
 		if !BUGGED_SCROLL_KEYS[charStr] {
 			return false
 		}
 	}
-	
+
 	if len(keyString) > 3 && (keyString[len(keyString)-1] == 'M' || keyString[len(keyString)-1] == 'm') {
 		return true
 	}
-	
+
 	return len(keyString) > 1
 }
 
@@ -350,7 +350,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCompletionDialog = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
-			"CH-AI updated to "+msg.Properties.Version+", restart to apply.",
+			"CH-AI Universe updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
 	case opencode.EventListResponseEventSessionDeleted:
@@ -598,23 +598,27 @@ func (a appModel) openFile(filepath string) (tea.Model, tea.Cmd) {
 func (a appModel) home(width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Background(t.Background())
-	base := baseStyle.Render
-	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	
+	// Clean, professional text style
+	textStyle := styles.NewStyle().
+		Foreground(t.Text()).
+		Background(t.Background()).
+		Render
 
-	open := `
-█▀▀█ █▀▀█ █▀▀ █▀▀▄ 
-█░░█ █░░█ █▀▀ █░░█ 
-▀▀▀▀ █▀▀▀ ▀▀▀ ▀  ▀ `
-	code := `
-█▀▀ █▀▀█ █▀▀▄ █▀▀
-█░░ █░░█ █░░█ █▀▀
-▀▀▀ ▀▀▀▀ ▀▀▀  ▀▀▀`
-
-	logo := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		muted(open),
-		base(code),
-	)
+	// Simple, elegant text logo with proper spacing
+	logoText := "CH-AI  UNIVERSE"
+	
+	logoContent := textStyle(logoText)
+	
+	// Soft rounded frame with Apple-inspired padding
+	borderStyle := styles.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(t.BorderSubtle()).
+		BorderBackground(t.Background()).
+		Padding(1, 4).
+		Background(t.Background())
+	
+	logo := borderStyle.Render(logoContent)
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
 
@@ -622,8 +626,8 @@ func (a appModel) home(width int) string {
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
 		Width(lipgloss.Width(logo)).
-		Align(lipgloss.Right)
-	version := versionStyle.Render(a.app.Version)
+		Align(lipgloss.Center)
+	version := versionStyle.Render("v" + a.app.Version + " • dev")
 
 	logoAndVersion := strings.Join([]string{logo, version}, "\n")
 	logoAndVersion = lipgloss.PlaceHorizontal(

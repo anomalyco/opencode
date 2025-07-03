@@ -1,0 +1,2 @@
+# Protect TUI branding during merges
+packages/tui/internal/tui/tui.go -merge
