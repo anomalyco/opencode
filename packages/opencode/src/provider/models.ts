@@ -10,7 +10,9 @@ export namespace ModelsDev {
 
   export const Model = z
     .object({
+      id: z.string(),
       name: z.string(),
+      release_date: z.string(),
       attachment: z.boolean(),
       reasoning: z.boolean(),
       temperature: z.boolean(),
@@ -25,7 +27,6 @@ export namespace ModelsDev {
         context: z.number(),
         output: z.number(),
       }),
-      id: z.string(),
       options: z.record(z.any()),
     })
     .openapi({

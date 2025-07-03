@@ -57,6 +57,7 @@ export namespace LSPServer {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
+        if (!Bun.which("go")) return
         log.info("installing gopls")
         const proc = Bun.spawn({
           cmd: ["go", "install", "golang.org/x/tools/gopls@latest"],
@@ -120,6 +121,26 @@ export namespace LSPServer {
       }
       return {
         process: spawn(bin!, ["--stdio"]),
+      }
+    },
+  }
+
+  export const Pyright: Info = {
+    id: "pyright",
+    extensions: [".py", ".pyi"],
+    async spawn() {
+      const proc = spawn(
+        BunProc.which(),
+        ["x", "pyright-langserver", "--stdio"],
+        {
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        },
+      )
+      return {
+        process: proc,
       }
     },
   }

@@ -1,7 +1,7 @@
-import { App } from "../../app/app"
 import { Provider } from "../../provider/provider"
 import { Server } from "../../server/server"
 import { Share } from "../../share/share"
+import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 
 export const ServeCommand = cmd({
@@ -23,7 +23,7 @@ export const ServeCommand = cmd({
   describe: "starts a headless opencode server",
   handler: async (args) => {
     const cwd = process.cwd()
-    await App.provide({ cwd }, async () => {
+    await bootstrap({ cwd }, async () => {
       const providers = await Provider.list()
       if (Object.keys(providers).length === 0) {
         return "needs_provider"

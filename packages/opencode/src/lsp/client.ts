@@ -12,6 +12,7 @@ import { Bus } from "../bus"
 import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
+import { withTimeout } from "../util/timeout"
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -52,7 +53,9 @@ export namespace LSPClient {
       log.info("textDocument/publishDiagnostics", {
         path,
       })
+      const exists = diagnostics.has(path)
       diagnostics.set(path, params.diagnostics)
+      if (!exists && serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path, serverID })
     })
     connection.onRequest("workspace/configuration", async () => {
@@ -61,7 +64,7 @@ export namespace LSPClient {
     connection.listen()
 
     log.info("sending initialize", { id: serverID })
-    await Promise.race([
+    await withTimeout(
       connection.sendRequest("initialize", {
         processId: server.process.pid,
         workspaceFolders: [
@@ -88,12 +91,10 @@ export namespace LSPClient {
           },
         },
       }),
-      new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new InitializeError({ serverID }))
-        }, 5_000)
-      }),
-    ])
+      5_000,
+    ).catch(() => {
+      throw new InitializeError({ serverID })
+    })
     await connection.sendNotification("initialized", {})
     log.info("initialized")
 
@@ -116,36 +117,28 @@ export namespace LSPClient {
           const file = Bun.file(input.path)
           const text = await file.text()
           const version = files[input.path]
-          if (version === undefined) {
-            log.info("textDocument/didOpen", input)
+          if (version !== undefined) {
             diagnostics.delete(input.path)
-            const extension = path.extname(input.path)
-            const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
-            await connection.sendNotification("textDocument/didOpen", {
+            await connection.sendNotification("textDocument/didClose", {
               textDocument: {
                 uri: `file://` + input.path,
-                languageId,
-                version: 0,
-                text,
               },
             })
-            files[input.path] = 0
-            return
           }
-
-          log.info("textDocument/didChange", input)
+          log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
-          await connection.sendNotification("textDocument/didChange", {
+          const extension = path.extname(input.path)
+          const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+          await connection.sendNotification("textDocument/didOpen", {
             textDocument: {
               uri: `file://` + input.path,
-              version: ++files[input.path],
+              languageId,
+              version: 0,
+              text,
             },
-            contentChanges: [
-              {
-                text,
-              },
-            ],
           })
+          files[input.path] = 0
+          return
         },
       },
       get diagnostics() {
@@ -157,35 +150,32 @@ export namespace LSPClient {
           : path.resolve(app.path.cwd, input.path)
         log.info("waiting for diagnostics", input)
         let unsub: () => void
-        let timeout: NodeJS.Timeout
-        return await Promise.race([
-          new Promise<void>(async (resolve) => {
+        return await withTimeout(
+          new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
               if (
                 event.properties.path === input.path &&
                 event.properties.serverID === result.serverID
               ) {
                 log.info("got diagnostics", input)
-                clearTimeout(timeout)
                 unsub?.()
                 resolve()
               }
             })
           }),
-          new Promise<void>((resolve) => {
-            timeout = setTimeout(() => {
-              log.info("timed out refreshing diagnostics", input)
-              unsub?.()
-              resolve()
-            }, 5000)
-          }),
-        ])
+          3000,
+        )
+          .catch(() => {})
+          .finally(() => {
+            unsub?.()
+          })
       },
       async shutdown() {
-        log.info("shutting down")
+        log.info("shutting down", { serverID })
         connection.end()
         connection.dispose()
-        server.process.kill("SIGKILL")
+        server.process.kill("SIGTERM")
+        log.info("shutdown", { serverID })
       },
     }
 

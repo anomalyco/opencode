@@ -25,13 +25,6 @@ func (c *CommandCompletionProvider) GetId() string {
 	return "commands"
 }
 
-func (c *CommandCompletionProvider) GetEntry() dialog.CompletionItemI {
-	return dialog.NewCompletionItem(dialog.CompletionItem{
-		Title: "Commands",
-		Value: "commands",
-	})
-}
-
 func (c *CommandCompletionProvider) GetEmptyMessage() string {
 	return "no matching commands"
 }

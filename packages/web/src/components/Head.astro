@@ -7,13 +7,14 @@ import config from '../../config.mjs'
 const slug = Astro.url.pathname.replace(/^\//, "").replace(/\/$/, "");
 const {
   entry: {
-    data: { title },
+    data: { title , description },
   },
 } = Astro.locals.starlightRoute;
 const isDocs = slug.startsWith("docs")
 
 let encodedTitle = '';
 let ogImage = `${config.url}/social-share.png`;
+let truncatedDesc = '';
 
 if (isDocs) {
   // Truncate to fit S3's max key size
@@ -26,7 +27,12 @@ if (isDocs) {
       )
     )
   );
-  ogImage = `${config.socialCard}/opencode-docs/${encodedTitle}.png`;
+
+  if (description) {
+    truncatedDesc = encodeURIComponent(description.substring(0, 400))
+  }
+
+  ogImage = `${config.socialCard}/opencode-docs/${encodedTitle}.png?desc=${truncatedDesc}`;
 }
 ---
 

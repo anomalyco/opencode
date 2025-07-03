@@ -1,6 +1,8 @@
 import { App } from "../app/app"
 import { ConfigHooks } from "../config/hooks"
+import { FileWatcher } from "../file/watch"
 import { Format } from "../format"
+import { LSP } from "../lsp"
 import { Share } from "../share/share"
 
 export async function bootstrap<T>(
@@ -11,6 +13,8 @@ export async function bootstrap<T>(
     Share.init()
     Format.init()
     ConfigHooks.init()
+    LSP.init()
+    FileWatcher.init()
 
     return cb(app)
   })

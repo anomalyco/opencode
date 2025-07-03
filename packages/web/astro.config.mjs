@@ -42,7 +42,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl: `${github}/edit/master/www/`,
+        baseUrl: `${github}/edit/dev/packages/web/`,
       },
       markdown: {
         headingLinks: false,

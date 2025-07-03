@@ -27,6 +27,10 @@ type LoadedTheme struct {
 	name string
 }
 
+func (t *LoadedTheme) Name() string {
+	return t.name
+}
+
 type colorRef struct {
 	value    any
 	resolved bool

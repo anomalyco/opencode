@@ -8,6 +8,8 @@ import (
 // All colors must be defined as compat.AdaptiveColor to support
 // both light and dark terminal backgrounds.
 type Theme interface {
+	Name() string
+
 	// Background colors
 	Background() compat.AdaptiveColor        // Radix 1
 	BackgroundPanel() compat.AdaptiveColor   // Radix 2

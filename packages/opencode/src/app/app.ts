@@ -36,12 +36,15 @@ export namespace App {
     services: Map<any, { state: any; shutdown?: (input: any) => Promise<void> }>
   }>("app")
 
+  export const use = ctx.use
+
   const APP_JSON = "app.json"
 
   export type Input = {
     cwd: string
   }
 
+  export const provideExisting = ctx.provide
   export async function provide<T>(
     input: Input,
     cb: (app: App.Info) => Promise<T>,
@@ -96,13 +99,16 @@ export namespace App {
     }
 
     return ctx.provide(app, async () => {
-      const result = await cb(app.info)
-      for (const [key, entry] of app.services.entries()) {
-        if (!entry.shutdown) continue
-        log.info("shutdown", { name: key })
-        await entry.shutdown?.(await entry.state)
+      try {
+        const result = await cb(app.info)
+        return result
+      } finally {
+        for (const [key, entry] of app.services.entries()) {
+          if (!entry.shutdown) continue
+          log.info("shutdown", { name: key })
+          await entry.shutdown?.(await entry.state)
+        }
       }
-      return result
     })
   }
 

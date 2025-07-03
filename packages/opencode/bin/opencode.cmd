@@ -48,7 +48,7 @@ set "current_dir=%parent_dir%"
 goto :search_loop
 
 :not_found
-echo It seems that your package manager failed to install the right version of the OpenCode CLI for your platform. You can try manually installing the "%name%" package >&2
+echo It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the "%name%" package >&2
 exit /b 1
 
 :execute
