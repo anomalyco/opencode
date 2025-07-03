@@ -627,7 +627,7 @@ func (a appModel) home(width int) string {
 		Background(t.Background()).
 		Width(lipgloss.Width(logo)).
 		Align(lipgloss.Center)
-	version := versionStyle.Render("v" + a.app.Version + " • dev")
+	version := versionStyle.Render("dev")
 
 	logoAndVersion := strings.Join([]string{logo, version}, "\n")
 	logoAndVersion = lipgloss.PlaceHorizontal(
