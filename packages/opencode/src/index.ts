@@ -14,6 +14,7 @@ import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
+import { SessionLoopCommand } from "./cli/cmd/session-loop"
 
 const cancel = new AbortController()
 
@@ -54,6 +55,7 @@ const cli = yargs(hideBin(process.argv))
   .command(UpgradeCommand)
   .command(ServeCommand)
   .command(ModelsCommand)
+  .command(SessionLoopCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
