@@ -2,6 +2,7 @@ import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
+import { Config } from "../config/config"
 import path from "path"
 import os from "os"
 
@@ -55,8 +56,10 @@ export namespace SystemPrompt {
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
   ]
+
   export async function custom() {
     const { cwd, root } = App.info().path
+    const config = await Config.get()
     const found = []
     for (const item of CUSTOM_FILES) {
       const matches = await Filesystem.findUp(item, cwd, root)
@@ -72,6 +75,18 @@ export namespace SystemPrompt {
         .text()
         .catch(() => ""),
     )
+
+    if (config.instructions) {
+      for (const instruction of config.instructions) {
+        try {
+          const matches = await Filesystem.globUp(instruction, cwd, root)
+          found.push(...matches.map((x) => Bun.file(x).text()))
+        } catch {
+          continue // Skip invalid glob patterns
+        }
+      }
+    }
+
     return Promise.all(found).then((result) => result.filter(Boolean))
   }
 

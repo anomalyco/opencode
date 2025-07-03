@@ -4,9 +4,33 @@ import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
 import { Ripgrep } from "../file/ripgrep"
+import { z } from "zod"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  export const Symbol = z
+    .object({
+      name: z.string(),
+      kind: z.number(),
+      location: z.object({
+        uri: z.string(),
+        range: z.object({
+          start: z.object({
+            line: z.number(),
+            character: z.number(),
+          }),
+          end: z.object({
+            line: z.number(),
+            character: z.number(),
+          }),
+        }),
+      }),
+    })
+    .openapi({
+      ref: "LSP.Symbol",
+    })
+  export type Symbol = z.infer<typeof Symbol>
 
   const state = App.state(
     "lsp",
@@ -96,7 +120,7 @@ export namespace LSP {
       client.connection.sendRequest("workspace/symbol", {
         query,
       }),
-    )
+    ).then((result) => result.flat() as LSP.Symbol[])
   }
 
   async function run<T>(

@@ -31,7 +31,7 @@ export namespace Format {
     const result = []
     for (const item of Object.values(Formatter)) {
       if (!item.extensions.includes(ext)) continue
-      if (!isEnabled(item)) continue
+      if (!(await isEnabled(item))) continue
       result.push(item)
     }
     return result

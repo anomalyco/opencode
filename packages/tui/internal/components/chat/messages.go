@@ -17,37 +17,48 @@ import (
 
 type MessagesComponent interface {
 	tea.Model
-	tea.ViewModel
-	// View(width int) string
-	SetSize(width, height int) tea.Cmd
+	View(width, height int) string
+	SetWidth(width int) tea.Cmd
 	PageUp() (tea.Model, tea.Cmd)
 	PageDown() (tea.Model, tea.Cmd)
 	HalfPageUp() (tea.Model, tea.Cmd)
 	HalfPageDown() (tea.Model, tea.Cmd)
 	First() (tea.Model, tea.Cmd)
 	Last() (tea.Model, tea.Cmd)
-	// Previous() (tea.Model, tea.Cmd)
-	// Next() (tea.Model, tea.Cmd)
+	Previous() (tea.Model, tea.Cmd)
+	Next() (tea.Model, tea.Cmd)
 	ToolDetailsVisible() bool
+	Selected() string
 }
 
 type messagesComponent struct {
-	width, height      int
+	width              int
 	app                *app.App
 	viewport           viewport.Model
-	attachments        viewport.Model
 	cache              *MessageCache
 	rendering          bool
 	showToolDetails    bool
 	tail               bool
 	scrollbarDragging  bool
 	scrollbarDragStart int
+	partCount          int
+	lineCount          int
+	selectedPart       int
+	selectedText       string
 }
 type renderFinishedMsg struct{}
+type selectedMessagePartChangedMsg struct {
+	part int
+}
+
 type ToggleToolDetailsMsg struct{}
 
 func (m *messagesComponent) Init() tea.Cmd {
 	return tea.Batch(m.viewport.Init())
+}
+
+func (m *messagesComponent) Selected() string {
+	return m.selectedText
 }
 
 func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -69,40 +80,55 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case app.SendMsg:
 		m.viewport.GotoBottom()
 		m.tail = true
+		m.selectedPart = -1
 		return m, nil
 	case app.OptimisticMessageAddedMsg:
-		m.renderView()
+		m.renderView(m.width)
 		if m.tail {
 			m.viewport.GotoBottom()
 		}
 		return m, nil
 	case dialog.ThemeSelectedMsg:
 		m.cache.Clear()
+		m.rendering = true
 		return m, m.Reload()
 	case ToggleToolDetailsMsg:
 		m.showToolDetails = !m.showToolDetails
+		m.rendering = true
 		return m, m.Reload()
-	case app.SessionSelectedMsg:
+	case app.SessionLoadedMsg:
 		m.cache.Clear()
 		m.tail = true
+		m.rendering = true
 		return m, m.Reload()
 	case app.SessionClearedMsg:
 		m.cache.Clear()
-		cmd := m.Reload()
-		return m, cmd
+		m.rendering = true
+		return m, m.Reload()
 	case renderFinishedMsg:
 		m.rendering = false
 		if m.tail {
 			m.viewport.GotoBottom()
 		}
-	case opencode.EventListResponseEventSessionUpdated, opencode.EventListResponseEventMessageUpdated:
-		m.renderView()
-		if m.tail {
-			m.viewport.GotoBottom()
+	case selectedMessagePartChangedMsg:
+		return m, m.Reload()
+	case opencode.EventListResponseEventSessionUpdated:
+		if msg.Properties.Info.ID == m.app.Session.ID {
+			m.renderView(m.width)
+			if m.tail {
+				m.viewport.GotoBottom()
+			}
+		}
+	case opencode.EventListResponseEventMessageUpdated:
+		if msg.Properties.Info.Metadata.SessionID == m.app.Session.ID {
+			m.renderView(m.width)
+			if m.tail {
+				m.viewport.GotoBottom()
+			}
 		}
 	}
 
@@ -114,45 +140,46 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *messagesComponent) renderView() {
-	if m.width == 0 {
-		return
-	}
-
+func (m *messagesComponent) renderView(width int) {
 	measure := util.Measure("messages.renderView")
 	defer measure("messageCount", len(m.app.Messages))
 
 	t := theme.CurrentTheme()
+	blocks := make([]string, 0)
+	m.partCount = 0
+	m.lineCount = 0
 
-	align := lipgloss.Center
-	width := layout.Current.Container.Width
-
-	sb := strings.Builder{}
-	util.WriteStringsPar(&sb, m.app.Messages, func(message opencode.Message) string {
+	for _, message := range m.app.Messages {
 		var content string
 		var cached bool
-		blocks := make([]string, 0)
 
 		switch message.Role {
 		case opencode.MessageRoleUser:
 			for _, part := range message.Parts {
 				switch part := part.AsUnion().(type) {
 				case opencode.TextPart:
-					key := m.cache.GenerateKey(message.ID, part.Text, layout.Current.Viewport.Width)
+					key := m.cache.GenerateKey(message.ID, part.Text, width, m.selectedPart == m.partCount)
 					content, cached = m.cache.Get(key)
 					if !cached {
 						content = renderText(
+							m.app,
 							message,
 							part.Text,
 							m.app.Info.User,
 							m.showToolDetails,
+							m.partCount == m.selectedPart,
 							width,
-							align,
 						)
 						m.cache.Set(key, content)
 					}
 					if content != "" {
+						if m.selectedPart == m.partCount {
+							m.viewport.SetYOffset(m.lineCount - 4)
+							m.selectedText = part.Text
+						}
 						blocks = append(blocks, content)
+						m.partCount++
+						m.lineCount += lipgloss.Height(content) + 1
 					}
 				}
 			}
@@ -181,33 +208,41 @@ func (m *messagesComponent) renderView() {
 					}
 
 					if finished {
-						key := m.cache.GenerateKey(message.ID, p.Text, layout.Current.Viewport.Width, m.showToolDetails)
+						key := m.cache.GenerateKey(message.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
 						content, cached = m.cache.Get(key)
 						if !cached {
 							content = renderText(
+								m.app,
 								message,
 								p.Text,
 								message.Metadata.Assistant.ModelID,
 								m.showToolDetails,
+								m.partCount == m.selectedPart,
 								width,
-								align,
 								toolCallParts...,
 							)
 							m.cache.Set(key, content)
 						}
 					} else {
 						content = renderText(
+							m.app,
 							message,
 							p.Text,
 							message.Metadata.Assistant.ModelID,
 							m.showToolDetails,
+							m.partCount == m.selectedPart,
 							width,
-							align,
 							toolCallParts...,
 						)
 					}
 					if content != "" {
+						if m.selectedPart == m.partCount {
+							m.viewport.SetYOffset(m.lineCount - 4)
+							m.selectedText = p.Text
+						}
 						blocks = append(blocks, content)
+						m.partCount++
+						m.lineCount += lipgloss.Height(content) + 1
 					}
 				case opencode.ToolInvocationPart:
 					if !m.showToolDetails {
@@ -218,29 +253,38 @@ func (m *messagesComponent) renderView() {
 						key := m.cache.GenerateKey(message.ID,
 							part.ToolInvocation.ToolCallID,
 							m.showToolDetails,
-							layout.Current.Viewport.Width,
+							width,
+							m.partCount == m.selectedPart,
 						)
 						content, cached = m.cache.Get(key)
 						if !cached {
 							content = renderToolDetails(
+								m.app,
 								part,
 								message.Metadata,
+								m.partCount == m.selectedPart,
 								width,
-								align,
 							)
 							m.cache.Set(key, content)
 						}
 					} else {
 						// if the tool call isn't finished, don't cache
 						content = renderToolDetails(
+							m.app,
 							part,
 							message.Metadata,
+							m.partCount == m.selectedPart,
 							width,
-							align,
 						)
 					}
 					if content != "" {
+						if m.selectedPart == m.partCount {
+							m.viewport.SetYOffset(m.lineCount - 4)
+							m.selectedText = ""
+						}
 						blocks = append(blocks, content)
+						m.partCount++
+						m.lineCount += lipgloss.Height(content) + 1
 					}
 				}
 			}
@@ -259,34 +303,33 @@ func (m *messagesComponent) renderView() {
 
 		if error != "" {
 			error = renderContentBlock(
+				m.app,
 				error,
+				false,
 				width,
-				align,
 				WithBorderColor(t.Error()),
 			)
 			blocks = append(blocks, error)
+			m.lineCount += lipgloss.Height(error) + 1
 		}
+	}
 
-		return strings.Join(blocks, "\n\n")
-	})
-
-	content := sb.String()
-
-	m.viewport.SetHeight(m.height - lipgloss.Height(m.header()) + 1)
-	m.viewport.SetContent("\n" + content)
+	m.viewport.SetContent("\n" + strings.Join(blocks, "\n\n"))
+	if m.selectedPart == m.partCount-1 {
+		m.viewport.GotoBottom()
+	}
 }
 
-func (m *messagesComponent) header() string {
+func (m *messagesComponent) header(width int) string {
 	if m.app.Session.ID == "" {
 		return ""
 	}
 
 	t := theme.CurrentTheme()
-	width := layout.Current.Container.Width
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 	headerLines := []string{}
-	headerLines = append(headerLines, toMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
+	headerLines = append(headerLines, util.ToMarkdown("# "+m.app.Session.Title, width-6, t.Background()))
 	if m.app.Session.Share.URL != "" {
 		headerLines = append(headerLines, muted(m.app.Session.Share.URL))
 	} else {
@@ -350,6 +393,7 @@ func (m *messagesComponent) renderScrollbar() string {
 
 	return strings.Join(scrollbar, "\n")
 }
+
 func (m *messagesComponent) handleScrollbarClick(x, y int) bool {
 	// Check if click is in scrollbar area (rightmost column)
 	if x != m.width-1 {
@@ -364,7 +408,7 @@ func (m *messagesComponent) handleScrollbarClick(x, y int) bool {
 	}
 
 	// Calculate header offset - account for the header in the layout
-	headerHeight := lipgloss.Height(m.header())
+	headerHeight := lipgloss.Height(m.header(m.width))
 	scrollbarY := y - headerHeight
 
 	// Check if click is within scrollbar bounds
@@ -408,7 +452,7 @@ func (m *messagesComponent) handleScrollbarDrag(y int) {
 	}
 
 	// Calculate header offset - consistent with click handler
-	headerHeight := lipgloss.Height(m.header())
+	headerHeight := lipgloss.Height(m.header(m.width))
 	scrollbarY := y - headerHeight - m.scrollbarDragStart
 	// Calculate scrollbar dimensions
 	scrollbarHeight := visibleLines
@@ -447,12 +491,12 @@ func (m *messagesComponent) applyScrollbarOverlay(viewportContent string) string
 	)
 }
 
-func (m *messagesComponent) View() string {
+func (m *messagesComponent) View(width, height int) string {
 	t := theme.CurrentTheme()
 	if m.rendering {
 		return lipgloss.Place(
-			m.width,
-			m.height+1,
+			width,
+			height,
 			lipgloss.Center,
 			lipgloss.Center,
 			styles.NewStyle().Background(t.Background()).Render("Loading session..."),
@@ -460,26 +504,23 @@ func (m *messagesComponent) View() string {
 		)
 	}
 
-	// Get the viewport content - this should remain untouched
+	header := m.header(width)
+	m.viewport.SetWidth(width)
+	m.viewport.SetHeight(height - lipgloss.Height(header))
+
+	// Get the viewport content
 	content := m.viewport.View()
 
 	// Apply scrollbar overlay using OpenCode's overlay system
 	content = m.applyScrollbarOverlay(content)
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		lipgloss.PlaceHorizontal(
-			m.width,
-			lipgloss.Center,
-			m.header(),
-			styles.WhitespaceStyle(t.Background()),
-		),
-		content,
-	)
+	return styles.NewStyle().
+		Background(t.Background()).
+		Render(header + "\n" + content)
 }
 
-func (m *messagesComponent) SetSize(width, height int) tea.Cmd {
-	if m.width == width && m.height == height {
+func (m *messagesComponent) SetWidth(width int) tea.Cmd {
+	if m.width == width {
 		return nil
 	}
 	// Clear cache on resize since width affects rendering
@@ -487,23 +528,14 @@ func (m *messagesComponent) SetSize(width, height int) tea.Cmd {
 		m.cache.Clear()
 	}
 	m.width = width
-	m.height = height
 	m.viewport.SetWidth(width)
-	m.viewport.SetHeight(height - lipgloss.Height(m.header()))
-	m.attachments.SetWidth(width + 40)
-	m.attachments.SetHeight(3)
-	m.renderView()
+	m.renderView(width)
 	return nil
 }
 
-func (m *messagesComponent) GetSize() (int, int) {
-	return m.width, m.height
-}
-
 func (m *messagesComponent) Reload() tea.Cmd {
-	m.rendering = true
 	return func() tea.Msg {
-		m.renderView()
+		m.renderView(m.width)
 		return renderFinishedMsg{}
 	}
 }
@@ -528,16 +560,45 @@ func (m *messagesComponent) HalfPageDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *messagesComponent) First() (tea.Model, tea.Cmd) {
-	m.viewport.GotoTop()
+func (m *messagesComponent) Previous() (tea.Model, tea.Cmd) {
 	m.tail = false
-	return m, nil
+	if m.selectedPart < 0 {
+		m.selectedPart = m.partCount
+	}
+	m.selectedPart--
+	if m.selectedPart < 0 {
+		m.selectedPart = 0
+	}
+	return m, util.CmdHandler(selectedMessagePartChangedMsg{
+		part: m.selectedPart,
+	})
+}
+
+func (m *messagesComponent) Next() (tea.Model, tea.Cmd) {
+	m.tail = false
+	m.selectedPart++
+	if m.selectedPart >= m.partCount {
+		m.selectedPart = m.partCount
+	}
+	return m, util.CmdHandler(selectedMessagePartChangedMsg{
+		part: m.selectedPart,
+	})
+}
+
+func (m *messagesComponent) First() (tea.Model, tea.Cmd) {
+	m.selectedPart = 0
+	m.tail = false
+	return m, util.CmdHandler(selectedMessagePartChangedMsg{
+		part: m.selectedPart,
+	})
 }
 
 func (m *messagesComponent) Last() (tea.Model, tea.Cmd) {
-	m.viewport.GotoBottom()
+	m.selectedPart = m.partCount - 1
 	m.tail = true
-	return m, nil
+	return m, util.CmdHandler(selectedMessagePartChangedMsg{
+		part: m.selectedPart,
+	})
 }
 
 func (m *messagesComponent) ToolDetailsVisible() bool {
@@ -546,16 +607,15 @@ func (m *messagesComponent) ToolDetailsVisible() bool {
 
 func NewMessagesComponent(app *app.App) MessagesComponent {
 	vp := viewport.New()
-	attachments := viewport.New()
-	// Don't disable the viewport's key bindings - this allows mouse scrolling to work
+	// Keep viewport key bindings enabled for mouse scrolling
 	// vp.KeyMap = viewport.KeyMap{}
 
 	return &messagesComponent{
 		app:             app,
 		viewport:        vp,
-		attachments:     attachments,
 		showToolDetails: true,
 		cache:           NewMessageCache(),
 		tail:            true,
+		selectedPart:    -1,
 	}
 }

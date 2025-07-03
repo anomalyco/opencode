@@ -159,6 +159,7 @@ export namespace Message {
             z
               .object({
                 title: z.string(),
+                snapshot: z.string().optional(),
                 time: z.object({
                   start: z.number(),
                   end: z.number(),
@@ -188,11 +189,7 @@ export namespace Message {
               }),
             })
             .optional(),
-          user: z
-            .object({
-              snapshot: z.string().optional(),
-            })
-            .optional(),
+          snapshot: z.string().optional(),
         })
         .openapi({ ref: "MessageMetadata" }),
     })
@@ -206,6 +203,13 @@ export namespace Message {
       "message.updated",
       z.object({
         info: Info,
+      }),
+    ),
+    Removed: Bus.event(
+      "message.removed",
+      z.object({
+        sessionID: z.string(),
+        messageID: z.string(),
       }),
     ),
     PartUpdated: Bus.event(

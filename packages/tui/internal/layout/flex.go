@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/lipgloss/v2/compat"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/theme"
 )
 
 type Direction int
@@ -34,11 +36,13 @@ const (
 )
 
 type FlexOptions struct {
-	Direction Direction
-	Justify   Justify
-	Align     Align
-	Width     int
-	Height    int
+	Background *compat.AdaptiveColor
+	Direction  Direction
+	Justify    Justify
+	Align      Align
+	Width      int
+	Height     int
+	Gap        int
 }
 
 type FlexItem struct {
@@ -51,6 +55,12 @@ type FlexItem struct {
 func Render(opts FlexOptions, items ...FlexItem) string {
 	if len(items) == 0 {
 		return ""
+	}
+
+	t := theme.CurrentTheme()
+	if opts.Background == nil {
+		background := t.Background()
+		opts.Background = &background
 	}
 
 	// Calculate dimensions for each item
@@ -72,8 +82,14 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 		}
 	}
 
+	// Account for gaps between items
+	totalGapSize := 0
+	if len(items) > 1 && opts.Gap > 0 {
+		totalGapSize = opts.Gap * (len(items) - 1)
+	}
+
 	// Calculate available space for grow items
-	availableSpace := max(mainAxisSize-totalFixedSize, 0)
+	availableSpace := max(mainAxisSize-totalFixedSize-totalGapSize, 0)
 
 	// Calculate size for each grow item
 	growItemSize := 0
@@ -108,6 +124,7 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 			// For row direction, constrain width and handle height alignment
 			if itemSize > 0 {
 				view = styles.NewStyle().
+					Background(*opts.Background).
 					Width(itemSize).
 					Height(crossAxisSize).
 					Render(view)
@@ -116,31 +133,65 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 			// Apply cross-axis alignment
 			switch opts.Align {
 			case AlignCenter:
-				view = lipgloss.PlaceVertical(crossAxisSize, lipgloss.Center, view)
+				view = lipgloss.PlaceVertical(
+					crossAxisSize,
+					lipgloss.Center,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignEnd:
-				view = lipgloss.PlaceVertical(crossAxisSize, lipgloss.Bottom, view)
+				view = lipgloss.PlaceVertical(
+					crossAxisSize,
+					lipgloss.Bottom,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignStart:
-				view = lipgloss.PlaceVertical(crossAxisSize, lipgloss.Top, view)
+				view = lipgloss.PlaceVertical(
+					crossAxisSize,
+					lipgloss.Top,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignStretch:
 				// Already stretched by Height setting above
 			}
 		} else {
 			// For column direction, constrain height and handle width alignment
 			if itemSize > 0 {
-				view = styles.NewStyle().
-					Height(itemSize).
-					Width(crossAxisSize).
-					Render(view)
+				style := styles.NewStyle().
+					Background(*opts.Background).
+					Height(itemSize)
+				// Only set width for stretch alignment
+				if opts.Align == AlignStretch {
+					style = style.Width(crossAxisSize)
+				}
+				view = style.Render(view)
 			}
 
 			// Apply cross-axis alignment
 			switch opts.Align {
 			case AlignCenter:
-				view = lipgloss.PlaceHorizontal(crossAxisSize, lipgloss.Center, view)
+				view = lipgloss.PlaceHorizontal(
+					crossAxisSize,
+					lipgloss.Center,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignEnd:
-				view = lipgloss.PlaceHorizontal(crossAxisSize, lipgloss.Right, view)
+				view = lipgloss.PlaceHorizontal(
+					crossAxisSize,
+					lipgloss.Right,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignStart:
-				view = lipgloss.PlaceHorizontal(crossAxisSize, lipgloss.Left, view)
+				view = lipgloss.PlaceHorizontal(
+					crossAxisSize,
+					lipgloss.Left,
+					view,
+					styles.WhitespaceStyle(*opts.Background),
+				)
 			case AlignStretch:
 				// Already stretched by Width setting above
 			}
@@ -154,10 +205,13 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 		}
 	}
 
-	// Calculate total actual size
+	// Calculate total actual size including gaps
 	totalActualSize := 0
 	for _, size := range actualSizes {
 		totalActualSize += size
+	}
+	if len(items) > 1 && opts.Gap > 0 {
+		totalActualSize += opts.Gap * (len(items) - 1)
 	}
 
 	// Apply justification
@@ -191,12 +245,17 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 	// Build the final layout
 	var parts []string
 
+	spaceStyle := styles.NewStyle().Background(*opts.Background)
 	// Add space before if needed
 	if spaceBefore > 0 {
 		if opts.Direction == Row {
-			parts = append(parts, strings.Repeat(" ", spaceBefore))
+			space := strings.Repeat(" ", spaceBefore)
+			parts = append(parts, spaceStyle.Render(space))
 		} else {
-			parts = append(parts, strings.Repeat("\n", spaceBefore))
+			// For vertical layout, add empty lines as separate parts
+			for range spaceBefore {
+				parts = append(parts, "")
+			}
 		}
 	}
 
@@ -205,11 +264,19 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 		parts = append(parts, view)
 
 		// Add space between items (not after the last one)
-		if i < len(sizedViews)-1 && spaceBetween > 0 {
-			if opts.Direction == Row {
-				parts = append(parts, strings.Repeat(" ", spaceBetween))
-			} else {
-				parts = append(parts, strings.Repeat("\n", spaceBetween))
+		if i < len(sizedViews)-1 {
+			// Add gap first, then any additional spacing from justification
+			totalSpacing := opts.Gap + spaceBetween
+			if totalSpacing > 0 {
+				if opts.Direction == Row {
+					space := strings.Repeat(" ", totalSpacing)
+					parts = append(parts, spaceStyle.Render(space))
+				} else {
+					// For vertical layout, add empty lines as separate parts
+					for range totalSpacing {
+						parts = append(parts, "")
+					}
+				}
 			}
 		}
 	}
@@ -217,9 +284,13 @@ func Render(opts FlexOptions, items ...FlexItem) string {
 	// Add space after if needed
 	if spaceAfter > 0 {
 		if opts.Direction == Row {
-			parts = append(parts, strings.Repeat(" ", spaceAfter))
+			space := strings.Repeat(" ", spaceAfter)
+			parts = append(parts, spaceStyle.Render(space))
 		} else {
-			parts = append(parts, strings.Repeat("\n", spaceAfter))
+			// For vertical layout, add empty lines as separate parts
+			for range spaceAfter {
+				parts = append(parts, "")
+			}
 		}
 	}
 

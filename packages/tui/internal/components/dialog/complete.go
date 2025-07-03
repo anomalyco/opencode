@@ -41,7 +41,6 @@ func (ci *CompletionItem) Render(selected bool, width int) string {
 	title := itemStyle.Render(
 		ci.DisplayValue(),
 	)
-
 	return title
 }
 
@@ -59,7 +58,6 @@ func NewCompletionItem(completionItem CompletionItem) CompletionItemI {
 
 type CompletionProvider interface {
 	GetId() string
-	GetEntry() CompletionItemI
 	GetChildEntries(query string) ([]CompletionItemI, error)
 	GetEmptyMessage() string
 }
@@ -175,9 +173,6 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, c.pseudoSearchTextArea.Focus())
 			return c, tea.Batch(cmds...)
 		}
-	case tea.WindowSizeMsg:
-		c.width = msg.Width
-		c.height = msg.Height
 	}
 
 	return c, tea.Batch(cmds...)

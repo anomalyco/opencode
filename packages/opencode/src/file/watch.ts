@@ -22,28 +22,30 @@ export namespace FileWatcher {
       "file.watcher",
       () => {
         const app = App.use()
-        const watcher = fs.watch(
-          app.info.path.cwd,
-          { recursive: true },
-          (event, file) => {
-            log.info("change", { file, event })
-            if (!file) return
-            // for some reason async local storage is lost here
-            // https://github.com/oven-sh/bun/issues/20754
-            App.provideExisting(app, async () => {
-              Bus.publish(Event.Updated, {
-                file,
-                event,
+        try {
+          const watcher = fs.watch(
+            app.info.path.cwd,
+            { recursive: true },
+            (event, file) => {
+              log.info("change", { file, event })
+              if (!file) return
+              // for some reason async local storage is lost here
+              // https://github.com/oven-sh/bun/issues/20754
+              App.provideExisting(app, async () => {
+                Bus.publish(Event.Updated, {
+                  file,
+                  event,
+                })
               })
-            })
-          },
-        )
-        return {
-          watcher,
+            },
+          )
+          return { watcher }
+        } catch {
+          return {}
         }
       },
       async (state) => {
-        state.watcher.close()
+        state.watcher?.close()
       },
     )()
   }

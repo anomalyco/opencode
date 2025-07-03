@@ -21,6 +21,8 @@ type State struct {
 	Provider           string       `toml:"provider"`
 	Model              string       `toml:"model"`
 	RecentlyUsedModels []ModelUsage `toml:"recently_used_models"`
+	MessagesRight      bool         `toml:"messages_right"`
+	SplitDiff          bool         `toml:"split_diff"`
 }
 
 func NewState() *State {

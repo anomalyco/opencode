@@ -57,6 +57,7 @@ export namespace LSPServer {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
+        if (!Bun.which("go")) return
         log.info("installing gopls")
         const proc = Bun.spawn({
           cmd: ["go", "install", "golang.org/x/tools/gopls@latest"],
