@@ -102,27 +102,27 @@ func (m *editorComponent) Content(width int) string {
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 	promptStyle := styles.NewStyle().Foreground(t.Primary()).
-		Padding(0, 0, 0, 1).
-		Bold(true)
+		Padding(0, 1, 0, 1)
 	prompt := promptStyle.Render(">")
 
 	m.textarea.SetWidth(width - 6)
-	textarea := lipgloss.JoinHorizontal(
+	textareaContent := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		prompt,
 		m.textarea.View(),
 	)
-	textarea = styles.NewStyle().
-		Background(t.BackgroundElement()).
+
+	// Apply border with padding to create space
+	textareaBox := styles.NewStyle().
 		Width(width).
-		PaddingTop(1).
-		PaddingBottom(1).
-		BorderStyle(lipgloss.ThickBorder()).
+		Padding(0, 1, 0, 1).
+		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(t.Border()).
-		BorderBackground(t.Background()).
+		BorderTop(true).
+		BorderBottom(true).
 		BorderLeft(true).
 		BorderRight(true).
-		Render(textarea)
+		Render(textareaContent)
 
 	hint := base(m.getSubmitKeyText()) + muted(" send   ")
 	if m.app.IsBusy() {
@@ -145,7 +145,7 @@ func (m *editorComponent) Content(width int) string {
 	info := hint + spacer + model
 	info = styles.NewStyle().Background(t.Background()).Padding(0, 1).Render(info)
 
-	content := strings.Join([]string{"", textarea, info}, "\n")
+	content := strings.Join([]string{"", textareaBox, info}, "\n")
 	return content
 }
 
@@ -246,20 +246,21 @@ func (m *editorComponent) getSubmitKeyText() string {
 
 func createTextArea(existing *textarea.Model) textarea.Model {
 	t := theme.CurrentTheme()
-	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
 
 	ta := textarea.New()
 
-	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Focused.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	transparentBase := styles.NewStyle().Lipgloss()
+
+	ta.Styles.Blurred.Base = transparentBase
+	ta.Styles.Blurred.CursorLine = styles.NewStyle().Lipgloss()
+	ta.Styles.Blurred.Placeholder = styles.NewStyle().Foreground(textMutedColor).Lipgloss()
+	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Lipgloss()
+	ta.Styles.Focused.Base = transparentBase
+	ta.Styles.Focused.CursorLine = styles.NewStyle().Lipgloss()
+	ta.Styles.Focused.Placeholder = styles.NewStyle().Foreground(textMutedColor).Lipgloss()
+	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
 
 	ta.Prompt = " "
