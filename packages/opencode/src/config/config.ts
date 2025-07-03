@@ -163,6 +163,12 @@ export namespace Config {
           "Model to use in the format of provider/model, eg anthropic/claude-2",
         )
         .optional(),
+      use_standard_pricing_only: z
+        .boolean()
+        .optional()
+        .describe(
+          "Force the use of standard pricing tier for Gemini models, even for large contexts.",
+        ),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({
@@ -176,10 +182,6 @@ export namespace Config {
         .record(z.string(), Mcp)
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
-      instructions: z
-        .array(z.string())
-        .optional()
-        .describe("Additional instruction files or patterns to include"),
       experimental: z
         .object({
           hook: z
