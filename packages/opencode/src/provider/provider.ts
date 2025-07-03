@@ -37,6 +37,18 @@ export namespace Provider {
 
   type Source = "env" | "config" | "custom" | "api"
 
+  // Helper function to get cost based on context size
+  export function getCost(model: ModelsDev.Model, use_standard_pricing_only: boolean, contextSize?: number) {
+    if ("standard" in model.cost && "large_context" in model.cost) {
+      const threshold = model.limit.standard_context_threshold ?? 200000; // Default threshold if not specified
+      if (contextSize && contextSize > threshold && !use_standard_pricing_only) {
+        return model.cost.large_context;
+      }
+      return model.cost.standard;
+    }
+    return model.cost; // Fallback for models without tiered pricing
+  }
+
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic(provider) {
       const access = await AuthAnthropic.access()
@@ -99,25 +111,11 @@ export namespace Provider {
               })
               info.access = tokens.access
             }
-            let isAgentCall = false
-            try {
-              const body =
-                typeof init.body === "string"
-                  ? JSON.parse(init.body)
-                  : init.body
-              if (body?.messages) {
-                isAgentCall = body.messages.some(
-                  (msg: any) =>
-                    msg.role && ["tool", "assistant"].includes(msg.role),
-                )
-              }
-            } catch {}
             const headers = {
               ...init.headers,
               ...copilot.HEADERS,
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
-              "X-Initiator": isAgentCall ? "agent" : "user",
             }
             delete headers["x-api-key"]
             return fetch(input, {
@@ -202,17 +200,6 @@ export namespace Provider {
           }
 
           return sdk.languageModel(modelID)
-        },
-      }
-    },
-    openrouter: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
-          },
         },
       }
     },
