@@ -202,8 +202,11 @@ export namespace Ripgrep {
     const commands = [
       `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
     ]
-    if (input.query)
-      commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
+    if (input.query) {
+      // Properly escape the query to prevent shell injection
+      const escapedQuery = input.query.replace(/'/g, "'\"'\"'")
+      commands.push(`${await Fzf.filepath()} --filter='${escapedQuery}'`)
+    }
     if (input.limit) commands.push(`head -n ${input.limit}`)
     const joined = commands.join(" | ")
     const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
