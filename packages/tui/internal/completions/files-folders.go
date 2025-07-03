@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -75,6 +76,7 @@ func (cg *filesAndFoldersContextGroup) GetChildEntries(query string) ([]dialog.C
 	)
 	if err != nil {
 		slog.Error("Failed to get completion items", "error", err)
+		return items, fmt.Errorf("Failed to get completion items: %w", err)
 	}
 
 	for _, file := range *files {
