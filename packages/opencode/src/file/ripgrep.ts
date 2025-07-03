@@ -7,6 +7,7 @@ import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 import { Fzf } from "./fzf"
+import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 
 export namespace Ripgrep {
   const Stats = z.object({
@@ -164,20 +165,32 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        const proc = Bun.spawn(
-          ["unzip", "-j", archivePath, "*/rg.exe", "-d", Global.Path.bin],
-          {
-            cwd: Global.Path.bin,
-            stderr: "pipe",
-            stdout: "ignore",
-          },
-        )
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])));
+        const entries = await zipFileReader.getEntries();
+        let rgEntry: any;
+        for (const entry of entries) {
+          if (entry.filename.endsWith("rg.exe")) {
+            rgEntry = entry;
+            break;
+          }
+        }
+
+        if (!rgEntry) {
           throw new ExtractionFailedError({
             filepath: archivePath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
-          })
+            stderr: "rg.exe not found in zip archive",
+          });
+        }
+
+        const rgBlob = await rgEntry.getData(new BlobWriter());
+        if (!rgBlob) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "Failed to extract rg.exe from zip archive",
+          });
+        }
+        await Bun.write(filepath, await rgBlob.arrayBuffer());
+        await zipFileReader.close();
       }
       await fs.unlink(archivePath)
       if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)
