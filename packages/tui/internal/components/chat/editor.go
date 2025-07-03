@@ -21,9 +21,8 @@ import (
 
 type EditorComponent interface {
 	tea.Model
-	tea.ViewModel
-	layout.Sizeable
-	Content() string
+	View(width int) string
+	Content(width int) string
 	Lines() int
 	Value() string
 	Focused() bool
@@ -33,8 +32,6 @@ type EditorComponent interface {
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
-	Previous() (tea.Model, tea.Cmd)
-	Next() (tea.Model, tea.Cmd)
 	SetInterruptKeyInDebounce(inDebounce bool)
 }
 
@@ -60,12 +57,10 @@ type ScrollbarState struct {
 
 type editorComponent struct {
 	app                    *app.App
-	width, height          int
+	width                  int
+	height                 int
 	textarea               textarea.Model
 	attachments            []app.Attachment
-	history                []string
-	historyIndex           int
-	currentMessage         string
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 	scrollbar              ScrollbarState
@@ -230,7 +225,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *editorComponent) Content() string {
+func (m *editorComponent) Content(width int) string {
 	// Update scrollbar state before rendering
 	m.updateScrollbarState()
 
@@ -242,6 +237,7 @@ func (m *editorComponent) Content() string {
 		Bold(true)
 	prompt := promptStyle.Render(">")
 
+	m.textarea.SetWidth(width - 6)
 	textareaView := m.textarea.View()
 
 	// Create the content with prompt
@@ -254,7 +250,7 @@ func (m *editorComponent) Content() string {
 	// Always render without top/bottom borders for clean look
 	textarea := styles.NewStyle().
 		Background(t.BackgroundElement()).
-		Width(m.width).
+		Width(width).
 		PaddingTop(1).
 		PaddingBottom(1).
 		BorderStyle(lipgloss.ThickBorder()).
@@ -315,7 +311,7 @@ func (m *editorComponent) Content() string {
 		model = muted(m.app.Provider.Name) + base(" "+m.app.Model.Name)
 	}
 
-	space := m.width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
+	space := width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
 	spacer := styles.NewStyle().Background(t.Background()).Width(space).Render("")
 
 	info := hint + spacer + model
@@ -325,11 +321,18 @@ func (m *editorComponent) Content() string {
 	return result
 }
 
-func (m *editorComponent) View() string {
+func (m *editorComponent) View(width int) string {
 	if m.Lines() > 1 {
-		return ""
+		return lipgloss.Place(
+			width,
+			5,
+			lipgloss.Center,
+			lipgloss.Center,
+			"",
+			styles.WhitespaceStyle(theme.CurrentTheme().Background()),
+		)
 	}
-	return m.Content()
+	return m.Content(width)
 }
 
 func (m *editorComponent) Focused() bool {
@@ -360,7 +363,6 @@ func (m *editorComponent) SetSize(width, height int) tea.Cmd {
 	m.textarea.SetWidth(width - borderAdjust)
 	return nil
 }
-
 func (m *editorComponent) Lines() int {
 	// If MaxHeight is set, grow naturally up to MaxHeight, then stay fixed
 	if m.textarea.MaxHeight > 0 {
@@ -631,16 +633,6 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	attachments := m.attachments
-
-	// Save to history if not empty and not a duplicate of the last entry
-	if value != "" {
-		if len(m.history) == 0 || m.history[len(m.history)-1] != value {
-			m.history = append(m.history, value)
-		}
-		m.historyIndex = len(m.history)
-		m.currentMessage = ""
-	}
-
 	m.attachments = nil
 
 	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: attachments}))
@@ -670,48 +662,6 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
 	m.textarea.Newline()
-	return m, nil
-}
-
-func (m *editorComponent) Previous() (tea.Model, tea.Cmd) {
-	currentLine := m.textarea.Line()
-
-	// Only navigate history if we're at the first line
-	if currentLine == 0 && len(m.history) > 0 {
-		// Save current message if we're just starting to navigate
-		if m.historyIndex == len(m.history) {
-			m.currentMessage = m.textarea.Value()
-		}
-
-		// Go to previous message in history
-		if m.historyIndex > 0 {
-			m.historyIndex--
-			m.textarea.SetValue(m.history[m.historyIndex])
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *editorComponent) Next() (tea.Model, tea.Cmd) {
-	currentLine := m.textarea.Line()
-	value := m.textarea.Value()
-	lines := strings.Split(value, "\n")
-	totalLines := len(lines)
-
-	// Only navigate history if we're at the last line
-	if currentLine == totalLines-1 {
-		if m.historyIndex < len(m.history)-1 {
-			// Go to next message in history
-			m.historyIndex++
-			m.textarea.SetValue(m.history[m.historyIndex])
-		} else if m.historyIndex == len(m.history)-1 {
-			// Return to the current message being composed
-			m.historyIndex = len(m.history)
-			m.textarea.SetValue(m.currentMessage)
-		}
-		return m, nil
-	}
 	return m, nil
 }
 
@@ -748,7 +698,6 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
-	ta.SetWidth(layout.Current.Container.Width - 6)
 
 	// Limit height to 10 lines to prevent excessive growth
 	ta.MaxHeight = 10
@@ -759,7 +708,6 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 		ta.SetHeight(existing.Height())
 	}
 
-	// ta.Focus()
 	return ta
 }
 
@@ -784,9 +732,6 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	return &editorComponent{
 		app:                    app,
 		textarea:               ta,
-		history:                []string{},
-		historyIndex:           0,
-		currentMessage:         "",
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}

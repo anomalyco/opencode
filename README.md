@@ -40,6 +40,9 @@ For more info on how to configure opencode [**head over to our docs**](https://o
 
 For any new features we'd appreciate it if you could open an issue first to discuss what you'd like to implement. We're pretty responsive there and it'll save you from working on something that we don't end up using. No need to do this for simpler fixes.
 
+> **Note**: Please talk to us via github issues before spending time working on
+> a new feature
+
 To run opencode locally you need.
 
 - Bun
@@ -66,10 +69,6 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 - Not coupled to any provider. Although Anthropic is recommended, opencode can be used with OpenAI, Google or even local models. As models evolve the gaps between them will close and pricing will drop so being provider agnostic is important.
 - A focus on TUI. opencode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
 - A client/server architecture. This for example can allow opencode to run on your computer, while you can drive it remotely from a mobile app. Meaning that the TUI frontend is just one of the possible clients.
-
-#### What about Windows support?
-
-There are some minor problems blocking opencode from working on windows. We are working on on them now. You'll need to use WSL for now.
 
 #### What's the other repo?
 

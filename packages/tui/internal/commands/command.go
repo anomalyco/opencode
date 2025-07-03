@@ -85,6 +85,10 @@ const (
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
 	ThemeListCommand            CommandName = "theme_list"
+	FileListCommand             CommandName = "file_list"
+	FileCloseCommand            CommandName = "file_close"
+	FileSearchCommand           CommandName = "file_search"
+	FileDiffToggleCommand       CommandName = "file_diff_toggle"
 	ProjectInitCommand          CommandName = "project_init"
 	InputClearCommand           CommandName = "input_clear"
 	InputPasteCommand           CommandName = "input_paste"
@@ -92,8 +96,6 @@ const (
 	SelectionCopyCommand        CommandName = "selection_copy"
 	SelectionAllCommand         CommandName = "selection_all"
 	InputNewlineCommand         CommandName = "input_newline"
-	HistoryPreviousCommand      CommandName = "history_previous"
-	HistoryNextCommand          CommandName = "history_next"
 	MessagesPageUpCommand       CommandName = "messages_page_up"
 	MessagesPageDownCommand     CommandName = "messages_page_down"
 	MessagesHalfPageUpCommand   CommandName = "messages_half_page_up"
@@ -102,6 +104,9 @@ const (
 	MessagesNextCommand         CommandName = "messages_next"
 	MessagesFirstCommand        CommandName = "messages_first"
 	MessagesLastCommand         CommandName = "messages_last"
+	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
+	MessagesCopyCommand         CommandName = "messages_copy"
+	MessagesRevertCommand       CommandName = "messages_revert"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -192,6 +197,27 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Trigger:     "themes",
 		},
 		{
+			Name:        FileListCommand,
+			Description: "list files",
+			Keybindings: parseBindings("<leader>f"),
+			Trigger:     "files",
+		},
+		{
+			Name:        FileCloseCommand,
+			Description: "close file",
+			Keybindings: parseBindings("esc"),
+		},
+		{
+			Name:        FileSearchCommand,
+			Description: "search file",
+			Keybindings: parseBindings("<leader>/"),
+		},
+		{
+			Name:        FileDiffToggleCommand,
+			Description: "split/unified diff",
+			Keybindings: parseBindings("<leader>v"),
+		},
+		{
 			Name:        ProjectInitCommand,
 			Description: "create/update AGENTS.md",
 			Keybindings: parseBindings("<leader>i"),
@@ -227,16 +253,6 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "select all text",
 			Keybindings: parseBindings("ctrl+a", "cmd+a"),
 		},
-		// {
-		// 	Name:        HistoryPreviousCommand,
-		// 	Description: "previous prompt",
-		// 	Keybindings: parseBindings("up"),
-		// },
-		// {
-		// 	Name:        HistoryNextCommand,
-		// 	Description: "next prompt",
-		// 	Keybindings: parseBindings("down"),
-		// },
 		{
 			Name:        MessagesPageUpCommand,
 			Description: "page up",
@@ -260,12 +276,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		{
 			Name:        MessagesPreviousCommand,
 			Description: "previous message",
-			Keybindings: parseBindings("ctrl+alt+k"),
+			Keybindings: parseBindings("ctrl+up"),
 		},
 		{
 			Name:        MessagesNextCommand,
 			Description: "next message",
-			Keybindings: parseBindings("ctrl+alt+j"),
+			Keybindings: parseBindings("ctrl+down"),
 		},
 		{
 			Name:        MessagesFirstCommand,
@@ -276,6 +292,21 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        MessagesLastCommand,
 			Description: "last message",
 			Keybindings: parseBindings("ctrl+alt+g"),
+		},
+		{
+			Name:        MessagesLayoutToggleCommand,
+			Description: "toggle layout",
+			Keybindings: parseBindings("<leader>p"),
+		},
+		{
+			Name:        MessagesCopyCommand,
+			Description: "copy message",
+			Keybindings: parseBindings("<leader>y"),
+		},
+		{
+			Name:        MessagesRevertCommand,
+			Description: "revert message",
+			Keybindings: parseBindings("<leader>u"),
 		},
 		{
 			Name:        AppExitCommand,

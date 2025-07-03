@@ -13,7 +13,6 @@ import (
 	"github.com/sst/opencode-sdk-go/option"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/tui"
-	"github.com/sst/opencode/pkg/client"
 )
 
 var Version = "dev"
@@ -78,15 +77,15 @@ func main() {
 		tea.WithMouseCellMotion(),
 	)
 
-	evts, err := client.Event(httpClient, url, ctx)
-	if err != nil {
-		slog.Error("Failed to subscribe to events", "error", err)
-		os.Exit(1)
-	}
-
 	go func() {
-		for item := range evts {
-			program.Send(item)
+		stream := httpClient.Event.ListStreaming(ctx)
+		for stream.Next() {
+			evt := stream.Current().AsUnion()
+			program.Send(evt)
+		}
+		if err := stream.Err(); err != nil {
+			slog.Error("Error streaming events", "error", err)
+			program.Send(err)
 		}
 	}()
 

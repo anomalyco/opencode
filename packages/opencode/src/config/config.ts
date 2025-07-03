@@ -37,6 +37,10 @@ export namespace Config {
         .record(z.string(), z.string())
         .optional()
         .describe("Environment variables to set when running the MCP server"),
+      enabled: z
+        .boolean()
+        .optional()
+        .describe("Enable or disable the MCP server on startup"),
     })
     .strict()
     .openapi({
@@ -47,6 +51,10 @@ export namespace Config {
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
+      enabled: z
+        .boolean()
+        .optional()
+        .describe("Enable or disable the MCP server on startup"),
     })
     .strict()
     .openapi({
@@ -168,6 +176,10 @@ export namespace Config {
         .record(z.string(), Mcp)
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
+      instructions: z
+        .array(z.string())
+        .optional()
+        .describe("Additional instruction files or patterns to include"),
       experimental: z
         .object({
           hook: z
