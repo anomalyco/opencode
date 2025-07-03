@@ -59,10 +59,36 @@ export namespace Provider {
               "anthropic-beta": "oauth-2025-04-20",
             }
             delete headers["x-api-key"]
-            return fetch(input, {
+            const response = await fetch(input, {
               ...init,
               headers,
             })
+
+            if (response.status === 429) {
+              const resetTimestampStr = response.headers.get("anthropic-ratelimit-unified-reset")
+              let userMessage = `Anthropic API rate limit exceeded. `
+              let resetTimestamp = parseInt(resetTimestampStr || "", 10)
+
+              if (!isNaN(resetTimestamp)) {
+                const resetDate = new Date(resetTimestamp * 1000)
+                const currentDate = new Date()
+
+                let resetStr: string;
+                if (currentDate.toLocaleDateString() == resetDate.toLocaleDateString()) {
+                  resetStr = resetDate.toLocaleTimeString()
+                } else {
+                  resetStr = resetDate.toLocaleString()
+                }
+
+                userMessage += `Please try again after ${resetStr}.`
+              } else {
+                userMessage += "Please try again later."
+              }
+
+              throw new Error(userMessage)
+            }
+
+            return response
           },
         },
       }
