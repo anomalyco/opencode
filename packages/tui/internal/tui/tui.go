@@ -17,7 +17,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/chat"
-	cmdcomp "github.com/sst/opencode/internal/components/commands"
+	// cmdcomp "github.com/sst/opencode/internal/components/commands" // Commented out - no longer used
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/fileviewer"
 	"github.com/sst/opencode/internal/components/modal"
@@ -647,17 +647,18 @@ func (a appModel) home(width int) string {
 		logoAndVersion,
 		styles.WhitespaceStyle(t.Background()),
 	)
-	commandsView := cmdcomp.New(
-		a.app,
-		cmdcomp.WithBackground(t.Background()),
-		cmdcomp.WithLimit(6),
-	)
-	cmds := lipgloss.PlaceHorizontal(
-		width,
-		lipgloss.Center,
-		commandsView.View(),
-		styles.WhitespaceStyle(t.Background()),
-	)
+	// Removed commands view to hide help text
+	// commandsView := cmdcomp.New(
+	// 	a.app,
+	// 	cmdcomp.WithBackground(t.Background()),
+	// 	cmdcomp.WithLimit(6),
+	// )
+	// cmds := lipgloss.PlaceHorizontal(
+	// 	width,
+	// 	lipgloss.Center,
+	// 	commandsView.View(),
+	// 	styles.WhitespaceStyle(t.Background()),
+	// )
 
 	lines := []string{}
 	lines = append(lines, "")
@@ -668,7 +669,7 @@ func (a appModel) home(width int) string {
 	// lines = append(lines, base("cwd ")+muted(cwd))
 	// lines = append(lines, base("config ")+muted(config))
 	// lines = append(lines, "")
-	lines = append(lines, cmds)
+	// lines = append(lines, cmds) // Removed to hide help text
 	lines = append(lines, "")
 	lines = append(lines, "")
 
