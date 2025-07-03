@@ -599,10 +599,11 @@ func (a appModel) home(width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Background(t.Background())
 	
-	// Clean, professional text style
+	// Clean, professional text style with bold
 	textStyle := styles.NewStyle().
 		Foreground(t.Text()).
 		Background(t.Background()).
+		Bold(true).
 		Render
 
 	// Simple, elegant text logo with proper spacing
@@ -610,15 +611,25 @@ func (a appModel) home(width int) string {
 	
 	logoContent := textStyle(logoText)
 	
-	// Soft rounded frame with Apple-inspired padding
-	borderStyle := styles.NewStyle().
+	// Inner frame with content
+	innerBorderStyle := styles.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(t.BorderSubtle()).
+		BorderForeground(t.Border()).
 		BorderBackground(t.Background()).
 		Padding(1, 4).
 		Background(t.Background())
 	
-	logo := borderStyle.Render(logoContent)
+	innerFrame := innerBorderStyle.Render(logoContent)
+	
+	// Outer frame for double frame effect
+	outerBorderStyle := styles.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(t.BorderSubtle()).
+		BorderBackground(t.Background()).
+		Padding(0, 1).
+		Background(t.Background())
+	
+	logo := outerBorderStyle.Render(innerFrame)
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
 
