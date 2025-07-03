@@ -135,11 +135,11 @@ func (m *Modal) Render(contentView string, background string) string {
 	col := (bgWidth - modalWidth) / 2
 
 	return layout.PlaceOverlay(
-		col,
+		col-1, // TODO: whyyyyy
 		row,
 		modalView,
 		background,
 		layout.WithOverlayBorder(),
-		layout.WithOverlayBorderColor(t.Primary()),
+		layout.WithOverlayBorderColor(t.BorderActive()),
 	)
 }

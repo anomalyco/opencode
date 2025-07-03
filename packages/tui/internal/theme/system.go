@@ -27,6 +27,10 @@ func NewSystemTheme(terminalBg color.Color, isDark bool) *SystemTheme {
 	return theme
 }
 
+func (t *SystemTheme) Name() string {
+	return "system"
+}
+
 // initializeColors sets up all theme colors
 func (t *SystemTheme) initializeColors() {
 	// Generate gray scale based on terminal background

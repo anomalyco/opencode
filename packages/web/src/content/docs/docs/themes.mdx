@@ -1,5 +1,6 @@
 ---
 title: Themes
+description: Select a built-in theme or define your own.
 ---
 
 With opencode you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
@@ -62,6 +63,8 @@ You can select a theme by bringing up the theme select with the `/theme` command
 
 opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily. 
 
+---
+
 ### Hierarchy
 
 Themes are loaded from multiple directories in the following order where later directories override earlier ones:
@@ -72,6 +75,8 @@ Themes are loaded from multiple directories in the following order where later d
 4. **Current working directory** - Defined in `./.opencode/themes/*.json`
 
 If multiple directories contain a theme with the same name, the theme from the directory with higher priority will be used.
+
+---
 
 ### Creating a theme
 
@@ -91,6 +96,8 @@ mkdir -p .opencode/themes
 vim .opencode/themes/my-theme.json
 ```
 
+---
+
 ### JSON format
 
 Themes use a flexible JSON format with support for:
@@ -100,6 +107,23 @@ Themes use a flexible JSON format with support for:
 - **Color references**: `"primary"` or custom definitions
 - **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
 - **No color**: `"none"` - Uses the terminal's default color or transparent
+
+---
+
+### Color definitions
+
+The `defs` section is optional and it allows you to define reusable colors that can be referenced in the theme.
+
+---
+
+### Terminal defaults
+
+The special value `"none"` can be used for any color to inherit the terminal's default color. This is particularly useful for creating themes that blend seamlessly with your terminal's color scheme:
+
+- `"text": "none"` - Uses terminal's default foreground color
+- `"background": "none"` - Uses terminal's default background color
+
+---
 
 ### Example
 
@@ -330,14 +354,3 @@ Here's an example of a custom theme:
   }
 }
 ```
-
-### Color definitions
-
-The `defs` section is optional and it allows you to define reusable colors that can be referenced in the theme.
-
-### Terminal defaults
-
-The special value `\"none\"` can be used for any color to inherit the terminal's default color. This is particularly useful for creating themes that blend seamlessly with your terminal's color scheme:
-
-- `"text": "none"` - Uses terminal's default foreground color
-- `"background": "none"` - Uses terminal's default background color

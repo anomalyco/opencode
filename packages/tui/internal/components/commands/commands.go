@@ -9,15 +9,13 @@ import (
 	"github.com/charmbracelet/lipgloss/v2/compat"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
-	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
 
 type CommandsComponent interface {
-	tea.Model
 	tea.ViewModel
-	layout.Sizeable
+	SetSize(width, height int) tea.Cmd
 	SetBackgroundColor(color compat.AdaptiveColor)
 }
 
@@ -36,25 +34,8 @@ func (c *commandsComponent) SetSize(width, height int) tea.Cmd {
 	return nil
 }
 
-func (c *commandsComponent) GetSize() (int, int) {
-	return c.width, c.height
-}
-
 func (c *commandsComponent) SetBackgroundColor(color compat.AdaptiveColor) {
 	c.background = &color
-}
-
-func (c *commandsComponent) Init() tea.Cmd {
-	return nil
-}
-
-func (c *commandsComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		c.width = msg.Width
-		c.height = msg.Height
-	}
-	return c, nil
 }
 
 func (c *commandsComponent) View() string {
