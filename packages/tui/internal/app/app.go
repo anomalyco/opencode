@@ -20,9 +20,6 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
-var RootPath string
-var CwdPath string
-
 type App struct {
 	Info      opencode.App
 	Version   string
@@ -38,6 +35,7 @@ type App struct {
 }
 
 type SessionSelectedMsg = *opencode.Session
+type SessionLoadedMsg struct{}
 type ModelSelectedMsg struct {
 	Provider opencode.Provider
 	Model    opencode.Model
@@ -48,11 +46,11 @@ type SendMsg struct {
 	Text        string
 	Attachments []Attachment
 }
-type CompletionDialogTriggeredMsg struct {
-	InitialValue string
-}
 type OptimisticMessageAddedMsg struct {
 	Message opencode.Message
+}
+type FileRenderedMsg struct {
+	FilePath string
 }
 
 func New(
@@ -61,8 +59,8 @@ func New(
 	appInfo opencode.App,
 	httpClient *opencode.Client,
 ) (*App, error) {
-	RootPath = appInfo.Path.Root
-	CwdPath = appInfo.Path.Cwd
+	util.RootPath = appInfo.Path.Root
+	util.CwdPath = appInfo.Path.Cwd
 
 	configInfo, err := httpClient.Config.Get(ctx)
 	if err != nil {
@@ -123,6 +121,23 @@ func New(
 	}
 
 	return app, nil
+}
+
+func (a *App) Key(commandName commands.CommandName) string {
+	t := theme.CurrentTheme()
+	base := styles.NewStyle().Background(t.Background()).Foreground(t.Text()).Bold(true).Render
+	muted := styles.NewStyle().
+		Background(t.Background()).
+		Foreground(t.TextMuted()).
+		Faint(true).
+		Render
+	command := a.Commands[commandName]
+	kb := command.Keybindings[0]
+	key := kb.Key
+	if kb.RequiresLeader {
+		key = a.Config.Keybinds.Leader + " " + kb.Key
+	}
+	return base(key) + muted(" "+command.Description)
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
@@ -187,7 +202,10 @@ func (a *App) InitializeProvider() tea.Cmd {
 	}
 }
 
-func getDefaultModel(response *opencode.ConfigProvidersResponse, provider opencode.Provider) *opencode.Model {
+func getDefaultModel(
+	response *opencode.ConfigProvidersResponse,
+	provider opencode.Provider,
+) *opencode.Model {
 	if match, ok := response.Default[provider.ID]; ok {
 		model := provider.Models[match]
 		return &model

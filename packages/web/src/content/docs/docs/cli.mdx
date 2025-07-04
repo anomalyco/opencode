@@ -1,5 +1,6 @@
 ---
 title: CLI
+description: The opencode CLI options and commands.
 ---
 
 Running the opencode CLI starts it for the current directory.
@@ -19,6 +20,8 @@ opencode /path/to/project
 ## Commands
 
 The opencode CLI also has the following commands.
+
+---
 
 ### run
 
@@ -53,6 +56,8 @@ Command to manage credentials and login for providers.
 opencode auth [command]
 ```
 
+---
+
 #### login
 
 Logs you into a provider and saves them in the credentials file in `~/.local/share/opencode/auth.json`.
@@ -62,6 +67,8 @@ opencode auth login
 ```
 
 When opencode starts up it will loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+
+---
 
 #### list
 
@@ -76,6 +83,8 @@ Or the short version.
 ```bash
 opencode auth ls
 ```
+
+---
 
 #### logout
 

@@ -5,11 +5,13 @@ import {
   Match,
   Switch,
   onMount,
+  Suspense,
   onCleanup,
   splitProps,
   createMemo,
   createEffect,
   createSignal,
+  SuspenseList,
 } from "solid-js"
 import map from "lang-map"
 import { DateTime } from "luxon"
@@ -22,7 +24,6 @@ import {
   IconAnthropic,
 } from "./icons/custom"
 import {
-  IconFolder,
   IconHashtag,
   IconSparkles,
   IconGlobeAlt,
@@ -320,6 +321,7 @@ function TextPart(props: TextPartProps) {
 
   createEffect(() => {
     local.text
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -371,6 +373,7 @@ function ErrorPart(props: ErrorPartProps) {
 
   createEffect(() => {
     local.children
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -424,6 +427,7 @@ function MarkdownPart(props: MarkdownPartProps) {
 
   createEffect(() => {
     local.text
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -485,7 +489,16 @@ function TerminalPart(props: TerminalPartProps) {
     }
   }
 
+  createEffect(() => {
+    local.command
+    local.result
+    local.error
+    local.expand
+    setTimeout(checkOverflow, 0)
+  })
+
   onMount(() => {
+    checkOverflow()
     window.addEventListener("resize", checkOverflow)
   })
 
@@ -510,7 +523,6 @@ function TerminalPart(props: TerminalPartProps) {
               <CodeBlock
                 data-section="error"
                 lang="text"
-                onRendered={checkOverflow}
                 ref={(el) => (preEl = el)}
                 code={local.error || ""}
               />
@@ -518,7 +530,6 @@ function TerminalPart(props: TerminalPartProps) {
             <Match when={local.result}>
               <CodeBlock
                 lang="console"
-                onRendered={checkOverflow}
                 ref={(el) => (preEl = el)}
                 code={local.result || ""}
               />
@@ -596,8 +607,9 @@ export default function Share(props: {
   messages: Record<string, Message.Info>
 }) {
   let lastScrollY = 0
-  let hasScrolled = false
   let scrollTimeout: number | undefined
+  let scrollSentinel: HTMLElement | undefined
+  let scrollObserver: IntersectionObserver | undefined
 
   const id = props.id
   const params = new URLSearchParams(window.location.search)
@@ -605,12 +617,7 @@ export default function Share(props: {
 
   const [showScrollButton, setShowScrollButton] = createSignal(false)
   const [isButtonHovered, setIsButtonHovered] = createSignal(false)
-
-  const anchorId = createMemo<string | null>(() => {
-    const raw = window.location.hash.slice(1)
-    const [id] = raw.split("-")
-    return id
-  })
+  const [isNearBottom, setIsNearBottom] = createSignal(false)
 
   const [store, setStore] = createStore<{
     info?: Session.Info
@@ -677,11 +684,6 @@ export default function Share(props: {
           if (type === "message") {
             const [, messageID] = splits
             setStore("messages", messageID, reconcile(d.content))
-
-            if (!hasScrolled && messageID === anchorId()) {
-              scrollToAnchor(window.location.hash.slice(1))
-              hasScrolled = true
-            }
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error)
@@ -725,10 +727,9 @@ export default function Share(props: {
     const currentScrollY = window.scrollY
     const isScrollingDown = currentScrollY > lastScrollY
     const scrolled = currentScrollY > 200 // Show after scrolling 200px
-    const isNearBottom = window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
 
     // Only show when scrolling down, scrolled enough, and not near bottom
-    const shouldShow = isScrollingDown && scrolled && !isNearBottom
+    const shouldShow = isScrollingDown && scrolled && !isNearBottom()
 
     // Update last scroll position
     lastScrollY = currentScrollY
@@ -744,7 +745,7 @@ export default function Share(props: {
         if (!isButtonHovered()) {
           setShowScrollButton(false)
         }
-      }, 3000)
+      }, 1500)
     } else if (!isButtonHovered()) {
       // Only hide if not hovered (to prevent disappearing while user is about to click)
       setShowScrollButton(false)
@@ -756,6 +757,26 @@ export default function Share(props: {
 
   onMount(() => {
     lastScrollY = window.scrollY // Initialize scroll position
+
+    // Create sentinel element
+    const sentinel = document.createElement("div")
+    sentinel.style.height = "1px"
+    sentinel.style.position = "absolute"
+    sentinel.style.bottom = "100px"
+    sentinel.style.width = "100%"
+    sentinel.style.pointerEvents = "none"
+    document.body.appendChild(sentinel)
+
+    // Create intersection observer
+    const observer = new IntersectionObserver((entries) => {
+      setIsNearBottom(entries[0].isIntersecting)
+    })
+    observer.observe(sentinel)
+
+    // Store references for cleanup
+    scrollSentinel = sentinel
+    scrollObserver = observer
+
     checkScrollNeed()
     window.addEventListener("scroll", checkScrollNeed)
     window.addEventListener("resize", checkScrollNeed)
@@ -764,6 +785,15 @@ export default function Share(props: {
   onCleanup(() => {
     window.removeEventListener("scroll", checkScrollNeed)
     window.removeEventListener("resize", checkScrollNeed)
+
+    // Clean up observer and sentinel
+    if (scrollObserver) {
+      scrollObserver.disconnect()
+    }
+    if (scrollSentinel) {
+      document.body.removeChild(scrollSentinel)
+    }
+
     if (scrollTimeout) {
       clearTimeout(scrollTimeout)
     }
@@ -789,19 +819,7 @@ export default function Share(props: {
     for (let i = 0; i < messages().length; i++) {
       const msg = messages()[i]
 
-      // TODO: Cleanup
-      // const system = result.messages.length === 0 && msg.role === "system"
       const assistant = msg.metadata?.assistant
-
-      // if (system) {
-      //   for (const part of msg.parts) {
-      //     if (part.type === "text") {
-      //       result.system.push(part.text)
-      //     }
-      //   }
-      //   result.created = msg.metadata?.time.created
-      //   continue
-      // }
 
       result.messages.push(msg)
 
@@ -879,7 +897,6 @@ export default function Share(props: {
               </span>
             )}
           </div>
-
         </div>
       </div>
 
@@ -889,994 +906,1065 @@ export default function Share(props: {
           fallback={<p>Waiting for messages...</p>}
         >
           <div class={styles.parts}>
-            <For each={data().messages}>
-              {(msg, msgIndex) => (
-                <For each={msg.parts}>
-                  {(part, partIndex) => {
-                    if (
-                      (part.type === "step-start" &&
-                        (partIndex() > 0 || !msg.metadata?.assistant)) ||
-                      (msg.role === "assistant" &&
-                        part.type === "tool-invocation" &&
-                        part.toolInvocation.toolName === "todoread")
-                    )
-                      return null
+            <SuspenseList revealOrder="forwards">
+              <For each={data().messages}>
+                {(msg, msgIndex) => (
+                  <Suspense>
+                    <For each={msg.parts}>
+                      {(part, partIndex) => {
+                        if (
+                          (part.type === "step-start" &&
+                            (partIndex() > 0 || !msg.metadata?.assistant)) ||
+                          (msg.role === "assistant" &&
+                            part.type === "tool-invocation" &&
+                            part.toolInvocation.toolName === "todoread")
+                        )
+                          return null
 
-                    const anchor = createMemo(() => `${msg.id}-${partIndex()}`)
-                    const [showResults, setShowResults] = createSignal(false)
-                    const isLastPart = createMemo(
-                      () =>
-                        data().messages.length === msgIndex() + 1 &&
-                        msg.parts.length === partIndex() + 1,
-                    )
-                    const toolData = createMemo(() => {
-                      if (
-                        msg.role !== "assistant" ||
-                        part.type !== "tool-invocation"
-                      )
-                        return {}
+                        const anchor = createMemo(
+                          () => `${msg.id}-${partIndex()}`,
+                        )
+                        const [showResults, setShowResults] =
+                          createSignal(false)
+                        const isLastPart = createMemo(
+                          () =>
+                            data().messages.length === msgIndex() + 1 &&
+                            msg.parts.length === partIndex() + 1,
+                        )
+                        const toolData = createMemo(() => {
+                          if (
+                            msg.role !== "assistant" ||
+                            part.type !== "tool-invocation"
+                          )
+                            return {}
 
-                      const metadata =
-                        msg.metadata?.tool[part.toolInvocation.toolCallId]
-                      const args = part.toolInvocation.args
-                      const result =
-                        part.toolInvocation.state === "result" &&
-                        part.toolInvocation.result
-                      const duration = DateTime.fromMillis(
-                        metadata?.time.end || 0,
-                      )
-                        .diff(DateTime.fromMillis(metadata?.time.start || 0))
-                        .toMillis()
+                          const metadata =
+                            msg.metadata?.tool[part.toolInvocation.toolCallId]
+                          const args = part.toolInvocation.args
+                          const result =
+                            part.toolInvocation.state === "result" &&
+                            part.toolInvocation.result
+                          const duration = DateTime.fromMillis(
+                            metadata?.time.end || 0,
+                          )
+                            .diff(
+                              DateTime.fromMillis(metadata?.time.start || 0),
+                            )
+                            .toMillis()
 
-                      return { metadata, args, result, duration }
-                    })
-                    return (
-                      <Switch>
-                        {/* User text */}
-                        <Match
-                          when={
-                            msg.role === "user" && part.type === "text" && part
+                          return { metadata, args, result, duration }
+                        })
+
+                        onMount(() => {
+                          const hash = window.location.hash.slice(1)
+                          // Wait till all parts are loaded
+                          if (
+                            hash !== ""
+                            && msg.parts.length === partIndex() + 1
+                            && data().messages.length === msgIndex() + 1
+                          ) {
+                            scrollToAnchor(hash)
                           }
-                        >
-                          {(part) => (
-                            <div
-                              id={anchor()}
-                              data-section="part"
-                              data-part-type="user-text"
+                        })
+
+                        return (
+                          <Switch>
+                            {/* User text */}
+                            <Match
+                              when={
+                                msg.role === "user" &&
+                                part.type === "text" &&
+                                part
+                              }
                             >
-                              <div data-section="decoration">
-                                <AnchorIcon id={anchor()}>
-                                  <IconUserCircle width={18} height={18} />
-                                </AnchorIcon>
-                                <div></div>
-                              </div>
-                              <div data-section="content">
-                                <TextPart
-                                  invert
-                                  text={part().text}
-                                  expand={isLastPart()}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </Match>
-                        {/* AI text */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "text" &&
-                            part
-                          }
-                        >
-                          {(part) => (
-                            <div
-                              id={anchor()}
-                              data-section="part"
-                              data-part-type="ai-text"
-                            >
-                              <div data-section="decoration">
-                                <AnchorIcon id={anchor()}>
-                                  <IconSparkles width={18} height={18} />
-                                </AnchorIcon>
-                                <div></div>
-                              </div>
-                              <div data-section="content">
-                                <MarkdownPart
-                                  highlight
-                                  expand={isLastPart()}
-                                  text={stripEnclosingTag(part().text)}
-                                />
-                                <Show when={isLastPart() && data().completed}>
-                                  <span
-                                    data-part-footer
-                                    title={DateTime.fromMillis(
-                                      data().completed || 0,
-                                    ).toLocaleString(
-                                      DateTime.DATETIME_FULL_WITH_SECONDS,
-                                    )}
-                                  >
-                                    {DateTime.fromMillis(
-                                      data().completed || 0,
-                                    ).toLocaleString(DateTime.DATETIME_MED)}
-                                  </span>
-                                </Show>
-                              </div>
-                            </div>
-                          )}
-                        </Match>
-                        {/* AI model */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "step-start" &&
-                            msg.metadata?.assistant
-                          }
-                        >
-                          {(assistant) => {
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="ai-model"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <ProviderIcon
-                                      size={18}
-                                      provider={assistant().providerID}
+                              {(part) => (
+                                <div
+                                  id={anchor()}
+                                  data-section="part"
+                                  data-part-type="user-text"
+                                >
+                                  <div data-section="decoration">
+                                    <AnchorIcon id={anchor()}>
+                                      <IconUserCircle width={18} height={18} />
+                                    </AnchorIcon>
+                                    <div></div>
+                                  </div>
+                                  <div data-section="content">
+                                    <TextPart
+                                      invert
+                                      text={part().text}
+                                      expand={isLastPart()}
                                     />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>
-                                        {assistant().providerID}
-                                      </span>
-                                    </div>
-                                    <span data-part-model>
-                                      {assistant().modelID}
-                                    </span>
                                   </div>
                                 </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-
-                        {/* Grep tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "grep" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const matches = () => toolData()?.metadata?.matches
-                            const splitArgs = () => {
-                              const { pattern, ...rest } = toolData()?.args
-                              return { pattern, rest }
-                            }
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-grep"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconDocumentMagnifyingGlass
-                                      width={18}
-                                      height={18}
+                              )}
+                            </Match>
+                            {/* AI text */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "text" &&
+                                part
+                              }
+                            >
+                              {(part) => (
+                                <div
+                                  id={anchor()}
+                                  data-section="part"
+                                  data-part-type="ai-text"
+                                >
+                                  <div data-section="decoration">
+                                    <AnchorIcon id={anchor()}>
+                                      <IconSparkles width={18} height={18} />
+                                    </AnchorIcon>
+                                    <div></div>
+                                  </div>
+                                  <div data-section="content">
+                                    <MarkdownPart
+                                      highlight
+                                      expand={isLastPart()}
+                                      text={stripEnclosingTag(part().text)}
                                     />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Grep</span>
-                                      <b>&ldquo;{splitArgs().pattern}&rdquo;</b>
-                                    </div>
                                     <Show
-                                      when={
-                                        Object.keys(splitArgs().rest).length > 0
-                                      }
+                                      when={isLastPart() && data().completed}
                                     >
-                                      <div data-part-tool-args>
-                                        <For
-                                          each={flattenToolArgs(
-                                            splitArgs().rest,
-                                          )}
-                                        >
-                                          {([name, value]) => (
-                                            <>
-                                              <div></div>
-                                              <div>{name}</div>
-                                              <div>{value}</div>
-                                            </>
-                                          )}
-                                        </For>
+                                      <span
+                                        data-part-footer
+                                        title={DateTime.fromMillis(
+                                          data().completed || 0,
+                                        ).toLocaleString(
+                                          DateTime.DATETIME_FULL_WITH_SECONDS,
+                                        )}
+                                      >
+                                        {DateTime.fromMillis(
+                                          data().completed || 0,
+                                        ).toLocaleString(DateTime.DATETIME_MED)}
+                                      </span>
+                                    </Show>
+                                  </div>
+                                </div>
+                              )}
+                            </Match>
+                            {/* AI model */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "step-start" &&
+                                msg.metadata?.assistant
+                              }
+                            >
+                              {(assistant) => {
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="ai-model"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <ProviderIcon
+                                          size={18}
+                                          provider={assistant().providerID}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>
+                                            {assistant().providerID}
+                                          </span>
+                                        </div>
+                                        <span data-part-model>
+                                          {assistant().modelID}
+                                        </span>
                                       </div>
-                                    </Show>
-                                    <Switch>
-                                      <Match when={matches() > 0}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            showCopy={
-                                              matches() === 1
-                                                ? "1 match"
-                                                : `${matches()} matches`
-                                            }
-                                            hideCopy="Hide matches"
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <TextPart
-                                              expand
-                                              data-size="sm"
-                                              data-color="dimmed"
-                                              text={toolData()?.result}
-                                            />
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                      <Match when={toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <TextPart
-                                            expand
-                                            data-size="sm"
-                                            data-color="dimmed"
-                                            text={toolData()?.result}
-                                          />
-                                        </div>
-                                      </Match>
-                                    </Switch>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Glob tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "glob" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const count = () => toolData()?.metadata?.count
-                            const pattern = () => toolData()?.args.pattern
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-glob"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconMagnifyingGlass
-                                      width={18}
-                                      height={18}
-                                    />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Glob</span>
-                                      <b>&ldquo;{pattern()}&rdquo;</b>
                                     </div>
-                                    <Switch>
-                                      <Match when={count() > 0}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            showCopy={
-                                              count() === 1
-                                                ? "1 result"
-                                                : `${count()} results`
-                                            }
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <TextPart
-                                              expand
-                                              text={toolData()?.result}
-                                              data-size="sm"
-                                              data-color="dimmed"
-                                            />
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                      <Match when={toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <TextPart
-                                            expand
-                                            text={toolData()?.result}
-                                            data-size="sm"
-                                            data-color="dimmed"
-                                          />
-                                        </div>
-                                      </Match>
-                                    </Switch>
                                   </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* LS tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "list" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const path = createMemo(() =>
-                              toolData()?.args?.path !== data().rootDir
-                                ? stripWorkingDirectory(
-                                  toolData()?.args?.path,
-                                  data().rootDir,
                                 )
-                                : toolData()?.args?.path,
-                            )
+                              }}
+                            </Match>
 
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-list"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconRectangleStack
-                                      width={18}
-                                      height={18}
-                                    />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>LS</span>
-                                      <b title={toolData()?.args?.path}>
-                                        {path()}
-                                      </b>
-                                    </div>
-                                    <Switch>
-                                      <Match when={toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <TextPart
-                                              expand
-                                              data-size="sm"
-                                              data-color="dimmed"
-                                              text={toolData()?.result}
-                                            />
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                    </Switch>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Read tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "read" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const filePath = createMemo(() =>
-                              stripWorkingDirectory(
-                                toolData()?.args?.filePath,
-                                data().rootDir,
-                              ),
-                            )
-                            const hasError = () => toolData()?.metadata?.error
-                            const preview = () => toolData()?.metadata?.preview
+                            {/* Grep tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "grep" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const matches = () =>
+                                  toolData()?.metadata?.matches
+                                const splitArgs = () => {
+                                  const { pattern, ...rest } = toolData()?.args
+                                  return { pattern, rest }
+                                }
 
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-read"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconDocument width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Read</span>
-                                      <b title={toolData()?.args?.filePath}>
-                                        {filePath()}
-                                      </b>
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-grep"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconDocumentMagnifyingGlass
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
                                     </div>
-                                    <Switch>
-                                      <Match when={hasError()}>
-                                        <div data-part-tool-result>
-                                          <ErrorPart>
-                                            {formatErrorString(
-                                              toolData()?.result,
-                                            )}
-                                          </ErrorPart>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Grep</span>
+                                          <b>
+                                            &ldquo;{splitArgs().pattern}&rdquo;
+                                          </b>
                                         </div>
-                                      </Match>
-                                      {/* Always try to show CodeBlock if preview is available (even if empty string) */}
-                                      <Match when={typeof preview() === 'string'}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            showCopy="Show preview"
-                                            hideCopy="Hide preview"
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <div data-part-tool-code>
-                                              <CodeBlock
-                                                lang={getShikiLang(filePath())}
-                                                code={preview()}
+                                        <Show
+                                          when={
+                                            Object.keys(splitArgs().rest)
+                                              .length > 0
+                                          }
+                                        >
+                                          <div data-part-tool-args>
+                                            <For
+                                              each={flattenToolArgs(
+                                                splitArgs().rest,
+                                              )}
+                                            >
+                                              {([name, value]) => (
+                                                <>
+                                                  <div></div>
+                                                  <div>{name}</div>
+                                                  <div>{value}</div>
+                                                </>
+                                              )}
+                                            </For>
+                                          </div>
+                                        </Show>
+                                        <Switch>
+                                          <Match when={matches() > 0}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                showCopy={
+                                                  matches() === 1
+                                                    ? "1 match"
+                                                    : `${matches()} matches`
+                                                }
+                                                hideCopy="Hide matches"
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
                                               />
+                                              <Show when={showResults()}>
+                                                <TextPart
+                                                  expand
+                                                  data-size="sm"
+                                                  data-color="dimmed"
+                                                  text={toolData()?.result}
+                                                />
+                                              </Show>
                                             </div>
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                      {/* Fallback to TextPart if preview is not a string (e.g. undefined) AND result exists */}
-                                      <Match when={typeof preview() !== 'string' && toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <TextPart
-                                              expand
-                                              text={toolData()?.result}
-                                              data-size="sm"
-                                              data-color="dimmed"
-                                            />
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                    </Switch>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Write tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "write" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const filePath = createMemo(() =>
-                              stripWorkingDirectory(
-                                toolData()?.args?.filePath,
-                                data().rootDir,
-                              ),
-                            )
-                            const hasError = () => toolData()?.metadata?.error
-                            const content = () => toolData()?.args?.content
-                            const diagnostics = createMemo(() =>
-                              getDiagnostics(
-                                toolData()?.metadata?.diagnostics,
-                                toolData()?.args.filePath,
-                              ),
-                            )
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-write"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconDocumentPlus width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Write</span>
-                                      <b title={toolData()?.args?.filePath}>
-                                        {filePath()}
-                                      </b>
-                                    </div>
-                                    <Show when={diagnostics().length > 0}>
-                                      <ErrorPart>{diagnostics()}</ErrorPart>
-                                    </Show>
-                                    <Switch>
-                                      <Match when={hasError()}>
-                                        <div data-part-tool-result>
-                                          <ErrorPart>
-                                            {formatErrorString(
-                                              toolData()?.result
-                                            )}
-                                          </ErrorPart>
-                                        </div>
-                                      </Match>
-                                      <Match when={content()}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            showCopy="Show contents"
-                                            hideCopy="Hide contents"
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <div data-part-tool-code>
-                                              <CodeBlock
-                                                lang={getShikiLang(filePath())}
-                                                code={toolData()?.args?.content}
-                                              />
-                                            </div>
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                    </Switch>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Edit tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "edit" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const diff = () => toolData()?.metadata?.diff
-                            const message = () => toolData()?.metadata?.message
-                            const hasError = () => toolData()?.metadata?.error
-                            const filePath = createMemo(() =>
-                              stripWorkingDirectory(
-                                toolData()?.args.filePath,
-                                data().rootDir,
-                              ),
-                            )
-                            const diagnostics = createMemo(() =>
-                              getDiagnostics(
-                                toolData()?.metadata?.diagnostics,
-                                toolData()?.args.filePath,
-                              ),
-                            )
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-edit"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconPencilSquare width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Edit</span>
-                                      <b title={toolData()?.args?.filePath}>
-                                        {filePath()}
-                                      </b>
-                                    </div>
-                                    <Switch>
-                                      <Match when={hasError()}>
-                                        <div data-part-tool-result>
-                                          <ErrorPart>
-                                            {formatErrorString(message())}
-                                          </ErrorPart>
-                                        </div>
-                                      </Match>
-                                      <Match when={diff()}>
-                                        <div data-part-tool-edit>
-                                          <DiffView
-                                            class={styles["diff-code-block"]}
-                                            diff={diff()}
-                                            lang={getShikiLang(filePath())}
-                                          />
-                                        </div>
-                                      </Match>
-                                    </Switch>
-                                    <Show when={diagnostics().length > 0}>
-                                      <ErrorPart>{diagnostics()}</ErrorPart>
-                                    </Show>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Bash tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "bash" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const command = () => toolData()?.metadata?.title
-                            const desc = () => toolData()?.metadata?.description
-                            const result = () => toolData()?.metadata?.stdout
-                            const error = () => toolData()?.metadata?.stderr
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-bash"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconCommandLine width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  {command() && (
-                                    <div data-part-tool-body>
-                                      <TerminalPart
-                                        desc={desc()}
-                                        data-size="sm"
-                                        command={command()!}
-                                        result={result()}
-                                        error={error()}
-                                      />
-                                    </div>
-                                  )}
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Todo write */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "todowrite" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const todos = createMemo(() =>
-                              sortTodosByStatus(toolData()?.args?.todos ?? []),
-                            )
-                            const starting = () =>
-                              todos().every((t) => t.status === "pending")
-                            const finished = () =>
-                              todos().every((t) => t.status === "completed")
-
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-todo"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconQueueList width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>
-                                        <Switch fallback="Updating plan">
-                                          <Match when={starting()}>
-                                            Creating plan
                                           </Match>
-                                          <Match when={finished()}>
-                                            Completing plan
+                                          <Match when={toolData()?.result}>
+                                            <div data-part-tool-result>
+                                              <TextPart
+                                                expand
+                                                data-size="sm"
+                                                data-color="dimmed"
+                                                text={toolData()?.result}
+                                              />
+                                            </div>
                                           </Match>
                                         </Switch>
-                                      </span>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
                                     </div>
-                                    <Show when={todos().length > 0}>
-                                      <ul class={styles.todos}>
-                                        <For each={todos()}>
-                                          {(todo) => (
-                                            <li data-status={todo.status}>
-                                              <span></span>
-                                              {todo.content}
-                                            </li>
-                                          )}
-                                        </For>
-                                      </ul>
-                                    </Show>
                                   </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Fetch tool */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part.toolInvocation.toolName === "webfetch" &&
-                            part
-                          }
-                        >
-                          {(_part) => {
-                            const url = () => toolData()?.args.url
-                            const format = () => toolData()?.args.format
-                            const hasError = () => toolData()?.metadata?.error
+                                )
+                              }}
+                            </Match>
+                            {/* Glob tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "glob" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const count = () => toolData()?.metadata?.count
+                                const pattern = () => toolData()?.args.pattern
 
-                            return (
-                              <div
-                                id={anchor()}
-                                data-section="part"
-                                data-part-type="tool-fetch"
-                              >
-                                <div data-section="decoration">
-                                  <AnchorIcon id={anchor()}>
-                                    <IconGlobeAlt width={18} height={18} />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      <span data-element-label>Fetch</span>
-                                      <b>{url()}</b>
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-glob"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconMagnifyingGlass
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
                                     </div>
-                                    <Switch>
-                                      <Match when={hasError()}>
-                                        <div data-part-tool-result>
-                                          <ErrorPart>
-                                            {formatErrorString(
-                                              toolData()?.result,
-                                            )}
-                                          </ErrorPart>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Glob</span>
+                                          <b>&ldquo;{pattern()}&rdquo;</b>
                                         </div>
-                                      </Match>
-                                      <Match when={toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <div data-part-tool-code>
-                                              <CodeBlock
-                                                lang={format() || "text"}
-                                                code={toolData()?.result}
+                                        <Switch>
+                                          <Match when={count() > 0}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                showCopy={
+                                                  count() === 1
+                                                    ? "1 result"
+                                                    : `${count()} results`
+                                                }
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <TextPart
+                                                  expand
+                                                  text={toolData()?.result}
+                                                  data-size="sm"
+                                                  data-color="dimmed"
+                                                />
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                          <Match when={toolData()?.result}>
+                                            <div data-part-tool-result>
+                                              <TextPart
+                                                expand
+                                                text={toolData()?.result}
+                                                data-size="sm"
+                                                data-color="dimmed"
                                               />
                                             </div>
-                                          </Show>
-                                        </div>
-                                      </Match>
-                                    </Switch>
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
                                   </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Tool call */}
-                        <Match
-                          when={
-                            msg.role === "assistant" &&
-                            part.type === "tool-invocation" &&
-                            part
-                          }
-                        >
-                          {(part) => {
-                            return (
+                                )
+                              }}
+                            </Match>
+                            {/* LS tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "list" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const path = createMemo(() =>
+                                  toolData()?.args?.path !== data().rootDir
+                                    ? stripWorkingDirectory(
+                                      toolData()?.args?.path,
+                                      data().rootDir,
+                                    )
+                                    : toolData()?.args?.path,
+                                )
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-list"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconRectangleStack
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>LS</span>
+                                          <b title={toolData()?.args?.path}>
+                                            {path()}
+                                          </b>
+                                        </div>
+                                        <Switch>
+                                          <Match when={toolData()?.result}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <TextPart
+                                                  expand
+                                                  data-size="sm"
+                                                  data-color="dimmed"
+                                                  text={toolData()?.result}
+                                                />
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Read tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "read" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const filePath = createMemo(() =>
+                                  stripWorkingDirectory(
+                                    toolData()?.args?.filePath,
+                                    data().rootDir,
+                                  ),
+                                )
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
+                                const preview = () =>
+                                  toolData()?.metadata?.preview
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-read"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconDocument width={18} height={18} />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Read</span>
+                                          <b title={toolData()?.args?.filePath}>
+                                            {filePath()}
+                                          </b>
+                                        </div>
+                                        <Switch>
+                                          <Match when={hasError()}>
+                                            <div data-part-tool-result>
+                                              <ErrorPart>
+                                                {formatErrorString(
+                                                  toolData()?.result,
+                                                )}
+                                              </ErrorPart>
+                                            </div>
+                                          </Match>
+                                          {/* Always try to show CodeBlock if preview is available (even if empty string) */}
+                                          <Match
+                                            when={typeof preview() === "string"}
+                                          >
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                showCopy="Show preview"
+                                                hideCopy="Hide preview"
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <div data-part-tool-code>
+                                                  <CodeBlock
+                                                    lang={getShikiLang(
+                                                      filePath(),
+                                                    )}
+                                                    code={preview()}
+                                                  />
+                                                </div>
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                          {/* Fallback to TextPart if preview is not a string (e.g. undefined) AND result exists */}
+                                          <Match
+                                            when={
+                                              typeof preview() !== "string" &&
+                                              toolData()?.result
+                                            }
+                                          >
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <TextPart
+                                                  expand
+                                                  text={toolData()?.result}
+                                                  data-size="sm"
+                                                  data-color="dimmed"
+                                                />
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Write tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "write" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const filePath = createMemo(() =>
+                                  stripWorkingDirectory(
+                                    toolData()?.args?.filePath,
+                                    data().rootDir,
+                                  ),
+                                )
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
+                                const content = () => toolData()?.args?.content
+                                const diagnostics = createMemo(() =>
+                                  getDiagnostics(
+                                    toolData()?.metadata?.diagnostics,
+                                    toolData()?.args.filePath,
+                                  ),
+                                )
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-write"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconDocumentPlus
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Write</span>
+                                          <b title={toolData()?.args?.filePath}>
+                                            {filePath()}
+                                          </b>
+                                        </div>
+                                        <Show when={diagnostics().length > 0}>
+                                          <ErrorPart>{diagnostics()}</ErrorPart>
+                                        </Show>
+                                        <Switch>
+                                          <Match when={hasError()}>
+                                            <div data-part-tool-result>
+                                              <ErrorPart>
+                                                {formatErrorString(
+                                                  toolData()?.result,
+                                                )}
+                                              </ErrorPart>
+                                            </div>
+                                          </Match>
+                                          <Match when={content()}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                showCopy="Show contents"
+                                                hideCopy="Hide contents"
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <div data-part-tool-code>
+                                                  <CodeBlock
+                                                    lang={getShikiLang(
+                                                      filePath(),
+                                                    )}
+                                                    code={
+                                                      toolData()?.args?.content
+                                                    }
+                                                  />
+                                                </div>
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Edit tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "edit" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const diff = () => toolData()?.metadata?.diff
+                                const message = () =>
+                                  toolData()?.metadata?.message
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
+                                const filePath = createMemo(() =>
+                                  stripWorkingDirectory(
+                                    toolData()?.args.filePath,
+                                    data().rootDir,
+                                  ),
+                                )
+                                const diagnostics = createMemo(() =>
+                                  getDiagnostics(
+                                    toolData()?.metadata?.diagnostics,
+                                    toolData()?.args.filePath,
+                                  ),
+                                )
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-edit"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconPencilSquare
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Edit</span>
+                                          <b title={toolData()?.args?.filePath}>
+                                            {filePath()}
+                                          </b>
+                                        </div>
+                                        <Switch>
+                                          <Match when={hasError()}>
+                                            <div data-part-tool-result>
+                                              <ErrorPart>
+                                                {formatErrorString(message())}
+                                              </ErrorPart>
+                                            </div>
+                                          </Match>
+                                          <Match when={diff()}>
+                                            <div data-part-tool-edit>
+                                              <DiffView
+                                                class={
+                                                  styles["diff-code-block"]
+                                                }
+                                                diff={diff()}
+                                                lang={getShikiLang(filePath())}
+                                              />
+                                            </div>
+                                          </Match>
+                                        </Switch>
+                                        <Show when={diagnostics().length > 0}>
+                                          <ErrorPart>{diagnostics()}</ErrorPart>
+                                        </Show>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Bash tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "bash" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const command = () =>
+                                  toolData()?.metadata?.title
+                                const desc = () =>
+                                  toolData()?.metadata?.description
+                                const result = () =>
+                                  toolData()?.metadata?.stdout
+                                const error = () => toolData()?.metadata?.stderr
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-bash"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconCommandLine
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      {command() && (
+                                        <div data-part-tool-body>
+                                          <TerminalPart
+                                            desc={desc()}
+                                            data-size="sm"
+                                            command={command()!}
+                                            result={result()}
+                                            error={error()}
+                                          />
+                                        </div>
+                                      )}
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Todo write */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "todowrite" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const todos = createMemo(() =>
+                                  sortTodosByStatus(
+                                    toolData()?.args?.todos ?? [],
+                                  ),
+                                )
+                                const starting = () =>
+                                  todos().every((t) => t.status === "pending")
+                                const finished = () =>
+                                  todos().every((t) => t.status === "completed")
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-todo"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconQueueList width={18} height={18} />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>
+                                            <Switch fallback="Updating plan">
+                                              <Match when={starting()}>
+                                                Creating plan
+                                              </Match>
+                                              <Match when={finished()}>
+                                                Completing plan
+                                              </Match>
+                                            </Switch>
+                                          </span>
+                                        </div>
+                                        <Show when={todos().length > 0}>
+                                          <ul class={styles.todos}>
+                                            <For each={todos()}>
+                                              {(todo) => (
+                                                <li data-status={todo.status}>
+                                                  <span></span>
+                                                  {todo.content}
+                                                </li>
+                                              )}
+                                            </For>
+                                          </ul>
+                                        </Show>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Fetch tool */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part.toolInvocation.toolName === "webfetch" &&
+                                part
+                              }
+                            >
+                              {(_part) => {
+                                const url = () => toolData()?.args.url
+                                const format = () => toolData()?.args.format
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
+
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-fetch"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconGlobeAlt width={18} height={18} />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          <span data-element-label>Fetch</span>
+                                          <b>{url()}</b>
+                                        </div>
+                                        <Switch>
+                                          <Match when={hasError()}>
+                                            <div data-part-tool-result>
+                                              <ErrorPart>
+                                                {formatErrorString(
+                                                  toolData()?.result,
+                                                )}
+                                              </ErrorPart>
+                                            </div>
+                                          </Match>
+                                          <Match when={toolData()?.result}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <div data-part-tool-code>
+                                                  <CodeBlock
+                                                    lang={format() || "text"}
+                                                    code={toolData()?.result}
+                                                  />
+                                                </div>
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Tool call */}
+                            <Match
+                              when={
+                                msg.role === "assistant" &&
+                                part.type === "tool-invocation" &&
+                                part
+                              }
+                            >
+                              {(part) => {
+                                return (
+                                  <div
+                                    id={anchor()}
+                                    data-section="part"
+                                    data-part-type="tool-fallback"
+                                  >
+                                    <div data-section="decoration">
+                                      <AnchorIcon id={anchor()}>
+                                        <IconWrenchScrewdriver
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </AnchorIcon>
+                                      <div></div>
+                                    </div>
+                                    <div data-section="content">
+                                      <div data-part-tool-body>
+                                        <div data-part-title>
+                                          {part().toolInvocation.toolName}
+                                        </div>
+                                        <div data-part-tool-args>
+                                          <For
+                                            each={flattenToolArgs(
+                                              part().toolInvocation.args,
+                                            )}
+                                          >
+                                            {(arg) => (
+                                              <>
+                                                <div></div>
+                                                <div>{arg[0]}</div>
+                                                <div>{arg[1]}</div>
+                                              </>
+                                            )}
+                                          </For>
+                                        </div>
+                                        <Switch>
+                                          <Match when={toolData()?.result}>
+                                            <div data-part-tool-result>
+                                              <ResultsButton
+                                                results={showResults()}
+                                                onClick={() =>
+                                                  setShowResults((e) => !e)
+                                                }
+                                              />
+                                              <Show when={showResults()}>
+                                                <TextPart
+                                                  expand
+                                                  data-size="sm"
+                                                  data-color="dimmed"
+                                                  text={toolData()?.result}
+                                                />
+                                              </Show>
+                                            </div>
+                                          </Match>
+                                          <Match
+                                            when={
+                                              part().toolInvocation.state ===
+                                              "call"
+                                            }
+                                          >
+                                            <TextPart
+                                              data-size="sm"
+                                              data-color="dimmed"
+                                              text="Calling..."
+                                            />
+                                          </Match>
+                                        </Switch>
+                                      </div>
+                                      <ToolFooter
+                                        time={toolData()?.duration || 0}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              }}
+                            </Match>
+                            {/* Fallback */}
+                            <Match when={true}>
                               <div
                                 id={anchor()}
                                 data-section="part"
-                                data-part-type="tool-fallback"
+                                data-part-type="fallback"
                               >
                                 <div data-section="decoration">
                                   <AnchorIcon id={anchor()}>
-                                    <IconWrenchScrewdriver
-                                      width={18}
-                                      height={18}
-                                    />
-                                  </AnchorIcon>
-                                  <div></div>
-                                </div>
-                                <div data-section="content">
-                                  <div data-part-tool-body>
-                                    <div data-part-title>
-                                      {part().toolInvocation.toolName}
-                                    </div>
-                                    <div data-part-tool-args>
-                                      <For
-                                        each={flattenToolArgs(
-                                          part().toolInvocation.args,
-                                        )}
-                                      >
-                                        {(arg) => (
-                                          <>
-                                            <div></div>
-                                            <div>{arg[0]}</div>
-                                            <div>{arg[1]}</div>
-                                          </>
-                                        )}
-                                      </For>
-                                    </div>
-                                    <Switch>
-                                      <Match when={toolData()?.result}>
-                                        <div data-part-tool-result>
-                                          <ResultsButton
-                                            results={showResults()}
-                                            onClick={() =>
-                                              setShowResults((e) => !e)
-                                            }
-                                          />
-                                          <Show when={showResults()}>
-                                            <TextPart
-                                              expand
-                                              data-size="sm"
-                                              data-color="dimmed"
-                                              text={toolData()?.result}
-                                            />
-                                          </Show>
-                                        </div>
-                                      </Match>
+                                    <Switch
+                                      fallback={
+                                        <IconWrenchScrewdriver
+                                          width={16}
+                                          height={16}
+                                        />
+                                      }
+                                    >
                                       <Match
                                         when={
-                                          part().toolInvocation.state === "call"
+                                          msg.role === "assistant" &&
+                                          part.type !== "tool-invocation"
                                         }
                                       >
-                                        <TextPart
-                                          data-size="sm"
-                                          data-color="dimmed"
-                                          text="Calling..."
+                                        <IconSparkles width={18} height={18} />
+                                      </Match>
+
+                                      <Match when={msg.role === "user"}>
+                                        <IconUserCircle
+                                          width={18}
+                                          height={18}
                                         />
                                       </Match>
                                     </Switch>
-                                  </div>
-                                  <ToolFooter
-                                    time={toolData()?.duration || 0}
-                                  />
+                                  </AnchorIcon>
+                                  <div></div>
                                 </div>
-                              </div>
-                            )
-                          }}
-                        </Match>
-                        {/* Fallback */}
-                        <Match when={true}>
-                          <div
-                            id={anchor()}
-                            data-section="part"
-                            data-part-type="fallback"
-                          >
-                            <div data-section="decoration">
-                              <AnchorIcon id={anchor()}>
-                                <Switch
-                                  fallback={
-                                    <IconWrenchScrewdriver
-                                      width={16}
-                                      height={16}
+                                <div data-section="content">
+                                  <div data-part-tool-body>
+                                    <div data-part-title>
+                                      <span data-element-label>
+                                        {part.type}
+                                      </span>
+                                    </div>
+                                    <TextPart
+                                      text={JSON.stringify(part, null, 2)}
                                     />
-                                  }
-                                >
-                                  <Match
-                                    when={
-                                      msg.role === "assistant" &&
-                                      part.type !== "tool-invocation"
-                                    }
-                                  >
-                                    <IconSparkles width={18} height={18} />
-                                  </Match>
-
-                                  <Match when={msg.role === "user"}>
-                                    <IconUserCircle width={18} height={18} />
-                                  </Match>
-                                </Switch>
-                              </AnchorIcon>
-                              <div></div>
-                            </div>
-                            <div data-section="content">
-                              <div data-part-tool-body>
-                                <div data-part-title>
-                                  <span data-element-label>{part.type}</span>
+                                  </div>
                                 </div>
-                                <TextPart
-                                  text={JSON.stringify(part, null, 2)}
-                                />
                               </div>
-                            </div>
-                          </div>
-                        </Match>
-                      </Switch>
-                    )
-                  }}
-                </For>
-              )}
-            </For>
+                            </Match>
+                          </Switch>
+                        )
+                      }}
+                    </For>
+                  </Suspense>
+                )}
+              </For>
+            </SuspenseList>
             <div data-section="part" data-part-type="summary">
               <div data-section="decoration">
                 <span data-status={connectionStatus()[0]}></span>

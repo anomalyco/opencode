@@ -205,7 +205,7 @@ export namespace Provider {
         },
       }
     },
-    openrouter: async (provider) => {
+    openrouter: async () => {
       return {
         autoload: false,
         options: {

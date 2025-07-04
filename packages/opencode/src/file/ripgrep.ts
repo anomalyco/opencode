@@ -32,7 +32,7 @@ export namespace Ripgrep {
     }),
   })
 
-  const Match = z.object({
+  export const Match = z.object({
     type: z.literal("match"),
     data: z.object({
       path: z.object({

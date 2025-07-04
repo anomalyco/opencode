@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
+import { Log } from "../../util/log"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -57,6 +58,9 @@ export const TuiCommand = cmd({
           cwd = process.cwd()
           cmd = [binary]
         }
+        Log.Default.info("tui", {
+          cmd,
+        })
         const proc = Bun.spawn({
           cmd: [...cmd, ...process.argv.slice(2)],
           cwd,
@@ -100,7 +104,7 @@ export const TuiCommand = cmd({
         UI.empty()
         UI.println(UI.logo("   "))
         const result = await Bun.spawn({
-          cmd: [process.execPath, "auth", "login"],
+          cmd: [...getOpencodeCommand(), "auth", "login"],
           cwd: process.cwd(),
           stdout: "inherit",
           stderr: "inherit",
@@ -112,3 +116,25 @@ export const TuiCommand = cmd({
     }
   },
 })
+
+/**
+ * Get the correct command to run opencode CLI
+ * In development: ["bun", "run", "packages/opencode/src/index.ts"]
+ * In production: ["/path/to/opencode"]
+ */
+function getOpencodeCommand(): string[] {
+  // Check if OPENCODE_BIN_PATH is set (used by shell wrapper scripts)
+  if (process.env["OPENCODE_BIN_PATH"]) {
+    return [process.env["OPENCODE_BIN_PATH"]]
+  }
+
+  const execPath = process.execPath.toLowerCase()
+
+  if (Installation.isDev()) {
+    // In development, use bun to run the TypeScript entry point
+    return [execPath, "run", process.argv[1]]
+  }
+
+  // In production, use the current executable path
+  return [process.execPath]
+}

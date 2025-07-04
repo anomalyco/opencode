@@ -185,11 +185,14 @@ export namespace Session {
   }
 
   export async function unshare(id: string) {
+    const share = await getShare(id)
+    if (!share) return
+    console.log("share", share)
     await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id)
+    await Share.remove(id, share.secret)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -583,6 +586,7 @@ export namespace Session {
       //   return step
       // },
       toolCallStreaming: true,
+      maxRetries: 10,
       maxTokens: Math.max(0, model.info.limit.output) || undefined,
       abortSignal: abort.signal,
       maxSteps: 1000,
