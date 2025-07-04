@@ -166,26 +166,20 @@ export const biome: Info = {
     BUN_BE_BUN: "1",
   },
   extensions: [
-    // JavaScript
     ".js",
     ".jsx",
     ".mjs",
     ".cjs",
-    // TypeScript
     ".ts",
     ".tsx",
     ".mts",
     ".cts",
-    // JSON
     ".json",
     ".jsonc",
     ".json5",
-    // CSS
     ".css",
-    // HTML
     ".html",
     ".htm",
-    // GraphQL
     ".graphql",
     ".gql",
   ],
