@@ -3,6 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { App } from "../app/app"
+import { BANNED_COMMANDS } from "../tool/bash"
 
 export namespace Commands {
   const log = Log.create({ service: "commands" })
@@ -81,19 +82,6 @@ export namespace Commands {
   async function executeBashCommand(
     command: string,
   ): Promise<BashCommandResult> {
-    const BANNED_COMMANDS = [
-      "alias",
-      "nc",
-      "telnet",
-      "lynx",
-      "w3m",
-      "links",
-      "xh",
-      "chrome",
-      "firefox",
-      "safari",
-    ]
-
     if (BANNED_COMMANDS.some((item) => command.startsWith(item))) {
       throw new Error(`Command '${command}' is not allowed`)
     }

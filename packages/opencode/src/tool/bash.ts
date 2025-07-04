@@ -4,7 +4,7 @@ import DESCRIPTION from "./bash.txt"
 import { App } from "../app/app"
 
 const MAX_OUTPUT_LENGTH = 30000
-const BANNED_COMMANDS = [
+export const BANNED_COMMANDS = [
   "alias",
   "curl",
   "curlie",
