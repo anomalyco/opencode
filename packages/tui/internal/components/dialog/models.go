@@ -56,24 +56,24 @@ func (m ModelItem) Render(selected bool, width int) string {
 		displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
 		return styles.NewStyle().
 			Background(t.Primary()).
-			Foreground(t.BackgroundElement()).
+			Foreground(t.BackgroundPanel()).
 			Width(width).
 			PaddingLeft(1).
 			Render(displayText)
 	} else {
 		modelStyle := styles.NewStyle().
 			Foreground(t.Text()).
-			Background(t.BackgroundElement())
+			Background(t.BackgroundPanel())
 		providerStyle := styles.NewStyle().
 			Foreground(t.TextMuted()).
-			Background(t.BackgroundElement())
+			Background(t.BackgroundPanel())
 
 		modelPart := modelStyle.Render(m.ModelName)
 		providerPart := providerStyle.Render(fmt.Sprintf(" (%s)", m.ProviderName))
 
 		combinedText := modelPart + providerPart
 		return styles.NewStyle().
-			Background(t.BackgroundElement()).
+			Background(t.BackgroundPanel()).
 			PaddingLeft(1).
 			Render(combinedText)
 	}

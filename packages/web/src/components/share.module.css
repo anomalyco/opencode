@@ -493,9 +493,8 @@
     }
   }
 
-  &[data-highlight="true"] {
-    background-color: var(--sl-color-blue-low);
-  }
+  &[data-background="none"] { background-color: transparent; }
+  &[data-background="blue"] { background-color: var(--sl-color-blue-low); }
 
   &[data-expanded="true"] {
     pre {
@@ -669,7 +668,7 @@
 }
 
 .message-markdown {
-  background-color: var(--sl-color-bg-surface);
+  border: 1px solid var(--sl-color-blue-high);
   padding: 0.5rem calc(0.5rem + 3px);
   border-radius: 0.25rem;
   display: flex;

@@ -294,15 +294,11 @@ function ResultsButton(props: ResultsButtonProps) {
 interface TextPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
   text: string
   expand?: boolean
-  invert?: boolean
-  highlight?: boolean
 }
 function TextPart(props: TextPartProps) {
   const [local, rest] = splitProps(props, [
     "text",
     "expand",
-    "invert",
-    "highlight",
   ])
   const [expanded, setExpanded] = createSignal(false)
   const [overflowed, setOverflowed] = createSignal(false)
@@ -321,6 +317,7 @@ function TextPart(props: TextPartProps) {
 
   createEffect(() => {
     local.text
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -331,8 +328,6 @@ function TextPart(props: TextPartProps) {
   return (
     <div
       class={styles["message-text"]}
-      data-invert={local.invert}
-      data-highlight={local.highlight}
       data-expanded={expanded() || local.expand === true}
       {...rest}
     >
@@ -372,6 +367,7 @@ function ErrorPart(props: ErrorPartProps) {
 
   createEffect(() => {
     local.children
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -425,6 +421,7 @@ function MarkdownPart(props: MarkdownPartProps) {
 
   createEffect(() => {
     local.text
+    local.expand
     setTimeout(checkOverflow, 0)
   })
 
@@ -485,6 +482,14 @@ function TerminalPart(props: TerminalPartProps) {
       setOverflowed(preEl.clientHeight < code.offsetHeight)
     }
   }
+
+  createEffect(() => {
+    local.command
+    local.result
+    local.error
+    local.expand
+    setTimeout(checkOverflow, 0)
+  })
 
   onMount(() => {
     checkOverflow()
@@ -596,7 +601,10 @@ export default function Share(props: {
   messages: Record<string, Message.Info>
 }) {
   let lastScrollY = 0
+  let hasScrolledToAnchor = false
   let scrollTimeout: number | undefined
+  let scrollSentinel: HTMLElement | undefined
+  let scrollObserver: IntersectionObserver | undefined
 
   const id = props.id
   const params = new URLSearchParams(window.location.search)
@@ -604,6 +612,7 @@ export default function Share(props: {
 
   const [showScrollButton, setShowScrollButton] = createSignal(false)
   const [isButtonHovered, setIsButtonHovered] = createSignal(false)
+  const [isNearBottom, setIsNearBottom] = createSignal(false)
 
   const [store, setStore] = createStore<{
     info?: Session.Info
@@ -713,10 +722,9 @@ export default function Share(props: {
     const currentScrollY = window.scrollY
     const isScrollingDown = currentScrollY > lastScrollY
     const scrolled = currentScrollY > 200 // Show after scrolling 200px
-    const isNearBottom = window.innerHeight + currentScrollY >= document.body.scrollHeight - 100
 
     // Only show when scrolling down, scrolled enough, and not near bottom
-    const shouldShow = isScrollingDown && scrolled && !isNearBottom
+    const shouldShow = isScrollingDown && scrolled && !isNearBottom()
 
     // Update last scroll position
     lastScrollY = currentScrollY
@@ -732,7 +740,7 @@ export default function Share(props: {
         if (!isButtonHovered()) {
           setShowScrollButton(false)
         }
-      }, 3000)
+      }, 1500)
     } else if (!isButtonHovered()) {
       // Only hide if not hovered (to prevent disappearing while user is about to click)
       setShowScrollButton(false)
@@ -744,6 +752,26 @@ export default function Share(props: {
 
   onMount(() => {
     lastScrollY = window.scrollY // Initialize scroll position
+
+    // Create sentinel element
+    const sentinel = document.createElement("div")
+    sentinel.style.height = "1px"
+    sentinel.style.position = "absolute"
+    sentinel.style.bottom = "100px"
+    sentinel.style.width = "100%"
+    sentinel.style.pointerEvents = "none"
+    document.body.appendChild(sentinel)
+
+    // Create intersection observer
+    const observer = new IntersectionObserver((entries) => {
+      setIsNearBottom(entries[0].isIntersecting)
+    })
+    observer.observe(sentinel)
+
+    // Store references for cleanup
+    scrollSentinel = sentinel
+    scrollObserver = observer
+
     checkScrollNeed()
     window.addEventListener("scroll", checkScrollNeed)
     window.addEventListener("resize", checkScrollNeed)
@@ -752,6 +780,15 @@ export default function Share(props: {
   onCleanup(() => {
     window.removeEventListener("scroll", checkScrollNeed)
     window.removeEventListener("resize", checkScrollNeed)
+
+    // Clean up observer and sentinel
+    if (scrollObserver) {
+      scrollObserver.disconnect()
+    }
+    if (scrollSentinel) {
+      document.body.removeChild(scrollSentinel)
+    }
+
     if (scrollTimeout) {
       clearTimeout(scrollTimeout)
     }
@@ -855,7 +892,6 @@ export default function Share(props: {
               </span>
             )}
           </div>
-
         </div>
       </div>
 
@@ -865,7 +901,7 @@ export default function Share(props: {
           fallback={<p>Waiting for messages...</p>}
         >
           <div class={styles.parts}>
-            <SuspenseList>
+            <SuspenseList revealOrder="forwards">
               <For each={data().messages}>
                 {(msg, msgIndex) => (
                   <Suspense>
@@ -880,8 +916,11 @@ export default function Share(props: {
                         )
                           return null
 
-                        const anchor = createMemo(() => `${msg.id}-${partIndex()}`)
-                        const [showResults, setShowResults] = createSignal(false)
+                        const anchor = createMemo(
+                          () => `${msg.id}-${partIndex()}`,
+                        )
+                        const [showResults, setShowResults] =
+                          createSignal(false)
                         const isLastPart = createMemo(
                           () =>
                             data().messages.length === msgIndex() + 1 &&
@@ -903,7 +942,9 @@ export default function Share(props: {
                           const duration = DateTime.fromMillis(
                             metadata?.time.end || 0,
                           )
-                            .diff(DateTime.fromMillis(metadata?.time.start || 0))
+                            .diff(
+                              DateTime.fromMillis(metadata?.time.start || 0),
+                            )
                             .toMillis()
 
                           return { metadata, args, result, duration }
@@ -911,7 +952,14 @@ export default function Share(props: {
 
                         onMount(() => {
                           const hash = window.location.hash.slice(1)
-                          if (hash !== "" && hash === anchor()) {
+                          // Wait till all parts are loaded
+                          if (
+                            hash !== ""
+                            && !hasScrolledToAnchor
+                            && msg.parts.length === partIndex() + 1
+                            && data().messages.length === msgIndex() + 1
+                          ) {
+                            hasScrolledToAnchor = true
                             scrollToAnchor(hash)
                           }
                         })
@@ -921,7 +969,9 @@ export default function Share(props: {
                             {/* User text */}
                             <Match
                               when={
-                                msg.role === "user" && part.type === "text" && part
+                                msg.role === "user" &&
+                                part.type === "text" &&
+                                part
                               }
                             >
                               {(part) => (
@@ -938,9 +988,9 @@ export default function Share(props: {
                                   </div>
                                   <div data-section="content">
                                     <TextPart
-                                      invert
                                       text={part().text}
                                       expand={isLastPart()}
+                                      data-background="blue"
                                     />
                                   </div>
                                 </div>
@@ -968,11 +1018,12 @@ export default function Share(props: {
                                   </div>
                                   <div data-section="content">
                                     <MarkdownPart
-                                      highlight
                                       expand={isLastPart()}
                                       text={stripEnclosingTag(part().text)}
                                     />
-                                    <Show when={isLastPart() && data().completed}>
+                                    <Show
+                                      when={isLastPart() && data().completed}
+                                    >
                                       <span
                                         data-part-footer
                                         title={DateTime.fromMillis(
@@ -1041,7 +1092,8 @@ export default function Share(props: {
                               }
                             >
                               {(_part) => {
-                                const matches = () => toolData()?.metadata?.matches
+                                const matches = () =>
+                                  toolData()?.metadata?.matches
                                 const splitArgs = () => {
                                   const { pattern, ...rest } = toolData()?.args
                                   return { pattern, rest }
@@ -1066,11 +1118,14 @@ export default function Share(props: {
                                       <div data-part-tool-body>
                                         <div data-part-title>
                                           <span data-element-label>Grep</span>
-                                          <b>&ldquo;{splitArgs().pattern}&rdquo;</b>
+                                          <b>
+                                            &ldquo;{splitArgs().pattern}&rdquo;
+                                          </b>
                                         </div>
                                         <Show
                                           when={
-                                            Object.keys(splitArgs().rest).length > 0
+                                            Object.keys(splitArgs().rest)
+                                              .length > 0
                                           }
                                         >
                                           <div data-part-tool-args>
@@ -1299,8 +1354,10 @@ export default function Share(props: {
                                     data().rootDir,
                                   ),
                                 )
-                                const hasError = () => toolData()?.metadata?.error
-                                const preview = () => toolData()?.metadata?.preview
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
+                                const preview = () =>
+                                  toolData()?.metadata?.preview
 
                                 return (
                                   <div
@@ -1333,7 +1390,9 @@ export default function Share(props: {
                                             </div>
                                           </Match>
                                           {/* Always try to show CodeBlock if preview is available (even if empty string) */}
-                                          <Match when={typeof preview() === 'string'}>
+                                          <Match
+                                            when={typeof preview() === "string"}
+                                          >
                                             <div data-part-tool-result>
                                               <ResultsButton
                                                 showCopy="Show preview"
@@ -1346,7 +1405,9 @@ export default function Share(props: {
                                               <Show when={showResults()}>
                                                 <div data-part-tool-code>
                                                   <CodeBlock
-                                                    lang={getShikiLang(filePath())}
+                                                    lang={getShikiLang(
+                                                      filePath(),
+                                                    )}
                                                     code={preview()}
                                                   />
                                                 </div>
@@ -1354,7 +1415,12 @@ export default function Share(props: {
                                             </div>
                                           </Match>
                                           {/* Fallback to TextPart if preview is not a string (e.g. undefined) AND result exists */}
-                                          <Match when={typeof preview() !== 'string' && toolData()?.result}>
+                                          <Match
+                                            when={
+                                              typeof preview() !== "string" &&
+                                              toolData()?.result
+                                            }
+                                          >
                                             <div data-part-tool-result>
                                               <ResultsButton
                                                 results={showResults()}
@@ -1398,7 +1464,8 @@ export default function Share(props: {
                                     data().rootDir,
                                   ),
                                 )
-                                const hasError = () => toolData()?.metadata?.error
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
                                 const content = () => toolData()?.args?.content
                                 const diagnostics = createMemo(() =>
                                   getDiagnostics(
@@ -1415,7 +1482,10 @@ export default function Share(props: {
                                   >
                                     <div data-section="decoration">
                                       <AnchorIcon id={anchor()}>
-                                        <IconDocumentPlus width={18} height={18} />
+                                        <IconDocumentPlus
+                                          width={18}
+                                          height={18}
+                                        />
                                       </AnchorIcon>
                                       <div></div>
                                     </div>
@@ -1435,7 +1505,7 @@ export default function Share(props: {
                                             <div data-part-tool-result>
                                               <ErrorPart>
                                                 {formatErrorString(
-                                                  toolData()?.result
+                                                  toolData()?.result,
                                                 )}
                                               </ErrorPart>
                                             </div>
@@ -1453,8 +1523,12 @@ export default function Share(props: {
                                               <Show when={showResults()}>
                                                 <div data-part-tool-code>
                                                   <CodeBlock
-                                                    lang={getShikiLang(filePath())}
-                                                    code={toolData()?.args?.content}
+                                                    lang={getShikiLang(
+                                                      filePath(),
+                                                    )}
+                                                    code={
+                                                      toolData()?.args?.content
+                                                    }
                                                   />
                                                 </div>
                                               </Show>
@@ -1481,8 +1555,10 @@ export default function Share(props: {
                             >
                               {(_part) => {
                                 const diff = () => toolData()?.metadata?.diff
-                                const message = () => toolData()?.metadata?.message
-                                const hasError = () => toolData()?.metadata?.error
+                                const message = () =>
+                                  toolData()?.metadata?.message
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
                                 const filePath = createMemo(() =>
                                   stripWorkingDirectory(
                                     toolData()?.args.filePath,
@@ -1504,7 +1580,10 @@ export default function Share(props: {
                                   >
                                     <div data-section="decoration">
                                       <AnchorIcon id={anchor()}>
-                                        <IconPencilSquare width={18} height={18} />
+                                        <IconPencilSquare
+                                          width={18}
+                                          height={18}
+                                        />
                                       </AnchorIcon>
                                       <div></div>
                                     </div>
@@ -1527,7 +1606,9 @@ export default function Share(props: {
                                           <Match when={diff()}>
                                             <div data-part-tool-edit>
                                               <DiffView
-                                                class={styles["diff-code-block"]}
+                                                class={
+                                                  styles["diff-code-block"]
+                                                }
                                                 diff={diff()}
                                                 lang={getShikiLang(filePath())}
                                               />
@@ -1556,9 +1637,12 @@ export default function Share(props: {
                               }
                             >
                               {(_part) => {
-                                const command = () => toolData()?.metadata?.title
-                                const desc = () => toolData()?.metadata?.description
-                                const result = () => toolData()?.metadata?.stdout
+                                const command = () =>
+                                  toolData()?.metadata?.title
+                                const desc = () =>
+                                  toolData()?.metadata?.description
+                                const result = () =>
+                                  toolData()?.metadata?.stdout
                                 const error = () => toolData()?.metadata?.stderr
 
                                 return (
@@ -1569,7 +1653,10 @@ export default function Share(props: {
                                   >
                                     <div data-section="decoration">
                                       <AnchorIcon id={anchor()}>
-                                        <IconCommandLine width={18} height={18} />
+                                        <IconCommandLine
+                                          width={18}
+                                          height={18}
+                                        />
                                       </AnchorIcon>
                                       <div></div>
                                     </div>
@@ -1604,7 +1691,9 @@ export default function Share(props: {
                             >
                               {(_part) => {
                                 const todos = createMemo(() =>
-                                  sortTodosByStatus(toolData()?.args?.todos ?? []),
+                                  sortTodosByStatus(
+                                    toolData()?.args?.todos ?? [],
+                                  ),
                                 )
                                 const starting = () =>
                                   todos().every((t) => t.status === "pending")
@@ -1670,7 +1759,8 @@ export default function Share(props: {
                               {(_part) => {
                                 const url = () => toolData()?.args.url
                                 const format = () => toolData()?.args.format
-                                const hasError = () => toolData()?.metadata?.error
+                                const hasError = () =>
+                                  toolData()?.metadata?.error
 
                                 return (
                                   <div
@@ -1793,7 +1883,8 @@ export default function Share(props: {
                                           </Match>
                                           <Match
                                             when={
-                                              part().toolInvocation.state === "call"
+                                              part().toolInvocation.state ===
+                                              "call"
                                             }
                                           >
                                             <TextPart
@@ -1839,7 +1930,10 @@ export default function Share(props: {
                                       </Match>
 
                                       <Match when={msg.role === "user"}>
-                                        <IconUserCircle width={18} height={18} />
+                                        <IconUserCircle
+                                          width={18}
+                                          height={18}
+                                        />
                                       </Match>
                                     </Switch>
                                   </AnchorIcon>
@@ -1848,7 +1942,9 @@ export default function Share(props: {
                                 <div data-section="content">
                                   <div data-part-tool-body>
                                     <div data-part-title>
-                                      <span data-element-label>{part.type}</span>
+                                      <span data-element-label>
+                                        {part.type}
+                                      </span>
                                     </div>
                                     <TextPart
                                       text={JSON.stringify(part, null, 2)}

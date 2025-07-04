@@ -158,7 +158,12 @@ func (c *listComponent[T]) View() string {
 	return strings.Join(listItems, "\n")
 }
 
-func NewListComponent[T ListItem](items []T, maxVisibleItems int, fallbackMsg string, useAlphaNumericKeys bool) List[T] {
+func NewListComponent[T ListItem](
+	items []T,
+	maxVisibleItems int,
+	fallbackMsg string,
+	useAlphaNumericKeys bool,
+) List[T] {
 	return &listComponent[T]{
 		fallbackMsg:         fallbackMsg,
 		items:               items,
@@ -194,7 +199,12 @@ func (s StringItem) Render(selected bool, width int) string {
 }
 
 // NewStringList creates a new list component with string items
-func NewStringList(items []string, maxVisibleItems int, fallbackMsg string, useAlphaNumericKeys bool) List[StringItem] {
+func NewStringList(
+	items []string,
+	maxVisibleItems int,
+	fallbackMsg string,
+	useAlphaNumericKeys bool,
+) List[StringItem] {
 	stringItems := make([]StringItem, len(items))
 	for i, item := range items {
 		stringItems[i] = StringItem(item)

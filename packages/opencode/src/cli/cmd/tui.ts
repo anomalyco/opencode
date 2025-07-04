@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
+import { Log } from "../../util/log"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -57,6 +58,9 @@ export const TuiCommand = cmd({
           cwd = process.cwd()
           cmd = [binary]
         }
+        Log.Default.info("tui", {
+          cmd,
+        })
         const proc = Bun.spawn({
           cmd: [...cmd, ...process.argv.slice(2)],
           cwd,

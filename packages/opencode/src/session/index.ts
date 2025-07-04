@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import { App } from "../app/app"
 import { Identifier } from "../id/id"
 import { Storage } from "../storage/storage"
@@ -15,6 +15,7 @@ import {
   type UIMessage,
   type ProviderMetadata,
   wrapLanguageModel,
+  type Attachment,
 } from "ai"
 import { z, ZodSchema } from "zod"
 import { Decimal } from "decimal.js"
@@ -187,7 +188,6 @@ export namespace Session {
   export async function unshare(id: string) {
     const share = await getShare(id)
     if (!share) return
-    console.log("share", share)
     await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
       draft.share = undefined
@@ -361,6 +361,36 @@ export namespace Session {
     if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
 
     const app = App.info()
+    input.parts = await Promise.all(
+      input.parts.map(async (part) => {
+        if (part.type === "file") {
+          const url = new URL(part.url)
+          switch (url.protocol) {
+            case "file:":
+              let content = await Bun.file(
+                path.join(app.path.cwd, url.pathname),
+              ).text()
+              const range = {
+                start: url.searchParams.get("start"),
+                end: url.searchParams.get("end"),
+              }
+              if (range.start != null && part.mediaType === "text/plain") {
+                const lines = content.split("\n")
+                const start = parseInt(range.start)
+                const end = range.end ? parseInt(range.end) : lines.length
+                content = lines.slice(start, end).join("\n")
+              }
+              return {
+                type: "file",
+                url: `data:${part.mediaType};base64,` + btoa(content),
+                mediaType: part.mediaType,
+                filename: part.filename,
+              }
+          }
+        }
+        return part
+      }),
+    )
     if (msgs.length === 0 && !session.parentID) {
       generateText({
         maxTokens: input.providerID === "google" ? 1024 : 20,
@@ -376,7 +406,7 @@ export namespace Session {
             {
               role: "user",
               content: "",
-              parts: toParts(input.parts),
+              parts: toParts(input.parts).parts,
             },
           ]),
         ],
@@ -1028,7 +1058,7 @@ function toUIMessage(msg: Message.Info): UIMessage {
       id: msg.id,
       role: "assistant",
       content: "",
-      parts: toParts(msg.parts),
+      ...toParts(msg.parts),
     }
   }
 
@@ -1037,35 +1067,41 @@ function toUIMessage(msg: Message.Info): UIMessage {
       id: msg.id,
       role: "user",
       content: "",
-      parts: toParts(msg.parts),
+      ...toParts(msg.parts),
     }
   }
 
   throw new Error("not implemented")
 }
 
-function toParts(parts: Message.MessagePart[]): UIMessage["parts"] {
-  const result: UIMessage["parts"] = []
+function toParts(parts: Message.MessagePart[]) {
+  const result: {
+    parts: UIMessage["parts"]
+    experimental_attachments: Attachment[]
+  } = {
+    parts: [],
+    experimental_attachments: [],
+  }
   for (const part of parts) {
     switch (part.type) {
       case "text":
-        result.push({ type: "text", text: part.text })
+        result.parts.push({ type: "text", text: part.text })
         break
       case "file":
-        result.push({
-          type: "file",
-          data: part.url,
-          mimeType: part.mediaType,
+        result.experimental_attachments.push({
+          url: part.url,
+          contentType: part.mediaType,
+          name: part.filename,
         })
         break
       case "tool-invocation":
-        result.push({
+        result.parts.push({
           type: "tool-invocation",
           toolInvocation: part.toolInvocation,
         })
         break
       case "step-start":
-        result.push({
+        result.parts.push({
           type: "step-start",
         })
         break

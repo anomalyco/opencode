@@ -9,6 +9,7 @@ import (
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/dialog"
+	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -133,10 +134,49 @@ func (m *messagesComponent) renderView(width int) {
 
 		switch message.Role {
 		case opencode.MessageRoleUser:
-			for _, part := range message.Parts {
+			for partIndex, part := range message.Parts {
 				switch part := part.AsUnion().(type) {
 				case opencode.TextPart:
-					key := m.cache.GenerateKey(message.ID, part.Text, width, m.selectedPart == m.partCount)
+					remainingParts := message.Parts[partIndex+1:]
+					fileParts := make([]opencode.FilePart, 0)
+					for _, part := range remainingParts {
+						switch part := part.AsUnion().(type) {
+						case opencode.FilePart:
+							fileParts = append(fileParts, part)
+						}
+					}
+					flexItems := []layout.FlexItem{}
+					if len(fileParts) > 0 {
+						fileStyle := styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Padding(0, 1)
+						mediaTypeStyle := styles.NewStyle().Background(t.Secondary()).Foreground(t.BackgroundPanel()).Padding(0, 1)
+						for _, filePart := range fileParts {
+							mediaType := ""
+							switch filePart.MediaType {
+							case "text/plain":
+								mediaType = "txt"
+							case "image/png", "image/jpeg", "image/gif", "image/webp":
+								mediaType = "img"
+								mediaTypeStyle = mediaTypeStyle.Background(t.Accent())
+							case "application/pdf":
+								mediaType = "pdf"
+								mediaTypeStyle = mediaTypeStyle.Background(t.Primary())
+							}
+							flexItems = append(flexItems, layout.FlexItem{
+								View: mediaTypeStyle.Render(mediaType) + fileStyle.Render(filePart.Filename),
+							})
+						}
+					}
+					bgColor := t.BackgroundPanel()
+					files := layout.Render(
+						layout.FlexOptions{
+							Background: &bgColor,
+							Width:      width - 6,
+							Direction:  layout.Column,
+						},
+						flexItems...,
+					)
+
+					key := m.cache.GenerateKey(message.ID, part.Text, width, m.selectedPart == m.partCount, files)
 					content, cached = m.cache.Get(key)
 					if !cached {
 						content = renderText(
@@ -147,6 +187,7 @@ func (m *messagesComponent) renderView(width int) {
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,
+							files,
 						)
 						m.cache.Set(key, content)
 					}
@@ -206,6 +247,7 @@ func (m *messagesComponent) renderView(width int) {
 								m.showToolDetails,
 								m.partCount == m.selectedPart,
 								width,
+								"",
 								toolCallParts...,
 							)
 							m.cache.Set(key, content)
@@ -219,6 +261,7 @@ func (m *messagesComponent) renderView(width int) {
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,
+							"",
 							toolCallParts...,
 						)
 					}

@@ -47,7 +47,7 @@ export namespace LSP {
           const handle = await server.spawn(App.info())
           if (!handle) break
           const client = await LSPClient.create(server.id, handle).catch(
-            () => {},
+            (err) => log.error("", { error: err }),
           )
           if (!client) break
           clients.set(server.id, client)

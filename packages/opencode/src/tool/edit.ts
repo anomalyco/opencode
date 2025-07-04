@@ -489,10 +489,10 @@ export function replace(
     BlockAnchorReplacer,
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
-    EscapeNormalizedReplacer,
-    TrimmedBoundaryReplacer,
-    ContextAwareReplacer,
-    MultiOccurrenceReplacer,
+    // EscapeNormalizedReplacer,
+    // TrimmedBoundaryReplacer,
+    // ContextAwareReplacer,
+    // MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)

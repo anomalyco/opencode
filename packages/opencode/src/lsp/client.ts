@@ -92,11 +92,20 @@ export namespace LSPClient {
         },
       }),
       5_000,
-    ).catch(() => {
-      throw new InitializeError({ serverID })
+    ).catch((err) => {
+      log.error("initialize error", { error: err })
+      throw new InitializeError(
+        { serverID },
+        {
+          cause: err,
+        },
+      )
     })
+
     await connection.sendNotification("initialized", {})
-    log.info("initialized")
+    log.info("initialized", {
+      serverID,
+    })
 
     const files: {
       [path: string]: number
@@ -174,7 +183,6 @@ export namespace LSPClient {
         log.info("shutting down", { serverID })
         connection.end()
         connection.dispose()
-        server.process.kill("SIGTERM")
         log.info("shutdown", { serverID })
       },
     }
