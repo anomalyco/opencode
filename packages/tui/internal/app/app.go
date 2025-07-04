@@ -389,14 +389,6 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 	if a.compactCancel != nil {
 		a.compactCancel()
 		a.compactCancel = nil
-
-		// Mark any incomplete message as completed when canceling compact
-		if len(a.Messages) > 0 {
-			lastMessage := &a.Messages[len(a.Messages)-1]
-			if lastMessage.Metadata.Time.Completed == 0 {
-				lastMessage.Metadata.Time.Completed = float64(time.Now().Unix())
-			}
-		}
 	}
 
 	_, err := a.Client.Session.Abort(ctx, sessionID)

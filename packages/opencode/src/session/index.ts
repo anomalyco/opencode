@@ -947,26 +947,60 @@ export namespace Session {
         const usage = getUsage(model.info, input.usage, input.providerMetadata)
         assistant.cost += usage.cost
         assistant.tokens = usage.tokens
-        next.metadata!.time.completed = Date.now()
-        await updateMessage(next)
       },
     })
 
-    for await (const value of result.fullStream) {
-      switch (value.type) {
-        case "text-delta":
-          if (!text) {
-            text = {
-              type: "text",
-              text: value.textDelta,
-            }
-            next.parts.push(text)
-          } else text.text += value.textDelta
+    try {
+      for await (const value of result.fullStream) {
+        switch (value.type) {
+          case "text-delta":
+            if (!text) {
+              text = {
+                type: "text",
+                text: value.textDelta,
+              }
+              next.parts.push(text)
+            } else text.text += value.textDelta
 
-          await updateMessage(next)
-          break
+            await updateMessage(next)
+            break
+        }
       }
+    } catch (e: any) {
+      log.error("summarize stream error", {
+        error: e,
+      })
+      switch (true) {
+        case Message.OutputLengthError.isInstance(e):
+          next.metadata.error = e
+          break
+        case LoadAPIKeyError.isInstance(e):
+          next.metadata.error = new Provider.AuthError(
+            {
+              providerID: input.providerID,
+              message: e.message,
+            },
+            { cause: e },
+          ).toObject()
+          break
+        case e instanceof Error:
+          next.metadata.error = new NamedError.Unknown(
+            { message: e.toString() },
+            { cause: e },
+          ).toObject()
+          break
+        default:
+          next.metadata.error = new NamedError.Unknown(
+            { message: JSON.stringify(e) },
+            { cause: e },
+          )
+      }
+      Bus.publish(Event.Error, {
+        error: next.metadata.error,
+      })
     }
+    next.metadata!.time.completed = Date.now()
+    await updateMessage(next)
   }
 
   function lock(sessionID: string) {
