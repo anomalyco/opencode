@@ -83,9 +83,9 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.IsCommand {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
 
-			// Check if this is a custom command
-			if strings.HasPrefix(msg.CompletionValue, "custom:") {
-				customCommandName := strings.TrimPrefix(msg.CompletionValue, "custom:")
+			// Check if this is a valid custom command (not a built-in command)
+			if !commands.IsBuiltinCommand(commandName) && commands.IsValidCustomCommand(commandName, m.app.Info.Path.Config) {
+				customCommandName := commandName
 				updated, cmd := m.Clear()
 				m = updated.(*editorComponent)
 				cmds = append(cmds, cmd)
@@ -111,6 +111,24 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case dialog.CompletionFilledMsg:
+		// For fill (tab), just update the input text without executing
+		existingValue := m.textarea.Value()
+
+		if msg.IsCommand {
+			// For commands, replace the search string with the command value
+			m.textarea.SetValue(msg.CompletionValue + " ")
+		} else {
+			// Replace the current token (after last space)
+			lastSpaceIndex := strings.LastIndex(existingValue, " ")
+			if lastSpaceIndex == -1 {
+				m.textarea.SetValue(msg.CompletionValue + " ")
+			} else {
+				modifiedValue := existingValue[:lastSpaceIndex+1] + msg.CompletionValue
+				m.textarea.SetValue(modifiedValue + " ")
+			}
+		}
+		return m, nil
 	}
 
 	m.spinner, cmd = m.spinner.Update(msg)

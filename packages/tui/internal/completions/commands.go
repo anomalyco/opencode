@@ -65,7 +65,7 @@ func getCustomCommandCompletionItem(cmd CustomCommandFile, space int, t theme.Th
 		description = "custom command"
 	}
 	title := "  /" + cmd.Name + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+description)
-	value := "custom:" + cmd.Name
+	value := "/" + cmd.Name
 	return dialog.NewCompletionItem(dialog.CompletionItem{
 		Title: title,
 		Value: value,
@@ -196,7 +196,6 @@ func (c *CommandCompletionProvider) scanCommandsDirectory(baseDir, relativePath 
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}

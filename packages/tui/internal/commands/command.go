@@ -2,6 +2,8 @@ package commands
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -9,9 +11,11 @@ import (
 	"github.com/sst/opencode-sdk-go"
 )
 
-type ExecuteCommandMsg Command
-type ExecuteCommandsMsg []Command
-type CommandExecutedMsg Command
+type (
+	ExecuteCommandMsg  Command
+	ExecuteCommandsMsg []Command
+	CommandExecutedMsg Command
+)
 
 type Keybinding struct {
 	RequiresLeader bool
@@ -24,13 +28,15 @@ func (k Keybinding) Matches(msg tea.KeyPressMsg, leader bool) bool {
 	return key == msg.String() && (k.RequiresLeader == leader)
 }
 
-type CommandName string
-type Command struct {
-	Name        CommandName
-	Description string
-	Keybindings []Keybinding
-	Trigger     string
-}
+type (
+	CommandName string
+	Command     struct {
+		Name        CommandName
+		Description string
+		Keybindings []Keybinding
+		Trigger     string
+	}
+)
 
 func (c Command) Keys() []string {
 	var keys []string
@@ -98,6 +104,150 @@ const (
 	AppExitCommand              CommandName = "app_exit"
 )
 
+var defaults = []Command{
+	{
+		Name:        AppHelpCommand,
+		Description: "show help",
+		Keybindings: parseBindings("<leader>h"),
+		Trigger:     "help",
+	},
+	{
+		Name:        EditorOpenCommand,
+		Description: "open editor",
+		Keybindings: parseBindings("<leader>e"),
+		Trigger:     "editor",
+	},
+	{
+		Name:        SessionNewCommand,
+		Description: "new session",
+		Keybindings: parseBindings("<leader>n"),
+		Trigger:     "new",
+	},
+	{
+		Name:        SessionListCommand,
+		Description: "list sessions",
+		Keybindings: parseBindings("<leader>l"),
+		Trigger:     "sessions",
+	},
+	{
+		Name:        SessionShareCommand,
+		Description: "share session",
+		Keybindings: parseBindings("<leader>s"),
+		Trigger:     "share",
+	},
+	{
+		Name:        SessionInterruptCommand,
+		Description: "interrupt session",
+		Keybindings: parseBindings("esc"),
+	},
+	{
+		Name:        SessionCompactCommand,
+		Description: "compact the session",
+		Keybindings: parseBindings("<leader>c"),
+		Trigger:     "compact",
+	},
+	{
+		Name:        ToolDetailsCommand,
+		Description: "toggle tool details",
+		Keybindings: parseBindings("<leader>d"),
+		Trigger:     "details",
+	},
+	{
+		Name:        ModelListCommand,
+		Description: "list models",
+		Keybindings: parseBindings("<leader>m"),
+		Trigger:     "models",
+	},
+	{
+		Name:        ThemeListCommand,
+		Description: "list themes",
+		Keybindings: parseBindings("<leader>t"),
+		Trigger:     "themes",
+	},
+	{
+		Name:        ProjectInitCommand,
+		Description: "create/update AGENTS.md",
+		Keybindings: parseBindings("<leader>i"),
+		Trigger:     "init",
+	},
+	{
+		Name:        InputClearCommand,
+		Description: "clear input",
+		Keybindings: parseBindings("ctrl+c"),
+	},
+	{
+		Name:        InputPasteCommand,
+		Description: "paste content",
+		Keybindings: parseBindings("ctrl+v"),
+	},
+	{
+		Name:        InputSubmitCommand,
+		Description: "submit message",
+		Keybindings: parseBindings("enter"),
+	},
+	{
+		Name:        InputNewlineCommand,
+		Description: "insert newline",
+		Keybindings: parseBindings("shift+enter", "ctrl+j"),
+	},
+	// {
+	// 	Name:        HistoryPreviousCommand,
+	// 	Description: "previous prompt",
+	// 	Keybindings: parseBindings("up"),
+	// },
+	// {
+	// 	Name:        HistoryNextCommand,
+	// 	Description: "next prompt",
+	// 	Keybindings: parseBindings("down"),
+	// },
+	{
+		Name:        MessagesPageUpCommand,
+		Description: "page up",
+		Keybindings: parseBindings("pgup"),
+	},
+	{
+		Name:        MessagesPageDownCommand,
+		Description: "page down",
+		Keybindings: parseBindings("pgdown"),
+	},
+	{
+		Name:        MessagesHalfPageUpCommand,
+		Description: "half page up",
+		Keybindings: parseBindings("ctrl+alt+u"),
+	},
+	{
+		Name:        MessagesHalfPageDownCommand,
+		Description: "half page down",
+		Keybindings: parseBindings("ctrl+alt+d"),
+	},
+	{
+		Name:        MessagesPreviousCommand,
+		Description: "previous message",
+		Keybindings: parseBindings("ctrl+alt+k"),
+	},
+	{
+		Name:        MessagesNextCommand,
+		Description: "next message",
+		Keybindings: parseBindings("ctrl+alt+j"),
+	},
+	{
+		Name:        MessagesFirstCommand,
+		Description: "first message",
+		Keybindings: parseBindings("ctrl+g"),
+	},
+	{
+		Name:        MessagesLastCommand,
+		Description: "last message",
+		Keybindings: parseBindings("ctrl+alt+g"),
+	},
+	{
+		Name:        AppExitCommand,
+		Description: "exit the app",
+		Keybindings: parseBindings("ctrl+c", "<leader>q"),
+		Trigger:     "exit",
+	},
+}
+
 func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
 	for _, binding := range k.Keybindings {
 		if binding.Matches(msg, leader) {
@@ -123,150 +273,41 @@ func parseBindings(bindings ...string) []Keybinding {
 	return parsedBindings
 }
 
-func LoadFromConfig(config *opencode.Config) CommandRegistry {
-	defaults := []Command{
-		{
-			Name:        AppHelpCommand,
-			Description: "show help",
-			Keybindings: parseBindings("<leader>h"),
-			Trigger:     "help",
-		},
-		{
-			Name:        EditorOpenCommand,
-			Description: "open editor",
-			Keybindings: parseBindings("<leader>e"),
-			Trigger:     "editor",
-		},
-		{
-			Name:        SessionNewCommand,
-			Description: "new session",
-			Keybindings: parseBindings("<leader>n"),
-			Trigger:     "new",
-		},
-		{
-			Name:        SessionListCommand,
-			Description: "list sessions",
-			Keybindings: parseBindings("<leader>l"),
-			Trigger:     "sessions",
-		},
-		{
-			Name:        SessionShareCommand,
-			Description: "share session",
-			Keybindings: parseBindings("<leader>s"),
-			Trigger:     "share",
-		},
-		{
-			Name:        SessionInterruptCommand,
-			Description: "interrupt session",
-			Keybindings: parseBindings("esc"),
-		},
-		{
-			Name:        SessionCompactCommand,
-			Description: "compact the session",
-			Keybindings: parseBindings("<leader>c"),
-			Trigger:     "compact",
-		},
-		{
-			Name:        ToolDetailsCommand,
-			Description: "toggle tool details",
-			Keybindings: parseBindings("<leader>d"),
-			Trigger:     "details",
-		},
-		{
-			Name:        ModelListCommand,
-			Description: "list models",
-			Keybindings: parseBindings("<leader>m"),
-			Trigger:     "models",
-		},
-		{
-			Name:        ThemeListCommand,
-			Description: "list themes",
-			Keybindings: parseBindings("<leader>t"),
-			Trigger:     "themes",
-		},
-		{
-			Name:        ProjectInitCommand,
-			Description: "create/update AGENTS.md",
-			Keybindings: parseBindings("<leader>i"),
-			Trigger:     "init",
-		},
-		{
-			Name:        InputClearCommand,
-			Description: "clear input",
-			Keybindings: parseBindings("ctrl+c"),
-		},
-		{
-			Name:        InputPasteCommand,
-			Description: "paste content",
-			Keybindings: parseBindings("ctrl+v"),
-		},
-		{
-			Name:        InputSubmitCommand,
-			Description: "submit message",
-			Keybindings: parseBindings("enter"),
-		},
-		{
-			Name:        InputNewlineCommand,
-			Description: "insert newline",
-			Keybindings: parseBindings("shift+enter", "ctrl+j"),
-		},
-		// {
-		// 	Name:        HistoryPreviousCommand,
-		// 	Description: "previous prompt",
-		// 	Keybindings: parseBindings("up"),
-		// },
-		// {
-		// 	Name:        HistoryNextCommand,
-		// 	Description: "next prompt",
-		// 	Keybindings: parseBindings("down"),
-		// },
-		{
-			Name:        MessagesPageUpCommand,
-			Description: "page up",
-			Keybindings: parseBindings("pgup"),
-		},
-		{
-			Name:        MessagesPageDownCommand,
-			Description: "page down",
-			Keybindings: parseBindings("pgdown"),
-		},
-		{
-			Name:        MessagesHalfPageUpCommand,
-			Description: "half page up",
-			Keybindings: parseBindings("ctrl+alt+u"),
-		},
-		{
-			Name:        MessagesHalfPageDownCommand,
-			Description: "half page down",
-			Keybindings: parseBindings("ctrl+alt+d"),
-		},
-		{
-			Name:        MessagesPreviousCommand,
-			Description: "previous message",
-			Keybindings: parseBindings("ctrl+alt+k"),
-		},
-		{
-			Name:        MessagesNextCommand,
-			Description: "next message",
-			Keybindings: parseBindings("ctrl+alt+j"),
-		},
-		{
-			Name:        MessagesFirstCommand,
-			Description: "first message",
-			Keybindings: parseBindings("ctrl+g"),
-		},
-		{
-			Name:        MessagesLastCommand,
-			Description: "last message",
-			Keybindings: parseBindings("ctrl+alt+g"),
-		},
-		{
-			Name:        AppExitCommand,
-			Description: "exit the app",
-			Keybindings: parseBindings("ctrl+c", "<leader>q"),
-			Trigger:     "exit",
-		},
+// IsBuiltinCommand checks if a command name matches any of the built-in command triggers
+func IsBuiltinCommand(commandName string) bool {
+	for _, command := range defaults {
+		if command.Trigger == commandName {
+			return true
+		}
 	}
+	return false
+}
+
+// IsValidCustomCommand checks if a custom command exists in the filesystem
+func IsValidCustomCommand(commandName string, configPath string) bool {
+	// Convert colon notation to file path
+	filePath := strings.ReplaceAll(commandName, ":", string(filepath.Separator)) + ".md"
+
+	// Try project-level commands first ($PWD/.opencode/commands)
+	if cwd, err := os.Getwd(); err == nil {
+		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
+		projectCommandFile := filepath.Join(projectCommandsDir, filePath)
+		if _, err := os.Stat(projectCommandFile); err == nil {
+			return true
+		}
+	}
+
+	// Try global commands (~/.config/opencode/commands)
+	globalCommandsDir := filepath.Join(configPath, "commands")
+	globalCommandFile := filepath.Join(globalCommandsDir, filePath)
+	if _, err := os.Stat(globalCommandFile); err == nil {
+		return true
+	}
+
+	return false
+}
+
+func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	registry := make(CommandRegistry)
 	keybinds := map[string]string{}
 	marshalled, _ := json.Marshal(config.Keybinds)
