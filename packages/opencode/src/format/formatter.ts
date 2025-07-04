@@ -158,3 +158,52 @@ export const htmlbeautifier: Info = {
     return Bun.which("htmlbeautifier") !== null
   },
 }
+
+export const biome: Info = {
+  name: "biome",
+  command: [BunProc.which(), "run", "biome", "format", "--write", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [
+    // JavaScript
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    // TypeScript
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    // JSON
+    ".json",
+    ".jsonc",
+    ".json5",
+    // CSS
+    ".css",
+    // HTML
+    ".html",
+    ".htm",
+    // GraphQL
+    ".graphql",
+    ".gql",
+  ],
+  async enabled() {
+    try {
+      const proc = Bun.spawn({
+        cmd: [BunProc.which(), "run", "biome", "--version"],
+        cwd: App.info().path.cwd,
+        env: {
+          BUN_BE_BUN: "1",
+        },
+        stdout: "ignore",
+        stderr: "ignore",
+      })
+      const exit = await proc.exited
+      return exit === 0
+    } catch {
+      return false
+    }
+  },
+}
