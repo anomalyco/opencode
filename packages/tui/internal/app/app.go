@@ -21,17 +21,18 @@ import (
 )
 
 type App struct {
-	Info      opencode.App
-	Version   string
-	StatePath string
-	Config    *opencode.Config
-	Client    *opencode.Client
-	State     *config.State
-	Provider  *opencode.Provider
-	Model     *opencode.Model
-	Session   *opencode.Session
-	Messages  []opencode.Message
-	Commands  commands.CommandRegistry
+	Info          opencode.App
+	Version       string
+	StatePath     string
+	Config        *opencode.Config
+	Client        *opencode.Client
+	State         *config.State
+	Provider      *opencode.Provider
+	Model         *opencode.Model
+	Session       *opencode.Session
+	Messages      []opencode.Message
+	Commands      commands.CommandRegistry
+	compactCancel context.CancelFunc
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -267,13 +268,26 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) CompactSession(ctx context.Context) tea.Cmd {
+	if a.compactCancel != nil {
+		a.compactCancel()
+	}
+
+	compactCtx, cancel := context.WithCancel(ctx)
+	a.compactCancel = cancel
+
 	go func() {
-		_, err := a.Client.Session.Summarize(ctx, a.Session.ID, opencode.SessionSummarizeParams{
+		defer func() {
+			a.compactCancel = nil
+		}()
+
+		_, err := a.Client.Session.Summarize(compactCtx, a.Session.ID, opencode.SessionSummarizeParams{
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
 		if err != nil {
-			slog.Error("Failed to compact session", "error", err)
+			if compactCtx.Err() != context.Canceled {
+				slog.Error("Failed to compact session", "error", err)
+			}
 		}
 	}()
 	return nil
@@ -350,6 +364,20 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {
+	// Cancel any running compact operation
+	if a.compactCancel != nil {
+		a.compactCancel()
+		a.compactCancel = nil
+
+		// Mark any incomplete message as completed when canceling compact
+		if len(a.Messages) > 0 {
+			lastMessage := &a.Messages[len(a.Messages)-1]
+			if lastMessage.Metadata.Time.Completed == 0 {
+				lastMessage.Metadata.Time.Completed = float64(time.Now().Unix())
+			}
+		}
+	}
+
 	_, err := a.Client.Session.Abort(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
