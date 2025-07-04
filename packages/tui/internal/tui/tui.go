@@ -32,6 +32,11 @@ import (
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
 
+// EditorRestoreMsg is sent when the external editor fails and we need to restore the original content
+type EditorRestoreMsg struct {
+	Content string
+}
+
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
 
@@ -486,6 +491,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset interrupt key state after timeout
 		a.interruptKeyState = InterruptKeyIdle
 		a.editor.SetInterruptKeyInDebounce(false)
+	case EditorRestoreMsg:
+		// Restore the original content to the textarea when editor fails
+		a.editor.SetValue(msg.Content)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
 	}
@@ -789,20 +797,32 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 		cmd = tea.ExecProcess(c, func(err error) tea.Msg {
+			defer os.Remove(tmpfile.Name())
+
+			// Check if the process exited with non-zero status
 			if err != nil {
-				slog.Error("Failed to open editor", "error", err)
-				return nil
+				if exitError, ok := err.(*exec.ExitError); ok {
+					slog.Warn("Editor exited with non-zero status", "exitCode", exitError.ExitCode())
+					// Restore original content when editor exits unsuccessfully
+					return EditorRestoreMsg{Content: value}
+				} else {
+					slog.Error("Failed to open editor", "error", err)
+					// Restore original content when editor fails to start
+					return EditorRestoreMsg{Content: value}
+				}
 			}
+
 			content, err := os.ReadFile(tmpfile.Name())
 			if err != nil {
 				slog.Error("Failed to read file", "error", err)
-				return nil
+				// Restore original content when file read fails
+				return EditorRestoreMsg{Content: value}
 			}
 			if len(content) == 0 {
 				slog.Warn("Message is empty")
-				return nil
+				// Restore original content when message is empty
+				return EditorRestoreMsg{Content: value}
 			}
-			os.Remove(tmpfile.Name())
 			return app.SendMsg{
 				Text: string(content),
 			}
