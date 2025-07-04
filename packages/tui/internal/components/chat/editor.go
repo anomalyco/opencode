@@ -84,7 +84,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
 
 			// Check if this is a valid custom command (not a built-in command)
-			if !commands.IsBuiltinCommand(commandName) && commands.IsValidCustomCommand(commandName, m.app.Info.Path.Config) {
+			if !commands.IsBuiltinCommand(commandName) && commands.IsValidCustomCommandWithClient(commandName, m.app.Info.Path.Config, m.app.CommandsClient) {
 				customCommandName := commandName
 				updated, cmd := m.Clear()
 				m = updated.(*editorComponent)

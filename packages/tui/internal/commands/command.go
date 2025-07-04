@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -305,6 +306,21 @@ func IsValidCustomCommand(commandName string, configPath string) bool {
 	}
 
 	return false
+}
+
+// IsValidCustomCommandWithClient checks if a custom command exists via server or filesystem
+func IsValidCustomCommandWithClient(commandName string, configPath string, client *CommandsClient) bool {
+	// Try server first if client is available
+	if client != nil {
+		ctx := context.Background()
+		exists, err := client.CustomCommandExists(ctx, commandName)
+		if err == nil {
+			return exists
+		}
+	}
+
+	// Fallback to local filesystem check
+	return IsValidCustomCommand(commandName, configPath)
 }
 
 func LoadFromConfig(config *opencode.Config) CommandRegistry {

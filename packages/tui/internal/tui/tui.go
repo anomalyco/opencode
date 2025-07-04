@@ -800,49 +800,69 @@ func (a appModel) parseCustomCommand(input string) (commandName, arguments strin
 
 // executeCustomCommandWithArgs executes a custom command with arguments
 func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (tea.Model, tea.Cmd) {
+	slog.Debug("Executing custom command with arguments", "command", commandName, "arguments", arguments)
+
+	// Try to execute command via server first
+	ctx := context.Background()
+	var args *string
+	if arguments != "" {
+		args = &arguments
+	}
+
+	result, err := a.app.CommandsClient.ExecuteCustomCommand(ctx, commandName, args)
+	if err == nil {
+		// Server execution successful
+		slog.Info("Custom command executed via server", "command", commandName)
+		cmd := a.app.SendChatMessage(context.Background(), result.ProcessedContent, []app.Attachment{})
+		return a, cmd
+	}
+
+	// Fallback to local execution if server is not available
+	slog.Warn("Server execution failed, falling back to local execution", "command", commandName, "error", err)
+
 	// Convert colon notation back to file path
 	filePath := strings.ReplaceAll(commandName, ":", string(filepath.Separator)) + ".md"
 
 	var commandFile string
 	var content []byte
-	var err error
+	var localErr error
 
 	// Try project-level commands first ($PWD/.opencode/commands)
 	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
 		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
 		projectCommandFile := filepath.Join(projectCommandsDir, filePath)
-		content, err = os.ReadFile(projectCommandFile)
-		if err == nil {
+		content, localErr = os.ReadFile(projectCommandFile)
+		if localErr == nil {
 			commandFile = projectCommandFile
 		}
 	}
 
 	// If not found in project, try global commands (~/.config/opencode/commands)
-	if err != nil {
+	if localErr != nil {
 		globalCommandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
 		globalCommandFile := filepath.Join(globalCommandsDir, filePath)
-		content, err = os.ReadFile(globalCommandFile)
-		if err == nil {
+		content, localErr = os.ReadFile(globalCommandFile)
+		if localErr == nil {
 			commandFile = globalCommandFile
 		}
 	}
 
-	if err != nil {
-		slog.Error("Failed to read custom command file", "command", commandName, "error", err)
+	if localErr != nil {
+		slog.Error("Failed to read custom command file", "command", commandName, "error", localErr)
 		return a, toast.NewErrorToast("Failed to read custom command: " + commandName)
 	}
 
-	slog.Debug("Executing custom command with arguments", "command", commandName, "file", commandFile, "arguments", arguments)
+	slog.Debug("Executing custom command locally", "command", commandName, "file", commandFile, "arguments", arguments)
 
 	// Replace $ARGUMENTS placeholder with actual arguments
 	contentStr := string(content)
 	contentStr = strings.ReplaceAll(contentStr, "$ARGUMENTS", arguments)
 
 	// Process bash commands if any exist
-	processedContent, err := a.processBashCommands(contentStr)
-	if err != nil {
-		slog.Error("Failed to process bash commands", "error", err)
-		return a, toast.NewErrorToast("Failed to process bash commands: " + err.Error())
+	processedContent, localErr := a.processBashCommands(contentStr)
+	if localErr != nil {
+		slog.Error("Failed to process bash commands", "error", localErr)
+		return a, toast.NewErrorToast("Failed to process bash commands: " + localErr.Error())
 	}
 
 	// Send the processed command content as a message to the LLM

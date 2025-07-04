@@ -14,6 +14,7 @@ import { NamedError } from "../util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
+import { Commands } from "../commands"
 
 const ERRORS = {
   400: {
@@ -521,6 +522,120 @@ export namespace Server {
             limit: 10,
           })
           return c.json(result)
+        },
+      )
+      .get(
+        "/commands",
+        describeRoute({
+          description: "List all available custom commands",
+          responses: {
+            200: {
+              description: "List of custom commands",
+              content: {
+                "application/json": {
+                  schema: resolver(Commands.CustomCommand.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Commands.listCustomCommands()
+          return c.json(commands)
+        },
+      )
+      .get(
+        "/commands/:name",
+        describeRoute({
+          description: "Get a specific custom command",
+          responses: {
+            200: {
+              description: "Custom command details",
+              content: {
+                "application/json": {
+                  schema: resolver(Commands.CustomCommand),
+                },
+              },
+            },
+            404: {
+              description: "Command not found",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      error: z.string(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            name: z.string(),
+          }),
+        ),
+        async (c) => {
+          const commandName = c.req.valid("param").name
+          const command = await Commands.getCustomCommand(commandName)
+          if (!command) {
+            return c.json({ error: "Command not found" }, 404)
+          }
+          return c.json(command)
+        },
+      )
+      .post(
+        "/commands/:name/execute",
+        describeRoute({
+          description: "Execute a custom command with optional arguments",
+          responses: {
+            200: {
+              description: "Command execution result",
+              content: {
+                "application/json": {
+                  schema: resolver(Commands.ExecuteCommandResponse),
+                },
+              },
+            },
+            404: {
+              description: "Command not found",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      error: z.string(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            name: z.string(),
+          }),
+        ),
+        zValidator("json", Commands.ExecuteCommandRequest),
+        async (c) => {
+          const commandName = c.req.valid("param").name
+          const body = c.req.valid("json")
+
+          try {
+            const result = await Commands.executeCustomCommand(
+              commandName,
+              body.arguments,
+            )
+            return c.json(result)
+          } catch (error) {
+            if (error instanceof Error && error.message.includes("not found")) {
+              return c.json({ error: error.message }, 404)
+            }
+            throw error
+          }
         },
       )
 

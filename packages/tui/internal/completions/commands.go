@@ -2,6 +2,7 @@ package completions
 
 import (
 	"bufio"
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -123,6 +124,28 @@ func parseMarkdownMetadata(filePath string) string {
 }
 
 func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, error) {
+	// Try to get commands from server first
+	ctx := context.Background()
+	serverCommands, err := c.app.CommandsClient.ListCustomCommands(ctx)
+	if err == nil {
+		// Convert server commands to local format
+		var commands []CustomCommandFile
+		for _, cmd := range serverCommands {
+			description := ""
+			if cmd.Description != nil {
+				description = *cmd.Description
+			}
+			commands = append(commands, CustomCommandFile{
+				Name:        cmd.Name,
+				Description: description,
+				Filename:    filepath.Base(cmd.FilePath),
+				Content:     cmd.Content,
+			})
+		}
+		return commands, nil
+	}
+
+	// Fallback to local filesystem scanning if server is not available
 	var commands []CustomCommandFile
 
 	// Get global commands from ~/.config/opencode/commands

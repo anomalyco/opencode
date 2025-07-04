@@ -25,17 +25,18 @@ var RootPath string
 var CwdPath string
 
 type App struct {
-	Info      opencode.App
-	Version   string
-	StatePath string
-	Config    *opencode.Config
-	Client    *opencode.Client
-	State     *config.State
-	Provider  *opencode.Provider
-	Model     *opencode.Model
-	Session   *opencode.Session
-	Messages  []opencode.Message
-	Commands  commands.CommandRegistry
+	Info           opencode.App
+	Version        string
+	StatePath      string
+	Config         *opencode.Config
+	Client         *opencode.Client
+	CommandsClient *commands.CommandsClient
+	State          *config.State
+	Provider       *opencode.Provider
+	Model          *opencode.Model
+	Session        *opencode.Session
+	Messages       []opencode.Message
+	Commands       commands.CommandRegistry
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -111,16 +112,20 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
+	// Create commands client - assuming server runs on same host with port 3000
+	commandsClient := commands.NewCommandsClient("http://localhost:3000")
+
 	app := &App{
-		Info:      appInfo,
-		Version:   version,
-		StatePath: appStatePath,
-		Config:    configInfo,
-		State:     appState,
-		Client:    httpClient,
-		Session:   &opencode.Session{},
-		Messages:  []opencode.Message{},
-		Commands:  commands.LoadFromConfig(configInfo),
+		Info:           appInfo,
+		Version:        version,
+		StatePath:      appStatePath,
+		Config:         configInfo,
+		State:          appState,
+		Client:         httpClient,
+		CommandsClient: commandsClient,
+		Session:        &opencode.Session{},
+		Messages:       []opencode.Message{},
+		Commands:       commands.LoadFromConfig(configInfo),
 	}
 
 	// Create example command file if commands directory doesn't exist
