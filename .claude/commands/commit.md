@@ -1,6 +1,6 @@
 ---
 description: Smart git commit command with contextual behavior
-allowed-tools: Bash(git status), Bash(git diff*), Bash(git log*), Bash(git add*), Bash(git commit*)
+allowed-tools: Bash(git status --short), Bash(git diff --cached), Bash(git diff), Bash(git log --oneline -5), Bash(git add*), Bash(git commit*)
 ---
 
 Handle git commits based on the provided arguments:
