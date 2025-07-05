@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test"
 import {
   McpAddCommand,
   McpRemoveCommand,
@@ -10,7 +10,6 @@ import {
 } from "../../src/cli/cmd/mcp"
 import { Config } from "../../src/config/config"
 import { Global } from "../../src/global"
-import { UI } from "../../src/cli/ui"
 import path from "path"
 import fs from "fs"
 
@@ -20,28 +19,86 @@ const testProjectDir = path.join(process.cwd(), "test-project")
 const testProjectConfigPath = path.join(testProjectDir, "opencode.json")
 
 let originalCwd: string
+let originalGlobalPath: string
+let configGlobalSpy: ReturnType<typeof spyOn> | undefined
+let configGetSpy: ReturnType<typeof spyOn> | undefined
+
+// Helper to capture stderr output
+function captureStderr() {
+  const outputs: string[] = []
+
+  const spy = spyOn(Bun.stderr, "write").mockImplementation(async (data) => {
+    if (typeof data === "string") {
+      outputs.push(data)
+    } else if (data instanceof Uint8Array) {
+      outputs.push(new TextDecoder().decode(data))
+    } else {
+      outputs.push(String(data))
+    }
+    return typeof data === "string" ? data.length : 0
+  })
+
+  return {
+    getOutput: () => outputs.join(""),
+    restore: () => spy.mockRestore(),
+  }
+}
 
 beforeEach(async () => {
   // Create test directories
   await fs.promises.mkdir(testConfigDir, { recursive: true })
   await fs.promises.mkdir(testProjectDir, { recursive: true })
 
+  // Store original values
+  originalGlobalPath = Global.Path.config
+  originalCwd = process.cwd()
+
   // Mock Global.Path.config to use test directory
-  // @ts-expect-error
+  // @ts-expect-error - Mocking for tests
   Global.Path.config = testConfigDir
 
   // Mock process.cwd to use test project directory
-  originalCwd = process.cwd()
   process.cwd = () => testProjectDir
 
-  // Create empty configs
+  // Create empty configs with proper structure
   await Bun.write(testConfigPath, JSON.stringify({}, null, 2))
   await Bun.write(testProjectConfigPath, JSON.stringify({}, null, 2))
+
+  // Spy on Config.global to use test config
+  configGlobalSpy = spyOn(Config, "global").mockImplementation(async () => {
+    try {
+      const file = Bun.file(testConfigPath)
+      const data = await file.json()
+      return data
+    } catch (error) {
+      return {}
+    }
+  })
+
+  // Spy on Config.get to use test configs (merged global + project)
+  configGetSpy = spyOn(Config, "get").mockImplementation(async () => {
+    const globalConfig = await configGlobalSpy!()
+    let projectConfig = {}
+    try {
+      const file = Bun.file(testProjectConfigPath)
+      projectConfig = await file.json()
+    } catch (error) {
+      // Project config doesn't exist yet
+    }
+    // Simple merge - project config takes precedence
+    return { ...globalConfig, ...projectConfig }
+  })
 })
 
 afterEach(async () => {
-  // Restore original process.cwd
+  // Restore original values
   process.cwd = () => originalCwd
+  // @ts-expect-error - Restoring mocked value
+  Global.Path.config = originalGlobalPath
+
+  // Restore spies
+  configGlobalSpy?.mockRestore()
+  configGetSpy?.mockRestore()
 
   // Clean up test directories
   await fs.promises.rm(testConfigDir, { recursive: true, force: true })
@@ -65,11 +122,9 @@ describe("mcp command", () => {
     await McpAddCommand.handler(args)
 
     // Read project config
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
+    const projectConfig = await Config.get()
     expect(projectConfig.mcp).toBeDefined()
-    expect(projectConfig.mcp["test-server"]).toMatchObject({
+    expect(projectConfig.mcp?.["test-server"]).toMatchObject({
       type: "local",
       command: ["node", "server.js"],
       environment: {
@@ -96,7 +151,7 @@ describe("mcp command", () => {
 
     const config = await Config.global()
     expect(config.mcp).toBeDefined()
-    expect(config.mcp!["remote-server"]).toMatchObject({
+    expect(config.mcp?.["remote-server"]).toMatchObject({
       type: "remote",
       url: "https://example.com/mcp",
       headers: {
@@ -120,10 +175,8 @@ describe("mcp command", () => {
 
     await McpAddCommand.handler(args)
 
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
-    expect(projectConfig.mcp["sse-server"]).toMatchObject({
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["sse-server"]).toMatchObject({
       type: "remote",
       url: "http://localhost:8080/mcp",
       headers: {
@@ -134,11 +187,7 @@ describe("mcp command", () => {
   })
 
   test("validate transport constraints", async () => {
-    const originalError = UI.error
-    let errorMessage = ""
-    UI.error = (msg: string) => {
-      errorMessage = msg
-    }
+    const stderr = captureStderr()
 
     // Test stdio with URL should fail
     const args = {
@@ -154,11 +203,12 @@ describe("mcp command", () => {
     }
 
     await McpAddCommand.handler(args)
-    expect(errorMessage).toContain(
+
+    expect(stderr.getOutput()).toContain(
       "stdio transport requires a command, not a URL",
     )
 
-    UI.error = originalError
+    stderr.restore()
   })
 
   test("add server to user scope", async () => {
@@ -178,7 +228,7 @@ describe("mcp command", () => {
 
     const config = await Config.global()
     expect(config.mcp).toBeDefined()
-    expect(config.mcp!["user-server"]).toMatchObject({
+    expect(config.mcp?.["user-server"]).toMatchObject({
       type: "local",
       command: ["bun", "run", "server.ts"],
       environment: {
@@ -213,9 +263,7 @@ describe("mcp command", () => {
     }
     await McpRemoveCommand.handler(args)
 
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
+    const projectConfig = await Config.get()
     expect(projectConfig.mcp).toBeUndefined()
   })
 
@@ -250,11 +298,7 @@ describe("mcp command", () => {
   })
 
   test("remove non-existent MCP server shows error", async () => {
-    const originalError = UI.error
-    let errorMessage = ""
-    UI.error = (msg: string) => {
-      errorMessage = msg
-    }
+    const stderr = captureStderr()
 
     const args = {
       name: "non-existent",
@@ -264,11 +308,11 @@ describe("mcp command", () => {
     }
     await McpRemoveCommand.handler(args)
 
-    expect(errorMessage).toContain(
+    expect(stderr.getOutput()).toContain(
       'MCP server "non-existent" not found in project config',
     )
 
-    UI.error = originalError
+    stderr.restore()
   })
 
   test("add server with JSON to project scope", async () => {
@@ -286,10 +330,8 @@ describe("mcp command", () => {
 
     await McpAddJsonCommand.handler(args)
 
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
-    expect(projectConfig.mcp["json-server"]).toMatchObject({
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["json-server"]).toMatchObject({
       type: "local",
       command: ["bun", "run", "mcp-server.ts"],
       environment: { DEBUG: "true" },
@@ -312,7 +354,7 @@ describe("mcp command", () => {
     await McpAddJsonCommand.handler(args)
 
     const config = await Config.global()
-    expect(config.mcp!["user-json-server"]).toMatchObject({
+    expect(config.mcp?.["user-json-server"]).toMatchObject({
       type: "remote",
       url: "https://example.com/mcp",
       headers: { Authorization: "Bearer token" },
@@ -320,16 +362,12 @@ describe("mcp command", () => {
   })
 
   test("list empty MCP servers", async () => {
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     await McpListCommand.handler({ $0: "opencode", _: [] })
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("No MCP servers configured"))).toBe(
-      true,
-    )
+    expect(stderr.getOutput()).toContain("No MCP servers configured")
+    stderr.restore()
   })
 
   test("list global and project MCP servers", async () => {
@@ -367,17 +405,16 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     await McpListCommand.handler({ $0: "opencode", _: [] })
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("Global MCP servers:"))).toBe(true)
-    expect(logs.some((log) => log.includes("Project MCP servers:"))).toBe(true)
-    expect(logs.some((log) => log.includes("global-server"))).toBe(true)
-    expect(logs.some((log) => log.includes("project-server"))).toBe(true)
+    const output = stderr.getOutput()
+    expect(output).toContain("Global MCP servers:")
+    expect(output).toContain("Project MCP servers:")
+    expect(output).toContain("global-server")
+    expect(output).toContain("project-server")
+    stderr.restore()
   })
 
   test("get MCP server details from user scope", async () => {
@@ -399,9 +436,7 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     const args = {
       name: "detail-server",
@@ -410,13 +445,12 @@ describe("mcp command", () => {
     }
     await McpGetCommand.handler(args)
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("MCP Server: detail-server"))).toBe(
-      true,
-    )
-    expect(logs.some((log) => log.includes("Scope: user"))).toBe(true)
-    expect(logs.some((log) => log.includes("Type: local"))).toBe(true)
-    expect(logs.some((log) => log.includes("Enabled: true"))).toBe(true)
+    const output = stderr.getOutput()
+    expect(output).toContain("MCP Server: detail-server")
+    expect(output).toContain("Scope: user")
+    expect(output).toContain("Type: local")
+    expect(output).toContain("Enabled: true")
+    stderr.restore()
   })
 
   test("get MCP server details from project scope", async () => {
@@ -438,9 +472,7 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     const args = {
       name: "project-server",
@@ -449,14 +481,13 @@ describe("mcp command", () => {
     }
     await McpGetCommand.handler(args)
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("MCP Server: project-server"))).toBe(
-      true,
-    )
-    expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
-    expect(logs.some((log) => log.includes("Type: remote"))).toBe(true)
-    expect(logs.some((log) => log.includes("Enabled: true"))).toBe(true)
-    expect(logs.some((log) => log.includes("Headers:"))).toBe(true)
+    const output = stderr.getOutput()
+    expect(output).toContain("MCP Server: project-server")
+    expect(output).toContain("Scope: project")
+    expect(output).toContain("Type: remote")
+    expect(output).toContain("Enabled: true")
+    expect(output).toContain("Headers:")
+    stderr.restore()
   })
 
   test("get MCP server prioritizes project over user scope", async () => {
@@ -493,9 +524,7 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     const args = {
       name: "shared-server",
@@ -504,10 +533,11 @@ describe("mcp command", () => {
     }
     await McpGetCommand.handler(args)
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("Scope: project"))).toBe(true)
-    expect(logs.some((log) => log.includes("project-server.js"))).toBe(true)
-    expect(logs.some((log) => log.includes("user-server.js"))).toBe(false)
+    const output = stderr.getOutput()
+    expect(output).toContain("Scope: project")
+    expect(output).toContain("project-server.js")
+    expect(output).not.toContain("user-server.js")
+    stderr.restore()
   })
 
   test("enable MCP server in project scope", async () => {
@@ -537,10 +567,8 @@ describe("mcp command", () => {
     }
     await McpEnableCommand.handler(args)
 
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
-    expect(projectConfig.mcp["disabled-server"].enabled).toBe(true)
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["disabled-server"].enabled).toBe(true)
   })
 
   test("enable MCP server in user scope", async () => {
@@ -571,7 +599,7 @@ describe("mcp command", () => {
     await McpEnableCommand.handler(args)
 
     const config = await Config.global()
-    expect(config.mcp!["user-disabled-server"].enabled).toBe(true)
+    expect(config.mcp?.["user-disabled-server"].enabled).toBe(true)
   })
 
   test("disable MCP server in project scope", async () => {
@@ -601,10 +629,8 @@ describe("mcp command", () => {
     }
     await McpDisableCommand.handler(args)
 
-    const projectConfig = JSON.parse(
-      await Bun.file(testProjectConfigPath).text(),
-    )
-    expect(projectConfig.mcp["enabled-server"].enabled).toBe(false)
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["enabled-server"].enabled).toBe(false)
   })
 
   test("disable MCP server in user scope", async () => {
@@ -635,15 +661,11 @@ describe("mcp command", () => {
     await McpDisableCommand.handler(args)
 
     const config = await Config.global()
-    expect(config.mcp!["user-enabled-server"].enabled).toBe(false)
+    expect(config.mcp?.["user-enabled-server"].enabled).toBe(false)
   })
 
   test("enable non-existent MCP server shows error", async () => {
-    const originalError = UI.error
-    let errorMessage = ""
-    UI.error = (msg: string) => {
-      errorMessage = msg
-    }
+    const stderr = captureStderr()
 
     const args = {
       name: "non-existent",
@@ -653,19 +675,15 @@ describe("mcp command", () => {
     }
     await McpEnableCommand.handler(args)
 
-    expect(errorMessage).toContain(
+    expect(stderr.getOutput()).toContain(
       'MCP server "non-existent" not found in project config',
     )
 
-    UI.error = originalError
+    stderr.restore()
   })
 
   test("disable non-existent MCP server shows error", async () => {
-    const originalError = UI.error
-    let errorMessage = ""
-    UI.error = (msg: string) => {
-      errorMessage = msg
-    }
+    const stderr = captureStderr()
 
     const args = {
       name: "non-existent",
@@ -675,11 +693,11 @@ describe("mcp command", () => {
     }
     await McpDisableCommand.handler(args)
 
-    expect(errorMessage).toContain(
+    expect(stderr.getOutput()).toContain(
       'MCP server "non-existent" not found in user config',
     )
 
-    UI.error = originalError
+    stderr.restore()
   })
 
   test("list shows disabled status for MCP servers", async () => {
@@ -710,22 +728,15 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     await McpListCommand.handler({ $0: "opencode", _: [] })
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("enabled-server (local)"))).toBe(
-      true,
-    )
-    expect(
-      logs.some((log) => log.includes("disabled-server (local) (disabled)")),
-    ).toBe(true)
-    expect(logs.some((log) => log.includes("default-server (local)"))).toBe(
-      true,
-    )
+    const output = stderr.getOutput()
+    expect(output).toContain("enabled-server (local)")
+    expect(output).toContain("disabled-server (local) (disabled)")
+    expect(output).toContain("default-server (local)")
+    stderr.restore()
   })
 
   test("get shows enabled status for MCP servers", async () => {
@@ -747,9 +758,7 @@ describe("mcp command", () => {
       ),
     )
 
-    const originalPrintln = UI.println
-    const logs: string[] = []
-    UI.println = (...messages: string[]) => logs.push(messages.join(" "))
+    const stderr = captureStderr()
 
     const args = {
       name: "status-server",
@@ -758,7 +767,8 @@ describe("mcp command", () => {
     }
     await McpGetCommand.handler(args)
 
-    UI.println = originalPrintln
-    expect(logs.some((log) => log.includes("Enabled: false"))).toBe(true)
+    const output = stderr.getOutput()
+    expect(output).toContain("Enabled: false")
+    stderr.restore()
   })
 })
