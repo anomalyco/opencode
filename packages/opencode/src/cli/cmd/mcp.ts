@@ -28,28 +28,12 @@ export const McpCommand = cmd({
       .command(McpAddJsonCommand)
       .command(McpEnableCommand)
       .command(McpDisableCommand)
+      .demandCommand()
       .help()
 
     return configured
   },
-  handler: () => {
-    // Show help if no subcommand provided
-    console.log(`Usage: opencode mcp [options] [command]
-
-Configure and manage MCP servers
-
-Options:
-  -h, --help                                     Display help for command
-
-Commands:
-  add [options] <name> <commandOrUrl> [args...]  Add a server
-  remove [options] <name>                        Remove an MCP server
-  list                                           List configured MCP servers
-  get <name>                                     Get details about an MCP server
-  add-json [options] <name> <json>               Add an MCP server (stdio or SSE) with a JSON string
-  enable [options] <name>                        Enable an MCP server
-  disable [options] <name>                       Disable an MCP server`)
-  },
+  handler: async () => {},
 })
 
 export const McpAddCommand = cmd({
