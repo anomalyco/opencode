@@ -32,9 +32,10 @@ import (
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
 
-// EditorRestoreMsg is sent when the external editor fails and we need to restore the original content
-type EditorRestoreMsg struct {
-	Content string
+// EditorSuccessMsg is sent when the external editor succeeds and we should clear textarea and send the message
+type EditorSuccessMsg struct {
+	Text        string
+	Attachments []opencode.FilePartParam
 }
 
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
@@ -491,9 +492,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset interrupt key state after timeout
 		a.interruptKeyState = InterruptKeyIdle
 		a.editor.SetInterruptKeyInDebounce(false)
-	case EditorRestoreMsg:
-		// Restore the original content to the textarea when editor fails
-		a.editor.SetValue(msg.Content)
+	case EditorSuccessMsg:
+		// Clear the textarea and send the message when editor succeeds
+		updated, cmd := a.editor.Clear()
+		a.editor = updated.(chat.EditorComponent)
+		cmds = append(cmds, cmd)
+		cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: msg.Text, Attachments: msg.Attachments}))
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
 	}
@@ -781,9 +785,6 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		}
 
 		value := a.editor.Value()
-		updated, cmd := a.editor.Clear()
-		a.editor = updated.(chat.EditorComponent)
-		cmds = append(cmds, cmd)
 
 		tmpfile, err := os.CreateTemp("", "msg_*.md")
 		tmpfile.WriteString(value)
@@ -803,28 +804,30 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			if err != nil {
 				if exitError, ok := err.(*exec.ExitError); ok {
 					slog.Warn("Editor exited with non-zero status", "exitCode", exitError.ExitCode())
-					// Restore original content when editor exits unsuccessfully
-					return EditorRestoreMsg{Content: value}
+					// Don't clear textarea on failure
+					return nil
 				} else {
 					slog.Error("Failed to open editor", "error", err)
-					// Restore original content when editor fails to start
-					return EditorRestoreMsg{Content: value}
+					// Don't clear textarea on failure
+					return nil
 				}
 			}
 
 			content, err := os.ReadFile(tmpfile.Name())
 			if err != nil {
 				slog.Error("Failed to read file", "error", err)
-				// Restore original content when file read fails
-				return EditorRestoreMsg{Content: value}
+				// Don't clear textarea on failure
+				return nil
 			}
 			if len(content) == 0 {
 				slog.Warn("Message is empty")
-				// Restore original content when message is empty
-				return EditorRestoreMsg{Content: value}
+				// Don't clear textarea on failure
+				return nil
 			}
-			return app.SendMsg{
-				Text: string(content),
+			// Only clear and send if everything succeeded
+			return EditorSuccessMsg{
+				Text:        string(content),
+				Attachments: []opencode.FilePartParam{}, // attachments,
 			}
 		})
 		cmds = append(cmds, cmd)
