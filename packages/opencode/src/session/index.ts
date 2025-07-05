@@ -1,40 +1,43 @@
-import path from "path"
-import { App } from "../app/app"
-import { Identifier } from "../id/id"
-import { Storage } from "../storage/storage"
-import { Log } from "../util/log"
+import path from "node:path"
+import { Decimal } from "decimal.js"
+import { z, ZodSchema } from "zod"
 import {
   generateText,
   LoadAPIKeyError,
   convertToCoreMessages,
   streamText,
   tool,
+  wrapLanguageModel,
   type Tool as AITool,
   type LanguageModelUsage,
   type CoreMessage,
   type UIMessage,
   type ProviderMetadata,
-  wrapLanguageModel,
+  type Attachment,
 } from "ai"
-import { z, ZodSchema } from "zod"
-import { Decimal } from "decimal.js"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
-import { Share } from "../share/share"
-import { Message } from "./message"
+import { App } from "../app/app"
 import { Bus } from "../bus"
-import { Provider } from "../provider/provider"
-import { MCP } from "../mcp"
-import { NamedError } from "../util/error"
-import type { Tool } from "../tool/tool"
-import { SystemPrompt } from "./system"
-import { Flag } from "../flag/flag"
-import type { ModelsDev } from "../provider/models"
-import { Installation } from "../installation"
 import { Config } from "../config/config"
+import { Flag } from "../flag/flag"
+import { Identifier } from "../id/id"
+import { Installation } from "../installation"
+import { MCP } from "../mcp"
+import { Provider } from "../provider/provider"
 import { ProviderTransform } from "../provider/transform"
 import { FileReference } from "../util/file-reference"
+import type { ModelsDev } from "../provider/models"
+import { Share } from "../share/share"
+import { Snapshot } from "../snapshot"
+import { Storage } from "../storage/storage"
+import type { Tool } from "../tool/tool"
+import { Log } from "../util/log"
+import { NamedError } from "../util/error"
+import { Message } from "./message"
+import { SystemPrompt } from "./system"
+import { FileTime } from "../file/time"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -54,6 +57,13 @@ export namespace Session {
         created: z.number(),
         updated: z.number(),
       }),
+      revert: z
+        .object({
+          messageID: z.string(),
+          part: z.number(),
+          snapshot: z.string().optional(),
+        })
+        .optional(),
     })
     .openapi({
       ref: "Session",
@@ -178,11 +188,13 @@ export namespace Session {
   }
 
   export async function unshare(id: string) {
+    const share = await getShare(id)
+    if (!share) return
     await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id)
+    await Share.remove(id, share.secret)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -286,6 +298,37 @@ export namespace Session {
     l.info("chatting")
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
+    const session = await get(input.sessionID)
+
+    if (session.revert) {
+      const trimmed = []
+      for (const msg of msgs) {
+        if (
+          msg.id > session.revert.messageID ||
+          (msg.id === session.revert.messageID && session.revert.part === 0)
+        ) {
+          await Storage.remove(
+            "session/message/" + input.sessionID + "/" + msg.id,
+          )
+          await Bus.publish(Message.Event.Removed, {
+            sessionID: input.sessionID,
+            messageID: msg.id,
+          })
+          continue
+        }
+
+        if (msg.id === session.revert.messageID) {
+          if (session.revert.part === 0) break
+          msg.parts = msg.parts.slice(0, session.revert.part)
+        }
+        trimmed.push(msg)
+      }
+      msgs = trimmed
+      await update(input.sessionID, (draft) => {
+        draft.revert = undefined
+      })
+    }
+
     const previous = msgs.at(-1)
 
     // auto summarize if too long
@@ -326,15 +369,68 @@ export namespace Session {
           const { processedText } = await FileReference.resolve(part.text)
           return {
             ...part,
-            text: processedText
+            text: processedText,
           }
         }
         return part
-      })
+      }),
     )
 
     const app = App.info()
-    const session = await get(input.sessionID)
+    input.parts = await Promise.all(
+      input.parts.map(async (part): Promise<Message.MessagePart[]> => {
+        if (part.type === "file") {
+          const url = new URL(part.url)
+          switch (url.protocol) {
+            case "file:":
+              const filepath = path.join(app.path.cwd, url.pathname)
+              let file = Bun.file(filepath)
+
+              if (part.mediaType === "text/plain") {
+                let text = await file.text()
+                const range = {
+                  start: url.searchParams.get("start"),
+                  end: url.searchParams.get("end"),
+                }
+                if (range.start != null && part.mediaType === "text/plain") {
+                  const lines = text.split("\n")
+                  const start = parseInt(range.start)
+                  const end = range.end ? parseInt(range.end) : lines.length
+                  text = lines.slice(start, end).join("\n")
+                }
+                FileTime.read(input.sessionID, filepath)
+                return [
+                  {
+                    type: "text",
+                    text: [
+                      "Called the Read tool on " + url.pathname,
+                      "<results>",
+                      text,
+                      "</results>",
+                    ].join("\n"),
+                  },
+                ]
+              }
+
+              return [
+                {
+                  type: "text",
+                  text: ["Called the Read tool on " + url.pathname].join("\n"),
+                },
+                {
+                  type: "file",
+                  url:
+                    `data:${part.mediaType};base64,` +
+                    Buffer.from(await file.bytes()).toString("base64url"),
+                  mediaType: part.mediaType,
+                  filename: part.filename!,
+                },
+              ]
+          }
+        }
+        return [part]
+      }),
+    ).then((x) => x.flat())
     if (msgs.length === 0 && !session.parentID) {
       generateText({
         maxTokens: input.providerID === "google" ? 1024 : 20,
@@ -350,7 +446,7 @@ export namespace Session {
             {
               role: "user",
               content: "",
-              parts: toParts(input.parts),
+              parts: toParts(input.parts).parts,
             },
           ]),
         ],
@@ -364,6 +460,7 @@ export namespace Session {
         })
         .catch(() => {})
     }
+    const snapshot = await Snapshot.create(input.sessionID)
     const msg: Message.Info = {
       role: "user",
       id: Identifier.ascending("message"),
@@ -374,6 +471,7 @@ export namespace Session {
         },
         sessionID: input.sessionID,
         tool: {},
+        snapshot,
       },
     }
     await updateMessage(msg)
@@ -388,6 +486,7 @@ export namespace Session {
       role: "assistant",
       parts: [],
       metadata: {
+        snapshot,
         assistant: {
           system,
           path: {
@@ -439,6 +538,7 @@ export namespace Session {
             })
             next.metadata!.tool![opts.toolCallId] = {
               ...result.metadata,
+              snapshot: await Snapshot.create(input.sessionID),
               time: {
                 start,
                 end: Date.now(),
@@ -451,6 +551,7 @@ export namespace Session {
               error: true,
               message: e.toString(),
               title: e.toString(),
+              snapshot: await Snapshot.create(input.sessionID),
               time: {
                 start,
                 end: Date.now(),
@@ -472,6 +573,7 @@ export namespace Session {
           const result = await execute(args, opts)
           next.metadata!.tool![opts.toolCallId] = {
             ...result.metadata,
+            snapshot: await Snapshot.create(input.sessionID),
             time: {
               start,
               end: Date.now(),
@@ -486,6 +588,7 @@ export namespace Session {
           next.metadata!.tool![opts.toolCallId] = {
             error: true,
             message: e.toString(),
+            snapshot: await Snapshot.create(input.sessionID),
             title: "mcp",
             time: {
               start,
@@ -553,6 +656,7 @@ export namespace Session {
       //   return step
       // },
       toolCallStreaming: true,
+      maxRetries: 10,
       maxTokens: Math.max(0, model.info.limit.output) || undefined,
       abortSignal: abort.signal,
       maxSteps: 1000,
@@ -748,6 +852,51 @@ export namespace Session {
     }
     await updateMessage(next)
     return next
+  }
+
+  export async function revert(input: {
+    sessionID: string
+    messageID: string
+    part: number
+  }) {
+    const message = await getMessage(input.sessionID, input.messageID)
+    if (!message) return
+    const part = message.parts[input.part]
+    if (!part) return
+    const session = await get(input.sessionID)
+    const snapshot =
+      session.revert?.snapshot ?? (await Snapshot.create(input.sessionID))
+    const old = (() => {
+      if (message.role === "assistant") {
+        const lastTool = message.parts.findLast(
+          (part, index) =>
+            part.type === "tool-invocation" && index < input.part,
+        )
+        if (lastTool && lastTool.type === "tool-invocation")
+          return message.metadata.tool[lastTool.toolInvocation.toolCallId]
+            .snapshot
+      }
+      return message.metadata.snapshot
+    })()
+    if (old) await Snapshot.restore(input.sessionID, old)
+    await update(input.sessionID, (draft) => {
+      draft.revert = {
+        messageID: input.messageID,
+        part: input.part,
+        snapshot,
+      }
+    })
+  }
+
+  export async function unrevert(sessionID: string) {
+    const session = await get(sessionID)
+    if (!session) return
+    if (!session.revert) return
+    if (session.revert.snapshot)
+      await Snapshot.restore(sessionID, session.revert.snapshot)
+    update(sessionID, (draft) => {
+      draft.revert = undefined
+    })
   }
 
   export async function summarize(input: {
@@ -949,7 +1098,7 @@ function toUIMessage(msg: Message.Info): UIMessage {
       id: msg.id,
       role: "assistant",
       content: "",
-      parts: toParts(msg.parts),
+      ...toParts(msg.parts),
     }
   }
 
@@ -958,35 +1107,41 @@ function toUIMessage(msg: Message.Info): UIMessage {
       id: msg.id,
       role: "user",
       content: "",
-      parts: toParts(msg.parts),
+      ...toParts(msg.parts),
     }
   }
 
   throw new Error("not implemented")
 }
 
-function toParts(parts: Message.MessagePart[]): UIMessage["parts"] {
-  const result: UIMessage["parts"] = []
+function toParts(parts: Message.MessagePart[]) {
+  const result: {
+    parts: UIMessage["parts"]
+    experimental_attachments: Attachment[]
+  } = {
+    parts: [],
+    experimental_attachments: [],
+  }
   for (const part of parts) {
     switch (part.type) {
       case "text":
-        result.push({ type: "text", text: part.text })
+        result.parts.push({ type: "text", text: part.text })
         break
       case "file":
-        result.push({
-          type: "file",
-          data: part.url,
-          mimeType: part.mediaType,
+        result.experimental_attachments.push({
+          url: part.url,
+          contentType: part.mediaType,
+          name: part.filename,
         })
         break
       case "tool-invocation":
-        result.push({
+        result.parts.push({
           type: "tool-invocation",
           toolInvocation: part.toolInvocation,
         })
         break
       case "step-start":
-        result.push({
+        result.parts.push({
           type: "step-start",
         })
         break

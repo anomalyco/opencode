@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -73,44 +74,6 @@ type linePair struct {
 	right *DiffLine
 }
 
-// -------------------------------------------------------------------------
-// Side-by-Side Configuration
-// -------------------------------------------------------------------------
-
-// SideBySideConfig configures the rendering of side-by-side diffs
-type SideBySideConfig struct {
-	TotalWidth int
-}
-
-// SideBySideOption modifies a SideBySideConfig
-type SideBySideOption func(*SideBySideConfig)
-
-// NewSideBySideConfig creates a SideBySideConfig with default values
-func NewSideBySideConfig(opts ...SideBySideOption) SideBySideConfig {
-	config := SideBySideConfig{
-		TotalWidth: 160, // Default width for side-by-side view
-	}
-
-	for _, opt := range opts {
-		opt(&config)
-	}
-
-	return config
-}
-
-// WithTotalWidth sets the total width for side-by-side view
-func WithTotalWidth(width int) SideBySideOption {
-	return func(s *SideBySideConfig) {
-		if width > 0 {
-			s.TotalWidth = width
-		}
-	}
-}
-
-// -------------------------------------------------------------------------
-// Unified Configuration
-// -------------------------------------------------------------------------
-
 // UnifiedConfig configures the rendering of unified diffs
 type UnifiedConfig struct {
 	Width int
@@ -122,13 +85,22 @@ type UnifiedOption func(*UnifiedConfig)
 // NewUnifiedConfig creates a UnifiedConfig with default values
 func NewUnifiedConfig(opts ...UnifiedOption) UnifiedConfig {
 	config := UnifiedConfig{
-		Width: 80, // Default width for unified view
+		Width: 80,
 	}
-
 	for _, opt := range opts {
 		opt(&config)
 	}
+	return config
+}
 
+// NewSideBySideConfig creates a SideBySideConfig with default values
+func NewSideBySideConfig(opts ...UnifiedOption) UnifiedConfig {
+	config := UnifiedConfig{
+		Width: 160,
+	}
+	for _, opt := range opts {
+		opt(&config)
+	}
 	return config
 }
 
@@ -604,7 +576,10 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 			ansiSequences[visibleIdx] = lastAnsiSeq
 		}
 		visibleIdx++
-		i++
+
+		// Properly advance by UTF-8 rune, not byte
+		_, size := utf8.DecodeRuneInString(content[i:])
+		i += size
 	}
 
 	// Apply highlighting
@@ -651,8 +626,9 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 			}
 		}
 
-		// Get current character
-		char := string(content[i])
+		// Get current character (properly handle UTF-8)
+		r, size := utf8.DecodeRuneInString(content[i:])
+		char := string(r)
 
 		if inSelection {
 			// Get the current styling
@@ -686,7 +662,7 @@ func applyHighlighting(content string, segments []Segment, segmentType LineType,
 		}
 
 		currentPos++
-		i++
+		i += size
 	}
 
 	return sb.String()
@@ -907,7 +883,7 @@ func RenderUnifiedHunk(fileName string, h Hunk, opts ...UnifiedOption) string {
 }
 
 // RenderSideBySideHunk formats a hunk for side-by-side display
-func RenderSideBySideHunk(fileName string, h Hunk, opts ...SideBySideOption) string {
+func RenderSideBySideHunk(fileName string, h Hunk, opts ...UnifiedOption) string {
 	// Apply options to create the configuration
 	config := NewSideBySideConfig(opts...)
 
@@ -922,10 +898,10 @@ func RenderSideBySideHunk(fileName string, h Hunk, opts ...SideBySideOption) str
 	pairs := pairLines(hunkCopy.Lines)
 
 	// Calculate column width
-	colWidth := config.TotalWidth / 2
+	colWidth := config.Width / 2
 
 	leftWidth := colWidth
-	rightWidth := config.TotalWidth - colWidth
+	rightWidth := config.Width - colWidth
 	var sb strings.Builder
 
 	util.WriteStringsPar(&sb, pairs, func(p linePair) string {
@@ -963,7 +939,7 @@ func FormatUnifiedDiff(filename string, diffText string, opts ...UnifiedOption) 
 }
 
 // FormatDiff creates a side-by-side formatted view of a diff
-func FormatDiff(filename string, diffText string, opts ...SideBySideOption) (string, error) {
+func FormatDiff(filename string, diffText string, opts ...UnifiedOption) (string, error) {
 	diffResult, err := ParseUnifiedDiff(diffText)
 	if err != nil {
 		return "", err

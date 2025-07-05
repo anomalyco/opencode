@@ -21,9 +21,6 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
-var RootPath string
-var CwdPath string
-
 type App struct {
 	Info           opencode.App
 	Version        string
@@ -40,6 +37,7 @@ type App struct {
 }
 
 type SessionSelectedMsg = *opencode.Session
+type SessionLoadedMsg struct{}
 type ModelSelectedMsg struct {
 	Provider opencode.Provider
 	Model    opencode.Model
@@ -48,13 +46,13 @@ type SessionClearedMsg struct{}
 type CompactSessionMsg struct{}
 type SendMsg struct {
 	Text        string
-	Attachments []Attachment
-}
-type CompletionDialogTriggeredMsg struct {
-	InitialValue string
+	Attachments []opencode.FilePartParam
 }
 type OptimisticMessageAddedMsg struct {
 	Message opencode.Message
+}
+type FileRenderedMsg struct {
+	FilePath string
 }
 
 func New(
@@ -63,8 +61,8 @@ func New(
 	appInfo opencode.App,
 	httpClient *opencode.Client,
 ) (*App, error) {
-	RootPath = appInfo.Path.Root
-	CwdPath = appInfo.Path.Cwd
+	util.RootPath = appInfo.Path.Root
+	util.CwdPath = appInfo.Path.Cwd
 
 	configInfo, err := httpClient.Config.Get(ctx)
 	if err != nil {
@@ -134,6 +132,23 @@ func New(
 	return app, nil
 }
 
+func (a *App) Key(commandName commands.CommandName) string {
+	t := theme.CurrentTheme()
+	base := styles.NewStyle().Background(t.Background()).Foreground(t.Text()).Bold(true).Render
+	muted := styles.NewStyle().
+		Background(t.Background()).
+		Foreground(t.TextMuted()).
+		Faint(true).
+		Render
+	command := a.Commands[commandName]
+	kb := command.Keybindings[0]
+	key := kb.Key
+	if kb.RequiresLeader {
+		key = a.Config.Keybinds.Leader + " " + kb.Key
+	}
+	return base(key) + muted(" "+command.Description)
+}
+
 func (a *App) InitializeProvider() tea.Cmd {
 	return func() tea.Msg {
 		providersResponse, err := a.Client.Config.Providers(context.Background())
@@ -196,7 +211,10 @@ func (a *App) InitializeProvider() tea.Cmd {
 	}
 }
 
-func getDefaultModel(response *opencode.ConfigProvidersResponse, provider opencode.Provider) *opencode.Model {
+func getDefaultModel(
+	response *opencode.ConfigProvidersResponse,
+	provider opencode.Provider,
+) *opencode.Model {
 	if match, ok := response.Default[provider.ID]; ok {
 		model := provider.Models[match]
 		return &model
@@ -206,13 +224,6 @@ func getDefaultModel(response *opencode.ConfigProvidersResponse, provider openco
 		}
 	}
 	return nil
-}
-
-type Attachment struct {
-	FilePath string
-	FileName string
-	MimeType string
-	Content  []byte
 }
 
 func (a *App) IsBusy() bool {
@@ -287,24 +298,40 @@ func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
 	return session, nil
 }
 
-func (a *App) SendChatMessage(ctx context.Context, text string, attachments []Attachment) tea.Cmd {
+func (a *App) SendChatMessage(
+	ctx context.Context,
+	text string,
+	attachments []opencode.FilePartParam,
+) (*App, tea.Cmd) {
 	var cmds []tea.Cmd
 	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
-			return toast.NewErrorToast(err.Error())
+			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
 		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
 	}
 
+	optimisticParts := []opencode.MessagePart{{
+		Type: opencode.MessagePartTypeText,
+		Text: text,
+	}}
+	if len(attachments) > 0 {
+		for _, attachment := range attachments {
+			optimisticParts = append(optimisticParts, opencode.MessagePart{
+				Type:      opencode.MessagePartTypeFile,
+				Filename:  attachment.Filename.Value,
+				MediaType: attachment.MediaType.Value,
+				URL:       attachment.URL.Value,
+			})
+		}
+	}
+
 	optimisticMessage := opencode.Message{
-		ID:   fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role: opencode.MessageRoleUser,
-		Parts: []opencode.MessagePart{{
-			Type: opencode.MessagePartTypeText,
-			Text: text,
-		}},
+		ID:    fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
+		Role:  opencode.MessageRoleUser,
+		Parts: optimisticParts,
 		Metadata: opencode.MessageMetadata{
 			SessionID: a.Session.ID,
 			Time: opencode.MessageMetadataTime{
@@ -317,13 +344,25 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
 
 	cmds = append(cmds, func() tea.Msg {
+		parts := []opencode.MessagePartUnionParam{
+			opencode.TextPartParam{
+				Type: opencode.F(opencode.TextPartTypeText),
+				Text: opencode.F(text),
+			},
+		}
+		if len(attachments) > 0 {
+			for _, attachment := range attachments {
+				parts = append(parts, opencode.FilePartParam{
+					MediaType: attachment.MediaType,
+					Type:      attachment.Type,
+					URL:       attachment.URL,
+					Filename:  attachment.Filename,
+				})
+			}
+		}
+
 		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			Parts: opencode.F([]opencode.MessagePartUnionParam{
-				opencode.TextPartParam{
-					Type: opencode.F(opencode.TextPartTypeText),
-					Text: opencode.F(text),
-				},
-			}),
+			Parts:      opencode.F(parts),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
@@ -337,7 +376,7 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 
 	// The actual response will come through SSE
 	// For now, just return success
-	return tea.Batch(cmds...)
+	return a, tea.Batch(cmds...)
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {

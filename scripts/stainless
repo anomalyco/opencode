@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -e
+
+echo "Starting opencode server on port 4096..."
+bun run ./packages/opencode/src/index.ts serve --port 4096 &
+SERVER_PID=$!
+
+echo "Waiting for server to start..."
+sleep 3
+
+echo "Fetching OpenAPI spec from http://localhost:4096/doc..."
+curl -s http://localhost:4096/doc > openapi.json
+
+echo "Stopping server..."
+kill $SERVER_PID
+
+echo "Running stl builds create..."
+stl builds create --branch dev --pull --allow-empty --targets go 
+
+echo "Cleaning up..."
+rm -rf packages/tui/sdk
+mv opencode-go/ packages/tui/sdk/
+rm -rf packages/tui/sdk/.git
+
+echo "Done!"

@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/v2/textarea"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -41,7 +40,6 @@ func (ci *CompletionItem) Render(selected bool, width int) string {
 	title := itemStyle.Render(
 		ci.DisplayValue(),
 	)
-
 	return title
 }
 
@@ -59,7 +57,6 @@ func NewCompletionItem(completionItem CompletionItem) CompletionItemI {
 
 type CompletionProvider interface {
 	GetId() string
-	GetEntry() CompletionItemI
 	GetChildEntries(query string) ([]CompletionItemI, error)
 	GetEmptyMessage() string
 }
@@ -67,7 +64,7 @@ type CompletionProvider interface {
 type CompletionSelectedMsg struct {
 	SearchString    string
 	CompletionValue string
-	IsCommand       bool
+	ProviderID      string
 }
 
 type CompletionFilledMsg struct {
@@ -87,7 +84,6 @@ type CompletionDialog interface {
 	tea.ViewModel
 	SetWidth(width int)
 	IsEmpty() bool
-	SetProvider(provider CompletionProvider)
 }
 
 type completionDialogComponent struct {
@@ -126,8 +122,6 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case []CompletionItemI:
 		c.list.SetItems(msg)
-	case app.CompletionDialogTriggeredMsg:
-		c.pseudoSearchTextArea.SetValue(msg.InitialValue)
 	case tea.KeyMsg:
 		if c.pseudoSearchTextArea.Focused() {
 			if !key.Matches(msg, completionDialogKeys.Complete) {
@@ -137,9 +131,6 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				var query string
 				query = c.pseudoSearchTextArea.Value()
-				if query != "" {
-					query = query[1:]
-				}
 
 				if query != c.query {
 					c.query = query
@@ -191,9 +182,6 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, c.pseudoSearchTextArea.Focus())
 			return c, tea.Batch(cmds...)
 		}
-	case tea.WindowSizeMsg:
-		c.width = msg.Width
-		c.height = msg.Height
 	}
 
 	return c, tea.Batch(cmds...)
@@ -208,8 +196,9 @@ func (c *completionDialogComponent) View() string {
 
 	for _, cmd := range completions {
 		title := cmd.DisplayValue()
-		if len(title) > maxWidth-4 {
-			maxWidth = len(title) + 4
+		width := lipgloss.Width(title)
+		if width > maxWidth-4 {
+			maxWidth = width + 4
 		}
 	}
 
@@ -235,28 +224,14 @@ func (c *completionDialogComponent) IsEmpty() bool {
 	return c.list.IsEmpty()
 }
 
-func (c *completionDialogComponent) SetProvider(provider CompletionProvider) {
-	if c.completionProvider.GetId() != provider.GetId() {
-		c.completionProvider = provider
-		c.list.SetEmptyMessage(" " + provider.GetEmptyMessage())
-		c.list.SetItems([]CompletionItemI{})
-	}
-}
-
 func (c *completionDialogComponent) complete(item CompletionItemI) tea.Cmd {
 	value := c.pseudoSearchTextArea.Value()
-	if value == "" {
-		return nil
-	}
-
-	// Check if this is a command completion
-	isCommand := c.completionProvider.GetId() == "commands"
 
 	return tea.Batch(
 		util.CmdHandler(CompletionSelectedMsg{
 			SearchString:    value,
 			CompletionValue: item.GetValue(),
-			IsCommand:       isCommand,
+			ProviderID:      c.completionProvider.GetId(),
 		}),
 		c.close(),
 	)

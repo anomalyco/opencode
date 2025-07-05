@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 type Env = {
   SYNC_SERVER: DurableObjectNamespace<SyncServer>
   Bucket: R2Bucket
+  WEB_DOMAIN: string
 }
 
 export class SyncServer extends DurableObject<Env> {
@@ -127,7 +128,7 @@ export default {
       return new Response(
         JSON.stringify({
           secret,
-          url: "https://opencode.ai/s/" + short,
+          url: `https://${env.WEB_DOMAIN}/s/${short}`,
         }),
         {
           headers: { "Content-Type": "application/json" },

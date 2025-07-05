@@ -51,9 +51,16 @@ resources:
       get: get /app
       init: post /app/init
 
+  find:
+    methods:
+      text: get /find
+      files: get /find/file
+      symbols: get /find/symbol
+
   file:
     methods:
-      search: get /file
+      read: get /file
+      status: get /file/status
 
   config:
     models:

@@ -40,11 +40,17 @@
   }
 
   pre {
-    white-space: pre-wrap;
-    border-radius: 0.25rem;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    --shiki-dark-bg: var(--sl-color-bg-surface) !important;
+    background-color: var(--sl-color-bg-surface) !important;
     padding: 0.5rem 0.75rem;
+    line-height: 1.6;
     font-size: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    span {
+      white-space: break-spaces;
+    }
   }
 
   code {
@@ -60,5 +66,41 @@
         font-weight: 700;
       }
     }
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--sl-color-border);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+
+  th {
+    border-bottom: 1px solid var(--sl-color-border);
+  }
+
+  /* Remove outer borders */
+  table tr:first-child th,
+  table tr:first-child td {
+    border-top: none;
+  }
+
+  table tr:last-child td {
+    border-bottom: none;
+  }
+
+  table th:first-child,
+  table td:first-child {
+    border-left: none;
+  }
+
+  table th:last-child,
+  table td:last-child {
+    border-right: none;
   }
 }

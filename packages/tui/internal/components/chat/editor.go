@@ -3,17 +3,19 @@ package chat
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/google/uuid"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
 	"github.com/sst/opencode/internal/image"
-	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -26,10 +28,8 @@ type CustomCommandExecuteMsg struct {
 
 type EditorComponent interface {
 	tea.Model
-	// tea.ViewModel
-	SetSize(width, height int) tea.Cmd
-	View(width int, align lipgloss.Position) string
-	Content(width int, align lipgloss.Position) string
+	View(width int) string
+	Content(width int) string
 	Lines() int
 	Value() string
 	Focused() bool
@@ -39,19 +39,12 @@ type EditorComponent interface {
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
-	Previous() (tea.Model, tea.Cmd)
-	Next() (tea.Model, tea.Cmd)
 	SetInterruptKeyInDebounce(inDebounce bool)
 }
 
 type editorComponent struct {
 	app                    *app.App
-	width, height          int
 	textarea               textarea.Model
-	attachments            []app.Attachment
-	history                []string
-	historyIndex           int
-	currentMessage         string
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 }
@@ -80,7 +73,8 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
-		if msg.IsCommand {
+		switch msg.ProviderID {
+		case "commands":
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
 
 			// Check if this is a valid custom command (not a built-in command)
@@ -91,17 +85,53 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 				cmds = append(cmds, util.CmdHandler(CustomCommandExecuteMsg{Name: customCommandName, Arguments: ""}))
 				return m, tea.Batch(cmds...)
-			} else {
-				updated, cmd := m.Clear()
-				m = updated.(*editorComponent)
-				cmds = append(cmds, cmd)
-				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
-				return m, tea.Batch(cmds...)
 			}
-		} else {
-			existingValue := m.textarea.Value()
 
-			// Replace the current token (after last space)
+			updated, cmd := m.Clear()
+			m = updated.(*editorComponent)
+			cmds = append(cmds, cmd)
+			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+			return m, tea.Batch(cmds...)
+		case "files":
+			atIndex := m.textarea.LastRuneIndex('@')
+			if atIndex == -1 {
+				// Should not happen, but as a fallback, just insert.
+				m.textarea.InsertString(msg.CompletionValue + " ")
+				return m, nil
+			}
+
+			// The range to replace is from the '@' up to the current cursor position.
+			// Replace the search term (e.g., "@search") with an empty string first.
+			cursorCol := m.textarea.CursorColumn()
+			m.textarea.ReplaceRange(atIndex, cursorCol, "")
+
+			// Now, insert the attachment at the position where the '@' was.
+			// The cursor is now at `atIndex` after the replacement.
+			filePath := msg.CompletionValue
+			extension := filepath.Ext(filePath)
+			mediaType := ""
+			switch extension {
+			case ".jpg":
+				mediaType = "image/jpeg"
+			case ".png", ".jpeg", ".gif", ".webp":
+				mediaType = "image/" + extension[1:]
+			case ".pdf":
+				mediaType = "application/pdf"
+			default:
+				mediaType = "text/plain"
+			}
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + filePath,
+				URL:       fmt.Sprintf("file://./%s", filePath),
+				Filename:  filePath,
+				MediaType: mediaType,
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
+		default:
+			existingValue := m.textarea.Value()
 			lastSpaceIndex := strings.LastIndex(existingValue, " ")
 			if lastSpaceIndex == -1 {
 				m.textarea.SetValue(msg.CompletionValue + " ")
@@ -140,7 +170,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *editorComponent) Content(width int, align lipgloss.Position) string {
+func (m *editorComponent) Content(width int) string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
@@ -149,6 +179,7 @@ func (m *editorComponent) Content(width int, align lipgloss.Position) string {
 		Bold(true)
 	prompt := promptStyle.Render(">")
 
+	m.textarea.SetWidth(width - 6)
 	textarea := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		prompt,
@@ -170,7 +201,15 @@ func (m *editorComponent) Content(width int, align lipgloss.Position) string {
 	if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		if m.interruptKeyInDebounce {
-			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText+" again") + muted(" interrupt")
+			hint = muted(
+				"working",
+			) + m.spinner.View() + muted(
+				"  ",
+			) + base(
+				keyText+" again",
+			) + muted(
+				" interrupt",
+			)
 		} else {
 			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText) + muted(" interrupt")
 		}
@@ -181,7 +220,7 @@ func (m *editorComponent) Content(width int, align lipgloss.Position) string {
 		model = muted(m.app.Provider.Name) + base(" "+m.app.Model.Name)
 	}
 
-	space := m.width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
+	space := width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
 	spacer := styles.NewStyle().Background(t.Background()).Width(space).Render("")
 
 	info := hint + spacer + model
@@ -191,19 +230,18 @@ func (m *editorComponent) Content(width int, align lipgloss.Position) string {
 	return content
 }
 
-func (m *editorComponent) View(width int, align lipgloss.Position) string {
+func (m *editorComponent) View(width int) string {
 	if m.Lines() > 1 {
-		t := theme.CurrentTheme()
 		return lipgloss.Place(
 			width,
-			m.height,
-			align,
+			5,
+			lipgloss.Center,
 			lipgloss.Center,
 			"",
-			styles.WhitespaceStyle(t.Background()),
+			styles.WhitespaceStyle(theme.CurrentTheme().Background()),
 		)
 	}
-	return m.Content(width, align)
+	return m.Content(width)
 }
 
 func (m *editorComponent) Focused() bool {
@@ -216,16 +254,6 @@ func (m *editorComponent) Focus() (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) Blur() {
 	m.textarea.Blur()
-}
-
-func (m *editorComponent) GetSize() (width, height int) {
-	return m.width, m.height
-}
-
-func (m *editorComponent) SetSize(width, height int) tea.Cmd {
-	m.width = width
-	m.height = height
-	return nil
 }
 
 func (m *editorComponent) Lines() int {
@@ -243,29 +271,29 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	}
 	if len(value) > 0 && value[len(value)-1] == '\\' {
 		// If the last character is a backslash, remove it and add a newline
-		m.textarea.SetValue(value[:len(value)-1] + "\n")
+		m.textarea.ReplaceRange(len(value)-1, len(value), "")
+		m.textarea.InsertString("\n")
 		return m, nil
 	}
 
 	var cmds []tea.Cmd
+
+	attachments := m.textarea.GetAttachments()
+	fileParts := make([]opencode.FilePartParam, 0)
+	for _, attachment := range attachments {
+		fileParts = append(fileParts, opencode.FilePartParam{
+			Type:      opencode.F(opencode.FilePartTypeFile),
+			MediaType: opencode.F(attachment.MediaType),
+			URL:       opencode.F(attachment.URL),
+			Filename:  opencode.F(attachment.Filename),
+		})
+	}
+
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
 
-	attachments := m.attachments
-
-	// Save to history if not empty and not a duplicate of the last entry
-	if value != "" {
-		if len(m.history) == 0 || m.history[len(m.history)-1] != value {
-			m.history = append(m.history, value)
-		}
-		m.historyIndex = len(m.history)
-		m.currentMessage = ""
-	}
-
-	m.attachments = nil
-
-	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: attachments}))
+	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: fileParts}))
 	return m, tea.Batch(cmds...)
 }
 
@@ -275,65 +303,28 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
-	imageBytes, text, err := image.GetImageFromClipboard()
+	_, text, err := image.GetImageFromClipboard()
 	if err != nil {
 		slog.Error(err.Error())
 		return m, nil
 	}
-	if len(imageBytes) != 0 {
-		attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
-		attachment := app.Attachment{FilePath: attachmentName, FileName: attachmentName, Content: imageBytes, MimeType: "image/png"}
-		m.attachments = append(m.attachments, attachment)
-	} else {
-		m.textarea.SetValue(m.textarea.Value() + text)
-	}
+	// if len(imageBytes) != 0 {
+	// 	attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
+	// 	attachment := app.Attachment{
+	// 		FilePath: attachmentName,
+	// 		FileName: attachmentName,
+	// 		Content:  imageBytes,
+	// 		MimeType: "image/png",
+	// 	}
+	// 	m.attachments = append(m.attachments, attachment)
+	// } else {
+	m.textarea.InsertString(text)
+	// }
 	return m, nil
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
 	m.textarea.Newline()
-	return m, nil
-}
-
-func (m *editorComponent) Previous() (tea.Model, tea.Cmd) {
-	currentLine := m.textarea.Line()
-
-	// Only navigate history if we're at the first line
-	if currentLine == 0 && len(m.history) > 0 {
-		// Save current message if we're just starting to navigate
-		if m.historyIndex == len(m.history) {
-			m.currentMessage = m.textarea.Value()
-		}
-
-		// Go to previous message in history
-		if m.historyIndex > 0 {
-			m.historyIndex--
-			m.textarea.SetValue(m.history[m.historyIndex])
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-func (m *editorComponent) Next() (tea.Model, tea.Cmd) {
-	currentLine := m.textarea.Line()
-	value := m.textarea.Value()
-	lines := strings.Split(value, "\n")
-	totalLines := len(lines)
-
-	// Only navigate history if we're at the last line
-	if currentLine == totalLines-1 {
-		if m.historyIndex < len(m.history)-1 {
-			// Go to next message in history
-			m.historyIndex++
-			m.textarea.SetValue(m.history[m.historyIndex])
-		} else if m.historyIndex == len(m.history)-1 {
-			// Return to the current message being composed
-			m.historyIndex = len(m.history)
-			m.textarea.SetValue(m.currentMessage)
-		}
-		return m, nil
-	}
 	return m, nil
 }
 
@@ -359,18 +350,31 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 
 	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
 	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Focused.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Focused.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
 	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Attachment = styles.NewStyle().
+		Foreground(t.Secondary()).
+		Background(bgColor).
+		Lipgloss()
+	ta.Styles.SelectedAttachment = styles.NewStyle().
+		Foreground(t.Text()).
+		Background(t.Secondary()).
+		Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
 
 	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
-	ta.SetWidth(layout.Current.Container.Width - 6)
 
 	if existing != nil {
 		ta.SetValue(existing.Value())
@@ -402,9 +406,6 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	return &editorComponent{
 		app:                    app,
 		textarea:               ta,
-		history:                []string{},
-		historyIndex:           0,
-		currentMessage:         "",
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}

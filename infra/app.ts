@@ -9,6 +9,9 @@ const bucket = new sst.cloudflare.Bucket("Bucket")
 export const api = new sst.cloudflare.Worker("Api", {
   domain: `api.${domain}`,
   handler: "packages/function/src/api.ts",
+  environment: {
+    WEB_DOMAIN: domain,
+  },
   url: true,
   link: [bucket],
   transform: {

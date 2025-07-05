@@ -34,10 +34,6 @@ func (c *commandsComponent) SetSize(width, height int) tea.Cmd {
 	return nil
 }
 
-func (c *commandsComponent) GetSize() (int, int) {
-	return c.width, c.height
-}
-
 func (c *commandsComponent) SetBackgroundColor(color compat.AdaptiveColor) {
 	c.background = &color
 }

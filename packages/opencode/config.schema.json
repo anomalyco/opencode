@@ -297,6 +297,13 @@
       },
       "description": "MCP (Model Context Protocol) server configurations"
     },
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional instruction files or patterns to include"
+    },
     "experimental": {
       "type": "object",
       "properties": {

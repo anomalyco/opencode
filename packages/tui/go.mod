@@ -15,10 +15,12 @@ require (
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
-	github.com/sst/opencode-sdk-go v0.1.0-alpha.7
+	github.com/sst/opencode-sdk-go v0.1.0-alpha.8
 	github.com/tidwall/gjson v1.14.4
 	rsc.io/qr v0.2.0
 )
+
+replace github.com/sst/opencode-sdk-go => ./sdk
 
 require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
@@ -35,6 +37,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
