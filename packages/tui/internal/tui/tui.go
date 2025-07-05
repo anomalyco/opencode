@@ -55,7 +55,9 @@ type appModel struct {
 	messages             chat.MessagesComponent
 	completions          dialog.CompletionDialog
 	commandProvider      dialog.CompletionProvider
+	fileProvider         dialog.CompletionProvider
 	showCompletionDialog bool
+	fileCompletionActive bool
 	leaderBinding        *key.Binding
 	isLeaderSequence     bool
 	toastManager         *toast.ToastManager
@@ -183,11 +185,33 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!a.showCompletionDialog &&
 			a.editor.Value() == "" {
 			a.showCompletionDialog = true
+			a.fileCompletionActive = false
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
 			cmds = append(cmds, cmd)
 
+			// Set command provider for command completion
+			a.completions = dialog.NewCompletionDialogComponent(a.commandProvider)
+			updated, cmd = a.completions.Update(msg)
+			a.completions = updated.(dialog.CompletionDialog)
+			cmds = append(cmds, cmd)
+
+			return a, tea.Sequence(cmds...)
+		}
+
+		// Handle file completions trigger
+		if keyString == "@" &&
+			!a.showCompletionDialog {
+			a.showCompletionDialog = true
+			a.fileCompletionActive = true
+
+			updated, cmd := a.editor.Update(msg)
+			a.editor = updated.(chat.EditorComponent)
+			cmds = append(cmds, cmd)
+
+			// Set file provider for file completion
+			a.completions = dialog.NewCompletionDialogComponent(a.fileProvider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -197,7 +221,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.showCompletionDialog {
 			switch keyString {
-			case "tab", "enter", "esc", "ctrl+c":
+			case "tab", "enter", "esc", "ctrl+c", "up", "down":
 				updated, cmd := a.completions.Update(msg)
 				a.completions = updated.(dialog.CompletionDialog)
 				cmds = append(cmds, cmd)
@@ -329,10 +353,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, toast.NewErrorToast(msg.Error())
 	case app.SendMsg:
 		a.showCompletionDialog = false
-		cmd := a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
+		a.app, cmd = a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
+		a.fileCompletionActive = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -781,11 +806,8 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 				return nil
 			}
 			os.Remove(tmpfile.Name())
-			// attachments := m.attachments
-			// m.attachments = nil
 			return app.SendMsg{
-				Text:        string(content),
-				Attachments: []app.Attachment{}, // attachments,
+				Text: string(content),
 			}
 		})
 		cmds = append(cmds, cmd)
@@ -1023,6 +1045,7 @@ func httpExportSession(sessionID string) (*struct {
 
 func NewModel(app *app.App) tea.Model {
 	commandProvider := completions.NewCommandCompletionProvider(app)
+	fileProvider := completions.NewFileAndFolderContextGroup(app)
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
@@ -1041,9 +1064,11 @@ func NewModel(app *app.App) tea.Model {
 		messages:             messages,
 		completions:          completions,
 		commandProvider:      commandProvider,
+		fileProvider:         fileProvider,
 		leaderBinding:        leaderBinding,
 		isLeaderSequence:     false,
 		showCompletionDialog: false,
+		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
 		fileViewer:           fileviewer.New(app),

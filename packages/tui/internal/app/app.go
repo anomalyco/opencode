@@ -44,7 +44,7 @@ type SessionClearedMsg struct{}
 type CompactSessionMsg struct{}
 type SendMsg struct {
 	Text        string
-	Attachments []Attachment
+	Attachments []opencode.FilePartParam
 }
 type OptimisticMessageAddedMsg struct {
 	Message opencode.Message
@@ -217,13 +217,6 @@ func getDefaultModel(
 	return nil
 }
 
-type Attachment struct {
-	FilePath string
-	FileName string
-	MimeType string
-	Content  []byte
-}
-
 func (a *App) IsBusy() bool {
 	if len(a.Messages) == 0 {
 		return false
@@ -296,24 +289,40 @@ func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
 	return session, nil
 }
 
-func (a *App) SendChatMessage(ctx context.Context, text string, attachments []Attachment) tea.Cmd {
+func (a *App) SendChatMessage(
+	ctx context.Context,
+	text string,
+	attachments []opencode.FilePartParam,
+) (*App, tea.Cmd) {
 	var cmds []tea.Cmd
 	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
-			return toast.NewErrorToast(err.Error())
+			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
 		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
 	}
 
+	optimisticParts := []opencode.MessagePart{{
+		Type: opencode.MessagePartTypeText,
+		Text: text,
+	}}
+	if len(attachments) > 0 {
+		for _, attachment := range attachments {
+			optimisticParts = append(optimisticParts, opencode.MessagePart{
+				Type:      opencode.MessagePartTypeFile,
+				Filename:  attachment.Filename.Value,
+				MediaType: attachment.MediaType.Value,
+				URL:       attachment.URL.Value,
+			})
+		}
+	}
+
 	optimisticMessage := opencode.Message{
-		ID:   fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role: opencode.MessageRoleUser,
-		Parts: []opencode.MessagePart{{
-			Type: opencode.MessagePartTypeText,
-			Text: text,
-		}},
+		ID:    fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
+		Role:  opencode.MessageRoleUser,
+		Parts: optimisticParts,
 		Metadata: opencode.MessageMetadata{
 			SessionID: a.Session.ID,
 			Time: opencode.MessageMetadataTime{
@@ -326,13 +335,25 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
 
 	cmds = append(cmds, func() tea.Msg {
+		parts := []opencode.MessagePartUnionParam{
+			opencode.TextPartParam{
+				Type: opencode.F(opencode.TextPartTypeText),
+				Text: opencode.F(text),
+			},
+		}
+		if len(attachments) > 0 {
+			for _, attachment := range attachments {
+				parts = append(parts, opencode.FilePartParam{
+					MediaType: attachment.MediaType,
+					Type:      attachment.Type,
+					URL:       attachment.URL,
+					Filename:  attachment.Filename,
+				})
+			}
+		}
+
 		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			Parts: opencode.F([]opencode.MessagePartUnionParam{
-				opencode.TextPartParam{
-					Type: opencode.F(opencode.TextPartTypeText),
-					Text: opencode.F(text),
-				},
-			}),
+			Parts:      opencode.F(parts),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
@@ -346,7 +367,7 @@ func (a *App) SendChatMessage(ctx context.Context, text string, attachments []At
 
 	// The actual response will come through SSE
 	// For now, just return success
-	return tea.Batch(cmds...)
+	return a, tea.Batch(cmds...)
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {

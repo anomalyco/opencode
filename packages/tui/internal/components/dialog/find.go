@@ -124,7 +124,7 @@ func (f *findDialogComponent) View() string {
 	f.list.SetMaxWidth(f.width - 4)
 	inputView := f.textInput.View()
 	inputView = styles.NewStyle().
-		Background(t.BackgroundPanel()).
+		Background(t.BackgroundElement()).
 		Height(1).
 		Width(f.width-4).
 		Padding(0, 0).
@@ -171,7 +171,7 @@ func (f *findDialogComponent) Close() tea.Cmd {
 
 func createTextInput(existing *textinput.Model) textinput.Model {
 	t := theme.CurrentTheme()
-	bgColor := t.BackgroundPanel()
+	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
 
