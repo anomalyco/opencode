@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -992,6 +993,28 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			cmds = append(cmds, cmd)
 		}
 	case commands.MessagesRevertCommand:
+	case commands.ConfigCommand:
+		if a.app.IsBusy() {
+			return a, nil
+		}
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			return a, toast.NewErrorToast("No EDITOR set, can't open config")
+		}
+
+		configPath := filepath.Join(a.app.Info.Path.Config, "config.json")
+		c := exec.Command(editor, configPath) //nolint:gosec
+		c.Stdin = os.Stdin
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+    cmd := tea.ExecProcess(c, func(err error) tea.Msg {
+			if err != nil {
+				slog.Error("Failed to open config", "error", err)
+				return toast.NewErrorToast("Failed to open config")()
+			}
+      return tea.QuitMsg{}
+		})
+		cmds = append(cmds, cmd)
 	case commands.AppExitCommand:
 		return a, tea.Quit
 	}

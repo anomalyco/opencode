@@ -117,6 +117,7 @@ const (
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
 	MessagesRevertCommand       CommandName = "messages_revert"
+	ConfigCommand               CommandName = "config"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -318,6 +319,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        MessagesRevertCommand,
 			Description: "revert message",
 			Keybindings: parseBindings("<leader>r"),
+		},
+		{
+			Name:        ConfigCommand,
+			Description: "edit config",
+			Keybindings: parseBindings("<leader>o"),
+			Trigger:     "config",
 		},
 		{
 			Name:        AppExitCommand,

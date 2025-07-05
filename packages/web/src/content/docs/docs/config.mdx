@@ -33,6 +33,17 @@ When opencode starts up, it looks for a config file in the current directory or 
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
+## Quick Access
+
+You can quickly open your global config file for editing using the `/config` command in opencode. This will open `~/.config/opencode/config.json` in your default editor (set via the `$EDITOR` environment variable).
+
+- **Command**: `/config`
+- **Keybinding**: `<leader>o` (where leader is typically `Ctrl+X`)
+
+This is the fastest way to modify your global configuration without leaving the opencode interface.
+
+You can customize the keybinding by setting the `config` field in your keybinds configuration. See the [keybinds documentation](/docs/keybinds) for more details.
+
 ---
 
 ## Schema
@@ -51,9 +62,9 @@ opencode comes with two built-in modes: _build_, the default with all tools enab
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
-    "build": { },
-    "plan": { },
-    "my-custom-mode": { }
+    "build": {},
+    "plan": {},
+    "my-custom-mode": {}
   }
 }
 ```
