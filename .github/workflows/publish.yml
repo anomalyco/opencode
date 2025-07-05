@@ -28,7 +28,7 @@ jobs:
         with:
           go-version: ">=1.24.0"
           cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: "**/*.sum"
 
       - uses: oven-sh/setup-bun@v2
         with:
