@@ -200,7 +200,7 @@ export namespace Ripgrep {
     limit?: number
   }) {
     const commands = [
-      `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
+      `${$.escape(await filepath())} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
     ]
     if (input.query)
       commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
