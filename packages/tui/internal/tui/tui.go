@@ -1007,12 +1007,12 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-    cmd := tea.ExecProcess(c, func(err error) tea.Msg {
+		cmd := tea.ExecProcess(c, func(err error) tea.Msg {
 			if err != nil {
 				slog.Error("Failed to open config", "error", err)
 				return toast.NewErrorToast("Failed to open config")()
 			}
-      return tea.QuitMsg{}
+			return toast.NewSuccessToast("Config updated, restart to apply changes")()
 		})
 		cmds = append(cmds, cmd)
 	case commands.AppExitCommand:
