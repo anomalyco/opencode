@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -992,7 +993,6 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			cmd = toast.NewSuccessToast("Message copied to clipboard")
 			cmds = append(cmds, cmd)
 		}
-	case commands.MessagesRevertCommand:
 	case commands.ConfigCommand:
 		if a.app.IsBusy() {
 			return a, nil
@@ -1002,19 +1002,29 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, toast.NewErrorToast("No EDITOR set, can't open config")
 		}
 
-		configPath := filepath.Join(a.app.Info.Path.Config, "config.json")
-		c := exec.Command(editor, configPath) //nolint:gosec
+    cfgPath := filepath.Join(a.app.Info.Path.Cwd, "opencode.json")
+    cfgKind := "project"
+    if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+      cfgPath = filepath.Join(a.app.Info.Path.Config, "config.json")
+      cfgKind = "global"
+    }
+
+		c := exec.Command(editor, cfgPath) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-		cmd := tea.ExecProcess(c, func(err error) tea.Msg {
-			if err != nil {
-				slog.Error("Failed to open config", "error", err)
-				return toast.NewErrorToast("Failed to open config")()
-			}
-			return toast.NewSuccessToast("Config updated, restart to apply changes")()
-		})
+    cmd := tea.ExecProcess(exec.Command(editor, cfgPath), func(err error) tea.Msg {
+      if err != nil {
+        slog.Error("Failed to open config", "error", err)
+        return toast.NewErrorToast("Failed to open config")()
+      }
+      return toast.NewSuccessToast(
+        fmt.Sprintf("%s config updated, restart to apply changes",
+          strings.Title(cfgKind)),
+      )()
+    })
 		cmds = append(cmds, cmd)
+	case commands.MessagesRevertCommand:
 	case commands.AppExitCommand:
 		return a, tea.Quit
 	}
