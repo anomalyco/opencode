@@ -1044,11 +1044,12 @@ func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (t
 		args = &arguments
 	}
 
+	var cmd tea.Cmd
 	result, err := a.app.CommandsClient.ExecuteCustomCommand(ctx, commandName, args)
 	if err == nil {
 		// Server execution successful
 		slog.Info("Custom command executed via server", "command", commandName)
-		cmd := a.app.SendChatMessage(context.Background(), result.ProcessedContent, []app.Attachment{})
+		a.app, cmd = a.app.SendChatMessage(context.Background(), result.ProcessedContent, []opencode.FilePartParam{})
 		return a, cmd
 	}
 
@@ -1101,7 +1102,7 @@ func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (t
 	}
 
 	// Send the processed command content as a message to the LLM
-	cmd := a.app.SendChatMessage(context.Background(), processedContent, []app.Attachment{})
+	a.app, cmd = a.app.SendChatMessage(context.Background(), processedContent, []opencode.FilePartParam{})
 	return a, cmd
 }
 
@@ -1290,15 +1291,6 @@ func (a appModel) scanCommandsDirectory(baseDir, relativePath string) ([]CustomC
 	}
 
 	return commands, nil
-}
-
-func (a appModel) updateCompletions(msg tea.Msg) (tea.Model, tea.Cmd) {
-	currentInput := a.editor.Value()
-	if currentInput != "" {
-		provider := a.completionManager.GetProvider(currentInput)
-		a.completions.SetProvider(provider)
-	}
-	return a.completions.Update(msg)
 }
 
 func NewModel(app *app.App) tea.Model {
