@@ -17,6 +17,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/chat"
+
 	// cmdcomp "github.com/sst/opencode/internal/components/commands" // Commented out - no longer used
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/fileviewer"
@@ -598,7 +599,6 @@ func (a appModel) openFile(filepath string) (tea.Model, tea.Cmd) {
 func (a appModel) home(width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Background(t.Background())
-	
 	// Clean, professional text style with bold
 	textStyle := styles.NewStyle().
 		Foreground(t.Text()).
@@ -608,9 +608,9 @@ func (a appModel) home(width int) string {
 
 	// Simple, elegant text logo with proper spacing
 	logoText := "CH-AI  UNIVERSE"
-	
+
 	logoContent := textStyle(logoText)
-	
+
 	// Inner frame with content
 	innerBorderStyle := styles.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -618,9 +618,9 @@ func (a appModel) home(width int) string {
 		BorderBackground(t.Background()).
 		Padding(1, 4).
 		Background(t.Background())
-	
+
 	innerFrame := innerBorderStyle.Render(logoContent)
-	
+
 	// Outer frame for double frame effect
 	outerBorderStyle := styles.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -628,23 +628,15 @@ func (a appModel) home(width int) string {
 		BorderBackground(t.Background()).
 		Padding(0, 1).
 		Background(t.Background())
-	
+
 	logo := outerBorderStyle.Render(innerFrame)
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
 
-	versionStyle := styles.NewStyle().
-		Foreground(t.TextMuted()).
-		Background(t.Background()).
-		Width(lipgloss.Width(logo)).
-		Align(lipgloss.Center)
-	version := versionStyle.Render("dev")
-
-	logoAndVersion := strings.Join([]string{logo, version}, "\n")
-	logoAndVersion = lipgloss.PlaceHorizontal(
+	logoAndVersion := lipgloss.PlaceHorizontal(
 		width,
 		lipgloss.Center,
-		logoAndVersion,
+		logo,
 		styles.WhitespaceStyle(t.Background()),
 	)
 	// Removed commands view to hide help text

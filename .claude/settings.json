@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f ./scripts/go-lint.sh ]; then bash ./scripts/go-lint.sh; fi",
+            "description": "Run Go linters on modified files"
+          }
+        ]
+      }
+    ]
+  }
+}

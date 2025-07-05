@@ -168,6 +168,27 @@ tui/
   - Classes/Types: PascalCase
   - Functions/Variables: camelCase
 
+## Go Code Quality Standards
+
+When working with Go code in the TUI package, always run linters after generating or modifying code:
+
+```bash
+bun run lint:go
+```
+
+This command automatically runs:
+- **go fmt** - Formats code consistently
+- **go vet** - Catches compilation errors
+- **staticcheck** - Finds bugs and performance issues (if installed)
+
+### When to Run
+
+- After generating new Go code
+- After editing existing Go files
+- Before committing changes
+
+**Note**: If you have Claude Code hooks enabled, linting runs automatically on file edits.
+
 ## Testing Approach
 
 - **Framework**: Bun's built-in test runner
@@ -245,3 +266,54 @@ bun run ./src/index.ts auth login
 - **Type errors**: Run `bun run typecheck` to check all packages
 - **Test failures**: Update snapshots with `bun test -u` if output changes are expected
 - **Provider errors**: Check `~/.config/opencode/providers.json` for correct credentials
+
+## Claude Code Hooks Configuration
+
+### Automatic Go Linting
+
+To enable automatic Go linting when editing files, add this to your Claude Code settings:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/go-lint.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### What This Hook Does
+
+When you edit or create Go files:
+1. Automatically runs `go fmt` to format code
+2. Runs `go vet` to check for errors
+3. Runs `staticcheck` if available
+4. Reports any issues found
+
+### Manual Linting
+
+If hooks are not enabled, manually run:
+```bash
+bun run lint:go
+```
+
+### Customizing the Linter
+
+The `scripts/go-lint.sh` script:
+- Processes all files in `packages/tui/`
+- Exits with error if `go vet` fails
+- Shows warnings from `staticcheck` without failing
+
+To customize, edit `scripts/go-lint.sh` to:
+- Add more linters (e.g., golangci-lint)
+- Change which packages to check
+- Make staticcheck errors blocking

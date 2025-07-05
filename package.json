@@ -6,7 +6,8 @@
   "packageManager": "bun@1.2.14",
   "scripts": {
     "typecheck": "bun run --filter='*' typecheck",
-    "postinstall": "./scripts/hooks"
+    "postinstall": "./scripts/hooks",
+    "lint:go": "bash scripts/go-lint.sh"
   },
   "workspaces": {
     "packages": [
