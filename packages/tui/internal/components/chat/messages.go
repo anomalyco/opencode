@@ -439,7 +439,7 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 	return &messagesComponent{
 		app:             app,
 		viewport:        vp,
-		showToolDetails: true,
+		showToolDetails: false,
 		cache:           NewMessageCache(),
 		tail:            true,
 		selectedPart:    -1,
