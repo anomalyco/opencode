@@ -83,7 +83,7 @@ func Extension(path string) string {
 }
 
 func ToMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
-	r := styles.GetMarkdownRenderer(width-7, backgroundColor)
+	r := styles.GetMarkdownRenderer(width-6, backgroundColor)
 	content = strings.ReplaceAll(content, RootPath+"/", "")
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")

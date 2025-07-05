@@ -64,7 +64,7 @@ type CompletionProvider interface {
 type CompletionSelectedMsg struct {
 	SearchString    string
 	CompletionValue string
-	IsCommand       bool
+	ProviderID      string
 }
 
 type CompletionDialogCompleteItemMsg struct {
@@ -121,9 +121,6 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				var query string
 				query = c.pseudoSearchTextArea.Value()
-				if query != "" {
-					query = query[1:]
-				}
 
 				if query != c.query {
 					c.query = query
@@ -183,8 +180,9 @@ func (c *completionDialogComponent) View() string {
 
 	for _, cmd := range completions {
 		title := cmd.DisplayValue()
-		if len(title) > maxWidth-4 {
-			maxWidth = len(title) + 4
+		width := lipgloss.Width(title)
+		if width > maxWidth-4 {
+			maxWidth = width + 4
 		}
 	}
 
@@ -213,14 +211,11 @@ func (c *completionDialogComponent) IsEmpty() bool {
 func (c *completionDialogComponent) complete(item CompletionItemI) tea.Cmd {
 	value := c.pseudoSearchTextArea.Value()
 
-	// Check if this is a command completion
-	isCommand := c.completionProvider.GetId() == "commands"
-
 	return tea.Batch(
 		util.CmdHandler(CompletionSelectedMsg{
 			SearchString:    value,
 			CompletionValue: item.GetValue(),
-			IsCommand:       isCommand,
+			ProviderID:      c.completionProvider.GetId(),
 		}),
 		c.close(),
 	)

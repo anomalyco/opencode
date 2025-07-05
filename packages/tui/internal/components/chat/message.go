@@ -223,6 +223,7 @@ func renderText(
 	showToolDetails bool,
 	highlight bool,
 	width int,
+	extra string,
 	toolCalls ...opencode.ToolInvocationPart,
 ) string {
 	t := theme.CurrentTheme()
@@ -269,7 +270,11 @@ func renderText(
 		}
 	}
 
-	content = strings.Join([]string{content, info}, "\n")
+	sections := []string{content, info}
+	if extra != "" {
+		sections = append(sections, "\n"+extra)
+	}
+	content = strings.Join(sections, "\n")
 
 	switch message.Role {
 	case opencode.MessageRoleUser:

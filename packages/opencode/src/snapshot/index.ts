@@ -9,6 +9,7 @@ export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
   export async function create(sessionID: string) {
+    return
     log.info("creating snapshot")
     const app = App.info()
     const git = gitdir(sessionID)
@@ -45,10 +46,9 @@ export namespace Snapshot {
         .nothrow()
     log.info("commit")
 
-    // Extract commit hash from output like "[main abc1234] snapshot"
     const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
-    if (!match) throw new Error("Failed to extract commit hash")
-    return match[1]
+    if (!match) return
+    return match![1]
   }
 
   export async function restore(sessionID: string, commit: string) {

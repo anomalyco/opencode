@@ -16,12 +16,11 @@ import (
 
 type filesAndFoldersContextGroup struct {
 	app      *app.App
-	prefix   string
 	gitFiles []dialog.CompletionItemI
 }
 
 func (cg *filesAndFoldersContextGroup) GetId() string {
-	return cg.prefix
+	return "files"
 }
 
 func (cg *filesAndFoldersContextGroup) GetEmptyMessage() string {
@@ -107,9 +106,10 @@ func (cg *filesAndFoldersContextGroup) GetChildEntries(
 
 func NewFileAndFolderContextGroup(app *app.App) dialog.CompletionProvider {
 	cg := &filesAndFoldersContextGroup{
-		app:    app,
-		prefix: "file",
+		app: app,
 	}
-	cg.gitFiles = cg.getGitFiles()
+	go func() {
+		cg.gitFiles = cg.getGitFiles()
+	}()
 	return cg
 }

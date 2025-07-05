@@ -90,7 +90,7 @@ func (m *Modal) Render(contentView string, background string) string {
 
 	innerWidth := outerWidth - 4
 
-	baseStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement())
+	baseStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel())
 
 	var finalContent string
 	if m.title != "" {
@@ -140,6 +140,6 @@ func (m *Modal) Render(contentView string, background string) string {
 		modalView,
 		background,
 		layout.WithOverlayBorder(),
-		layout.WithOverlayBorderColor(t.BorderActive()),
+		layout.WithOverlayBorderColor(t.Primary()),
 	)
 }

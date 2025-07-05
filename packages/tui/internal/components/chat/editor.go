@@ -3,11 +3,14 @@ package chat
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/google/uuid"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
@@ -37,7 +40,6 @@ type EditorComponent interface {
 type editorComponent struct {
 	app                    *app.App
 	textarea               textarea.Model
-	attachments            []app.Attachment
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 }
@@ -66,17 +68,54 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
-		if msg.IsCommand {
+		switch msg.ProviderID {
+		case "commands":
 			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
 			updated, cmd := m.Clear()
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
 			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
 			return m, tea.Batch(cmds...)
-		} else {
-			existingValue := m.textarea.Value()
+		case "files":
+			atIndex := m.textarea.LastRuneIndex('@')
+			if atIndex == -1 {
+				// Should not happen, but as a fallback, just insert.
+				m.textarea.InsertString(msg.CompletionValue + " ")
+				return m, nil
+			}
 
-			// Replace the current token (after last space)
+			// The range to replace is from the '@' up to the current cursor position.
+			// Replace the search term (e.g., "@search") with an empty string first.
+			cursorCol := m.textarea.CursorColumn()
+			m.textarea.ReplaceRange(atIndex, cursorCol, "")
+
+			// Now, insert the attachment at the position where the '@' was.
+			// The cursor is now at `atIndex` after the replacement.
+			filePath := msg.CompletionValue
+			extension := filepath.Ext(filePath)
+			mediaType := ""
+			switch extension {
+			case ".jpg":
+				mediaType = "image/jpeg"
+			case ".png", ".jpeg", ".gif", ".webp":
+				mediaType = "image/" + extension[1:]
+			case ".pdf":
+				mediaType = "application/pdf"
+			default:
+				mediaType = "text/plain"
+			}
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + filePath,
+				URL:       fmt.Sprintf("file://./%s", filePath),
+				Filename:  filePath,
+				MediaType: mediaType,
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
+		default:
+			existingValue := m.textarea.Value()
 			lastSpaceIndex := strings.LastIndex(existingValue, " ")
 			if lastSpaceIndex == -1 {
 				m.textarea.SetValue(msg.CompletionValue + " ")
@@ -128,7 +167,15 @@ func (m *editorComponent) Content(width int) string {
 	if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		if m.interruptKeyInDebounce {
-			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText+" again") + muted(" interrupt")
+			hint = muted(
+				"working",
+			) + m.spinner.View() + muted(
+				"  ",
+			) + base(
+				keyText+" again",
+			) + muted(
+				" interrupt",
+			)
 		} else {
 			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText) + muted(" interrupt")
 		}
@@ -190,19 +237,29 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	}
 	if len(value) > 0 && value[len(value)-1] == '\\' {
 		// If the last character is a backslash, remove it and add a newline
-		m.textarea.SetValue(value[:len(value)-1] + "\n")
+		m.textarea.ReplaceRange(len(value)-1, len(value), "")
+		m.textarea.InsertString("\n")
 		return m, nil
 	}
 
 	var cmds []tea.Cmd
+
+	attachments := m.textarea.GetAttachments()
+	fileParts := make([]opencode.FilePartParam, 0)
+	for _, attachment := range attachments {
+		fileParts = append(fileParts, opencode.FilePartParam{
+			Type:      opencode.F(opencode.FilePartTypeFile),
+			MediaType: opencode.F(attachment.MediaType),
+			URL:       opencode.F(attachment.URL),
+			Filename:  opencode.F(attachment.Filename),
+		})
+	}
+
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
 
-	attachments := m.attachments
-	m.attachments = nil
-
-	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: attachments}))
+	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: fileParts}))
 	return m, tea.Batch(cmds...)
 }
 
@@ -212,18 +269,23 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
-	imageBytes, text, err := image.GetImageFromClipboard()
+	_, text, err := image.GetImageFromClipboard()
 	if err != nil {
 		slog.Error(err.Error())
 		return m, nil
 	}
-	if len(imageBytes) != 0 {
-		attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
-		attachment := app.Attachment{FilePath: attachmentName, FileName: attachmentName, Content: imageBytes, MimeType: "image/png"}
-		m.attachments = append(m.attachments, attachment)
-	} else {
-		m.textarea.SetValue(m.textarea.Value() + text)
-	}
+	// if len(imageBytes) != 0 {
+	// 	attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
+	// 	attachment := app.Attachment{
+	// 		FilePath: attachmentName,
+	// 		FileName: attachmentName,
+	// 		Content:  imageBytes,
+	// 		MimeType: "image/png",
+	// 	}
+	// 	m.attachments = append(m.attachments, attachment)
+	// } else {
+	m.textarea.InsertString(text)
+	// }
 	return m, nil
 }
 
@@ -254,12 +316,26 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 
 	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
 	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Focused.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Focused.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Placeholder = styles.NewStyle().Foreground(textMutedColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
 	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Attachment = styles.NewStyle().
+		Foreground(t.Secondary()).
+		Background(bgColor).
+		Lipgloss()
+	ta.Styles.SelectedAttachment = styles.NewStyle().
+		Foreground(t.Text()).
+		Background(t.Secondary()).
+		Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
 
 	ta.Prompt = " "
