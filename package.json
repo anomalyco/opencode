@@ -3,7 +3,7 @@
   "name": "opencode",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.2.14",
+  "packageManager": "bun@1.2.18",
   "scripts": {
     "dev": "bun run packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
