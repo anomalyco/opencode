@@ -29,7 +29,7 @@ export const McpCommand = cmd({
       .command(McpEnableCommand)
       .command(McpDisableCommand)
       .help()
-    
+
     return configured
   },
   handler: () => {
@@ -98,7 +98,8 @@ export const McpAddCommand = cmd({
         alias: "H",
         type: "string",
         array: true,
-        describe: "Set HTTP headers for SSE transport (e.g. -H \"X-Api-Key: abc123\")",
+        describe:
+          'Set HTTP headers for SSE transport (e.g. -H "X-Api-Key: abc123")',
         default: [],
       }),
   handler: async (args) => {
@@ -107,7 +108,9 @@ export const McpAddCommand = cmd({
     for (const envVar of args.env) {
       const [key, ...valueParts] = envVar.split("=")
       if (!key || valueParts.length === 0) {
-        UI.error(`Invalid environment variable format: ${envVar}. Use KEY=VALUE format.`)
+        UI.error(
+          `Invalid environment variable format: ${envVar}. Use KEY=VALUE format.`,
+        )
         return
       }
       environment[key] = valueParts.join("=")
@@ -126,7 +129,9 @@ export const McpAddCommand = cmd({
 
     // Determine server type based on transport and URL
     const serverType = args.transport === "stdio" ? "local" : "remote"
-    const isUrl = args.commandOrUrl.startsWith("http://") || args.commandOrUrl.startsWith("https://")
+    const isUrl =
+      args.commandOrUrl.startsWith("http://") ||
+      args.commandOrUrl.startsWith("https://")
 
     // Validate transport constraints
     if (args.transport === "stdio") {
@@ -145,37 +150,44 @@ export const McpAddCommand = cmd({
         return
       }
       if (args.args.length > 0) {
-        UI.error(`${args.transport} transport doesn't accept additional arguments`)
+        UI.error(
+          `${args.transport} transport doesn't accept additional arguments`,
+        )
         return
       }
       if (Object.keys(environment).length > 0) {
-        UI.error(`${args.transport} transport doesn't support environment variables`)
+        UI.error(
+          `${args.transport} transport doesn't support environment variables`,
+        )
         return
       }
     }
 
     // Create config
-    const mcpConfig: Config.Mcp = serverType === "remote" 
-      ? {
-          type: "remote",
-          url: args.commandOrUrl,
-          ...(Object.keys(headers).length > 0 && { headers }),
-        }
-      : {
-          type: "local",
-          command: [args.commandOrUrl, ...args.args],
-          ...(Object.keys(environment).length > 0 && { environment }),
-        }
+    const mcpConfig: Config.Mcp =
+      serverType === "remote"
+        ? {
+            type: "remote",
+            url: args.commandOrUrl,
+            ...(Object.keys(headers).length > 0 && { headers }),
+          }
+        : {
+            type: "local",
+            command: [args.commandOrUrl, ...args.args],
+            ...(Object.keys(environment).length > 0 && { environment }),
+          }
 
     // Determine config path based on scope
-    const configPath = args.scope === "user" 
-      ? path.join(Global.Path.config, "config.json")
-      : path.join(process.cwd(), "opencode.json")
+    const configPath =
+      args.scope === "user"
+        ? path.join(Global.Path.config, "config.json")
+        : path.join(process.cwd(), "opencode.json")
 
     // Load current config
-    const currentConfig = args.scope === "user" 
-      ? await Config.global()
-      : await loadProjectConfig(configPath)
+    const currentConfig =
+      args.scope === "user"
+        ? await Config.global()
+        : await loadProjectConfig(configPath)
 
     const updatedConfig = {
       ...currentConfig,
@@ -186,8 +198,10 @@ export const McpAddCommand = cmd({
     }
 
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
-    
-    UI.println(`Added MCP server "${args.name}" (${args.transport}) to ${args.scope} config`)
+
+    UI.println(
+      `Added MCP server "${args.name}" (${args.transport}) to ${args.scope} config`,
+    )
   },
 })
 
@@ -210,14 +224,16 @@ export const McpRemoveCommand = cmd({
       }),
   handler: async (args) => {
     // Determine config path based on scope
-    const configPath = args.scope === "user" 
-      ? path.join(Global.Path.config, "config.json")
-      : path.join(process.cwd(), "opencode.json")
+    const configPath =
+      args.scope === "user"
+        ? path.join(Global.Path.config, "config.json")
+        : path.join(process.cwd(), "opencode.json")
 
     // Load current config
-    const currentConfig = args.scope === "user" 
-      ? await Config.global()
-      : await loadProjectConfig(configPath)
+    const currentConfig =
+      args.scope === "user"
+        ? await Config.global()
+        : await loadProjectConfig(configPath)
 
     if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
       UI.error(`MCP server "${args.name}" not found in ${args.scope} config`)
@@ -231,7 +247,7 @@ export const McpRemoveCommand = cmd({
     }
 
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
-    
+
     UI.println(`Removed MCP server "${args.name}" from ${args.scope} config`)
   },
 })
@@ -243,10 +259,12 @@ export const McpListCommand = cmd({
     const globalConfig = await Config.global()
     const projectConfigPath = path.join(process.cwd(), "opencode.json")
     const projectConfig = await loadProjectConfig(projectConfigPath)
-    
-    const hasGlobalServers = globalConfig.mcp && Object.keys(globalConfig.mcp).length > 0
-    const hasProjectServers = projectConfig.mcp && Object.keys(projectConfig.mcp).length > 0
-    
+
+    const hasGlobalServers =
+      globalConfig.mcp && Object.keys(globalConfig.mcp).length > 0
+    const hasProjectServers =
+      projectConfig.mcp && Object.keys(projectConfig.mcp).length > 0
+
     if (!hasGlobalServers && !hasProjectServers) {
       UI.println("No MCP servers configured")
       return
@@ -256,13 +274,16 @@ export const McpListCommand = cmd({
     if (hasGlobalServers) {
       UI.println("Global MCP servers:")
       UI.empty()
-      
+
       for (const [name, mcpConfig] of Object.entries(globalConfig.mcp!)) {
         const status = mcpConfig.enabled === false ? " (disabled)" : ""
         UI.println(`  ${name} (${mcpConfig.type})${status}`)
         if (mcpConfig.type === "local") {
           UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
-          if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
+          if (
+            mcpConfig.environment &&
+            Object.keys(mcpConfig.environment).length > 0
+          ) {
             UI.println(`    Environment:`)
             for (const [key, value] of Object.entries(mcpConfig.environment)) {
               UI.println(`      ${key}=${value}`)
@@ -279,13 +300,16 @@ export const McpListCommand = cmd({
     if (hasProjectServers) {
       UI.println("Project MCP servers:")
       UI.empty()
-      
+
       for (const [name, mcpConfig] of Object.entries(projectConfig.mcp!)) {
         const status = mcpConfig.enabled === false ? " (disabled)" : ""
         UI.println(`  ${name} (${mcpConfig.type})${status}`)
         if (mcpConfig.type === "local") {
           UI.println(`    Command: ${mcpConfig.command.join(" ")}`)
-          if (mcpConfig.environment && Object.keys(mcpConfig.environment).length > 0) {
+          if (
+            mcpConfig.environment &&
+            Object.keys(mcpConfig.environment).length > 0
+          ) {
             UI.println(`    Environment:`)
             for (const [key, value] of Object.entries(mcpConfig.environment)) {
               UI.println(`      ${key}=${value}`)
@@ -304,12 +328,11 @@ export const McpGetCommand = cmd({
   command: "get <name>",
   describe: "Get details about an MCP server",
   builder: (yargs) =>
-    yargs
-      .positional("name", {
-        type: "string",
-        describe: "Name of the MCP server",
-        demandOption: true,
-      }),
+    yargs.positional("name", {
+      type: "string",
+      describe: "Name of the MCP server",
+      demandOption: true,
+    }),
   handler: async (args) => {
     const globalConfig = await Config.global()
     const projectConfigPath = path.join(process.cwd(), "opencode.json")
@@ -338,10 +361,13 @@ export const McpGetCommand = cmd({
     UI.println(`Scope: ${foundScope}`)
     UI.println(`Type: ${foundConfig.type}`)
     UI.println(`Enabled: ${foundConfig.enabled !== false ? "true" : "false"}`)
-    
+
     if (foundConfig.type === "local") {
       UI.println(`Command: ${foundConfig.command.join(" ")}`)
-      if (foundConfig.environment && Object.keys(foundConfig.environment).length > 0) {
+      if (
+        foundConfig.environment &&
+        Object.keys(foundConfig.environment).length > 0
+      ) {
         UI.println(`Environment variables:`)
         for (const [key, value] of Object.entries(foundConfig.environment)) {
           UI.println(`  ${key}=${value}`)
@@ -384,46 +410,50 @@ export const McpAddJsonCommand = cmd({
   handler: async (args) => {
     try {
       const jsonConfig = JSON.parse(args.json)
-      
+
       // Infer type and transform to match schema
       let mcpConfig
-      if ('command' in jsonConfig) {
+      if ("command" in jsonConfig) {
         // Transform stdio transport format
         const { type, command, args, env, ...rest } = jsonConfig
-        
+
         // Build command array
         const commandArray = Array.isArray(command) ? command : [command]
         if (args && Array.isArray(args)) {
           commandArray.push(...args)
         }
-        
+
         mcpConfig = Config.Mcp.parse({
-          type: 'local',
+          type: "local",
           command: commandArray,
           ...(env && { environment: env }),
-          ...rest
+          ...rest,
         })
-      } else if ('url' in jsonConfig) {
+      } else if ("url" in jsonConfig) {
         // Transform sse transport format
         const { type, ...rest } = jsonConfig
         mcpConfig = Config.Mcp.parse({
-          type: 'remote',
-          ...rest
+          type: "remote",
+          ...rest,
         })
       } else {
-        UI.error("Invalid MCP configuration: Unable to determine transport type from JSON. Must include either 'command' for stdio or 'url' for sse.")
+        UI.error(
+          "Invalid MCP configuration: Unable to determine transport type from JSON. Must include either 'command' for stdio or 'url' for sse.",
+        )
         return
       }
 
       // Determine config path based on scope
-      const configPath = args.scope === "user" 
-        ? path.join(Global.Path.config, "config.json")
-        : path.join(process.cwd(), "opencode.json")
+      const configPath =
+        args.scope === "user"
+          ? path.join(Global.Path.config, "config.json")
+          : path.join(process.cwd(), "opencode.json")
 
       // Load current config
-      const currentConfig = args.scope === "user" 
-        ? await Config.global()
-        : await loadProjectConfig(configPath)
+      const currentConfig =
+        args.scope === "user"
+          ? await Config.global()
+          : await loadProjectConfig(configPath)
 
       const updatedConfig = {
         ...currentConfig,
@@ -434,8 +464,10 @@ export const McpAddJsonCommand = cmd({
       }
 
       await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
-      
-      UI.println(`Added MCP server "${args.name}" (${mcpConfig.type}) to ${args.scope} config`)
+
+      UI.println(
+        `Added MCP server "${args.name}" (${mcpConfig.type}) to ${args.scope} config`,
+      )
     } catch (error) {
       if (error instanceof SyntaxError) {
         UI.error(`Invalid JSON: ${error.message}`)
@@ -472,14 +504,16 @@ export const McpEnableCommand = cmd({
       }),
   handler: async (args) => {
     // Determine config path based on scope
-    const configPath = args.scope === "user" 
-      ? path.join(Global.Path.config, "config.json")
-      : path.join(process.cwd(), "opencode.json")
+    const configPath =
+      args.scope === "user"
+        ? path.join(Global.Path.config, "config.json")
+        : path.join(process.cwd(), "opencode.json")
 
     // Load current config
-    const currentConfig = args.scope === "user" 
-      ? await Config.global()
-      : await loadProjectConfig(configPath)
+    const currentConfig =
+      args.scope === "user"
+        ? await Config.global()
+        : await loadProjectConfig(configPath)
 
     if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
       UI.error(`MCP server "${args.name}" not found in ${args.scope} config`)
@@ -498,7 +532,7 @@ export const McpEnableCommand = cmd({
     }
 
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
-    
+
     UI.println(`Enabled MCP server "${args.name}" in ${args.scope} config`)
   },
 })
@@ -522,14 +556,16 @@ export const McpDisableCommand = cmd({
       }),
   handler: async (args) => {
     // Determine config path based on scope
-    const configPath = args.scope === "user" 
-      ? path.join(Global.Path.config, "config.json")
-      : path.join(process.cwd(), "opencode.json")
+    const configPath =
+      args.scope === "user"
+        ? path.join(Global.Path.config, "config.json")
+        : path.join(process.cwd(), "opencode.json")
 
     // Load current config
-    const currentConfig = args.scope === "user" 
-      ? await Config.global()
-      : await loadProjectConfig(configPath)
+    const currentConfig =
+      args.scope === "user"
+        ? await Config.global()
+        : await loadProjectConfig(configPath)
 
     if (!currentConfig.mcp || !currentConfig.mcp[args.name]) {
       UI.error(`MCP server "${args.name}" not found in ${args.scope} config`)
@@ -548,7 +584,7 @@ export const McpDisableCommand = cmd({
     }
 
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
-    
+
     UI.println(`Disabled MCP server "${args.name}" in ${args.scope} config`)
   },
 })
