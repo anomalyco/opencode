@@ -918,7 +918,7 @@ export namespace Session {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
+for (const [key, item] of Object.entries(await MCP.tools(model.providerID))) {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue

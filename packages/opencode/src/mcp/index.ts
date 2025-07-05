@@ -143,15 +143,47 @@ export namespace MCP {
     return state().then((state) => state.clients)
   }
 
-  export async function tools() {
+  export async function tools(providerID?: string) {
     const result: Record<string, Tool> = {}
-    for (const [clientName, client] of Object.entries(await clients())) {
-      for (const [toolName, tool] of Object.entries(await client.tools())) {
-        const sanitizedClientName = clientName.replace(/\s+/g, "_")
-        const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = tool
+    const clientEntries = Object.entries(await clients())
+    
+    for (const [clientName, client] of clientEntries) {
+      try {
+        const clientTools = await client.tools()
+        
+        for (const [toolName, tool] of Object.entries(clientTools)) {
+          const sanitizedClientName = clientName.replace(/\s+/g, "_")
+          const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
+          const toolKey = sanitizedClientName + "_" + sanitizedToolName
+          
+          if (providerID) {
+            const transformedTool = await transformToolForProvider(tool, providerID)
+            result[toolKey] = transformedTool
+          } else {
+            result[toolKey] = tool
+          }
+        }
+      } catch (error: any) {
+        log.error('Failed to get tools from MCP client', { clientName, error: error.message })
       }
     }
+    
     return result
+  }
+
+  async function transformToolForProvider(tool: any, providerID: string): Promise<any> {
+    if (!['openai', 'azure'].includes(providerID)) return tool
+    
+    try {
+      const { Provider } = await import("../provider/provider")
+      return Provider.transformMCPToolForProvider(tool, providerID)
+    } catch (error: any) {
+      log.warn('Could not transform MCP tool schema, using as-is', { 
+        toolId: tool.id || 'unknown',
+        providerID,
+        error: error.message
+      })
+      return tool
+    }
   }
 }
