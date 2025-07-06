@@ -1,13 +1,12 @@
 package completions
 
 import (
-	"bufio"
 	"context"
-	"io/fs"
-	"os"
+	"fmt"
+	"log/slog"
 	"path/filepath"
-	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss/v2"
@@ -66,155 +65,35 @@ func getCustomCommandCompletionItem(cmd CustomCommandFile, space int, t theme.Th
 	})
 }
 
-// parseMarkdownMetadata extracts description from markdown frontmatter or first heading
-func parseMarkdownMetadata(filePath string) string {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return ""
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-
-	// Check for YAML frontmatter
-	if scanner.Scan() {
-		firstLine := strings.TrimSpace(scanner.Text())
-		if firstLine == "---" {
-			// Parse YAML frontmatter
-			descriptionRegex := regexp.MustCompile(`(?i)^description:\s*(.+)$`)
-			for scanner.Scan() {
-				line := strings.TrimSpace(scanner.Text())
-				if line == "---" {
-					break
-				}
-				if matches := descriptionRegex.FindStringSubmatch(line); len(matches) > 1 {
-					return strings.Trim(matches[1], `"'`)
-				}
-			}
-		} else {
-			// Check if first line is a heading and use it as description
-			if strings.HasPrefix(firstLine, "#") {
-				return strings.TrimSpace(strings.TrimLeft(firstLine, "#"))
-			}
-		}
-	}
-
-	// If no frontmatter, look for first heading
-	file.Seek(0, 0)
-	scanner = bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "#") {
-			return strings.TrimSpace(strings.TrimLeft(line, "#"))
-		}
-		// Stop at first non-empty, non-comment line
-		if line != "" && !strings.HasPrefix(line, "<!--") {
-			break
-		}
-	}
-
-	return ""
-}
-
 func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, error) {
-	// Try to get commands from server first
+	// Get commands from server endpoint
 	ctx := context.Background()
 	serverCommands, err := c.app.CommandsClient.ListCustomCommands(ctx)
-	if err == nil {
-		// Convert server commands to local format
-		var commands []CustomCommandFile
-		for _, cmd := range serverCommands {
-			description := ""
-			if cmd.Description != nil {
-				description = *cmd.Description
-			}
-			commands = append(commands, CustomCommandFile{
-				Name:        cmd.Name,
-				Description: description,
-				Filename:    filepath.Base(cmd.FilePath),
-				Content:     cmd.Content,
-			})
-		}
-		return commands, nil
-	}
-
-	// Fallback to local filesystem scanning if server is not available
-	var commands []CustomCommandFile
-
-	// Get global commands from ~/.config/opencode/commands
-	globalCommandsDir := filepath.Join(c.app.Info.Path.Config, "commands")
-	globalCommands, err := c.scanCommandsDirectory(globalCommandsDir, "")
 	if err != nil {
-		// Log error but continue with project commands
-		globalCommands = []CustomCommandFile{}
+		return nil, fmt.Errorf("failed to get commands from server: %w", err)
 	}
-	commands = append(commands, globalCommands...)
 
-	// Get project-level commands from $PWD/.opencode/commands
-	cwd, err := os.Getwd()
-	if err == nil {
-		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
-		projectCommands, err := c.scanCommandsDirectory(projectCommandsDir, "")
-		if err == nil {
-			commands = append(commands, projectCommands...)
+	slog.Debug("Server commands:" + strconv.Itoa(len(serverCommands)))
+
+	// Convert server commands to local format
+	var commands []CustomCommandFile
+	for _, cmd := range serverCommands {
+		description := ""
+		if cmd.Description != nil {
+			description = *cmd.Description
 		}
+		commands = append(commands, CustomCommandFile{
+			Name:        cmd.Name,
+			Description: description,
+			Filename:    filepath.Base(cmd.FilePath),
+			Content:     cmd.Content,
+		})
 	}
 
 	// Sort commands alphabetically
 	sort.Slice(commands, func(i, j int) bool {
 		return commands[i].Name < commands[j].Name
 	})
-
-	return commands, nil
-}
-
-// scanCommandsDirectory recursively scans a directory for markdown command files
-func (c *CommandCompletionProvider) scanCommandsDirectory(baseDir, relativePath string) ([]CustomCommandFile, error) {
-	var commands []CustomCommandFile
-
-	currentDir := filepath.Join(baseDir, relativePath)
-
-	err := filepath.WalkDir(currentDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// If the commands directory doesn't exist, just return empty list
-			if strings.Contains(err.Error(), "no such file or directory") {
-				return nil
-			}
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(d.Name(), ".md") {
-			return nil
-		}
-
-		// Calculate relative path from base commands directory
-		relPath, err := filepath.Rel(baseDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Convert file path to command name with colon notation
-		// e.g., "foo/bar.md" -> "foo:bar"
-		name := strings.TrimSuffix(relPath, ".md")
-		name = strings.ReplaceAll(name, string(filepath.Separator), ":")
-
-		description := parseMarkdownMetadata(path)
-		commands = append(commands, CustomCommandFile{
-			Name:        name,
-			Filename:    d.Name(),
-			Content:     "", // We don't need content for completion
-			Description: description,
-		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
 
 	return commands, nil
 }
@@ -226,7 +105,7 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 	// Get custom commands
 	customCommands, err := c.getCustomCommands()
 	if err != nil {
-		// Log error but continue with built-in commands
+		// If server is not available, return only built-in commands
 		customCommands = []CustomCommandFile{}
 	}
 

@@ -1,14 +1,10 @@
 package tui
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,14 +31,6 @@ import (
 
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
-
-// CustomCommandFile represents a custom command file
-type CustomCommandFile struct {
-	Name        string `json:"name"`
-	Filename    string `json:"filename"`
-	Content     string `json:"content"`
-	Description string `json:"description"`
-}
 
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
@@ -1018,16 +1006,15 @@ func (a appModel) parseCustomCommand(input string) (commandName, arguments strin
 		arguments = parts[1]
 	}
 
-	// Check if this command exists as a custom command
-	customCommands, err := a.getAvailableCustomCommands()
+	// Check if this command exists as a custom command via server
+	ctx := context.Background()
+	exists, err := a.app.CommandsClient.CustomCommandExists(ctx, commandName)
 	if err != nil {
 		return "", "", false
 	}
 
-	for _, cmd := range customCommands {
-		if cmd.Name == commandName {
-			return commandName, arguments, true
-		}
+	if exists {
+		return commandName, arguments, true
 	}
 
 	return "", "", false
@@ -1037,7 +1024,7 @@ func (a appModel) parseCustomCommand(input string) (commandName, arguments strin
 func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (tea.Model, tea.Cmd) {
 	slog.Debug("Executing custom command with arguments", "command", commandName, "arguments", arguments)
 
-	// Try to execute command via server first
+	// Execute command via server endpoint
 	ctx := context.Background()
 	var args *string
 	if arguments != "" {
@@ -1053,244 +1040,9 @@ func (a appModel) executeCustomCommandWithArgs(commandName, arguments string) (t
 		return a, cmd
 	}
 
-	// Fallback to local execution if server is not available
-	slog.Warn("Server execution failed, falling back to local execution", "command", commandName, "error", err)
-
-	// Convert colon notation back to file path
-	filePath := strings.ReplaceAll(commandName, ":", string(filepath.Separator)) + ".md"
-
-	var commandFile string
-	var content []byte
-	var localErr error
-
-	// Try project-level commands first ($PWD/.opencode/commands)
-	if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
-		projectCommandFile := filepath.Join(projectCommandsDir, filePath)
-		content, localErr = os.ReadFile(projectCommandFile)
-		if localErr == nil {
-			commandFile = projectCommandFile
-		}
-	}
-
-	// If not found in project, try global commands (~/.config/opencode/commands)
-	if localErr != nil {
-		globalCommandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
-		globalCommandFile := filepath.Join(globalCommandsDir, filePath)
-		content, localErr = os.ReadFile(globalCommandFile)
-		if localErr == nil {
-			commandFile = globalCommandFile
-		}
-	}
-
-	if localErr != nil {
-		slog.Error("Failed to read custom command file", "command", commandName, "error", localErr)
-		return a, toast.NewErrorToast("Failed to read custom command: " + commandName)
-	}
-
-	slog.Debug("Executing custom command locally", "command", commandName, "file", commandFile, "arguments", arguments)
-
-	// Replace $ARGUMENTS placeholder with actual arguments
-	contentStr := string(content)
-	contentStr = strings.ReplaceAll(contentStr, "$ARGUMENTS", arguments)
-
-	// Process bash commands if any exist
-	processedContent, localErr := a.processBashCommands(contentStr)
-	if localErr != nil {
-		slog.Error("Failed to process bash commands", "error", localErr)
-		return a, toast.NewErrorToast("Failed to process bash commands: " + localErr.Error())
-	}
-
-	// Send the processed command content as a message to the LLM
-	a.app, cmd = a.app.SendChatMessage(context.Background(), processedContent, []opencode.FilePartParam{})
-	return a, cmd
-}
-
-// processBashCommands processes bash commands prefixed with ! in the content
-func (a appModel) processBashCommands(content string) (string, error) {
-	lines := strings.Split(content, "\n")
-	var commands []string
-	var cleanLines []string
-
-	// Parse bash commands and clean content
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "!") {
-			command := strings.TrimSpace(trimmed[1:])
-			if command != "" {
-				commands = append(commands, command)
-			}
-		} else {
-			cleanLines = append(cleanLines, line)
-		}
-	}
-
-	// If no bash commands found, return original content
-	if len(commands) == 0 {
-		return content, nil
-	}
-
-	slog.Info("Processing bash commands", "count", len(commands))
-
-	// Execute bash commands and collect results
-	var contextSection strings.Builder
-	contextSection.WriteString("\n\n## Command Context\n\n")
-	contextSection.WriteString("The following bash commands were executed to gather context:\n\n")
-
-	for _, command := range commands {
-		result, err := a.executeBashCommand(command)
-		if err != nil {
-			slog.Error("Failed to execute bash command", "command", command, "error", err)
-			contextSection.WriteString(fmt.Sprintf("### Command: `%s`\n\n", command))
-			contextSection.WriteString(fmt.Sprintf("*Command failed: %s*\n\n", err.Error()))
-			continue
-		}
-
-		contextSection.WriteString(fmt.Sprintf("### Command: `%s`\n\n", command))
-		if result.ExitCode == 0 {
-			if strings.TrimSpace(result.Stdout) != "" {
-				contextSection.WriteString("```\n")
-				contextSection.WriteString(strings.TrimSpace(result.Stdout))
-				contextSection.WriteString("\n```\n\n")
-			} else {
-				contextSection.WriteString("*No output*\n\n")
-			}
-		} else {
-			contextSection.WriteString(fmt.Sprintf("*Command failed with exit code %d*\n\n", result.ExitCode))
-			if strings.TrimSpace(result.Stderr) != "" {
-				contextSection.WriteString("```\n")
-				contextSection.WriteString(strings.TrimSpace(result.Stderr))
-				contextSection.WriteString("\n```\n\n")
-			}
-		}
-	}
-
-	// Combine clean content with command context
-	cleanContent := strings.Join(cleanLines, "\n")
-	return cleanContent + contextSection.String(), nil
-}
-
-// BashCommandResult represents the result of executing a bash command
-type BashCommandResult struct {
-	Command  string
-	Stdout   string
-	Stderr   string
-	ExitCode int
-}
-
-// executeBashCommand executes a single bash command and returns the result
-func (a appModel) executeBashCommand(command string) (*BashCommandResult, error) {
-	// List of banned commands for security
-	bannedCommands := []string{
-		"axel", "aria2c", "nc", "telnet", "lynx", "w3m", "links", "xh", "chrome", "firefox", "safari",
-	}
-
-	// Check if command is banned
-	for _, banned := range bannedCommands {
-		if strings.HasPrefix(command, banned) {
-			return nil, fmt.Errorf("command '%s' is not allowed", command)
-		}
-	}
-
-	// Execute the command
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			exitCode = exitError.ExitCode()
-		} else {
-			return nil, fmt.Errorf("failed to execute command: %w", err)
-		}
-	}
-
-	return &BashCommandResult{
-		Command:  command,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-		ExitCode: exitCode,
-	}, nil
-}
-
-// getAvailableCustomCommands returns a list of available custom commands
-func (a appModel) getAvailableCustomCommands() ([]CustomCommandFile, error) {
-	var commands []CustomCommandFile
-
-	// Get global commands from ~/.config/opencode/commands
-	globalCommandsDir := filepath.Join(a.app.Info.Path.Config, "commands")
-	globalCommands, err := a.scanCommandsDirectory(globalCommandsDir, "")
-	if err != nil {
-		globalCommands = []CustomCommandFile{}
-	}
-	commands = append(commands, globalCommands...)
-
-	// Get project-level commands from $PWD/.opencode/commands
-	cwd, err := os.Getwd()
-	if err == nil {
-		projectCommandsDir := filepath.Join(cwd, ".opencode", "commands")
-		projectCommands, err := a.scanCommandsDirectory(projectCommandsDir, "")
-		if err == nil {
-			commands = append(commands, projectCommands...)
-		}
-	}
-
-	return commands, nil
-}
-
-// scanCommandsDirectory recursively scans a directory for markdown command files
-func (a appModel) scanCommandsDirectory(baseDir, relativePath string) ([]CustomCommandFile, error) {
-	var commands []CustomCommandFile
-
-	currentDir := filepath.Join(baseDir, relativePath)
-
-	err := filepath.WalkDir(currentDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if strings.Contains(err.Error(), "no such file or directory") {
-				return nil
-			}
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(d.Name(), ".md") {
-			return nil
-		}
-
-		// Calculate relative path from base commands directory
-		relPath, err := filepath.Rel(baseDir, path)
-		if err != nil {
-			return err
-		}
-
-		// Convert file path to command name with colon notation
-		name := strings.TrimSuffix(relPath, ".md")
-		name = strings.ReplaceAll(name, string(filepath.Separator), ":")
-
-		commands = append(commands, CustomCommandFile{
-			Name:        name,
-			Filename:    d.Name(),
-			Content:     "",
-			Description: "",
-		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return commands, nil
+	// Server execution failed
+	slog.Error("Failed to execute custom command via server", "command", commandName, "error", err)
+	return a, toast.NewErrorToast("Failed to execute custom command: " + commandName)
 }
 
 func NewModel(app *app.App) tea.Model {

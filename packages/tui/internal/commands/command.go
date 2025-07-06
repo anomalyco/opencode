@@ -314,9 +314,9 @@ func IsValidCustomCommand(commandName string, configPath string) bool {
 	return false
 }
 
-// IsValidCustomCommandWithClient checks if a custom command exists via server or filesystem
+// IsValidCustomCommandWithClient checks if a custom command exists via server
 func IsValidCustomCommandWithClient(commandName string, configPath string, client *CommandsClient) bool {
-	// Try server first if client is available
+	// Use server endpoint if client is available
 	if client != nil {
 		ctx := context.Background()
 		exists, err := client.CustomCommandExists(ctx, commandName)
@@ -325,8 +325,8 @@ func IsValidCustomCommandWithClient(commandName string, configPath string, clien
 		}
 	}
 
-	// Fallback to local filesystem check
-	return IsValidCustomCommand(commandName, configPath)
+	// Return false if server is not available or returns an error
+	return false
 }
 
 func LoadFromConfig(config *opencode.Config) CommandRegistry {

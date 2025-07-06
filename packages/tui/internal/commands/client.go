@@ -56,7 +56,7 @@ func NewCommandsClient(baseURL string) *CommandsClient {
 
 // ListCustomCommands fetches all available custom commands from the server
 func (c *CommandsClient) ListCustomCommands(ctx context.Context) ([]CustomCommand, error) {
-	url := fmt.Sprintf("%s/commands", c.baseURL)
+	url := fmt.Sprintf("%scommands", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -83,7 +83,7 @@ func (c *CommandsClient) ListCustomCommands(ctx context.Context) ([]CustomComman
 
 // GetCustomCommand fetches a specific custom command from the server
 func (c *CommandsClient) GetCustomCommand(ctx context.Context, name string) (*CustomCommand, error) {
-	url := fmt.Sprintf("%s/commands/%s", c.baseURL, name)
+	url := fmt.Sprintf("%scommands/%s", c.baseURL, name)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func (c *CommandsClient) GetCustomCommand(ctx context.Context, name string) (*Cu
 
 // ExecuteCustomCommand executes a custom command on the server
 func (c *CommandsClient) ExecuteCustomCommand(ctx context.Context, name string, arguments *string) (*ExecuteCommandResponse, error) {
-	url := fmt.Sprintf("%s/commands/%s/execute", c.baseURL, name)
+	url := fmt.Sprintf("%scommands/%s/execute", c.baseURL, name)
 
 	reqBody := ExecuteCommandRequest{
 		Arguments: arguments,

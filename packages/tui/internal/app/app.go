@@ -110,8 +110,12 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
-	// Create commands client - assuming server runs on same host with port 3000
-	commandsClient := commands.NewCommandsClient("http://localhost:3000")
+	// Create commands client using the same base URL as the HTTP client
+	baseURL := os.Getenv("OPENCODE_SERVER")
+	if baseURL == "" {
+		baseURL = "http://localhost:4096" // Default fallback
+	}
+	commandsClient := commands.NewCommandsClient(baseURL)
 
 	app := &App{
 		Info:           appInfo,
