@@ -21,6 +21,10 @@ export namespace Config {
         result = mergeDeep(result, await load(resolved))
       }
     }
+
+    const projectMcps = await getProjectMcps(app.path.cwd);
+    result = mergeDeep(result, { mcp: projectMcps } as Info)
+
     log.info("loaded", result)
 
     return result
@@ -63,6 +67,25 @@ export namespace Config {
 
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
+
+  export const ProjectMcps = z.record(z.string(), Mcp)
+    .optional()
+    .describe("MCP (Model Context Protocol) server configurations")
+  export type ProjectMcps = z.infer<typeof ProjectMcps>
+
+  export const StandardMcpServer = z
+    .object({
+      command: z.string().describe("Command to run the MCP server"),
+      args: z.array(z.string()).optional().describe("Arguments for the MCP server command"),
+      env: z.record(z.string(), z.string()).optional().describe("Environment variables"),
+    })
+    .strict()
+
+  export const StandardMcpConfig = z
+    .object({
+      mcpServers: z.record(z.string(), StandardMcpServer)
+    })
+    .describe("Standard MCP configuration format")
 
   export const Keybinds = z
     .object({
@@ -172,10 +195,7 @@ export namespace Config {
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(z.string(), Mcp)
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
+      mcp: ProjectMcps,
       instructions: z
         .array(z.string())
         .optional()
@@ -249,6 +269,30 @@ export namespace Config {
     const parsed = Info.safeParse(data)
     if (parsed.success) return parsed.data
     throw new InvalidError({ path, issues: parsed.error.issues })
+  }
+
+  async function getProjectMcps(cwd: string): Promise<ProjectMcps> {
+    const projectMcpFile = path.join(cwd, ".mcp.json")
+    const data = await Bun.file(projectMcpFile).json()
+
+    const parsed = StandardMcpConfig.safeParse(data)
+    if (parsed.success) {
+      let projectMcps: ProjectMcps
+
+      for (const [name, server] of Object.entries(parsed.data.mcpServers) ) {
+        if(projectMcps === undefined) projectMcps = {}
+        projectMcps[name] = {
+          type: "local",
+          command: [server.command, ...(server.args || [])],
+          environment: server.env,
+          enabled: true
+        }
+      }
+
+      return projectMcps
+    }
+
+    return undefined;
   }
 
   export const JsonError = NamedError.create(
