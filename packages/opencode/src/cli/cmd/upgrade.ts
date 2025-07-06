@@ -35,6 +35,15 @@ export const UpgradeCommand = {
     }
     prompts.log.info("Using method: " + method)
     const target = args.target ?? (await Installation.latest())
+
+    if (Installation.VERSION === target) {
+      prompts.log.warn(
+        `opencode upgrade skipped: ${target} is already installed`,
+      )
+      prompts.outro("Done")
+      return
+    }
+
     prompts.log.info(`From ${Installation.VERSION} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
