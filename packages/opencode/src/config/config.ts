@@ -273,7 +273,11 @@ export namespace Config {
 
   async function getProjectMcps(cwd: string): Promise<ProjectMcps> {
     const projectMcpFile = path.join(cwd, ".mcp.json")
-    const data = await Bun.file(projectMcpFile).json()
+    const file = Bun.file(projectMcpFile)
+    const fileExists = await file.exists()
+    if(!fileExists) return undefined
+
+    const data = await file.json()
 
     const parsed = StandardMcpConfig.safeParse(data)
     if (parsed.success) {
