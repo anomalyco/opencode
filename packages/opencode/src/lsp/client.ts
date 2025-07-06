@@ -66,6 +66,7 @@ export namespace LSPClient {
     log.info("sending initialize", { id: serverID })
     await withTimeout(
       connection.sendRequest("initialize", {
+        rootUri: "file://" + app.path.cwd,
         processId: server.process.pid,
         workspaceFolders: [
           {
