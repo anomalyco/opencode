@@ -17,6 +17,9 @@ export namespace ProviderTransform {
           anthropic: {
             cacheControl: { type: "ephemeral" },
           },
+          openaiCompatible: {
+            cache_control: { type: "ephemeral" },
+          },
         }
       }
     }
