@@ -1512,7 +1512,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.transposeLeft()
 
 		default:
-			m.insertRunesFromUserInput([]rune{msg.Code})
+			m.insertRunesFromUserInput([]rune(msg.Text))
 		}
 
 	case pasteMsg:

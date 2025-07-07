@@ -92,7 +92,6 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Now, insert the attachment at the position where the '@' was.
 			// The cursor is now at `atIndex` after the replacement.
 			filePath := msg.CompletionValue
-			fileName := filepath.Base(filePath)
 			extension := filepath.Ext(filePath)
 			mediaType := ""
 			switch extension {
@@ -107,7 +106,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			attachment := &textarea.Attachment{
 				ID:        uuid.NewString(),
-				Display:   "@" + fileName,
+				Display:   "@" + filePath,
 				URL:       fmt.Sprintf("file://./%s", filePath),
 				Filename:  filePath,
 				MediaType: mediaType,

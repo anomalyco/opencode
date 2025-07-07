@@ -68,11 +68,9 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedPart = -1
 		return m, nil
 	case app.OptimisticMessageAddedMsg:
-		m.renderView(m.width)
-		if m.tail {
-			m.viewport.GotoBottom()
-		}
-		return m, nil
+		m.tail = true
+		m.rendering = true
+		return m, m.Reload()
 	case dialog.ThemeSelectedMsg:
 		m.cache.Clear()
 		m.rendering = true
@@ -134,6 +132,7 @@ func (m *messagesComponent) renderView(width int) {
 
 		switch message.Role {
 		case opencode.MessageRoleUser:
+		userLoop:
 			for partIndex, part := range message.Parts {
 				switch part := part.AsUnion().(type) {
 				case opencode.TextPart:
@@ -195,6 +194,8 @@ func (m *messagesComponent) renderView(width int) {
 						m = m.updateSelected(content, part.Text)
 						blocks = append(blocks, content)
 					}
+					// Only render the first text part
+					break userLoop
 				}
 			}
 

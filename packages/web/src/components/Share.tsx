@@ -243,6 +243,44 @@ function getStatusText(status: [Status, string?]): string {
   }
 }
 
+function checkOverflow(getEl: () => HTMLElement | undefined, watch?: () => any) {
+  const [needsToggle, setNeedsToggle] = createSignal(false)
+
+  function measure() {
+    const el = getEl()
+    if (!el) return
+    setNeedsToggle(el.scrollHeight > el.clientHeight + 1)
+  }
+
+  onMount(() => {
+    let raf = 0
+
+    function probe() {
+      const el = getEl()
+      if (el && el.offsetParent !== null && el.getBoundingClientRect().height) {
+        measure()
+      }
+      else {
+        raf = requestAnimationFrame(probe)
+      }
+    }
+    raf = requestAnimationFrame(probe)
+
+    const ro = new ResizeObserver(measure)
+    const el = getEl()
+    if (el) ro.observe(el)
+
+    onCleanup(() => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    })
+  })
+
+  if (watch) createEffect(measure)
+
+  return needsToggle
+}
+
 function ProviderIcon(props: { provider: string; size?: number }) {
   const size = props.size || 16
   return (
@@ -296,34 +334,11 @@ interface TextPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
   expand?: boolean
 }
 function TextPart(props: TextPartProps) {
-  const [local, rest] = splitProps(props, [
-    "text",
-    "expand",
-  ])
-  const [expanded, setExpanded] = createSignal(false)
-  const [overflowed, setOverflowed] = createSignal(false)
   let preEl: HTMLPreElement | undefined
 
-  function checkOverflow() {
-    if (preEl && !local.expand) {
-      setOverflowed(preEl.scrollHeight > preEl.clientHeight + 1)
-    }
-  }
-
-  onMount(() => {
-    checkOverflow()
-    window.addEventListener("resize", checkOverflow)
-  })
-
-  createEffect(() => {
-    local.text
-    local.expand
-    setTimeout(checkOverflow, 0)
-  })
-
-  onCleanup(() => {
-    window.removeEventListener("resize", checkOverflow)
-  })
+  const [local, rest] = splitProps(props, ["text", "expand"])
+  const [expanded, setExpanded] = createSignal(false)
+  const overflowed = checkOverflow(() => preEl, () => local.expand)
 
   return (
     <div
@@ -331,7 +346,7 @@ function TextPart(props: TextPartProps) {
       data-expanded={expanded() || local.expand === true}
       {...rest}
     >
-      <pre ref={(el) => (preEl = el)}>{local.text}</pre>
+      <pre ref={preEl}>{local.text}</pre>
       {((!local.expand && overflowed()) || expanded()) && (
         <button
           type="button"
@@ -349,31 +364,11 @@ interface ErrorPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
   expand?: boolean
 }
 function ErrorPart(props: ErrorPartProps) {
+  let preEl: HTMLDivElement | undefined
+
   const [local, rest] = splitProps(props, ["expand", "children"])
   const [expanded, setExpanded] = createSignal(false)
-  const [overflowed, setOverflowed] = createSignal(false)
-  let preEl: HTMLElement | undefined
-
-  function checkOverflow() {
-    if (preEl && !local.expand) {
-      setOverflowed(preEl.scrollHeight > preEl.clientHeight + 1)
-    }
-  }
-
-  onMount(() => {
-    checkOverflow()
-    window.addEventListener("resize", checkOverflow)
-  })
-
-  createEffect(() => {
-    local.children
-    local.expand
-    setTimeout(checkOverflow, 0)
-  })
-
-  onCleanup(() => {
-    window.removeEventListener("resize", checkOverflow)
-  })
+  const overflowed = checkOverflow(() => preEl, () => local.expand)
 
   return (
     <div
@@ -381,7 +376,7 @@ function ErrorPart(props: ErrorPartProps) {
       data-expanded={expanded() || local.expand === true}
       {...rest}
     >
-      <div data-section="content" ref={(el) => (preEl = el)}>
+      <div data-section="content" ref={preEl}>
         {local.children}
       </div>
       {((!local.expand && overflowed()) || expanded()) && (
@@ -403,31 +398,11 @@ interface MarkdownPartProps extends JSX.HTMLAttributes<HTMLDivElement> {
   highlight?: boolean
 }
 function MarkdownPart(props: MarkdownPartProps) {
-  const [local, rest] = splitProps(props, ["text", "expand", "highlight"])
-  const [expanded, setExpanded] = createSignal(false)
-  const [overflowed, setOverflowed] = createSignal(false)
   let divEl: HTMLDivElement | undefined
 
-  function checkOverflow() {
-    if (divEl && !local.expand) {
-      setOverflowed(divEl.scrollHeight > divEl.clientHeight + 1)
-    }
-  }
-
-  onMount(() => {
-    checkOverflow()
-    window.addEventListener("resize", checkOverflow)
-  })
-
-  createEffect(() => {
-    local.text
-    local.expand
-    setTimeout(checkOverflow, 0)
-  })
-
-  onCleanup(() => {
-    window.removeEventListener("resize", checkOverflow)
-  })
+  const [local, rest] = splitProps(props, ["text", "expand", "highlight"])
+  const [expanded, setExpanded] = createSignal(false)
+  const overflowed = checkOverflow(() => divEl, () => local.expand)
 
   return (
     <div
@@ -469,36 +444,16 @@ function TerminalPart(props: TerminalPartProps) {
     "desc",
     "expand",
   ])
+  let preEl: HTMLDivElement | undefined
+
   const [expanded, setExpanded] = createSignal(false)
-  const [overflowed, setOverflowed] = createSignal(false)
-  let preEl: HTMLElement | undefined
-
-  function checkOverflow() {
-    if (!preEl) return
-
-    const code = preEl.getElementsByTagName("code")[0]
-
-    if (code && !local.expand) {
-      setOverflowed(preEl.clientHeight < code.offsetHeight)
-    }
-  }
-
-  createEffect(() => {
-    local.command
-    local.result
-    local.error
-    local.expand
-    setTimeout(checkOverflow, 0)
-  })
-
-  onMount(() => {
-    checkOverflow()
-    window.addEventListener("resize", checkOverflow)
-  })
-
-  onCleanup(() => {
-    window.removeEventListener("resize", checkOverflow)
-  })
+  const overflowed = checkOverflow(
+    () => {
+      if (!preEl) return
+      return preEl.getElementsByTagName("pre")[0]
+    },
+    () => local.expand
+  )
 
   return (
     <div
@@ -515,16 +470,16 @@ function TerminalPart(props: TerminalPartProps) {
           <Switch>
             <Match when={local.error}>
               <CodeBlock
-                data-section="error"
+                ref={preEl}
                 lang="text"
-                ref={(el) => (preEl = el)}
+                data-section="error"
                 code={local.error || ""}
               />
             </Match>
             <Match when={local.result}>
               <CodeBlock
+                ref={preEl}
                 lang="console"
-                ref={(el) => (preEl = el)}
                 code={local.result || ""}
               />
             </Match>
