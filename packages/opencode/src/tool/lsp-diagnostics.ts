@@ -13,20 +13,16 @@ export const LspDiagnosticTool = Tool.define({
   }),
   execute: async (args) => {
     const app = App.info()
-    const normalized = path.isAbsolute(args.path)
-      ? args.path
-      : path.join(app.path.cwd, args.path)
+    const normalized = path.isAbsolute(args.path) ? args.path : path.join(app.path.cwd, args.path)
     await LSP.touchFile(normalized, true)
     const diagnostics = await LSP.diagnostics()
     const file = diagnostics[normalized]
     return {
+      title: path.relative(app.path.root, normalized),
       metadata: {
         diagnostics,
-        title: path.relative(app.path.root, normalized),
       },
-      output: file?.length
-        ? file.map(LSP.Diagnostic.pretty).join("\n")
-        : "No errors found",
+      output: file?.length ? file.map(LSP.Diagnostic.pretty).join("\n") : "No errors found",
     }
   },
 })

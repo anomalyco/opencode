@@ -4,9 +4,7 @@ import path from "path"
 
 export const AuthCopilot = lazy(async () => {
   const file = Bun.file(path.join(Global.Path.state, "plugin", "copilot.ts"))
-  const response = fetch(
-    "https://raw.githubusercontent.com/sst/opencode-github-copilot/refs/heads/main/auth.ts",
-  )
+  const response = fetch("https://raw.githubusercontent.com/sst/opencode-github-copilot/refs/heads/main/auth.ts")
     .then((x) => Bun.write(file, x))
     .catch(() => {})
 

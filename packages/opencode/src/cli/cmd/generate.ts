@@ -10,9 +10,6 @@ export const GenerateCommand = {
     const dir = "gen"
     await fs.rmdir(dir, { recursive: true }).catch(() => {})
     await fs.mkdir(dir, { recursive: true })
-    await Bun.write(
-      path.join(dir, "openapi.json"),
-      JSON.stringify(specs, null, 2),
-    )
+    await Bun.write(path.join(dir, "openapi.json"), JSON.stringify(specs, null, 2))
   },
 } satisfies CommandModule

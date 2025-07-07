@@ -46,9 +46,7 @@ export namespace LSP {
           if (!file) continue
           const handle = await server.spawn(App.info())
           if (!handle) break
-          const client = await LSPClient.create(server.id, handle).catch(
-            (err) => log.error("", { error: err }),
-          )
+          const client = await LSPClient.create(server.id, handle).catch((err) => log.error("", { error: err }))
           if (!client) break
           clients.set(server.id, client)
           break
@@ -77,9 +75,7 @@ export namespace LSP {
       .map((x) => x.id)
     await run(async (client) => {
       if (!matches.includes(client.serverID)) return
-      const wait = waitForDiagnostics
-        ? client.waitForDiagnostics({ path: input })
-        : Promise.resolve()
+      const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
     })
@@ -97,11 +93,7 @@ export namespace LSP {
     return results
   }
 
-  export async function hover(input: {
-    file: string
-    line: number
-    character: number
-  }) {
+  export async function hover(input: { file: string; line: number; character: number }) {
     return run((client) => {
       return client.connection.sendRequest("textDocument/hover", {
         textDocument: {
@@ -123,9 +115,7 @@ export namespace LSP {
     ).then((result) => result.flat() as LSP.Symbol[])
   }
 
-  async function run<T>(
-    input: (client: LSPClient.Info) => Promise<T>,
-  ): Promise<T[]> {
+  async function run<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
     const clients = await state().then((x) => [...x.clients.values()])
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)

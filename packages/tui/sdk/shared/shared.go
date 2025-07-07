@@ -31,7 +31,7 @@ func (r providerAuthErrorJSON) RawJSON() string {
 
 func (r ProviderAuthError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
 
-func (r ProviderAuthError) ImplementsMessageMetadataError() {}
+func (r ProviderAuthError) ImplementsAssistantMessageError() {}
 
 type ProviderAuthErrorData struct {
 	Message    string                    `json:"message,required"`
@@ -94,7 +94,7 @@ func (r unknownErrorJSON) RawJSON() string {
 
 func (r UnknownError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
 
-func (r UnknownError) ImplementsMessageMetadataError() {}
+func (r UnknownError) ImplementsAssistantMessageError() {}
 
 type UnknownErrorData struct {
 	Message string               `json:"message,required"`
