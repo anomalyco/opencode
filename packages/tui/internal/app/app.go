@@ -3,13 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
-
-	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode-sdk-go"
@@ -36,20 +35,24 @@ type App struct {
 	Commands       commands.CommandRegistry
 }
 
-type SessionSelectedMsg = *opencode.Session
-type SessionLoadedMsg struct{}
-type ModelSelectedMsg struct {
-	Provider opencode.Provider
-	Model    opencode.Model
-}
-type SessionClearedMsg struct{}
-type CompactSessionMsg struct{}
-type SendMsg struct {
-	Text        string
-	Attachments []opencode.FilePartParam
-}
+type (
+	SessionSelectedMsg = *opencode.Session
+	SessionLoadedMsg   struct{}
+	ModelSelectedMsg   struct {
+		Provider opencode.Provider
+		Model    opencode.Model
+	}
+)
+type (
+	SessionClearedMsg struct{}
+	CompactSessionMsg struct{}
+	SendMsg           struct {
+		Text        string
+		Attachments []opencode.FilePartParam
+	}
+)
 type OptimisticMessageAddedMsg struct {
-	Message opencode.Message
+	Message opencode.MessageUnion
 }
 type FileRenderedMsg struct {
 	FilePath string
@@ -236,7 +239,10 @@ func (a *App) IsBusy() bool {
 	}
 
 	lastMessage := a.Messages[len(a.Messages)-1]
-	return lastMessage.Metadata.Time.Completed == 0
+	if casted, ok := lastMessage.(opencode.AssistantMessage); ok {
+		return casted.Time.Completed == 0
+	}
+	return false
 }
 
 func (a *App) SaveState() {
@@ -317,30 +323,28 @@ func (a *App) SendChatMessage(
 		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
 	}
 
-	optimisticParts := []opencode.MessagePart{{
-		Type: opencode.MessagePartTypeText,
+	optimisticParts := []opencode.UserMessagePart{{
+		Type: opencode.UserMessagePartTypeText,
 		Text: text,
 	}}
 	if len(attachments) > 0 {
 		for _, attachment := range attachments {
-			optimisticParts = append(optimisticParts, opencode.MessagePart{
-				Type:      opencode.MessagePartTypeFile,
-				Filename:  attachment.Filename.Value,
-				MediaType: attachment.MediaType.Value,
-				URL:       attachment.URL.Value,
+			optimisticParts = append(optimisticParts, opencode.UserMessagePart{
+				Type:     opencode.UserMessagePartTypeFile,
+				Filename: attachment.Filename.Value,
+				Mime:     attachment.Mime.Value,
+				URL:      attachment.URL.Value,
 			})
 		}
 	}
 
-	optimisticMessage := opencode.Message{
-		ID:    fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role:  opencode.MessageRoleUser,
-		Parts: optimisticParts,
-		Metadata: opencode.MessageMetadata{
-			SessionID: a.Session.ID,
-			Time: opencode.MessageMetadataTime{
-				Created: float64(time.Now().Unix()),
-			},
+	optimisticMessage := opencode.UserMessage{
+		ID:        fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
+		Role:      opencode.UserMessageRoleUser,
+		Parts:     optimisticParts,
+		SessionID: a.Session.ID,
+		Time: opencode.UserMessageTime{
+			Created: float64(time.Now().Unix()),
 		},
 	}
 
@@ -348,7 +352,7 @@ func (a *App) SendChatMessage(
 	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
 
 	cmds = append(cmds, func() tea.Msg {
-		parts := []opencode.MessagePartUnionParam{
+		parts := []opencode.UserMessagePartUnionParam{
 			opencode.TextPartParam{
 				Type: opencode.F(opencode.TextPartTypeText),
 				Text: opencode.F(text),
@@ -357,10 +361,10 @@ func (a *App) SendChatMessage(
 		if len(attachments) > 0 {
 			for _, attachment := range attachments {
 				parts = append(parts, opencode.FilePartParam{
-					MediaType: attachment.MediaType,
-					Type:      attachment.Type,
-					URL:       attachment.URL,
-					Filename:  attachment.Filename,
+					Mime:     attachment.Mime,
+					Type:     attachment.Type,
+					URL:      attachment.URL,
+					Filename: attachment.Filename,
 				})
 			}
 		}

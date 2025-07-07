@@ -118,7 +118,7 @@ func TestSessionChat(t *testing.T) {
 		"id",
 		opencode.SessionChatParams{
 			ModelID: opencode.F("modelID"),
-			Parts: opencode.F([]opencode.MessagePartUnionParam{opencode.TextPartParam{
+			Parts: opencode.F([]opencode.UserMessagePartUnionParam{opencode.TextPartParam{
 				Text: opencode.F("text"),
 				Type: opencode.F(opencode.TextPartTypeText),
 			}}),

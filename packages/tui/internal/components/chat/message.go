@@ -17,7 +17,6 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/tidwall/gjson"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -217,18 +216,35 @@ func renderContentBlock(
 
 func renderText(
 	app *app.App,
-	message opencode.Message,
+	message opencode.MessageUnion,
 	text string,
 	author string,
 	showToolDetails bool,
 	highlight bool,
 	width int,
 	extra string,
-	toolCalls ...opencode.ToolInvocationPart,
+	toolCalls ...opencode.ToolPart,
 ) string {
 	t := theme.CurrentTheme()
 
-	timestamp := time.UnixMilli(int64(message.Metadata.Time.Created)).
+	var ts time.Time
+	backgroundColor := t.BackgroundPanel()
+	if highlight {
+		backgroundColor = t.BackgroundElement()
+	}
+	messageStyle := styles.NewStyle().Background(backgroundColor)
+	content := messageStyle.Render(text)
+
+	switch casted := message.(type) {
+	case opencode.AssistantMessage:
+		ts = time.UnixMilli(int64(casted.Time.Created))
+		content = util.ToMarkdown(text, width, backgroundColor)
+	case opencode.UserMessage:
+		ts = time.UnixMilli(int64(casted.Time.Created))
+		messageStyle = messageStyle.Width(width - 6)
+	}
+
+	timestamp := ts.
 		Local().
 		Format("02 Jan 2006 03:04 PM")
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
@@ -238,30 +254,12 @@ func renderText(
 	info := fmt.Sprintf("%s (%s)", author, timestamp)
 	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 
-	backgroundColor := t.BackgroundPanel()
-	if highlight {
-		backgroundColor = t.BackgroundElement()
-	}
-	messageStyle := styles.NewStyle().Background(backgroundColor)
-	if message.Role == opencode.MessageRoleUser {
-		messageStyle = messageStyle.Width(width - 6)
-	}
-
-	content := messageStyle.Render(text)
-	if message.Role == opencode.MessageRoleAssistant {
-		content = util.ToMarkdown(text, width, backgroundColor)
-	}
-
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
 		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
-			title := renderToolTitle(toolCall, message.Metadata, width)
-			metadata := opencode.MessageMetadataTool{}
-			if _, ok := message.Metadata.Tool[toolCall.ToolInvocation.ToolCallID]; ok {
-				metadata = message.Metadata.Tool[toolCall.ToolInvocation.ToolCallID]
-			}
+			title := renderToolTitle(toolCall, width)
 			style := styles.NewStyle()
-			if _, ok := metadata.ExtraFields["error"]; ok {
+			if toolCall.State.Status == opencode.ToolPartStateStatusError {
 				style = style.Foreground(t.Error())
 			}
 			title = style.Render(title)
@@ -276,8 +274,8 @@ func renderText(
 	}
 	content = strings.Join(sections, "\n")
 
-	switch message.Role {
-	case opencode.MessageRoleUser:
+	switch message.(type) {
+	case opencode.UserMessage:
 		return renderContentBlock(
 			app,
 			content,
@@ -286,7 +284,7 @@ func renderText(
 			WithTextColor(t.Text()),
 			WithBorderColorRight(t.Secondary()),
 		)
-	case opencode.MessageRoleAssistant:
+	case opencode.AssistantMessage:
 		return renderContentBlock(
 			app,
 			content,
@@ -300,39 +298,32 @@ func renderText(
 
 func renderToolDetails(
 	app *app.App,
-	toolCall opencode.ToolInvocationPart,
-	messageMetadata opencode.MessageMetadata,
+	toolCall opencode.ToolPart,
 	highlight bool,
 	width int,
 ) string {
 	ignoredTools := []string{"todoread"}
-	if slices.Contains(ignoredTools, toolCall.ToolInvocation.ToolName) {
+	if slices.Contains(ignoredTools, toolCall.Tool) {
 		return ""
 	}
 
-	toolCallID := toolCall.ToolInvocation.ToolCallID
-	metadata := opencode.MessageMetadataTool{}
-	if _, ok := messageMetadata.Tool[toolCallID]; ok {
-		metadata = messageMetadata.Tool[toolCallID]
-	}
-
-	var result *string
-	if toolCall.ToolInvocation.Result != "" {
-		result = &toolCall.ToolInvocation.Result
-	}
-
-	if toolCall.ToolInvocation.State == "partial-call" {
-		title := renderToolTitle(toolCall, messageMetadata, width)
+	if toolCall.State.Status == opencode.ToolPartStateStatusPending || toolCall.State.Status == opencode.ToolPartStateStatusRunning {
+		title := renderToolTitle(toolCall, width)
 		return renderContentBlock(app, title, highlight, width)
 	}
 
-	toolArgsMap := make(map[string]any)
-	if toolCall.ToolInvocation.Args != nil {
-		value := toolCall.ToolInvocation.Args
+	var result *string
+	if toolCall.State.Output != "" {
+		result = &toolCall.State.Output
+	}
+
+	toolInputMap := make(map[string]any)
+	if toolCall.State.Input != nil {
+		value := toolCall.State.Input
 		if m, ok := value.(map[string]any); ok {
-			toolArgsMap = m
-			keys := make([]string, 0, len(toolArgsMap))
-			for key := range toolArgsMap {
+			toolInputMap = m
+			keys := make([]string, 0, len(toolInputMap))
+			for key := range toolInputMap {
 				keys = append(keys, key)
 			}
 			slices.Sort(keys)
@@ -340,7 +331,6 @@ func renderToolDetails(
 	}
 
 	body := ""
-	finished := result != nil && *result != ""
 	t := theme.CurrentTheme()
 	backgroundColor := t.BackgroundPanel()
 	borderColor := t.BackgroundPanel()
@@ -349,137 +339,128 @@ func renderToolDetails(
 		borderColor = t.BorderActive()
 	}
 
-	switch toolCall.ToolInvocation.ToolName {
-	case "read":
-		preview := metadata.ExtraFields["preview"]
-		if preview != nil && toolArgsMap["filePath"] != nil {
-			filename := toolArgsMap["filePath"].(string)
-			body = preview.(string)
-			body = util.RenderFile(filename, body, width, util.WithTruncate(6))
-		}
-	case "edit":
-		if filename, ok := toolArgsMap["filePath"].(string); ok {
-			diffField := metadata.ExtraFields["diff"]
-			if diffField != nil {
-				patch := diffField.(string)
-				var formattedDiff string
-				formattedDiff, _ = diff.FormatUnifiedDiff(
-					filename,
-					patch,
-					diff.WithWidth(width-2),
-				)
-				body = strings.TrimSpace(formattedDiff)
-				style := styles.NewStyle().
-					Background(backgroundColor).
-					Foreground(t.TextMuted()).
-					Padding(1, 2).
-					Width(width - 4)
-				if highlight {
-					style = style.Foreground(t.Text()).Bold(true)
-				}
-
-				if diagnostics := renderDiagnostics(metadata, filename); diagnostics != "" {
-					diagnostics = style.Render(diagnostics)
-					body += "\n" + diagnostics
-				}
-
-				title := renderToolTitle(toolCall, messageMetadata, width)
-				title = style.Render(title)
-				content := title + "\n" + body
-				content = renderContentBlock(
-					app,
-					content,
-					highlight,
-					width,
-					WithPadding(0),
-					WithBorderColor(borderColor),
-				)
-				return content
+	if toolCall.State.Status == opencode.ToolPartStateStatusCompleted {
+		metadata := toolCall.State.Metadata.(map[string]any)
+		switch toolCall.Tool {
+		case "read":
+			preview := metadata["preview"]
+			if preview != nil && toolInputMap["filePath"] != nil {
+				filename := toolInputMap["filePath"].(string)
+				body = preview.(string)
+				body = util.RenderFile(filename, body, width, util.WithTruncate(6))
 			}
-		}
-	case "write":
-		if filename, ok := toolArgsMap["filePath"].(string); ok {
-			if content, ok := toolArgsMap["content"].(string); ok {
-				body = util.RenderFile(filename, content, width)
-				if diagnostics := renderDiagnostics(metadata, filename); diagnostics != "" {
-					body += "\n\n" + diagnostics
+		case "edit":
+			if filename, ok := toolInputMap["filePath"].(string); ok {
+				diffField := metadata["diff"]
+				if diffField != nil {
+					patch := diffField.(string)
+					var formattedDiff string
+					formattedDiff, _ = diff.FormatUnifiedDiff(
+						filename,
+						patch,
+						diff.WithWidth(width-2),
+					)
+					body = strings.TrimSpace(formattedDiff)
+					style := styles.NewStyle().
+						Background(backgroundColor).
+						Foreground(t.TextMuted()).
+						Padding(1, 2).
+						Width(width - 4)
+					if highlight {
+						style = style.Foreground(t.Text()).Bold(true)
+					}
+
+					if diagnostics := renderDiagnostics(metadata, filename); diagnostics != "" {
+						diagnostics = style.Render(diagnostics)
+						body += "\n" + diagnostics
+					}
+
+					title := renderToolTitle(toolCall, width)
+					title = style.Render(title)
+					content := title + "\n" + body
+					content = renderContentBlock(
+						app,
+						content,
+						highlight,
+						width,
+						WithPadding(0),
+						WithBorderColor(borderColor),
+					)
+					return content
 				}
 			}
-		}
-	case "bash":
-		stdout := metadata.ExtraFields["stdout"]
-		if stdout != nil {
-			command := toolArgsMap["command"].(string)
-			body = fmt.Sprintf("```console\n> %s\n%s```", command, stdout)
-			body = util.ToMarkdown(body, width, backgroundColor)
-		}
-	case "webfetch":
-		if format, ok := toolArgsMap["format"].(string); ok && result != nil {
-			body = *result
-			body = util.TruncateHeight(body, 10)
-			if format == "html" || format == "markdown" {
+		case "write":
+			if filename, ok := toolInputMap["filePath"].(string); ok {
+				if content, ok := toolInputMap["content"].(string); ok {
+					body = util.RenderFile(filename, content, width)
+					if diagnostics := renderDiagnostics(metadata, filename); diagnostics != "" {
+						body += "\n\n" + diagnostics
+					}
+				}
+			}
+		case "bash":
+			stdout := metadata["stdout"]
+			if stdout != nil {
+				command := toolInputMap["command"].(string)
+				body = fmt.Sprintf("```console\n> %s\n%s```", command, stdout)
 				body = util.ToMarkdown(body, width, backgroundColor)
 			}
-		}
-	case "todowrite":
-		todos := metadata.JSON.ExtraFields["todos"]
-		if !todos.IsNull() && finished {
-			strTodos := todos.Raw()
-			todos := gjson.Parse(strTodos)
-			for _, todo := range todos.Array() {
-				content := todo.Get("content").String()
-				switch todo.Get("status").String() {
-				case "completed":
-					body += fmt.Sprintf("- [x] %s\n", content)
-				// case "in-progress":
-				// 	body += fmt.Sprintf("- [ ] %s\n", content)
-				default:
-					body += fmt.Sprintf("- [ ] %s\n", content)
+		case "webfetch":
+			if format, ok := toolInputMap["format"].(string); ok && result != nil {
+				body = *result
+				body = util.TruncateHeight(body, 10)
+				if format == "html" || format == "markdown" {
+					body = util.ToMarkdown(body, width, backgroundColor)
 				}
 			}
-			body = util.ToMarkdown(body, width, backgroundColor)
-		}
-	case "task":
-		summary := metadata.JSON.ExtraFields["summary"]
-		if !summary.IsNull() {
-			strValue := summary.Raw()
-			toolcalls := gjson.Parse(strValue).Array()
-
-			steps := []string{}
-			for _, toolcall := range toolcalls {
-				call := toolcall.Value().(map[string]any)
-				if toolInvocation, ok := call["toolInvocation"].(map[string]any); ok {
-					data, _ := json.Marshal(toolInvocation)
-					var toolCall opencode.ToolInvocationPart
-					_ = json.Unmarshal(data, &toolCall)
-
-					if metadata, ok := call["metadata"].(map[string]any); ok {
-						data, _ = json.Marshal(metadata)
-						var toolMetadata opencode.MessageMetadataTool
-						_ = json.Unmarshal(data, &toolMetadata)
-
-						step := renderToolTitle(toolCall, messageMetadata, width)
+		case "todowrite":
+			todos := metadata["todos"]
+			if todos != nil {
+				for _, item := range todos.([]any) {
+					todo := item.(map[string]any)
+					content := todo["content"].(string)
+					switch todo["status"] {
+					case "completed":
+						body += fmt.Sprintf("- [x] %s\n", content)
+					// case "in-progress":
+					// 	body += fmt.Sprintf("- [ ] %s\n", content)
+					default:
+						body += fmt.Sprintf("- [ ] %s\n", content)
+					}
+				}
+				body = util.ToMarkdown(body, width, backgroundColor)
+			}
+		case "task":
+			summary := metadata["summary"]
+			if summary != nil {
+				toolcalls := summary.([]any)
+				steps := []string{}
+				for _, toolcall := range toolcalls {
+					call := toolcall.(map[string]any)
+					if toolInvocation, ok := call["toolInvocation"].(map[string]any); ok {
+						data, _ := json.Marshal(toolInvocation)
+						var toolCall opencode.ToolPart
+						_ = json.Unmarshal(data, &toolCall)
+						step := renderToolTitle(toolCall, width)
 						step = "∟ " + step
 						steps = append(steps, step)
 					}
 				}
+				body = strings.Join(steps, "\n")
 			}
-			body = strings.Join(steps, "\n")
+		default:
+			if result == nil {
+				empty := ""
+				result = &empty
+			}
+			body = *result
+			body = util.TruncateHeight(body, 10)
 		}
-	default:
-		if result == nil {
-			empty := ""
-			result = &empty
-		}
-		body = *result
-		body = util.TruncateHeight(body, 10)
 	}
 
 	error := ""
-	if err, ok := metadata.ExtraFields["error"].(bool); ok && err {
-		if message, ok := metadata.ExtraFields["message"].(string); ok {
-			error = message
-		}
+	if toolCall.State.Status == opencode.ToolPartStateStatusError {
+		error = toolCall.State.Error
 	}
 
 	if error != "" {
@@ -494,7 +475,7 @@ func renderToolDetails(
 		body = util.TruncateHeight(body, 10)
 	}
 
-	title := renderToolTitle(toolCall, messageMetadata, width)
+	title := renderToolTitle(toolCall, width)
 	content := title + "\n\n" + body
 	return renderContentBlock(app, content, highlight, width, WithBorderColor(borderColor))
 }
@@ -515,20 +496,19 @@ func renderToolName(name string) string {
 }
 
 func renderToolTitle(
-	toolCall opencode.ToolInvocationPart,
-	messageMetadata opencode.MessageMetadata,
+	toolCall opencode.ToolPart,
 	width int,
 ) string {
 	// TODO: handle truncate to width
 
-	if toolCall.ToolInvocation.State == "partial-call" {
-		return renderToolAction(toolCall.ToolInvocation.ToolName)
+	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
+		return renderToolAction(toolCall.Tool)
 	}
 
 	toolArgs := ""
 	toolArgsMap := make(map[string]any)
-	if toolCall.ToolInvocation.Args != nil {
-		value := toolCall.ToolInvocation.Args
+	if toolCall.State.Input != nil {
+		value := toolCall.State.Input
 		if m, ok := value.(map[string]any); ok {
 			toolArgsMap = m
 
@@ -546,8 +526,8 @@ func renderToolTitle(
 		}
 	}
 
-	title := renderToolName(toolCall.ToolInvocation.ToolName)
-	switch toolCall.ToolInvocation.ToolName {
+	title := renderToolName(toolCall.Tool)
+	switch toolCall.Tool {
 	case "read":
 		toolArgs = renderArgs(&toolArgsMap, "filePath")
 		title = fmt.Sprintf("%s %s", title, toolArgs)
@@ -565,7 +545,7 @@ func renderToolTitle(
 	case "todowrite", "todoread":
 		// title is just the tool name
 	default:
-		toolName := renderToolName(toolCall.ToolInvocation.ToolName)
+		toolName := renderToolName(toolCall.Tool)
 		title = fmt.Sprintf("%s %s", toolName, toolArgs)
 	}
 	return title
@@ -645,8 +625,8 @@ type Diagnostic struct {
 }
 
 // renderDiagnostics formats LSP diagnostics for display in the TUI
-func renderDiagnostics(metadata opencode.MessageMetadataTool, filePath string) string {
-	if diagnosticsData, ok := metadata.ExtraFields["diagnostics"].(map[string]any); ok {
+func renderDiagnostics(metadata map[string]any, filePath string) string {
+	if diagnosticsData, ok := metadata["diagnostics"].(map[string]any); ok {
 		if fileDiagnostics, ok := diagnosticsData[filePath].([]any); ok {
 			var errorDiagnostics []string
 			for _, diagInterface := range fileDiagnostics {

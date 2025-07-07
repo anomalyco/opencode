@@ -17,8 +17,8 @@
     "catalog": {
       "typescript": "5.8.2",
       "@types/node": "22.13.9",
-      "zod": "3.24.2",
-      "ai": "4.3.16"
+      "zod": "3.25.49",
+      "ai": "5.0.0-beta.7"
     }
   },
   "devDependencies": {
@@ -31,10 +31,8 @@
   },
   "license": "MIT",
   "prettier": {
-    "semi": false
-  },
-  "overrides": {
-    "zod": "3.24.2"
+    "semi": false,
+    "printWidth": 120
   },
   "trustedDependencies": [
     "esbuild",

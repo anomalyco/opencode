@@ -26,11 +26,7 @@ export namespace Identifier {
     return generateID(prefix, true, given)
   }
 
-  function generateID(
-    prefix: keyof typeof prefixes,
-    descending: boolean,
-    given?: string,
-  ): string {
+  function generateID(prefix: keyof typeof prefixes, descending: boolean, given?: string): string {
     if (!given) {
       return generateNewID(prefix, descending)
     }
@@ -42,8 +38,7 @@ export namespace Identifier {
   }
 
   function randomBase62(length: number): string {
-    const chars =
-      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
     let result = ""
     const bytes = randomBytes(length)
     for (let i = 0; i < length; i++) {
@@ -52,10 +47,7 @@ export namespace Identifier {
     return result
   }
 
-  function generateNewID(
-    prefix: keyof typeof prefixes,
-    descending: boolean,
-  ): string {
+  function generateNewID(prefix: keyof typeof prefixes, descending: boolean): string {
     const currentTimestamp = Date.now()
 
     if (currentTimestamp !== lastTimestamp) {
@@ -73,11 +65,6 @@ export namespace Identifier {
       timeBytes[i] = Number((now >> BigInt(40 - 8 * i)) & BigInt(0xff))
     }
 
-    return (
-      prefixes[prefix] +
-      "_" +
-      timeBytes.toString("hex") +
-      randomBase62(LENGTH - 12)
-    )
+    return prefixes[prefix] + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
   }
 }

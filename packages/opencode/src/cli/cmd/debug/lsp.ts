@@ -5,15 +5,13 @@ import { Log } from "../../../util/log"
 
 export const LSPCommand = cmd({
   command: "lsp",
-  builder: (yargs) =>
-    yargs.command(DiagnosticsCommand).command(SymbolsCommand).demandCommand(),
+  builder: (yargs) => yargs.command(DiagnosticsCommand).command(SymbolsCommand).demandCommand(),
   async handler() {},
 })
 
 const DiagnosticsCommand = cmd({
   command: "diagnostics <file>",
-  builder: (yargs) =>
-    yargs.positional("file", { type: "string", demandOption: true }),
+  builder: (yargs) => yargs.positional("file", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
       await LSP.touchFile(args.file, true)
@@ -24,8 +22,7 @@ const DiagnosticsCommand = cmd({
 
 export const SymbolsCommand = cmd({
   command: "symbols <query>",
-  builder: (yargs) =>
-    yargs.positional("query", { type: "string", demandOption: true }),
+  builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
       await LSP.touchFile("./src/index.ts", true)

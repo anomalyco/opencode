@@ -19,10 +19,7 @@ export namespace Log {
     await fs.mkdir(dir, { recursive: true })
     cleanup(dir)
     if (options.print) return
-    logpath = path.join(
-      dir,
-      new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-    )
+    logpath = path.join(dir, new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log")
     const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()
@@ -43,9 +40,7 @@ export namespace Log {
 
     const filesToDelete = files.slice(0, -10)
 
-    await Promise.all(
-      filesToDelete.map((file) => fs.unlink(file).catch(() => {})),
-    )
+    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
   let last = Date.now()
@@ -63,11 +58,7 @@ export namespace Log {
       const next = new Date()
       const diff = next.getTime() - last
       last = next.getTime()
-      return (
-        [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message]
-          .filter(Boolean)
-          .join(" ") + "\n"
-      )
+      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
     }
     const result = {
       info(message?: any, extra?: Record<string, any>) {
