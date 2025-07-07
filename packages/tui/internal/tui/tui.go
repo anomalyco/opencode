@@ -363,7 +363,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventSessionDeleted:
 		if a.app.Session != nil && msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &opencode.Session{}
-			a.app.Messages = []opencode.Message{}
+			a.app.Messages = []opencode.MessageUnion{}
 		}
 		return a, toast.NewSuccessToast("Session deleted successfully")
 	case opencode.EventListResponseEventSessionUpdated:
@@ -371,7 +371,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.app.Session = &msg.Properties.Info
 		}
 	case opencode.EventListResponseEventMessageUpdated:
-		if msg.Properties.Info.Metadata.SessionID == a.app.Session.ID {
+		if msg.Properties.Info.SessionID == a.app.Session.ID {
 			exists := false
 			optimisticReplaced := false
 
@@ -379,12 +379,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Properties.Info.Role == opencode.MessageRoleUser {
 				// Look for optimistic messages to replace
 				for i, m := range a.app.Messages {
-					if strings.HasPrefix(m.ID, "optimistic-") && m.Role == opencode.MessageRoleUser {
-						// Replace the optimistic message with the real one
-						a.app.Messages[i] = msg.Properties.Info
-						exists = true
-						optimisticReplaced = true
-						break
+					switch m := m.(type) {
+					case opencode.UserMessage:
+						if strings.HasPrefix(m.ID, "optimistic-") && m.Role == opencode.UserMessageRoleUser {
+							// Replace the optimistic message with the real one
+							a.app.Messages[i] = msg.Properties.Info.AsUnion()
+							exists = true
+							optimisticReplaced = true
+							break
+						}
 					}
 				}
 			}
@@ -392,8 +395,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// If not replacing optimistic, check for existing message with same ID
 			if !optimisticReplaced {
 				for i, m := range a.app.Messages {
-					if m.ID == msg.Properties.Info.ID {
-						a.app.Messages[i] = msg.Properties.Info
+					var id string
+					switch m := m.(type) {
+					case opencode.UserMessage:
+						id = m.ID
+					case opencode.AssistantMessage:
+						id = m.ID
+					}
+					if id == msg.Properties.Info.ID {
+						a.app.Messages[i] = msg.Properties.Info.AsUnion()
 						exists = true
 						break
 					}
@@ -401,7 +411,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if !exists {
-				a.app.Messages = append(a.app.Messages, msg.Properties.Info)
+				a.app.Messages = append(a.app.Messages, msg.Properties.Info.AsUnion())
 			}
 		}
 	case opencode.EventListResponseEventSessionError:
@@ -462,7 +472,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, toast.NewErrorToast("Failed to open session")
 		}
 		a.app.Session = msg
-		a.app.Messages = messages
+		a.app.Messages = make([]opencode.MessageUnion, 0)
+		for _, message := range messages {
+			a.app.Messages = append(a.app.Messages, message.AsUnion())
+		}
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
@@ -813,7 +826,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, nil
 		}
 		a.app.Session = &opencode.Session{}
-		a.app.Messages = []opencode.Message{}
+		a.app.Messages = []opencode.MessageUnion{}
 		cmds = append(cmds, util.CmdHandler(app.SessionClearedMsg{}))
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)

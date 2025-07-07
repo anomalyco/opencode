@@ -5,16 +5,16 @@
 
 declare module "sst" {
   export interface Resource {
-    "Api": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
+    Api: {
+      type: "sst.cloudflare.Worker"
+      url: string
     }
-    "Bucket": {
-      "type": "sst.cloudflare.Bucket"
+    Bucket: {
+      type: "sst.cloudflare.Bucket"
     }
-    "Web": {
-      "type": "sst.cloudflare.Astro"
-      "url": string
+    Web: {
+      type: "sst.cloudflare.Astro"
+      url: string
     }
   }
 }

@@ -22,9 +22,7 @@ export namespace ConfigHooks {
           command: item.command,
         })
         Bun.spawn({
-          cmd: item.command.map((x) =>
-            x.replace("$FILE", payload.properties.file),
-          ),
+          cmd: item.command.map((x) => x.replace("$FILE", payload.properties.file)),
           env: item.environment,
           cwd: app.path.cwd,
           stdout: "ignore",

@@ -15,10 +15,21 @@ export const TuiCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
   builder: (yargs) =>
-    yargs.positional("project", {
-      type: "string",
-      describe: "path to start opencode in",
-    }),
+    yargs
+      .positional("project", {
+        type: "string",
+        describe: "path to start opencode in",
+      })
+      .option("model", {
+        type: "string",
+        alias: ["m"],
+        describe: "model to use in the format of provider/model",
+      })
+      .option("prompt", {
+        alias: ["p"],
+        type: "string",
+        describe: "prompt to use",
+      }),
   handler: async (args) => {
     while (true) {
       const cwd = args.project ? path.resolve(args.project) : process.cwd()
@@ -40,9 +51,7 @@ export const TuiCommand = cmd({
         })
 
         let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(
-          new URL("../../../../tui/cmd/opencode", import.meta.url),
-        )
+        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
         if (Bun.embeddedFiles.length > 0) {
           const blob = Bun.embeddedFiles[0] as File
           let binaryName = blob.name
@@ -62,7 +71,11 @@ export const TuiCommand = cmd({
           cmd,
         })
         const proc = Bun.spawn({
-          cmd: [...cmd, ...process.argv.slice(2)],
+          cmd: [
+            ...cmd,
+            ...(args.model ? ["--model", args.model] : []),
+            ...(args.prompt ? ["--prompt", args.prompt] : []),
+          ],
           cwd,
           stdout: "inherit",
           stderr: "inherit",

@@ -248,10 +248,10 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	fileParts := make([]opencode.FilePartParam, 0)
 	for _, attachment := range attachments {
 		fileParts = append(fileParts, opencode.FilePartParam{
-			Type:      opencode.F(opencode.FilePartTypeFile),
-			MediaType: opencode.F(attachment.MediaType),
-			URL:       opencode.F(attachment.URL),
-			Filename:  opencode.F(attachment.Filename),
+			Type:     opencode.F(opencode.FilePartTypeFile),
+			Mime:     opencode.F(attachment.MediaType),
+			URL:      opencode.F(attachment.URL),
+			Filename: opencode.F(attachment.Filename),
 		})
 	}
 

@@ -55,9 +55,7 @@ export namespace Snapshot {
     log.info("restore", { commit })
     const app = App.info()
     const git = gitdir(sessionID)
-    await $`git --git-dir=${git} checkout ${commit} --force`
-      .quiet()
-      .cwd(app.path.root)
+    await $`git --git-dir=${git} checkout ${commit} --force`.quiet().cwd(app.path.root)
   }
 
   function gitdir(sessionID: string) {

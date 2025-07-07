@@ -45,23 +45,14 @@ export namespace App {
   }
 
   export const provideExisting = ctx.provide
-  export async function provide<T>(
-    input: Input,
-    cb: (app: App.Info) => Promise<T>,
-  ) {
+  export async function provide<T>(input: Input, cb: (app: App.Info) => Promise<T>) {
     log.info("creating", {
       cwd: input.cwd,
     })
-    const git = await Filesystem.findUp(".git", input.cwd).then(([x]) =>
-      x ? path.dirname(x) : undefined,
-    )
+    const git = await Filesystem.findUp(".git", input.cwd).then(([x]) => (x ? path.dirname(x) : undefined))
     log.info("git", { git })
 
-    const data = path.join(
-      Global.Path.data,
-      "project",
-      git ? directory(git) : "global",
-    )
+    const data = path.join(Global.Path.data, "project", git ? directory(git) : "global")
     const stateFile = Bun.file(path.join(data, APP_JSON))
     const state = (await stateFile.json().catch(() => ({}))) as {
       initialized: number

@@ -8,10 +8,7 @@ import { readableStreamToText } from "bun"
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
-  export async function run(
-    cmd: string[],
-    options?: Bun.SpawnOptions.OptionsObject<any, any, any>,
-  ) {
+  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
       cmd: [which(), ...cmd],
       ...options,
@@ -26,9 +23,17 @@ export namespace BunProc {
         BUN_BE_BUN: "1",
       },
     })
-    const code = await result.exited;
-    const stdout = result.stdout ? typeof result.stdout === "number" ? result.stdout : await readableStreamToText(result.stdout) : undefined
-    const stderr = result.stderr ? typeof result.stderr === "number" ? result.stderr : await readableStreamToText(result.stderr) : undefined
+    const code = await result.exited
+    const stdout = result.stdout
+      ? typeof result.stdout === "number"
+        ? result.stdout
+        : await readableStreamToText(result.stdout)
+      : undefined
+    const stderr = result.stderr
+      ? typeof result.stderr === "number"
+        ? result.stderr
+        : await readableStreamToText(result.stderr)
+      : undefined
     log.info("done", {
       code,
       stdout,
@@ -61,7 +66,7 @@ export namespace BunProc {
     if (parsed.dependencies[pkg] === version) return mod
     parsed.dependencies[pkg] = version
     await Bun.write(pkgjson, JSON.stringify(parsed, null, 2))
-    await BunProc.run(["install", "--registry=https://registry.npmjs.org"], {
+    await BunProc.run(["install", "--cwd", Global.Path.cache, "--registry=https://registry.npmjs.org"], {
       cwd: Global.Path.cache,
     }).catch((e) => {
       throw new InstallFailedError(

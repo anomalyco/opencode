@@ -15,11 +15,7 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs
-      .command(AuthLoginCommand)
-      .command(AuthLogoutCommand)
-      .command(AuthListCommand)
-      .demandCommand(),
+    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
   async handler() {},
 })
 
@@ -31,9 +27,7 @@ export const AuthListCommand = cmd({
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
-    const displayPath = authPath.startsWith(homedir)
-      ? authPath.replace(homedir, "~")
-      : authPath
+    const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = await Auth.all().then((x) => Object.entries(x))
     const database = await ModelsDev.get()
@@ -114,8 +108,7 @@ export const AuthLoginCommand = cmd({
     if (provider === "other") {
       provider = await prompts.text({
         message: "Enter provider id",
-        validate: (x) =>
-          x.match(/^[a-z-]+$/) ? undefined : "a-z and hyphens only",
+        validate: (x) => (x.match(/^[a-z-]+$/) ? undefined : "a-z and hyphens only"),
       })
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
       provider = provider.replace(/^@ai-sdk\//, "")
@@ -186,17 +179,13 @@ export const AuthLoginCommand = cmd({
       await new Promise((resolve) => setTimeout(resolve, 10))
       const deviceInfo = await copilot.authorize()
 
-      prompts.note(
-        `Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`,
-      )
+      prompts.note(`Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`)
 
       const spinner = prompts.spinner()
       spinner.start("Waiting for authorization...")
 
       while (true) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, deviceInfo.interval * 1000),
-        )
+        await new Promise((resolve) => setTimeout(resolve, deviceInfo.interval * 1000))
         const response = await copilot.poll(deviceInfo.device)
         if (response.status === "pending") continue
         if (response.status === "success") {
@@ -248,12 +237,7 @@ export const AuthLogoutCommand = cmd({
     const providerID = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
-        label:
-          (database[key]?.name || key) +
-          UI.Style.TEXT_DIM +
-          " (" +
-          value.type +
-          ")",
+        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
     })
