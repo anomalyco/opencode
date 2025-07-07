@@ -528,7 +528,7 @@ export namespace Server {
                   schema: resolver(
                     z.object({
                       session: Session.Info,
-                      messages: z.array(Message.Info),
+                      messages: z.array(MessageV2.Info),
                       exportedAt: z.number(),
                     }),
                   ),
