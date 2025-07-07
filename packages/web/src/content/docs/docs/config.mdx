@@ -1,6 +1,5 @@
 ---
 title: Config
-description: Using the opencode JSON config.
 ---
 
 You can configure opencode using a JSON config file that can be placed in:
@@ -14,7 +13,8 @@ You can configure opencode using a JSON config file that can be placed in:
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-20250514",
   "autoshare": false,
-  "autoupdate": true
+  "autoupdate": true,
+  "use_standard_pricing_only": false
 }
 ```
 
@@ -90,6 +90,21 @@ You can configure MCP servers you want to use through the `mcp` option.
 ```
 
 [Learn more here](/docs/mcp-servers).
+
+---
+
+### Gemini Pricing Tier
+
+For Gemini models that offer different pricing tiers based on context size (e.g., Gemini 2.5 Pro), OpenCode will automatically select the appropriate tier. However, you can force the use of the standard (lower-cost) tier even for larger contexts by setting `use_standard_pricing_only` to `true`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "use_standard_pricing_only": true
+}
+```
+
+This can be useful if you want to strictly control costs and avoid potentially higher charges for large context windows, even if it means the model might not be able to process the entire context. By default, this is `false`, allowing OpenCode to use the higher-cost tier for large contexts if necessary.
 
 ---
 
