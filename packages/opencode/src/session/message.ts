@@ -1,13 +1,9 @@
 import z from "zod"
-import { Bus } from "../bus"
 import { Provider } from "../provider/provider"
 import { NamedError } from "../util/error"
 
 export namespace Message {
-  export const OutputLengthError = NamedError.create(
-    "MessageOutputLengthError",
-    z.object({}),
-  )
+  export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
 
   export const ToolCall = z
     .object({
@@ -49,11 +45,9 @@ export namespace Message {
     })
   export type ToolResult = z.infer<typeof ToolResult>
 
-  export const ToolInvocation = z
-    .discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult])
-    .openapi({
-      ref: "ToolInvocation",
-    })
+  export const ToolInvocation = z.discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult]).openapi({
+    ref: "ToolInvocation",
+  })
   export type ToolInvocation = z.infer<typeof ToolInvocation>
 
   export const TextPart = z
@@ -122,14 +116,7 @@ export namespace Message {
   export type StepStartPart = z.infer<typeof StepStartPart>
 
   export const MessagePart = z
-    .discriminatedUnion("type", [
-      TextPart,
-      ReasoningPart,
-      ToolInvocationPart,
-      SourceUrlPart,
-      FilePart,
-      StepStartPart,
-    ])
+    .discriminatedUnion("type", [TextPart, ReasoningPart, ToolInvocationPart, SourceUrlPart, FilePart, StepStartPart])
     .openapi({
       ref: "MessagePart",
     })
@@ -197,28 +184,4 @@ export namespace Message {
       ref: "Message",
     })
   export type Info = z.infer<typeof Info>
-
-  export const Event = {
-    Updated: Bus.event(
-      "message.updated",
-      z.object({
-        info: Info,
-      }),
-    ),
-    Removed: Bus.event(
-      "message.removed",
-      z.object({
-        sessionID: z.string(),
-        messageID: z.string(),
-      }),
-    ),
-    PartUpdated: Bus.event(
-      "message.part.updated",
-      z.object({
-        part: MessagePart,
-        sessionID: z.string(),
-        messageID: z.string(),
-      }),
-    ),
-  }
 }

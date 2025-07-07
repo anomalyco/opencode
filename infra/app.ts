@@ -39,6 +39,8 @@ new sst.cloudflare.x.Astro("Web", {
   domain,
   path: "packages/web",
   environment: {
+    // For astro config
+    SST_STAGE: $app.stage,
     VITE_API_URL: api.url,
   },
 })

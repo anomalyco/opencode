@@ -25,21 +25,14 @@ export namespace LSPServer {
     id: "typescript",
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(app) {
-      const tsserver = await Bun.resolve(
-        "typescript/lib/tsserver.js",
-        app.path.cwd,
-      ).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})
       if (!tsserver) return
-      const proc = spawn(
-        BunProc.which(),
-        ["x", "typescript-language-server", "--stdio"],
-        {
-          env: {
-            ...process.env,
-            BUN_BE_BUN: "1",
-          },
+      const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
         },
-      )
+      })
       return {
         process: proc,
         initialization: {
@@ -73,10 +66,7 @@ export namespace LSPServer {
           log.error("Failed to install gopls")
           return
         }
-        bin = path.join(
-          Global.Path.bin,
-          "gopls" + (process.platform === "win32" ? ".exe" : ""),
-        )
+        bin = path.join(Global.Path.bin, "gopls" + (process.platform === "win32" ? ".exe" : ""))
         log.info(`installed gopls`, {
           bin,
         })
@@ -113,10 +103,7 @@ export namespace LSPServer {
           log.error("Failed to install ruby-lsp")
           return
         }
-        bin = path.join(
-          Global.Path.bin,
-          "ruby-lsp" + (process.platform === "win32" ? ".exe" : ""),
-        )
+        bin = path.join(Global.Path.bin, "ruby-lsp" + (process.platform === "win32" ? ".exe" : ""))
         log.info(`installed ruby-lsp`, {
           bin,
         })
@@ -131,16 +118,12 @@ export namespace LSPServer {
     id: "pyright",
     extensions: [".py", ".pyi"],
     async spawn() {
-      const proc = spawn(
-        BunProc.which(),
-        ["x", "pyright-langserver", "--stdio"],
-        {
-          env: {
-            ...process.env,
-            BUN_BE_BUN: "1",
-          },
+      const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
         },
-      )
+      })
       return {
         process: proc,
       }
@@ -158,9 +141,7 @@ export namespace LSPServer {
           Global.Path.bin,
           "elixir-ls-master",
           "release",
-          process.platform === "win32"
-            ? "language_server.bar"
-            : "language_server.sh",
+          process.platform === "win32" ? "language_server.bar" : "language_server.sh",
         )
 
         if (!(await Bun.file(binary).exists())) {
@@ -172,9 +153,7 @@ export namespace LSPServer {
 
           log.info("downloading elixir-ls from GitHub releases")
 
-          const response = await fetch(
-            "https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip",
-          )
+          const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)

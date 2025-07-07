@@ -13,18 +13,12 @@ export const WriteTool = Tool.define({
   id: "write",
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z
-      .string()
-      .describe(
-        "The absolute path to the file to write (must be absolute, not relative)",
-      ),
+    filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
     content: z.string().describe("The content to write to the file"),
   }),
   async execute(params, ctx) {
     const app = App.info()
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(app.path.cwd, params.filePath)
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
@@ -33,9 +27,7 @@ export const WriteTool = Tool.define({
     await Permission.ask({
       id: "write",
       sessionID: ctx.sessionID,
-      title: exists
-        ? "Overwrite this file: " + filepath
-        : "Create new file: " + filepath,
+      title: exists ? "Overwrite this file: " + filepath : "Create new file: " + filepath,
       metadata: {
         filePath: filepath,
         content: params.content,
@@ -62,11 +54,11 @@ export const WriteTool = Tool.define({
     }
 
     return {
+      title: path.relative(app.path.root, filepath),
       metadata: {
         diagnostics,
         filepath,
         exists: exists,
-        title: path.relative(app.path.root, filepath),
       },
       output,
     }

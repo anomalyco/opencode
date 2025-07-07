@@ -31,7 +31,6 @@ const FileStatusCommand = cmd({
 
 export const FileCommand = cmd({
   command: "file",
-  builder: (yargs) =>
-    yargs.command(FileReadCommand).command(FileStatusCommand).demandCommand(),
+  builder: (yargs) => yargs.command(FileReadCommand).command(FileStatusCommand).demandCommand(),
   async handler() {},
 })

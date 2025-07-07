@@ -42,10 +42,7 @@ describe("tool.glob", () => {
 describe("tool.ls", () => {
   test("basic", async () => {
     const result = await App.provide({ cwd: process.cwd() }, async () => {
-      return await ListTool.execute(
-        { path: "./example", ignore: [".git"] },
-        ctx,
-      )
+      return await ListTool.execute({ path: "./example", ignore: [".git"] }, ctx)
     })
     expect(result.output).toMatchSnapshot()
   })

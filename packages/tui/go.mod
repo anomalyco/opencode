@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.1
 	github.com/charmbracelet/x/ansi v0.8.0
+	github.com/google/uuid v1.6.0
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
@@ -37,7 +38,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect

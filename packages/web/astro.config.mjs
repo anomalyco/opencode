@@ -9,10 +9,13 @@ import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 
 const github = "https://github.com/sst/opencode"
+const stage = process.env.SST_STAGE || "dev"
 
 // https://astro.build/config
 export default defineConfig({
-  site: config.url,
+  site: stage === "production"
+    ? `https://${config.domain}`
+    : `https://${stage}.${config.domain}`,
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
@@ -20,18 +23,21 @@ export default defineConfig({
   devToolbar: {
     enabled: false,
   },
+  server: {
+    host: "0.0.0.0",
+  },
   markdown: {
-    rehypePlugins: [
-      rehypeHeadingIds,
-      [rehypeAutolinkHeadings, { behavior: "wrap" }],
-    ],
+    rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },
   integrations: [
     solidJs(),
     starlight({
       title: "opencode",
       expressiveCode: { themes: ["github-light", "github-dark"] },
-      social: [{ icon: "github", label: "GitHub", href: config.github }],
+      social: [
+        { icon: "github", label: "GitHub", href: config.github },
+        { icon: "discord", label: "Dscord", href: config.discord },
+      ],
       head: [
         {
           tag: "link",

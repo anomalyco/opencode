@@ -55,10 +55,7 @@ const cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(ModelsCommand)
   .fail((msg) => {
-    if (
-      msg.startsWith("Unknown argument") ||
-      msg.startsWith("Not enough non-option arguments")
-    ) {
+    if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
       cli.showHelp("log")
     }
   })
@@ -97,10 +94,7 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (formatted === undefined)
-    UI.error(
-      "Unexpected error, check log file at " + Log.file() + " for more details",
-    )
+  if (formatted === undefined) UI.error("Unexpected error, check log file at " + Log.file() + " for more details")
   process.exitCode = 1
 }
 

@@ -1,9 +1,5 @@
 import path from "path"
-import {
-  createMessageConnection,
-  StreamMessageReader,
-  StreamMessageWriter,
-} from "vscode-jsonrpc/node"
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { App } from "../app/app"
 import { Log } from "../util/log"
@@ -121,9 +117,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path)
-            ? input.path
-            : path.resolve(app.path.cwd, input.path)
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
           const file = Bun.file(input.path)
           const text = await file.text()
           const version = files[input.path]
@@ -155,18 +149,13 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        input.path = path.isAbsolute(input.path)
-          ? input.path
-          : path.resolve(app.path.cwd, input.path)
+        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
         log.info("waiting for diagnostics", input)
         let unsub: () => void
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (
-                event.properties.path === input.path &&
-                event.properties.serverID === result.serverID
-              ) {
+              if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
                 log.info("got diagnostics", input)
                 unsub?.()
                 resolve()
