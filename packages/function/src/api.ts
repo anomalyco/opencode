@@ -38,10 +38,7 @@ export class SyncServer extends DurableObject<Env> {
 
   async publish(key: string, content: any) {
     const sessionID = await this.getSessionID()
-    if (
-      !key.startsWith(`session/info/${sessionID}`) &&
-      !key.startsWith(`session/message/${sessionID}/`)
-    )
+    if (!key.startsWith(`session/info/${sessionID}`) && !key.startsWith(`session/message/${sessionID}/`))
       return new Response("Error: Invalid key", { status: 400 })
 
     // store message
@@ -184,8 +181,7 @@ export default {
       }
       const id = url.searchParams.get("id")
       console.log("share_poll", id)
-      if (!id)
-        return new Response("Error: Share ID is required", { status: 400 })
+      if (!id) return new Response("Error: Share ID is required", { status: 400 })
       const stub = env.SYNC_SERVER.get(env.SYNC_SERVER.idFromName(id))
       return stub.fetch(request)
     }
@@ -193,8 +189,7 @@ export default {
     if (request.method === "GET" && method === "share_data") {
       const id = url.searchParams.get("id")
       console.log("share_data", id)
-      if (!id)
-        return new Response("Error: Share ID is required", { status: 400 })
+      if (!id) return new Response("Error: Share ID is required", { status: 400 })
       const stub = env.SYNC_SERVER.get(env.SYNC_SERVER.idFromName(id))
       const data = await stub.getData()
 

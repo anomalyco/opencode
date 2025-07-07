@@ -10,14 +10,8 @@ export namespace AuthAnthropic {
     url.searchParams.set("code", "true")
     url.searchParams.set("client_id", CLIENT_ID)
     url.searchParams.set("response_type", "code")
-    url.searchParams.set(
-      "redirect_uri",
-      "https://console.anthropic.com/oauth/code/callback",
-    )
-    url.searchParams.set(
-      "scope",
-      "org:create_api_key user:profile user:inference",
-    )
+    url.searchParams.set("redirect_uri", "https://console.anthropic.com/oauth/code/callback")
+    url.searchParams.set("scope", "org:create_api_key user:profile user:inference")
     url.searchParams.set("code_challenge", pkce.challenge)
     url.searchParams.set("code_challenge_method", "S256")
     url.searchParams.set("state", pkce.verifier)
@@ -57,20 +51,17 @@ export namespace AuthAnthropic {
     const info = await Auth.get("anthropic")
     if (!info || info.type !== "oauth") return
     if (info.access && info.expires > Date.now()) return info.access
-    const response = await fetch(
-      "https://console.anthropic.com/v1/oauth/token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          grant_type: "refresh_token",
-          refresh_token: info.refresh,
-          client_id: CLIENT_ID,
-        }),
+    const response = await fetch("https://console.anthropic.com/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    )
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: info.refresh,
+        client_id: CLIENT_ID,
+      }),
+    })
     if (!response.ok) return
     const json = await response.json()
     await Auth.set("anthropic", {

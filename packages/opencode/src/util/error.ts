@@ -7,10 +7,7 @@ export abstract class NamedError extends Error {
   abstract schema(): ZodSchema
   abstract toObject(): { name: string; data: any }
 
-  static create<Name extends string, Data extends ZodSchema>(
-    name: Name,
-    data: Data,
-  ) {
+  static create<Name extends string, Data extends ZodSchema>(name: Name, data: Data) {
     const schema = z
       .object({
         name: z.literal(name),

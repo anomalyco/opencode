@@ -99,7 +99,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case opencode.EventListResponseEventMessageUpdated:
-		if msg.Properties.Info.Metadata.SessionID == m.app.Session.ID {
+		if msg.Properties.Info.SessionID == m.app.Session.ID {
 			m.renderView(m.width)
 			if m.tail {
 				m.viewport.GotoBottom()
@@ -124,19 +124,19 @@ func (m *messagesComponent) renderView(width int) {
 	m.partCount = 0
 	m.lineCount = 0
 
-	orphanedToolCalls := make([]opencode.ToolInvocationPart, 0)
+	orphanedToolCalls := make([]opencode.ToolPart, 0)
 
 	for _, message := range m.app.Messages {
 		var content string
 		var cached bool
 
-		switch message.Role {
-		case opencode.MessageRoleUser:
+		switch casted := message.(type) {
+		case opencode.UserMessage:
 		userLoop:
-			for partIndex, part := range message.Parts {
+			for partIndex, part := range casted.Parts {
 				switch part := part.AsUnion().(type) {
 				case opencode.TextPart:
-					remainingParts := message.Parts[partIndex+1:]
+					remainingParts := casted.Parts[partIndex+1:]
 					fileParts := make([]opencode.FilePart, 0)
 					for _, part := range remainingParts {
 						switch part := part.AsUnion().(type) {
@@ -150,7 +150,7 @@ func (m *messagesComponent) renderView(width int) {
 						mediaTypeStyle := styles.NewStyle().Background(t.Secondary()).Foreground(t.BackgroundPanel()).Padding(0, 1)
 						for _, filePart := range fileParts {
 							mediaType := ""
-							switch filePart.MediaType {
+							switch filePart.Mime {
 							case "text/plain":
 								mediaType = "txt"
 							case "image/png", "image/jpeg", "image/gif", "image/webp":
@@ -175,7 +175,7 @@ func (m *messagesComponent) renderView(width int) {
 						flexItems...,
 					)
 
-					key := m.cache.GenerateKey(message.ID, part.Text, width, m.selectedPart == m.partCount, files)
+					key := m.cache.GenerateKey(casted.ID, part.Text, width, m.selectedPart == m.partCount, files)
 					content, cached = m.cache.Get(key)
 					if !cached {
 						content = renderText(
@@ -199,21 +199,21 @@ func (m *messagesComponent) renderView(width int) {
 				}
 			}
 
-		case opencode.MessageRoleAssistant:
+		case opencode.AssistantMessage:
 			hasTextPart := false
-			for partIndex, p := range message.Parts {
+			for partIndex, p := range casted.Parts {
 				switch part := p.AsUnion().(type) {
 				case opencode.TextPart:
 					hasTextPart = true
-					finished := message.Metadata.Time.Completed > 0
-					remainingParts := message.Parts[partIndex+1:]
-					toolCallParts := make([]opencode.ToolInvocationPart, 0)
+					finished := casted.Time.Completed > 0
+					remainingParts := casted.Parts[partIndex+1:]
+					toolCallParts := make([]opencode.ToolPart, 0)
 
 					// sometimes tool calls happen without an assistant message
 					// these should be included in this assistant message as well
 					if len(orphanedToolCalls) > 0 {
 						toolCallParts = append(toolCallParts, orphanedToolCalls...)
-						orphanedToolCalls = make([]opencode.ToolInvocationPart, 0)
+						orphanedToolCalls = make([]opencode.ToolPart, 0)
 					}
 
 					remaining := true
@@ -226,9 +226,9 @@ func (m *messagesComponent) renderView(width int) {
 							// we only want tool calls associated with the current text part.
 							// if we hit another text part, we're done.
 							remaining = false
-						case opencode.ToolInvocationPart:
+						case opencode.ToolPart:
 							toolCallParts = append(toolCallParts, part)
-							if part.ToolInvocation.State != "result" {
+							if part.State.Status != opencode.ToolPartStateStatusCompleted || part.State.Status != opencode.ToolPartStateStatusError {
 								// i don't think there's a case where a tool call isn't in result state
 								// and the message time is 0, but just in case
 								finished = false
@@ -237,14 +237,14 @@ func (m *messagesComponent) renderView(width int) {
 					}
 
 					if finished {
-						key := m.cache.GenerateKey(message.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
+						key := m.cache.GenerateKey(casted.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
 						content, cached = m.cache.Get(key)
 						if !cached {
 							content = renderText(
 								m.app,
 								message,
 								p.Text,
-								message.Metadata.Assistant.ModelID,
+								casted.ModelID,
 								m.showToolDetails,
 								m.partCount == m.selectedPart,
 								width,
@@ -258,7 +258,7 @@ func (m *messagesComponent) renderView(width int) {
 							m.app,
 							message,
 							p.Text,
-							message.Metadata.Assistant.ModelID,
+							casted.ModelID,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,
@@ -270,7 +270,7 @@ func (m *messagesComponent) renderView(width int) {
 						m = m.updateSelected(content, p.Text)
 						blocks = append(blocks, content)
 					}
-				case opencode.ToolInvocationPart:
+				case opencode.ToolPart:
 					if !m.showToolDetails {
 						if !hasTextPart {
 							orphanedToolCalls = append(orphanedToolCalls, part)
@@ -278,9 +278,9 @@ func (m *messagesComponent) renderView(width int) {
 						continue
 					}
 
-					if part.ToolInvocation.State == "result" {
-						key := m.cache.GenerateKey(message.ID,
-							part.ToolInvocation.ToolCallID,
+					if part.State.Status == opencode.ToolPartStateStatusCompleted || part.State.Status == opencode.ToolPartStateStatusError {
+						key := m.cache.GenerateKey(casted.ID,
+							part.ID,
 							m.showToolDetails,
 							width,
 							m.partCount == m.selectedPart,
@@ -290,7 +290,6 @@ func (m *messagesComponent) renderView(width int) {
 							content = renderToolDetails(
 								m.app,
 								part,
-								message.Metadata,
 								m.partCount == m.selectedPart,
 								width,
 							)
@@ -301,7 +300,6 @@ func (m *messagesComponent) renderView(width int) {
 						content = renderToolDetails(
 							m.app,
 							part,
-							message.Metadata,
 							m.partCount == m.selectedPart,
 							width,
 						)
@@ -315,14 +313,16 @@ func (m *messagesComponent) renderView(width int) {
 		}
 
 		error := ""
-		switch err := message.Metadata.Error.AsUnion().(type) {
-		case nil:
-		case opencode.MessageMetadataErrorMessageOutputLengthError:
-			error = "Message output length exceeded"
-		case opencode.ProviderAuthError:
-			error = err.Data.Message
-		case opencode.UnknownError:
-			error = err.Data.Message
+		if assistant, ok := message.(opencode.AssistantMessage); ok {
+			switch err := assistant.Error.AsUnion().(type) {
+			case nil:
+			case opencode.AssistantMessageErrorMessageOutputLengthError:
+				error = "Message output length exceeded"
+			case opencode.ProviderAuthError:
+				error = err.Data.Message
+			case opencode.UnknownError:
+				error = err.Data.Message
+			}
 		}
 
 		if error != "" {

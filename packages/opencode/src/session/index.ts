@@ -1,19 +1,17 @@
-import path from "node:path"
+import path from "path"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
 import {
   generateText,
   LoadAPIKeyError,
-  convertToCoreMessages,
   streamText,
   tool,
   wrapLanguageModel,
   type Tool as AITool,
   type LanguageModelUsage,
-  type CoreMessage,
-  type UIMessage,
   type ProviderMetadata,
-  type Attachment,
+  type ModelMessage,
+  stepCountIs,
 } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
@@ -34,9 +32,9 @@ import { Storage } from "../storage/storage"
 import type { Tool } from "../tool/tool"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
-import { Message } from "./message"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
+import { MessageV2 } from "./message-v2"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -101,7 +99,7 @@ export namespace Session {
     Error: Bus.event(
       "session.error",
       z.object({
-        error: Message.Info.shape.metadata.shape.error,
+        error: MessageV2.Assistant.shape.error,
       }),
     ),
   }
@@ -110,7 +108,7 @@ export namespace Session {
     "session",
     () => {
       const sessions = new Map<string, Info>()
-      const messages = new Map<string, Message.Info[]>()
+      const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
 
       return {
@@ -131,9 +129,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title:
-        (parentID ? "Child session - " : "New Session - ") +
-        new Date().toISOString(),
+      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -211,10 +207,10 @@ export namespace Session {
   }
 
   export async function messages(sessionID: string) {
-    const result = [] as Message.Info[]
+    const result = [] as MessageV2.Info[]
     const list = Storage.list("session/message/" + sessionID)
     for await (const p of list) {
-      const read = await Storage.readJSON<Message.Info>(p)
+      const read = await Storage.readJSON<MessageV2.Info>(p)
       result.push(read)
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
@@ -222,9 +218,7 @@ export namespace Session {
   }
 
   export async function getMessage(sessionID: string, messageID: string) {
-    return Storage.readJSON<Message.Info>(
-      "session/message/" + sessionID + "/" + messageID,
-    )
+    return Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID)
   }
 
   export async function* list() {
@@ -275,12 +269,9 @@ export namespace Session {
     }
   }
 
-  async function updateMessage(msg: Message.Info) {
-    await Storage.writeJSON(
-      "session/message/" + msg.metadata.sessionID + "/" + msg.id,
-      msg,
-    )
-    Bus.publish(Message.Event.Updated, {
+  async function updateMessage(msg: MessageV2.Info) {
+    await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
+    Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
   }
@@ -289,10 +280,11 @@ export namespace Session {
     sessionID: string
     providerID: string
     modelID: string
-    parts: Message.MessagePart[]
+    parts: MessageV2.UserPart[]
     system?: string[]
     tools?: Tool.Info[]
   }) {
+    using abort = lock(input.sessionID)
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
     const model = await Provider.getModel(input.providerID, input.modelID)
@@ -302,14 +294,9 @@ export namespace Session {
     if (session.revert) {
       const trimmed = []
       for (const msg of msgs) {
-        if (
-          msg.id > session.revert.messageID ||
-          (msg.id === session.revert.messageID && session.revert.part === 0)
-        ) {
-          await Storage.remove(
-            "session/message/" + input.sessionID + "/" + msg.id,
-          )
-          await Bus.publish(Message.Event.Removed, {
+        if (msg.id > session.revert.messageID || (msg.id === session.revert.messageID && session.revert.part === 0)) {
+          await Storage.remove("session/message/" + input.sessionID + "/" + msg.id)
+          await Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
             messageID: msg.id,
           })
@@ -328,22 +315,15 @@ export namespace Session {
       })
     }
 
-    const previous = msgs.at(-1)
+    const previous = msgs.at(-1) as MessageV2.Assistant
 
     // auto summarize if too long
-    if (previous?.metadata.assistant) {
+    if (previous) {
       const tokens =
-        previous.metadata.assistant.tokens.input +
-        previous.metadata.assistant.tokens.cache.read +
-        previous.metadata.assistant.tokens.cache.write +
-        previous.metadata.assistant.tokens.output
+        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
       if (
         model.info.limit.context &&
-        tokens >
-          Math.max(
-            (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9,
-            0,
-          )
+        tokens > Math.max((model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9, 0)
       ) {
         await summarize({
           sessionID: input.sessionID,
@@ -354,16 +334,12 @@ export namespace Session {
       }
     }
 
-    using abort = lock(input.sessionID)
-
-    const lastSummary = msgs.findLast(
-      (msg) => msg.metadata.assistant?.summary === true,
-    )
+    const lastSummary = msgs.findLast((msg) => msg.role === "assistant" && msg.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
 
     const app = App.info()
     input.parts = await Promise.all(
-      input.parts.map(async (part): Promise<Message.MessagePart[]> => {
+      input.parts.map(async (part): Promise<MessageV2.UserPart[]> => {
         if (part.type === "file") {
           const url = new URL(part.url)
           switch (url.protocol) {
@@ -371,13 +347,13 @@ export namespace Session {
               const filepath = path.join(app.path.cwd, url.pathname)
               let file = Bun.file(filepath)
 
-              if (part.mediaType === "text/plain") {
+              if (part.mime === "text/plain") {
                 let text = await file.text()
                 const range = {
                   start: url.searchParams.get("start"),
                   end: url.searchParams.get("end"),
                 }
-                if (range.start != null && part.mediaType === "text/plain") {
+                if (range.start != null && part.mime === "text/plain") {
                   const lines = text.split("\n")
                   const start = parseInt(range.start)
                   const end = range.end ? parseInt(range.end) : lines.length
@@ -387,12 +363,7 @@ export namespace Session {
                 return [
                   {
                     type: "text",
-                    text: [
-                      "Called the Read tool on " + url.pathname,
-                      "<results>",
-                      text,
-                      "</results>",
-                    ].join("\n"),
+                    text: ["Called the Read tool on " + url.pathname, "<results>", text, "</results>"].join("\n"),
                   },
                 ]
               }
@@ -404,10 +375,8 @@ export namespace Session {
                 },
                 {
                   type: "file",
-                  url:
-                    `data:${part.mediaType};base64,` +
-                    Buffer.from(await file.bytes()).toString("base64url"),
-                  mediaType: part.mediaType,
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64url"),
+                  mime: part.mime,
                   filename: part.filename!,
                 },
               ]
@@ -418,20 +387,24 @@ export namespace Session {
     ).then((x) => x.flat())
     if (msgs.length === 0 && !session.parentID) {
       generateText({
-        maxTokens: input.providerID === "google" ? 1024 : 20,
+        maxOutputTokens: input.providerID === "google" ? 1024 : 20,
         providerOptions: model.info.options,
         messages: [
           ...SystemPrompt.title(input.providerID).map(
-            (x): CoreMessage => ({
+            (x): ModelMessage => ({
               role: "system",
               content: x,
             }),
           ),
-          ...convertToCoreMessages([
+          ...MessageV2.toModelMessage([
             {
+              id: Identifier.ascending("message"),
               role: "user",
-              content: "",
-              parts: toParts(input.parts).parts,
+              sessionID: input.sessionID,
+              parts: input.parts,
+              time: {
+                created: Date.now(),
+              },
             },
           ]),
         ],
@@ -445,18 +418,13 @@ export namespace Session {
         })
         .catch(() => {})
     }
-    const snapshot = await Snapshot.create(input.sessionID)
-    const msg: Message.Info = {
-      role: "user",
+    const msg: MessageV2.Info = {
       id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
       parts: input.parts,
-      metadata: {
-        time: {
-          created: Date.now(),
-        },
-        sessionID: input.sessionID,
-        tool: {},
-        snapshot,
+      time: {
+        created: Date.now(),
       },
     }
     await updateMessage(msg)
@@ -466,34 +434,28 @@ export namespace Session {
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
 
-    const next: Message.Info = {
+    const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
       role: "assistant",
       parts: [],
-      metadata: {
-        snapshot,
-        assistant: {
-          system,
-          path: {
-            cwd: app.path.cwd,
-            root: app.path.root,
-          },
-          cost: 0,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: input.modelID,
-          providerID: input.providerID,
-        },
-        time: {
-          created: Date.now(),
-        },
-        sessionID: input.sessionID,
-        tool: {},
+      system,
+      path: {
+        cwd: app.path.cwd,
+        root: app.path.root,
       },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: input.modelID,
+      providerID: input.providerID,
+      time: {
+        created: Date.now(),
+      },
+      sessionID: input.sessionID,
     }
     await updateMessage(next)
     const tools: Record<string, AITool> = {}
@@ -502,48 +464,29 @@ export namespace Session {
       tools[item.id.replaceAll(".", "_")] = tool({
         id: item.id as any,
         description: item.description,
-        parameters: item.parameters as ZodSchema,
+        inputSchema: item.parameters as ZodSchema,
         async execute(args, opts) {
-          const start = Date.now()
-          try {
-            const result = await item.execute(args, {
-              sessionID: input.sessionID,
-              abort: abort.signal,
-              messageID: next.id,
-              metadata: async (val) => {
-                next.metadata.tool[opts.toolCallId] = {
-                  ...val,
-                  time: {
-                    start: 0,
-                    end: 0,
-                  },
-                }
-                await updateMessage(next)
-              },
-            })
-            next.metadata!.tool![opts.toolCallId] = {
-              ...result.metadata,
-              snapshot: await Snapshot.create(input.sessionID),
-              time: {
-                start,
-                end: Date.now(),
-              },
-            }
-            await updateMessage(next)
-            return result.output
-          } catch (e: any) {
-            next.metadata!.tool![opts.toolCallId] = {
-              error: true,
-              message: e.toString(),
-              title: e.toString(),
-              snapshot: await Snapshot.create(input.sessionID),
-              time: {
-                start,
-                end: Date.now(),
-              },
-            }
-            await updateMessage(next)
-            return e.toString()
+          const result = await item.execute(args, {
+            sessionID: input.sessionID,
+            abort: abort.signal,
+            messageID: next.id,
+            metadata: async (val) => {
+              const match = next.parts.find(
+                (p): p is MessageV2.ToolPart => p.type === "tool" && p.id === opts.toolCallId,
+              )
+              if (match && match.state.status === "running") {
+                match.state.title = val.title
+                match.state.metadata = val.metadata
+              }
+              await updateMessage(next)
+            },
+          })
+          return result
+        },
+        toModelOutput(result) {
+          return {
+            type: "text",
+            value: result.output,
           }
         },
       })
@@ -553,109 +496,38 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        const start = Date.now()
         try {
           const result = await execute(args, opts)
-          next.metadata!.tool![opts.toolCallId] = {
-            ...result.metadata,
-            snapshot: await Snapshot.create(input.sessionID),
-            time: {
-              start,
-              end: Date.now(),
-            },
-          }
-          await updateMessage(next)
           return result.content
             .filter((x: any) => x.type === "text")
             .map((x: any) => x.text)
             .join("\n\n")
         } catch (e: any) {
-          next.metadata!.tool![opts.toolCallId] = {
-            error: true,
-            message: e.toString(),
-            snapshot: await Snapshot.create(input.sessionID),
-            title: "mcp",
-            time: {
-              start,
-              end: Date.now(),
-            },
-          }
-          await updateMessage(next)
           return e.toString()
         }
       }
       tools[key] = item
     }
 
-    let text: Message.TextPart | undefined
+    let text: MessageV2.TextPart = {
+      type: "text",
+      text: "",
+    }
     const result = streamText({
-      onStepFinish: async (step) => {
-        log.info("step finish", { finishReason: step.finishReason })
-        const assistant = next.metadata!.assistant!
-        const usage = getUsage(model.info, step.usage, step.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
-        await updateMessage(next)
-        if (text) {
-          Bus.publish(Message.Event.PartUpdated, {
-            part: text,
-            messageID: next.id,
-            sessionID: next.metadata.sessionID,
-          })
-        }
-        text = undefined
-      },
-      onError(err) {
-        log.error("callback error", err)
-        switch (true) {
-          case LoadAPIKeyError.isInstance(err.error):
-            next.metadata.error = new Provider.AuthError(
-              {
-                providerID: input.providerID,
-                message: err.error.message,
-              },
-              { cause: err.error },
-            ).toObject()
-            break
-          case err.error instanceof Error:
-            next.metadata.error = new NamedError.Unknown(
-              { message: err.error.toString() },
-              { cause: err.error },
-            ).toObject()
-            break
-          default:
-            next.metadata.error = new NamedError.Unknown(
-              { message: JSON.stringify(err.error) },
-              { cause: err.error },
-            )
-        }
-        Bus.publish(Event.Error, {
-          error: next.metadata.error,
-        })
-      },
-      // async prepareStep(step) {
-      //   next.parts.push({
-      //     type: "step-start",
-      //   })
-      //   await updateMessage(next)
-      //   return step
-      // },
-      toolCallStreaming: true,
+      onError() {},
       maxRetries: 10,
-      maxTokens: Math.max(0, model.info.limit.output) || undefined,
+      maxOutputTokens: Math.max(0, model.info.limit.output) || undefined,
       abortSignal: abort.signal,
-      maxSteps: 1000,
+      stopWhen: stepCountIs(1000),
       providerOptions: model.info.options,
       messages: [
         ...system.map(
-          (x): CoreMessage => ({
+          (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...convertToCoreMessages(
-          msgs.map(toUIMessage).filter((x) => x.parts.length > 0),
-        ),
+        ...MessageV2.toModelMessage(msgs),
       ],
       temperature: model.info.temperature ? 0 : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
@@ -665,11 +537,8 @@ export namespace Session {
           {
             async transformParams(args) {
               if (args.type === "stream") {
-                args.params.prompt = ProviderTransform.message(
-                  args.params.prompt,
-                  input.providerID,
-                  input.modelID,
-                )
+                // @ts-expect-error
+                args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
               }
               return args.params
             },
@@ -677,173 +546,174 @@ export namespace Session {
         ],
       }),
     })
-    try {
-      for await (const value of result.fullStream) {
-        l.info("part", {
-          type: value.type,
-        })
-        switch (value.type) {
-          case "step-start":
-            next.parts.push({
-              type: "step-start",
-            })
-            break
-          case "text-delta":
-            if (!text) {
-              text = {
-                type: "text",
-                text: value.textDelta,
-              }
-              next.parts.push(text)
-              break
-            } else text.text += value.textDelta
-            break
-
-          case "tool-call": {
-            const [match] = next.parts.flatMap((p) =>
-              p.type === "tool-invocation" &&
-              p.toolInvocation.toolCallId === value.toolCallId
-                ? [p]
-                : [],
-            )
-            if (!match) break
-            match.toolInvocation.args = value.args
-            match.toolInvocation.state = "call"
-            Bus.publish(Message.Event.PartUpdated, {
-              part: match,
-              messageID: next.id,
-              sessionID: next.metadata.sessionID,
-            })
-            break
-          }
-
-          case "tool-call-streaming-start":
-            next.parts.push({
-              type: "tool-invocation",
-              toolInvocation: {
-                state: "partial-call",
-                toolName: value.toolName,
-                toolCallId: value.toolCallId,
-                args: {},
-              },
-            })
-            Bus.publish(Message.Event.PartUpdated, {
-              part: next.parts[next.parts.length - 1],
-              messageID: next.id,
-              sessionID: next.metadata.sessionID,
-            })
-            break
-
-          case "tool-call-delta":
-            continue
-
-          // for some reason ai sdk claims to not send this part but it does
-          // @ts-expect-error
-          case "tool-result":
-            const match = next.parts.find(
-              (p) =>
-                p.type === "tool-invocation" &&
-                // @ts-expect-error
-                p.toolInvocation.toolCallId === value.toolCallId,
-            )
-            if (match && match.type === "tool-invocation") {
-              match.toolInvocation = {
-                // @ts-expect-error
-                args: value.args,
-                // @ts-expect-error
-                toolCallId: value.toolCallId,
-                // @ts-expect-error
-                toolName: value.toolName,
-                state: "result",
-                // @ts-expect-error
-                result: value.result as string,
-              }
-              Bus.publish(Message.Event.PartUpdated, {
-                part: match,
-                messageID: next.id,
-                sessionID: next.metadata.sessionID,
-              })
-            }
-            break
-
-          case "finish":
-            log.info("message finish", {
-              reason: value.finishReason,
-            })
-            const assistant = next.metadata!.assistant!
-            const usage = getUsage(
-              model.info,
-              value.usage,
-              value.providerMetadata,
-            )
-            assistant.cost += usage.cost
-            await updateMessage(next)
-            if (value.finishReason === "length")
-              throw new Message.OutputLengthError({})
-            break
-          default:
-            l.info("unhandled", {
-              type: value.type,
-            })
-            continue
-        }
-        await updateMessage(next)
-      }
-    } catch (e: any) {
-      log.error("stream error", {
-        error: e,
+    for await (const value of result.fullStream) {
+      l.info("part", {
+        type: value.type,
       })
-      switch (true) {
-        case Message.OutputLengthError.isInstance(e):
-          next.metadata.error = e
+      switch (value.type) {
+        case "start":
           break
-        case LoadAPIKeyError.isInstance(e):
-          next.metadata.error = new Provider.AuthError(
-            {
-              providerID: input.providerID,
-              message: e.message,
+
+        case "tool-input-start":
+          next.parts.push({
+            type: "tool",
+            tool: value.toolName,
+            id: value.id,
+            state: {
+              status: "pending",
             },
-            { cause: e },
-          ).toObject()
+          })
+          Bus.publish(MessageV2.Event.PartUpdated, {
+            part: next.parts[next.parts.length - 1],
+            sessionID: next.sessionID,
+            messageID: next.id,
+          })
           break
-        case e instanceof Error:
-          next.metadata.error = new NamedError.Unknown(
-            { message: e.toString() },
-            { cause: e },
-          ).toObject()
+
+        case "tool-input-delta":
           break
-        default:
-          next.metadata.error = new NamedError.Unknown(
-            { message: JSON.stringify(e) },
-            { cause: e },
-          )
-      }
-      Bus.publish(Event.Error, {
-        error: next.metadata.error,
-      })
-    }
-    next.metadata!.time.completed = Date.now()
-    for (const part of next.parts) {
-      if (
-        part.type === "tool-invocation" &&
-        part.toolInvocation.state !== "result"
-      ) {
-        part.toolInvocation = {
-          ...part.toolInvocation,
-          state: "result",
-          result: "request was aborted",
+
+        case "tool-call": {
+          const match = next.parts.find((p): p is MessageV2.ToolPart => p.type === "tool" && p.id === value.toolCallId)
+          if (match) {
+            match.state = {
+              status: "running",
+              input: value.input,
+              time: {
+                start: Date.now(),
+              },
+            }
+            Bus.publish(MessageV2.Event.PartUpdated, {
+              part: match,
+              sessionID: next.sessionID,
+              messageID: next.id,
+            })
+          }
+          break
         }
+        case "tool-result": {
+          const match = next.parts.find((p): p is MessageV2.ToolPart => p.type === "tool" && p.id === value.toolCallId)
+          if (match && match.state.status === "running") {
+            match.state = {
+              status: "completed",
+              input: value.input,
+              output: value.output.output,
+              metadata: value.output.metadata,
+              title: value.output.title,
+              time: {
+                start: match.state.time.start,
+                end: Date.now(),
+              },
+            }
+            Bus.publish(MessageV2.Event.PartUpdated, {
+              part: match,
+              sessionID: next.sessionID,
+              messageID: next.id,
+            })
+          }
+          break
+        }
+
+        case "tool-error": {
+          const match = next.parts.find((p): p is MessageV2.ToolPart => p.type === "tool" && p.id === value.toolCallId)
+          if (match && match.state.status === "running") {
+            match.state = {
+              status: "error",
+              input: value.input,
+              error: (value.error as any).toString(),
+              time: {
+                start: match.state.time.start,
+                end: Date.now(),
+              },
+            }
+            Bus.publish(MessageV2.Event.PartUpdated, {
+              part: match,
+              sessionID: next.sessionID,
+              messageID: next.id,
+            })
+          }
+          break
+        }
+
+        case "error":
+          const e = value.error
+          log.error("", {
+            error: e,
+          })
+          switch (true) {
+            case MessageV2.OutputLengthError.isInstance(e):
+              next.error = e
+              break
+            case LoadAPIKeyError.isInstance(e):
+              next.error = new Provider.AuthError(
+                {
+                  providerID: input.providerID,
+                  message: e.message,
+                },
+                { cause: e },
+              ).toObject()
+              break
+            case e instanceof Error:
+              next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+              break
+            default:
+              next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+          }
+          Bus.publish(Event.Error, {
+            error: next.error,
+          })
+          break
+
+        case "start-step":
+          next.parts.push({
+            type: "step-start",
+          })
+          break
+
+        case "finish-step":
+          const usage = getUsage(model.info, value.usage, value.providerMetadata)
+          next.cost += usage.cost
+          next.tokens = usage.tokens
+          break
+
+        case "text-start":
+          text = {
+            type: "text",
+            text: "",
+          }
+          break
+
+        case "text":
+          if (text.text === "") next.parts.push(text)
+          text.text += value.text
+          break
+
+        case "text-end":
+          Bus.publish(MessageV2.Event.PartUpdated, {
+            part: text,
+            sessionID: next.sessionID,
+            messageID: next.id,
+          })
+          break
+
+        case "finish":
+          next.time.completed = Date.now()
+          break
+
+        default:
+          l.info("unhandled", {
+            ...value,
+          })
+          continue
       }
+      await updateMessage(next)
     }
-    await updateMessage(next)
     return next
   }
 
-  export async function revert(input: {
-    sessionID: string
-    messageID: string
-    part: number
-  }) {
+  export async function revert(_input: { sessionID: string; messageID: string; part: number }) {
+    // TODO
+    /*
     const message = await getMessage(input.sessionID, input.messageID)
     if (!message) return
     const part = message.parts[input.part]
@@ -871,77 +741,66 @@ export namespace Session {
         snapshot,
       }
     })
+    */
   }
 
   export async function unrevert(sessionID: string) {
     const session = await get(sessionID)
     if (!session) return
     if (!session.revert) return
-    if (session.revert.snapshot)
-      await Snapshot.restore(sessionID, session.revert.snapshot)
+    if (session.revert.snapshot) await Snapshot.restore(sessionID, session.revert.snapshot)
     update(sessionID, (draft) => {
       draft.revert = undefined
     })
   }
 
-  export async function summarize(input: {
-    sessionID: string
-    providerID: string
-    modelID: string
-  }) {
+  export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
     using abort = lock(input.sessionID)
     const msgs = await messages(input.sessionID)
-    const lastSummary = msgs.findLast(
-      (msg) => msg.metadata.assistant?.summary === true,
-    )?.id
+    const lastSummary = msgs.findLast((msg) => msg.role === "assistant" && msg.summary === true)?.id
     const filtered = msgs.filter((msg) => !lastSummary || msg.id >= lastSummary)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const app = App.info()
     const system = SystemPrompt.summarize(input.providerID)
 
-    const next: Message.Info = {
+    const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
       role: "assistant",
       parts: [],
-      metadata: {
-        tool: {},
-        sessionID: input.sessionID,
-        assistant: {
-          system,
-          path: {
-            cwd: app.path.cwd,
-            root: app.path.root,
-          },
-          summary: true,
-          cost: 0,
-          modelID: input.modelID,
-          providerID: input.providerID,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-        },
-        time: {
-          created: Date.now(),
-        },
+      sessionID: input.sessionID,
+      system,
+      path: {
+        cwd: app.path.cwd,
+        root: app.path.root,
+      },
+      summary: true,
+      cost: 0,
+      modelID: input.modelID,
+      providerID: input.providerID,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      time: {
+        created: Date.now(),
       },
     }
     await updateMessage(next)
 
-    let text: Message.TextPart | undefined
+    let text: MessageV2.TextPart | undefined
     const result = streamText({
       abortSignal: abort.signal,
       model: model.language,
       messages: [
         ...system.map(
-          (x): CoreMessage => ({
+          (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...convertToCoreMessages(filtered.map(toUIMessage)),
+        ...MessageV2.toModelMessage(filtered),
         {
           role: "user",
           content: [
@@ -953,41 +812,38 @@ export namespace Session {
         },
       ],
       onStepFinish: async (step) => {
-        const assistant = next.metadata!.assistant!
         const usage = getUsage(model.info, step.usage, step.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
+        next.cost += usage.cost
+        next.tokens = usage.tokens
         await updateMessage(next)
         if (text) {
-          Bus.publish(Message.Event.PartUpdated, {
+          Bus.publish(MessageV2.Event.PartUpdated, {
             part: text,
             messageID: next.id,
-            sessionID: next.metadata.sessionID,
+            sessionID: next.sessionID,
           })
         }
         text = undefined
       },
       async onFinish(input) {
-        const assistant = next.metadata!.assistant!
         const usage = getUsage(model.info, input.usage, input.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
-        next.metadata!.time.completed = Date.now()
+        next.cost += usage.cost
+        next.tokens = usage.tokens
+        next.time.completed = Date.now()
         await updateMessage(next)
       },
     })
 
     for await (const value of result.fullStream) {
       switch (value.type) {
-        case "text-delta":
+        case "text":
           if (!text) {
             text = {
               type: "text",
-              text: value.textDelta,
+              text: value.text,
             }
             next.parts.push(text)
-          } else text.text += value.textDelta
-
+          } else text.text += value.text
           await updateMessage(next)
           break
       }
@@ -1011,40 +867,25 @@ export namespace Session {
     }
   }
 
-  function getUsage(
-    model: ModelsDev.Model,
-    usage: LanguageModelUsage,
-    metadata?: ProviderMetadata,
-  ) {
+  function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {
     const tokens = {
-      input: usage.promptTokens ?? 0,
-      output: usage.completionTokens ?? 0,
+      input: usage.inputTokens ?? 0,
+      output: usage.outputTokens ?? 0,
       reasoning: 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error
           metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
           0) as number,
-        read: (metadata?.["anthropic"]?.["cacheReadInputTokens"] ??
-          // @ts-expect-error
-          metadata?.["bedrock"]?.["usage"]?.["cacheReadInputTokens"] ??
-          0) as number,
+        read: usage.cachedInputTokens ?? 0,
       },
     }
     return {
       cost: new Decimal(0)
         .add(new Decimal(tokens.input).mul(model.cost.input).div(1_000_000))
         .add(new Decimal(tokens.output).mul(model.cost.output).div(1_000_000))
-        .add(
-          new Decimal(tokens.cache.read)
-            .mul(model.cost.cache_read ?? 0)
-            .div(1_000_000),
-        )
-        .add(
-          new Decimal(tokens.cache.write)
-            .mul(model.cost.cache_write ?? 0)
-            .div(1_000_000),
-        )
+        .add(new Decimal(tokens.cache.read).mul(model.cost.cache_read ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.write).mul(model.cost.cache_write ?? 0).div(1_000_000))
         .toNumber(),
       tokens,
     }
@@ -1056,11 +897,7 @@ export namespace Session {
     }
   }
 
-  export async function initialize(input: {
-    sessionID: string
-    modelID: string
-    providerID: string
-  }) {
+  export async function initialize(input: { sessionID: string; modelID: string; providerID: string }) {
     const app = App.info()
     await Session.chat({
       sessionID: input.sessionID,
@@ -1075,64 +912,4 @@ export namespace Session {
     })
     await App.initialize()
   }
-}
-
-function toUIMessage(msg: Message.Info): UIMessage {
-  if (msg.role === "assistant") {
-    return {
-      id: msg.id,
-      role: "assistant",
-      content: "",
-      ...toParts(msg.parts),
-    }
-  }
-
-  if (msg.role === "user") {
-    return {
-      id: msg.id,
-      role: "user",
-      content: "",
-      ...toParts(msg.parts),
-    }
-  }
-
-  throw new Error("not implemented")
-}
-
-function toParts(parts: Message.MessagePart[]) {
-  const result: {
-    parts: UIMessage["parts"]
-    experimental_attachments: Attachment[]
-  } = {
-    parts: [],
-    experimental_attachments: [],
-  }
-  for (const part of parts) {
-    switch (part.type) {
-      case "text":
-        result.parts.push({ type: "text", text: part.text })
-        break
-      case "file":
-        result.experimental_attachments.push({
-          url: part.url,
-          contentType: part.mediaType,
-          name: part.filename,
-        })
-        break
-      case "tool-invocation":
-        result.parts.push({
-          type: "tool-invocation",
-          toolInvocation: part.toolInvocation,
-        })
-        break
-      case "step-start":
-        result.parts.push({
-          type: "step-start",
-        })
-        break
-      default:
-        break
-    }
-  }
-  return result
 }

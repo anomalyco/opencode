@@ -3,41 +3,36 @@ import DESCRIPTION from "./task.txt"
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
-import { Message } from "../session/message"
+import { MessageV2 } from "../session/message-v2"
 
 export const TaskTool = Tool.define({
   id: "task",
   description: DESCRIPTION,
   parameters: z.object({
-    description: z
-      .string()
-      .describe("A short (3-5 words) description of the task"),
+    description: z.string().describe("A short (3-5 words) description of the task"),
     prompt: z.string().describe("The task for the agent to perform"),
   }),
   async execute(params, ctx) {
     const session = await Session.create(ctx.sessionID)
-    const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
-    const metadata = msg.metadata.assistant!
+    const msg = (await Session.getMessage(ctx.sessionID, ctx.messageID)) as MessageV2.Assistant
 
-    function summary(input: Message.Info) {
+    function summary(input: MessageV2.Info) {
       const result = []
-
       for (const part of input.parts) {
-        if (part.type === "tool-invocation") {
-          result.push({
-            toolInvocation: part.toolInvocation,
-            metadata: input.metadata.tool[part.toolInvocation.toolCallId],
-          })
+        if (part.type === "tool" && part.state.status === "completed") {
+          result.push(part)
         }
       }
       return result
     }
 
-    const unsub = Bus.subscribe(Message.Event.Updated, async (evt) => {
-      if (evt.properties.info.metadata.sessionID !== session.id) return
+    const unsub = Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+      if (evt.properties.info.sessionID !== session.id) return
       ctx.metadata({
         title: params.description,
-        summary: summary(evt.properties.info),
+        metadata: {
+          summary: summary(evt.properties.info),
+        },
       })
     })
 
@@ -46,8 +41,8 @@ export const TaskTool = Tool.define({
     })
     const result = await Session.chat({
       sessionID: session.id,
-      modelID: metadata.modelID,
-      providerID: metadata.providerID,
+      modelID: msg.modelID,
+      providerID: msg.providerID,
       parts: [
         {
           type: "text",
@@ -57,8 +52,8 @@ export const TaskTool = Tool.define({
     })
     unsub()
     return {
+      title: params.description,
       metadata: {
-        title: params.description,
         summary: summary(result),
       },
       output: result.parts.findLast((x) => x.type === "text")!.text,

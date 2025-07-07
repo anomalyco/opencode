@@ -40,9 +40,7 @@ export const TuiCommand = cmd({
         })
 
         let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(
-          new URL("../../../../tui/cmd/opencode", import.meta.url),
-        )
+        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
         if (Bun.embeddedFiles.length > 0) {
           const blob = Bun.embeddedFiles[0] as File
           let binaryName = blob.name

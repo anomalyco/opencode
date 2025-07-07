@@ -78,16 +78,19 @@ resources:
     models:
       session: Session
       message: Message
-      toolCall: ToolCall
-      toolPartialCall: ToolPartialCall
-      toolResult: ToolResult
       textPart: TextPart
-      reasoningPart: ReasoningPart
-      toolInvocationPart: ToolInvocationPart
-      sourceUrlPart: SourceUrlPart
       filePart: FilePart
+      toolPart: ToolPart
       stepStartPart: StepStartPart
-      messagePart: MessagePart
+      assistantMessage: AssistantMessage
+      assistantMessagePart: AssistantMessagePart
+      userMessage: UserMessage
+      userMessagePart: UserMessagePart
+      toolStatePending: ToolStatePending
+      toolStateRunning: ToolStateRunning
+      toolStateCompleted: ToolStateCompleted
+      toolStateError: ToolStateError
+
     methods:
       list: get /session
       create: post /session
