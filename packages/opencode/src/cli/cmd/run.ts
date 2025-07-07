@@ -54,7 +54,10 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
-    const message = args.message.join(" ")
+    let message = args.message.join(" ")
+
+    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+
     await bootstrap({ cwd: process.cwd() }, async () => {
       const session = await (async () => {
         if (args.continue) {
@@ -78,7 +81,8 @@ export const RunCommand = cmd({
       UI.empty()
       UI.println(UI.logo())
       UI.empty()
-      UI.println(UI.Style.TEXT_NORMAL_BOLD + "> ", message)
+      const displayMessage = message.length > 300 ? message.slice(0, 300) + "..." : message
+      UI.println(UI.Style.TEXT_NORMAL_BOLD + "> ", displayMessage)
       UI.empty()
 
       const cfg = await Config.get()
