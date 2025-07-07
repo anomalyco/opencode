@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import { Bus } from "../bus"
 import { describeRoute, generateSpecs, openAPISpecs } from "hono-openapi"
 import { Hono } from "hono"
+import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { Session } from "../session"
 import { resolver, validator as zValidator } from "hono-openapi/zod"
@@ -58,6 +59,29 @@ export namespace Server {
           },
         )
       })
+      .use(
+        "*",
+        cors({
+          origin: (origin) => {
+            const localhostPattern = /^https?:\/\/localhost(:\d+)?$/
+            const localhostIPPattern = /^https?:\/\/127\.0\.0\.1(:\d+)?$/
+
+            if (
+              localhostPattern.test(origin) ||
+              localhostIPPattern.test(origin)
+            ) {
+              return origin
+            }
+
+            return null
+          },
+          allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+          allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+          exposeHeaders: ["Content-Length", "X-Request-ID"],
+          credentials: true,
+          maxAge: 86400,
+        }),
+      )
       .use(async (c, next) => {
         log.info("request", {
           method: c.req.method,
