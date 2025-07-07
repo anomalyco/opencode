@@ -338,24 +338,18 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.role === "assistant" && msg.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
 
-    // Process file references in text parts
-    const processedParts = await Promise.all(
-      input.parts.map(async (part) => {
-        if (part.type === "text") {
-          const { processedText } = await FileReference.resolve(part.text)
-          return {
-            ...part,
-            text: processedText,
-          }
-        }
-        return part
-      }),
-    )
-
     const app = App.info()
     input.parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.UserPart[]> => {
-        if (part.type === "file") {
+        if (part.type === "text") {
+          const { processedText } = await FileReference.resolve(part.text)
+          return [
+            {
+              ...part,
+              text: processedText,
+            },
+          ]
+        } else if (part.type === "file") {
           const url = new URL(part.url)
           switch (url.protocol) {
             case "file:":
@@ -439,7 +433,7 @@ export namespace Session {
       id: Identifier.ascending("message"),
       role: "user",
       sessionID: input.sessionID,
-      parts: processedParts,
+      parts: input.parts,
       time: {
         created: Date.now(),
       },

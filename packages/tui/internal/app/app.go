@@ -31,7 +31,7 @@ type App struct {
 	Provider       *opencode.Provider
 	Model          *opencode.Model
 	Session        *opencode.Session
-	Messages       []opencode.Message
+	Messages       []opencode.MessageUnion
 	Commands       commands.CommandRegistry
 }
 
@@ -43,6 +43,7 @@ type (
 		Model    opencode.Model
 	}
 )
+
 type (
 	SessionClearedMsg struct{}
 	CompactSessionMsg struct{}
@@ -51,6 +52,7 @@ type (
 		Attachments []opencode.FilePartParam
 	}
 )
+
 type OptimisticMessageAddedMsg struct {
 	Message opencode.MessageUnion
 }
@@ -129,7 +131,7 @@ func New(
 		Client:         httpClient,
 		CommandsClient: commandsClient,
 		Session:        &opencode.Session{},
-		Messages:       []opencode.Message{},
+		Messages:       []opencode.MessageUnion{},
 		Commands:       commands.LoadFromConfig(configInfo),
 	}
 
