@@ -794,6 +794,8 @@ export namespace Session {
       }
       await updateMessage(next)
     }
+    next.time.completed = Date.now()
+    await updateMessage(next)
     return next
   }
 
