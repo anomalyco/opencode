@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -56,11 +57,6 @@ func main() {
 		option.WithBaseURL(url),
 	)
 
-	if err != nil {
-		slog.Error("Failed to create client", "error", err)
-		os.Exit(1)
-	}
-
 	// Create main context for the application
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,8 +66,25 @@ func main() {
 		panic(err)
 	}
 
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		slog.Error("Failed to stat stdin", "error", err)
+		os.Exit(1)
+	}
+
+	// Check if there's data piped to stdin
+	var stdinContent string
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		stdin, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			slog.Error("Failed to read stdin", "error", err)
+			os.Exit(1)
+		}
+		stdinContent = strings.TrimSpace(string(stdin))
+	}
+
 	program := tea.NewProgram(
-		tui.NewModel(app_),
+		tui.NewModel(app_, stdinContent),
 		tea.WithAltScreen(),
 		tea.WithKeyboardEnhancements(),
 		tea.WithMouseCellMotion(),

@@ -96,7 +96,7 @@ func (m statusComponent) View() string {
 		Render(m.app.Info.Path.Cwd)
 
 	sessionInfo := ""
-	if m.app.Session.ID != "" {
+	if m.app.Session.ID != "" && m.app.Model != nil {
 		tokens := float64(0)
 		cost := float64(0)
 		contextWindow := m.app.Model.Limit.Context

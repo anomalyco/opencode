@@ -66,6 +66,7 @@ type appModel struct {
 	fileViewerStart      int
 	fileViewerEnd        int
 	fileViewerHit        bool
+	stdinContent         string
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -88,6 +89,16 @@ func (a appModel) Init() tea.Cmd {
 		shouldShow := a.app.Info.Git && a.app.Info.Time.Initialized > 0
 		return dialog.ShowInitDialogMsg{Show: shouldShow}
 	})
+
+	// If we have stdin content, send it as the first message
+	if a.stdinContent != "" {
+		cmds = append(cmds, func() tea.Msg {
+			return app.SendMsg{
+				Text:        a.stdinContent,
+				Attachments: []opencode.FilePartParam{},
+			}
+		})
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -987,7 +998,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	return a, tea.Batch(cmds...)
 }
 
-func NewModel(app *app.App) tea.Model {
+func NewModel(app *app.App, stdinContent string) tea.Model {
 	commandProvider := completions.NewCommandCompletionProvider(app)
 	fileProvider := completions.NewFileAndFolderContextGroup(app)
 
@@ -1017,6 +1028,7 @@ func NewModel(app *app.App) tea.Model {
 		interruptKeyState:    InterruptKeyIdle,
 		fileViewer:           fileviewer.New(app),
 		messagesRight:        app.State.MessagesRight,
+		stdinContent:         stdinContent,
 	}
 
 	return model
