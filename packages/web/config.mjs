@@ -1,5 +1,9 @@
+const stage = process.env.SST_STAGE || "dev"
+
 export default {
-  domain: "opencode.ai",
+  url: stage === "production"
+    ? "https://opencode.ai"
+    : `https://${stage}.opencode.ai`,
   socialCard: "https://social-cards.sst.dev",
   github: "https://github.com/sst/opencode",
   discord: "https://discord.gg/opencode",

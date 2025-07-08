@@ -7,6 +7,7 @@ import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
+  export const AbortedError = NamedError.create("MessageAbortedError", z.object({}))
 
   export const ToolStatePending = z
     .object({
@@ -148,7 +149,12 @@ export namespace MessageV2 {
       completed: z.number().optional(),
     }),
     error: z
-      .discriminatedUnion("name", [Provider.AuthError.Schema, NamedError.Unknown.Schema, OutputLengthError.Schema])
+      .discriminatedUnion("name", [
+        Provider.AuthError.Schema,
+        NamedError.Unknown.Schema,
+        OutputLengthError.Schema,
+        AbortedError.Schema,
+      ])
       .optional(),
     system: z.string().array(),
     modelID: z.string(),
