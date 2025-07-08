@@ -10,6 +10,7 @@ import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
+import { FileWatcher } from "../../file/watch"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -40,6 +41,7 @@ export const TuiCommand = cmd({
         return
       }
       const result = await bootstrap({ cwd }, async (app) => {
+        FileWatcher.init()
         const providers = await Provider.list()
         if (Object.keys(providers).length === 0) {
           return "needs_provider"
