@@ -1,5 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "weather": {
+      "type": "local",
+      "command": ["opencode", "x", "@h1deya/mcp-server-weather"]
+    }
+  },
   "experimental": {
     "hook": {
       "file_edited": {

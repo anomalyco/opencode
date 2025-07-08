@@ -1,9 +1,12 @@
 package chat
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
@@ -15,10 +18,10 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
-	"github.com/sst/opencode/internal/image"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"golang.design/x/clipboard"
 )
 
 type EditorComponent interface {
@@ -63,8 +66,59 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 			return m, tea.Batch(cmds...)
 		}
+	case tea.PasteMsg:
+		text := string(msg)
+		text = strings.ReplaceAll(text, "\\", "")
+		text, err := strconv.Unquote(`"` + text + `"`)
+		if err != nil {
+			slog.Error("Failed to unquote text", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+		if _, err := os.Stat(text); err != nil {
+			slog.Error("Failed to paste file", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+
+		filePath := text
+		ext := strings.ToLower(filepath.Ext(filePath))
+
+		mediaType := ""
+		switch ext {
+		case ".jpg":
+			mediaType = "image/jpeg"
+		case ".png", ".jpeg", ".gif", ".webp":
+			mediaType = "image/" + ext[1:]
+		case ".pdf":
+			mediaType = "application/pdf"
+		default:
+			mediaType = "text/plain"
+		}
+
+		fileBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			slog.Error("Failed to read file", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+		base64EncodedFile := base64.StdEncoding.EncodeToString(fileBytes)
+		url := fmt.Sprintf("data:%s;base64,%s", mediaType, base64EncodedFile)
+
+		attachment := &textarea.Attachment{
+			ID:        uuid.NewString(),
+			Display:   fmt.Sprintf("<%s>", filePath),
+			URL:       url,
+			Filename:  filePath,
+			MediaType: mediaType,
+		}
+		m.textarea.InsertAttachment(attachment)
+		m.textarea.InsertString(" ")
+	case tea.ClipboardMsg:
+		text := string(msg)
+		m.textarea.InsertRunesFromUserInput([]rune(text))
 	case dialog.ThemeSelectedMsg:
-		m.textarea = createTextArea(&m.textarea)
+		m.textarea = m.resetTextareaStyles()
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
@@ -248,10 +302,10 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	fileParts := make([]opencode.FilePartParam, 0)
 	for _, attachment := range attachments {
 		fileParts = append(fileParts, opencode.FilePartParam{
-			Type:      opencode.F(opencode.FilePartTypeFile),
-			MediaType: opencode.F(attachment.MediaType),
-			URL:       opencode.F(attachment.URL),
-			Filename:  opencode.F(attachment.Filename),
+			Type:     opencode.F(opencode.FilePartTypeFile),
+			Mime:     opencode.F(attachment.MediaType),
+			URL:      opencode.F(attachment.URL),
+			Filename: opencode.F(attachment.Filename),
 		})
 	}
 
@@ -269,24 +323,29 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
-	_, text, err := image.GetImageFromClipboard()
-	if err != nil {
-		slog.Error(err.Error())
+	imageBytes := clipboard.Read(clipboard.FmtImage)
+	if imageBytes != nil {
+		base64EncodedFile := base64.StdEncoding.EncodeToString(imageBytes)
+		attachment := &textarea.Attachment{
+			ID:        uuid.NewString(),
+			Display:   "<clipboard-image>",
+			Filename:  "clipboard-image",
+			MediaType: "image/png",
+			URL:       fmt.Sprintf("data:image/png;base64,%s", base64EncodedFile),
+		}
+		m.textarea.InsertAttachment(attachment)
+		m.textarea.InsertString(" ")
 		return m, nil
 	}
-	// if len(imageBytes) != 0 {
-	// 	attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
-	// 	attachment := app.Attachment{
-	// 		FilePath: attachmentName,
-	// 		FileName: attachmentName,
-	// 		Content:  imageBytes,
-	// 		MimeType: "image/png",
-	// 	}
-	// 	m.attachments = append(m.attachments, attachment)
-	// } else {
-	m.textarea.InsertString(text)
-	// }
-	return m, nil
+
+	textBytes := clipboard.Read(clipboard.FmtText)
+	if textBytes != nil {
+		m.textarea.InsertRunesFromUserInput([]rune(string(textBytes)))
+		return m, nil
+	}
+
+	// fallback to reading the clipboard using OSC52
+	return m, tea.ReadClipboard
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
@@ -306,13 +365,13 @@ func (m *editorComponent) getSubmitKeyText() string {
 	return m.app.Commands[commands.InputSubmitCommand].Keys()[0]
 }
 
-func createTextArea(existing *textarea.Model) textarea.Model {
+func (m *editorComponent) resetTextareaStyles() textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
 
-	ta := textarea.New()
+	ta := m.textarea
 
 	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
@@ -337,17 +396,6 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 		Background(t.Secondary()).
 		Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
-
-	ta.Prompt = " "
-	ta.ShowLineNumbers = false
-	ta.CharLimit = -1
-
-	if existing != nil {
-		ta.SetValue(existing.Value())
-		// ta.SetWidth(existing.Width())
-		ta.SetHeight(existing.Height())
-	}
-
 	return ta
 }
 
@@ -367,12 +415,19 @@ func createSpinner() spinner.Model {
 
 func NewEditorComponent(app *app.App) EditorComponent {
 	s := createSpinner()
-	ta := createTextArea(nil)
 
-	return &editorComponent{
+	ta := textarea.New()
+	ta.Prompt = " "
+	ta.ShowLineNumbers = false
+	ta.CharLimit = -1
+
+	m := &editorComponent{
 		app:                    app,
 		textarea:               ta,
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}
+	m.resetTextareaStyles()
+
+	return m
 }

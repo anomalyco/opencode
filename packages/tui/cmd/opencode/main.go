@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	flag "github.com/spf13/pflag"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/tui"
+	"golang.design/x/clipboard"
 )
 
 var Version = "dev"
@@ -22,6 +24,10 @@ func main() {
 	if version != "dev" && !strings.HasPrefix(Version, "v") {
 		version = "v" + Version
 	}
+
+	var model *string = flag.String("model", "", "model to begin with")
+	var prompt *string = flag.String("prompt", "", "prompt to begin with")
+	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
 
@@ -61,11 +67,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	go func() {
+		err = clipboard.Init()
+		if err != nil {
+			slog.Error("Failed to initialize clipboard", "error", err)
+		}
+	}()
+
 	// Create main context for the application
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	app_, err := app.New(ctx, version, appInfo, httpClient)
+	app_, err := app.New(ctx, version, appInfo, httpClient, model, prompt)
 	if err != nil {
 		panic(err)
 	}

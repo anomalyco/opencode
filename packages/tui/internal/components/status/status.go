@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -101,18 +102,20 @@ func (m statusComponent) View() string {
 		contextWindow := m.app.Model.Limit.Context
 
 		for _, message := range m.app.Messages {
-			cost += message.Metadata.Assistant.Cost
-			usage := message.Metadata.Assistant.Tokens
-			if usage.Output > 0 {
-				if message.Metadata.Assistant.Summary {
-					tokens = usage.Output
-					continue
+			if assistant, ok := message.(opencode.AssistantMessage); ok {
+				cost += assistant.Cost
+				usage := assistant.Tokens
+				if usage.Output > 0 {
+					if assistant.Summary {
+						tokens = usage.Output
+						continue
+					}
+					tokens = (usage.Input +
+						usage.Cache.Write +
+						usage.Cache.Read +
+						usage.Output +
+						usage.Reasoning)
 				}
-				tokens = (usage.Input +
-					usage.Cache.Write +
-					usage.Cache.Read +
-					usage.Output +
-					usage.Reasoning)
 			}
 		}
 

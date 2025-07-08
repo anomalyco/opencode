@@ -1,8 +1,4 @@
-import {
-  type JSX,
-  splitProps,
-  createResource,
-} from "solid-js"
+import { type JSX, splitProps, createResource } from "solid-js"
 import { codeToHtml } from "shiki"
 import styles from "./codeblock.module.css"
 import { transformerNotationDiff } from "@shikijs/transformers"
@@ -30,7 +26,7 @@ function CodeBlock(props: CodeBlockProps) {
     },
   )
 
-  return <div innerHTML={html()} class={styles.codeblock} {...rest}></div >
+  return <div innerHTML={html()} class={styles.codeblock} {...rest}></div>
 }
 
 export default CodeBlock

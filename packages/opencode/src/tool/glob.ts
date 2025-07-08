@@ -20,9 +20,7 @@ export const GlobTool = Tool.define({
   async execute(params) {
     const app = App.info()
     let search = params.path ?? app.path.cwd
-    search = path.isAbsolute(search)
-      ? search
-      : path.resolve(app.path.cwd, search)
+    search = path.isAbsolute(search) ? search : path.resolve(app.path.cwd, search)
 
     const limit = 100
     const files = []
@@ -53,17 +51,15 @@ export const GlobTool = Tool.define({
       output.push(...files.map((f) => f.path))
       if (truncated) {
         output.push("")
-        output.push(
-          "(Results are truncated. Consider using a more specific path or pattern.)",
-        )
+        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
       }
     }
 
     return {
+      title: path.relative(app.path.root, search),
       metadata: {
         count: files.length,
         truncated,
-        title: path.relative(app.path.root, search),
       },
       output: output.join("\n"),
     }

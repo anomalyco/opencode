@@ -27,10 +27,7 @@ export namespace FileTime {
 
   export async function assert(sessionID: string, filepath: string) {
     const time = get(sessionID, filepath)
-    if (!time)
-      throw new Error(
-        `You must read the file ${filepath} before overwriting it. Use the Read tool first`,
-      )
+    if (!time) throw new Error(`You must read the file ${filepath} before overwriting it. Use the Read tool first`)
     const stats = await Bun.file(filepath).stat()
     if (stats.mtime.getTime() > time.getTime()) {
       throw new Error(

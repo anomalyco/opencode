@@ -56,8 +56,8 @@ func (c *commandsComponent) View() string {
 	var untriggeredCommands []commands.Command
 
 	for _, cmd := range c.app.Commands.Sorted() {
-		if c.showAll || cmd.Trigger != "" {
-			if cmd.Trigger != "" {
+		if c.showAll || cmd.HasTrigger() {
+			if cmd.HasTrigger() {
 				triggeredCommands = append(triggeredCommands, cmd)
 			} else if c.showAll {
 				untriggeredCommands = append(untriggeredCommands, cmd)
@@ -97,8 +97,8 @@ func (c *commandsComponent) View() string {
 
 	for _, cmd := range commandsToShow {
 		trigger := ""
-		if cmd.Trigger != "" {
-			trigger = "/" + cmd.Trigger
+		if cmd.HasTrigger() {
+			trigger = "/" + cmd.PrimaryTrigger()
 		} else {
 			trigger = string(cmd.Name)
 		}

@@ -1,7 +1,7 @@
 import { type Component, createMemo } from "solid-js"
 import { parsePatch } from "diff"
-import CodeBlock from "./CodeBlock"
-import styles from "./diffview.module.css"
+import { ContentCode } from "./content-code"
+import styles from "./content-diff.module.css"
 
 type DiffRow = {
   left: string
@@ -9,14 +9,12 @@ type DiffRow = {
   type: "added" | "removed" | "unchanged" | "modified"
 }
 
-interface DiffViewProps {
+interface Props {
   diff: string
   lang?: string
-  class?: string
 }
 
-const DiffView: Component<DiffViewProps> = (props) => {
-
+export function ContentDiff(props: Props) {
   const rows = createMemo(() => {
     const diffRows: DiffRow[] = []
 
@@ -33,20 +31,20 @@ const DiffView: Component<DiffViewProps> = (props) => {
             const content = line.slice(1)
             const prefix = line[0]
 
-            if (prefix === '-') {
+            if (prefix === "-") {
               // Look ahead for consecutive additions to pair with removals
               const removals: string[] = [content]
               let j = i + 1
 
               // Collect all consecutive removals
-              while (j < lines.length && lines[j][0] === '-') {
+              while (j < lines.length && lines[j][0] === "-") {
                 removals.push(lines[j].slice(1))
                 j++
               }
 
               // Collect all consecutive additions that follow
               const additions: string[] = []
-              while (j < lines.length && lines[j][0] === '+') {
+              while (j < lines.length && lines[j][0] === "+") {
                 additions.push(lines[j].slice(1))
                 j++
               }
@@ -62,39 +60,39 @@ const DiffView: Component<DiffViewProps> = (props) => {
                   diffRows.push({
                     left: removals[k],
                     right: additions[k],
-                    type: "modified"
+                    type: "modified",
                   })
                 } else if (hasLeft) {
                   // Pure removal
                   diffRows.push({
                     left: removals[k],
                     right: "",
-                    type: "removed"
+                    type: "removed",
                   })
                 } else if (hasRight) {
                   // Pure addition - only create if we actually have content
                   diffRows.push({
                     left: "",
                     right: additions[k],
-                    type: "added"
+                    type: "added",
                   })
                 }
               }
 
               i = j
-            } else if (prefix === '+') {
+            } else if (prefix === "+") {
               // Standalone addition (not paired with removal)
               diffRows.push({
                 left: "",
                 right: content,
-                type: "added"
+                type: "added",
               })
               i++
-            } else if (prefix === ' ') {
+            } else if (prefix === " ") {
               diffRows.push({
                 left: content,
                 right: content,
-                type: "unchanged"
+                type: "unchanged",
               })
               i++
             } else {
@@ -112,7 +110,7 @@ const DiffView: Component<DiffViewProps> = (props) => {
   })
 
   const mobileRows = createMemo(() => {
-    const mobileBlocks: { type: 'removed' | 'added' | 'unchanged', lines: string[] }[] = []
+    const mobileBlocks: { type: "removed" | "added" | "unchanged"; lines: string[] }[] = []
     const currentRows = rows()
 
     let i = 0
@@ -121,15 +119,15 @@ const DiffView: Component<DiffViewProps> = (props) => {
       const addedLines: string[] = []
 
       // Collect consecutive modified/removed/added rows
-      while (i < currentRows.length &&
-        (currentRows[i].type === 'modified' ||
-          currentRows[i].type === 'removed' ||
-          currentRows[i].type === 'added')) {
+      while (
+        i < currentRows.length &&
+        (currentRows[i].type === "modified" || currentRows[i].type === "removed" || currentRows[i].type === "added")
+      ) {
         const row = currentRows[i]
-        if (row.left && (row.type === 'removed' || row.type === 'modified')) {
+        if (row.left && (row.type === "removed" || row.type === "modified")) {
           removedLines.push(row.left)
         }
-        if (row.right && (row.type === 'added' || row.type === 'modified')) {
+        if (row.right && (row.type === "added" || row.type === "modified")) {
           addedLines.push(row.right)
         }
         i++
@@ -137,17 +135,17 @@ const DiffView: Component<DiffViewProps> = (props) => {
 
       // Add grouped blocks
       if (removedLines.length > 0) {
-        mobileBlocks.push({ type: 'removed', lines: removedLines })
+        mobileBlocks.push({ type: "removed", lines: removedLines })
       }
       if (addedLines.length > 0) {
-        mobileBlocks.push({ type: 'added', lines: addedLines })
+        mobileBlocks.push({ type: "added", lines: addedLines })
       }
 
       // Add unchanged rows as-is
-      if (i < currentRows.length && currentRows[i].type === 'unchanged') {
+      if (i < currentRows.length && currentRows[i].type === "unchanged") {
         mobileBlocks.push({
-          type: 'unchanged',
-          lines: [currentRows[i].left]
+          type: "unchanged",
+          lines: [currentRows[i].left],
         })
         i++
       }
@@ -157,40 +155,29 @@ const DiffView: Component<DiffViewProps> = (props) => {
   })
 
   return (
-    <div class={`${styles.diff} ${props.class ?? ""}`}>
-      <div class={styles.desktopView}>
+    <div class={styles.root}>
+      <div data-component="desktop">
         {rows().map((r) => (
-          <div class={styles.row}>
-            <div class={styles.beforeColumn}>
-              <CodeBlock
-                code={r.left}
-                lang={props.lang}
-                data-section="cell"
-                data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}
-              />
+          <div data-component="diff-row" data-type={r.type}>
+            <div data-slot="before" data-diff-type={r.type === "removed" || r.type === "modified" ? "removed" : ""}>
+              <ContentCode code={r.left} flush lang={props.lang} />
             </div>
-            <div class={styles.afterColumn}>
-              <CodeBlock
-                code={r.right}
-                lang={props.lang}
-                data-section="cell"
-                data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}
-              />
+            <div data-slot="after" data-diff-type={r.type === "added" || r.type === "modified" ? "added" : ""}>
+              <ContentCode code={r.right} lang={props.lang} flush />
             </div>
           </div>
         ))}
       </div>
 
-      <div class={styles.mobileView}>
+      <div data-component="mobile">
         {mobileRows().map((block) => (
-          <div class={styles.mobileBlock}>
+          <div data-component="diff-block" data-type={block.type}>
             {block.lines.map((line) => (
-              <CodeBlock
+              <ContentCode
                 code={line}
                 lang={props.lang}
                 data-section="cell"
-                data-diff-type={block.type === 'removed' ? 'removed' :
-                  block.type === 'added' ? 'added' : ''}
+                data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}
               />
             ))}
           </div>
@@ -200,8 +187,6 @@ const DiffView: Component<DiffViewProps> = (props) => {
   )
 }
 
-export default DiffView
-
 // const testDiff = `--- combined_before.txt	2025-06-24 16:38:08
 // +++ combined_after.txt	2025-06-24 16:38:12
 // @@ -1,21 +1,25 @@
@@ -210,12 +195,12 @@ export default DiffView
 // -old content
 // +added line
 // +new content
-//  
+//
 // -removed empty line below
 // +added empty line above
-//  
+//
 // -	tab indented
-// -trailing spaces   
+// -trailing spaces
 // -very long line that will definitely wrap in most editors and cause potential alignment issues when displayed in a two column diff view
 // -unicode content: 🚀 ✨ 中文
 // -mixed	content with	tabs and spaces
@@ -226,14 +211,14 @@ export default DiffView
 // +different unicode: 🎉 💻 日本語
 // +normalized content with consistent spacing
 // +newline to content
-//  
+//
 // -content to remove
-// -whitespace only:    	  
+// -whitespace only:
 // -multiple
 // -consecutive
 // -deletions
 // -single deletion
-// +    	  
+// +
 // +single addition
 // +first addition
 // +second addition

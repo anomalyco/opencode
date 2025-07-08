@@ -9,21 +9,9 @@ export const GrepTool = Tool.define({
   id: "grep",
   description: DESCRIPTION,
   parameters: z.object({
-    pattern: z
-      .string()
-      .describe("The regex pattern to search for in file contents"),
-    path: z
-      .string()
-      .optional()
-      .describe(
-        "The directory to search in. Defaults to the current working directory.",
-      ),
-    include: z
-      .string()
-      .optional()
-      .describe(
-        'File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")',
-      ),
+    pattern: z.string().describe("The regex pattern to search for in file contents"),
+    path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
+    include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
   }),
   async execute(params) {
     if (!params.pattern) {
@@ -51,7 +39,8 @@ export const GrepTool = Tool.define({
 
     if (exitCode === 1) {
       return {
-        metadata: { matches: 0, truncated: false, title: params.pattern },
+        title: params.pattern,
+        metadata: { matches: 0, truncated: false },
         output: "No files found",
       }
     }
@@ -93,7 +82,8 @@ export const GrepTool = Tool.define({
 
     if (finalMatches.length === 0) {
       return {
-        metadata: { matches: 0, truncated: false, title: params.pattern },
+        title: params.pattern,
+        metadata: { matches: 0, truncated: false },
         output: "No files found",
       }
     }
@@ -114,16 +104,14 @@ export const GrepTool = Tool.define({
 
     if (truncated) {
       outputLines.push("")
-      outputLines.push(
-        "(Results are truncated. Consider using a more specific path or pattern.)",
-      )
+      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
     }
 
     return {
+      title: params.pattern,
       metadata: {
         matches: finalMatches.length,
         truncated,
-        title: params.pattern,
       },
       output: outputLines.join("\n"),
     }

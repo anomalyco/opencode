@@ -24,11 +24,7 @@ export namespace File {
     const app = App.info()
     if (!app.git) return []
 
-    const diffOutput = await $`git diff --numstat HEAD`
-      .cwd(app.path.cwd)
-      .quiet()
-      .nothrow()
-      .text()
+    const diffOutput = await $`git diff --numstat HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
 
     const changedFiles = []
 
@@ -45,19 +41,13 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`
-      .cwd(app.path.cwd)
-      .quiet()
-      .nothrow()
-      .text()
+    const untrackedOutput = await $`git ls-files --others --exclude-standard`.cwd(app.path.cwd).quiet().nothrow().text()
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(
-            path.join(app.path.root, filepath),
-          ).text()
+          const content = await Bun.file(path.join(app.path.root, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             file: filepath,
@@ -72,11 +62,7 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`
-      .cwd(app.path.cwd)
-      .quiet()
-      .nothrow()
-      .text()
+    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -112,11 +98,7 @@ export namespace File {
         filepath: rel,
       })
       if (diff !== "unmodified") {
-        const original = await $`git show HEAD:${rel}`
-          .cwd(app.path.root)
-          .quiet()
-          .nothrow()
-          .text()
+        const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
         })

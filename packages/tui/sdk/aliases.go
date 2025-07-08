@@ -10,6 +10,15 @@ import (
 type Error = apierror.Error
 
 // This is an alias to an internal type.
+type MessageAbortedError = shared.MessageAbortedError
+
+// This is an alias to an internal type.
+type MessageAbortedErrorName = shared.MessageAbortedErrorName
+
+// This is an alias to an internal value.
+const MessageAbortedErrorNameMessageAbortedError = shared.MessageAbortedErrorNameMessageAbortedError
+
+// This is an alias to an internal type.
 type ProviderAuthError = shared.ProviderAuthError
 
 // This is an alias to an internal type.

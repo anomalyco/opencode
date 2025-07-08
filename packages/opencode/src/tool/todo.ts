@@ -5,12 +5,8 @@ import { App } from "../app/app"
 
 const TodoInfo = z.object({
   content: z.string().min(1).describe("Brief description of the task"),
-  status: z
-    .enum(["pending", "in_progress", "completed"])
-    .describe("Current status of the task"),
-  priority: z
-    .enum(["high", "medium", "low"])
-    .describe("Priority level of the task"),
+  status: z.enum(["pending", "in_progress", "completed"]).describe("Current status of the task"),
+  priority: z.enum(["high", "medium", "low"]).describe("Priority level of the task"),
   id: z.string().describe("Unique identifier for the todo item"),
 })
 type TodoInfo = z.infer<typeof TodoInfo>
@@ -32,9 +28,9 @@ export const TodoWriteTool = Tool.define({
     const todos = state()
     todos[opts.sessionID] = params.todos
     return {
+      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
       output: JSON.stringify(params.todos, null, 2),
       metadata: {
-        title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
         todos: params.todos,
       },
     }
@@ -48,9 +44,9 @@ export const TodoReadTool = Tool.define({
   async execute(_params, opts) {
     const todos = state()[opts.sessionID] ?? []
     return {
+      title: `${todos.filter((x) => x.status !== "completed").length} todos`,
       metadata: {
         todos,
-        title: `${todos.filter((x) => x.status !== "completed").length} todos`,
       },
       output: JSON.stringify(todos, null, 2),
     }
