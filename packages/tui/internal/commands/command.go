@@ -117,7 +117,7 @@ const (
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
 	MessagesRevertCommand       CommandName = "messages_revert"
-	ConfigCommand               CommandName = "config"
+	EditConfigCommand           CommandName = "edit_config"
 	EditAuthCommand             CommandName = "edit_auth"
 	AppExitCommand              CommandName = "app_exit"
 )
@@ -322,7 +322,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Keybindings: parseBindings("<leader>r"),
 		},
 		{
-			Name:        ConfigCommand,
+			Name:        EditConfigCommand,
 			Description: "edit config",
 			Keybindings: parseBindings("<leader>o"),
 			Trigger:     []string{"config"},

@@ -993,7 +993,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			cmd = toast.NewSuccessToast("Message copied to clipboard")
 			cmds = append(cmds, cmd)
 		}
-	case commands.ConfigCommand:
+	case commands.EditConfigCommand:
 		if a.app.IsBusy() {
 			return a, nil
 		}
