@@ -477,6 +477,8 @@ type Keybinds struct {
 	AppHelp string `json:"app_help,required"`
 	// Edit configuration file
 	Config string `json:"config, required"`
+	// Edit auth configuration file
+	EditAuth string `json:"edit_auth, required"`
 	// Open external editor
 	EditorOpen string `json:"editor_open,required"`
 	// Close file
@@ -549,6 +551,7 @@ type keybindsJSON struct {
 	AppExit              apijson.Field
 	AppHelp              apijson.Field
 	Config               apijson.Field
+	EditAuth             apijson.Field
 	EditorOpen           apijson.Field
 	FileClose            apijson.Field
 	FileDiffToggle       apijson.Field

@@ -1002,27 +1002,47 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, toast.NewErrorToast("No EDITOR set, can't open config")
 		}
 
-    cfgPath := filepath.Join(a.app.Info.Path.Cwd, "opencode.json")
-    cfgKind := "project"
-    if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-      cfgPath = filepath.Join(a.app.Info.Path.Config, "config.json")
-      cfgKind = "global"
-    }
+		cfgPath := filepath.Join(a.app.Info.Path.Cwd, "opencode.json")
+		cfgKind := "project"
+		if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+			cfgPath = filepath.Join(a.app.Info.Path.Config, "config.json")
+			cfgKind = "global"
+		}
 
 		c := exec.Command(editor, cfgPath) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
-    cmd := tea.ExecProcess(exec.Command(editor, cfgPath), func(err error) tea.Msg {
-      if err != nil {
-        slog.Error("Failed to open config", "error", err)
-        return toast.NewErrorToast("Failed to open config")()
-      }
-      return toast.NewSuccessToast(
-        fmt.Sprintf("%s config updated, restart to apply changes",
-          strings.Title(cfgKind)),
-      )()
-    })
+		cmd := tea.ExecProcess(exec.Command(editor, cfgPath), func(err error) tea.Msg {
+			if err != nil {
+				slog.Error("Failed to open config", "error", err)
+				return toast.NewErrorToast("Failed to open config")()
+			}
+			return toast.NewSuccessToast(
+				fmt.Sprintf("%s config updated, restart to apply changes",
+					strings.Title(cfgKind)),
+			)()
+		})
+		cmds = append(cmds, cmd)
+	case commands.EditAuthCommand:
+		if a.app.IsBusy() {
+			return a, nil
+		}
+
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			return a, toast.NewErrorToast("No EDITOR set, can't open auth config")
+		}
+
+		authPath := filepath.Join(a.app.Info.Path.GlobalData, "auth.json")
+
+		cmd := tea.ExecProcess(exec.Command(editor, authPath), func(err error) tea.Msg {
+			if err != nil {
+				slog.Error("Failed to open auth config", "error", err)
+				return toast.NewErrorToast("Failed to open auth config")()
+			}
+			return toast.NewSuccessToast("Auth config updated")()
+		})
 		cmds = append(cmds, cmd)
 	case commands.MessagesRevertCommand:
 	case commands.AppExitCommand:

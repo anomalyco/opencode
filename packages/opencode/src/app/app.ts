@@ -18,6 +18,7 @@ export namespace App {
       path: z.object({
         config: z.string(),
         data: z.string(),
+        globalData: z.string(),
         root: z.string(),
         cwd: z.string(),
         state: z.string(),
@@ -80,6 +81,7 @@ export namespace App {
         config: Global.Path.config,
         state: Global.Path.state,
         data,
+        globalData: Global.Path.data,
         root,
         cwd: input.cwd,
       },
