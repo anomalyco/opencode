@@ -12,12 +12,7 @@ export const BashTool = Tool.define({
   description: DESCRIPTION,
   parameters: z.object({
     command: z.string().describe("The command to execute"),
-    timeout: z
-      .number()
-      .min(0)
-      .max(MAX_TIMEOUT)
-      .describe("Optional timeout in milliseconds")
-      .optional(),
+    timeout: z.number().min(0).max(MAX_TIMEOUT).describe("Optional timeout in milliseconds").optional(),
     description: z
       .string()
       .describe(
@@ -41,21 +36,14 @@ export const BashTool = Tool.define({
     const stderr = await new Response(process.stderr).text()
 
     return {
+      title: params.command,
       metadata: {
         stderr,
         stdout,
         exit: process.exitCode,
         description: params.description,
-        title: params.command,
       },
-      output: [
-        `<stdout>`,
-        stdout ?? "",
-        `</stdout>`,
-        `<stderr>`,
-        stderr ?? "",
-        `</stderr>`,
-      ].join("\n"),
+      output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),
     }
   },
 })

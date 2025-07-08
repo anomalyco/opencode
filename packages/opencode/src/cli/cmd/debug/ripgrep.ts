@@ -5,12 +5,7 @@ import { cmd } from "../cmd"
 
 export const RipgrepCommand = cmd({
   command: "rg",
-  builder: (yargs) =>
-    yargs
-      .command(TreeCommand)
-      .command(FilesCommand)
-      .command(SearchCommand)
-      .demandCommand(),
+  builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
 })
 

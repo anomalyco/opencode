@@ -15,76 +15,42 @@
   --lg-tool-width: 56rem;
 
   --term-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2060%2016'%20preserveAspectRatio%3D'xMidYMid%20meet'%3E%3Ccircle%20cx%3D'8'%20cy%3D'8'%20r%3D'8'%2F%3E%3Ccircle%20cx%3D'30'%20cy%3D'8'%20r%3D'8'%2F%3E%3Ccircle%20cx%3D'52'%20cy%3D'8'%20r%3D'8'%2F%3E%3C%2Fsvg%3E");
-}
 
-[data-element-button-text] {
-  cursor: pointer;
-  appearance: none;
-  background-color: transparent;
-  border: none;
-  padding: 0;
-  color: var(--sl-color-text-secondary);
-
-  &:hover {
-    color: var(--sl-color-text);
-  }
-
-  &[data-element-button-more] {
+  [data-component="header"] {
     display: flex;
-    align-items: center;
-    gap: 0.125rem;
-
-    span[data-button-icon] {
-      line-height: 1;
-      opacity: 0.85;
-      svg {
-        display: block;
-      }
-    }
-  }
-}
-
-[data-element-label] {
-  text-transform: uppercase;
-  letter-spacing: -0.5px;
-  color: var(--sl-color-text-dimmed);
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-
-  @media (max-width: 30rem) {
+    flex-direction: column;
     gap: 1rem;
-  }
 
-  [data-section="title"] {
-    h1 {
-      font-size: 2.75rem;
-      font-weight: 500;
-      line-height: 1.2;
-      letter-spacing: -0.05em;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 3;
-      overflow: hidden;
-
-      @media (max-width: 30rem) {
-        font-size: 1.75rem;
-        line-height: 1.25;
-        -webkit-line-clamp: 3;
-      }
+    @media (max-width: 30rem) {
+      gap: 1rem;
     }
   }
 
-  [data-section="row"] {
+  [data-component="header-title"] {
+    font-size: 2.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.05em;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+
+    @media (max-width: 30rem) {
+      font-size: 1.75rem;
+      line-height: 1.25;
+      -webkit-line-clamp: 3;
+    }
+  }
+
+  [data-component="header-details"] {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  [data-section="stats"] {
+  [data-component="header-stats"] {
     list-style-type: none;
     padding: 0;
     margin: 0;
@@ -92,41 +58,62 @@
     gap: 0.5rem 0.875rem;
     flex-wrap: wrap;
 
-    li {
+    [data-slot="item"] {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.3125rem;
       font-size: 0.875rem;
 
       span[data-placeholder] {
         color: var(--sl-color-text-dimmed);
       }
     }
+
+    [data-slot="icon"] {
+      flex: 0 0 auto;
+      color: var(--sl-color-text-dimmed);
+      opacity: 0.85;
+
+      svg {
+        display: block;
+      }
+    }
+
+    [data-slot="model"] {
+      color: var(--sl-color-text);
+    }
   }
 
-  [data-section="stats"] {
-    li {
-      gap: 0.3125rem;
+  [data-component="header-time"] {
+    color: var(--sl-color-text-dimmed);
+    font-size: 0.875rem;
+  }
 
-      [data-stat-icon] {
-        flex: 0 0 auto;
-        color: var(--sl-color-text-dimmed);
+  [data-component="text-button"] {
+    cursor: pointer;
+    appearance: none;
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    color: var(--sl-color-text-secondary);
+
+    &:hover {
+      color: var(--sl-color-text);
+    }
+
+    &[data-element-button-more] {
+      display: flex;
+      align-items: center;
+      gap: 0.125rem;
+
+      span[data-button-icon] {
+        line-height: 1;
         opacity: 0.85;
+
         svg {
           display: block;
         }
       }
-
-      span[data-stat-model] {
-        color: var(--sl-color-text);
-      }
-    }
-  }
-
-  [data-section="time"] {
-    span {
-      color: var(--sl-color-text-dimmed);
-      font-size: 0.875rem;
     }
   }
 }
@@ -170,10 +157,12 @@
           svg:nth-child(3) {
             display: none;
           }
+
           &:hover {
             svg:nth-child(1) {
               display: none;
             }
+
             svg:nth-child(2) {
               display: block;
             }
@@ -213,12 +202,14 @@
             opacity: 1;
             visibility: visible;
           }
+
           a,
           a:hover {
             svg:nth-child(1),
             svg:nth-child(2) {
               display: none;
             }
+
             svg:nth-child(3) {
               display: block;
             }
@@ -264,7 +255,7 @@
         }
 
         b {
-        color: var(--sl-color-text);
+          color: var(--sl-color-text);
           word-break: break-all;
           font-weight: 500;
         }
@@ -348,8 +339,7 @@
   }
 
   [data-part-type="tool-grep"] {
-    &:not(:has([data-part-tool-args]))
-      > [data-section="content"] > [data-part-tool-body] {
+    &:not(:has([data-part-tool-args])) > [data-section="content"] > [data-part-tool-body] {
       gap: 0.5rem;
     }
   }
@@ -374,6 +364,7 @@
       }
     }
   }
+
   [data-part-type="summary"] {
     & > [data-section="decoration"] {
       span:first-child {
@@ -388,15 +379,19 @@
         &[data-status="connected"] {
           background-color: var(--sl-color-green);
         }
+
         &[data-status="connecting"] {
           background-color: var(--sl-color-orange);
         }
+
         &[data-status="disconnected"] {
           background-color: var(--sl-color-divider);
         }
+
         &[data-status="reconnecting"] {
           background-color: var(--sl-color-orange);
         }
+
         &[data-status="error"] {
           background-color: var(--sl-color-red);
         }
@@ -493,14 +488,20 @@
     }
   }
 
-  &[data-background="none"] { background-color: transparent; }
-  &[data-background="blue"] { background-color: var(--sl-color-blue-low); }
+  &[data-background="none"] {
+    background-color: transparent;
+  }
+
+  &[data-background="blue"] {
+    background-color: var(--sl-color-blue-low);
+  }
 
   &[data-expanded="true"] {
     pre {
       display: block;
     }
   }
+
   &[data-expanded="false"] {
     pre {
       display: -webkit-box;
@@ -536,20 +537,25 @@
 
       span {
         margin-right: 0.25rem;
+
         &:last-child {
           margin-right: 0;
         }
       }
+
       span[data-color="red"] {
         color: var(--sl-color-red);
       }
+
       span[data-color="dimmed"] {
         color: var(--sl-color-text-dimmed);
       }
+
       span[data-marker="label"] {
         text-transform: uppercase;
         letter-spacing: -0.5px;
       }
+
       span[data-separator] {
         margin-right: 0.375rem;
       }
@@ -561,6 +567,7 @@
       display: block;
     }
   }
+
   &[data-expanded="false"] {
     [data-section="content"] {
       display: -webkit-box;
@@ -575,7 +582,6 @@
     padding: 2px 0;
     font-size: 0.75rem;
   }
-
 }
 
 .message-terminal {
@@ -611,7 +617,7 @@
       }
 
       &::before {
-        content: '';
+        content: "";
         position: absolute;
         pointer-events: none;
         top: 8px;
@@ -651,6 +657,7 @@
       display: block;
     }
   }
+
   &[data-expanded="false"] {
     pre {
       display: -webkit-box;
@@ -693,6 +700,7 @@
       display: block;
     }
   }
+
   &[data-expanded="false"] {
     [data-element-markdown] {
       display: -webkit-box;
@@ -750,10 +758,14 @@
     &[data-status="pending"] {
       color: var(--sl-color-text);
     }
+
     &[data-status="in_progress"] {
       color: var(--sl-color-text);
 
-      & > span { border-color: var(--sl-color-orange); }
+      & > span {
+        border-color: var(--sl-color-orange);
+      }
+
       & > span::before {
         content: "";
         position: absolute;
@@ -764,10 +776,14 @@
         box-shadow: inset 1rem 1rem var(--sl-color-orange-low);
       }
     }
+
     &[data-status="completed"] {
       color: var(--sl-color-text-secondary);
 
-      & > span { border-color: var(--sl-color-green-low); }
+      & > span {
+        border-color: var(--sl-color-green-low);
+      }
+
       & > span::before {
         content: "";
         position: absolute;
@@ -798,7 +814,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease, opacity 0.5s ease;
+  transition:
+    all 0.15s ease,
+    opacity 0.5s ease;
   z-index: 100;
   appearance: none;
   opacity: 1;

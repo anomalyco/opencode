@@ -29,18 +29,12 @@ export namespace Config {
   export const McpLocal = z
     .object({
       type: z.literal("local").describe("Type of MCP server connection"),
-      command: z
-        .string()
-        .array()
-        .describe("Command and arguments to run the MCP server"),
+      command: z.string().array().describe("Command and arguments to run the MCP server"),
       environment: z
         .record(z.string(), z.string())
         .optional()
         .describe("Environment variables to set when running the MCP server"),
-      enabled: z
-        .boolean()
-        .optional()
-        .describe("Enable or disable the MCP server on startup"),
+      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
     })
     .strict()
     .openapi({
@@ -51,10 +45,7 @@ export namespace Config {
     .object({
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
-      enabled: z
-        .boolean()
-        .optional()
-        .describe("Enable or disable the MCP server on startup"),
+      enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
     })
     .strict()
     .openapi({
@@ -66,69 +57,43 @@ export namespace Config {
 
   export const Keybinds = z
     .object({
-      leader: z
-        .string()
-        .optional()
-        .describe("Leader key for keybind combinations"),
-      help: z.string().optional().describe("Show help dialog"),
-      editor_open: z.string().optional().describe("Open external editor"),
-      session_new: z.string().optional().describe("Create a new session"),
-      session_list: z.string().optional().describe("List all sessions"),
-      session_share: z.string().optional().describe("Share current session"),
-      session_interrupt: z
-        .string()
-        .optional()
-        .describe("Interrupt current session"),
-      session_compact: z
-        .string()
-        .optional()
-        .describe("Toggle compact mode for session"),
-      tool_details: z.string().optional().describe("Show tool details"),
-      model_list: z.string().optional().describe("List available models"),
-      theme_list: z.string().optional().describe("List available themes"),
-      project_init: z
-        .string()
-        .optional()
-        .describe("Initialize project configuration"),
-      input_clear: z.string().optional().describe("Clear input field"),
-      input_paste: z.string().optional().describe("Paste from clipboard"),
-      input_submit: z.string().optional().describe("Submit input"),
-      input_newline: z.string().optional().describe("Insert newline in input"),
-      history_previous: z
-        .string()
-        .optional()
-        .describe("Navigate to previous history item"),
-      history_next: z
-        .string()
-        .optional()
-        .describe("Navigate to next history item"),
-      messages_page_up: z
-        .string()
-        .optional()
-        .describe("Scroll messages up by one page"),
-      messages_page_down: z
-        .string()
-        .optional()
-        .describe("Scroll messages down by one page"),
-      messages_half_page_up: z
-        .string()
-        .optional()
-        .describe("Scroll messages up by half page"),
+      leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
+      app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
+      editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
+      session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
+      session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
+      session_share: z.string().optional().default("<leader>s").describe("Share current session"),
+      session_unshare: z.string().optional().default("<leader>u").describe("Unshare current session"),
+      session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
+      session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
+      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
+      model_list: z.string().optional().default("<leader>m").describe("List available models"),
+      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
+      file_list: z.string().optional().default("<leader>f").describe("List files"),
+      file_close: z.string().optional().default("esc").describe("Close file"),
+      file_search: z.string().optional().default("<leader>/").describe("Search file"),
+      file_diff_toggle: z.string().optional().default("<leader>v").describe("Split/unified diff"),
+      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
+      input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
+      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_submit: z.string().optional().default("enter").describe("Submit input"),
+      input_newline: z.string().optional().default("shift+enter,ctrl+j").describe("Insert newline in input"),
+      messages_page_up: z.string().optional().default("pgup").describe("Scroll messages up by one page"),
+      messages_page_down: z.string().optional().default("pgdown").describe("Scroll messages down by one page"),
+      messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
       messages_half_page_down: z
         .string()
         .optional()
+        .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_previous: z
-        .string()
-        .optional()
-        .describe("Navigate to previous message"),
-      messages_next: z.string().optional().describe("Navigate to next message"),
-      messages_first: z
-        .string()
-        .optional()
-        .describe("Navigate to first message"),
-      messages_last: z.string().optional().describe("Navigate to last message"),
-      app_exit: z.string().optional().describe("Exit the application"),
+      messages_previous: z.string().optional().default("ctrl+up").describe("Navigate to previous message"),
+      messages_next: z.string().optional().default("ctrl+down").describe("Navigate to next message"),
+      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
+      messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
+      messages_layout_toggle: z.string().optional().default("<leader>p").describe("Toggle layout"),
+      messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
+      messages_revert: z.string().optional().default("<leader>r").describe("Revert message"),
+      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
     })
     .strict()
     .openapi({
@@ -136,33 +101,13 @@ export namespace Config {
     })
   export const Info = z
     .object({
-      $schema: z
-        .string()
-        .optional()
-        .describe("JSON schema reference for configuration validation"),
-      theme: z
-        .string()
-        .optional()
-        .describe("Theme name to use for the interface"),
+      $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
+      theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("Share newly created sessions automatically"),
-      autoupdate: z
-        .boolean()
-        .optional()
-        .describe("Automatically update to the latest version"),
-      disabled_providers: z
-        .array(z.string())
-        .optional()
-        .describe("Disable providers that are loaded automatically"),
-      model: z
-        .string()
-        .describe(
-          "Model to use in the format of provider/model, eg anthropic/claude-2",
-        )
-        .optional(),
+      autoshare: z.boolean().optional().describe("Share newly created sessions automatically"),
+      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+      disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({
@@ -172,14 +117,8 @@ export namespace Config {
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(z.string(), Mcp)
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
-      instructions: z
-        .array(z.string())
-        .optional()
-        .describe("Additional instruction files or patterns to include"),
+      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       experimental: z
         .object({
           hook: z
@@ -227,10 +166,7 @@ export namespace Config {
         if (provider && model) result.model = `${provider}/${model}`
         result["$schema"] = "https://opencode.ai/config.json"
         result = mergeDeep(result, rest)
-        await Bun.write(
-          path.join(Global.Path.config, "config.json"),
-          JSON.stringify(result, null, 2),
-        )
+        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
       .catch(() => {})
