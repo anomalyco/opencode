@@ -430,7 +430,7 @@ export namespace Session {
     await updateMessage(msg)
     msgs.push(msg)
 
-    const system = input.system ?? SystemPrompt.provider(input.providerID)
+    const system = input.system ?? (await SystemPrompt.provider(input.providerID, input.modelID))
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
 

@@ -151,6 +151,10 @@
           "api": {
             "type": "string"
           },
+          "systemPrompt": {
+            "type": "string",
+            "description": "Custom system prompt for this provider (string or file path)"
+          },
           "name": {
             "type": "string"
           },
@@ -173,6 +177,10 @@
               "properties": {
                 "name": {
                   "type": "string"
+                },
+                "systemPrompt": {
+                  "type": "string",
+                  "description": "Custom system prompt for this model (string or file path)"
                 },
                 "attachment": {
                   "type": "boolean"

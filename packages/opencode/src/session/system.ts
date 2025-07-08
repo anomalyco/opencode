@@ -12,7 +12,43 @@ import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 
 export namespace SystemPrompt {
-  export function provider(providerID: string) {
+  export async function provider(providerID: string, modelID?: string) {
+    const config = await Config.get()
+    let prompt: string | undefined
+
+    // Check model-specific prompt
+    if (
+      config.provider &&
+      config.provider[providerID] &&
+      config.provider[providerID].models &&
+      config.provider[providerID].models[modelID] &&
+      config.provider[providerID].models[modelID].systemPrompt
+    ) {
+      prompt = config.provider[providerID].models[modelID].systemPrompt
+    }
+    // Check provider-level prompt
+    else if (
+      config.provider &&
+      config.provider[providerID] &&
+      config.provider[providerID].systemPrompt
+    ) {
+      prompt = config.provider[providerID].systemPrompt
+    }
+
+    if (prompt) {
+      // If prompt looks like a file path and exists, load file content
+      try {
+        const file = Bun.file(prompt)
+        if (await file.exists()) {
+          const text = await file.text()
+          if (text.trim().length > 0) return [text.trim()]
+        }
+      } catch {}
+      // Otherwise, treat as inline string
+      if (prompt.trim().length > 0) return [prompt.trim()]
+    }
+
+    // Fallback to default logic
     const result = []
     switch (providerID) {
       case "anthropic":

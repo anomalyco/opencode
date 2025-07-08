@@ -107,9 +107,13 @@ export namespace Config {
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({
-            models: z.record(ModelsDev.Model.partial()),
+            systemPrompt: z.string().optional().describe("Custom system prompt for this provider (string or file path)"),
+            models: z.record(
+              ModelsDev.Model.partial().extend({
+                systemPrompt: z.string().optional().describe("Custom system prompt for this model (string or file path)"),
+              })
+            ),
             options: z.record(z.any()).optional(),
-          }),
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
