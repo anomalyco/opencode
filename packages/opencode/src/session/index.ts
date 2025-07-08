@@ -864,8 +864,8 @@ export namespace Session {
       },
       async onFinish(input) {
         const usage = getUsage(model.info, input.usage, input.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
+        next.cost += usage.cost
+        next.tokens = usage.tokens
         next.time.completed = Date.now()
         await updateMessage(next)
       },
@@ -891,11 +891,19 @@ export namespace Session {
         error: e,
       })
       switch (true) {
-        case Message.OutputLengthError.isInstance(e):
-          next.metadata.error = e
+        case e instanceof DOMException && e.name === "AbortError":
+          next.error = new MessageV2.AbortedError(
+            { message: e.message },
+            {
+              cause: e,
+            },
+          ).toObject()
+          break
+        case MessageV2.OutputLengthError.isInstance(e):
+          next.error = e
           break
         case LoadAPIKeyError.isInstance(e):
-          next.metadata.error = new Provider.AuthError(
+          next.error = new Provider.AuthError(
             {
               providerID: input.providerID,
               message: e.message,
@@ -904,16 +912,16 @@ export namespace Session {
           ).toObject()
           break
         case e instanceof Error:
-          next.metadata.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+          next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
           break
         default:
-          next.metadata.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+          next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
       }
       Bus.publish(Event.Error, {
-        error: next.metadata.error,
+        error: next.error,
       })
     }
-    next.metadata!.time.completed = Date.now()
+    next.time.completed = Date.now()
     await updateMessage(next)
   }
 
