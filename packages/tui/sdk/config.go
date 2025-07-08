@@ -397,14 +397,18 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 type Keybinds struct {
 	// Exit the application
 	AppExit string `json:"app_exit"`
+	// Show help dialog
+	AppHelp string `json:"app_help"`
 	// Open external editor
 	EditorOpen string `json:"editor_open"`
-	// Show help dialog
-	Help string `json:"help"`
-	// Navigate to next history item
-	HistoryNext string `json:"history_next"`
-	// Navigate to previous history item
-	HistoryPrevious string `json:"history_previous"`
+	// Close file
+	FileClose string `json:"file_close"`
+	// Toggle split/unified diff
+	FileDiffToggle string `json:"file_diff_toggle"`
+	// List files
+	FileList string `json:"file_list"`
+	// Search file
+	FileSearch string `json:"file_search"`
 	// Clear input field
 	InputClear string `json:"input_clear"`
 	// Insert newline in input
@@ -415,6 +419,8 @@ type Keybinds struct {
 	InputSubmit string `json:"input_submit"`
 	// Leader key for keybind combinations
 	Leader string `json:"leader"`
+	// Copy message
+	MessagesCopy string `json:"messages_copy"`
 	// Navigate to first message
 	MessagesFirst string `json:"messages_first"`
 	// Scroll messages down by half page
@@ -423,6 +429,8 @@ type Keybinds struct {
 	MessagesHalfPageUp string `json:"messages_half_page_up"`
 	// Navigate to last message
 	MessagesLast string `json:"messages_last"`
+	// Toggle layout
+	MessagesLayoutToggle string `json:"messages_layout_toggle"`
 	// Navigate to next message
 	MessagesNext string `json:"messages_next"`
 	// Scroll messages down by one page
@@ -431,6 +439,8 @@ type Keybinds struct {
 	MessagesPageUp string `json:"messages_page_up"`
 	// Navigate to previous message
 	MessagesPrevious string `json:"messages_previous"`
+	// Revert message
+	MessagesRevert string `json:"messages_revert"`
 	// List available models
 	ModelList string `json:"model_list"`
 	// Initialize project configuration
@@ -445,6 +455,8 @@ type Keybinds struct {
 	SessionNew string `json:"session_new"`
 	// Share current session
 	SessionShare string `json:"session_share"`
+	// Unshare current session
+	SessionUnshare string `json:"session_unshare"`
 	// List available themes
 	ThemeList string `json:"theme_list"`
 	// Show tool details
@@ -455,23 +467,28 @@ type Keybinds struct {
 // keybindsJSON contains the JSON metadata for the struct [Keybinds]
 type keybindsJSON struct {
 	AppExit              apijson.Field
+	AppHelp              apijson.Field
 	EditorOpen           apijson.Field
-	Help                 apijson.Field
-	HistoryNext          apijson.Field
-	HistoryPrevious      apijson.Field
+	FileClose            apijson.Field
+	FileDiffToggle       apijson.Field
+	FileList             apijson.Field
+	FileSearch           apijson.Field
 	InputClear           apijson.Field
 	InputNewline         apijson.Field
 	InputPaste           apijson.Field
 	InputSubmit          apijson.Field
 	Leader               apijson.Field
+	MessagesCopy         apijson.Field
 	MessagesFirst        apijson.Field
 	MessagesHalfPageDown apijson.Field
 	MessagesHalfPageUp   apijson.Field
 	MessagesLast         apijson.Field
+	MessagesLayoutToggle apijson.Field
 	MessagesNext         apijson.Field
 	MessagesPageDown     apijson.Field
 	MessagesPageUp       apijson.Field
 	MessagesPrevious     apijson.Field
+	MessagesRevert       apijson.Field
 	ModelList            apijson.Field
 	ProjectInit          apijson.Field
 	SessionCompact       apijson.Field
@@ -479,6 +496,7 @@ type keybindsJSON struct {
 	SessionList          apijson.Field
 	SessionNew           apijson.Field
 	SessionShare         apijson.Field
+	SessionUnshare       apijson.Field
 	ThemeList            apijson.Field
 	ToolDetails          apijson.Field
 	raw                  string

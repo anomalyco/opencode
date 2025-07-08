@@ -18,20 +18,23 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"golang.design/x/clipboard"
 )
 
 type App struct {
-	Info      opencode.App
-	Version   string
-	StatePath string
-	Config    *opencode.Config
-	Client    *opencode.Client
-	State     *config.State
-	Provider  *opencode.Provider
-	Model     *opencode.Model
-	Session   *opencode.Session
-	Messages  []opencode.MessageUnion
-	Commands  commands.CommandRegistry
+	Info          opencode.App
+	Version       string
+	StatePath     string
+	Config        *opencode.Config
+	Client        *opencode.Client
+	State         *config.State
+	Provider      *opencode.Provider
+	Model         *opencode.Model
+	Session       *opencode.Session
+	Messages      []opencode.MessageUnion
+	Commands      commands.CommandRegistry
+	InitialModel  *string
+	InitialPrompt *string
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -58,6 +61,8 @@ func New(
 	version string,
 	appInfo opencode.App,
 	httpClient *opencode.Client,
+	model *string,
+	prompt *string,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -109,15 +114,17 @@ func New(
 	slog.Debug("Loaded config", "config", configInfo)
 
 	app := &App{
-		Info:      appInfo,
-		Version:   version,
-		StatePath: appStatePath,
-		Config:    configInfo,
-		State:     appState,
-		Client:    httpClient,
-		Session:   &opencode.Session{},
-		Messages:  []opencode.MessageUnion{},
-		Commands:  commands.LoadFromConfig(configInfo),
+		Info:          appInfo,
+		Version:       version,
+		StatePath:     appStatePath,
+		Config:        configInfo,
+		State:         appState,
+		Client:        httpClient,
+		Session:       &opencode.Session{},
+		Messages:      []opencode.MessageUnion{},
+		Commands:      commands.LoadFromConfig(configInfo),
+		InitialModel:  model,
+		InitialPrompt: prompt,
 	}
 
 	return app, nil
@@ -140,66 +147,102 @@ func (a *App) Key(commandName commands.CommandName) string {
 	return base(key) + muted(" "+command.Description)
 }
 
+func (a *App) SetClipboard(text string) tea.Cmd {
+	var cmds []tea.Cmd
+	cmds = append(cmds, func() tea.Msg {
+		clipboard.Write(clipboard.FmtText, []byte(text))
+		return nil
+	})
+	// try to set the clipboard using OSC52 for terminals that support it
+	cmds = append(cmds, tea.SetClipboard(text))
+	return tea.Sequence(cmds...)
+}
+
 func (a *App) InitializeProvider() tea.Cmd {
-	return func() tea.Msg {
-		providersResponse, err := a.Client.Config.Providers(context.Background())
-		if err != nil {
-			slog.Error("Failed to list providers", "error", err)
-			// TODO: notify user
-			return nil
-		}
-		providers := providersResponse.Providers
-		var defaultProvider *opencode.Provider
-		var defaultModel *opencode.Model
+	providersResponse, err := a.Client.Config.Providers(context.Background())
+	if err != nil {
+		slog.Error("Failed to list providers", "error", err)
+		// TODO: notify user
+		return nil
+	}
+	providers := providersResponse.Providers
+	var defaultProvider *opencode.Provider
+	var defaultModel *opencode.Model
 
-		var anthropic *opencode.Provider
-		for _, provider := range providers {
-			if provider.ID == "anthropic" {
-				anthropic = &provider
+	var anthropic *opencode.Provider
+	for _, provider := range providers {
+		if provider.ID == "anthropic" {
+			anthropic = &provider
+		}
+	}
+
+	// default to anthropic if available
+	if anthropic != nil {
+		defaultProvider = anthropic
+		defaultModel = getDefaultModel(providersResponse, *anthropic)
+	}
+
+	for _, provider := range providers {
+		if defaultProvider == nil || defaultModel == nil {
+			defaultProvider = &provider
+			defaultModel = getDefaultModel(providersResponse, provider)
+		}
+		providers = append(providers, provider)
+	}
+	if len(providers) == 0 {
+		slog.Error("No providers configured")
+		return nil
+	}
+
+	var currentProvider *opencode.Provider
+	var currentModel *opencode.Model
+	for _, provider := range providers {
+		if provider.ID == a.State.Provider {
+			currentProvider = &provider
+
+			for _, model := range provider.Models {
+				if model.ID == a.State.Model {
+					currentModel = &model
+				}
 			}
 		}
+	}
+	if currentProvider == nil || currentModel == nil {
+		currentProvider = defaultProvider
+		currentModel = defaultModel
+	}
 
-		// default to anthropic if available
-		if anthropic != nil {
-			defaultProvider = anthropic
-			defaultModel = getDefaultModel(providersResponse, *anthropic)
-		}
-
+	var initialProvider *opencode.Provider
+	var initialModel *opencode.Model
+	if a.InitialModel != nil && *a.InitialModel != "" {
+		splits := strings.Split(*a.InitialModel, "/")
 		for _, provider := range providers {
-			if defaultProvider == nil || defaultModel == nil {
-				defaultProvider = &provider
-				defaultModel = getDefaultModel(providersResponse, provider)
-			}
-			providers = append(providers, provider)
-		}
-		if len(providers) == 0 {
-			slog.Error("No providers configured")
-			return nil
-		}
-
-		var currentProvider *opencode.Provider
-		var currentModel *opencode.Model
-		for _, provider := range providers {
-			if provider.ID == a.State.Provider {
-				currentProvider = &provider
-
+			if provider.ID == splits[0] {
+				initialProvider = &provider
 				for _, model := range provider.Models {
-					if model.ID == a.State.Model {
-						currentModel = &model
+					modelID := strings.Join(splits[1:], "/")
+					if model.ID == modelID {
+						initialModel = &model
 					}
 				}
 			}
 		}
-		if currentProvider == nil || currentModel == nil {
-			currentProvider = defaultProvider
-			currentModel = defaultModel
-		}
-
-		return ModelSelectedMsg{
-			Provider: *currentProvider,
-			Model:    *currentModel,
-		}
 	}
+
+	if initialProvider != nil && initialModel != nil {
+		currentProvider = initialProvider
+		currentModel = initialModel
+	}
+
+	var cmds []tea.Cmd
+	cmds = append(cmds, util.CmdHandler(ModelSelectedMsg{
+		Provider: *currentProvider,
+		Model:    *currentModel,
+	}))
+	if a.InitialPrompt != nil && *a.InitialPrompt != "" {
+		cmds = append(cmds, util.CmdHandler(SendMsg{Text: *a.InitialPrompt}))
+	}
+	return tea.Sequence(cmds...)
 }
 
 func getDefaultModel(
