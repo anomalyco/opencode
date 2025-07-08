@@ -45,6 +45,7 @@ type editorComponent struct {
 	textarea               textarea.Model
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
+	pasteCounter           int
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -72,12 +73,22 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text, err := strconv.Unquote(`"` + text + `"`)
 		if err != nil {
 			slog.Error("Failed to unquote text", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 		if _, err := os.Stat(text); err != nil {
 			slog.Error("Failed to paste file", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 
@@ -99,7 +110,12 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		fileBytes, err := os.ReadFile(filePath)
 		if err != nil {
 			slog.Error("Failed to read file", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 		base64EncodedFile := base64.StdEncoding.EncodeToString(fileBytes)
@@ -122,11 +138,21 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString(" ")
 	case tea.ClipboardMsg:
 		text := string(msg)
-		m.textarea.InsertRunesFromUserInput([]rune(text))
+		// Check if the pasted text is long and should be summarized
+		if m.shouldSummarizePastedText(text) {
+			m.handleLongPaste(text)
+		} else {
+			m.textarea.InsertRunesFromUserInput([]rune(text))
+		}
 	case dialog.ThemeSelectedMsg:
 		m.textarea = m.resetTextareaStyles()
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
+	case tea.MouseWheelMsg:
+		// Forward mouse wheel events to the textarea for scrolling
+		m.textarea, cmd = m.textarea.Update(msg)
+		cmds = append(cmds, cmd)
+		return m, tea.Batch(cmds...)
 	case dialog.CompletionSelectedMsg:
 		switch msg.ProviderID {
 		case "commands":
@@ -306,25 +332,46 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 	attachments := m.textarea.GetAttachments()
 	fileParts := make([]opencode.FilePartParam, 0)
+	expandedText := value
+
 	for _, attachment := range attachments {
-		fileParts = append(fileParts, opencode.FilePartParam{
-			Type:     opencode.F(opencode.FilePartTypeFile),
-			Mime:     opencode.F(attachment.MediaType),
-			URL:      opencode.F(attachment.URL),
-			Filename: opencode.F(attachment.Filename),
-		})
+		// Check if this is a pasted text attachment
+		if attachment.MediaType == "text/plain" && strings.HasPrefix(attachment.Filename, "pasted-text-") {
+			// Extract and decode the pasted text content
+			if strings.HasPrefix(attachment.URL, "data:text/plain;base64,") {
+				base64Data := strings.TrimPrefix(attachment.URL, "data:text/plain;base64,")
+				if decodedBytes, err := base64.StdEncoding.DecodeString(base64Data); err == nil {
+					decodedText := string(decodedBytes)
+					// Append the decoded text to the message
+					if expandedText != "" {
+						expandedText += "\n\n" + decodedText
+					} else {
+						expandedText = decodedText
+					}
+				}
+			}
+		} else {
+			// This is a real file attachment, keep it as a file part
+			fileParts = append(fileParts, opencode.FilePartParam{
+				Type:     opencode.F(opencode.FilePartTypeFile),
+				Mime:     opencode.F(attachment.MediaType),
+				URL:      opencode.F(attachment.URL),
+				Filename: opencode.F(attachment.Filename),
+			})
+		}
 	}
 
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
 
-	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: fileParts}))
+	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: expandedText, Attachments: fileParts}))
 	return m, tea.Batch(cmds...)
 }
 
 func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 	m.textarea.Reset()
+	m.pasteCounter = 0
 	return m, nil
 }
 
@@ -348,7 +395,13 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 
 	textBytes := clipboard.Read(clipboard.FmtText)
 	if textBytes != nil {
-		m.textarea.InsertRunesFromUserInput([]rune(string(textBytes)))
+		text := string(textBytes)
+		// Check if the pasted text is long and should be summarized
+		if m.shouldSummarizePastedText(text) {
+			m.handleLongPaste(text)
+		} else {
+			m.textarea.InsertRunesFromUserInput([]rune(text))
+		}
 		return m, nil
 	}
 
@@ -371,6 +424,43 @@ func (m *editorComponent) getInterruptKeyText() string {
 
 func (m *editorComponent) getSubmitKeyText() string {
 	return m.app.Commands[commands.InputSubmitCommand].Keys()[0]
+}
+
+// shouldSummarizePastedText determines if pasted text should be summarized
+func (m *editorComponent) shouldSummarizePastedText(text string) bool {
+	lines := strings.Split(text, "\n")
+	lineCount := len(lines)
+	charCount := len(text)
+
+	// Consider text long if it has more than 3 lines or more than 150 characters
+	return lineCount > 3 || charCount > 150
+}
+
+// handleLongPaste handles long pasted text by creating a summary attachment
+func (m *editorComponent) handleLongPaste(text string) {
+	lines := strings.Split(text, "\n")
+	lineCount := len(lines)
+
+	// Increment paste counter
+	m.pasteCounter++
+
+	// Create attachment with full text as base64 encoded data
+	base64EncodedText := base64.StdEncoding.EncodeToString([]byte(text))
+	url := fmt.Sprintf("data:text/plain;base64,%s", base64EncodedText)
+
+	// Create display text showing line count with counter
+	displayText := fmt.Sprintf("[pasted #%d %d+ lines]", m.pasteCounter, lineCount)
+
+	attachment := &textarea.Attachment{
+		ID:        uuid.NewString(),
+		MediaType: "text/plain",
+		Display:   displayText,
+		URL:       url,
+		Filename:  fmt.Sprintf("pasted-text-%d.txt", m.pasteCounter),
+	}
+
+	m.textarea.InsertAttachment(attachment)
+	m.textarea.InsertString(" ")
 }
 
 func (m *editorComponent) resetTextareaStyles() textarea.Model {
@@ -434,6 +524,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 		textarea:               ta,
 		spinner:                s,
 		interruptKeyInDebounce: false,
+		pasteCounter:           0,
 	}
 	m.resetTextareaStyles()
 

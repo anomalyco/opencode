@@ -528,6 +528,9 @@ type Model struct {
 	// vertically such that we can maintain the same navigating position.
 	lastCharOffset int
 
+	// viewportOffset is the line offset for scrolling the viewport
+	viewportOffset int
+
 	// rune sanitizer for input.
 	rsan Sanitizer
 }
@@ -1028,7 +1031,28 @@ func (m *Model) Reset() {
 	m.value = make([][]any, minHeight, maxLines)
 	m.col = 0
 	m.row = 0
+	m.viewportOffset = 0
 	m.SetCursorColumn(0)
+}
+
+// ScrollUp scrolls the viewport up by one line
+func (m *Model) ScrollUp() {
+	if m.viewportOffset > 0 {
+		m.viewportOffset--
+	}
+}
+
+// ScrollDown scrolls the viewport down by one line
+func (m *Model) ScrollDown() {
+	maxOffset := max(0, m.ContentHeight()-m.height)
+	if m.viewportOffset < maxOffset {
+		m.viewportOffset++
+	}
+}
+
+// ViewportOffset returns the current viewport offset
+func (m Model) ViewportOffset() int {
+	return m.viewportOffset
 }
 
 // san initializes or retrieves the rune sanitizer.
@@ -1515,6 +1539,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case pasteErrMsg:
 		m.Err = msg
+	case tea.MouseWheelMsg:
+		// Handle mouse wheel scrolling
+		if msg.Y > 0 {
+			// Scroll up
+			m.ScrollUp()
+		} else if msg.Y < 0 {
+			// Scroll down
+			m.ScrollDown()
+		}
 	}
 
 	var cmd tea.Cmd
@@ -1547,6 +1580,7 @@ func (m Model) View() string {
 	)
 
 	displayLine := 0
+	visibleDisplayLine := 0
 	for l, line := range m.value {
 		wrappedLines := m.memoizedWrap(line, m.width)
 
@@ -1557,10 +1591,19 @@ func (m Model) View() string {
 		}
 
 		for wl, wrappedLine := range wrappedLines {
+			// Check if this line is within the viewport
+			if displayLine < m.viewportOffset {
+				displayLine++
+				continue
+			}
+			if visibleDisplayLine >= m.height {
+				break
+			}
 			prompt := m.promptView(displayLine)
 			prompt = styles.computedPrompt().Render(prompt)
 			s.WriteString(style.Render(prompt))
 			displayLine++
+			visibleDisplayLine++
 
 			var ln string
 			if m.ShowLineNumbers {
@@ -1633,6 +1676,10 @@ func (m Model) View() string {
 			s.WriteString(style.Render(strings.Repeat(" ", max(0, padding))))
 			s.WriteRune('\n')
 			newLines++
+		}
+		// Break out of outer loop if we've filled the viewport
+		if visibleDisplayLine >= m.height {
+			break
 		}
 	}
 

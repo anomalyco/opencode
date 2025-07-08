@@ -138,7 +138,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
-		if time.Since(a.lastScroll) < time.Millisecond*100 && (BUGGED_SCROLL_KEYS[keyString] || isScrollRelatedInput(keyString)) {
+		if time.Since(a.lastScroll) < time.Millisecond*50 && (BUGGED_SCROLL_KEYS[keyString] || isScrollRelatedInput(keyString)) {
 			return a, nil
 		}
 
@@ -289,11 +289,19 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseWheelMsg:
 		a.lastScroll = time.Now()
 		if a.modal != nil {
-			return a, nil
+			// Allow scrolling in modals if they support it
+			updatedModal, cmd := a.modal.Update(msg)
+			a.modal = updatedModal.(layout.Modal)
+			return a, cmd
 		}
 
 		var cmd tea.Cmd
-		if a.fileViewerHit {
+		// If editor is focused and has content, let it handle scrolling
+		if a.editor.Focused() && a.editor.Lines() > 1 {
+			updated, cmd := a.editor.Update(msg)
+			a.editor = updated.(chat.EditorComponent)
+			cmds = append(cmds, cmd)
+		} else if a.fileViewerHit {
 			a.fileViewer, cmd = a.fileViewer.Update(msg)
 			cmds = append(cmds, cmd)
 		} else {
