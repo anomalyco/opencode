@@ -15,7 +15,7 @@
         "leader": {
           "type": "string",
           "default": "ctrl+x",
-          "description": "Leader key for keybind combinations",
+          "description": "Leader key for keybind combinations\n\ndefault: `ctrl+x`",
           "examples": [
             "ctrl+x"
           ]
@@ -23,7 +23,7 @@
         "app_help": {
           "type": "string",
           "default": "<leader>h",
-          "description": "Show help dialog",
+          "description": "Show help dialog\n\ndefault: `<leader>h`",
           "examples": [
             "<leader>h"
           ]
@@ -31,7 +31,7 @@
         "editor_open": {
           "type": "string",
           "default": "<leader>e",
-          "description": "Open external editor",
+          "description": "Open external editor\n\ndefault: `<leader>e`",
           "examples": [
             "<leader>e"
           ]
@@ -39,7 +39,7 @@
         "session_new": {
           "type": "string",
           "default": "<leader>n",
-          "description": "Create a new session",
+          "description": "Create a new session\n\ndefault: `<leader>n`",
           "examples": [
             "<leader>n"
           ]
@@ -47,7 +47,7 @@
         "session_list": {
           "type": "string",
           "default": "<leader>l",
-          "description": "List all sessions",
+          "description": "List all sessions\n\ndefault: `<leader>l`",
           "examples": [
             "<leader>l"
           ]
@@ -55,7 +55,7 @@
         "session_share": {
           "type": "string",
           "default": "<leader>s",
-          "description": "Share current session",
+          "description": "Share current session\n\ndefault: `<leader>s`",
           "examples": [
             "<leader>s"
           ]
@@ -63,7 +63,7 @@
         "session_unshare": {
           "type": "string",
           "default": "<leader>u",
-          "description": "Unshare current session",
+          "description": "Unshare current session\n\ndefault: `<leader>u`",
           "examples": [
             "<leader>u"
           ]
@@ -71,7 +71,7 @@
         "session_interrupt": {
           "type": "string",
           "default": "esc",
-          "description": "Interrupt current session",
+          "description": "Interrupt current session\n\ndefault: `esc`",
           "examples": [
             "esc"
           ]
@@ -79,7 +79,7 @@
         "session_compact": {
           "type": "string",
           "default": "<leader>c",
-          "description": "Compact the session",
+          "description": "Compact the session\n\ndefault: `<leader>c`",
           "examples": [
             "<leader>c"
           ]
@@ -87,7 +87,7 @@
         "tool_details": {
           "type": "string",
           "default": "<leader>d",
-          "description": "Toggle tool details",
+          "description": "Toggle tool details\n\ndefault: `<leader>d`",
           "examples": [
             "<leader>d"
           ]
@@ -95,7 +95,7 @@
         "model_list": {
           "type": "string",
           "default": "<leader>m",
-          "description": "List available models",
+          "description": "List available models\n\ndefault: `<leader>m`",
           "examples": [
             "<leader>m"
           ]
@@ -103,7 +103,7 @@
         "theme_list": {
           "type": "string",
           "default": "<leader>t",
-          "description": "List available themes",
+          "description": "List available themes\n\ndefault: `<leader>t`",
           "examples": [
             "<leader>t"
           ]
@@ -111,7 +111,7 @@
         "file_list": {
           "type": "string",
           "default": "<leader>f",
-          "description": "List files",
+          "description": "List files\n\ndefault: `<leader>f`",
           "examples": [
             "<leader>f"
           ]
@@ -119,7 +119,7 @@
         "file_close": {
           "type": "string",
           "default": "esc",
-          "description": "Close file",
+          "description": "Close file\n\ndefault: `esc`",
           "examples": [
             "esc"
           ]
@@ -127,7 +127,7 @@
         "file_search": {
           "type": "string",
           "default": "<leader>/",
-          "description": "Search file",
+          "description": "Search file\n\ndefault: `<leader>/`",
           "examples": [
             "<leader>/"
           ]
@@ -135,7 +135,7 @@
         "file_diff_toggle": {
           "type": "string",
           "default": "<leader>v",
-          "description": "Split/unified diff",
+          "description": "Split/unified diff\n\ndefault: `<leader>v`",
           "examples": [
             "<leader>v"
           ]
@@ -143,7 +143,7 @@
         "project_init": {
           "type": "string",
           "default": "<leader>i",
-          "description": "Create/update AGENTS.md",
+          "description": "Create/update AGENTS.md\n\ndefault: `<leader>i`",
           "examples": [
             "<leader>i"
           ]
@@ -151,7 +151,7 @@
         "input_clear": {
           "type": "string",
           "default": "ctrl+c",
-          "description": "Clear input field",
+          "description": "Clear input field\n\ndefault: `ctrl+c`",
           "examples": [
             "ctrl+c"
           ]
@@ -159,7 +159,7 @@
         "input_paste": {
           "type": "string",
           "default": "ctrl+v",
-          "description": "Paste from clipboard",
+          "description": "Paste from clipboard\n\ndefault: `ctrl+v`",
           "examples": [
             "ctrl+v"
           ]
@@ -167,7 +167,7 @@
         "input_submit": {
           "type": "string",
           "default": "enter",
-          "description": "Submit input",
+          "description": "Submit input\n\ndefault: `enter`",
           "examples": [
             "enter"
           ]
@@ -175,7 +175,7 @@
         "input_newline": {
           "type": "string",
           "default": "shift+enter,ctrl+j",
-          "description": "Insert newline in input",
+          "description": "Insert newline in input\n\ndefault: `shift+enter,ctrl+j`",
           "examples": [
             "shift+enter,ctrl+j"
           ]
@@ -183,7 +183,7 @@
         "messages_page_up": {
           "type": "string",
           "default": "pgup",
-          "description": "Scroll messages up by one page",
+          "description": "Scroll messages up by one page\n\ndefault: `pgup`",
           "examples": [
             "pgup"
           ]
@@ -191,7 +191,7 @@
         "messages_page_down": {
           "type": "string",
           "default": "pgdown",
-          "description": "Scroll messages down by one page",
+          "description": "Scroll messages down by one page\n\ndefault: `pgdown`",
           "examples": [
             "pgdown"
           ]
@@ -199,7 +199,7 @@
         "messages_half_page_up": {
           "type": "string",
           "default": "ctrl+alt+u",
-          "description": "Scroll messages up by half page",
+          "description": "Scroll messages up by half page\n\ndefault: `ctrl+alt+u`",
           "examples": [
             "ctrl+alt+u"
           ]
@@ -207,7 +207,7 @@
         "messages_half_page_down": {
           "type": "string",
           "default": "ctrl+alt+d",
-          "description": "Scroll messages down by half page",
+          "description": "Scroll messages down by half page\n\ndefault: `ctrl+alt+d`",
           "examples": [
             "ctrl+alt+d"
           ]
@@ -215,7 +215,7 @@
         "messages_previous": {
           "type": "string",
           "default": "ctrl+up",
-          "description": "Navigate to previous message",
+          "description": "Navigate to previous message\n\ndefault: `ctrl+up`",
           "examples": [
             "ctrl+up"
           ]
@@ -223,7 +223,7 @@
         "messages_next": {
           "type": "string",
           "default": "ctrl+down",
-          "description": "Navigate to next message",
+          "description": "Navigate to next message\n\ndefault: `ctrl+down`",
           "examples": [
             "ctrl+down"
           ]
@@ -231,7 +231,7 @@
         "messages_first": {
           "type": "string",
           "default": "ctrl+g",
-          "description": "Navigate to first message",
+          "description": "Navigate to first message\n\ndefault: `ctrl+g`",
           "examples": [
             "ctrl+g"
           ]
@@ -239,7 +239,7 @@
         "messages_last": {
           "type": "string",
           "default": "ctrl+alt+g",
-          "description": "Navigate to last message",
+          "description": "Navigate to last message\n\ndefault: `ctrl+alt+g`",
           "examples": [
             "ctrl+alt+g"
           ]
@@ -247,7 +247,7 @@
         "messages_layout_toggle": {
           "type": "string",
           "default": "<leader>p",
-          "description": "Toggle layout",
+          "description": "Toggle layout\n\ndefault: `<leader>p`",
           "examples": [
             "<leader>p"
           ]
@@ -255,7 +255,7 @@
         "messages_copy": {
           "type": "string",
           "default": "<leader>y",
-          "description": "Copy message",
+          "description": "Copy message\n\ndefault: `<leader>y`",
           "examples": [
             "<leader>y"
           ]
@@ -263,7 +263,7 @@
         "messages_revert": {
           "type": "string",
           "default": "<leader>r",
-          "description": "Revert message",
+          "description": "Revert message\n\ndefault: `<leader>r`",
           "examples": [
             "<leader>r"
           ]
@@ -271,7 +271,7 @@
         "app_exit": {
           "type": "string",
           "default": "ctrl+c,<leader>q",
-          "description": "Exit the application",
+          "description": "Exit the application\n\ndefault: `ctrl+c,<leader>q`",
           "examples": [
             "ctrl+c,<leader>q"
           ]

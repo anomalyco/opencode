@@ -16,15 +16,15 @@ const result = zodToJsonSchema(Config.Info, {
     const schema = jsonSchema as typeof jsonSchema & {
       examples?: unknown[]
     }
-    if (
-      schema &&
-      typeof schema === "object" &&
-      "type" in schema &&
-      schema.type === "string" &&
-      !schema?.examples &&
-      schema?.default
-    ) {
-      schema.examples = [schema.default]
+    if (schema && typeof schema === "object" && "type" in schema && schema.type === "string" && schema?.default) {
+      if (!schema.examples) {
+        schema.examples = [schema.default]
+      }
+
+      schema.description = [schema.description || "", `default: \`${schema.default}\``]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim()
     }
 
     return jsonSchema
