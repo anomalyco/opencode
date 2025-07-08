@@ -68,8 +68,7 @@ export const McpAddCommand = cmd({
         alias: "t",
         type: "string",
         choices: ["stdio", "sse"] as const,
-        default: "stdio",
-        describe: "Transport type (stdio, sse)",
+        describe: "Transport type (stdio, sse) - auto-detected if not specified",
       })
       .option("env", {
         alias: "e",
@@ -111,55 +110,49 @@ export const McpAddCommand = cmd({
       headers[key.trim()] = valueParts.join(":").trim()
     }
 
-    // Determine server type based on transport and URL
-    const serverType = args.transport === "stdio" ? "local" : "remote"
-    const isUrl =
-      args.commandOrUrl.startsWith("http://") ||
-      args.commandOrUrl.startsWith("https://")
+    // Detect transport type based on URL format
+    const isUrl = /^(https?|wss?):\/\//.test(args.commandOrUrl)
+    const detectedTransport = isUrl ? "sse" : "stdio"
+    const actualTransport = args.transport || detectedTransport
+
+    // Validate manual transport override against detected type
+    if (args.transport && args.transport !== detectedTransport) {
+      UI.error(
+        `Transport type mismatch: detected "${detectedTransport}" but you specified "${args.transport}".`,
+      )
+      return
+    }
 
     // Validate transport constraints
-    if (args.transport === "stdio") {
-      if (isUrl) {
-        UI.error("stdio transport requires a command, not a URL")
-        return
-      }
+    if (actualTransport === "stdio") {
       if (Object.keys(headers).length > 0) {
         UI.error("stdio transport doesn't support headers")
         return
       }
     } else {
       // sse transport
-      if (!isUrl) {
-        UI.error(`${args.transport} transport requires a URL`)
-        return
-      }
       if (args.args.length > 0) {
-        UI.error(
-          `${args.transport} transport doesn't accept additional arguments`,
-        )
+        UI.error("sse transport doesn't accept additional arguments")
         return
       }
       if (Object.keys(environment).length > 0) {
-        UI.error(
-          `${args.transport} transport doesn't support environment variables`,
-        )
+        UI.error("sse transport doesn't support environment variables")
         return
       }
     }
 
     // Create config
-    const mcpConfig: Config.Mcp =
-      serverType === "remote"
-        ? {
-            type: "remote",
-            url: args.commandOrUrl,
-            ...(Object.keys(headers).length > 0 && { headers }),
-          }
-        : {
-            type: "local",
-            command: [args.commandOrUrl, ...args.args],
-            ...(Object.keys(environment).length > 0 && { environment }),
-          }
+    const mcpConfig: Config.Mcp = isUrl
+      ? {
+          type: "remote",
+          url: args.commandOrUrl,
+          ...(Object.keys(headers).length > 0 && { headers }),
+        }
+      : {
+          type: "local",
+          command: [args.commandOrUrl, ...args.args],
+          ...(Object.keys(environment).length > 0 && { environment }),
+        }
 
     // Determine config path based on scope
     const configPath =
@@ -184,7 +177,7 @@ export const McpAddCommand = cmd({
     await Bun.write(configPath, JSON.stringify(updatedConfig, null, 2))
 
     UI.println(
-      `Added MCP server "${args.name}" (${args.transport}) to ${args.scope} config`,
+      `Added MCP server "${args.name}" (${actualTransport}) to ${args.scope} config`,
     )
   },
 })

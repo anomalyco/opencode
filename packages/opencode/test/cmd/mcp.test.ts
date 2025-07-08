@@ -189,7 +189,7 @@ describe("mcp command", () => {
   test("validate transport constraints", async () => {
     const stderr = captureStderr()
 
-    // Test stdio with URL should fail
+    // Test stdio with URL should fail with mismatch error
     const args = {
       name: "invalid-stdio",
       commandOrUrl: "https://example.com",
@@ -205,7 +205,171 @@ describe("mcp command", () => {
     await McpAddCommand.handler(args)
 
     expect(stderr.getOutput()).toContain(
-      "stdio transport requires a command, not a URL",
+      'Transport type mismatch: detected "sse" but you specified "stdio".',
+    )
+
+    stderr.restore()
+  })
+
+  test("auto-detect transport type for HTTP URLs", async () => {
+    const args = {
+      name: "auto-sse-server",
+      commandOrUrl: "https://api.example.com/mcp",
+      args: [],
+      scope: "project" as const,
+      transport: undefined, // Auto-detect
+      env: [],
+      header: ["Authorization: Bearer token123"],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["auto-sse-server"]).toMatchObject({
+      type: "remote",
+      url: "https://api.example.com/mcp",
+      headers: {
+        Authorization: "Bearer token123",
+      },
+    })
+  })
+
+  test("auto-detect transport type for commands", async () => {
+    const args = {
+      name: "auto-stdio-server",
+      commandOrUrl: "node",
+      args: ["server.js"],
+      scope: "project" as const,
+      transport: undefined, // Auto-detect
+      env: ["NODE_ENV=production"],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["auto-stdio-server"]).toMatchObject({
+      type: "local",
+      command: ["node", "server.js"],
+      environment: {
+        NODE_ENV: "production",
+      },
+    })
+  })
+
+  test("auto-detect transport type for WebSocket URLs", async () => {
+    const args = {
+      name: "auto-ws-server",
+      commandOrUrl: "wss://api.example.com/mcp",
+      args: [],
+      scope: "project" as const,
+      transport: undefined, // Auto-detect
+      env: [],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["auto-ws-server"]).toMatchObject({
+      type: "remote",
+      url: "wss://api.example.com/mcp",
+    })
+  })
+
+  test("manual override transport type for URLs", async () => {
+    const args = {
+      name: "manual-sse-server",
+      commandOrUrl: "https://api.example.com/mcp",
+      args: [],
+      scope: "project" as const,
+      transport: "sse" as const, // Manual override matches auto-detection
+      env: [],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["manual-sse-server"]).toMatchObject({
+      type: "remote",
+      url: "https://api.example.com/mcp",
+    })
+  })
+
+  test("manual override transport type for commands", async () => {
+    const args = {
+      name: "manual-stdio-server",
+      commandOrUrl: "node",
+      args: ["server.js"],
+      scope: "project" as const,
+      transport: "stdio" as const, // Manual override matches auto-detection
+      env: [],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    const projectConfig = await Config.get()
+    expect(projectConfig.mcp?.["manual-stdio-server"]).toMatchObject({
+      type: "local",
+      command: ["node", "server.js"],
+    })
+  })
+
+  test("transport type mismatch - stdio for URL", async () => {
+    const stderr = captureStderr()
+
+    const args = {
+      name: "mismatch-stdio",
+      commandOrUrl: "https://api.example.com/mcp",
+      args: [],
+      scope: "project" as const,
+      transport: "stdio" as const, // Mismatch: stdio for URL
+      env: [],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    expect(stderr.getOutput()).toContain(
+      'Transport type mismatch: detected "sse" but you specified "stdio".',
+    )
+
+    stderr.restore()
+  })
+
+  test("transport type mismatch - sse for command", async () => {
+    const stderr = captureStderr()
+
+    const args = {
+      name: "mismatch-sse",
+      commandOrUrl: "node",
+      args: ["server.js"],
+      scope: "project" as const,
+      transport: "sse" as const, // Mismatch: sse for command
+      env: [],
+      header: [],
+      _: [],
+      $0: "opencode",
+    }
+
+    await McpAddCommand.handler(args)
+
+    expect(stderr.getOutput()).toContain(
+      'Transport type mismatch: detected "stdio" but you specified "sse".',
     )
 
     stderr.restore()
