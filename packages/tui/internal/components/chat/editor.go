@@ -56,6 +56,7 @@ type editorComponent struct {
 	exitKeyInDebounce      bool
 	historyIndex           int    // -1 means current (not in history)
 	currentText            string // Store current text when navigating history
+	pasteCounter           int
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -129,12 +130,22 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text, err := strconv.Unquote(`"` + text + `"`)
 		if err != nil {
 			slog.Error("Failed to unquote text", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 		if _, err := os.Stat(text); err != nil {
 			slog.Error("Failed to paste file", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 
@@ -142,7 +153,11 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		attachment := m.createAttachmentFromFile(filePath)
 		if attachment == nil {
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
 			return m, nil
 		}
 
@@ -150,7 +165,12 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertString(" ")
 	case tea.ClipboardMsg:
 		text := string(msg)
-		m.textarea.InsertRunesFromUserInput([]rune(text))
+		// Check if the pasted text is long and should be summarized
+		if m.shouldSummarizePastedText(text) {
+			m.handleLongPaste(text)
+		} else {
+			m.textarea.InsertRunesFromUserInput([]rune(text))
+		}
 	case dialog.ThemeSelectedMsg:
 		m.textarea = updateTextareaStyles(m.textarea)
 		m.spinner = createSpinner()
@@ -392,6 +412,7 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 	m.textarea.Reset()
 	m.historyIndex = -1
 	m.currentText = ""
+	m.pasteCounter = 0
 	return m, nil
 }
 
@@ -421,7 +442,13 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 
 	textBytes := clipboard.Read(clipboard.FmtText)
 	if textBytes != nil {
-		m.textarea.InsertRunesFromUserInput([]rune(string(textBytes)))
+		text := string(textBytes)
+		// Check if the pasted text is long and should be summarized
+		if m.shouldSummarizePastedText(text) {
+			m.handleLongPaste(text)
+		} else {
+			m.textarea.InsertRunesFromUserInput([]rune(text))
+		}
 		return m, nil
 	}
 
@@ -490,6 +517,43 @@ func (m *editorComponent) getExitKeyText() string {
 	return m.app.Commands[commands.AppExitCommand].Keys()[0]
 }
 
+// shouldSummarizePastedText determines if pasted text should be summarized
+func (m *editorComponent) shouldSummarizePastedText(text string) bool {
+	lines := strings.Split(text, "\n")
+	lineCount := len(lines)
+	charCount := len(text)
+
+	// Consider text long if it has more than 3 lines or more than 150 characters
+	return lineCount > 3 || charCount > 150
+}
+
+// handleLongPaste handles long pasted text by creating a summary attachment
+func (m *editorComponent) handleLongPaste(text string) {
+	lines := strings.Split(text, "\n")
+	lineCount := len(lines)
+
+	// Increment paste counter
+	m.pasteCounter++
+
+	// Create attachment with full text as base64 encoded data
+	base64EncodedText := base64.StdEncoding.EncodeToString([]byte(text))
+	url := fmt.Sprintf("data:text/plain;base64,%s", base64EncodedText)
+
+	// Create display text showing line count with counter
+	displayText := fmt.Sprintf("[pasted #%d %d+ lines]", m.pasteCounter, lineCount)
+
+	attachment := &textarea.Attachment{
+		ID:        uuid.NewString(),
+		MediaType: "text/plain",
+		Display:   displayText,
+		URL:       url,
+		Filename:  fmt.Sprintf("pasted-text-%d.txt", m.pasteCounter),
+	}
+
+	m.textarea.InsertAttachment(attachment)
+	m.textarea.InsertString(" ")
+}
+
 func updateTextareaStyles(ta textarea.Model) textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
@@ -551,6 +615,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 		spinner:                s,
 		interruptKeyInDebounce: false,
 		historyIndex:           -1,
+		pasteCounter:           0,
 	}
 
 	return m
