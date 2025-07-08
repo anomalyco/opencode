@@ -39,7 +39,8 @@ export namespace Storage {
 
   const state = App.state("storage", async () => {
     const app = App.info()
-    const dir = path.join(app.path.data, "storage")
+    const dir = path.normalize(path.join(app.path.data, "storage"))
+    await fs.mkdir(dir, { recursive: true })
     const migration = await Bun.file(path.join(dir, "migration"))
       .json()
       .then((x) => parseInt(x))
