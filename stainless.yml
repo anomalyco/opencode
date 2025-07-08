@@ -34,6 +34,7 @@ resources:
     models:
       unknownError: UnknownError
       providerAuthError: ProviderAuthError
+      messageAbortedError: MessageAbortedError
 
   event:
     methods:

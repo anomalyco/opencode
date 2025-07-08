@@ -340,13 +340,14 @@ func (r *AssistantMessageError) UnmarshalJSON(data []byte) (err error) {
 // the specific types for more type safety.
 //
 // Possible runtime types of the union are [shared.ProviderAuthError],
-// [shared.UnknownError], [AssistantMessageErrorMessageOutputLengthError].
+// [shared.UnknownError], [AssistantMessageErrorMessageOutputLengthError],
+// [shared.MessageAbortedError].
 func (r AssistantMessageError) AsUnion() AssistantMessageErrorUnion {
 	return r.union
 }
 
-// Union satisfied by [shared.ProviderAuthError], [shared.UnknownError] or
-// [AssistantMessageErrorMessageOutputLengthError].
+// Union satisfied by [shared.ProviderAuthError], [shared.UnknownError],
+// [AssistantMessageErrorMessageOutputLengthError] or [shared.MessageAbortedError].
 type AssistantMessageErrorUnion interface {
 	ImplementsAssistantMessageError()
 }
@@ -369,6 +370,11 @@ func init() {
 			TypeFilter:         gjson.JSON,
 			Type:               reflect.TypeOf(AssistantMessageErrorMessageOutputLengthError{}),
 			DiscriminatorValue: "MessageOutputLengthError",
+		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(shared.MessageAbortedError{}),
+			DiscriminatorValue: "MessageAbortedError",
 		},
 	)
 }
@@ -418,11 +424,12 @@ const (
 	AssistantMessageErrorNameProviderAuthError        AssistantMessageErrorName = "ProviderAuthError"
 	AssistantMessageErrorNameUnknownError             AssistantMessageErrorName = "UnknownError"
 	AssistantMessageErrorNameMessageOutputLengthError AssistantMessageErrorName = "MessageOutputLengthError"
+	AssistantMessageErrorNameMessageAbortedError      AssistantMessageErrorName = "MessageAbortedError"
 )
 
 func (r AssistantMessageErrorName) IsKnown() bool {
 	switch r {
-	case AssistantMessageErrorNameProviderAuthError, AssistantMessageErrorNameUnknownError, AssistantMessageErrorNameMessageOutputLengthError:
+	case AssistantMessageErrorNameProviderAuthError, AssistantMessageErrorNameUnknownError, AssistantMessageErrorNameMessageOutputLengthError, AssistantMessageErrorNameMessageAbortedError:
 		return true
 	}
 	return false
@@ -889,7 +896,7 @@ func (r ToolPart) implementsAssistantMessagePart() {}
 type ToolPartState struct {
 	Status ToolPartStateStatus `json:"status,required"`
 	Error  string              `json:"error"`
-	// This field can have the runtime type of [interface{}].
+	// This field can have the runtime type of [interface{}], [map[string]interface{}].
 	Input interface{} `json:"input"`
 	// This field can have the runtime type of [map[string]interface{}].
 	Metadata interface{} `json:"metadata"`
@@ -1002,24 +1009,24 @@ func (r ToolPartType) IsKnown() bool {
 }
 
 type ToolStateCompleted struct {
+	Input    map[string]interface{}   `json:"input,required"`
 	Metadata map[string]interface{}   `json:"metadata,required"`
 	Output   string                   `json:"output,required"`
 	Status   ToolStateCompletedStatus `json:"status,required"`
 	Time     ToolStateCompletedTime   `json:"time,required"`
 	Title    string                   `json:"title,required"`
-	Input    interface{}              `json:"input"`
 	JSON     toolStateCompletedJSON   `json:"-"`
 }
 
 // toolStateCompletedJSON contains the JSON metadata for the struct
 // [ToolStateCompleted]
 type toolStateCompletedJSON struct {
+	Input       apijson.Field
 	Metadata    apijson.Field
 	Output      apijson.Field
 	Status      apijson.Field
 	Time        apijson.Field
 	Title       apijson.Field
-	Input       apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -1072,19 +1079,19 @@ func (r toolStateCompletedTimeJSON) RawJSON() string {
 }
 
 type ToolStateError struct {
-	Error  string               `json:"error,required"`
-	Status ToolStateErrorStatus `json:"status,required"`
-	Time   ToolStateErrorTime   `json:"time,required"`
-	Input  interface{}          `json:"input"`
-	JSON   toolStateErrorJSON   `json:"-"`
+	Error  string                 `json:"error,required"`
+	Input  map[string]interface{} `json:"input,required"`
+	Status ToolStateErrorStatus   `json:"status,required"`
+	Time   ToolStateErrorTime     `json:"time,required"`
+	JSON   toolStateErrorJSON     `json:"-"`
 }
 
 // toolStateErrorJSON contains the JSON metadata for the struct [ToolStateError]
 type toolStateErrorJSON struct {
 	Error       apijson.Field
+	Input       apijson.Field
 	Status      apijson.Field
 	Time        apijson.Field
-	Input       apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
