@@ -38,6 +38,7 @@ type EditorComponent interface {
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
 	SetInterruptKeyInDebounce(inDebounce bool)
+	SetExitKeyInDebounce(inDebounce bool)
 }
 
 type editorComponent struct {
@@ -45,6 +46,7 @@ type editorComponent struct {
 	textarea               textarea.Model
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
+	exitKeyInDebounce      bool
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -218,7 +220,10 @@ func (m *editorComponent) Content(width int) string {
 		Render(textarea)
 
 	hint := base(m.getSubmitKeyText()) + muted(" send   ")
-	if m.app.IsBusy() {
+	if m.exitKeyInDebounce {
+		keyText := m.getExitKeyText()
+		hint = base(keyText+" again") + muted(" to exit")
+	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		if m.interruptKeyInDebounce {
 			hint = muted(
@@ -357,12 +362,20 @@ func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 	m.interruptKeyInDebounce = inDebounce
 }
 
+func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
+	m.exitKeyInDebounce = inDebounce
+}
+
 func (m *editorComponent) getInterruptKeyText() string {
 	return m.app.Commands[commands.SessionInterruptCommand].Keys()[0]
 }
 
 func (m *editorComponent) getSubmitKeyText() string {
 	return m.app.Commands[commands.InputSubmitCommand].Keys()[0]
+}
+
+func (m *editorComponent) getExitKeyText() string {
+	return m.app.Commands[commands.AppExitCommand].Keys()[0]
 }
 
 func (m *editorComponent) resetTextareaStyles() textarea.Model {

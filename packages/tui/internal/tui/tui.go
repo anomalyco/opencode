@@ -32,15 +32,27 @@ import (
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
 
+// ExitDebounceTimeoutMsg is sent when the exit key debounce timeout expires
+type ExitDebounceTimeoutMsg struct{}
+
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
+
+// ExitKeyState tracks the state of exit key presses for debouncing
+type ExitKeyState int
 
 const (
 	InterruptKeyIdle InterruptKeyState = iota
 	InterruptKeyFirstPress
 )
 
+const (
+	ExitKeyIdle ExitKeyState = iota
+	ExitKeyFirstPress
+)
+
 const interruptDebounceTimeout = 1 * time.Second
+const exitDebounceTimeout = 1 * time.Second
 const fileViewerFullWidthCutoff = 160
 
 type appModel struct {
@@ -59,6 +71,7 @@ type appModel struct {
 	isLeaderSequence     bool
 	toastManager         *toast.ToastManager
 	interruptKeyState    InterruptKeyState
+	exitKeyState         ExitKeyState
 	lastScroll           time.Time
 	messagesRight        bool
 	fileViewer           fileviewer.Model
@@ -271,7 +284,26 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 7. Check again for commands that don't require leader (excluding interrupt when busy)
+		// 7. Handle exit key debounce for app exit when using non-leader command
+		exitCommand := a.app.Commands[commands.AppExitCommand]
+		if exitCommand.Matches(msg, a.isLeaderSequence) {
+			switch a.exitKeyState {
+			case ExitKeyIdle:
+				// First exit key press - start debounce timer
+				a.exitKeyState = ExitKeyFirstPress
+				a.editor.SetExitKeyInDebounce(true)
+				return a, tea.Tick(exitDebounceTimeout, func(t time.Time) tea.Msg {
+					return ExitDebounceTimeoutMsg{}
+				})
+			case ExitKeyFirstPress:
+				// Second exit key press within timeout - actually exit
+				a.exitKeyState = ExitKeyIdle
+				a.editor.SetExitKeyInDebounce(false)
+				return a, util.CmdHandler(commands.ExecuteCommandMsg(exitCommand))
+			}
+		}
+
+		// 8. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
 		matches := a.app.Commands.Matches(msg, a.isLeaderSequence)
 		if len(matches) > 0 {
 			// Skip interrupt key if we're in debounce mode and app is busy
@@ -281,7 +313,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
-		// 7. Fallback to editor. This is for other characters
+		// 9. Fallback to editor. This is for other characters
 		// like backspace, tab, etc.
 		updatedEditor, cmd := a.editor.Update(msg)
 		a.editor = updatedEditor.(chat.EditorComponent)
@@ -499,6 +531,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset interrupt key state after timeout
 		a.interruptKeyState = InterruptKeyIdle
 		a.editor.SetInterruptKeyInDebounce(false)
+	case ExitDebounceTimeoutMsg:
+		// Reset exit key state after timeout
+		a.exitKeyState = ExitKeyIdle
+		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
 	}
@@ -1015,6 +1051,7 @@ func NewModel(app *app.App) tea.Model {
 		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
+		exitKeyState:         ExitKeyIdle,
 		fileViewer:           fileviewer.New(app),
 		messagesRight:        app.State.MessagesRight,
 	}
