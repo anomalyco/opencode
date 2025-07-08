@@ -99,6 +99,7 @@ export namespace Session {
     Error: Bus.event(
       "session.error",
       z.object({
+        sessionID: z.string().optional(),
         error: MessageV2.Assistant.shape.error,
       }),
     ),
@@ -727,6 +728,7 @@ export namespace Session {
           next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
       }
       Bus.publish(Event.Error, {
+        sessionID: next.sessionID,
         error: next.error,
       })
     }
