@@ -7,12 +7,13 @@ import path from "path"
 import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
+import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 
 export namespace SystemPrompt {
-  export function provider(providerID: string) {
+  export function provider(providerID: string, modelID: string) {
     const result = []
     switch (providerID) {
       case "anthropic":
@@ -20,7 +21,8 @@ export namespace SystemPrompt {
         result.push(PROMPT_ANTHROPIC)
         break
       default:
-        result.push(PROMPT_ANTHROPIC)
+        if (modelID.startsWith("gpt-")) result.push(PROMPT_BEAST)
+        else result.push(PROMPT_ANTHROPIC)
         break
     }
     return result
