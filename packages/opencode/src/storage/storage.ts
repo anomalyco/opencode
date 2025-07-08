@@ -17,21 +17,23 @@ export namespace Storage {
 
   const MIGRATIONS: Migration[] = [
     async (dir: string) => {
-      const files = new Bun.Glob("session/message/*/*.json").scanSync({
-        cwd: dir,
-        absolute: true,
-      })
-      for (const file of files) {
-        const content = await Bun.file(file).json()
-        if (!content.metadata) continue
-        log.info("migrating to v2 message", { file })
-        try {
-          const result = MessageV2.fromV1(content)
-          await Bun.write(file, JSON.stringify(result, null, 2))
-        } catch (e) {
-          await fs.rename(file, file.replace("storage", "broken"))
+      try {
+        const files = new Bun.Glob("session/message/*/*.json").scanSync({
+          cwd: dir,
+          absolute: true,
+        })
+        for (const file of files) {
+          const content = await Bun.file(file).json()
+          if (!content.metadata) continue
+          log.info("migrating to v2 message", { file })
+          try {
+            const result = MessageV2.fromV1(content)
+            await Bun.write(file, JSON.stringify(result, null, 2))
+          } catch (e) {
+            await fs.rename(file, file.replace("storage", "broken"))
+          }
         }
-      }
+      } catch {}
     },
   ]
 

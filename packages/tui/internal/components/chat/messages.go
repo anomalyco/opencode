@@ -320,6 +320,8 @@ func (m *messagesComponent) renderView(width int) {
 				error = "Message output length exceeded"
 			case opencode.ProviderAuthError:
 				error = err.Data.Message
+			case opencode.MessageAbortedError:
+				error = "Request was aborted"
 			case opencode.UnknownError:
 				error = err.Data.Message
 			}

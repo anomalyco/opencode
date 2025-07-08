@@ -1,5 +1,6 @@
 # Shared Response Types
 
+- <a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared">shared</a>.<a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared#MessageAbortedError">MessageAbortedError</a>
 - <a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared">shared</a>.<a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared#ProviderAuthError">ProviderAuthError</a>
 - <a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared">shared</a>.<a href="https://pkg.go.dev/github.com/sst/opencode-sdk-go/shared#UnknownError">UnknownError</a>
 

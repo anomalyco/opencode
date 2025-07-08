@@ -841,7 +841,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, toast.NewErrorToast("Failed to share session")
 		}
 		shareUrl := response.Share.URL
-		cmds = append(cmds, tea.SetClipboard(shareUrl))
+		cmds = append(cmds, a.app.SetClipboard(shareUrl))
 		cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
 	case commands.SessionUnshareCommand:
 		if a.app.Session.ID == "" {
@@ -975,7 +975,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.MessagesCopyCommand:
 		selected := a.messages.Selected()
 		if selected != "" {
-			cmd = tea.SetClipboard(selected)
+			cmd = a.app.SetClipboard(selected)
 			cmds = append(cmds, cmd)
 			cmd = toast.NewSuccessToast("Message copied to clipboard")
 			cmds = append(cmds, cmd)
