@@ -187,7 +187,7 @@ export namespace Ripgrep {
 
   export async function files(input: { cwd: string; query?: string; glob?: string; limit?: number }) {
     const commands = [
-      `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
+      `${await filepath()} --files --follow --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
     ]
     if (input.query) commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
     if (input.limit) commands.push(`head -n ${input.limit}`)

@@ -11,7 +11,6 @@ import (
 
 	"slices"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/v2/cursor"
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -653,12 +652,12 @@ func (m *Model) SetValue(s string) {
 
 // InsertString inserts a string at the cursor position.
 func (m *Model) InsertString(s string) {
-	m.insertRunesFromUserInput([]rune(s))
+	m.InsertRunesFromUserInput([]rune(s))
 }
 
 // InsertRune inserts a rune at the cursor position.
 func (m *Model) InsertRune(r rune) {
-	m.insertRunesFromUserInput([]rune{r})
+	m.InsertRunesFromUserInput([]rune{r})
 }
 
 // InsertAttachment inserts an attachment at the cursor position.
@@ -730,8 +729,8 @@ func (m Model) GetAttachments() []*Attachment {
 	return attachments
 }
 
-// insertRunesFromUserInput inserts runes at the current cursor position.
-func (m *Model) insertRunesFromUserInput(runes []rune) {
+// InsertRunesFromUserInput inserts runes at the current cursor position.
+func (m *Model) InsertRunesFromUserInput(runes []rune) {
 	// Clean up any special characters in the input provided by the
 	// clipboard. This avoids bugs due to e.g. tab characters and
 	// whatnot.
@@ -1429,8 +1428,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.PasteMsg:
-		m.insertRunesFromUserInput([]rune(msg))
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.KeyMap.DeleteAfterCursor):
@@ -1490,8 +1487,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.CursorDown()
 		case key.Matches(msg, m.KeyMap.WordForward):
 			m.wordRight()
-		case key.Matches(msg, m.KeyMap.Paste):
-			return m, Paste
 		case key.Matches(msg, m.KeyMap.CharacterBackward):
 			m.characterLeft(false /* insideLine */)
 		case key.Matches(msg, m.KeyMap.LinePrevious):
@@ -1512,11 +1507,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.transposeLeft()
 
 		default:
-			m.insertRunesFromUserInput([]rune(msg.Text))
+			m.InsertRunesFromUserInput([]rune(msg.Text))
 		}
 
 	case pasteMsg:
-		m.insertRunesFromUserInput([]rune(msg))
+		m.InsertRunesFromUserInput([]rune(msg))
 
 	case pasteErrMsg:
 		m.Err = msg
@@ -1906,15 +1901,6 @@ func (m *Model) splitLine(row, col int) {
 
 	m.col = 0
 	m.row++
-}
-
-// Paste is a command for pasting from the clipboard into the text input.
-func Paste() tea.Msg {
-	str, err := clipboard.ReadAll()
-	if err != nil {
-		return pasteErrMsg{err}
-	}
-	return pasteMsg(str)
 }
 
 func wrapInterfaces(content []any, width int) [][]any {

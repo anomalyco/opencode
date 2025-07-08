@@ -29,7 +29,7 @@ type Command struct {
 	Name        CommandName
 	Description string
 	Keybindings []Keybinding
-	Trigger     string
+	Trigger     []string
 }
 
 func (c Command) Keys() []string {
@@ -38,6 +38,21 @@ func (c Command) Keys() []string {
 		keys = append(keys, k.Key)
 	}
 	return keys
+}
+
+func (c Command) HasTrigger() bool {
+	return len(c.Trigger) > 0
+}
+
+func (c Command) PrimaryTrigger() string {
+	if len(c.Trigger) > 0 {
+		return c.Trigger[0]
+	}
+	return ""
+}
+
+func (c Command) MatchesTrigger(trigger string) bool {
+	return slices.Contains(c.Trigger, trigger)
 }
 
 type CommandRegistry map[CommandName]Command
@@ -135,37 +150,37 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        AppHelpCommand,
 			Description: "show help",
 			Keybindings: parseBindings("<leader>h"),
-			Trigger:     "help",
+			Trigger:     []string{"help"},
 		},
 		{
 			Name:        EditorOpenCommand,
 			Description: "open editor",
 			Keybindings: parseBindings("<leader>e"),
-			Trigger:     "editor",
+			Trigger:     []string{"editor"},
 		},
 		{
 			Name:        SessionNewCommand,
 			Description: "new session",
 			Keybindings: parseBindings("<leader>n"),
-			Trigger:     "new",
+			Trigger:     []string{"new", "clear"},
 		},
 		{
 			Name:        SessionListCommand,
 			Description: "list sessions",
 			Keybindings: parseBindings("<leader>l"),
-			Trigger:     "sessions",
+			Trigger:     []string{"sessions", "resume", "continue"},
 		},
 		{
 			Name:        SessionShareCommand,
 			Description: "share session",
 			Keybindings: parseBindings("<leader>s"),
-			Trigger:     "share",
+			Trigger:     []string{"share"},
 		},
 		{
 			Name:        SessionUnshareCommand,
 			Description: "unshare session",
 			Keybindings: parseBindings("<leader>u"),
-			Trigger:     "unshare",
+			Trigger:     []string{"unshare"},
 		},
 		{
 			Name:        SessionInterruptCommand,
@@ -176,31 +191,31 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        SessionCompactCommand,
 			Description: "compact the session",
 			Keybindings: parseBindings("<leader>c"),
-			Trigger:     "compact",
+			Trigger:     []string{"compact", "summarize"},
 		},
 		{
 			Name:        ToolDetailsCommand,
 			Description: "toggle tool details",
 			Keybindings: parseBindings("<leader>d"),
-			Trigger:     "details",
+			Trigger:     []string{"details"},
 		},
 		{
 			Name:        ModelListCommand,
 			Description: "list models",
 			Keybindings: parseBindings("<leader>m"),
-			Trigger:     "models",
+			Trigger:     []string{"models"},
 		},
 		{
 			Name:        ThemeListCommand,
 			Description: "list themes",
 			Keybindings: parseBindings("<leader>t"),
-			Trigger:     "themes",
+			Trigger:     []string{"themes"},
 		},
 		{
 			Name:        FileListCommand,
 			Description: "list files",
 			Keybindings: parseBindings("<leader>f"),
-			Trigger:     "files",
+			Trigger:     []string{"files"},
 		},
 		{
 			Name:        FileCloseCommand,
@@ -221,7 +236,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        ProjectInitCommand,
 			Description: "create/update AGENTS.md",
 			Keybindings: parseBindings("<leader>i"),
-			Trigger:     "init",
+			Trigger:     []string{"init"},
 		},
 		{
 			Name:        InputClearCommand,
@@ -231,7 +246,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		{
 			Name:        InputPasteCommand,
 			Description: "paste content",
-			Keybindings: parseBindings("ctrl+v"),
+			Keybindings: parseBindings("ctrl+v", "super+v"),
 		},
 		{
 			Name:        InputSubmitCommand,
@@ -302,7 +317,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        AppExitCommand,
 			Description: "exit the app",
 			Keybindings: parseBindings("ctrl+c", "<leader>q"),
-			Trigger:     "exit",
+			Trigger:     []string{"exit", "quit"},
 		},
 	}
 	registry := make(CommandRegistry)

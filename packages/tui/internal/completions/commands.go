@@ -31,7 +31,7 @@ func (c *CommandCompletionProvider) GetEmptyMessage() string {
 
 func getCommandCompletionItem(cmd commands.Command, space int, t theme.Theme) dialog.CompletionItemI {
 	spacer := strings.Repeat(" ", space)
-	title := "  /" + cmd.Trigger + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
+	title := "  /" + cmd.PrimaryTrigger() + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
 	value := string(cmd.Name)
 	return dialog.NewCompletionItem(dialog.CompletionItem{
 		Title: title,
@@ -45,8 +45,8 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 
 	space := 1
 	for _, cmd := range c.app.Commands {
-		if lipgloss.Width(cmd.Trigger) > space {
-			space = lipgloss.Width(cmd.Trigger)
+		if cmd.HasTrigger() && lipgloss.Width(cmd.PrimaryTrigger()) > space {
+			space = lipgloss.Width(cmd.PrimaryTrigger())
 		}
 	}
 	space += 2
@@ -56,10 +56,10 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 		// If no query, return all commands
 		items := []dialog.CompletionItemI{}
 		for _, cmd := range sorted {
-			if cmd.Trigger == "" {
+			if !cmd.HasTrigger() {
 				continue
 			}
-			space := space - lipgloss.Width(cmd.Trigger)
+			space := space - lipgloss.Width(cmd.PrimaryTrigger())
 			items = append(items, getCommandCompletionItem(cmd, space, t))
 		}
 		return items, nil
@@ -70,12 +70,15 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 	commandMap := make(map[string]dialog.CompletionItemI)
 
 	for _, cmd := range sorted {
-		if cmd.Trigger == "" {
+		if !cmd.HasTrigger() {
 			continue
 		}
-		space := space - lipgloss.Width(cmd.Trigger)
-		commandNames = append(commandNames, cmd.Trigger)
-		commandMap[cmd.Trigger] = getCommandCompletionItem(cmd, space, t)
+		space := space - lipgloss.Width(cmd.PrimaryTrigger())
+		// Add all triggers as searchable options
+		for _, trigger := range cmd.Trigger {
+			commandNames = append(commandNames, trigger)
+			commandMap[trigger] = getCommandCompletionItem(cmd, space, t)
+		}
 	}
 
 	// Find fuzzy matches

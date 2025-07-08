@@ -125,6 +125,20 @@ export const RunCommand = cmd({
         }
       })
 
+      let errorMsg: string | undefined
+      Bus.subscribe(Session.Event.Error, async (evt) => {
+        const { sessionID, error } = evt.properties
+        if (sessionID !== session.id || !error) return
+        let err = String(error.name)
+
+        if ("data" in error && error.data && "message" in error.data) {
+          err = error.data.message
+        }
+        errorMsg = errorMsg ? errorMsg + "\n" + err : err
+
+        UI.error(err)
+      })
+
       const result = await Session.chat({
         sessionID: session.id,
         providerID,
@@ -140,6 +154,7 @@ export const RunCommand = cmd({
       if (isPiped) {
         const match = result.parts.findLast((x) => x.type === "text")
         if (match) process.stdout.write(match.text)
+        if (errorMsg) process.stdout.write(errorMsg)
       }
       UI.empty()
     })
