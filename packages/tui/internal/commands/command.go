@@ -35,7 +35,7 @@ type (
 		Name        CommandName
 		Description string
 		Keybindings []Keybinding
-		Trigger     string
+		Trigger     []string
 	}
 )
 
@@ -131,31 +131,31 @@ var defaults = []Command{
 		Name:        AppHelpCommand,
 		Description: "show help",
 		Keybindings: parseBindings("<leader>h"),
-		Trigger:     "help",
+		Trigger:     []string{"help"},
 	},
 	{
 		Name:        EditorOpenCommand,
 		Description: "open editor",
 		Keybindings: parseBindings("<leader>e"),
-		Trigger:     "editor",
+		Trigger:     []string{"editor"},
 	},
 	{
 		Name:        SessionNewCommand,
 		Description: "new session",
 		Keybindings: parseBindings("<leader>n"),
-		Trigger:     "new",
+		Trigger:     []string{"new"},
 	},
 	{
 		Name:        SessionListCommand,
 		Description: "list sessions",
 		Keybindings: parseBindings("<leader>l"),
-		Trigger:     "sessions",
+		Trigger:     []string{"sessions"},
 	},
 	{
 		Name:        SessionShareCommand,
 		Description: "share session",
 		Keybindings: parseBindings("<leader>s"),
-		Trigger:     "share",
+		Trigger:     []string{"share"},
 	},
 	{
 		Name:        SessionInterruptCommand,
@@ -166,31 +166,31 @@ var defaults = []Command{
 		Name:        SessionCompactCommand,
 		Description: "compact the session",
 		Keybindings: parseBindings("<leader>c"),
-		Trigger:     "compact",
+		Trigger:     []string{"compact"},
 	},
 	{
 		Name:        ToolDetailsCommand,
 		Description: "toggle tool details",
 		Keybindings: parseBindings("<leader>d"),
-		Trigger:     "details",
+		Trigger:     []string{"details"},
 	},
 	{
 		Name:        ModelListCommand,
 		Description: "list models",
 		Keybindings: parseBindings("<leader>m"),
-		Trigger:     "models",
+		Trigger:     []string{"models"},
 	},
 	{
 		Name:        ThemeListCommand,
 		Description: "list themes",
 		Keybindings: parseBindings("<leader>t"),
-		Trigger:     "themes",
+		Trigger:     []string{"themes"},
 	},
 	{
 		Name:        ProjectInitCommand,
 		Description: "create/update AGENTS.md",
 		Keybindings: parseBindings("<leader>i"),
-		Trigger:     "init",
+		Trigger:     []string{"init"},
 	},
 	{
 		Name:        InputClearCommand,
@@ -266,7 +266,7 @@ var defaults = []Command{
 		Name:        AppExitCommand,
 		Description: "exit the app",
 		Keybindings: parseBindings("ctrl+c", "<leader>q"),
-		Trigger:     "exit",
+		Trigger:     []string{"exit"},
 	},
 }
 
@@ -298,7 +298,7 @@ func parseBindings(bindings ...string) []Keybinding {
 // IsBuiltinCommand checks if a command name matches any of the built-in command triggers
 func IsBuiltinCommand(commandName string) bool {
 	for _, command := range defaults {
-		if command.Trigger == commandName {
+		if slices.Contains(command.Trigger, commandName) {
 			return true
 		}
 	}

@@ -157,8 +157,10 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 		}
 
 		cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
-		commandNames = append(commandNames, cmd.PrimaryTrigger())
-		commandMap[cmd.Trigger] = getCommandCompletionItem(cmd, cmdSpace, t)
+		for _, trigger := range cmd.Trigger {
+			commandNames = append(commandNames, cmd.PrimaryTrigger())
+			commandMap[trigger] = getCommandCompletionItem(cmd, cmdSpace, t)
+		}
 	}
 
 	// Add custom commands
