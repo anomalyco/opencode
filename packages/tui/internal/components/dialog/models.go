@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/v2/key"
+	"github.com/charmbracelet/bubbles/v2/textinput"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -30,13 +32,17 @@ type ModelDialog interface {
 }
 
 type modelDialog struct {
-	app         *app.App
-	allModels   []ModelWithProvider
-	width       int
-	height      int
-	modal       *modal.Modal
-	modelList   list.List[ModelItem]
-	dialogWidth int
+	app            *app.App
+	allModels      []ModelWithProvider
+	filteredModels []ModelWithProvider
+	width          int
+	height         int
+	modal          *modal.Modal
+	modelList      list.List[ModelItem]
+	dialogWidth    int
+	filterInput    textinput.Model
+	filterActive   bool
+	filterQuery    string
 }
 
 type ModelWithProvider struct {
@@ -82,6 +88,7 @@ func (m ModelItem) Render(selected bool, width int) string {
 type modelKeyMap struct {
 	Enter  key.Binding
 	Escape key.Binding
+	Filter key.Binding
 }
 
 var modelKeys = modelKeyMap{
@@ -93,46 +100,116 @@ var modelKeys = modelKeyMap{
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "close"),
 	),
+	Filter: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "filter models"),
+	),
 }
 
 func (m *modelDialog) Init() tea.Cmd {
 	m.setupAllModels()
+	m.filterInput = m.createTextInput()
 	return nil
 }
 
 func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, modelKeys.Enter):
-			_, selectedIndex := m.modelList.GetSelectedItem()
-			if selectedIndex >= 0 && selectedIndex < len(m.allModels) {
-				selectedModel := m.allModels[selectedIndex]
-				return m, tea.Sequence(
-					util.CmdHandler(modal.CloseModalMsg{}),
-					util.CmdHandler(
-						app.ModelSelectedMsg{
-							Provider: selectedModel.Provider,
-							Model:    selectedModel.Model,
-						}),
-				)
+		// Handle filter input when active
+		if m.filterActive {
+			switch {
+			case key.Matches(msg, modelKeys.Enter):
+				// Select model when filter is active
+				_, selectedIndex := m.modelList.GetSelectedItem()
+				if selectedIndex >= 0 && selectedIndex < len(m.filteredModels) {
+					selectedModel := m.filteredModels[selectedIndex]
+					return m, tea.Sequence(
+						util.CmdHandler(modal.CloseModalMsg{}),
+						util.CmdHandler(
+							app.ModelSelectedMsg{
+								Provider: selectedModel.Provider,
+								Model:    selectedModel.Model,
+							}),
+					)
+				}
+				return m, util.CmdHandler(modal.CloseModalMsg{})
+			case key.Matches(msg, modelKeys.Escape):
+				// Exit filter mode
+				m.filterActive = false
+				m.filterInput.Blur()
+				m.filterInput.SetValue("")
+				m.filterQuery = ""
+				m.filterModels("")
+				return m, nil
+			default:
+				// Update filter input
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				cmds = append(cmds, cmd)
+
+				// Update filter if query changed
+				newQuery := m.filterInput.Value()
+				if newQuery != m.filterQuery {
+					m.filterQuery = newQuery
+					m.filterModels(newQuery)
+				}
 			}
-			return m, util.CmdHandler(modal.CloseModalMsg{})
-		case key.Matches(msg, modelKeys.Escape):
-			return m, util.CmdHandler(modal.CloseModalMsg{})
+		} else {
+			// Handle normal navigation when filter is not active
+			switch {
+			case key.Matches(msg, modelKeys.Enter):
+				_, selectedIndex := m.modelList.GetSelectedItem()
+				if selectedIndex >= 0 && selectedIndex < len(m.filteredModels) {
+					selectedModel := m.filteredModels[selectedIndex]
+					return m, tea.Sequence(
+						util.CmdHandler(modal.CloseModalMsg{}),
+						util.CmdHandler(
+							app.ModelSelectedMsg{
+								Provider: selectedModel.Provider,
+								Model:    selectedModel.Model,
+							}),
+					)
+				}
+				return m, util.CmdHandler(modal.CloseModalMsg{})
+			case key.Matches(msg, modelKeys.Escape):
+				return m, util.CmdHandler(modal.CloseModalMsg{})
+			case key.Matches(msg, modelKeys.Filter):
+				// Activate filter mode
+				m.filterActive = true
+				m.filterInput.Focus()
+				return m, textinput.Blink
+			default:
+				// Update the list component for navigation
+				updatedList, cmd := m.modelList.Update(msg)
+				m.modelList = updatedList.(list.List[ModelItem])
+				cmds = append(cmds, cmd)
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 	}
 
-	// Update the list component
-	updatedList, cmd := m.modelList.Update(msg)
-	m.modelList = updatedList.(list.List[ModelItem])
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 func (m *modelDialog) View() string {
+	if m.filterActive {
+		t := theme.CurrentTheme()
+		m.filterInput.SetWidth(m.dialogWidth - 4)
+		inputView := m.filterInput.View()
+		inputView = styles.NewStyle().
+			Background(t.BackgroundElement()).
+			Height(1).
+			Width(m.dialogWidth-2).
+			Padding(0, 0).
+			Render(inputView)
+
+		listView := m.modelList.View()
+		return inputView + "\n" + listView
+	}
 	return m.modelList.View()
 }
 
@@ -170,8 +247,11 @@ func (m *modelDialog) setupAllModels() {
 
 	m.sortModels()
 
-	modelItems := make([]ModelItem, len(m.allModels))
-	for i, modelWithProvider := range m.allModels {
+	// Initialize filtered models to show all models initially
+	m.filteredModels = m.allModels
+
+	modelItems := make([]ModelItem, len(m.filteredModels))
+	for i, modelWithProvider := range m.filteredModels {
 		modelItems[i] = ModelItem{
 			ModelName:    modelWithProvider.Model.Name,
 			ProviderName: modelWithProvider.Provider.Name,
@@ -183,7 +263,7 @@ func (m *modelDialog) setupAllModels() {
 	m.modelList = list.NewListComponent(modelItems, numVisibleModels, "No models available", true)
 	m.modelList.SetMaxWidth(m.dialogWidth)
 
-	if len(m.allModels) > 0 {
+	if len(m.filteredModels) > 0 {
 		m.modelList.SetSelectedIndex(0)
 	}
 }
@@ -256,12 +336,73 @@ func (s *modelDialog) Close() tea.Cmd {
 	return nil
 }
 
+func (m *modelDialog) createTextInput() textinput.Model {
+	t := theme.CurrentTheme()
+	bgColor := t.BackgroundElement()
+	textColor := t.Text()
+	textMutedColor := t.TextMuted()
+
+	ti := textinput.New()
+
+	ti.Styles.Blurred.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
+	ti.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ti.Styles.Focused.Placeholder = styles.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
+	ti.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ti.Styles.Cursor.Color = t.Primary()
+	ti.VirtualCursor = true
+
+	ti.Prompt = " "
+	ti.CharLimit = -1
+	ti.Placeholder = "Filter models..."
+
+	return ti
+}
+
+func (m *modelDialog) filterModels(query string) {
+	if query == "" {
+		m.filteredModels = m.allModels
+	} else {
+		m.filteredModels = make([]ModelWithProvider, 0)
+		lowerQuery := strings.ToLower(query)
+
+		for _, model := range m.allModels {
+			modelName := strings.ToLower(model.Model.Name)
+			providerName := strings.ToLower(model.Provider.Name)
+
+			if strings.Contains(modelName, lowerQuery) || strings.Contains(providerName, lowerQuery) {
+				m.filteredModels = append(m.filteredModels, model)
+			}
+		}
+	}
+
+	// Update the list with filtered models
+	modelItems := make([]ModelItem, len(m.filteredModels))
+	for i, modelWithProvider := range m.filteredModels {
+		modelItems[i] = ModelItem{
+			ModelName:    modelWithProvider.Model.Name,
+			ProviderName: modelWithProvider.Provider.Name,
+		}
+	}
+
+	m.modelList.SetItems(modelItems)
+	if len(m.filteredModels) > 0 {
+		m.modelList.SetSelectedIndex(0)
+	}
+}
+
 func NewModelDialog(app *app.App) ModelDialog {
 	dialog := &modelDialog{
 		app: app,
 	}
 
 	dialog.setupAllModels()
+	dialog.filterInput = dialog.createTextInput()
 
 	dialog.modal = modal.New(
 		modal.WithTitle("Select Model"),
