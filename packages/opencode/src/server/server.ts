@@ -16,6 +16,7 @@ import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
+import { swaggerUI } from "@hono/swagger-ui"
 
 const ERRORS = {
   400: {
@@ -79,6 +80,7 @@ export namespace Server {
           },
         }),
       )
+      .get("/ui", swaggerUI({ url: "/doc" }))
       .get(
         "/event",
         describeRoute({
