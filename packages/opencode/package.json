@@ -30,6 +30,7 @@
     "@flystorage/local-fs": "1.1.0",
     "@hono/zod-validator": "0.5.0",
     "@openauthjs/openauth": "0.4.3",
+    "@scalar/hono-api-reference": "0.9.9",
     "@standard-schema/spec": "1.0.0",
     "ai": "catalog:",
     "decimal.js": "10.5.0",
