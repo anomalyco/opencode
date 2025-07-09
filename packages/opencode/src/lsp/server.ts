@@ -6,6 +6,10 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
+import { unique } from "remeda"
+import { Ripgrep } from "../file/ripgrep"
+import type { LSPClient } from "./client"
+import { withTimeout } from "../util/timeout"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -13,21 +17,40 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
+    onInitialized?: (lsp: LSPClient.Info) => Promise<void>
+  }
+
+  type RootsFunction = (app: App.Info) => Promise<string[]>
+
+  const SimpleRoots = (patterns: string[]): RootsFunction => {
+    return async (app) => {
+      const glob = `**/*/{${patterns.join(",")}}`
+      const files = await Ripgrep.files({
+        glob: [glob],
+        cwd: app.path.root,
+      })
+      const dirs = files.map((file) => path.dirname(file))
+      return unique(dirs).map((dir) => path.join(app.path.root, dir))
+    }
   }
 
   export interface Info {
     id: string
     extensions: string[]
-    spawn(app: App.Info): Promise<Handle | undefined>
+    global?: boolean
+    roots: (app: App.Info) => Promise<string[]>
+    spawn(app: App.Info, root: string): Promise<Handle | undefined>
   }
 
   export const Typescript: Info = {
     id: "typescript",
+    roots: SimpleRoots(["tsconfig.json", "jsconfig.json", "package.json"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
-    async spawn(app) {
+    async spawn(app, root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
+        cwd: root,
         env: {
           ...process.env,
           BUN_BE_BUN: "1",
@@ -40,14 +63,32 @@ export namespace LSPServer {
             path: tsserver,
           },
         },
+        // tsserver sucks and won't start processing codebase until you open a file
+        onInitialized: async (lsp) => {
+          const [hint] = await Ripgrep.files({
+            cwd: lsp.root,
+            glob: ["*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.mts", "*.cts"],
+            limit: 1,
+          })
+          const wait = new Promise<void>(async (resolve) => {
+            const notif = lsp.connection.onNotification("$/progress", (params) => {
+              if (params.value.kind !== "end") return
+              notif.dispose()
+              resolve()
+            })
+            await lsp.notify.open({ path: path.join(lsp.root, hint) })
+          })
+          await withTimeout(wait, 5_000)
+        },
       }
     },
   }
 
   export const Gopls: Info = {
     id: "golang",
+    roots: SimpleRoots(["go.mod", "go.sum"]),
     extensions: [".go"],
-    async spawn() {
+    async spawn(_, root) {
       let bin = Bun.which("gopls", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
@@ -72,15 +113,18 @@ export namespace LSPServer {
         })
       }
       return {
-        process: spawn(bin!),
+        process: spawn(bin!, {
+          cwd: root,
+        }),
       }
     },
   }
 
   export const RubyLsp: Info = {
     id: "ruby-lsp",
+    roots: SimpleRoots(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
-    async spawn() {
+    async spawn(_, root) {
       let bin = Bun.which("ruby-lsp", {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
@@ -109,7 +153,9 @@ export namespace LSPServer {
         })
       }
       return {
-        process: spawn(bin!, ["--stdio"]),
+        process: spawn(bin!, ["--stdio"], {
+          cwd: root,
+        }),
       }
     },
   }
@@ -117,8 +163,17 @@ export namespace LSPServer {
   export const Pyright: Info = {
     id: "pyright",
     extensions: [".py", ".pyi"],
-    async spawn() {
+    roots: SimpleRoots([
+      "pyproject.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+      "pyrightconfig.json",
+    ]),
+    async spawn(_, root) {
       const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
+        cwd: root,
         env: {
           ...process.env,
           BUN_BE_BUN: "1",
@@ -133,7 +188,8 @@ export namespace LSPServer {
   export const ElixirLS: Info = {
     id: "elixir-ls",
     extensions: [".ex", ".exs"],
-    async spawn() {
+    roots: SimpleRoots(["mix.exs", "mix.lock"]),
+    async spawn(_, root) {
       let binary = Bun.which("elixir-ls")
       if (!binary) {
         const elixirLsPath = path.join(Global.Path.bin, "elixir-ls")
@@ -177,7 +233,9 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(binary),
+        process: spawn(binary, {
+          cwd: root,
+        }),
       }
     },
   }

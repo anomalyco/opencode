@@ -45,7 +45,7 @@ const FilesCommand = cmd({
       const files = await Ripgrep.files({
         cwd: app.path.cwd,
         query: args.query,
-        glob: args.glob,
+        glob: args.glob ? [args.glob] : undefined,
         limit: args.limit,
       })
       console.log(files.join("\n"))

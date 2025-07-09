@@ -23,9 +23,8 @@ const models: Set<string> = new Set();
 const version = data.info.version ? `v${data.info.version}` : "v0.0.1";
 
 Object.values(data.messages).forEach((d) => {
-  const assistant = d.metadata?.assistant;
-  if (assistant) {
-    models.add(assistant.modelID);
+  if (d.role === "assistant" && d.modelID) {
+    models.add(d.modelID);
   }
 });
 
@@ -39,8 +38,19 @@ const encodedTitle = encodeURIComponent(
   )
 );
 
-const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${Array.from(models).join(",")}&version=${version}&id=${id}`;
+const modelsArray = Array.from(models);
+let modelParam;
+if (modelsArray.length === 1) {
+  modelParam = modelsArray[0];
+}
+else if (modelsArray.length === 2) {
+  modelParam = encodeURIComponent(`${modelsArray[0]} & ${modelsArray[1]}`);
+}
+else {
+  modelParam = encodeURIComponent(`${modelsArray[0]} & ${modelsArray.length - 1} others`);
+}
 
+const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${id}`;
 ---
 <StarlightPage
   hasSidebar={false}

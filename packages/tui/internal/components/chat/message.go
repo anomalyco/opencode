@@ -422,6 +422,8 @@ func renderToolDetails(
 					switch todo["status"] {
 					case "completed":
 						body += fmt.Sprintf("- [x] %s\n", content)
+					case "cancelled":
+						body += fmt.Sprintf("- [~] %s\n", content)
 					// case "in-progress":
 					// 	body += fmt.Sprintf("- [ ] %s\n", content)
 					default:

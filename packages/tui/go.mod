@@ -21,7 +21,10 @@ require (
 	rsc.io/qr v0.2.0
 )
 
-replace github.com/sst/opencode-sdk-go => ./sdk
+replace (
+	github.com/sst/opencode-sdk-go => ./sdk
+	golang.design/x/clipboard => ./clipboard
+)
 
 require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
@@ -63,7 +66,7 @@ require (
 )
 
 require (
-	github.com/atotto/clipboard v0.1.4
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.3.1 // indirect

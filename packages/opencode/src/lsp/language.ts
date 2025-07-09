@@ -94,4 +94,6 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".yml": "yaml",
   ".mjs": "javascript",
   ".cjs": "javascript",
+  ".zig": "zig",
+  ".zon": "zig",
 } as const

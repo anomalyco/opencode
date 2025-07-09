@@ -873,20 +873,58 @@ export namespace Session {
       },
     })
 
-    for await (const value of result.fullStream) {
-      switch (value.type) {
-        case "text":
-          if (!text) {
-            text = {
-              type: "text",
-              text: value.text,
-            }
-            next.parts.push(text)
-          } else text.text += value.text
-          await updateMessage(next)
-          break
+    try {
+      for await (const value of result.fullStream) {
+        switch (value.type) {
+          case "text":
+            if (!text) {
+              text = {
+                type: "text",
+                text: value.text,
+              }
+              next.parts.push(text)
+            } else text.text += value.text
+            await updateMessage(next)
+            break
+        }
       }
+    } catch (e: any) {
+      log.error("summarize stream error", {
+        error: e,
+      })
+      switch (true) {
+        case e instanceof DOMException && e.name === "AbortError":
+          next.error = new MessageV2.AbortedError(
+            { message: e.message },
+            {
+              cause: e,
+            },
+          ).toObject()
+          break
+        case MessageV2.OutputLengthError.isInstance(e):
+          next.error = e
+          break
+        case LoadAPIKeyError.isInstance(e):
+          next.error = new Provider.AuthError(
+            {
+              providerID: input.providerID,
+              message: e.message,
+            },
+            { cause: e },
+          ).toObject()
+          break
+        case e instanceof Error:
+          next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+          break
+        default:
+          next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+      }
+      Bus.publish(Event.Error, {
+        error: next.error,
+      })
     }
+    next.time.completed = Date.now()
+    await updateMessage(next)
   }
 
   function lock(sessionID: string) {
