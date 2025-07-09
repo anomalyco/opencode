@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
+import { z } from "zod"
 import { Global } from "../global"
-import z from "zod"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).openapi({ ref: "LogLevel", description: "Log level" })
@@ -27,7 +27,6 @@ export namespace Log {
   function shouldLog(level: Level): boolean {
     return levelPriority[level] >= levelPriority[currentLevel]
   }
-
   export type Logger = {
     debug(message?: any, extra?: Record<string, any>): void
     info(message?: any, extra?: Record<string, any>): void

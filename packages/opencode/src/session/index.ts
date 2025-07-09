@@ -566,9 +566,9 @@ export namespace Session {
         ],
       }),
     })
-    
+
     let hasStartedTokenProcessing = false
-    
+
     try {
       for await (const value of result.fullStream) {
         l.info("part", {
@@ -673,7 +673,7 @@ export namespace Session {
               type: "step-start",
             })
             break
-          case "text-delta":
+          case "text":
             if (!hasStartedTokenProcessing) {
               hasStartedTokenProcessing = true
               Bus.publish(Session.Event.TokenProcessingStart, {
@@ -681,19 +681,14 @@ export namespace Session {
               })
               Audio.playTokenProcessingSound()
             }
-            if (!text) {
-              text = {
-                type: "text",
-                text: value.textDelta,
-              }
-              next.parts.push(text)
-              break
-            } else text.text += value.textDelta
+            if (text.text === "") next.parts.push(text)
+            text.text += value.text
+            break
 
           case "finish-step":
-            const usage = getUsage(model.info, value.usage, value.providerMetadata)
-            next.cost += usage.cost
-            next.tokens = usage.tokens
+            const stepUsage = getUsage(model.info, value.usage, value.providerMetadata)
+            next.cost += stepUsage.cost
+            next.tokens = stepUsage.tokens
             break
 
           case "text-start":
@@ -725,16 +720,11 @@ export namespace Session {
                 sessionID: input.sessionID,
               })
             }
-            const usage = getUsage(
-              model.info,
-              value.usage,
-              value.providerMetadata,
-            )
+            const usage = getUsage(model.info, value.totalUsage)
             next.cost += usage.cost
             next.tokens = usage.tokens
             next.time.completed = Date.now()
-            if (value.finishReason === "length")
-              throw new MessageV2.OutputLengthError({})
+            if (value.finishReason === "length") throw new MessageV2.OutputLengthError({})
             break
 
           default:

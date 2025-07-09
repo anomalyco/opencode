@@ -57,22 +57,12 @@ export namespace Config {
 
   export const Audio = z
     .object({
-      enabled: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("Enable audio notifications"),
+      enabled: z.boolean().optional().default(true).describe("Enable audio notifications"),
       token_processing_sound: z
         .string()
         .optional()
         .describe("Sound to play during token processing (system beep, file path, or URL)"),
-      volume: z
-        .number()
-        .min(0)
-        .max(1)
-        .optional()
-        .default(0.5)
-        .describe("Audio volume (0.0 to 1.0)"),
+      volume: z.number().min(0).max(1).optional().default(0.5).describe("Audio volume (0.0 to 1.0)"),
     })
     .strict()
     .openapi({
