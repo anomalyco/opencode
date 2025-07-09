@@ -96,7 +96,16 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".pdf":
 			mediaType = "application/pdf"
 		default:
-			mediaType = "text/plain"
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + filePath,
+				URL:       fmt.Sprintf("file://./%s", filePath),
+				Filename:  filePath,
+				MediaType: "text/plain",
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
 		}
 
 		fileBytes, err := os.ReadFile(filePath)
