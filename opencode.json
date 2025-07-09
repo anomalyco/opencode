@@ -1,11 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "weather": {
-      "type": "local",
-      "command": ["opencode", "x", "@h1deya/mcp-server-weather"]
-    }
+  "audio": {
+    "enabled": true,
+    "token_processing_sound": "./Chuck E Cheese_ Ticket Muncher Sound Effect.mp3",
+    "volume": 0.8
   },
+  "mcp": {},
   "experimental": {
     "hook": {
       "file_edited": {

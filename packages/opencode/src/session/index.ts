@@ -35,6 +35,7 @@ import { NamedError } from "../util/error"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
+import { Audio } from "../audio/audio"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -101,6 +102,18 @@ export namespace Session {
       z.object({
         sessionID: z.string().optional(),
         error: MessageV2.Assistant.shape.error,
+      }),
+    ),
+    TokenProcessingStart: Bus.event(
+      "session.token_processing_start",
+      z.object({
+        sessionID: z.string(),
+      }),
+    ),
+    TokenProcessingEnd: Bus.event(
+      "session.token_processing_end",
+      z.object({
+        sessionID: z.string(),
       }),
     ),
   }
@@ -553,6 +566,9 @@ export namespace Session {
         ],
       }),
     })
+    
+    let hasStartedTokenProcessing = false
+    
     try {
       for await (const value of result.fullStream) {
         l.info("part", {
@@ -657,6 +673,22 @@ export namespace Session {
               type: "step-start",
             })
             break
+          case "text-delta":
+            if (!hasStartedTokenProcessing) {
+              hasStartedTokenProcessing = true
+              Bus.publish(Session.Event.TokenProcessingStart, {
+                sessionID: input.sessionID,
+              })
+              Audio.playTokenProcessingSound()
+            }
+            if (!text) {
+              text = {
+                type: "text",
+                text: value.textDelta,
+              }
+              next.parts.push(text)
+              break
+            } else text.text += value.textDelta
 
           case "finish-step":
             const usage = getUsage(model.info, value.usage, value.providerMetadata)
@@ -685,7 +717,24 @@ export namespace Session {
             break
 
           case "finish":
+            log.info("message finish", {
+              reason: value.finishReason,
+            })
+            if (hasStartedTokenProcessing) {
+              Bus.publish(Session.Event.TokenProcessingEnd, {
+                sessionID: input.sessionID,
+              })
+            }
+            const usage = getUsage(
+              model.info,
+              value.usage,
+              value.providerMetadata,
+            )
+            next.cost += usage.cost
+            next.tokens = usage.tokens
             next.time.completed = Date.now()
+            if (value.finishReason === "length")
+              throw new MessageV2.OutputLengthError({})
             break
 
           default:

@@ -55,6 +55,30 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
+  export const Audio = z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Enable audio notifications"),
+      token_processing_sound: z
+        .string()
+        .optional()
+        .describe("Sound to play during token processing (system beep, file path, or URL)"),
+      volume: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .default(0.5)
+        .describe("Audio volume (0.0 to 1.0)"),
+    })
+    .strict()
+    .openapi({
+      ref: "AudioConfig",
+    })
+
   export const Keybinds = z
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
@@ -104,10 +128,25 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      autoshare: z.boolean().optional().describe("Share newly created sessions automatically"),
-      autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
-      disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      audio: Audio.optional().describe("Audio notification settings"),
+      autoshare: z
+        .boolean()
+        .optional()
+        .describe("Share newly created sessions automatically"),
+      autoupdate: z
+        .boolean()
+        .optional()
+        .describe("Automatically update to the latest version"),
+      disabled_providers: z
+        .array(z.string())
+        .optional()
+        .describe("Disable providers that are loaded automatically"),
+      model: z
+        .string()
+        .describe(
+          "Model to use in the format of provider/model, eg anthropic/claude-2",
+        )
+        .optional(),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({
