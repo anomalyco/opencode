@@ -4,6 +4,8 @@ import "zod-openapi/extend"
 import { Config } from "../src/config/config"
 import { zodToJsonSchema } from "zod-to-json-schema"
 
+const file = process.argv[2]
+
 const result = zodToJsonSchema(Config.Info, {
   /**
    * We'll use the `default` values of the field as the only value in `examples`.
@@ -30,4 +32,4 @@ const result = zodToJsonSchema(Config.Info, {
     return jsonSchema
   },
 })
-await Bun.write("config.schema.json", JSON.stringify(result, null, 2))
+await Bun.write(file, JSON.stringify(result, null, 2))

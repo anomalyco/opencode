@@ -651,7 +651,7 @@ export namespace Server {
           "json",
           z.object({
             service: z.string().openapi({ description: "Service name for the log entry" }),
-            level: z.enum(["info", "error", "warn"]).openapi({ description: "Log level" }),
+            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
             message: z.string().openapi({ description: "Log message" }),
             extra: z
               .record(z.string(), z.any())
@@ -664,6 +664,9 @@ export namespace Server {
           const logger = Log.create({ service })
 
           switch (level) {
+            case "debug":
+              logger.debug(message, extra)
+              break
             case "info":
               logger.info(message, extra)
               break

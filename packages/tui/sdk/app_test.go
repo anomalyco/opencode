@@ -70,7 +70,7 @@ func TestAppLogWithOptionalParams(t *testing.T) {
 		option.WithBaseURL(baseURL),
 	)
 	_, err := client.App.Log(context.TODO(), opencode.AppLogParams{
-		Level:   opencode.F(opencode.AppLogParamsLevelInfo),
+		Level:   opencode.F(opencode.AppLogParamsLevelDebug),
 		Message: opencode.F("message"),
 		Service: opencode.F("service"),
 		Extra: opencode.F(map[string]interface{}{

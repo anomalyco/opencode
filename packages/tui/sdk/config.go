@@ -62,6 +62,8 @@ type Config struct {
 	Instructions []string `json:"instructions"`
 	// Custom keybind configurations
 	Keybinds Keybinds `json:"keybinds"`
+	// Minimum log level to write to log files
+	LogLevel LogLevel `json:"log_level"`
 	// MCP (Model Context Protocol) server configurations
 	Mcp map[string]ConfigMcp `json:"mcp"`
 	// Model to use in the format of provider/model, eg anthropic/claude-2
@@ -82,6 +84,7 @@ type configJSON struct {
 	Experimental      apijson.Field
 	Instructions      apijson.Field
 	Keybinds          apijson.Field
+	LogLevel          apijson.Field
 	Mcp               apijson.Field
 	Model             apijson.Field
 	Provider          apijson.Field

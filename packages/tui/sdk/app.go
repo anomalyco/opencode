@@ -131,6 +131,24 @@ func (r appTimeJSON) RawJSON() string {
 	return r.raw
 }
 
+// Log level
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "DEBUG"
+	LogLevelInfo  LogLevel = "INFO"
+	LogLevelWarn  LogLevel = "WARN"
+	LogLevelError LogLevel = "ERROR"
+)
+
+func (r LogLevel) IsKnown() bool {
+	switch r {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
+		return true
+	}
+	return false
+}
+
 type AppLogParams struct {
 	// Log level
 	Level param.Field[AppLogParamsLevel] `json:"level,required"`
@@ -150,6 +168,7 @@ func (r AppLogParams) MarshalJSON() (data []byte, err error) {
 type AppLogParamsLevel string
 
 const (
+	AppLogParamsLevelDebug AppLogParamsLevel = "debug"
 	AppLogParamsLevelInfo  AppLogParamsLevel = "info"
 	AppLogParamsLevelError AppLogParamsLevel = "error"
 	AppLogParamsLevelWarn  AppLogParamsLevel = "warn"
@@ -157,7 +176,7 @@ const (
 
 func (r AppLogParamsLevel) IsKnown() bool {
 	switch r {
-	case AppLogParamsLevelInfo, AppLogParamsLevelError, AppLogParamsLevelWarn:
+	case AppLogParamsLevelDebug, AppLogParamsLevelInfo, AppLogParamsLevelError, AppLogParamsLevelWarn:
 		return true
 	}
 	return false

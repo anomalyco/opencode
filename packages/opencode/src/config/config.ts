@@ -123,72 +123,62 @@ export namespace Config {
     .openapi({
       ref: "KeybindsConfig",
     })
-  export const Info = z
-    .object({
-      $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
-      theme: z.string().optional().describe("Theme name to use for the interface"),
-      keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      audio: Audio.optional().describe("Audio notification settings"),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("Share newly created sessions automatically"),
-      autoupdate: z
-        .boolean()
-        .optional()
-        .describe("Automatically update to the latest version"),
-      disabled_providers: z
-        .array(z.string())
-        .optional()
-        .describe("Disable providers that are loaded automatically"),
-      model: z
-        .string()
-        .describe(
-          "Model to use in the format of provider/model, eg anthropic/claude-2",
-        )
-        .optional(),
-      provider: z
-        .record(
-          ModelsDev.Provider.partial().extend({
-            models: z.record(ModelsDev.Model.partial()),
-            options: z.record(z.any()).optional(),
-          }),
-        )
-        .optional()
-        .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
-      instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
-      experimental: z
-        .object({
-          hook: z
-            .object({
-              file_edited: z
-                .record(
-                  z.string(),
-                  z
-                    .object({
-                      command: z.string().array(),
-                      environment: z.record(z.string(), z.string()).optional(),
-                    })
-                    .array(),
-                )
-                .optional(),
-              session_completed: z
-                .object({
-                  command: z.string().array(),
-                  environment: z.record(z.string(), z.string()).optional(),
-                })
-                .array()
-                .optional(),
-            })
-            .optional(),
-        })
-        .optional(),
-    })
-    .strict()
-    .openapi({
-      ref: "Config",
-    })
+export const Info = z
+  .object({
+    $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
+    theme: z.string().optional().describe("Theme name to use for the interface"),
+    keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+    audio: Audio.optional().describe("Audio notification settings"),
+    autoshare: z.boolean().optional().describe("Share newly created sessions automatically"),
+    autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
+    disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
+    model: z
+      .string()
+      .describe("Model to use in the format of provider/model, eg anthropic/claude-2")
+      .optional(),
+    log_level: Log.Level.optional().describe("Minimum log level to write to log files"),
+    provider: z
+      .record(
+        ModelsDev.Provider.partial().extend({
+          models: z.record(ModelsDev.Model.partial()),
+          options: z.record(z.any()).optional(),
+        }),
+      )
+      .optional()
+      .describe("Custom provider configurations and model overrides"),
+    mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+    instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+    experimental: z
+      .object({
+        hook: z
+          .object({
+            file_edited: z
+              .record(
+                z.string(),
+                z
+                  .object({
+                    command: z.string().array(),
+                    environment: z.record(z.string(), z.string()).optional(),
+                  })
+                  .array(),
+              )
+              .optional(),
+            session_completed: z
+              .object({
+                command: z.string().array(),
+                environment: z.record(z.string(), z.string()).optional(),
+              })
+              .array()
+              .optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+  })
+  .strict()
+  .openapi({
+    ref: "Config",
+  })
 
   export type Info = z.output<typeof Info>
 

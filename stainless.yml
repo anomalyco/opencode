@@ -48,6 +48,7 @@ resources:
   app:
     models:
       app: App
+      logLevel: LogLevel
     methods:
       get: get /app
       init: post /app/init

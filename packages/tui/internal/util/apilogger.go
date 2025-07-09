@@ -8,7 +8,6 @@ import (
 	opencode "github.com/sst/opencode-sdk-go"
 )
 
-// APILogHandler is a slog.Handler that sends logs to the opencode API
 type APILogHandler struct {
 	client  *opencode.Client
 	service string
@@ -18,7 +17,6 @@ type APILogHandler struct {
 	mu      sync.Mutex
 }
 
-// NewAPILogHandler creates a new APILogHandler
 func NewAPILogHandler(client *opencode.Client, service string, level slog.Level) *APILogHandler {
 	return &APILogHandler{
 		client:  client,
@@ -29,17 +27,16 @@ func NewAPILogHandler(client *opencode.Client, service string, level slog.Level)
 	}
 }
 
-// Enabled reports whether the handler handles records at the given level.
 func (h *APILogHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= h.level
 }
 
-// Handle handles the Record.
 func (h *APILogHandler) Handle(ctx context.Context, r slog.Record) error {
-	// Convert slog level to API level
 	var apiLevel opencode.AppLogParamsLevel
 	switch r.Level {
-	case slog.LevelDebug, slog.LevelInfo:
+	case slog.LevelDebug:
+		apiLevel = opencode.AppLogParamsLevelDebug
+	case slog.LevelInfo:
 		apiLevel = opencode.AppLogParamsLevelInfo
 	case slog.LevelWarn:
 		apiLevel = opencode.AppLogParamsLevelWarn
@@ -49,23 +46,19 @@ func (h *APILogHandler) Handle(ctx context.Context, r slog.Record) error {
 		apiLevel = opencode.AppLogParamsLevelInfo
 	}
 
-	// Build extra fields
 	extra := make(map[string]any)
 
-	// Add handler attributes
 	h.mu.Lock()
 	for _, attr := range h.attrs {
 		extra[attr.Key] = attr.Value.Any()
 	}
 	h.mu.Unlock()
 
-	// Add record attributes
 	r.Attrs(func(attr slog.Attr) bool {
 		extra[attr.Key] = attr.Value.Any()
 		return true
 	})
 
-	// Send log to API
 	params := opencode.AppLogParams{
 		Service: opencode.F(h.service),
 		Level:   opencode.F(apiLevel),
@@ -76,7 +69,6 @@ func (h *APILogHandler) Handle(ctx context.Context, r slog.Record) error {
 		params.Extra = opencode.F(extra)
 	}
 
-	// Use a goroutine to avoid blocking the logger
 	go func() {
 		_, err := h.client.App.Log(context.Background(), params)
 		if err != nil {
