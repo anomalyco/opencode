@@ -559,7 +559,7 @@ export namespace Server {
               description: "Symbols",
               content: {
                 "application/json": {
-                  schema: resolver(z.unknown().array()),
+                  schema: resolver(LSP.Symbol.array()),
                 },
               },
             },

@@ -47,6 +47,21 @@ func (c Command) Keys() []string {
 	return keys
 }
 
+func (c Command) HasTrigger() bool {
+	return len(c.Trigger) > 0
+}
+
+func (c Command) PrimaryTrigger() string {
+	if len(c.Trigger) > 0 {
+		return c.Trigger[0]
+	}
+	return ""
+}
+
+func (c Command) MatchesTrigger(trigger string) bool {
+	return slices.Contains(c.Trigger, trigger)
+}
+
 type CommandRegistry map[CommandName]Command
 
 func (r CommandRegistry) Sorted() []Command {

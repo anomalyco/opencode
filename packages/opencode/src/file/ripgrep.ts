@@ -185,10 +185,15 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function files(input: { cwd: string; query?: string; glob?: string; limit?: number }) {
-    const commands = [
-      `${await filepath()} --files --hidden --glob='!.git/*' ${input.glob ? `--glob='${input.glob}'` : ``}`,
-    ]
+  export async function files(input: { cwd: string; query?: string; glob?: string[]; limit?: number }) {
+    const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*'`]
+
+    if (input.glob) {
+      for (const g of input.glob) {
+        commands[0] += ` --glob='${g}'`
+      }
+    }
+
     if (input.query) commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
     if (input.limit) commands.push(`head -n ${input.limit}`)
     const joined = commands.join(" | ")

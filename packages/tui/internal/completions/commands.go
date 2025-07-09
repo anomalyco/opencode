@@ -43,7 +43,7 @@ func (c *CommandCompletionProvider) GetEmptyMessage() string {
 
 func getCommandCompletionItem(cmd commands.Command, space int, t theme.Theme) dialog.CompletionItemI {
 	spacer := strings.Repeat(" ", space)
-	title := "  /" + cmd.Trigger + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
+	title := "  /" + cmd.PrimaryTrigger() + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
 	value := string(cmd.Name)
 	return dialog.NewCompletionItem(dialog.CompletionItem{
 		Title: title,
@@ -112,8 +112,8 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 	// Calculate spacing for alignment
 	space := 1
 	for _, cmd := range c.app.Commands {
-		if lipgloss.Width(cmd.Trigger) > space {
-			space = lipgloss.Width(cmd.Trigger)
+		if cmd.HasTrigger() && lipgloss.Width(cmd.PrimaryTrigger()) > space {
+			space = lipgloss.Width(cmd.PrimaryTrigger())
 		}
 	}
 	for _, cmd := range customCommands {
@@ -130,10 +130,10 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 
 		// Add built-in commands
 		for _, cmd := range sorted {
-			if cmd.Trigger == "" {
+			if !cmd.HasTrigger() {
 				continue
 			}
-			cmdSpace := space - lipgloss.Width(cmd.Trigger)
+			cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
 			items = append(items, getCommandCompletionItem(cmd, cmdSpace, t))
 		}
 
@@ -152,11 +152,12 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 
 	// Add built-in commands
 	for _, cmd := range sorted {
-		if cmd.Trigger == "" {
+		if !cmd.HasTrigger() {
 			continue
 		}
-		cmdSpace := space - lipgloss.Width(cmd.Trigger)
-		commandNames = append(commandNames, cmd.Trigger)
+
+		cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
+		commandNames = append(commandNames, cmd.PrimaryTrigger())
 		commandMap[cmd.Trigger] = getCommandCompletionItem(cmd, cmdSpace, t)
 	}
 

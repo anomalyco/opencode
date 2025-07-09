@@ -32,8 +32,14 @@ import (
 // InterruptDebounceTimeoutMsg is sent when the interrupt key debounce timeout expires
 type InterruptDebounceTimeoutMsg struct{}
 
+// ExitDebounceTimeoutMsg is sent when the exit key debounce timeout expires
+type ExitDebounceTimeoutMsg struct{}
+
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
+
+// ExitKeyState tracks the state of exit key presses for debouncing
+type ExitKeyState int
 
 const (
 	InterruptKeyIdle InterruptKeyState = iota
@@ -41,9 +47,13 @@ const (
 )
 
 const (
-	interruptDebounceTimeout  = 1 * time.Second
-	fileViewerFullWidthCutoff = 160
+	ExitKeyIdle ExitKeyState = iota
+	ExitKeyFirstPress
 )
+
+const interruptDebounceTimeout = 1 * time.Second
+const exitDebounceTimeout = 1 * time.Second
+const fileViewerFullWidthCutoff = 160
 
 type appModel struct {
 	width, height        int
@@ -61,6 +71,7 @@ type appModel struct {
 	isLeaderSequence     bool
 	toastManager         *toast.ToastManager
 	interruptKeyState    InterruptKeyState
+	exitKeyState         ExitKeyState
 	lastScroll           time.Time
 	messagesRight        bool
 	fileViewer           fileviewer.Model
@@ -254,7 +265,13 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-		// 6. Handle interrupt key debounce for session interrupt
+		// 6 Handle input clear command
+		inputClearCommand := a.app.Commands[commands.InputClearCommand]
+		if inputClearCommand.Matches(msg, a.isLeaderSequence) && a.editor.Length() > 0 {
+			return a, util.CmdHandler(commands.ExecuteCommandMsg(inputClearCommand))
+		}
+
+		// 7. Handle interrupt key debounce for session interrupt
 		interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
 		if interruptCommand.Matches(msg, a.isLeaderSequence) && a.app.IsBusy() {
 			switch a.interruptKeyState {
@@ -273,7 +290,26 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 7. Check again for commands that don't require leader (excluding interrupt when busy)
+		// 8. Handle exit key debounce for app exit when using non-leader command
+		exitCommand := a.app.Commands[commands.AppExitCommand]
+		if exitCommand.Matches(msg, a.isLeaderSequence) {
+			switch a.exitKeyState {
+			case ExitKeyIdle:
+				// First exit key press - start debounce timer
+				a.exitKeyState = ExitKeyFirstPress
+				a.editor.SetExitKeyInDebounce(true)
+				return a, tea.Tick(exitDebounceTimeout, func(t time.Time) tea.Msg {
+					return ExitDebounceTimeoutMsg{}
+				})
+			case ExitKeyFirstPress:
+				// Second exit key press within timeout - actually exit
+				a.exitKeyState = ExitKeyIdle
+				a.editor.SetExitKeyInDebounce(false)
+				return a, util.CmdHandler(commands.ExecuteCommandMsg(exitCommand))
+			}
+		}
+
+		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
 		matches := a.app.Commands.Matches(msg, a.isLeaderSequence)
 		if len(matches) > 0 {
 			// Skip interrupt key if we're in debounce mode and app is busy
@@ -283,8 +319,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
-		// 7. Fallback to editor. This is for other characters
-		// like backspace, tab, etc.
+		// 10. Fallback to editor. This is for other characters like backspace, tab, etc.
 		updatedEditor, cmd := a.editor.Update(msg)
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd
@@ -514,6 +549,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset interrupt key state after timeout
 		a.interruptKeyState = InterruptKeyIdle
 		a.editor.SetInterruptKeyInDebounce(false)
+	case ExitDebounceTimeoutMsg:
+		// Reset exit key state after timeout
+		a.exitKeyState = ExitKeyIdle
+		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
 	}
@@ -856,7 +895,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, toast.NewErrorToast("Failed to share session")
 		}
 		shareUrl := response.Share.URL
-		cmds = append(cmds, tea.SetClipboard(shareUrl))
+		cmds = append(cmds, a.app.SetClipboard(shareUrl))
 		cmds = append(cmds, toast.NewSuccessToast("Share URL copied to clipboard!"))
 	case commands.SessionUnshareCommand:
 		if a.app.Session.ID == "" {
@@ -990,7 +1029,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.MessagesCopyCommand:
 		selected := a.messages.Selected()
 		if selected != "" {
-			cmd = tea.SetClipboard(selected)
+			cmd = a.app.SetClipboard(selected)
 			cmds = append(cmds, cmd)
 			cmd = toast.NewSuccessToast("Message copied to clipboard")
 			cmds = append(cmds, cmd)
@@ -1086,6 +1125,7 @@ func NewModel(app *app.App) tea.Model {
 		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
+		exitKeyState:         ExitKeyIdle,
 		fileViewer:           fileviewer.New(app),
 		messagesRight:        app.State.MessagesRight,
 	}

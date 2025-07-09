@@ -81,23 +81,14 @@ If you have both global and project-specific rules, opencode will combine them t
 
 ## Custom Instructions
 
-You can also specify custom instruction files using the `instructions` configuration in your `opencode.json` or global `~/.config/opencode/config.json`:
+You can specify custom instruction files in your `opencode.json` or the global `~/.config/opencode/config.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
+
+Example:
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": [".cursor/rules/*.md"]
-}
-```
-
-You can specify multiple files like `CONTRIBUTING.md` and `docs/guidelines.md`, and use glob patterns to match multiple files.
-
-For example, to reuse your existing Cursor rules:
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": [".cursor/rules/*.md"]
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
 

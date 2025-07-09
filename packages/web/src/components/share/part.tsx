@@ -1,31 +1,42 @@
-import { createMemo, createSignal, For, Match, Show, Switch, type JSX, type ParentProps } from "solid-js"
+import map from "lang-map"
+import { DateTime } from "luxon"
 import {
-  IconCheckCircle,
-  IconChevronDown,
-  IconChevronRight,
+  For,
+  Show,
+  Match,
+  Switch,
+  type JSX,
+  createMemo,
+  createSignal,
+  type ParentProps
+} from "solid-js"
+import {
   IconHashtag,
   IconSparkles,
   IconGlobeAlt,
   IconDocument,
   IconQueueList,
+  IconUserCircle,
   IconCommandLine,
+  IconCheckCircle,
+  IconChevronDown,
+  IconChevronRight,
   IconDocumentPlus,
   IconPencilSquare,
   IconRectangleStack,
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
 } from "../icons"
-import styles from "./part.module.css"
-import type { MessageV2 } from "opencode/session/message-v2"
-import { ContentText } from "./content-text"
-import { ContentMarkdown } from "./content-markdown"
-import { DateTime } from "luxon"
-import CodeBlock from "../CodeBlock"
-import map from "lang-map"
-import type { Diagnostic } from "vscode-languageserver-types"
-
+import { IconMeta, IconOpenAI, IconGemini, IconAnthropic } from "../icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
+import { ContentText } from "./content-text"
+import { ContentError } from "./content-error"
+import { ContentMarkdown } from "./content-markdown"
+import type { MessageV2 } from "opencode/session/message-v2"
+import type { Diagnostic } from "vscode-languageserver-types"
+
+import styles from "./part.module.css"
 
 export interface PartProps {
   index: number
@@ -65,6 +76,15 @@ export function Part(props: PartProps) {
             }}
           >
             <Switch>
+              <Match when={props.message.role === "user" && props.part.type === "text"}>
+                <IconUserCircle width={18} height={18} />
+              </Match>
+              <Match when={props.message.role === "user" && props.part.type === "file"}>
+                <IconDocument width={18} height={18} />
+              </Match>
+              <Match when={props.part.type === "step-start" && props.message.role === "assistant" && props.message.modelID}>
+                {model => <ProviderIcon model={model()} size={18} />}
+              </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
               </Match>
@@ -112,7 +132,8 @@ export function Part(props: PartProps) {
       <div data-component="content">
         {props.message.role === "user" && props.part.type === "text" && (
           <>
-            <ContentText text={props.part.text} expand={props.last} /> <Spacer />
+            <ContentText text={props.part.text} expand={props.last} />
+            <Spacer />
           </>
         )}
         {props.message.role === "assistant" && props.part.type === "text" && (
@@ -130,12 +151,28 @@ export function Part(props: PartProps) {
             <Spacer />
           </>
         )}
+        {props.message.role === "user" && props.part.type === "file" && (
+          <div data-component="tool-title">
+            <span data-slot="name">Read</span>
+            <span data-slot="target" title={props.part.filename}>
+              {props.part.filename}
+            </span>
+          </div>
+        )}
         {props.part.type === "step-start" && props.message.role === "assistant" && (
           <div data-component="step-start">
             <div data-slot="provider">{props.message.providerID}</div>
             <div data-slot="model">{props.message.modelID}</div>
           </div>
         )}
+        {props.part.type === "tool" &&
+          props.part.state.status === "error" && (
+            <div data-component="tool">
+              <ContentError>
+                {formatErrorString(props.part.state.error)}
+              </ContentError>
+            </div>
+          )}
         {props.part.type === "tool" &&
           props.part.state.status === "completed" &&
           props.message.role === "assistant" && (
@@ -420,11 +457,11 @@ export function WebFetchTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <div data-component="error">{formatErrorString(props.state.output)}</div>
+            <ContentError>{formatErrorString(props.state.output)}</ContentError>
           </Match>
           <Match when={props.state.output}>
             <ResultsButton>
-              <CodeBlock lang={props.state.input.format || "text"} code={props.state.output} />
+              <ContentCode lang={props.state.input.format || "text"} code={props.state.output} />
             </ResultsButton>
           </Match>
         </Switch>
@@ -447,7 +484,7 @@ export function ReadTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <div data-component="error">{formatErrorString(props.state.output)}</div>
+            <ContentError>{formatErrorString(props.state.output)}</ContentError>
           </Match>
           <Match when={typeof props.state.metadata?.preview === "string"}>
             <ResultsButton showCopy="Show preview" hideCopy="Hide preview">
@@ -483,7 +520,7 @@ export function WriteTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <div data-component="error">{formatErrorString(props.state.output)}</div>
+            <ContentError>{formatErrorString(props.state.output)}</ContentError>
           </Match>
           <Match when={props.state.input?.content}>
             <ResultsButton showCopy="Show contents" hideCopy="Hide contents">
@@ -511,7 +548,7 @@ export function EditTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <div data-component="error">{formatErrorString(props.state.metadata?.message || "")}</div>
+            <ContentError>{formatErrorString(props.state.metadata?.message || "")}</ContentError>
           </Match>
           <Match when={props.state.metadata?.diff}>
             <div data-component="diff">
@@ -661,4 +698,36 @@ function flattenToolArgs(obj: any, prefix: string = ""): Array<[string, any]> {
   }
 
   return entries
+}
+
+function getProvider(model: string) {
+  const lowerModel = model.toLowerCase()
+
+  if (/claude|anthropic/.test(lowerModel)) return "anthropic"
+  if (/gpt|o[1-4]|codex|openai/.test(lowerModel)) return "openai"
+  if (/gemini|palm|bard|google/.test(lowerModel)) return "gemini"
+  if (/llama|meta/.test(lowerModel)) return "meta"
+
+  return "any"
+}
+
+export function ProviderIcon(props: { model: string; size?: number }) {
+  const provider = getProvider(props.model)
+  const size = props.size || 16
+  return (
+    <Switch fallback={<IconSparkles width={size} height={size} />}>
+      <Match when={provider === "openai"}>
+        <IconOpenAI width={size} height={size} />
+      </Match>
+      <Match when={provider === "anthropic"}>
+        <IconAnthropic width={size} height={size} />
+      </Match>
+      <Match when={provider === "gemini"}>
+        <IconGemini width={size} height={size} />
+      </Match>
+      <Match when={provider === "meta"}>
+        <IconMeta width={size} height={size} />
+      </Match>
+    </Switch>
+  )
 }

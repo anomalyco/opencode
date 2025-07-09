@@ -103,6 +103,7 @@ if (!snapshot) {
       const lower = x.toLowerCase()
       return (
         !lower.includes("ignore:") &&
+        !lower.includes("chore:") &&
         !lower.includes("ci:") &&
         !lower.includes("wip:") &&
         !lower.includes("docs:") &&

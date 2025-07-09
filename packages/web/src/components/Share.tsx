@@ -1,8 +1,6 @@
 import {
   For,
   Show,
-  Match,
-  Switch,
   onMount,
   Suspense,
   onCleanup,
@@ -12,13 +10,13 @@ import {
 } from "solid-js"
 import { DateTime } from "luxon"
 import { createStore, reconcile } from "solid-js/store"
-import { IconOpenAI, IconGemini, IconOpencode, IconAnthropic } from "./icons/custom"
-import { IconSparkles, IconArrowDown } from "./icons"
+import { IconArrowDown } from "./icons"
+import { IconOpencode } from "./icons/custom"
 import styles from "./share.module.css"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
-import { Part } from "./share/part"
+import { Part, ProviderIcon } from "./share/part"
 
 type Status = "disconnected" | "connecting" | "connected" | "error" | "reconnecting"
 
@@ -44,23 +42,6 @@ function getStatusText(status: [Status, string?]): string {
     default:
       return "Unknown"
   }
-}
-
-function ProviderIcon(props: { provider: string; size?: number }) {
-  const size = props.size || 16
-  return (
-    <Switch fallback={<IconSparkles width={size} height={size} />}>
-      <Match when={props.provider === "openai"}>
-        <IconOpenAI width={size} height={size} />
-      </Match>
-      <Match when={props.provider === "anthropic"}>
-        <IconAnthropic width={size} height={size} />
-      </Match>
-      <Match when={props.provider === "gemini"}>
-        <IconGemini width={size} height={size} />
-      </Match>
-    </Switch>
-  )
 }
 
 export default function Share(props: {
@@ -319,7 +300,7 @@ export default function Share(props: {
                 {([provider, model]) => (
                   <li data-slot="item">
                     <div data-slot="icon" title={provider}>
-                      <ProviderIcon provider={provider} />
+                      <ProviderIcon model={model} />
                     </div>
                     <span data-slot="model">{model}</span>
                   </li>

@@ -27,7 +27,7 @@ export const GlobTool = Tool.define({
     let truncated = false
     for (const file of await Ripgrep.files({
       cwd: search,
-      glob: params.pattern,
+      glob: [params.pattern],
     })) {
       if (files.length >= limit) {
         truncated = true

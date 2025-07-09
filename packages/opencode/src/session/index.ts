@@ -100,6 +100,7 @@ export namespace Session {
     Error: Bus.event(
       "session.error",
       z.object({
+        sessionID: z.string().optional(),
         error: MessageV2.Assistant.shape.error,
       }),
     ),
@@ -380,11 +381,11 @@ export namespace Session {
               return [
                 {
                   type: "text",
-                  text: ["Called the Read tool on " + url.pathname].join("\n"),
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${url.pathname}\"}`,
                 },
                 {
                   type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64url"),
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                 },
@@ -739,6 +740,7 @@ export namespace Session {
           next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
       }
       Bus.publish(Event.Error, {
+        sessionID: next.sessionID,
         error: next.error,
       })
     }
@@ -883,20 +885,58 @@ export namespace Session {
       },
     })
 
-    for await (const value of result.fullStream) {
-      switch (value.type) {
-        case "text":
-          if (!text) {
-            text = {
-              type: "text",
-              text: value.text,
-            }
-            next.parts.push(text)
-          } else text.text += value.text
-          await updateMessage(next)
-          break
+    try {
+      for await (const value of result.fullStream) {
+        switch (value.type) {
+          case "text":
+            if (!text) {
+              text = {
+                type: "text",
+                text: value.text,
+              }
+              next.parts.push(text)
+            } else text.text += value.text
+            await updateMessage(next)
+            break
+        }
       }
+    } catch (e: any) {
+      log.error("summarize stream error", {
+        error: e,
+      })
+      switch (true) {
+        case e instanceof DOMException && e.name === "AbortError":
+          next.error = new MessageV2.AbortedError(
+            { message: e.message },
+            {
+              cause: e,
+            },
+          ).toObject()
+          break
+        case MessageV2.OutputLengthError.isInstance(e):
+          next.error = e
+          break
+        case LoadAPIKeyError.isInstance(e):
+          next.error = new Provider.AuthError(
+            {
+              providerID: input.providerID,
+              message: e.message,
+            },
+            { cause: e },
+          ).toObject()
+          break
+        case e instanceof Error:
+          next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+          break
+        default:
+          next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+      }
+      Bus.publish(Event.Error, {
+        error: next.error,
+      })
     }
+    next.time.completed = Date.now()
+    await updateMessage(next)
   }
 
   function lock(sessionID: string) {

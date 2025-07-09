@@ -57,6 +57,7 @@
     display: flex;
     gap: 0.5rem 0.875rem;
     flex-wrap: wrap;
+    max-width: var(--lg-tool-width);
 
     [data-slot="item"] {
       display: flex;

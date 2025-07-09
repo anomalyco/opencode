@@ -13,6 +13,7 @@
 
   pre {
     --shiki-dark-bg: var(--sl-color-bg-surface) !important;
+    background-color: var(--sl-color-bg-surface) !important;
     line-height: 1.6;
     font-size: 0.75rem;
     white-space: pre-wrap;

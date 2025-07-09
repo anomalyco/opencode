@@ -1,9 +1,12 @@
 package chat
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
@@ -15,10 +18,10 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
-	"github.com/sst/opencode/internal/image"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"golang.design/x/clipboard"
 )
 
 type CustomCommandExecuteMsg struct {
@@ -32,6 +35,7 @@ type EditorComponent interface {
 	Content(width int) string
 	Lines() int
 	Value() string
+	Length() int
 	Focused() bool
 	Focus() (tea.Model, tea.Cmd)
 	Blur()
@@ -40,6 +44,7 @@ type EditorComponent interface {
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
 	SetInterruptKeyInDebounce(inDebounce bool)
+	SetExitKeyInDebounce(inDebounce bool)
 }
 
 type editorComponent struct {
@@ -47,6 +52,7 @@ type editorComponent struct {
 	textarea               textarea.Model
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
+	exitKeyInDebounce      bool
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -68,8 +74,65 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 			return m, tea.Batch(cmds...)
 		}
+	case tea.PasteMsg:
+		text := string(msg)
+		text = strings.ReplaceAll(text, "\\", "")
+		text, err := strconv.Unquote(`"` + text + `"`)
+		if err != nil {
+			slog.Error("Failed to unquote text", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+		if _, err := os.Stat(text); err != nil {
+			slog.Error("Failed to paste file", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+
+		filePath := text
+		ext := strings.ToLower(filepath.Ext(filePath))
+
+		mediaType := ""
+		switch ext {
+		case ".jpg":
+			mediaType = "image/jpeg"
+		case ".png", ".jpeg", ".gif", ".webp":
+			mediaType = "image/" + ext[1:]
+		case ".pdf":
+			mediaType = "application/pdf"
+		default:
+			mediaType = "text/plain"
+		}
+
+		fileBytes, err := os.ReadFile(filePath)
+		if err != nil {
+			slog.Error("Failed to read file", "error", err)
+			m.textarea.InsertRunesFromUserInput([]rune(msg))
+			return m, nil
+		}
+		base64EncodedFile := base64.StdEncoding.EncodeToString(fileBytes)
+		url := fmt.Sprintf("data:%s;base64,%s", mediaType, base64EncodedFile)
+		attachmentCount := len(m.textarea.GetAttachments())
+		attachmentIndex := attachmentCount + 1
+		label := "File"
+		if strings.HasPrefix(mediaType, "image/") {
+			label = "Image"
+		}
+
+		attachment := &textarea.Attachment{
+			ID:        uuid.NewString(),
+			MediaType: mediaType,
+			Display:   fmt.Sprintf("[%s #%d]", label, attachmentIndex),
+			URL:       url,
+			Filename:  filePath,
+		}
+		m.textarea.InsertAttachment(attachment)
+		m.textarea.InsertString(" ")
+	case tea.ClipboardMsg:
+		text := string(msg)
+		m.textarea.InsertRunesFromUserInput([]rune(text))
 	case dialog.ThemeSelectedMsg:
-		m.textarea = createTextArea(&m.textarea)
+		m.textarea = m.resetTextareaStyles()
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
@@ -198,7 +261,10 @@ func (m *editorComponent) Content(width int) string {
 		Render(textarea)
 
 	hint := base(m.getSubmitKeyText()) + muted(" send   ")
-	if m.app.IsBusy() {
+	if m.exitKeyInDebounce {
+		keyText := m.getExitKeyText()
+		hint = base(keyText+" again") + muted(" to exit")
+	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		if m.interruptKeyInDebounce {
 			hint = muted(
@@ -264,6 +330,10 @@ func (m *editorComponent) Value() string {
 	return m.textarea.Value()
 }
 
+func (m *editorComponent) Length() int {
+	return m.textarea.Length()
+}
+
 func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.Value())
 	if value == "" {
@@ -303,24 +373,31 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
-	_, text, err := image.GetImageFromClipboard()
-	if err != nil {
-		slog.Error(err.Error())
+	imageBytes := clipboard.Read(clipboard.FmtImage)
+	if imageBytes != nil {
+		attachmentCount := len(m.textarea.GetAttachments())
+		attachmentIndex := attachmentCount + 1
+		base64EncodedFile := base64.StdEncoding.EncodeToString(imageBytes)
+		attachment := &textarea.Attachment{
+			ID:        uuid.NewString(),
+			MediaType: "image/png",
+			Display:   fmt.Sprintf("[Image #%d]", attachmentIndex),
+			Filename:  fmt.Sprintf("image-%d.png", attachmentIndex),
+			URL:       fmt.Sprintf("data:image/png;base64,%s", base64EncodedFile),
+		}
+		m.textarea.InsertAttachment(attachment)
+		m.textarea.InsertString(" ")
 		return m, nil
 	}
-	// if len(imageBytes) != 0 {
-	// 	attachmentName := fmt.Sprintf("clipboard-image-%d", len(m.attachments))
-	// 	attachment := app.Attachment{
-	// 		FilePath: attachmentName,
-	// 		FileName: attachmentName,
-	// 		Content:  imageBytes,
-	// 		MimeType: "image/png",
-	// 	}
-	// 	m.attachments = append(m.attachments, attachment)
-	// } else {
-	m.textarea.InsertString(text)
-	// }
-	return m, nil
+
+	textBytes := clipboard.Read(clipboard.FmtText)
+	if textBytes != nil {
+		m.textarea.InsertRunesFromUserInput([]rune(string(textBytes)))
+		return m, nil
+	}
+
+	// fallback to reading the clipboard using OSC52
+	return m, tea.ReadClipboard
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
@@ -332,6 +409,10 @@ func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 	m.interruptKeyInDebounce = inDebounce
 }
 
+func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
+	m.exitKeyInDebounce = inDebounce
+}
+
 func (m *editorComponent) getInterruptKeyText() string {
 	return m.app.Commands[commands.SessionInterruptCommand].Keys()[0]
 }
@@ -340,13 +421,17 @@ func (m *editorComponent) getSubmitKeyText() string {
 	return m.app.Commands[commands.InputSubmitCommand].Keys()[0]
 }
 
-func createTextArea(existing *textarea.Model) textarea.Model {
+func (m *editorComponent) getExitKeyText() string {
+	return m.app.Commands[commands.AppExitCommand].Keys()[0]
+}
+
+func (m *editorComponent) resetTextareaStyles() textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
 
-	ta := textarea.New()
+	ta := m.textarea
 
 	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
@@ -371,17 +456,6 @@ func createTextArea(existing *textarea.Model) textarea.Model {
 		Background(t.Secondary()).
 		Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
-
-	ta.Prompt = " "
-	ta.ShowLineNumbers = false
-	ta.CharLimit = -1
-
-	if existing != nil {
-		ta.SetValue(existing.Value())
-		// ta.SetWidth(existing.Width())
-		ta.SetHeight(existing.Height())
-	}
-
 	return ta
 }
 
@@ -401,12 +475,19 @@ func createSpinner() spinner.Model {
 
 func NewEditorComponent(app *app.App) EditorComponent {
 	s := createSpinner()
-	ta := createTextArea(nil)
 
-	return &editorComponent{
+	ta := textarea.New()
+	ta.Prompt = " "
+	ta.ShowLineNumbers = false
+	ta.CharLimit = -1
+
+	m := &editorComponent{
 		app:                    app,
 		textarea:               ta,
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}
+	m.resetTextareaStyles()
+
+	return m
 }

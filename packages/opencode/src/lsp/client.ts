@@ -34,46 +34,54 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(serverID: string, server: LSPServer.Handle) {
+  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
     const app = App.info()
-    log.info("starting client", { id: serverID })
+    const l = log.clone().tag("serverID", input.serverID)
+    l.info("starting client")
 
     const connection = createMessageConnection(
-      new StreamMessageReader(server.process.stdout),
-      new StreamMessageWriter(server.process.stdin),
+      new StreamMessageReader(input.server.process.stdout),
+      new StreamMessageWriter(input.server.process.stdin),
     )
 
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const path = new URL(params.uri).pathname
-      log.info("textDocument/publishDiagnostics", {
+      l.info("textDocument/publishDiagnostics", {
         path,
       })
       const exists = diagnostics.has(path)
       diagnostics.set(path, params.diagnostics)
-      if (!exists && serverID === "typescript") return
-      Bus.publish(Event.Diagnostics, { path, serverID })
+      if (!exists && input.serverID === "typescript") return
+      Bus.publish(Event.Diagnostics, { path, serverID: input.serverID })
+    })
+    connection.onRequest("window/workDoneProgress/create", (params) => {
+      l.info("window/workDoneProgress/create", params)
+      return null
     })
     connection.onRequest("workspace/configuration", async () => {
       return [{}]
     })
     connection.listen()
 
-    log.info("sending initialize", { id: serverID })
+    l.info("sending initialize")
     await withTimeout(
       connection.sendRequest("initialize", {
-        rootUri: "file://" + app.path.cwd,
-        processId: server.process.pid,
+        rootUri: "file://" + input.root,
+        processId: input.server.process.pid,
         workspaceFolders: [
           {
             name: "workspace",
-            uri: "file://" + app.path.cwd,
+            uri: "file://" + input.root,
           },
         ],
         initializationOptions: {
-          ...server.initialization,
+          ...input.server.initialization,
         },
         capabilities: {
+          window: {
+            workDoneProgress: true,
+          },
           workspace: {
             configuration: true,
           },
@@ -90,9 +98,9 @@ export namespace LSPClient {
       }),
       5_000,
     ).catch((err) => {
-      log.error("initialize error", { error: err })
+      l.error("initialize error", { error: err })
       throw new InitializeError(
-        { serverID },
+        { serverID: input.serverID },
         {
           cause: err,
         },
@@ -100,17 +108,15 @@ export namespace LSPClient {
     })
 
     await connection.sendNotification("initialized", {})
-    log.info("initialized", {
-      serverID,
-    })
 
     const files: {
       [path: string]: number
     } = {}
 
     const result = {
+      root: input.root,
       get serverID() {
-        return serverID
+        return input.serverID
       },
       get connection() {
         return connection
@@ -170,12 +176,18 @@ export namespace LSPClient {
           })
       },
       async shutdown() {
-        log.info("shutting down", { serverID })
+        l.info("shutting down")
         connection.end()
         connection.dispose()
-        log.info("shutdown", { serverID })
+        input.server.process.kill()
+        l.info("shutdown")
       },
     }
+
+    if (input.server.onInitialized) {
+      await input.server.onInitialized(result)
+    }
+    l.info("initialized")
 
     return result
   }

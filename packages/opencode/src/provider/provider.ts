@@ -99,18 +99,26 @@ export namespace Provider {
               info.access = tokens.access
             }
             let isAgentCall = false
+            let isVisionRequest = false
             try {
               const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body
               if (body?.messages) {
                 isAgentCall = body.messages.some((msg: any) => msg.role && ["tool", "assistant"].includes(msg.role))
+                isVisionRequest = body.messages.some(
+                  (msg: any) =>
+                    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
+                )
               }
             } catch {}
-            const headers = {
+            const headers: Record<string, string> = {
               ...init.headers,
               ...copilot.HEADERS,
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
               "X-Initiator": isAgentCall ? "agent" : "user",
+            }
+            if (isVisionRequest) {
+              headers["Copilot-Vision-Request"] = "true"
             }
             delete headers["x-api-key"]
             return fetch(input, {
