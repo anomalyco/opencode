@@ -17,6 +17,7 @@ import (
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
@@ -42,6 +43,7 @@ type App struct {
 	IntitialMode     *string
 	compactCancel    context.CancelFunc
 	IsLeaderSequence bool
+	TelemetryContext context.Context
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -148,21 +150,22 @@ func New(
 	slog.Debug("Loaded config", "config", configInfo)
 
 	app := &App{
-		Info:          appInfo,
-		Modes:         modes,
-		Version:       version,
-		StatePath:     appStatePath,
-		Config:        configInfo,
-		State:         appState,
-		Client:        httpClient,
-		ModeIndex:     modeIndex,
-		Mode:          mode,
-		Session:       &opencode.Session{},
-		Messages:      []opencode.MessageUnion{},
-		Commands:      commands.LoadFromConfig(configInfo),
-		InitialModel:  initialModel,
-		InitialPrompt: initialPrompt,
-		IntitialMode:  initialMode,
+		Info:             appInfo,
+		Modes:            modes,
+		Version:          version,
+		StatePath:        appStatePath,
+		Config:           configInfo,
+		State:            appState,
+		Client:           httpClient,
+		ModeIndex:        modeIndex,
+		Mode:             mode,
+		Session:          &opencode.Session{},
+		Messages:         []opencode.MessageUnion{},
+		Commands:         commands.LoadFromConfig(configInfo),
+		InitialModel:     initialModel,
+		InitialPrompt:    initialPrompt,
+		IntitialMode:     initialMode,
+		TelemetryContext: ctx,
 	}
 
 	return app, nil
@@ -236,7 +239,7 @@ func (a *App) SwitchMode() (*App, tea.Cmd) {
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
-	providersResponse, err := a.Client.Config.Providers(context.Background())
+	providersResponse, err := a.Client.Config.Providers(a.TelemetryContext)
 	if err != nil {
 		slog.Error("Failed to list providers", "error", err)
 		// TODO: notify user
@@ -365,11 +368,16 @@ func (a *App) SaveState() {
 }
 
 func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.initialize_project")
+	defer func() {
+		close(err)
+	}()
+
 	cmds := []tea.Cmd{}
 
 	session, err := a.CreateSession(ctx)
 	if err != nil {
-		// status.Error(err.Error())
 		return nil
 	}
 
@@ -383,7 +391,6 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 		})
 		if err != nil {
 			slog.Error("Failed to initialize project", "error", err)
-			// status.Error(err.Error())
 		}
 	}()
 
@@ -430,6 +437,12 @@ func (a *App) MarkProjectInitialized(ctx context.Context) error {
 }
 
 func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.create_session")
+	defer func() {
+		close(err)
+	}()
+
 	session, err := a.Client.Session.New(ctx)
 	if err != nil {
 		return nil, err
@@ -442,6 +455,12 @@ func (a *App) SendChatMessage(
 	text string,
 	attachments []opencode.FilePartParam,
 ) (*App, tea.Cmd) {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.send_chat_message")
+	defer func() {
+		close(err)
+	}()
+
 	var cmds []tea.Cmd
 	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
@@ -518,22 +537,33 @@ func (a *App) SendChatMessage(
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.cancel")
+	defer func() {
+		close(err)
+	}()
+
 	// Cancel any running compact operation
 	if a.compactCancel != nil {
 		a.compactCancel()
 		a.compactCancel = nil
 	}
 
-	_, err := a.Client.Session.Abort(ctx, sessionID)
+	_, err = a.Client.Session.Abort(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
-		// status.Error(err.Error())
 		return err
 	}
 	return nil
 }
 
 func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.list_sessions")
+	defer func() {
+		close(err)
+	}()
+
 	response, err := a.Client.Session.List(ctx)
 	if err != nil {
 		return nil, err
@@ -549,7 +579,13 @@ func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
 }
 
 func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
-	_, err := a.Client.Session.Delete(ctx, sessionID)
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.delete_session")
+	defer func() {
+		close(err)
+	}()
+
+	_, err = a.Client.Session.Delete(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to delete session", "error", err)
 		return err
@@ -558,6 +594,12 @@ func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
 }
 
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]opencode.Message, error) {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.list_messages")
+	defer func() {
+		close(err)
+	}()
+
 	response, err := a.Client.Session.Messages(ctx, sessionId)
 	if err != nil {
 		return nil, err
@@ -570,6 +612,12 @@ func (a *App) ListMessages(ctx context.Context, sessionId string) ([]opencode.Me
 }
 
 func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
+	var err error
+	ctx, close, _ := telemetry.NewSpan(ctx, "app.list_providers")
+	defer func() {
+		close(err)
+	}()
+
 	response, err := a.Client.Config.Providers(ctx)
 	if err != nil {
 		return nil, err

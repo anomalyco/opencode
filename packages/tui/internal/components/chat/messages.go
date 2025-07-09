@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -12,8 +13,10 @@ import (
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type MessagesComponent interface {
@@ -117,9 +120,10 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *messagesComponent) renderView(width int) {
-	measure := util.Measure("messages.renderView")
-	defer measure("messageCount", len(m.app.Messages))
-
+	var err error
+	ctx, close, _ := telemetry.NewSpan(m.app.TelemetryContext, "messagesComponent.renderView",
+		telemetry.WithAttributes(attribute.Int("messageCount", len(m.app.Messages))))
+	defer func() { close(err) }()
 	t := theme.CurrentTheme()
 	blocks := make([]string, 0)
 	m.partCount = 0
@@ -128,225 +132,247 @@ func (m *messagesComponent) renderView(width int) {
 	orphanedToolCalls := make([]opencode.ToolPart, 0)
 
 	for _, message := range m.app.Messages {
-		var content string
-		var cached bool
+		telemetry.WithSpan(ctx, "messagesComponent.renderView.message", func(ctx context.Context) error {
+			var content string
+			var cached bool
 
-		switch casted := message.(type) {
-		case opencode.UserMessage:
-		userLoop:
-			for partIndex, part := range casted.Parts {
-				switch part := part.AsUnion().(type) {
-				case opencode.TextPart:
-					remainingParts := casted.Parts[partIndex+1:]
-					fileParts := make([]opencode.FilePart, 0)
-					for _, part := range remainingParts {
-						switch part := part.AsUnion().(type) {
-						case opencode.FilePart:
-							fileParts = append(fileParts, part)
-						}
-					}
-					flexItems := []layout.FlexItem{}
-					if len(fileParts) > 0 {
-						fileStyle := styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Padding(0, 1)
-						mediaTypeStyle := styles.NewStyle().Background(t.Secondary()).Foreground(t.BackgroundPanel()).Padding(0, 1)
-						for _, filePart := range fileParts {
-							mediaType := ""
-							switch filePart.Mime {
-							case "text/plain":
-								mediaType = "txt"
-							case "image/png", "image/jpeg", "image/gif", "image/webp":
-								mediaType = "img"
-								mediaTypeStyle = mediaTypeStyle.Background(t.Accent())
-							case "application/pdf":
-								mediaType = "pdf"
-								mediaTypeStyle = mediaTypeStyle.Background(t.Primary())
-							}
-							flexItems = append(flexItems, layout.FlexItem{
-								View: mediaTypeStyle.Render(mediaType) + fileStyle.Render(filePart.Filename),
-							})
-						}
-					}
-					bgColor := t.BackgroundPanel()
-					files := layout.Render(
-						layout.FlexOptions{
-							Background: &bgColor,
-							Width:      width - 6,
-							Direction:  layout.Column,
-						},
-						flexItems...,
-					)
-
-					key := m.cache.GenerateKey(casted.ID, part.Text, width, m.selectedPart == m.partCount, files)
-					content, cached = m.cache.Get(key)
-					if !cached {
-						content = renderText(
-							m.app,
-							message,
-							part.Text,
-							m.app.Info.User,
-							m.showToolDetails,
-							m.partCount == m.selectedPart,
-							width,
-							files,
-						)
-						m.cache.Set(key, content)
-					}
-					if content != "" {
-						m = m.updateSelected(content, part.Text)
-						blocks = append(blocks, content)
-					}
-					// Only render the first text part
-					break userLoop
-				}
-			}
-
-		case opencode.AssistantMessage:
-			hasTextPart := false
-			for partIndex, p := range casted.Parts {
-				switch part := p.AsUnion().(type) {
-				case opencode.TextPart:
-					hasTextPart = true
-					finished := casted.Time.Completed > 0
-					remainingParts := casted.Parts[partIndex+1:]
-					toolCallParts := make([]opencode.ToolPart, 0)
-
-					// sometimes tool calls happen without an assistant message
-					// these should be included in this assistant message as well
-					if len(orphanedToolCalls) > 0 {
-						toolCallParts = append(toolCallParts, orphanedToolCalls...)
-						orphanedToolCalls = make([]opencode.ToolPart, 0)
-					}
-
-					remaining := true
-					for _, part := range remainingParts {
-						if !remaining {
-							break
-						}
+			switch casted := message.(type) {
+			case opencode.UserMessage:
+				telemetry.SetAttributes(ctx, attribute.String("message.author", "user"))
+			userLoop:
+				for partIndex, part := range casted.Parts {
+					shouldBreak := false
+					_ = telemetry.WithSpan(ctx, "messagesComponent.renderView.part", func(ctx context.Context) error {
 						switch part := part.AsUnion().(type) {
 						case opencode.TextPart:
-							// we only want tool calls associated with the current text part.
-							// if we hit another text part, we're done.
-							remaining = false
-						case opencode.ToolPart:
-							toolCallParts = append(toolCallParts, part)
-							if part.State.Status != opencode.ToolPartStateStatusCompleted || part.State.Status != opencode.ToolPartStateStatusError {
-								// i don't think there's a case where a tool call isn't in result state
-								// and the message time is 0, but just in case
-								finished = false
+							remainingParts := casted.Parts[partIndex+1:]
+							fileParts := make([]opencode.FilePart, 0)
+							for _, part := range remainingParts {
+								switch part := part.AsUnion().(type) {
+								case opencode.FilePart:
+									fileParts = append(fileParts, part)
+								}
 							}
-						}
-					}
-
-					if finished {
-						key := m.cache.GenerateKey(casted.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
-						content, cached = m.cache.Get(key)
-						if !cached {
-							content = renderText(
-								m.app,
-								message,
-								p.Text,
-								casted.ModelID,
-								m.showToolDetails,
-								m.partCount == m.selectedPart,
-								width,
-								"",
-								toolCallParts...,
+							flexItems := []layout.FlexItem{}
+							if len(fileParts) > 0 {
+								fileStyle := styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Padding(0, 1)
+								mediaTypeStyle := styles.NewStyle().Background(t.Secondary()).Foreground(t.BackgroundPanel()).Padding(0, 1)
+								for _, filePart := range fileParts {
+									mediaType := ""
+									switch filePart.Mime {
+									case "text/plain":
+										mediaType = "txt"
+									case "image/png", "image/jpeg", "image/gif", "image/webp":
+										mediaType = "img"
+										mediaTypeStyle = mediaTypeStyle.Background(t.Accent())
+									case "application/pdf":
+										mediaType = "pdf"
+										mediaTypeStyle = mediaTypeStyle.Background(t.Primary())
+									}
+									flexItems = append(flexItems, layout.FlexItem{
+										View: mediaTypeStyle.Render(mediaType) + fileStyle.Render(filePart.Filename),
+									})
+								}
+							}
+							bgColor := t.BackgroundPanel()
+							files := layout.Render(
+								layout.FlexOptions{
+									Background: &bgColor,
+									Width:      width - 6,
+									Direction:  layout.Column,
+								},
+								flexItems...,
 							)
-							m.cache.Set(key, content)
-						}
-					} else {
-						content = renderText(
-							m.app,
-							message,
-							p.Text,
-							casted.ModelID,
-							m.showToolDetails,
-							m.partCount == m.selectedPart,
-							width,
-							"",
-							toolCallParts...,
-						)
-					}
-					if content != "" {
-						m = m.updateSelected(content, p.Text)
-						blocks = append(blocks, content)
-					}
-				case opencode.ToolPart:
-					if !m.showToolDetails {
-						if !hasTextPart {
-							orphanedToolCalls = append(orphanedToolCalls, part)
-						}
-						continue
-					}
 
-					if part.State.Status == opencode.ToolPartStateStatusCompleted || part.State.Status == opencode.ToolPartStateStatusError {
-						key := m.cache.GenerateKey(casted.ID,
-							part.ID,
-							m.showToolDetails,
-							width,
-							m.partCount == m.selectedPart,
-						)
-						content, cached = m.cache.Get(key)
-						if !cached {
-							content = renderToolDetails(
-								m.app,
-								part,
-								m.partCount == m.selectedPart,
-								width,
-							)
-							m.cache.Set(key, content)
+							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.selectedPart == m.partCount, files)
+							content, cached = m.cache.Get(key)
+							if !cached {
+								content = renderText(
+									m.app,
+									message,
+									part.Text,
+									m.app.Info.User,
+									m.showToolDetails,
+									m.partCount == m.selectedPart,
+									width,
+									files,
+								)
+								m.cache.Set(key, content)
+							}
+							if content != "" {
+								m = m.updateSelected(content, part.Text)
+								blocks = append(blocks, content)
+							}
+							// Only render the first text part
+							shouldBreak = true
 						}
-					} else {
-						// if the tool call isn't finished, don't cache
-						content = renderToolDetails(
-							m.app,
-							part,
-							m.partCount == m.selectedPart,
-							width,
-						)
-					}
-					if content != "" {
-						m = m.updateSelected(content, "")
-						blocks = append(blocks, content)
+						return nil
+					})
+
+					if shouldBreak {
+						break userLoop
 					}
 				}
-			}
-		}
 
-		error := ""
-		if assistant, ok := message.(opencode.AssistantMessage); ok {
-			switch err := assistant.Error.AsUnion().(type) {
-			case nil:
-			case opencode.AssistantMessageErrorMessageOutputLengthError:
-				error = "Message output length exceeded"
-			case opencode.ProviderAuthError:
-				error = err.Data.Message
-			case opencode.MessageAbortedError:
-				error = "Request was aborted"
-			case opencode.UnknownError:
-				error = err.Data.Message
-			}
-		}
+			case opencode.AssistantMessage:
+				telemetry.SetAttributes(ctx, attribute.String("message.author", "assistant"))
+				hasTextPart := false
+				for partIndex, p := range casted.Parts {
+					telemetry.WithSpan(ctx, "messagesComponent.renderView.part", func(ctx context.Context) error {
+						telemetry.SetAttributes(ctx, attribute.String("tool", p.Tool), attribute.String("id", p.ID))
+						switch part := p.AsUnion().(type) {
+						case opencode.TextPart:
+							hasTextPart = true
+							finished := casted.Time.Completed > 0
+							remainingParts := casted.Parts[partIndex+1:]
+							toolCallParts := make([]opencode.ToolPart, 0)
 
-		if error != "" {
-			error = styles.NewStyle().Width(width - 6).Render(error)
-			error = renderContentBlock(
-				m.app,
-				error,
-				false,
-				width,
-				WithBorderColor(t.Error()),
-			)
-			blocks = append(blocks, error)
-			m.lineCount += lipgloss.Height(error) + 1
-		}
+							// sometimes tool calls happen without an assistant message
+							// these should be included in this assistant message as well
+							if len(orphanedToolCalls) > 0 {
+								toolCallParts = append(toolCallParts, orphanedToolCalls...)
+								orphanedToolCalls = make([]opencode.ToolPart, 0)
+							}
+
+							remaining := true
+							for _, part := range remainingParts {
+								if !remaining {
+									break
+								}
+								switch part := part.AsUnion().(type) {
+								case opencode.TextPart:
+									// we only want tool calls associated with the current text part.
+									// if we hit another text part, we're done.
+									remaining = false
+								case opencode.ToolPart:
+									toolCallParts = append(toolCallParts, part)
+									if part.State.Status != opencode.ToolPartStateStatusCompleted || part.State.Status != opencode.ToolPartStateStatusError {
+										// i don't think there's a case where a tool call isn't in result state
+										// and the message time is 0, but just in case
+										finished = false
+									}
+								}
+							}
+
+							if finished {
+								key := m.cache.GenerateKey(casted.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
+								content, cached = m.cache.Get(key)
+								if !cached {
+									content = renderText(
+										m.app,
+										message,
+										p.Text,
+										casted.ModelID,
+										m.showToolDetails,
+										m.partCount == m.selectedPart,
+										width,
+										"",
+										toolCallParts...,
+									)
+									m.cache.Set(key, content)
+								}
+							} else {
+								content = renderText(
+									m.app,
+									message,
+									p.Text,
+									casted.ModelID,
+									m.showToolDetails,
+									m.partCount == m.selectedPart,
+									width,
+									"",
+									toolCallParts...,
+								)
+							}
+							if content != "" {
+								m = m.updateSelected(content, p.Text)
+								blocks = append(blocks, content)
+							}
+						case opencode.ToolPart:
+							if !m.showToolDetails {
+								if !hasTextPart {
+									orphanedToolCalls = append(orphanedToolCalls, part)
+								}
+								return nil
+							}
+
+							if part.State.Status == opencode.ToolPartStateStatusCompleted || part.State.Status == opencode.ToolPartStateStatusError {
+								key := m.cache.GenerateKey(casted.ID,
+									part.ID,
+									m.showToolDetails,
+									width,
+									m.partCount == m.selectedPart,
+								)
+								content, cached = m.cache.Get(key)
+								telemetry.SetAttributes(ctx, attribute.Bool("cached", cached))
+								if !cached {
+									content = renderToolDetails(
+										ctx,
+										m.app,
+										part,
+										m.partCount == m.selectedPart,
+										width,
+									)
+									m.cache.Set(key, content)
+								}
+							} else {
+								// if the tool call isn't finished, don't cache
+								content = renderToolDetails(
+									ctx,
+									m.app,
+									part,
+									m.partCount == m.selectedPart,
+									width,
+								)
+							}
+							if content != "" {
+								m = m.updateSelected(content, "")
+								blocks = append(blocks, content)
+							}
+						}
+
+						return nil
+					})
+				}
+			}
+
+			error := ""
+			if assistant, ok := message.(opencode.AssistantMessage); ok {
+				switch err := assistant.Error.AsUnion().(type) {
+				case nil:
+				case opencode.AssistantMessageErrorMessageOutputLengthError:
+					error = "Message output length exceeded"
+				case opencode.ProviderAuthError:
+					error = err.Data.Message
+				case opencode.MessageAbortedError:
+					error = "Request was aborted"
+				case opencode.UnknownError:
+					error = err.Data.Message
+				}
+			}
+
+			if error != "" {
+				err = fmt.Errorf("%s", error)
+				error = renderContentBlock(
+					m.app,
+					error,
+					false,
+					width,
+					WithBorderColor(t.Error()),
+				)
+				blocks = append(blocks, error)
+				m.lineCount += lipgloss.Height(error) + 1
+				return err
+			}
+
+			return nil
+		})
 	}
 
 	m.viewport.SetContent("\n" + strings.Join(blocks, "\n\n"))
 	if m.selectedPart == m.partCount {
 		m.viewport.GotoBottom()
 	}
-
 }
 
 func (m *messagesComponent) updateSelected(content string, selectedText string) *messagesComponent {

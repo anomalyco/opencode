@@ -15,6 +15,7 @@ import (
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
@@ -191,38 +192,41 @@ func (s *sessionDialog) Close() tea.Cmd {
 
 // NewSessionDialog creates a new session switching dialog
 func NewSessionDialog(app *app.App) SessionDialog {
-	sessions, _ := app.ListSessions(context.Background())
-
-	var filteredSessions []opencode.Session
-	var items []sessionItem
-	for _, sess := range sessions {
-		if sess.ParentID != "" {
-			continue
+	ret, _ := telemetry.Traced(app.TelemetryContext, "dialog.NewSessionDialog", func(ctx context.Context) (SessionDialog, error) {
+		sessions, _ := app.ListSessions(ctx)
+		var filteredSessions []opencode.Session
+		var items []sessionItem
+		for _, sess := range sessions {
+			if sess.ParentID != "" {
+				continue
+			}
+			filteredSessions = append(filteredSessions, sess)
+			items = append(items, sessionItem{
+				title:              sess.Title,
+				isDeleteConfirming: false,
+			})
 		}
-		filteredSessions = append(filteredSessions, sess)
-		items = append(items, sessionItem{
-			title:              sess.Title,
-			isDeleteConfirming: false,
-		})
-	}
 
-	// Create a generic list component
-	listComponent := list.NewListComponent(
-		items,
-		10, // maxVisibleSessions
-		"No sessions available",
-		true, // useAlphaNumericKeys
-	)
-	listComponent.SetMaxWidth(layout.Current.Container.Width - 12)
+		// Create a generic list component
+		listComponent := list.NewListComponent(
+			items,
+			10, // maxVisibleSessions
+			"No sessions available",
+			true, // useAlphaNumericKeys
+		)
+		listComponent.SetMaxWidth(layout.Current.Container.Width - 12)
 
-	return &sessionDialog{
-		sessions:           filteredSessions,
-		list:               listComponent,
-		app:                app,
-		deleteConfirmation: -1,
-		modal: modal.New(
-			modal.WithTitle("Switch Session"),
-			modal.WithMaxWidth(layout.Current.Container.Width-8),
-		),
-	}
+		return &sessionDialog{
+			sessions:           filteredSessions,
+			list:               listComponent,
+			app:                app,
+			deleteConfirmation: -1,
+			modal: modal.New(
+				modal.WithTitle("Switch Session"),
+				modal.WithMaxWidth(layout.Current.Container.Width-8),
+			),
+		}, nil
+	})
+
+	return ret
 }

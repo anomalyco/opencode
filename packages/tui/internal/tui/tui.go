@@ -27,6 +27,7 @@ import (
 	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
@@ -346,7 +347,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, toast.NewErrorToast(msg.Error())
 	case app.SendMsg:
 		a.showCompletionDialog = false
-		a.app, cmd = a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
+		a.app, cmd = a.app.SendChatMessage(a.app.TelemetryContext, msg.Text, msg.Attachments)
 		cmds = append(cmds, cmd)
 	case app.SetEditorContentMsg:
 		// Set the editor content without sending
@@ -468,15 +469,19 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.fileViewer, cmd = a.fileViewer.SetSize(sideWidth, layout.Current.Viewport.Height)
 		cmds = append(cmds, cmd)
 	case app.SessionSelectedMsg:
-		messages, err := a.app.ListMessages(context.Background(), msg.ID)
+		var err error
+		ctx, close, _ := telemetry.NewSpan(a.app.TelemetryContext, "tui.app.Update.SessionSelectedMsg")
+		defer func() { close(err) }()
+		var messages []opencode.Message
+		messages, err = a.app.ListMessages(ctx, msg.ID)
 		if err != nil {
 			slog.Error("Failed to list messages", "error", err)
 			return a, toast.NewErrorToast("Failed to open session")
 		}
 		a.app.Session = msg
-		a.app.Messages = make([]opencode.MessageUnion, 0)
-		for _, message := range messages {
-			a.app.Messages = append(a.app.Messages, message.AsUnion())
+		a.app.Messages = make([]opencode.MessageUnion, len(messages))
+		for i, message := range messages {
+			a.app.Messages[i] = message.AsUnion()
 		}
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.ModelSelectedMsg:
@@ -910,7 +915,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.FileSearchCommand:
 		return a, nil
 	case commands.ProjectInitCommand:
-		cmds = append(cmds, a.app.InitializeProject(context.Background()))
+		cmds = append(cmds, a.app.InitializeProject(a.app.TelemetryContext))
 	case commands.InputClearCommand:
 		if a.editor.Value() == "" {
 			return a, nil

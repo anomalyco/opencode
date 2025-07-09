@@ -14,6 +14,7 @@ import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
+import { Telemetry } from "./telemetry"
 
 const cancel = new AbortController()
 
@@ -40,6 +41,7 @@ const cli = yargs(hideBin(process.argv))
   })
   .middleware(async () => {
     await Log.init({ print: process.argv.includes("--print-logs") })
+    Telemetry.init({ name: "opencode-server", version: Installation.VERSION, signal: cancel.signal })
 
     try {
       const { Config } = await import("./config/config")

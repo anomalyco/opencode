@@ -12,6 +12,7 @@ import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
 import { Mode } from "../../session/mode"
+import { Telemetry } from "../../telemetry"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -45,83 +46,96 @@ export const TuiCommand = cmd({
         UI.error("Failed to change directory to " + cwd)
         return
       }
-      const result = await bootstrap({ cwd }, async (app) => {
-        FileWatcher.init()
-        const providers = await Provider.list()
-        if (Object.keys(providers).length === 0) {
-          return "needs_provider"
-        }
-
-        const server = Server.listen({
-          port: 0,
-          hostname: "127.0.0.1",
-        })
-
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
-        if (Bun.embeddedFiles.length > 0) {
-          const blob = Bun.embeddedFiles[0] as File
-          let binaryName = blob.name
-          if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
-            binaryName += ".exe"
+      const result = await Telemetry.traced("bootstrap", (bootstrapSpan) =>
+        bootstrap({ cwd }, async (app) => {
+          FileWatcher.init()
+          const providers = await Provider.list()
+          if (Object.keys(providers).length === 0) {
+            return "needs_provider"
           }
-          const binary = path.join(Global.Path.cache, "tui", binaryName)
-          const file = Bun.file(binary)
-          if (!(await file.exists())) {
-            await Bun.write(file, blob, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
+
+          const server = Server.listen({
+            port: 0,
+            hostname: "127.0.0.1",
+          })
+
+          let cmd = ["go", "run", "./main.go"]
+          let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+          if (Bun.embeddedFiles.length > 0) {
+            const blob = Bun.embeddedFiles[0] as File
+            let binaryName = blob.name
+            if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
+              binaryName += ".exe"
+            }
+            const binary = path.join(Global.Path.cache, "tui", binaryName)
+            const file = Bun.file(binary)
+            if (!(await file.exists())) {
+              await Telemetry.traced("writeBinary", async (span) => {
+                span.setAttributes({ size: blob.size, binaryPath: binary })
+                await Bun.write(file, blob, { mode: 0o755 })
+                await fs.chmod(binary, 0o755)
+              })
+            }
+            cwd = process.cwd()
+            cmd = [binary]
           }
-          cwd = process.cwd()
-          cmd = [binary]
-        }
-        Log.Default.info("tui", {
-          cmd,
-        })
-        const proc = Bun.spawn({
-          cmd: [
-            ...cmd,
-            ...(args.model ? ["--model", args.model] : []),
-            ...(args.prompt ? ["--prompt", args.prompt] : []),
-            ...(args.mode ? ["--mode", args.mode] : []),
-          ],
-          cwd,
-          stdout: "inherit",
-          stderr: "inherit",
-          stdin: "inherit",
-          env: {
-            ...process.env,
-            CGO_ENABLED: "0",
-            OPENCODE_SERVER: server.url.toString(),
-            OPENCODE_APP_INFO: JSON.stringify(app),
-            OPENCODE_MODES: JSON.stringify(await Mode.list()),
-          },
-          onExit: () => {
-            server.stop()
-          },
-        })
+          Log.Default.info("tui", {
+            cmd,
+          })
+          const proc = Bun.spawn({
+            cmd: [
+              ...cmd,
+              ...(args.model ? ["--model", args.model] : []),
+              ...(args.prompt ? ["--prompt", args.prompt] : []),
+              ...(args.mode ? ["--mode", args.mode] : []),
+            ],
+            cwd,
+            stdout: "inherit",
+            stderr: "inherit",
+            stdin: "inherit",
+            env: {
+              ...process.env,
+              ...Telemetry.otelContextAsEnvVars(),
+              CGO_ENABLED: "0",
+              OPENCODE_SERVER: server.url.toString(),
+              OPENCODE_APP_INFO: JSON.stringify(app),
+              OPENCODE_MODES: JSON.stringify(await Mode.list()),
+            },
+            onExit: () => {
+              server.stop()
+            },
+          })
+          Telemetry.setAttributes({ "process.pid": proc.pid })
+          bootstrapSpan.end()
+          ;(async () => {
+            if (Installation.VERSION === "dev") return
+            if (Installation.isSnapshot()) return
+            const config = await Config.global()
+            if (config.autoupdate === false) return
+            const latest = await Installation.latest().catch(() => {})
+            if (!latest) return
+            if (Installation.VERSION === latest) return
+            const method = await Installation.method()
+            if (method === "unknown") return
+            await Installation.upgrade(method, latest)
+              .then(() => {
+                Bus.publish(Installation.Event.Updated, { version: latest })
+              })
+              .catch(() => {})
+          })()
 
-        ;(async () => {
-          if (Installation.VERSION === "dev") return
-          if (Installation.isSnapshot()) return
-          const config = await Config.global()
-          if (config.autoupdate === false) return
-          const latest = await Installation.latest().catch(() => {})
-          if (!latest) return
-          if (Installation.VERSION === latest) return
-          const method = await Installation.method()
-          if (method === "unknown") return
-          await Installation.upgrade(method, latest)
-            .then(() => {
-              Bus.publish(Installation.Event.Updated, { version: latest })
-            })
-            .catch(() => {})
-        })()
+          await Telemetry.traced("tui.process", async () => {
+            const statusCode = await proc.exited
+            if (statusCode !== 0) {
+              throw new Error(`Unexpected exit code: ${statusCode}`)
+            }
+          })
 
-        await proc.exited
-        server.stop()
+          server.stop()
 
-        return "done"
-      })
+          return "done"
+        }),
+      )
       if (result === "done") break
       if (result === "needs_provider") {
         UI.empty()

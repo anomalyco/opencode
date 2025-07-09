@@ -34,7 +34,7 @@ func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
 	green := base.Foreground(t.Success()).Render
 	red := base.Foreground(t.Error()).Render
 
-	status, _ := cg.app.Client.File.Status(context.Background())
+	status, _ := cg.app.Client.File.Status(cg.app.TelemetryContext)
 	if status != nil {
 		files := *status
 		sort.Slice(files, func(i, j int) bool {

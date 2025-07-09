@@ -7,6 +7,7 @@ import { NamedError } from "../util/error"
 import { z } from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
+import { Telemetry } from "../telemetry"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -31,14 +32,20 @@ export namespace MCP {
           continue
         }
         log.info("found", { key, type: mcp.type })
+        const spanName = `mcp.${key}`
         if (mcp.type === "remote") {
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: {
-              type: "sse",
-              url: mcp.url,
-            },
-          }).catch(() => {})
+          const client = await Telemetry.traced(
+            spanName,
+            () =>
+              experimental_createMCPClient({
+                name: key,
+                transport: {
+                  type: "sse",
+                  url: mcp.url,
+                },
+              }),
+            { attributes: { "mcp.url": mcp.url, "mcp.type": mcp.type } },
+          ).catch(() => {})
           if (!client) {
             Bus.publish(Session.Event.Error, {
               error: {
@@ -55,19 +62,24 @@ export namespace MCP {
 
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: new Experimental_StdioMCPTransport({
-              stderr: "ignore",
-              command: cmd,
-              args,
-              env: {
-                ...process.env,
-                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-                ...mcp.environment,
-              },
-            }),
-          }).catch(() => {})
+          const client = await Telemetry.traced(
+            spanName,
+            () =>
+              experimental_createMCPClient({
+                name: key,
+                transport: new Experimental_StdioMCPTransport({
+                  stderr: "ignore",
+                  command: cmd,
+                  args,
+                  env: {
+                    ...process.env,
+                    ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+                    ...mcp.environment,
+                  },
+                }),
+              }),
+            { attributes: { "mcp.command": cmd, "mcp.type": mcp.type } },
+          ).catch(() => {})
           if (!client) {
             Bus.publish(Session.Event.Error, {
               error: {

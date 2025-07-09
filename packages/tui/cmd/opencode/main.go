@@ -15,6 +15,7 @@ import (
 	"github.com/sst/opencode-sdk-go/option"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/internal/util"
 )
@@ -50,8 +51,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx, shutdown, err := telemetry.InitTelemetry(context.Background(), "opencode-tui", version)
+	if err != nil {
+		slog.Error("Failed to initialize telemetry", "error", err)
+	}
+	defer shutdown()
+
 	httpClient := opencode.NewClient(
 		option.WithBaseURL(url),
+		telemetry.OtelHeaderRequestMiddleware(),
 	)
 
 	apiHandler := util.NewAPILogHandler(httpClient, "tui", slog.LevelDebug)
@@ -67,12 +75,15 @@ func main() {
 		}
 	}()
 
-	// Create main context for the application
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create main context for the application with trace context
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	ctx, close, span := telemetry.NewSpan(ctx, "bootstrap")
 
 	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
 	if err != nil {
+		close(err)
 		panic(err)
 	}
 
@@ -86,6 +97,7 @@ func main() {
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+	span.End()
 
 	go func() {
 		stream := httpClient.Event.ListStreaming(ctx)

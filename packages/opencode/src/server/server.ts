@@ -17,6 +17,7 @@ import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
+import { Telemetry } from "../telemetry"
 
 const ERRORS = {
   400: {
@@ -44,6 +45,7 @@ export namespace Server {
 
   function app() {
     const app = new Hono()
+    Telemetry.registerHonoMiddleware(app)
 
     const result = app
       .onError((err, c) => {
@@ -729,6 +731,7 @@ export namespace Server {
       idleTimeout: 0,
       fetch: app().fetch,
     })
+
     return server
   }
 }

@@ -96,7 +96,7 @@ var modelKeys = modelKeyMap{
 }
 
 func (m *modelDialog) Init() tea.Cmd {
-	m.setupAllModels()
+	m.setupAllModels(m.app.TelemetryContext)
 	return nil
 }
 
@@ -155,8 +155,8 @@ func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
 	return maxWidth
 }
 
-func (m *modelDialog) setupAllModels() {
-	providers, _ := m.app.ListProviders(context.Background())
+func (m *modelDialog) setupAllModels(ctx context.Context) {
+	providers, _ := m.app.ListProviders(ctx)
 
 	m.allModels = make([]ModelWithProvider, 0)
 	for _, provider := range providers {
@@ -261,7 +261,7 @@ func NewModelDialog(app *app.App) ModelDialog {
 		app: app,
 	}
 
-	dialog.setupAllModels()
+	dialog.setupAllModels(app.TelemetryContext)
 
 	dialog.modal = modal.New(
 		modal.WithTitle("Select Model"),

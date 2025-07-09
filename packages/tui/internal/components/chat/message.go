@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"github.com/sst/opencode/internal/components/diff"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/telemetry"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 	"golang.org/x/text/cases"
@@ -295,6 +297,7 @@ func renderText(
 }
 
 func renderToolDetails(
+	ctx context.Context,
 	app *app.App,
 	toolCall opencode.ToolPart,
 	highlight bool,
@@ -355,11 +358,13 @@ func renderToolDetails(
 				if diffField != nil {
 					patch := diffField.(string)
 					var formattedDiff string
-					formattedDiff, _ = diff.FormatUnifiedDiff(
-						filename,
-						patch,
-						diff.WithWidth(width-2),
-					)
+					formattedDiff, _ = telemetry.Traced(ctx, "diff.FormatUnifiedDiff", func(_ctx context.Context) (string, error) {
+						return diff.FormatUnifiedDiff(
+							filename,
+							patch,
+							diff.WithWidth(width-2),
+						)
+					})
 					body = strings.TrimSpace(formattedDiff)
 					style := styles.NewStyle().
 						Background(backgroundColor).
