@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -89,11 +90,16 @@ func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
 
+	homePath, err := os.UserHomeDir()
+	cwdPath := m.app.Info.Path.Cwd
+	if err == nil && homePath != "" && strings.HasPrefix(cwdPath, homePath) {
+		cwdPath = "~" + cwdPath[len(homePath):]
+	}
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
 		Padding(0, 1).
-		Render(m.app.Info.Path.Cwd)
+		Render(cwdPath)
 
 	sessionInfo := ""
 	if m.app.Session.ID != "" {
