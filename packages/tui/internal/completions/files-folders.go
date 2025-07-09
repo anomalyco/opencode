@@ -42,7 +42,7 @@ func (cg *filesAndFoldersContextGroup) getGitFiles() []dialog.CompletionItemI {
 		})
 
 		for _, file := range files {
-			title := file.File
+			title := file.Path
 			if file.Added > 0 {
 				title += green(" +" + strconv.Itoa(int(file.Added)))
 			}
@@ -51,7 +51,7 @@ func (cg *filesAndFoldersContextGroup) getGitFiles() []dialog.CompletionItemI {
 			}
 			item := dialog.NewCompletionItem(dialog.CompletionItem{
 				Title: title,
-				Value: file.File,
+				Value: file.Path,
 			})
 			items = append(items, item)
 		}

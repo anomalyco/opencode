@@ -622,16 +622,7 @@ export namespace Server {
               description: "File status",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        file: z.string(),
-                        added: z.number().int(),
-                        removed: z.number().int(),
-                        status: z.enum(["added", "deleted", "modified"]),
-                      })
-                      .array(),
-                  ),
+                  schema: resolver(File.Info.array()),
                 },
               },
             },
@@ -640,6 +631,55 @@ export namespace Server {
         async (c) => {
           const content = await File.status()
           return c.json(content)
+        },
+      )
+      .post(
+        "/log",
+        describeRoute({
+          description: "Write a log entry to the server logs",
+          responses: {
+            200: {
+              description: "Log entry written successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            service: z.string().openapi({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
+            message: z.string().openapi({ description: "Log message" }),
+            extra: z
+              .record(z.string(), z.any())
+              .optional()
+              .openapi({ description: "Additional metadata for the log entry" }),
+          }),
+        ),
+        async (c) => {
+          const { service, level, message, extra } = c.req.valid("json")
+          const logger = Log.create({ service })
+
+          switch (level) {
+            case "debug":
+              logger.debug(message, extra)
+              break
+            case "info":
+              logger.info(message, extra)
+              break
+            case "error":
+              logger.error(message, extra)
+              break
+            case "warn":
+              logger.warn(message, extra)
+              break
+          }
+
+          return c.json(true)
         },
       )
       .get(
@@ -743,10 +783,7 @@ export namespace Server {
           const body = c.req.valid("json")
 
           try {
-            const result = await Commands.executeCustomCommand(
-              commandName,
-              body.arguments,
-            )
+            const result = await Commands.executeCustomCommand(commandName, body.arguments)
             return c.json(result)
           } catch (error) {
             if (error instanceof Error && error.message.includes("not found")) {

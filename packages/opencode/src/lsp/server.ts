@@ -44,7 +44,7 @@ export namespace LSPServer {
 
   export const Typescript: Info = {
     id: "typescript",
-    roots: SimpleRoots(["tsconfig.json", "jsconfig.json", "package.json"]),
+    roots: async (app) => [app.path.root],
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(app, root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})

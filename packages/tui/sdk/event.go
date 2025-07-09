@@ -916,14 +916,16 @@ func (r eventListResponseEventSessionErrorJSON) RawJSON() string {
 func (r EventListResponseEventSessionError) implementsEventListResponse() {}
 
 type EventListResponseEventSessionErrorProperties struct {
-	Error EventListResponseEventSessionErrorPropertiesError `json:"error"`
-	JSON  eventListResponseEventSessionErrorPropertiesJSON  `json:"-"`
+	Error     EventListResponseEventSessionErrorPropertiesError `json:"error"`
+	SessionID string                                            `json:"sessionID"`
+	JSON      eventListResponseEventSessionErrorPropertiesJSON  `json:"-"`
 }
 
 // eventListResponseEventSessionErrorPropertiesJSON contains the JSON metadata for
 // the struct [EventListResponseEventSessionErrorProperties]
 type eventListResponseEventSessionErrorPropertiesJSON struct {
 	Error       apijson.Field
+	SessionID   apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

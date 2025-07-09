@@ -93,6 +93,28 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 ---
 
+### Logging
+
+You can configure the minimum log level through the `log_level` option. This controls which log messages are written to the log files.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "log_level": "INFO"
+}
+```
+
+Available log levels are:
+
+- `DEBUG` - All messages including debug information
+- `INFO` - Informational messages and above (default)
+- `WARN` - Warnings and errors only
+- `ERROR` - Errors only
+
+The default log level is `INFO` in production and `DEBUG` in development mode.
+
+---
+
 ### Disabled providers
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.

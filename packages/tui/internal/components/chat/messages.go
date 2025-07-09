@@ -328,6 +328,7 @@ func (m *messagesComponent) renderView(width int) {
 		}
 
 		if error != "" {
+			error = styles.NewStyle().Width(width - 6).Render(error)
 			error = renderContentBlock(
 				m.app,
 				error,

@@ -108,6 +108,7 @@ export namespace Config {
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      log_level: Log.Level.optional().describe("Minimum log level to write to log files"),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({

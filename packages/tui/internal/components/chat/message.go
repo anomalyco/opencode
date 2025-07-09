@@ -134,7 +134,6 @@ func renderContentBlock(
 	style := styles.NewStyle().
 		Foreground(renderer.textColor).
 		Background(t.BackgroundPanel()).
-		Width(width).
 		PaddingTop(renderer.paddingTop).
 		PaddingBottom(renderer.paddingBottom).
 		PaddingLeft(renderer.paddingLeft).
@@ -232,16 +231,15 @@ func renderText(
 	if highlight {
 		backgroundColor = t.BackgroundElement()
 	}
-	messageStyle := styles.NewStyle().Background(backgroundColor)
-	content := messageStyle.Render(text)
-
+	var content string
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		content = util.ToMarkdown(text, width, backgroundColor)
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		messageStyle = messageStyle.Width(width - 6)
+		messageStyle := styles.NewStyle().Background(backgroundColor).Width(width - 6)
+		content = messageStyle.Render(text)
 	}
 
 	timestamp := ts.
@@ -307,8 +305,10 @@ func renderToolDetails(
 		return ""
 	}
 
-	if toolCall.State.Status == opencode.ToolPartStateStatusPending || toolCall.State.Status == opencode.ToolPartStateStatusRunning {
+	if toolCall.State.Status == opencode.ToolPartStateStatusPending ||
+		toolCall.State.Status == opencode.ToolPartStateStatusRunning {
 		title := renderToolTitle(toolCall, width)
+		title = styles.NewStyle().Width(width - 6).Render(title)
 		return renderContentBlock(app, title, highlight, width)
 	}
 
@@ -457,6 +457,7 @@ func renderToolDetails(
 			}
 			body = *result
 			body = util.TruncateHeight(body, 10)
+			body = styles.NewStyle().Width(width - 6).Render(body)
 		}
 	}
 
@@ -467,6 +468,7 @@ func renderToolDetails(
 
 	if error != "" {
 		body = styles.NewStyle().
+			Width(width - 6).
 			Foreground(t.Error()).
 			Background(backgroundColor).
 			Render(error)
@@ -475,6 +477,7 @@ func renderToolDetails(
 	if body == "" && error == "" && result != nil {
 		body = *result
 		body = util.TruncateHeight(body, 10)
+		body = styles.NewStyle().Width(width - 6).Render(body)
 	}
 
 	title := renderToolTitle(toolCall, width)

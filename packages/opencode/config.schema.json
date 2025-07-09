@@ -299,6 +299,16 @@
       "type": "string",
       "description": "Model to use in the format of provider/model, eg anthropic/claude-2"
     },
+    "log_level": {
+      "type": "string",
+      "enum": [
+        "DEBUG",
+        "INFO",
+        "WARN",
+        "ERROR"
+      ],
+      "description": "Minimum log level to write to log files"
+    },
     "provider": {
       "type": "object",
       "additionalProperties": {
