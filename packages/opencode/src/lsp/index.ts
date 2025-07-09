@@ -3,8 +3,8 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import { Ripgrep } from "../file/ripgrep"
 import { z } from "zod"
+import { Filesystem } from "../util/filesystem"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -36,29 +36,39 @@ export namespace LSP {
     "lsp",
     async (app) => {
       log.info("initializing")
-      const clients = new Map<string, LSPClient.Info>()
+      const clients: LSPClient.Info[] = []
+
       for (const server of Object.values(LSPServer)) {
-        for (const extension of server.extensions) {
-          const [file] = await Ripgrep.files({
-            cwd: app.path.cwd,
-            glob: "*" + extension,
+        const roots = await server.roots(app)
+
+        for (const root of roots) {
+          if (!Filesystem.overlaps(app.path.cwd, root)) continue
+          log.info("", {
+            root,
+            serverID: server.id,
           })
-          if (!file) continue
-          const handle = await server.spawn(App.info())
+          const handle = await server.spawn(App.info(), root)
           if (!handle) break
-          const client = await LSPClient.create(server.id, handle).catch((err) => log.error("", { error: err }))
+          const client = await LSPClient.create({
+            serverID: server.id,
+            server: handle,
+            root,
+          }).catch((err) => {
+            handle.process.kill()
+            log.error("", { error: err })
+          })
           if (!client) break
-          clients.set(server.id, client)
-          break
+          clients.push(client)
         }
       }
+
       log.info("initialized")
       return {
         clients,
       }
     },
     async (state) => {
-      for (const client of state.clients.values()) {
+      for (const client of state.clients) {
         await client.shutdown()
       }
     },
@@ -109,14 +119,17 @@ export namespace LSP {
 
   export async function workspaceSymbol(query: string) {
     return run((client) =>
-      client.connection.sendRequest("workspace/symbol", {
-        query,
-      }),
+      client.connection
+        .sendRequest("workspace/symbol", {
+          query,
+        })
+        .then((result: any) => result.slice(0, 10))
+        .catch(() => []),
     ).then((result) => result.flat() as LSP.Symbol[])
   }
 
   async function run<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
-    const clients = await state().then((x) => [...x.clients.values()])
+    const clients = await state().then((x) => x.clients)
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)
   }

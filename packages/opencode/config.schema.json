@@ -14,111 +14,267 @@
       "properties": {
         "leader": {
           "type": "string",
-          "description": "Leader key for keybind combinations"
+          "default": "ctrl+x",
+          "description": "Leader key for keybind combinations\n\ndefault: `ctrl+x`",
+          "examples": [
+            "ctrl+x"
+          ]
         },
-        "help": {
+        "app_help": {
           "type": "string",
-          "description": "Show help dialog"
+          "default": "<leader>h",
+          "description": "Show help dialog\n\ndefault: `<leader>h`",
+          "examples": [
+            "<leader>h"
+          ]
         },
         "editor_open": {
           "type": "string",
-          "description": "Open external editor"
+          "default": "<leader>e",
+          "description": "Open external editor\n\ndefault: `<leader>e`",
+          "examples": [
+            "<leader>e"
+          ]
         },
         "session_new": {
           "type": "string",
-          "description": "Create a new session"
+          "default": "<leader>n",
+          "description": "Create a new session\n\ndefault: `<leader>n`",
+          "examples": [
+            "<leader>n"
+          ]
         },
         "session_list": {
           "type": "string",
-          "description": "List all sessions"
+          "default": "<leader>l",
+          "description": "List all sessions\n\ndefault: `<leader>l`",
+          "examples": [
+            "<leader>l"
+          ]
         },
         "session_share": {
           "type": "string",
-          "description": "Share current session"
+          "default": "<leader>s",
+          "description": "Share current session\n\ndefault: `<leader>s`",
+          "examples": [
+            "<leader>s"
+          ]
+        },
+        "session_unshare": {
+          "type": "string",
+          "default": "<leader>u",
+          "description": "Unshare current session\n\ndefault: `<leader>u`",
+          "examples": [
+            "<leader>u"
+          ]
         },
         "session_interrupt": {
           "type": "string",
-          "description": "Interrupt current session"
+          "default": "esc",
+          "description": "Interrupt current session\n\ndefault: `esc`",
+          "examples": [
+            "esc"
+          ]
         },
         "session_compact": {
           "type": "string",
-          "description": "Toggle compact mode for session"
+          "default": "<leader>c",
+          "description": "Compact the session\n\ndefault: `<leader>c`",
+          "examples": [
+            "<leader>c"
+          ]
         },
         "tool_details": {
           "type": "string",
-          "description": "Show tool details"
+          "default": "<leader>d",
+          "description": "Toggle tool details\n\ndefault: `<leader>d`",
+          "examples": [
+            "<leader>d"
+          ]
         },
         "model_list": {
           "type": "string",
-          "description": "List available models"
+          "default": "<leader>m",
+          "description": "List available models\n\ndefault: `<leader>m`",
+          "examples": [
+            "<leader>m"
+          ]
         },
         "theme_list": {
           "type": "string",
-          "description": "List available themes"
+          "default": "<leader>t",
+          "description": "List available themes\n\ndefault: `<leader>t`",
+          "examples": [
+            "<leader>t"
+          ]
+        },
+        "file_list": {
+          "type": "string",
+          "default": "<leader>f",
+          "description": "List files\n\ndefault: `<leader>f`",
+          "examples": [
+            "<leader>f"
+          ]
+        },
+        "file_close": {
+          "type": "string",
+          "default": "esc",
+          "description": "Close file\n\ndefault: `esc`",
+          "examples": [
+            "esc"
+          ]
+        },
+        "file_search": {
+          "type": "string",
+          "default": "<leader>/",
+          "description": "Search file\n\ndefault: `<leader>/`",
+          "examples": [
+            "<leader>/"
+          ]
+        },
+        "file_diff_toggle": {
+          "type": "string",
+          "default": "<leader>v",
+          "description": "Split/unified diff\n\ndefault: `<leader>v`",
+          "examples": [
+            "<leader>v"
+          ]
         },
         "project_init": {
           "type": "string",
-          "description": "Initialize project configuration"
+          "default": "<leader>i",
+          "description": "Create/update AGENTS.md\n\ndefault: `<leader>i`",
+          "examples": [
+            "<leader>i"
+          ]
         },
         "input_clear": {
           "type": "string",
-          "description": "Clear input field"
+          "default": "ctrl+c",
+          "description": "Clear input field\n\ndefault: `ctrl+c`",
+          "examples": [
+            "ctrl+c"
+          ]
         },
         "input_paste": {
           "type": "string",
-          "description": "Paste from clipboard"
+          "default": "ctrl+v",
+          "description": "Paste from clipboard\n\ndefault: `ctrl+v`",
+          "examples": [
+            "ctrl+v"
+          ]
         },
         "input_submit": {
           "type": "string",
-          "description": "Submit input"
+          "default": "enter",
+          "description": "Submit input\n\ndefault: `enter`",
+          "examples": [
+            "enter"
+          ]
         },
         "input_newline": {
           "type": "string",
-          "description": "Insert newline in input"
-        },
-        "history_previous": {
-          "type": "string",
-          "description": "Navigate to previous history item"
-        },
-        "history_next": {
-          "type": "string",
-          "description": "Navigate to next history item"
+          "default": "shift+enter,ctrl+j",
+          "description": "Insert newline in input\n\ndefault: `shift+enter,ctrl+j`",
+          "examples": [
+            "shift+enter,ctrl+j"
+          ]
         },
         "messages_page_up": {
           "type": "string",
-          "description": "Scroll messages up by one page"
+          "default": "pgup",
+          "description": "Scroll messages up by one page\n\ndefault: `pgup`",
+          "examples": [
+            "pgup"
+          ]
         },
         "messages_page_down": {
           "type": "string",
-          "description": "Scroll messages down by one page"
+          "default": "pgdown",
+          "description": "Scroll messages down by one page\n\ndefault: `pgdown`",
+          "examples": [
+            "pgdown"
+          ]
         },
         "messages_half_page_up": {
           "type": "string",
-          "description": "Scroll messages up by half page"
+          "default": "ctrl+alt+u",
+          "description": "Scroll messages up by half page\n\ndefault: `ctrl+alt+u`",
+          "examples": [
+            "ctrl+alt+u"
+          ]
         },
         "messages_half_page_down": {
           "type": "string",
-          "description": "Scroll messages down by half page"
+          "default": "ctrl+alt+d",
+          "description": "Scroll messages down by half page\n\ndefault: `ctrl+alt+d`",
+          "examples": [
+            "ctrl+alt+d"
+          ]
         },
         "messages_previous": {
           "type": "string",
-          "description": "Navigate to previous message"
+          "default": "ctrl+up",
+          "description": "Navigate to previous message\n\ndefault: `ctrl+up`",
+          "examples": [
+            "ctrl+up"
+          ]
         },
         "messages_next": {
           "type": "string",
-          "description": "Navigate to next message"
+          "default": "ctrl+down",
+          "description": "Navigate to next message\n\ndefault: `ctrl+down`",
+          "examples": [
+            "ctrl+down"
+          ]
         },
         "messages_first": {
           "type": "string",
-          "description": "Navigate to first message"
+          "default": "ctrl+g",
+          "description": "Navigate to first message\n\ndefault: `ctrl+g`",
+          "examples": [
+            "ctrl+g"
+          ]
         },
         "messages_last": {
           "type": "string",
-          "description": "Navigate to last message"
+          "default": "ctrl+alt+g",
+          "description": "Navigate to last message\n\ndefault: `ctrl+alt+g`",
+          "examples": [
+            "ctrl+alt+g"
+          ]
+        },
+        "messages_layout_toggle": {
+          "type": "string",
+          "default": "<leader>p",
+          "description": "Toggle layout\n\ndefault: `<leader>p`",
+          "examples": [
+            "<leader>p"
+          ]
+        },
+        "messages_copy": {
+          "type": "string",
+          "default": "<leader>y",
+          "description": "Copy message\n\ndefault: `<leader>y`",
+          "examples": [
+            "<leader>y"
+          ]
+        },
+        "messages_revert": {
+          "type": "string",
+          "default": "<leader>r",
+          "description": "Revert message\n\ndefault: `<leader>r`",
+          "examples": [
+            "<leader>r"
+          ]
         },
         "app_exit": {
           "type": "string",
-          "description": "Exit the application"
+          "default": "ctrl+c,<leader>q",
+          "description": "Exit the application\n\ndefault: `ctrl+c,<leader>q`",
+          "examples": [
+            "ctrl+c,<leader>q"
+          ]
         }
       },
       "additionalProperties": false,
@@ -171,7 +327,13 @@
             "additionalProperties": {
               "type": "object",
               "properties": {
+                "id": {
+                  "type": "string"
+                },
                 "name": {
+                  "type": "string"
+                },
+                "release_date": {
                   "type": "string"
                 },
                 "attachment": {
@@ -202,7 +364,10 @@
                       "type": "number"
                     }
                   },
-                  "required": ["input", "output"],
+                  "required": [
+                    "input",
+                    "output"
+                  ],
                   "additionalProperties": false
                 },
                 "limit": {
@@ -215,11 +380,11 @@
                       "type": "number"
                     }
                   },
-                  "required": ["context", "output"],
+                  "required": [
+                    "context",
+                    "output"
+                  ],
                   "additionalProperties": false
-                },
-                "id": {
-                  "type": "string"
                 },
                 "options": {
                   "type": "object",
@@ -234,7 +399,9 @@
             "additionalProperties": {}
           }
         },
-        "required": ["models"],
+        "required": [
+          "models"
+        ],
         "additionalProperties": false
       },
       "description": "Custom provider configurations and model overrides"
@@ -270,7 +437,10 @@
                 "description": "Enable or disable the MCP server on startup"
               }
             },
-            "required": ["type", "command"],
+            "required": [
+              "type",
+              "command"
+            ],
             "additionalProperties": false
           },
           {
@@ -290,7 +460,10 @@
                 "description": "Enable or disable the MCP server on startup"
               }
             },
-            "required": ["type", "url"],
+            "required": [
+              "type",
+              "url"
+            ],
             "additionalProperties": false
           }
         ]
@@ -330,7 +503,9 @@
                       }
                     }
                   },
-                  "required": ["command"],
+                  "required": [
+                    "command"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -353,7 +528,9 @@
                     }
                   }
                 },
-                "required": ["command"],
+                "required": [
+                  "command"
+                ],
                 "additionalProperties": false
               }
             }

@@ -25,7 +25,6 @@ export const SymbolsCommand = cmd({
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
-      await LSP.touchFile("./src/index.ts", true)
       using _ = Log.Default.time("symbols")
       const results = await LSP.workspaceSymbol(args.query)
       console.log(JSON.stringify(results, null, 2))

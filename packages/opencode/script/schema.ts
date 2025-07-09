@@ -4,5 +4,30 @@ import "zod-openapi/extend"
 import { Config } from "../src/config/config"
 import { zodToJsonSchema } from "zod-to-json-schema"
 
-const result = zodToJsonSchema(Config.Info)
+const result = zodToJsonSchema(Config.Info, {
+  /**
+   * We'll use the `default` values of the field as the only value in `examples`.
+   * This will ensure no docs are needed to be read, as the configuration is
+   * self-documenting.
+   *
+   * See https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-validation-00#rfc.section.9.5
+   */
+  postProcess(jsonSchema) {
+    const schema = jsonSchema as typeof jsonSchema & {
+      examples?: unknown[]
+    }
+    if (schema && typeof schema === "object" && "type" in schema && schema.type === "string" && schema?.default) {
+      if (!schema.examples) {
+        schema.examples = [schema.default]
+      }
+
+      schema.description = [schema.description || "", `default: \`${schema.default}\``]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim()
+    }
+
+    return jsonSchema
+  },
+})
 await Bun.write("config.schema.json", JSON.stringify(result, null, 2))

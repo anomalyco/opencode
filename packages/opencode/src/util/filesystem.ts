@@ -1,7 +1,17 @@
 import { exists } from "fs/promises"
-import { dirname, join } from "path"
+import { dirname, join, relative } from "path"
 
 export namespace Filesystem {
+  export function overlaps(a: string, b: string) {
+    const relA = relative(a, b)
+    const relB = relative(b, a)
+    return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
+  }
+
+  export function contains(parent: string, child: string) {
+    return relative(parent, child).startsWith("..")
+  }
+
   export async function findUp(target: string, start: string, stop?: string) {
     let current = start
     const result = []

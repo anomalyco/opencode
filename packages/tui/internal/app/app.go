@@ -35,6 +35,7 @@ type App struct {
 	Commands      commands.CommandRegistry
 	InitialModel  *string
 	InitialPrompt *string
+	compactCancel context.CancelFunc
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -306,13 +307,26 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) CompactSession(ctx context.Context) tea.Cmd {
+	if a.compactCancel != nil {
+		a.compactCancel()
+	}
+
+	compactCtx, cancel := context.WithCancel(ctx)
+	a.compactCancel = cancel
+
 	go func() {
-		_, err := a.Client.Session.Summarize(ctx, a.Session.ID, opencode.SessionSummarizeParams{
+		defer func() {
+			a.compactCancel = nil
+		}()
+
+		_, err := a.Client.Session.Summarize(compactCtx, a.Session.ID, opencode.SessionSummarizeParams{
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
 		if err != nil {
-			slog.Error("Failed to compact session", "error", err)
+			if compactCtx.Err() != context.Canceled {
+				slog.Error("Failed to compact session", "error", err)
+			}
 		}
 	}()
 	return nil
@@ -415,6 +429,12 @@ func (a *App) SendChatMessage(
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {
+	// Cancel any running compact operation
+	if a.compactCancel != nil {
+		a.compactCancel()
+		a.compactCancel = nil
+	}
+
 	_, err := a.Client.Session.Abort(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)

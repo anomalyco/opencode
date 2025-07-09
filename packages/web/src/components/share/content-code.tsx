@@ -1,7 +1,7 @@
-import { type JSX, splitProps, createResource, Suspense } from "solid-js"
 import { codeToHtml } from "shiki"
-import style from "./content-code.module.css"
+import { createResource, Suspense } from "solid-js"
 import { transformerNotationDiff } from "@shikijs/transformers"
+import style from "./content-code.module.css"
 
 interface Props {
   code: string
