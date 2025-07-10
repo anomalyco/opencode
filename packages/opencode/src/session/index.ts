@@ -321,7 +321,7 @@ export namespace Session {
     }
 
     const previous = msgs.at(-1) as MessageV2.Assistant
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX)
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
     // auto summarize if too long
     if (previous) {
