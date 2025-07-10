@@ -53,7 +53,7 @@ func (m statusComponent) logo() string {
 		Render(open + code + version)
 }
 
-func formatTokensAndCost(tokens float64, contextWindow float64, cost float64) string {
+func formatTokensAndCost(tokens float64, contextWindow float64, cost float64, isSubscriptionModel bool) string {
 	// Format tokens in human-readable format (e.g., 110K, 1.2M)
 	var formattedTokens string
 	switch {
@@ -73,10 +73,17 @@ func formatTokensAndCost(tokens float64, contextWindow float64, cost float64) st
 		formattedTokens = strings.Replace(formattedTokens, ".0M", "M", 1)
 	}
 
-	// Format cost with $ symbol and 2 decimal places
-	formattedCost := fmt.Sprintf("$%.2f", cost)
 	percentage := (float64(tokens) / float64(contextWindow)) * 100
 
+	if isSubscriptionModel {
+		return fmt.Sprintf(
+			"Context: %s (%d%%)",
+			formattedTokens,
+			int(percentage),
+		)
+	}
+
+	formattedCost := fmt.Sprintf("$%.2f", cost)
 	return fmt.Sprintf(
 		"Context: %s (%d%%), Cost: %s",
 		formattedTokens,
@@ -119,11 +126,15 @@ func (m statusComponent) View() string {
 			}
 		}
 
+		// Check if current model is a subscription model (cost is 0 for both input and output)
+		isSubscriptionModel := m.app.Model != nil &&
+			m.app.Model.Cost.Input == 0 && m.app.Model.Cost.Output == 0
+
 		sessionInfo = styles.NewStyle().
 			Foreground(t.TextMuted()).
 			Background(t.BackgroundElement()).
 			Padding(0, 1).
-			Render(formatTokensAndCost(tokens, contextWindow, cost))
+			Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
 	}
 
 	// diagnostics := styles.Padded().Background(t.BackgroundElement()).Render(m.projectDiagnostics())
