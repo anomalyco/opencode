@@ -34,25 +34,27 @@ export namespace Ripgrep {
 
   export const Match = z.object({
     type: z.literal("match"),
-    data: z.object({
-      path: z.object({
-        text: z.string(),
-      }),
-      lines: z.object({
-        text: z.string(),
-      }),
-      line_number: z.number(),
-      absolute_offset: z.number(),
-      submatches: z.array(
-        z.object({
-          match: z.object({
-            text: z.string(),
-          }),
-          start: z.number(),
-          end: z.number(),
+    data: z
+      .object({
+        path: z.object({
+          text: z.string(),
         }),
-      ),
-    }),
+        lines: z.object({
+          text: z.string(),
+        }),
+        line_number: z.number(),
+        absolute_offset: z.number(),
+        submatches: z.array(
+          z.object({
+            match: z.object({
+              text: z.string(),
+            }),
+            start: z.number(),
+            end: z.number(),
+          }),
+        ),
+      })
+      .openapi({ ref: "Match" }),
   })
 
   const End = z.object({

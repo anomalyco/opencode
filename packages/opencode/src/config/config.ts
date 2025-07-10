@@ -56,6 +56,17 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
+  export const Mode = z
+    .object({
+      model: z.string().optional(),
+      prompt: z.string().optional(),
+      tools: z.record(z.string(), z.boolean()).optional(),
+    })
+    .openapi({
+      ref: "ModeConfig",
+    })
+  export type Mode = z.infer<typeof Mode>
+
   export const Keybinds = z
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
@@ -100,6 +111,7 @@ export namespace Config {
     .openapi({
       ref: "KeybindsConfig",
     })
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -109,6 +121,14 @@ export namespace Config {
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      mode: z
+        .object({
+          build: Mode.optional(),
+          plan: Mode.optional(),
+        })
+        .catchall(Mode)
+        .optional(),
+      log_level: Log.Level.optional().describe("Minimum log level to write to log files"),
       provider: z
         .record(
           ModelsDev.Provider.partial().extend({

@@ -1,15 +1,59 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
+import z from "zod"
+
 export namespace Log {
+  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).openapi({ ref: "LogLevel", description: "Log level" })
+  export type Level = z.infer<typeof Level>
+
+  const levelPriority: Record<Level, number> = {
+    DEBUG: 0,
+    INFO: 1,
+    WARN: 2,
+    ERROR: 3,
+  }
+
+  let currentLevel: Level = "INFO"
+
+  export function setLevel(level: Level) {
+    currentLevel = level
+  }
+
+  export function getLevel(): Level {
+    return currentLevel
+  }
+
+  function shouldLog(level: Level): boolean {
+    return levelPriority[level] >= levelPriority[currentLevel]
+  }
+
+  export type Logger = {
+    debug(message?: any, extra?: Record<string, any>): void
+    info(message?: any, extra?: Record<string, any>): void
+    error(message?: any, extra?: Record<string, any>): void
+    warn(message?: any, extra?: Record<string, any>): void
+    tag(key: string, value: string): Logger
+    clone(): Logger
+    time(
+      message: string,
+      extra?: Record<string, any>,
+    ): {
+      stop(): void
+      [Symbol.dispose](): void
+    }
+  }
+
+  const loggers = new Map<string, Logger>()
+
   export const Default = create({ service: "default" })
 
   export interface Options {
     print: boolean
+    level?: Level
   }
 
   let logpath = ""
-
   export function file() {
     return logpath
   }
@@ -47,6 +91,14 @@ export namespace Log {
   export function create(tags?: Record<string, any>) {
     tags = tags || {}
 
+    const service = tags["service"]
+    if (service && typeof service === "string") {
+      const cached = loggers.get(service)
+      if (cached) {
+        return cached
+      }
+    }
+
     function build(message: any, extra?: Record<string, any>) {
       const prefix = Object.entries({
         ...tags,
@@ -60,15 +112,26 @@ export namespace Log {
       last = next.getTime()
       return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
     }
-    const result = {
+    const result: Logger = {
+      debug(message?: any, extra?: Record<string, any>) {
+        if (shouldLog("DEBUG")) {
+          process.stderr.write("DEBUG " + build(message, extra))
+        }
+      },
       info(message?: any, extra?: Record<string, any>) {
-        process.stderr.write("INFO  " + build(message, extra))
+        if (shouldLog("INFO")) {
+          process.stderr.write("INFO  " + build(message, extra))
+        }
       },
       error(message?: any, extra?: Record<string, any>) {
-        process.stderr.write("ERROR " + build(message, extra))
+        if (shouldLog("ERROR")) {
+          process.stderr.write("ERROR " + build(message, extra))
+        }
       },
       warn(message?: any, extra?: Record<string, any>) {
-        process.stderr.write("WARN  " + build(message, extra))
+        if (shouldLog("WARN")) {
+          process.stderr.write("WARN  " + build(message, extra))
+        }
       },
       tag(key: string, value: string) {
         if (tags) tags[key] = value
@@ -94,6 +157,10 @@ export namespace Log {
           },
         }
       },
+    }
+
+    if (service && typeof service === "string") {
+      loggers.set(service, result)
     }
 
     return result

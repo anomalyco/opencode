@@ -30,7 +30,7 @@
     "sharp": "0.32.5",
     "shiki": "3.4.2",
     "solid-js": "1.9.7",
-    "toolbeam-docs-theme": "0.4.1"
+    "toolbeam-docs-theme": "0.4.3"
   },
   "devDependencies": {
     "opencode": "workspace:*",

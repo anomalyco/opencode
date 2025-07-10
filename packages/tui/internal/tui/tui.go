@@ -202,7 +202,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			// Set command provider for command completion
-			a.completions = dialog.NewCompletionDialogComponent(a.commandProvider)
+			a.completions = dialog.NewCompletionDialogComponent(a.commandProvider, "/")
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -221,7 +221,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			// Set file provider for file completion
-			a.completions = dialog.NewCompletionDialogComponent(a.fileProvider)
+			a.completions = dialog.NewCompletionDialogComponent(a.fileProvider, "@")
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -1034,7 +1034,7 @@ func NewModel(app *app.App) tea.Model {
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
-	completions := dialog.NewCompletionDialogComponent(commandProvider)
+	completions := dialog.NewCompletionDialogComponent(commandProvider, "/")
 
 	var leaderBinding *key.Binding
 	if app.Config.Keybinds.Leader != "" {

@@ -53,7 +53,7 @@ clipboard data is changed, use the watcher API:
 		println(string(data))
 	}
 */
-package clipboard // import "golang.design/x/clipboard"
+package clipboard
 
 import (
 	"context"

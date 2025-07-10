@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -13,8 +12,9 @@ import (
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/tui"
-	"golang.design/x/clipboard"
+	"github.com/sst/opencode/internal/util"
 )
 
 var Version = "dev"
@@ -39,33 +39,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	logfile := filepath.Join(appInfo.Path.Data, "log", "tui.log")
-	if _, err := os.Stat(filepath.Dir(logfile)); os.IsNotExist(err) {
-		err := os.MkdirAll(filepath.Dir(logfile), 0755)
-		if err != nil {
-			slog.Error("Failed to create log directory", "error", err)
-			os.Exit(1)
-		}
-	}
-	file, err := os.Create(logfile)
-	if err != nil {
-		slog.Error("Failed to create log file", "error", err)
-		os.Exit(1)
-	}
-	defer file.Close()
-	logger := slog.New(slog.NewTextHandler(file, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	slog.SetDefault(logger)
-
-	slog.Debug("TUI launched", "app", appInfo)
-
 	httpClient := opencode.NewClient(
 		option.WithBaseURL(url),
 	)
 
-	if err != nil {
-		slog.Error("Failed to create client", "error", err)
-		os.Exit(1)
-	}
+	apiHandler := util.NewAPILogHandler(httpClient, "tui", slog.LevelDebug)
+	logger := slog.New(apiHandler)
+	slog.SetDefault(logger)
+
+	slog.Debug("TUI launched", "app", appInfo)
 
 	go func() {
 		err = clipboard.Init()

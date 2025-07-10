@@ -1,0 +1,103 @@
+---
+title: Share
+description: Share your opencode conversations.
+---
+
+opencode's share feature allows you to create public links to your opencode conversations, so you can collaborate with teammates or get help from others.
+
+:::note
+Shared conversations are publicly accessible to anyone with the link.
+:::
+
+---
+
+## How it works
+
+When you share a conversation, opencode:
+
+1. Creates a unique public URL for your session
+2. Syncs your conversation history to our servers
+3. Makes the conversation accessible via the shareable link — `opencode.ai/s/<share-id>`
+
+---
+
+## Sharing
+
+You can manually share a conversation or enable automatic sharing for all new conversations.
+
+---
+
+### Manual
+
+Use the `/share` command in any conversation to create a shareable link:
+
+```
+/share
+```
+
+This will generate a unique URL that'll be copied to your clipboard.
+
+---
+
+### Autoshare
+
+You can enable automatic sharing for all new conversations through the `autoshare` option in your [config file](/docs/config).
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoshare": true
+}
+```
+
+By default, `autoshare` is disabled.
+
+---
+
+## Unsharing
+
+To stop sharing a conversation and remove it from public access:
+
+```
+/unshare
+```
+
+This will remove the share link and delete the data related to the conversation.
+
+---
+
+## Privacy
+
+There are a few things to keep in mind when sharing a conversation.
+
+---
+
+### Data retention
+
+Shared conversations remain accessible until you explicitly unshare them. This
+includes:
+
+- Full conversation history
+- All messages and responses
+- Session metadata
+
+---
+
+### Recommendations
+
+- Only share conversations that don't contain sensitive information
+- Review conversation content before sharing
+- Unshare conversations when collaboration is complete
+- Avoid sharing conversations with proprietary code or confidential data
+
+---
+
+## For enterprises
+
+For enterprise deployments, the share feature can be:
+
+- **Self-hosted** on your own infrastructure
+- **Restricted** to authenticated users only
+- **Disabled** entirely for security compliance
+
+[Learn more](/docs/enterprise) about using opencode in your organization.

@@ -17,14 +17,11 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3
 	github.com/sst/opencode-sdk-go v0.1.0-alpha.8
-	golang.design/x/clipboard v0.7.1
+	golang.org/x/image v0.28.0
 	rsc.io/qr v0.2.0
 )
 
-replace (
-	github.com/sst/opencode-sdk-go => ./sdk
-	golang.design/x/clipboard => ./clipboard
-)
+replace github.com/sst/opencode-sdk-go => ./sdk
 
 require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
@@ -58,8 +55,6 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
-	golang.org/x/exp/shiny v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/mobile v0.0.0-20250606033058-a2a15c67f36f // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -87,7 +82,6 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.8 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
-	golang.org/x/image v0.28.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
