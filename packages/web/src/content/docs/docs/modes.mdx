@@ -105,7 +105,7 @@ Specify a custom system prompt file for this mode with the `prompt` config. The 
 {
   "mode": {
     "review": {
-      "prompt": "{file:./prompts/code-review.txt}"
+      "prompt": "./prompts/code-review.txt"
     }
   }
 }
@@ -170,7 +170,7 @@ You can create your own custom modes by adding them to the `mode` configuration.
   "$schema": "https://opencode.ai/config.json",
   "mode": {
     "docs": {
-      "prompt": "{file:./prompts/documentation.txt}",
+      "prompt": "./prompts/documentation.txt",
       "tools": {
         "write": true,
         "edit": true,
