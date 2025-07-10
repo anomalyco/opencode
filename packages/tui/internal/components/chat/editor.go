@@ -38,6 +38,7 @@ type EditorComponent interface {
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
+	SetValue(value string)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 }
@@ -382,6 +383,10 @@ func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 	m.interruptKeyInDebounce = inDebounce
+}
+
+func (m *editorComponent) SetValue(value string) {
+	m.textarea.SetValue(value)
 }
 
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {

@@ -389,6 +389,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCompletionDialog = false
 		a.app, cmd = a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
 		cmds = append(cmds, cmd)
+	case app.SetEditorContentMsg:
+		// Set the editor content without sending
+		a.editor.SetValue(msg.Text)
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
 		a.fileCompletionActive = false
@@ -857,7 +863,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 				return nil
 			}
 			os.Remove(tmpfile.Name())
-			return app.SendMsg{
+			return app.SetEditorContentMsg{
 				Text: string(content),
 			}
 		})

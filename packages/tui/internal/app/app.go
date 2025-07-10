@@ -50,6 +50,9 @@ type SendMsg struct {
 	Text        string
 	Attachments []opencode.FilePartParam
 }
+type SetEditorContentMsg struct {
+	Text string
+}
 type OptimisticMessageAddedMsg struct {
 	Message opencode.MessageUnion
 }
