@@ -28,6 +28,7 @@ func main() {
 	var model *string = flag.String("model", "", "model to begin with")
 	var prompt *string = flag.String("prompt", "", "prompt to begin with")
 	var mode *string = flag.String("mode", "", "mode to begin with")
+	var fullWidth *bool = flag.BoolP("fullwidth", "f", false, "use full window width for chat")
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
@@ -69,7 +70,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
+	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode, fullWidth)
 	if err != nil {
 		panic(err)
 	}

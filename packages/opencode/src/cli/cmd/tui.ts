@@ -35,6 +35,11 @@ export const TuiCommand = cmd({
       .option("mode", {
         type: "string",
         describe: "mode to use",
+      })
+      .option("fullwidth", {
+        type: "boolean",
+        alias: ["f"],
+        describe: "use full window width for chat",
       }),
   handler: async (args) => {
     while (true) {
@@ -83,6 +88,7 @@ export const TuiCommand = cmd({
             ...(args.model ? ["--model", args.model] : []),
             ...(args.prompt ? ["--prompt", args.prompt] : []),
             ...(args.mode ? ["--mode", args.mode] : []),
+            ...(args.fullwidth ? ["--fullwidth"] : []),
           ],
           cwd,
           stdout: "inherit",

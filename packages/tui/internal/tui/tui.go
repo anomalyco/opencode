@@ -478,12 +478,19 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
-		container := min(a.width, 84)
+		container := a.width
+		if !a.app.State.FullWidth {
+			container = min(a.width, 84)
+		}
 		if a.fileViewer.HasFile() {
 			if a.width < fileViewerFullWidthCutoff {
 				container = a.width
 			} else {
-				container = min(min(a.width, max(a.width/2, 50)), 84)
+				if a.app.State.FullWidth {
+					container = max(a.width/2, 50)
+				} else {
+					container = min(min(a.width, max(a.width/2, 50)), 84)
+				}
 			}
 		}
 		layout.Current = &layout.LayoutInfo{
@@ -730,7 +737,10 @@ func (a appModel) home(width int) string {
 
 	mainHeight := lipgloss.Height(strings.Join(lines, "\n"))
 
-	editorWidth := min(width, 80)
+	editorWidth := width
+	if !a.app.State.FullWidth {
+		editorWidth = min(width, 80)
+	}
 	editorView := a.editor.View(editorWidth)
 	editorView = lipgloss.PlaceHorizontal(
 		width,
@@ -1027,6 +1037,18 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		a.messagesRight = !a.messagesRight
 		a.app.State.MessagesRight = a.messagesRight
 		a.app.SaveState()
+	case commands.FullWidthToggleCommand:
+		a.app.State.FullWidth = !a.app.State.FullWidth
+		a.app.SaveState()
+		message := "Full width mode enabled"
+		if !a.app.State.FullWidth {
+			message = "Full width mode disabled"
+		}
+		cmds = append(cmds, toast.NewInfoToast(message))
+		// Trigger a window resize to recalculate layout
+		cmds = append(cmds, func() tea.Msg {
+			return tea.WindowSizeMsg{Width: a.width, Height: a.height + 2}
+		})
 	case commands.MessagesCopyCommand:
 		selected := a.messages.Selected()
 		if selected != "" {

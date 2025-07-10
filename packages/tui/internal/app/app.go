@@ -74,6 +74,7 @@ func New(
 	initialModel *string,
 	initialPrompt *string,
 	initialMode *string,
+	fullWidth *bool,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -100,6 +101,11 @@ func New(
 
 	if configInfo.Theme != "" {
 		appState.Theme = configInfo.Theme
+	}
+
+	// Set fullWidth from CLI flag if provided
+	if fullWidth != nil {
+		appState.FullWidth = *fullWidth
 	}
 
 	var modeIndex int

@@ -30,6 +30,7 @@ type State struct {
 	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
 	MessagesRight      bool                 `toml:"messages_right"`
 	SplitDiff          bool                 `toml:"split_diff"`
+	FullWidth          bool                 `toml:"full_width"`
 }
 
 func NewState() *State {

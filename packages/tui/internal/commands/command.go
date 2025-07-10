@@ -117,6 +117,7 @@ const (
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
 	MessagesRevertCommand       CommandName = "messages_revert"
+	FullWidthToggleCommand      CommandName = "fullwidth_toggle"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -319,6 +320,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        MessagesRevertCommand,
 			Description: "revert message",
 			Keybindings: parseBindings("<leader>r"),
+		},
+		{
+			Name:        FullWidthToggleCommand,
+			Description: "toggle full width",
+			Keybindings: parseBindings("<leader>w"),
+			Trigger:     []string{"fullwidth"},
 		},
 		{
 			Name:        AppExitCommand,
