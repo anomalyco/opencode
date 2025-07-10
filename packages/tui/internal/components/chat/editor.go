@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -180,7 +181,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			attachment := &textarea.Attachment{
 				ID:        uuid.NewString(),
 				Display:   "@" + filePath,
-				URL:       fmt.Sprintf("file://./%s", filePath),
+				URL:       fmt.Sprintf("file://./%s", url.PathEscape(filePath)),
 				Filename:  filePath,
 				MediaType: mediaType,
 			}
