@@ -2,6 +2,7 @@ package dialog
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	"github.com/charmbracelet/bubbles/v2/textarea"
@@ -87,6 +88,7 @@ type completionDialogComponent struct {
 	height               int
 	pseudoSearchTextArea textarea.Model
 	list                 list.List[CompletionItemI]
+	trigger              string
 }
 
 type completionDialogKeyMap struct {
@@ -119,8 +121,8 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				c.pseudoSearchTextArea, cmd = c.pseudoSearchTextArea.Update(msg)
 				cmds = append(cmds, cmd)
 
-				var query string
-				query = c.pseudoSearchTextArea.Value()
+				fullValue := c.pseudoSearchTextArea.Value()
+				query := strings.TrimPrefix(fullValue, c.trigger)
 
 				if query != c.query {
 					c.query = query
@@ -147,8 +149,9 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return c, c.complete(item)
 			case key.Matches(msg, completionDialogKeys.Cancel):
-				// Only close on backspace when there are no characters left
-				if msg.String() != "backspace" || len(c.pseudoSearchTextArea.Value()) <= 0 {
+				// Only close on backspace when there are no characters left, unless we're back to just the trigger
+				value := c.pseudoSearchTextArea.Value()
+				if msg.String() != "backspace" || (len(value) <= len(c.trigger) && value != c.trigger) {
 					return c, c.close()
 				}
 			}
@@ -227,7 +230,7 @@ func (c *completionDialogComponent) close() tea.Cmd {
 	return util.CmdHandler(CompletionDialogCloseMsg{})
 }
 
-func NewCompletionDialogComponent(completionProvider CompletionProvider) CompletionDialog {
+func NewCompletionDialogComponent(completionProvider CompletionProvider, trigger string) CompletionDialog {
 	ti := textarea.New()
 
 	li := list.NewListComponent(
@@ -245,10 +248,14 @@ func NewCompletionDialogComponent(completionProvider CompletionProvider) Complet
 		li.SetItems(items)
 	}()
 
+	// Initialize the textarea with the trigger character
+	ti.SetValue(trigger)
+
 	return &completionDialogComponent{
 		query:                "",
 		completionProvider:   completionProvider,
 		pseudoSearchTextArea: ti,
 		list:                 li,
+		trigger:              trigger,
 	}
 }

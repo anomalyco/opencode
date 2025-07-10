@@ -83,7 +83,7 @@
         "sharp": "0.32.5",
         "shiki": "3.4.2",
         "solid-js": "1.9.7",
-        "toolbeam-docs-theme": "0.4.1",
+        "toolbeam-docs-theme": "0.4.3",
       },
       "devDependencies": {
         "@types/node": "catalog:",
@@ -1531,7 +1531,7 @@
 
     "token-types": ["token-types@6.0.0", "", { "dependencies": { "@tokenizer/token": "^0.3.0", "ieee754": "^1.2.1" } }, "sha512-lbDrTLVsHhOMljPscd0yitpozq7Ga2M5Cvez5AjGg8GASBjtt6iERCAJ93yommPmz62fb45oFIXHEZ3u9bfJEA=="],
 
-    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.1", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-lTI4dHZaVNQky29m7sb36Oy4tWPwxsCuFxFjF8hgGW0vpV+S6qPvI9SwsJFvdE/OHO5DoI7VMbryV1pxZHkkHQ=="],
+    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.3", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-3um/NsSq4xFeKbKrNGPHIzfTixwnEVvroqA8Q+lecnYHHJ5TtiYTggHDqewOW+I67t0J1IVBwVKUPjxiQfIcog=="],
 
     "tr46": ["tr46@0.0.3", "", {}, "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="],
 

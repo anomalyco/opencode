@@ -7,5 +7,5 @@ cd "$(dirname "$0")/.."
 echo "==> Running Go build"
 go build .
 
-# Compile the tests but don't run them
-go test -c .
+echo "==> Checking tests compile"
+go test -run=^$ .

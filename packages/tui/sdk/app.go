@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
 )
@@ -43,6 +44,14 @@ func (r *AppService) Init(ctx context.Context, opts ...option.RequestOption) (re
 	opts = append(r.Options[:], opts...)
 	path := "app/init"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Write a log entry to the server logs
+func (r *AppService) Log(ctx context.Context, body AppLogParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "log"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return
 }
 
@@ -120,4 +129,55 @@ func (r *AppTime) UnmarshalJSON(data []byte) (err error) {
 
 func (r appTimeJSON) RawJSON() string {
 	return r.raw
+}
+
+// Log level
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "DEBUG"
+	LogLevelInfo  LogLevel = "INFO"
+	LogLevelWarn  LogLevel = "WARN"
+	LogLevelError LogLevel = "ERROR"
+)
+
+func (r LogLevel) IsKnown() bool {
+	switch r {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
+		return true
+	}
+	return false
+}
+
+type AppLogParams struct {
+	// Log level
+	Level param.Field[AppLogParamsLevel] `json:"level,required"`
+	// Log message
+	Message param.Field[string] `json:"message,required"`
+	// Service name for the log entry
+	Service param.Field[string] `json:"service,required"`
+	// Additional metadata for the log entry
+	Extra param.Field[map[string]interface{}] `json:"extra"`
+}
+
+func (r AppLogParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
+}
+
+// Log level
+type AppLogParamsLevel string
+
+const (
+	AppLogParamsLevelDebug AppLogParamsLevel = "debug"
+	AppLogParamsLevelInfo  AppLogParamsLevel = "info"
+	AppLogParamsLevelError AppLogParamsLevel = "error"
+	AppLogParamsLevelWarn  AppLogParamsLevel = "warn"
+)
+
+func (r AppLogParamsLevel) IsKnown() bool {
+	switch r {
+	case AppLogParamsLevelDebug, AppLogParamsLevelInfo, AppLogParamsLevelError, AppLogParamsLevelWarn:
+		return true
+	}
+	return false
 }

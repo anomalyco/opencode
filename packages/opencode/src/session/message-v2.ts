@@ -76,6 +76,7 @@ export namespace MessageV2 {
     .object({
       type: z.literal("text"),
       text: z.string(),
+      synthetic: z.boolean().optional(),
     })
     .openapi({
       ref: "TextPart",

@@ -4,7 +4,7 @@
 //
 // Written by Changkun Ou <changkun.de>
 
-//go:build linux && !android
+//go:build linux
 
 package clipboard
 
@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
@@ -72,11 +73,13 @@ func initialize() error {
 			clipboardTools[i].available = true
 			if selectedTool < 0 {
 				selectedTool = i
+				slog.Debug("Clipboard tool found", "tool", tool.name)
 			}
 		}
 	}
 
 	if selectedTool < 0 {
+		slog.Warn("No clipboard utility found on system. Copy/paste functionality will be disabled.")
 		return fmt.Errorf(`%w: No clipboard utility found. Install one of the following:
 
 For X11 systems:
@@ -98,6 +101,12 @@ If running in a headless environment, you may also need:
 }
 
 func read(t Format) (buf []byte, err error) {
+	// Ensure clipboard is initialized before attempting to read
+	if err := initialize(); err != nil {
+		slog.Debug("Clipboard read failed: not initialized", "error", err)
+		return nil, err
+	}
+
 	toolMutex.Lock()
 	tool := clipboardTools[selectedTool]
 	toolMutex.Unlock()
@@ -167,6 +176,11 @@ func readImage(tool struct {
 }
 
 func write(t Format, buf []byte) (<-chan struct{}, error) {
+	// Ensure clipboard is initialized before attempting to write
+	if err := initialize(); err != nil {
+		return nil, err
+	}
+
 	toolMutex.Lock()
 	tool := clipboardTools[selectedTool]
 	toolMutex.Unlock()
@@ -230,6 +244,13 @@ func write(t Format, buf []byte) (<-chan struct{}, error) {
 
 func watch(ctx context.Context, t Format) <-chan []byte {
 	recv := make(chan []byte, 1)
+
+	// Ensure clipboard is initialized before starting watch
+	if err := initialize(); err != nil {
+		close(recv)
+		return recv
+	}
+
 	ti := time.NewTicker(time.Second)
 
 	// Get initial clipboard content

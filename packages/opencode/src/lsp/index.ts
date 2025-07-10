@@ -28,7 +28,7 @@ export namespace LSP {
       }),
     })
     .openapi({
-      ref: "LSP.Symbol",
+      ref: "Symbol",
     })
   export type Symbol = z.infer<typeof Symbol>
 

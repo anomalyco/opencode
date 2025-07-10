@@ -184,9 +184,7 @@ export namespace LSPClient {
       },
     }
 
-    if (input.server.onInitialized) {
-      await input.server.onInitialized(result)
-    }
+    if (input.server.onInitialized) input.server.onInitialized(result)
     l.info("initialized")
 
     return result

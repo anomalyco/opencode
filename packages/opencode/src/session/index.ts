@@ -16,6 +16,7 @@ import {
 } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
+import PROMPT_PLAN from "../session/prompt/plan.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -30,12 +31,12 @@ import type { ModelsDev } from "../provider/models"
 import { Share } from "../share/share"
 import { Snapshot } from "../snapshot"
 import { Storage } from "../storage/storage"
-import type { Tool } from "../tool/tool"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
+import { Mode } from "./mode"
 import { Global } from "../global"
 
 const WEB_SERVER_PORT = 4321
@@ -367,13 +368,13 @@ export namespace Session {
     sessionID: string
     providerID: string
     modelID: string
+    mode?: string
     parts: MessageV2.UserPart[]
-    system?: string[]
-    tools?: Tool.Info[]
   }) {
     using abort = lock(input.sessionID)
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
+
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
     const session = await get(input.sessionID)
@@ -450,6 +451,7 @@ export namespace Session {
                 return [
                   {
                     type: "text",
+                    synthetic: true,
                     text: ["Called the Read tool on " + url.pathname, "<results>", text, "</results>"].join("\n"),
                   },
                 ]
@@ -459,6 +461,7 @@ export namespace Session {
                 {
                   type: "text",
                   text: `Called the Read tool with the following input: {\"filePath\":\"${url.pathname}\"}`,
+                  synthetic: true,
                 },
                 {
                   type: "file",
@@ -472,6 +475,14 @@ export namespace Session {
         return [part]
       }),
     ).then((x) => x.flat())
+
+    if (input.mode === "plan")
+      input.parts.push({
+        type: "text",
+        text: PROMPT_PLAN,
+        synthetic: true,
+      })
+
     if (msgs.length === 0 && !session.parentID) {
       generateText({
         maxOutputTokens: input.providerID === "google" ? 1024 : 20,
@@ -517,9 +528,13 @@ export namespace Session {
     await updateMessage(msg)
     msgs.push(msg)
 
-    const system = input.system ?? SystemPrompt.provider(input.providerID)
+    const mode = await Mode.get(input.mode ?? "build")
+    let system = mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.providerID, input.modelID)
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+    // max 2 system prompt messages for caching purposes
+    const [first, ...rest] = system
+    system = [first, rest.join("\n")]
 
     const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
@@ -548,7 +563,8 @@ export namespace Session {
     const tools: Record<string, AITool> = {}
 
     for (const item of await Provider.tools(input.providerID)) {
-      tools[item.id.replaceAll(".", "_")] = tool({
+      if (mode.tools[item.id] === false) continue
+      tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
@@ -580,6 +596,7 @@ export namespace Session {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (mode.tools[key] === false) continue
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {

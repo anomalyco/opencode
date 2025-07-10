@@ -1,13 +1,4 @@
-import {
-  For,
-  Show,
-  onMount,
-  Suspense,
-  onCleanup,
-  createMemo,
-  createSignal,
-  SuspenseList,
-} from "solid-js"
+import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, SuspenseList } from "solid-js"
 import { DateTime } from "luxon"
 import { createStore, reconcile } from "solid-js/store"
 import { IconArrowDown } from "./icons"
@@ -277,7 +268,6 @@ export default function Share(props: {
         }
       }
     }
-    console.log(result.messages)
     return result
   })
 
@@ -327,42 +317,47 @@ export default function Share(props: {
           <div class={styles.parts}>
             <SuspenseList revealOrder="forwards">
               <For each={data().messages}>
-                {(msg, msgIndex) => (
-                  <Suspense>
-                    <For
-                      each={msg.parts.filter((x, index) => {
-                        if (x.type === "step-start" && index > 0) return false
-                        if (x.type === "tool" && x.tool === "todoread") return false
-                        if (x.type === "text" && !x.text) return false
-                        if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
-                          return false
-                        return true
-                      })}
-                    >
-                      {(part, partIndex) => {
-                        const last = createMemo(
-                          () => data().messages.length === msgIndex() + 1 && msg.parts.length === partIndex() + 1,
-                        )
+                {(msg, msgIndex) => {
+                  const filteredParts = createMemo(() =>
+                    msg.parts.filter((x, index) => {
+                      if (x.type === "step-start" && index > 0) return false
+                      if (x.type === "tool" && x.tool === "todoread") return false
+                      if (x.type === "text" && !x.text) return false
+                      if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
+                        return false
+                      return true
+                    })
+                  )
 
-                        onMount(() => {
-                          const hash = window.location.hash.slice(1)
-                          // Wait till all parts are loaded
-                          if (
-                            hash !== "" &&
-                            !hasScrolledToAnchor &&
-                            msg.parts.length === partIndex() + 1 &&
-                            data().messages.length === msgIndex() + 1
-                          ) {
-                            hasScrolledToAnchor = true
-                            scrollToAnchor(hash)
-                          }
-                        })
+                  return (
+                    <Suspense>
+                      <For each={filteredParts()}>
+                        {(part, partIndex) => {
+                          const last = createMemo(
+                            () =>
+                              data().messages.length === msgIndex() + 1 && filteredParts().length === partIndex() + 1,
+                          )
 
-                        return <Part last={last()} part={part} index={partIndex()} message={msg} />
-                      }}
-                    </For>
-                  </Suspense>
-                )}
+                          onMount(() => {
+                            const hash = window.location.hash.slice(1)
+                            // Wait till all parts are loaded
+                            if (
+                              hash !== "" &&
+                              !hasScrolledToAnchor &&
+                              filteredParts().length === partIndex() + 1 &&
+                              data().messages.length === msgIndex() + 1
+                            ) {
+                              hasScrolledToAnchor = true
+                              scrollToAnchor(hash)
+                            }
+                          })
+
+                          return <Part last={last()} part={part} index={partIndex()} message={msg} />
+                        }}
+                      </For>
+                    </Suspense>
+                  )
+                }}
               </For>
             </SuspenseList>
             <div data-section="part" data-part-type="summary">

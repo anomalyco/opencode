@@ -15,13 +15,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"golang.design/x/clipboard"
 )
 
 type EditorComponent interface {
@@ -96,7 +96,16 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".pdf":
 			mediaType = "application/pdf"
 		default:
-			mediaType = "text/plain"
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + filePath,
+				URL:       fmt.Sprintf("file://./%s", filePath),
+				Filename:  filePath,
+				MediaType: "text/plain",
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
 		}
 
 		fileBytes, err := os.ReadFile(filePath)

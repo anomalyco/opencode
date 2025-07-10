@@ -48,17 +48,24 @@ resources:
   app:
     models:
       app: App
+      logLevel: LogLevel
     methods:
       get: get /app
       init: post /app/init
+      log: post /log
 
   find:
+    models:
+      match: Match
+      symbol: Symbol
     methods:
       text: get /find
       files: get /find/file
       symbols: get /find/symbol
 
   file:
+    models:
+      file: File
     methods:
       read: get /file
       status: get /file/status
