@@ -20,7 +20,6 @@ export const IGNORE_PATTERNS = [
   "zig-out",
   ".coverage",
   "coverage/",
-  "vendor/",
   "tmp/",
   "temp/",
   ".cache/",
@@ -31,7 +30,12 @@ export const IGNORE_PATTERNS = [
   "env/",
 ]
 
-const LIMIT = 100
+const DEFAULT_LIMIT = 100
+
+function shouldIgnoreFile(file: string, ignorePatterns: string[]): boolean {
+  return IGNORE_PATTERNS.some((p) => new Bun.Glob(p).match(file)) ||
+         ignorePatterns.some((pattern) => new Bun.Glob(pattern).match(file))
+}
 
 export const ListTool = Tool.define({
   id: "list",
@@ -48,10 +52,9 @@ export const ListTool = Tool.define({
     const files = []
 
     for await (const file of glob.scan({ cwd: searchPath, dot: true })) {
-      if (IGNORE_PATTERNS.some((p) => file.includes(p))) continue
-      if (params.ignore?.some((pattern) => new Bun.Glob(pattern).match(file))) continue
+      if (shouldIgnoreFile(file, params.ignore || [])) continue
       files.push(file)
-      if (files.length >= LIMIT) break
+      if (files.length >= DEFAULT_LIMIT) break
     }
 
     // Build directory structure
@@ -106,7 +109,7 @@ export const ListTool = Tool.define({
       title: path.relative(app.path.root, searchPath),
       metadata: {
         count: files.length,
-        truncated: files.length >= LIMIT,
+        truncated: files.length >= DEFAULT_LIMIT,
       },
       output,
     }
