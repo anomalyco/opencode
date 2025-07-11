@@ -2,6 +2,7 @@ package status
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -11,7 +12,6 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
-	"github.com/sst/opencode/internal/util"
 )
 
 type StatusComponent interface {
@@ -20,10 +20,9 @@ type StatusComponent interface {
 }
 
 type statusComponent struct {
-	app     *app.App
-	width   int
-	cwd     string
-	gitInfo *util.GitInfo
+	app   *app.App
+	width int
+	cwd   string
 }
 
 func (m statusComponent) Init() tea.Cmd {
@@ -61,27 +60,32 @@ func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
 
-	// Shorten the current working directory for less clutter
-	shortenedCwd := util.ShortenPath(m.cwd, 30)
+	// Shorten long paths
+	displayCwd := m.cwd
+	if len(m.cwd) > 30 && strings.Contains(m.cwd, "/") {
+		parts := strings.Split(m.cwd, "/")
+		if len(parts) > 2 {
+			displayCwd = "~/.../"+strings.Join(parts[len(parts)-2:], "/")
+		}
+	}
+
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
 		Padding(0, 1).
-		Render(shortenedCwd)
+		Render(displayCwd)
 
-	// Git information display
+	// Git head display
 	var git string
-	if m.gitInfo != nil && m.gitInfo.IsRepo && m.gitInfo.Branch != "" {
-		gitText := m.gitInfo.Branch
-		if m.gitInfo.CommitHash != "" {
-			gitText += "@" + m.gitInfo.CommitHash
+	if branch, err := exec.Command("git", "branch", "--show-current").Output(); err == nil {
+		if hash, err := exec.Command("git", "rev-parse", "--short=7", "HEAD").Output(); err == nil {
+			gitText := strings.TrimSpace(string(branch)) + "@" + strings.TrimSpace(string(hash))
+			git = styles.NewStyle().
+				Foreground(t.Info()).
+				Background(t.BackgroundPanel()).
+				Padding(0, 1).
+				Render(gitText)
 		}
-		
-		git = styles.NewStyle().
-			Foreground(t.Info()).
-			Background(t.BackgroundPanel()).
-			Padding(0, 1).
-			Render(gitText)
 	}
 
 	var modeBackground compat.AdaptiveColor
@@ -162,9 +166,6 @@ func NewStatusCmp(app *app.App) StatusComponent {
 		cwdPath = "~" + cwdPath[len(homePath):]
 	}
 	statusComponent.cwd = cwdPath
-
-	// Get git information for the current directory
-	statusComponent.gitInfo = util.GetGitInfo()
 
 	return statusComponent
 }
