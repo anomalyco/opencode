@@ -110,6 +110,10 @@ body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
   display: flex;
   gap: 0.5rem 1rem;
   flex-wrap: wrap;
+
+  li {
+    margin-top: 0 !important;
+  }
 }
 
 [data-section="stats"] li {
