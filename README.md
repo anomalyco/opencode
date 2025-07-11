@@ -1,1 +1,1 @@
-# Git Status Bar Test
+# Test Project for Git Status Bar
