@@ -351,8 +351,8 @@ export namespace Provider {
 
           // Use auth token first, then API key, or placeholder if using baseURL without auth
           if (authToken) {
-            options["apiKey"] = authToken
-            // For LLM gateways, also add custom fetch to handle gateway-specific headers
+            options["apiKey"] = "dummy" // The AI SDK requires an apiKey but we'll override the headers
+            // For claude-nexus-proxy, send auth token as Authorization Bearer header
             options["fetch"] = async (input: any, init: any) => {
               log.debug("making request to Anthropic gateway", {
                 url: typeof input === "string" ? input : input?.url,
@@ -363,9 +363,11 @@ export namespace Provider {
 
               const headers = {
                 ...init.headers,
-                "Proxy-Authorization": `Bearer ${authToken}`,
-                "X-API-Key": authToken,
+                Authorization: `Bearer ${authToken}`, // claude-nexus-proxy expects this format
               }
+
+              // Remove the x-api-key header that the AI SDK adds by default
+              delete headers["x-api-key"]
 
               log.debug("request headers", {
                 headers: Object.fromEntries(
@@ -387,7 +389,7 @@ export namespace Provider {
                 log.debug("gateway response", {
                   status: response.status,
                   statusText: response.statusText,
-                  headers: Object.fromEntries(response.headers.entries()),
+                  headers: Object.fromEntries(Array.from(response.headers.entries())),
                 })
 
                 return response
