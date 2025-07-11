@@ -216,7 +216,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if i == -1 {
 					return c, nil
 				}
-				return c, c.complete(item)
+				return c, c.fill(item)
 			case key.Matches(msg, completionDialogKeys.Cancel):
 				value := c.pseudoSearchTextArea.Value()
 				width := lipgloss.Width(value)
@@ -272,6 +272,29 @@ func (c *completionDialogComponent) complete(item CompletionItemI) tea.Cmd {
 		}),
 		c.close(),
 	)
+}
+
+func (c *completionDialogComponent) fill(item CompletionItemI) tea.Cmd {
+	value := c.pseudoSearchTextArea.Value()
+	if value == "" {
+		return nil
+	}
+
+	for _, provider := range c.providers {
+		// Check if this is a command completion
+		isCommand := provider.GetId() == "commands"
+
+		return tea.Batch(
+			util.CmdHandler(CompletionFilledMsg{
+				SearchString:    value,
+				CompletionValue: item.GetValue(),
+				IsCommand:       isCommand,
+			}),
+			c.close(),
+		)
+	}
+
+	return c.close()
 }
 
 func (c *completionDialogComponent) close() tea.Cmd {
