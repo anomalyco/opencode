@@ -44,7 +44,7 @@ export namespace Provider {
       const authToken = process.env["ANTHROPIC_AUTH_TOKEN"]
       const apiKey = process.env["ANTHROPIC_API_KEY"]
 
-      // If gateway configuration is present, use standard API key authentication
+      // If any gateway/direct API configuration is present, skip OAuth
       if (baseUrl || authToken || apiKey) {
         return { autoload: false } // Let the env loader handle this
       }
@@ -325,15 +325,27 @@ export namespace Provider {
 
         if (baseUrl || authToken || apiKey) {
           const options: Record<string, any> = {}
-          if (baseUrl) options["baseURL"] = baseUrl
-          if (authToken) options["apiKey"] = authToken
-          else if (apiKey) options["apiKey"] = apiKey
+
+          // Set base URL if provided
+          if (baseUrl) {
+            options["baseURL"] = baseUrl
+          }
+
+          // Use auth token first, then API key, or placeholder if using baseURL without auth
+          if (authToken) {
+            options["apiKey"] = authToken
+          } else if (apiKey) {
+            options["apiKey"] = apiKey
+          } else if (baseUrl) {
+            // If only baseURL is set, provide a placeholder API key
+            // The gateway should handle authentication
+            options["apiKey"] = "gateway-auth"
+          }
 
           mergeProvider(providerID, options, "env")
           continue
         }
       }
-
       const apiKey = provider.env.map((item) => process.env[item]).at(0)
       if (!apiKey) continue
       mergeProvider(
