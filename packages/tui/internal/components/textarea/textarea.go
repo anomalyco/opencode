@@ -931,7 +931,6 @@ func (m *Model) mapVisualOffsetToSliceIndex(row int, charOffset int) int {
 }
 
 // CursorDown moves the cursor down by one line.
-// Returns whether or not the cursor blink should be reset.
 func (m *Model) CursorDown() {
 	li := m.LineInfo()
 	charOffset := max(m.lastCharOffset, li.CharOffset)
@@ -940,11 +939,73 @@ func (m *Model) CursorDown() {
 	if li.RowOffset+1 >= li.Height && m.row < len(m.value)-1 {
 		// Move to the next model line
 		m.row++
-		m.col = m.mapVisualOffsetToSliceIndex(m.row, charOffset)
+
+		// We want to land on the first wrapped line of the new model line.
+		grid := m.memoizedWrap(m.value[m.row], m.width)
+		targetLineContent := grid[0]
+
+		// Find position within the first wrapped line.
+		offset := 0
+		colInLine := 0
+		for i, item := range targetLineContent {
+			var itemWidth int
+			switch v := item.(type) {
+			case rune:
+				itemWidth = rw.RuneWidth(v)
+			case *Attachment:
+				itemWidth = uniseg.StringWidth(v.Display)
+			}
+			if offset+itemWidth > charOffset {
+				// Decide whether to stick with the previous index or move to the current
+				// one based on which is closer to the target offset.
+				if (charOffset - offset) > ((offset + itemWidth) - charOffset) {
+					colInLine = i + 1
+				} else {
+					colInLine = i
+				}
+				goto foundNextLine
+			}
+			offset += itemWidth
+		}
+		colInLine = len(targetLineContent)
+	foundNextLine:
+		m.col = colInLine // startCol is 0 for the first wrapped line
 	} else if li.RowOffset+1 < li.Height {
 		// Move to the next wrapped line within the same model line
-		startOfNextWrappedLine := li.StartColumn + li.Width
-		m.col = startOfNextWrappedLine + m.mapVisualOffsetToSliceIndex(m.row, charOffset)
+		grid := m.memoizedWrap(m.value[m.row], m.width)
+		targetLineContent := grid[li.RowOffset+1]
+
+		startCol := 0
+		for i := 0; i < li.RowOffset+1; i++ {
+			startCol += len(grid[i])
+		}
+
+		// Find position within the target wrapped line.
+		offset := 0
+		colInLine := 0
+		for i, item := range targetLineContent {
+			var itemWidth int
+			switch v := item.(type) {
+			case rune:
+				itemWidth = rw.RuneWidth(v)
+			case *Attachment:
+				itemWidth = uniseg.StringWidth(v.Display)
+			}
+			if offset+itemWidth > charOffset {
+				// Decide whether to stick with the previous index or move to the current
+				// one based on which is closer to the target offset.
+				if (charOffset - offset) > ((offset + itemWidth) - charOffset) {
+					colInLine = i + 1
+				} else {
+					colInLine = i
+				}
+				goto foundSameLine
+			}
+			offset += itemWidth
+		}
+		colInLine = len(targetLineContent)
+	foundSameLine:
+		m.col = startCol + colInLine
 	}
 	m.SetCursorColumn(m.col)
 }
@@ -956,22 +1017,77 @@ func (m *Model) CursorUp() {
 	m.lastCharOffset = charOffset
 
 	if li.RowOffset <= 0 && m.row > 0 {
-		// Move to the previous model line
+		// Move to the previous model line. We want to land on the last wrapped
+		// line of the previous model line.
 		m.row--
-		m.col = m.mapVisualOffsetToSliceIndex(m.row, charOffset)
-	} else if li.RowOffset > 0 {
-		// Move to the previous wrapped line within the same model line
-		// To do this, we need to find the start of the previous wrapped line.
-		prevLineInfo := m.LineInfo()
-		// prevLineStart := 0
-		if prevLineInfo.RowOffset > 0 {
-			// This is complex, so we'll approximate by moving to the start of the current wrapped line
-			// and then letting characterLeft handle it. A more precise calculation would
-			// require re-wrapping to find the previous line's start.
-			// For now, a simpler approach:
-			m.col = li.StartColumn - 1
+		grid := m.memoizedWrap(m.value[m.row], m.width)
+		targetLineContent := grid[len(grid)-1]
+
+		// Find start of last wrapped line.
+		startCol := len(m.value[m.row]) - len(targetLineContent)
+
+		// Find position within the last wrapped line.
+		offset := 0
+		colInLine := 0
+		for i, item := range targetLineContent {
+			var itemWidth int
+			switch v := item.(type) {
+			case rune:
+				itemWidth = rw.RuneWidth(v)
+			case *Attachment:
+				itemWidth = uniseg.StringWidth(v.Display)
+			}
+			if offset+itemWidth > charOffset {
+				// Decide whether to stick with the previous index or move to the current
+				// one based on which is closer to the target offset.
+				if (charOffset - offset) > ((offset + itemWidth) - charOffset) {
+					colInLine = i + 1
+				} else {
+					colInLine = i
+				}
+				goto foundPrevLine
+			}
+			offset += itemWidth
 		}
-		m.col = m.mapVisualOffsetToSliceIndex(m.row, charOffset)
+		colInLine = len(targetLineContent)
+	foundPrevLine:
+		m.col = startCol + colInLine
+	} else if li.RowOffset > 0 {
+		// Move to the previous wrapped line within the same model line.
+		grid := m.memoizedWrap(m.value[m.row], m.width)
+		targetLineContent := grid[li.RowOffset-1]
+
+		startCol := 0
+		for i := 0; i < li.RowOffset-1; i++ {
+			startCol += len(grid[i])
+		}
+
+		// Find position within the target wrapped line.
+		offset := 0
+		colInLine := 0
+		for i, item := range targetLineContent {
+			var itemWidth int
+			switch v := item.(type) {
+			case rune:
+				itemWidth = rw.RuneWidth(v)
+			case *Attachment:
+				itemWidth = uniseg.StringWidth(v.Display)
+			}
+			if offset+itemWidth > charOffset {
+				// Decide whether to stick with the previous index or move to the current
+				// one based on which is closer to the target offset.
+				if (charOffset - offset) > ((offset + itemWidth) - charOffset) {
+					colInLine = i + 1
+				} else {
+					colInLine = i
+				}
+				goto foundSameLine
+			}
+			offset += itemWidth
+		}
+		colInLine = len(targetLineContent)
+	foundSameLine:
+		m.col = startCol + colInLine
 	}
 	m.SetCursorColumn(m.col)
 }
@@ -1591,7 +1707,7 @@ func (m Model) View() string {
 				// guaranteed to be a space since any other character would
 				// have been wrapped.
 				wrappedLineStr = strings.TrimSuffix(wrappedLineStr, " ")
-				padding -= m.width - strwidth
+				padding = m.width - uniseg.StringWidth(wrappedLineStr)
 			}
 
 			if m.row == l && lineInfo.RowOffset == wl {
@@ -1903,6 +2019,16 @@ func (m *Model) splitLine(row, col int) {
 	m.row++
 }
 
+func itemWidth(item any) int {
+	switch v := item.(type) {
+	case rune:
+		return rw.RuneWidth(v)
+	case *Attachment:
+		return uniseg.StringWidth(v.Display)
+	}
+	return 0
+}
+
 func wrapInterfaces(content []any, width int) [][]any {
 	if width <= 0 {
 		return [][]any{content}
@@ -1945,18 +2071,17 @@ func wrapInterfaces(content []any, width int) [][]any {
 			}
 			inSpaces = true
 			spaceW += itemW
-		} else {
+		} else { // It's not a space, it's a character for a word.
 			if inSpaces {
-				// End of spaces
-				if lineW > 0 && lineW+spaceW > width {
-					lines = append(lines, []any{})
-					lineW = 0
-				} else {
-					lineW += spaceW
-				}
-				// Add spaces to current line
+				// We just finished a block of spaces. Handle them now.
+				lineW += spaceW
 				for i := 0; i < spaceW; i++ {
 					lines[len(lines)-1] = append(lines[len(lines)-1], rune(' '))
+				}
+				if lineW > width {
+					// The spaces made the line overflow. Start a new line for the upcoming word.
+					lines = append(lines, []any{})
+					lineW = 0
 				}
 				spaceW = 0
 			}
@@ -1966,20 +2091,24 @@ func wrapInterfaces(content []any, width int) [][]any {
 		}
 	}
 
-	// Handle any remaining word/spaces
+	// Handle any remaining word/spaces at the end of the content.
 	if wordW > 0 {
 		if lineW > 0 && lineW+wordW > width {
 			lines = append(lines, word)
+			lineW = wordW
 		} else {
 			lines[len(lines)-1] = append(lines[len(lines)-1], word...)
+			lineW += wordW
 		}
 	}
 	if spaceW > 0 {
-		if lineW > 0 && lineW+spaceW > width {
-			lines = append(lines, []any{})
-		}
+		// There are trailing spaces. Add them.
 		for i := 0; i < spaceW; i++ {
 			lines[len(lines)-1] = append(lines[len(lines)-1], rune(' '))
+			lineW += 1
+		}
+		if lineW > width {
+			lines = append(lines, []any{})
 		}
 	}
 

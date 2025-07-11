@@ -43,17 +43,17 @@ This directory contains:
 If you're experiencing issues with opencode:
 
 1. **Report issues on GitHub**
-   
+
    The best way to report bugs or request features is through our GitHub repository:
-   
+
    [**github.com/sst/opencode/issues**](https://github.com/sst/opencode/issues)
-   
+
    Before creating a new issue, search existing issues to see if your problem has already been reported.
 
 2. **Join our Discord**
 
    For real-time help and community discussion, join our Discord server:
-   
+
    [**opencode.ai/discord**](https://opencode.ai/discord)
 
 ---
@@ -85,3 +85,34 @@ Here are some common issues and how to resolve them.
 1. Check that you've authenticated with the provider
 2. Verify the model name in your config is correct
 3. Some models may require specific access or subscriptions
+
+---
+
+### Copy/paste not working on Linux
+
+Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
+
+**For X11 systems:**
+
+```bash
+apt install -y xclip
+# or
+apt install -y xsel
+```
+
+**For Wayland systems:**
+
+```bash
+apt install -y wl-clipboard
+```
+
+**For headless environments:**
+
+```bash
+apt install -y xvfb
+# and run:
+Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+export DISPLAY=:99.0
+```
+
+opencode will automatically detect and use the first available clipboard tool in order of preference: `xclip`, `xsel`, then `wl-clipboard`.

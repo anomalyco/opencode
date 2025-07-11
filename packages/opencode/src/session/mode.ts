@@ -30,6 +30,7 @@ export namespace Mode {
             write: false,
             edit: false,
             patch: false,
+            bash: false,
           },
         },
       },

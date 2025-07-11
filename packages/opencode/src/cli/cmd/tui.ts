@@ -11,6 +11,7 @@ import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
+import { Mode } from "../../session/mode"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -30,6 +31,10 @@ export const TuiCommand = cmd({
         alias: ["p"],
         type: "string",
         describe: "prompt to use",
+      })
+      .option("mode", {
+        type: "string",
+        describe: "mode to use",
       }),
   handler: async (args) => {
     while (true) {
@@ -77,6 +82,7 @@ export const TuiCommand = cmd({
             ...cmd,
             ...(args.model ? ["--model", args.model] : []),
             ...(args.prompt ? ["--prompt", args.prompt] : []),
+            ...(args.mode ? ["--mode", args.mode] : []),
           ],
           cwd,
           stdout: "inherit",
@@ -87,6 +93,7 @@ export const TuiCommand = cmd({
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
             OPENCODE_APP_INFO: JSON.stringify(app),
+            OPENCODE_MODES: JSON.stringify(await Mode.list()),
           },
           onExit: () => {
             server.stop()

@@ -62,8 +62,9 @@ export default defineConfig({
       sidebar: [
         "docs",
         "docs/cli",
-        "docs/rules",
         "docs/share",
+        "docs/modes",
+        "docs/rules",
         "docs/config",
         "docs/models",
         "docs/themes",

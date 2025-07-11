@@ -49,10 +49,12 @@ resources:
     models:
       app: App
       logLevel: LogLevel
+      mode: Mode
     methods:
       get: get /app
       init: post /app/init
       log: post /log
+      modes: get /mode
 
   find:
     models:

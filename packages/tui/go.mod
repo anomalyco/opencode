@@ -6,10 +6,11 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/alecthomas/chroma/v2 v2.18.0
 	github.com/charmbracelet/bubbles/v2 v2.0.0-beta.1
-	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.3
+	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.4
 	github.com/charmbracelet/glamour v0.10.0
-	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.1
-	github.com/charmbracelet/x/ansi v0.8.0
+	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.3
+	github.com/charmbracelet/x/ansi v0.9.3
+	github.com/charmbracelet/x/input v0.3.7
 	github.com/google/uuid v1.6.0
 	github.com/lithammer/fuzzysearch v1.1.8
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
@@ -21,7 +22,10 @@ require (
 	rsc.io/qr v0.2.0
 )
 
-replace github.com/sst/opencode-sdk-go => ./sdk
+replace (
+	github.com/charmbracelet/x/input => ./input
+	github.com/sst/opencode-sdk-go => ./sdk
+)
 
 require golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 
@@ -30,7 +34,6 @@ require (
 	github.com/atombender/go-jsonschema v0.20.0 // indirect
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
-	github.com/charmbracelet/x/input v0.3.5-0.20250424101541-abb4d9a9b197 // indirect
 	github.com/charmbracelet/x/windows v0.2.1 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
@@ -65,7 +68,7 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.3.1 // indirect
-	github.com/charmbracelet/x/cellbuf v0.0.14-0.20250501183327-ad3bc78c6a81 // indirect
+	github.com/charmbracelet/x/cellbuf v0.0.14-0.20250505150409-97991a1f17d1 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

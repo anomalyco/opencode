@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/x/input"
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -26,6 +27,7 @@ import (
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/components/status"
 	"github.com/sst/opencode/internal/components/toast"
+	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -68,20 +70,20 @@ type appModel struct {
 	completions          dialog.CompletionDialog
 	commandProvider      dialog.CompletionProvider
 	fileProvider         dialog.CompletionProvider
+	symbolsProvider      dialog.CompletionProvider
 	showCompletionDialog bool
 	fileCompletionActive bool
 	leaderBinding        *key.Binding
-	isLeaderSequence     bool
-	toastManager         *toast.ToastManager
-	interruptKeyState    InterruptKeyState
-	exitKeyState         ExitKeyState
-	lastScroll           time.Time
-	messagesRight        bool
-	fileViewer           fileviewer.Model
-	lastMouse            tea.Mouse
-	fileViewerStart      int
-	fileViewerEnd        int
-	fileViewerHit        bool
+	// isLeaderSequence     bool
+	toastManager      *toast.ToastManager
+	interruptKeyState InterruptKeyState
+	exitKeyState      ExitKeyState
+	messagesRight     bool
+	fileViewer        fileviewer.Model
+	lastMouse         tea.Mouse
+	fileViewerStart   int
+	fileViewerEnd     int
+	fileViewerHit     bool
 }
 
 func (a appModel) Init() tea.Cmd {
@@ -108,44 +110,6 @@ func (a appModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-var BUGGED_SCROLL_KEYS = map[string]bool{
-	"0": true,
-	"1": true,
-	"2": true,
-	"3": true,
-	"4": true,
-	"5": true,
-	"6": true,
-	"7": true,
-	"8": true,
-	"9": true,
-	"M": true,
-	"m": true,
-	"[": true,
-	";": true,
-	"<": true,
-}
-
-func isScrollRelatedInput(keyString string) bool {
-	if len(keyString) == 0 {
-		return false
-	}
-
-	for _, char := range keyString {
-		charStr := string(char)
-		if !BUGGED_SCROLL_KEYS[charStr] {
-			return false
-		}
-	}
-
-	if len(keyString) > 3 &&
-		(keyString[len(keyString)-1] == 'M' || keyString[len(keyString)-1] == 'm') {
-		return true
-	}
-
-	return len(keyString) > 1
-}
-
 func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -153,10 +117,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
-
-		if time.Since(a.lastScroll) < time.Millisecond*100 && (BUGGED_SCROLL_KEYS[keyString] || isScrollRelatedInput(keyString)) {
-			return a, nil
-		}
 
 		// 1. Handle active modal
 		if a.modal != nil {
@@ -185,9 +145,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 2. Check for commands that require leader
-		if a.isLeaderSequence {
-			matches := a.app.Commands.Matches(msg, a.isLeaderSequence)
-			a.isLeaderSequence = false
+		if a.app.IsLeaderSequence {
+			matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
+			a.app.IsLeaderSequence = false
 			if len(matches) > 0 {
 				return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 			}
@@ -205,7 +165,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			// Set command provider for command completion
-			a.completions = dialog.NewCompletionDialogComponent(a.commandProvider, "/")
+			a.completions = dialog.NewCompletionDialogComponent("/", a.commandProvider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -223,8 +183,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor = updated.(chat.EditorComponent)
 			cmds = append(cmds, cmd)
 
-			// Set file provider for file completion
-			a.completions = dialog.NewCompletionDialogComponent(a.fileProvider, "@")
+			// Set both file and symbols providers for @ completion
+			a.completions = dialog.NewCompletionDialogComponent("@", a.fileProvider, a.symbolsProvider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -262,21 +222,21 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// 5. Check for leader key activation
 		if a.leaderBinding != nil &&
-			!a.isLeaderSequence &&
+			!a.app.IsLeaderSequence &&
 			key.Matches(msg, *a.leaderBinding) {
-			a.isLeaderSequence = true
+			a.app.IsLeaderSequence = true
 			return a, nil
 		}
 
 		// 6 Handle input clear command
 		inputClearCommand := a.app.Commands[commands.InputClearCommand]
-		if inputClearCommand.Matches(msg, a.isLeaderSequence) && a.editor.Length() > 0 {
+		if inputClearCommand.Matches(msg, a.app.IsLeaderSequence) && a.editor.Length() > 0 {
 			return a, util.CmdHandler(commands.ExecuteCommandMsg(inputClearCommand))
 		}
 
 		// 7. Handle interrupt key debounce for session interrupt
 		interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
-		if interruptCommand.Matches(msg, a.isLeaderSequence) && a.app.IsBusy() {
+		if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() {
 			switch a.interruptKeyState {
 			case InterruptKeyIdle:
 				// First interrupt key press - start debounce timer
@@ -295,7 +255,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// 8. Handle exit key debounce for app exit when using non-leader command
 		exitCommand := a.app.Commands[commands.AppExitCommand]
-		if exitCommand.Matches(msg, a.isLeaderSequence) {
+		if exitCommand.Matches(msg, a.app.IsLeaderSequence) {
 			switch a.exitKeyState {
 			case ExitKeyIdle:
 				// First exit key press - start debounce timer
@@ -313,10 +273,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
-		matches := a.app.Commands.Matches(msg, a.isLeaderSequence)
+		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
 		if len(matches) > 0 {
 			// Skip interrupt key if we're in debounce mode and app is busy
-			if interruptCommand.Matches(msg, a.isLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
+			if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
 				return a, nil
 			}
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
@@ -327,7 +287,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd
 	case tea.MouseWheelMsg:
-		a.lastScroll = time.Now()
 		if a.modal != nil {
 			return a, nil
 		}
@@ -391,6 +350,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.SendMsg:
 		a.showCompletionDialog = false
 		a.app, cmd = a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
+		cmds = append(cmds, cmd)
+	case app.SetEditorContentMsg:
+		// Set the editor content without sending
+		a.editor.SetValue(msg.Text)
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
@@ -520,8 +485,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
-		a.app.State.Provider = msg.Provider.ID
-		a.app.State.Model = msg.Model.ID
+		a.app.State.ModeModel[a.app.Mode.Name] = config.ModeModel{
+			ProviderID: msg.Provider.ID,
+			ModelID:    msg.Model.ID,
+		}
 		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		a.app.SaveState()
 	case dialog.ThemeSelectedMsg:
@@ -545,6 +512,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
+	case input.UnknownEvent:
+		return a, nil
 	}
 
 	s, cmd := a.status.Update(msg)
@@ -819,6 +788,10 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.AppHelpCommand:
 		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
+	case commands.SwitchModeCommand:
+		updated, cmd := a.app.SwitchMode()
+		a.app = updated
+		cmds = append(cmds, cmd)
 	case commands.EditorOpenCommand:
 		if a.app.IsBusy() {
 			// status.Warn("Agent is working, please wait...")
@@ -860,7 +833,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 				return nil
 			}
 			os.Remove(tmpfile.Name())
-			return app.SendMsg{
+			return app.SetEditorContentMsg{
 				Text: string(content),
 			}
 		})
@@ -948,7 +921,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		a.modal = themeDialog
 	case commands.FileListCommand:
 		a.editor.Blur()
-		provider := completions.NewFileAndFolderContextGroup(a.app)
+		provider := completions.NewFileContextGroup(a.app)
 		findDialog := dialog.NewFindDialog(provider)
 		findDialog.SetWidth(layout.Current.Container.Width - 8)
 		a.modal = findDialog
@@ -1099,11 +1072,12 @@ func httpExportSession(sessionID string) (*struct {
 
 func NewModel(app *app.App) tea.Model {
 	commandProvider := completions.NewCommandCompletionProvider(app)
-	fileProvider := completions.NewFileAndFolderContextGroup(app)
+	fileProvider := completions.NewFileContextGroup(app)
+	symbolsProvider := completions.NewSymbolsContextGroup(app)
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
-	completions := dialog.NewCompletionDialogComponent(commandProvider, "/")
+	completions := dialog.NewCompletionDialogComponent("/", commandProvider)
 
 	var leaderBinding *key.Binding
 	if app.Config.Keybinds.Leader != "" {
@@ -1119,8 +1093,8 @@ func NewModel(app *app.App) tea.Model {
 		completions:          completions,
 		commandProvider:      commandProvider,
 		fileProvider:         fileProvider,
+		symbolsProvider:      symbolsProvider,
 		leaderBinding:        leaderBinding,
-		isLeaderSequence:     false,
 		showCompletionDialog: false,
 		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
