@@ -334,6 +334,18 @@ export namespace Provider {
           // Use auth token first, then API key, or placeholder if using baseURL without auth
           if (authToken) {
             options["apiKey"] = authToken
+            // For LLM gateways, also add custom fetch to handle gateway-specific headers
+            options["fetch"] = async (input: any, init: any) => {
+              const headers = {
+                ...init.headers,
+                "Proxy-Authorization": `Bearer ${authToken}`,
+                "X-API-Key": authToken,
+              }
+              return fetch(input, {
+                ...init,
+                headers,
+              })
+            }
           } else if (apiKey) {
             options["apiKey"] = apiKey
           } else if (baseUrl) {
