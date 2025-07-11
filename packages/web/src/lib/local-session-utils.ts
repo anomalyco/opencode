@@ -1,3 +1,8 @@
+import type { MessageV2 } from "opencode/session/message-v2"
+import type { Message } from "opencode/session/message"
+import type { Session } from "opencode/session/index"
+import { fromV1 } from "../components/Share"
+
 export interface SessionData {
   rootDir: string | undefined
   created: number
@@ -12,8 +17,8 @@ export interface SessionData {
 }
 
 export function computeSessionData(
-  sessionInfo: any,
-  messages: any[],
+  sessionInfo: Session.Info,
+  messages: (MessageV2.Info | Message.Info)[],
 ): SessionData {
   const result: SessionData = {
     rootDir: undefined,
@@ -28,27 +33,30 @@ export function computeSessionData(
     },
   }
 
-  for (const msg of messages) {
-    const assistant = msg.metadata?.assistant
-    if (assistant) {
-      result.cost += assistant.cost || 0
-      result.tokens.input += assistant.tokens?.input || 0
-      result.tokens.output += assistant.tokens?.output || 0
-      result.tokens.reasoning += assistant.tokens?.reasoning || 0
+  for (let i = 0; i < messages.length; i++) {
+    // Normalize to V2 format using same pattern as Share.tsx
+    const msg = "metadata" in messages[i] ? fromV1(messages[i] as Message.Info) : (messages[i] as MessageV2.Info)
 
-      if (assistant.providerID && assistant.modelID) {
-        result.models[`${assistant.providerID} ${assistant.modelID}`] = [
-          assistant.providerID,
-          assistant.modelID,
+    if (msg.role === "assistant") {
+      const assistantMsg = msg as MessageV2.Assistant
+      result.cost += assistantMsg.cost || 0
+      result.tokens.input += assistantMsg.tokens?.input || 0
+      result.tokens.output += assistantMsg.tokens?.output || 0
+      result.tokens.reasoning += assistantMsg.tokens?.reasoning || 0
+
+      if (assistantMsg.providerID && assistantMsg.modelID) {
+        result.models[`${assistantMsg.providerID} ${assistantMsg.modelID}`] = [
+          assistantMsg.providerID,
+          assistantMsg.modelID,
         ]
       }
 
-      if (assistant.path?.root) {
-        result.rootDir = assistant.path.root
+      if (assistantMsg.path?.root) {
+        result.rootDir = assistantMsg.path.root
       }
 
-      if (msg.metadata?.time?.completed) {
-        result.completed = msg.metadata.time.completed
+      if (assistantMsg.time?.completed) {
+        result.completed = assistantMsg.time.completed
       }
     }
   }
@@ -68,10 +76,7 @@ export async function fetchProjectSessions(localApiUrl: string) {
   return await response.json()
 }
 
-export async function fetchSessionMessages(
-  localApiUrl: string,
-  sessionId: string,
-) {
+export async function fetchSessionMessages(localApiUrl: string, sessionId: string) {
   const response = await fetch(`${localApiUrl}/session/${sessionId}/message`, {
     method: "get",
     headers: { "Content-Type": "application/json" },

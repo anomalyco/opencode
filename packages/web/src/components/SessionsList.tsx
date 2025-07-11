@@ -1,4 +1,6 @@
 import { Show, For } from "solid-js"
+import { ProviderIcon } from "./share/part"
+import { IconOpencode } from "./icons/custom"
 
 export interface SessionData {
   id: string
@@ -70,45 +72,41 @@ export default function SessionsList(props: SessionsListProps) {
                       <ul data-section="stats">
                         <li>
                           <span data-element-label>Cost</span>
-                          <Show
-                            when={session.computedData.cost !== undefined}
-                            fallback={<span data-placeholder>&mdash;</span>}
-                          >
+                          {session.computedData.cost !== undefined ? (
                             <span>${session.computedData.cost.toFixed(2)}</span>
-                          </Show>
+                          ) : (
+                            <span data-placeholder>&mdash;</span>
+                          )}
                         </li>
                         <li>
                           <span data-element-label>Input Tokens</span>
-                          <Show
-                            when={session.computedData.tokens.input}
-                            fallback={<span data-placeholder>&mdash;</span>}
-                          >
+                          {session.computedData.tokens.input ? (
                             <span>{session.computedData.tokens.input}</span>
-                          </Show>
+                          ) : (
+                            <span data-placeholder>&mdash;</span>
+                          )}
                         </li>
                         <li>
                           <span data-element-label>Output Tokens</span>
-                          <Show
-                            when={session.computedData.tokens.output}
-                            fallback={<span data-placeholder>&mdash;</span>}
-                          >
+                          {session.computedData.tokens.output ? (
                             <span>{session.computedData.tokens.output}</span>
-                          </Show>
+                          ) : (
+                            <span data-placeholder>&mdash;</span>
+                          )}
                         </li>
                         <li>
                           <span data-element-label>Reasoning Tokens</span>
-                          <Show
-                            when={session.computedData.tokens.reasoning}
-                            fallback={<span data-placeholder>&mdash;</span>}
-                          >
+                          {session.computedData.tokens.reasoning ? (
                             <span>{session.computedData.tokens.reasoning}</span>
-                          </Show>
+                          ) : (
+                            <span data-placeholder>&mdash;</span>
+                          )}
                         </li>
                       </ul>
                       <Show when={session.computedData.rootDir}>
                         <ul data-section="stats" data-section-root>
                           <li title="Project root">
-                            <div data-stat-icon>
+                            <div data-slot="icon">
                               <svg
                                 width="16"
                                 height="16"
@@ -121,15 +119,8 @@ export default function SessionsList(props: SessionsListProps) {
                             <span>{session.computedData.rootDir}</span>
                           </li>
                           <li title="opencode version">
-                            <div data-stat-icon title="opencode">
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                              >
-                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                              </svg>
+                            <div data-slot="icon" title="opencode">
+                              <IconOpencode width={16} height={16} />
                             </div>
                             <span>v{session.version || "0.0.1"}</span>
                           </li>
@@ -138,15 +129,8 @@ export default function SessionsList(props: SessionsListProps) {
                       <Show when={!session.computedData.rootDir}>
                         <ul data-section="stats" data-section-root>
                           <li title="opencode version">
-                            <div data-stat-icon title="opencode">
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                              >
-                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                              </svg>
+                            <div data-slot="icon" title="opencode">
+                              <IconOpencode width={16} height={16} />
                             </div>
                             <span>v{session.version || "0.0.1"}</span>
                           </li>
@@ -169,18 +153,11 @@ export default function SessionsList(props: SessionsListProps) {
                             each={Object.values(session.computedData.models)}
                           >
                             {(item) => (
-                              <li>
-                                <div data-stat-icon title={item[0]}>
-                                  <svg
-                                    width="16"
-                                    height="16"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z" />
-                                  </svg>
+                              <li data-slot="item">
+                                <div data-slot="icon" title={item[0]}>
+                                  <ProviderIcon model={item[1]} />
                                 </div>
-                                <span data-stat-model>{item[1]}</span>
+                                <span data-slot="model">{item[1]}</span>
                               </li>
                             )}
                           </For>
