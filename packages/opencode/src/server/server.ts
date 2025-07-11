@@ -448,6 +448,7 @@ export namespace Server {
           z.object({
             providerID: z.string(),
             modelID: z.string(),
+            mode: z.string(),
             parts: MessageV2.UserPart.array(),
           }),
         ),

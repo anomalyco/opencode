@@ -1,20 +1,12 @@
 import map from "lang-map"
 import { DateTime } from "luxon"
-import {
-  For,
-  Show,
-  Match,
-  Switch,
-  type JSX,
-  createMemo,
-  createSignal,
-  type ParentProps
-} from "solid-js"
+import { For, Show, Match, Switch, type JSX, createMemo, createSignal, type ParentProps } from "solid-js"
 import {
   IconHashtag,
   IconSparkles,
   IconGlobeAlt,
   IconDocument,
+  IconPaperClip,
   IconQueueList,
   IconUserCircle,
   IconCommandLine,
@@ -33,6 +25,7 @@ import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
 import { ContentError } from "./content-error"
 import { ContentMarkdown } from "./content-markdown"
+import { ContentBash } from "./content-bash"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"
 
@@ -80,10 +73,12 @@ export function Part(props: PartProps) {
                 <IconUserCircle width={18} height={18} />
               </Match>
               <Match when={props.message.role === "user" && props.part.type === "file"}>
-                <IconDocument width={18} height={18} />
+                <IconPaperClip width={18} height={18} />
               </Match>
-              <Match when={props.part.type === "step-start" && props.message.role === "assistant" && props.message.modelID}>
-                {model => <ProviderIcon model={model()} size={18} />}
+              <Match
+                when={props.part.type === "step-start" && props.message.role === "assistant" && props.message.modelID}
+              >
+                {(model) => <ProviderIcon model={model()} size={18} />}
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
@@ -152,11 +147,9 @@ export function Part(props: PartProps) {
           </>
         )}
         {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="tool-title">
-            <span data-slot="name">Read</span>
-            <span data-slot="target" title={props.part.filename}>
-              {props.part.filename}
-            </span>
+          <div data-component="attachment">
+            <div data-slot="copy">Attachment</div>
+            <div data-slot="filename">{props.part.filename}</div>
           </div>
         )}
         {props.part.type === "step-start" && props.message.role === "assistant" && (
@@ -165,14 +158,11 @@ export function Part(props: PartProps) {
             <div data-slot="model">{props.message.modelID}</div>
           </div>
         )}
-        {props.part.type === "tool" &&
-          props.part.state.status === "error" && (
-            <div data-component="tool">
-              <ContentError>
-                {formatErrorString(props.part.state.error)}
-              </ContentError>
-            </div>
-          )}
+        {props.part.type === "tool" && props.part.state.status === "error" && (
+          <div data-component="tool">
+            <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
+          </div>
+        )}
         {props.part.type === "tool" &&
           props.part.state.status === "completed" &&
           props.message.role === "assistant" && (
@@ -515,7 +505,7 @@ export function WriteTool(props: ToolProps) {
         </span>
       </div>
       <Show when={diagnostics().length > 0}>
-        <div data-component="error">{diagnostics()}</div>
+        <ContentError>{diagnostics()}</ContentError>
       </Show>
       <div data-component="tool-result">
         <Switch>
@@ -558,7 +548,7 @@ export function EditTool(props: ToolProps) {
         </Switch>
       </div>
       <Show when={diagnostics().length > 0}>
-        <div data-component="error">{diagnostics()}</div>
+        <ContentError>{diagnostics()}</ContentError>
       </Show>
     </>
   )
@@ -566,19 +556,11 @@ export function EditTool(props: ToolProps) {
 
 export function BashTool(props: ToolProps) {
   return (
-    <>
-      <div data-component="terminal" data-size="sm">
-        <div data-slot="body">
-          <div data-slot="header">
-            <span>{props.state.metadata.description}</span>
-          </div>
-          <div data-slot="content">
-            <ContentCode flush lang="bash" code={props.state.input.command} />
-            <ContentCode flush lang="console" code={props.state.metadata?.stdout || ""} />
-          </div>
-        </div>
-      </div>
-    </>
+    <ContentBash
+      command={props.state.input.command}
+      output={props.state.metadata?.stdout || ""}
+      description={props.state.metadata.description}
+    />
   )
 }
 

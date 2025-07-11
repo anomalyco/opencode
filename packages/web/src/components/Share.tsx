@@ -321,6 +321,7 @@ export default function Share(props: {
                   const filteredParts = createMemo(() =>
                     msg.parts.filter((x, index) => {
                       if (x.type === "step-start" && index > 0) return false
+                      if (x.type === "text" && x.synthetic === true) return false
                       if (x.type === "tool" && x.tool === "todoread") return false
                       if (x.type === "text" && !x.text) return false
                       if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))

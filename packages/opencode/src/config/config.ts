@@ -71,6 +71,7 @@ export namespace Config {
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
+      switch_mode: z.string().optional().default("tab").describe("Switch mode"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
@@ -195,19 +196,40 @@ export namespace Config {
     return result
   })
 
-  async function load(path: string) {
-    const data = await Bun.file(path)
-      .json()
+  async function load(configPath: string) {
+    let text = await Bun.file(configPath)
+      .text()
       .catch((err) => {
-        if (err.code === "ENOENT") return {}
-        throw new JsonError({ path }, { cause: err })
+        if (err.code === "ENOENT") return "{}"
+        throw new JsonError({ path: configPath }, { cause: err })
       })
+
+    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+      return process.env[varName] || ""
+    })
+
+    const fileMatches = text.match(/"?\{file:([^}]+)\}"?/g)
+    if (fileMatches) {
+      const configDir = path.dirname(configPath)
+      for (const match of fileMatches) {
+        const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
+        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const fileContent = await Bun.file(resolvedPath).text()
+        text = text.replace(match, JSON.stringify(fileContent))
+      }
+    }
+
+    let data: any
+    try {
+      data = JSON.parse(text)
+    } catch (err) {
+      throw new JsonError({ path: configPath }, { cause: err as Error })
+    }
 
     const parsed = Info.safeParse(data)
     if (parsed.success) return parsed.data
-    throw new InvalidError({ path, issues: parsed.error.issues })
+    throw new InvalidError({ path: configPath, issues: parsed.error.issues })
   }
-
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({

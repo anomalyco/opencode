@@ -14,20 +14,20 @@ import (
 	"github.com/sst/opencode/internal/theme"
 )
 
-type filesAndFoldersContextGroup struct {
+type filesContextGroup struct {
 	app      *app.App
 	gitFiles []dialog.CompletionItemI
 }
 
-func (cg *filesAndFoldersContextGroup) GetId() string {
+func (cg *filesContextGroup) GetId() string {
 	return "files"
 }
 
-func (cg *filesAndFoldersContextGroup) GetEmptyMessage() string {
+func (cg *filesContextGroup) GetEmptyMessage() string {
 	return "no matching files"
 }
 
-func (cg *filesAndFoldersContextGroup) getGitFiles() []dialog.CompletionItemI {
+func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
 	t := theme.CurrentTheme()
 	items := make([]dialog.CompletionItemI, 0)
 	base := styles.NewStyle().Background(t.BackgroundElement())
@@ -50,8 +50,10 @@ func (cg *filesAndFoldersContextGroup) getGitFiles() []dialog.CompletionItemI {
 				title += red(" -" + strconv.Itoa(int(file.Removed)))
 			}
 			item := dialog.NewCompletionItem(dialog.CompletionItem{
-				Title: title,
-				Value: file.Path,
+				Title:      title,
+				Value:      file.Path,
+				ProviderID: cg.GetId(),
+				Raw:        file,
 			})
 			items = append(items, item)
 		}
@@ -60,7 +62,7 @@ func (cg *filesAndFoldersContextGroup) getGitFiles() []dialog.CompletionItemI {
 	return items
 }
 
-func (cg *filesAndFoldersContextGroup) GetChildEntries(
+func (cg *filesContextGroup) GetChildEntries(
 	query string,
 ) ([]dialog.CompletionItemI, error) {
 	items := make([]dialog.CompletionItemI, 0)
@@ -94,8 +96,10 @@ func (cg *filesAndFoldersContextGroup) GetChildEntries(
 		}
 		if !exists {
 			item := dialog.NewCompletionItem(dialog.CompletionItem{
-				Title: file,
-				Value: file,
+				Title:      file,
+				Value:      file,
+				ProviderID: cg.GetId(),
+				Raw:        file,
 			})
 			items = append(items, item)
 		}
@@ -104,8 +108,8 @@ func (cg *filesAndFoldersContextGroup) GetChildEntries(
 	return items, nil
 }
 
-func NewFileAndFolderContextGroup(app *app.App) dialog.CompletionProvider {
-	cg := &filesAndFoldersContextGroup{
+func NewFileContextGroup(app *app.App) dialog.CompletionProvider {
+	cg := &filesContextGroup{
 		app: app,
 	}
 	go func() {

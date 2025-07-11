@@ -2,12 +2,15 @@ package dialog
 
 import (
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	"github.com/charmbracelet/bubbles/v2/textarea"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/lithammer/fuzzysearch/fuzzy"
+	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -15,32 +18,35 @@ import (
 )
 
 type CompletionItem struct {
-	Title string
-	Value string
+	Title      string
+	Value      string
+	ProviderID string
+	Raw        any
 }
 
 type CompletionItemI interface {
 	list.ListItem
 	GetValue() string
 	DisplayValue() string
+	GetProviderID() string
+	GetRaw() any
 }
 
 func (ci *CompletionItem) Render(selected bool, width int) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Foreground(t.Text())
 
+	truncatedStr := truncate.String(string(ci.DisplayValue()), uint(width-4))
+
 	itemStyle := baseStyle.
 		Background(t.BackgroundElement()).
-		Width(width).
 		Padding(0, 1)
 
 	if selected {
 		itemStyle = itemStyle.Foreground(t.Primary())
 	}
 
-	title := itemStyle.Render(
-		ci.DisplayValue(),
-	)
+	title := itemStyle.Render(truncatedStr)
 	return title
 }
 
@@ -50,6 +56,14 @@ func (ci *CompletionItem) DisplayValue() string {
 
 func (ci *CompletionItem) GetValue() string {
 	return ci.Value
+}
+
+func (ci *CompletionItem) GetProviderID() string {
+	return ci.ProviderID
+}
+
+func (ci *CompletionItem) GetRaw() any {
+	return ci.Raw
 }
 
 func NewCompletionItem(completionItem CompletionItem) CompletionItemI {
@@ -63,9 +77,8 @@ type CompletionProvider interface {
 }
 
 type CompletionSelectedMsg struct {
-	SearchString    string
-	CompletionValue string
-	ProviderID      string
+	Item         CompletionItemI
+	SearchString string
 }
 
 type CompletionDialogCompleteItemMsg struct {
@@ -83,7 +96,7 @@ type CompletionDialog interface {
 
 type completionDialogComponent struct {
 	query                string
-	completionProvider   CompletionProvider
+	providers            []CompletionProvider
 	width                int
 	height               int
 	pseudoSearchTextArea textarea.Model
@@ -109,6 +122,52 @@ func (c *completionDialogComponent) Init() tea.Cmd {
 	return nil
 }
 
+func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
+	return func() tea.Msg {
+		allItems := make([]CompletionItemI, 0)
+
+		// Collect results from all providers
+		for _, provider := range c.providers {
+			items, err := provider.GetChildEntries(query)
+			if err != nil {
+				slog.Error(
+					"Failed to get completion items",
+					"provider",
+					provider.GetId(),
+					"error",
+					err,
+				)
+				continue
+			}
+			allItems = append(allItems, items...)
+		}
+
+		// If there's a query, use fuzzy ranking to sort results
+		if query != "" && len(allItems) > 0 {
+			// Create a slice of display values for fuzzy matching
+			displayValues := make([]string, len(allItems))
+			for i, item := range allItems {
+				displayValues[i] = item.DisplayValue()
+			}
+
+			// Get fuzzy matches with ranking
+			matches := fuzzy.RankFindFold(query, displayValues)
+
+			// Sort by score (best matches first)
+			sort.Sort(matches)
+
+			// Reorder items based on fuzzy ranking
+			rankedItems := make([]CompletionItemI, 0, len(matches))
+			for _, match := range matches {
+				rankedItems = append(rankedItems, allItems[match.OriginalIndex])
+			}
+
+			return rankedItems
+		}
+
+		return allItems
+	}
+}
 func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
@@ -126,14 +185,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if query != c.query {
 					c.query = query
-					cmd = func() tea.Msg {
-						items, err := c.completionProvider.GetChildEntries(query)
-						if err != nil {
-							slog.Error("Failed to get completion items", "error", err)
-						}
-						return items
-					}
-					cmds = append(cmds, cmd)
+					cmds = append(cmds, c.getAllCompletions(query))
 				}
 
 				u, cmd := c.list.Update(msg)
@@ -149,23 +201,18 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return c, c.complete(item)
 			case key.Matches(msg, completionDialogKeys.Cancel):
-				// Only close on backspace when there are no characters left, unless we're back to just the trigger
 				value := c.pseudoSearchTextArea.Value()
-				if msg.String() != "backspace" || (len(value) <= len(c.trigger) && value != c.trigger) {
+				width := lipgloss.Width(value)
+				triggerWidth := lipgloss.Width(c.trigger)
+				// Only close on backspace when there are no characters left, unless we're back to just the trigger
+				if msg.String() != "backspace" || (width <= triggerWidth && value != c.trigger) {
 					return c, c.close()
 				}
 			}
 
 			return c, tea.Batch(cmds...)
 		} else {
-			cmd := func() tea.Msg {
-				items, err := c.completionProvider.GetChildEntries("")
-				if err != nil {
-					slog.Error("Failed to get completion items", "error", err)
-				}
-				return items
-			}
-			cmds = append(cmds, cmd)
+			cmds = append(cmds, c.getAllCompletions(""))
 			cmds = append(cmds, c.pseudoSearchTextArea.Focus())
 			return c, tea.Batch(cmds...)
 		}
@@ -177,19 +224,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (c *completionDialogComponent) View() string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Foreground(t.Text())
-
-	maxWidth := 40
-	completions := c.list.GetItems()
-
-	for _, cmd := range completions {
-		title := cmd.DisplayValue()
-		width := lipgloss.Width(title)
-		if width > maxWidth-4 {
-			maxWidth = width + 4
-		}
-	}
-
-	c.list.SetMaxWidth(maxWidth)
+	c.list.SetMaxWidth(c.width)
 
 	return baseStyle.
 		Padding(0, 0).
@@ -213,12 +248,10 @@ func (c *completionDialogComponent) IsEmpty() bool {
 
 func (c *completionDialogComponent) complete(item CompletionItemI) tea.Cmd {
 	value := c.pseudoSearchTextArea.Value()
-
 	return tea.Batch(
 		util.CmdHandler(CompletionSelectedMsg{
-			SearchString:    value,
-			CompletionValue: item.GetValue(),
-			ProviderID:      c.completionProvider.GetId(),
+			SearchString: value,
+			Item:         item,
 		}),
 		c.close(),
 	)
@@ -230,32 +263,53 @@ func (c *completionDialogComponent) close() tea.Cmd {
 	return util.CmdHandler(CompletionDialogCloseMsg{})
 }
 
-func NewCompletionDialogComponent(completionProvider CompletionProvider, trigger string) CompletionDialog {
+func NewCompletionDialogComponent(
+	trigger string,
+	providers ...CompletionProvider,
+) CompletionDialog {
 	ti := textarea.New()
+	ti.SetValue(trigger)
+
+	// Use a generic empty message if we have multiple providers
+	emptyMessage := "no matching items"
+	if len(providers) == 1 {
+		emptyMessage = providers[0].GetEmptyMessage()
+	}
 
 	li := list.NewListComponent(
 		[]CompletionItemI{},
 		7,
-		completionProvider.GetEmptyMessage(),
+		emptyMessage,
 		false,
 	)
 
-	go func() {
-		items, err := completionProvider.GetChildEntries("")
-		if err != nil {
-			slog.Error("Failed to get completion items", "error", err)
-		}
-		li.SetItems(items)
-	}()
-
-	// Initialize the textarea with the trigger character
-	ti.SetValue(trigger)
-
-	return &completionDialogComponent{
+	c := &completionDialogComponent{
 		query:                "",
-		completionProvider:   completionProvider,
+		providers:            providers,
 		pseudoSearchTextArea: ti,
 		list:                 li,
 		trigger:              trigger,
 	}
+
+	// Load initial items from all providers
+	go func() {
+		allItems := make([]CompletionItemI, 0)
+		for _, provider := range providers {
+			items, err := provider.GetChildEntries("")
+			if err != nil {
+				slog.Error(
+					"Failed to get completion items",
+					"provider",
+					provider.GetId(),
+					"error",
+					err,
+				)
+				continue
+			}
+			allItems = append(allItems, items...)
+		}
+		li.SetItems(allItems)
+	}()
+
+	return c
 }

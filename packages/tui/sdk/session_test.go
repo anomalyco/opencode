@@ -117,10 +117,12 @@ func TestSessionChat(t *testing.T) {
 		context.TODO(),
 		"id",
 		opencode.SessionChatParams{
+			Mode:    opencode.F("mode"),
 			ModelID: opencode.F("modelID"),
 			Parts: opencode.F([]opencode.UserMessagePartUnionParam{opencode.TextPartParam{
-				Text: opencode.F("text"),
-				Type: opencode.F(opencode.TextPartTypeText),
+				Text:      opencode.F("text"),
+				Type:      opencode.F(opencode.TextPartTypeText),
+				Synthetic: opencode.F(true),
 			}}),
 			ProviderID: opencode.F("providerID"),
 		},

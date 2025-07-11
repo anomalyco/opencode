@@ -116,6 +116,25 @@ export namespace MessageV2 {
     })
   export type StepStartPart = z.infer<typeof StepStartPart>
 
+  export const StepFinishPart = z
+    .object({
+      type: z.literal("step-finish"),
+      cost: z.number(),
+      tokens: z.object({
+        input: z.number(),
+        output: z.number(),
+        reasoning: z.number(),
+        cache: z.object({
+          read: z.number(),
+          write: z.number(),
+        }),
+      }),
+    })
+    .openapi({
+      ref: "StepFinishPart",
+    })
+  export type StepFinishPart = z.infer<typeof StepFinishPart>
+
   const Base = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -137,9 +156,11 @@ export namespace MessageV2 {
   })
   export type User = z.infer<typeof User>
 
-  export const AssistantPart = z.discriminatedUnion("type", [TextPart, ToolPart, StepStartPart]).openapi({
-    ref: "AssistantMessagePart",
-  })
+  export const AssistantPart = z
+    .discriminatedUnion("type", [TextPart, ToolPart, StepStartPart, StepFinishPart])
+    .openapi({
+      ref: "AssistantMessagePart",
+    })
   export type AssistantPart = z.infer<typeof AssistantPart>
 
   export const Assistant = Base.extend({
@@ -164,8 +185,8 @@ export namespace MessageV2 {
       cwd: z.string(),
       root: z.string(),
     }),
-    cost: z.number(),
     summary: z.boolean().optional(),
+    cost: z.number(),
     tokens: z.object({
       input: z.number(),
       output: z.number(),

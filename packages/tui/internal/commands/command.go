@@ -86,6 +86,7 @@ func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 
 const (
 	AppHelpCommand              CommandName = "app_help"
+	SwitchModeCommand           CommandName = "switch_mode"
 	EditorOpenCommand           CommandName = "editor_open"
 	SessionNewCommand           CommandName = "session_new"
 	SessionListCommand          CommandName = "session_list"
@@ -151,6 +152,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "show help",
 			Keybindings: parseBindings("<leader>h"),
 			Trigger:     []string{"help"},
+		},
+		{
+			Name:        SwitchModeCommand,
+			Description: "switch mode",
+			Keybindings: parseBindings("tab"),
+			Trigger:     []string{"mode"},
 		},
 		{
 			Name:        EditorOpenCommand,
