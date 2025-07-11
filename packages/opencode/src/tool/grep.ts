@@ -12,6 +12,7 @@ export const GrepTool = Tool.define({
     pattern: z.string().describe("The regex pattern to search for in file contents"),
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
     include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
+    case_insensitive: z.boolean().optional().describe("Perform case-insensitive search"),
   }),
   async execute(params) {
     if (!params.pattern) {
@@ -22,7 +23,11 @@ export const GrepTool = Tool.define({
     const searchPath = params.path || app.path.cwd
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-n", params.pattern]
+    const args = ["-n"]
+    if (params.case_insensitive) {
+      args.push("-i")
+    }
+    args.push(params.pattern)
     if (params.include) {
       args.push("--glob", params.include)
     }
