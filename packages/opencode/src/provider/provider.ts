@@ -43,12 +43,12 @@ export namespace Provider {
       const baseUrl = process.env["ANTHROPIC_BASE_URL"]
       const authToken = process.env["ANTHROPIC_AUTH_TOKEN"]
       const apiKey = process.env["ANTHROPIC_API_KEY"]
-      
+
       // If gateway configuration is present, use standard API key authentication
       if (baseUrl || authToken || apiKey) {
         return { autoload: false } // Let the env loader handle this
       }
-      
+
       // Otherwise, use OAuth authentication
       const access = await AuthAnthropic.access()
       if (!access) return { autoload: false }
@@ -305,28 +305,35 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
+    // Add LLM Gateway environment variables to Anthropic provider
+    if (database["anthropic"]) {
+      database["anthropic"].env = [
+        ...new Set([...database["anthropic"].env, "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]),
+      ]
+    }
+
     const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      
+
       // Handle Anthropic LLM Gateway configuration
       if (providerID === "anthropic") {
         const baseUrl = process.env["ANTHROPIC_BASE_URL"]
         const authToken = process.env["ANTHROPIC_AUTH_TOKEN"]
         const apiKey = process.env["ANTHROPIC_API_KEY"]
-        
+
         if (baseUrl || authToken || apiKey) {
           const options: Record<string, any> = {}
           if (baseUrl) options["baseURL"] = baseUrl
           if (authToken) options["apiKey"] = authToken
           else if (apiKey) options["apiKey"] = apiKey
-          
+
           mergeProvider(providerID, options, "env")
           continue
         }
       }
-      
+
       const apiKey = provider.env.map((item) => process.env[item]).at(0)
       if (!apiKey) continue
       mergeProvider(
