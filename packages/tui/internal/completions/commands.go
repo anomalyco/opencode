@@ -41,13 +41,20 @@ func (c *CommandCompletionProvider) GetEmptyMessage() string {
 	return "no matching commands"
 }
 
-func getCommandCompletionItem(cmd commands.Command, space int, t theme.Theme) dialog.CompletionItemI {
+func (c *CommandCompletionProvider) getCommandCompletionItem(
+	cmd commands.Command,
+	space int,
+	t theme.Theme,
+) dialog.CompletionItemI {
 	spacer := strings.Repeat(" ", space)
-	title := "  /" + cmd.PrimaryTrigger() + styles.NewStyle().Foreground(t.TextMuted()).Render(spacer+cmd.Description)
+	title := "  /" + cmd.PrimaryTrigger() + styles.NewStyle().
+		Foreground(t.TextMuted()).
+		Render(spacer+cmd.Description)
 	value := string(cmd.Name)
 	return dialog.NewCompletionItem(dialog.CompletionItem{
-		Title: title,
-		Value: value,
+		Title:      title,
+		Value:      value,
+		ProviderID: c.GetId(),
 	})
 }
 
@@ -98,7 +105,9 @@ func (c *CommandCompletionProvider) getCustomCommands() ([]CustomCommandFile, er
 	return commands, nil
 }
 
-func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.CompletionItemI, error) {
+func (c *CommandCompletionProvider) GetChildEntries(
+	query string,
+) ([]dialog.CompletionItemI, error) {
 	t := theme.CurrentTheme()
 	commands := c.app.Commands
 
@@ -134,7 +143,7 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 				continue
 			}
 			cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
-			items = append(items, getCommandCompletionItem(cmd, cmdSpace, t))
+			items = append(items, c.getCommandCompletionItem(cmd, cmdSpace, t))
 		}
 
 		// Add custom commands
@@ -158,8 +167,8 @@ func (c *CommandCompletionProvider) GetChildEntries(query string) ([]dialog.Comp
 
 		cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
 		for _, trigger := range cmd.Trigger {
-			commandNames = append(commandNames, cmd.PrimaryTrigger())
-			commandMap[trigger] = getCommandCompletionItem(cmd, cmdSpace, t)
+			commandNames = append(commandNames, trigger)
+			commandMap[trigger] = c.getCommandCompletionItem(cmd, cmdSpace, t)
 		}
 	}
 

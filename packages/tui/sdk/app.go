@@ -55,6 +55,14 @@ func (r *AppService) Log(ctx context.Context, body AppLogParams, opts ...option.
 	return
 }
 
+// List all modes
+func (r *AppService) Modes(ctx context.Context, opts ...option.RequestOption) (res *[]Mode, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "mode"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	return
+}
+
 type App struct {
 	Git      bool    `json:"git,required"`
 	Hostname string  `json:"hostname,required"`
@@ -147,6 +155,54 @@ func (r LogLevel) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type Mode struct {
+	Name   string          `json:"name,required"`
+	Tools  map[string]bool `json:"tools,required"`
+	Model  ModeModel       `json:"model"`
+	Prompt string          `json:"prompt"`
+	JSON   modeJSON        `json:"-"`
+}
+
+// modeJSON contains the JSON metadata for the struct [Mode]
+type modeJSON struct {
+	Name        apijson.Field
+	Tools       apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *Mode) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modeJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModeModel struct {
+	ModelID    string        `json:"modelID,required"`
+	ProviderID string        `json:"providerID,required"`
+	JSON       modeModelJSON `json:"-"`
+}
+
+// modeModelJSON contains the JSON metadata for the struct [ModeModel]
+type modeModelJSON struct {
+	ModelID     apijson.Field
+	ProviderID  apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModeModel) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modeModelJSON) RawJSON() string {
+	return r.raw
 }
 
 type AppLogParams struct {

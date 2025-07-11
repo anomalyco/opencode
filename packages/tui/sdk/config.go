@@ -65,7 +65,8 @@ type Config struct {
 	// Minimum log level to write to log files
 	LogLevel LogLevel `json:"log_level"`
 	// MCP (Model Context Protocol) server configurations
-	Mcp map[string]ConfigMcp `json:"mcp"`
+	Mcp  map[string]ConfigMcp `json:"mcp"`
+	Mode ConfigMode           `json:"mode"`
 	// Model to use in the format of provider/model, eg anthropic/claude-2
 	Model string `json:"model"`
 	// Custom provider configurations and model overrides
@@ -86,6 +87,7 @@ type configJSON struct {
 	Keybinds          apijson.Field
 	LogLevel          apijson.Field
 	Mcp               apijson.Field
+	Mode              apijson.Field
 	Model             apijson.Field
 	Provider          apijson.Field
 	Theme             apijson.Field
@@ -276,6 +278,77 @@ func (r ConfigMcpType) IsKnown() bool {
 	return false
 }
 
+type ConfigMode struct {
+	Build       ConfigModeBuild       `json:"build"`
+	Plan        ConfigModePlan        `json:"plan"`
+	ExtraFields map[string]ConfigMode `json:"-,extras"`
+	JSON        configModeJSON        `json:"-"`
+}
+
+// configModeJSON contains the JSON metadata for the struct [ConfigMode]
+type configModeJSON struct {
+	Build       apijson.Field
+	Plan        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigMode) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModeJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModeBuild struct {
+	Model  string              `json:"model"`
+	Prompt string              `json:"prompt"`
+	Tools  map[string]bool     `json:"tools"`
+	JSON   configModeBuildJSON `json:"-"`
+}
+
+// configModeBuildJSON contains the JSON metadata for the struct [ConfigModeBuild]
+type configModeBuildJSON struct {
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Tools       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModeBuild) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModeBuildJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModePlan struct {
+	Model  string             `json:"model"`
+	Prompt string             `json:"prompt"`
+	Tools  map[string]bool    `json:"tools"`
+	JSON   configModePlanJSON `json:"-"`
+}
+
+// configModePlanJSON contains the JSON metadata for the struct [ConfigModePlan]
+type configModePlanJSON struct {
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Tools       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModePlan) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModePlanJSON) RawJSON() string {
+	return r.raw
+}
+
 type ConfigProvider struct {
 	Models  map[string]ConfigProviderModel `json:"models,required"`
 	ID      string                         `json:"id"`
@@ -460,6 +533,8 @@ type Keybinds struct {
 	SessionShare string `json:"session_share,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
+	// Switch mode
+	SwitchMode string `json:"switch_mode,required"`
 	// List available themes
 	ThemeList string `json:"theme_list,required"`
 	// Toggle tool details
@@ -500,6 +575,7 @@ type keybindsJSON struct {
 	SessionNew           apijson.Field
 	SessionShare         apijson.Field
 	SessionUnshare       apijson.Field
+	SwitchMode           apijson.Field
 	ThemeList            apijson.Field
 	ToolDetails          apijson.Field
 	raw                  string

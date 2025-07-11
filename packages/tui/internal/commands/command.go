@@ -93,6 +93,7 @@ func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 
 const (
 	AppHelpCommand              CommandName = "app_help"
+	SwitchModeCommand           CommandName = "switch_mode"
 	EditorOpenCommand           CommandName = "editor_open"
 	SessionNewCommand           CommandName = "session_new"
 	SessionListCommand          CommandName = "session_list"
@@ -134,6 +135,11 @@ var defaults = []Command{
 		Trigger:     []string{"help"},
 	},
 	{
+		Name:        SwitchModeCommand,
+		Description: "switch mode",
+		Keybindings: parseBindings("tab"),
+	},
+	{
 		Name:        EditorOpenCommand,
 		Description: "open editor",
 		Keybindings: parseBindings("<leader>e"),
@@ -143,19 +149,25 @@ var defaults = []Command{
 		Name:        SessionNewCommand,
 		Description: "new session",
 		Keybindings: parseBindings("<leader>n"),
-		Trigger:     []string{"new"},
+		Trigger:     []string{"new", "clear"},
 	},
 	{
 		Name:        SessionListCommand,
 		Description: "list sessions",
 		Keybindings: parseBindings("<leader>l"),
-		Trigger:     []string{"sessions"},
+		Trigger:     []string{"sessions", "resume", "continue"},
 	},
 	{
 		Name:        SessionShareCommand,
 		Description: "share session",
 		Keybindings: parseBindings("<leader>s"),
 		Trigger:     []string{"share"},
+	},
+	{
+		Name:        SessionUnshareCommand,
+		Description: "unshare session",
+		Keybindings: parseBindings("<leader>u"),
+		Trigger:     []string{"unshare"},
 	},
 	{
 		Name:        SessionInterruptCommand,
@@ -166,7 +178,7 @@ var defaults = []Command{
 		Name:        SessionCompactCommand,
 		Description: "compact the session",
 		Keybindings: parseBindings("<leader>c"),
-		Trigger:     []string{"compact"},
+		Trigger:     []string{"compact", "summarize"},
 	},
 	{
 		Name:        ToolDetailsCommand,
@@ -187,6 +199,27 @@ var defaults = []Command{
 		Trigger:     []string{"themes"},
 	},
 	{
+		Name:        FileListCommand,
+		Description: "list files",
+		Keybindings: parseBindings("<leader>f"),
+		Trigger:     []string{"files"},
+	},
+	{
+		Name:        FileCloseCommand,
+		Description: "close file",
+		Keybindings: parseBindings("esc"),
+	},
+	{
+		Name:        FileSearchCommand,
+		Description: "search file",
+		Keybindings: parseBindings("<leader>/"),
+	},
+	{
+		Name:        FileDiffToggleCommand,
+		Description: "split/unified diff",
+		Keybindings: parseBindings("<leader>v"),
+	},
+	{
 		Name:        ProjectInitCommand,
 		Description: "create/update AGENTS.md",
 		Keybindings: parseBindings("<leader>i"),
@@ -200,7 +233,7 @@ var defaults = []Command{
 	{
 		Name:        InputPasteCommand,
 		Description: "paste content",
-		Keybindings: parseBindings("ctrl+v"),
+		Keybindings: parseBindings("ctrl+v", "super+v"),
 	},
 	{
 		Name:        InputSubmitCommand,
@@ -212,16 +245,6 @@ var defaults = []Command{
 		Description: "insert newline",
 		Keybindings: parseBindings("shift+enter", "ctrl+j"),
 	},
-	// {
-	// 	Name:        HistoryPreviousCommand,
-	// 	Description: "previous prompt",
-	// 	Keybindings: parseBindings("up"),
-	// },
-	// {
-	// 	Name:        HistoryNextCommand,
-	// 	Description: "next prompt",
-	// 	Keybindings: parseBindings("down"),
-	// },
 	{
 		Name:        MessagesPageUpCommand,
 		Description: "page up",
@@ -245,12 +268,12 @@ var defaults = []Command{
 	{
 		Name:        MessagesPreviousCommand,
 		Description: "previous message",
-		Keybindings: parseBindings("ctrl+alt+k"),
+		Keybindings: parseBindings("ctrl+up"),
 	},
 	{
 		Name:        MessagesNextCommand,
 		Description: "next message",
-		Keybindings: parseBindings("ctrl+alt+j"),
+		Keybindings: parseBindings("ctrl+down"),
 	},
 	{
 		Name:        MessagesFirstCommand,
@@ -263,10 +286,25 @@ var defaults = []Command{
 		Keybindings: parseBindings("ctrl+alt+g"),
 	},
 	{
+		Name:        MessagesLayoutToggleCommand,
+		Description: "toggle layout",
+		Keybindings: parseBindings("<leader>p"),
+	},
+	{
+		Name:        MessagesCopyCommand,
+		Description: "copy message",
+		Keybindings: parseBindings("<leader>y"),
+	},
+	{
+		Name:        MessagesRevertCommand,
+		Description: "revert message",
+		Keybindings: parseBindings("<leader>r"),
+	},
+	{
 		Name:        AppExitCommand,
 		Description: "exit the app",
 		Keybindings: parseBindings("ctrl+c", "<leader>q"),
-		Trigger:     []string{"exit"},
+		Trigger:     []string{"exit", "quit"},
 	},
 }
 

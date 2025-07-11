@@ -1,5 +1,9 @@
 import { DurableObject } from "cloudflare:workers"
 import { randomUUID } from "node:crypto"
+import { jwtVerify, createRemoteJWKSet } from "jose"
+import { createAppAuth } from "@octokit/auth-app"
+import { Octokit } from "@octokit/rest"
+import { Resource } from "sst"
 
 type Env = {
   SYNC_SERVER: DurableObjectNamespace<SyncServer>
@@ -104,7 +108,7 @@ export class SyncServer extends DurableObject<Env> {
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
     const splits = url.pathname.split("/")
     const method = splits[1]
@@ -218,5 +222,60 @@ export default {
         },
       )
     }
+
+    if (request.method === "POST" && method === "exchange_github_app_token") {
+      const EXPECTED_AUDIENCE = "opencode-github-action"
+      const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
+      const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
+
+      // get Authorization header
+      const authHeader = request.headers.get("Authorization")
+      const token = authHeader?.replace(/^Bearer /, "")
+      if (!token)
+        return new Response(JSON.stringify({ error: "Authorization header is required" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        })
+
+      // verify token
+      const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
+      let owner, repo
+      try {
+        const { payload } = await jwtVerify(token, JWKS, {
+          issuer: GITHUB_ISSUER,
+          audience: EXPECTED_AUDIENCE,
+        })
+        const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
+        const parts = sub.split(":")[1].split("/")
+        owner = parts[0]
+        repo = parts[1]
+      } catch (err) {
+        console.error("Token verification failed:", err)
+        return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+
+      // Create app JWT token
+      const auth = createAppAuth({
+        appId: Resource.GITHUB_APP_ID.value,
+        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+      })
+      const appAuth = await auth({ type: "app" })
+
+      // Lookup installation
+      const octokit = new Octokit({ auth: appAuth.token })
+      const { data: installation } = await octokit.apps.getRepoInstallation({ owner, repo })
+
+      // Get installation token
+      const installationAuth = await auth({ type: "installation", installationId: installation.id })
+
+      return new Response(JSON.stringify({ token: installationAuth.token }), {
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    return new Response("Not Found", { status: 404 })
   },
 }

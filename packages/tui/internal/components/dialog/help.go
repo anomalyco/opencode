@@ -30,9 +30,10 @@ func (h *helpDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		h.width = msg.Width
 		h.height = msg.Height
-		// Set viewport size with some padding for the modal
-		h.viewport = viewport.New(viewport.WithWidth(msg.Width-4), viewport.WithHeight(msg.Height-6))
-		h.commandsComponent.SetSize(msg.Width-4, msg.Height-6)
+		// Set viewport size with some padding for the modal, but cap at reasonable width
+		maxWidth := min(80, msg.Width-8)
+		h.viewport = viewport.New(viewport.WithWidth(maxWidth-4), viewport.WithHeight(msg.Height-6))
+		h.commandsComponent.SetSize(maxWidth-4, msg.Height-6)
 	}
 
 	// Update viewport content
@@ -48,7 +49,7 @@ func (h *helpDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (h *helpDialog) View() string {
 	t := theme.CurrentTheme()
-	h.commandsComponent.SetBackgroundColor(t.BackgroundElement())
+	h.commandsComponent.SetBackgroundColor(t.BackgroundPanel())
 	return h.viewport.View()
 }
 
@@ -69,11 +70,11 @@ func NewHelpDialog(app *app.App) HelpDialog {
 	return &helpDialog{
 		app: app,
 		commandsComponent: commandsComponent.New(app,
-			commandsComponent.WithBackground(theme.CurrentTheme().BackgroundElement()),
+			commandsComponent.WithBackground(theme.CurrentTheme().BackgroundPanel()),
 			commandsComponent.WithShowAll(true),
 			commandsComponent.WithKeybinds(true),
 		),
-		modal:    modal.New(modal.WithTitle("Help")),
+		modal:    modal.New(modal.WithTitle("Help"), modal.WithMaxWidth(80)),
 		viewport: vp,
 	}
 }

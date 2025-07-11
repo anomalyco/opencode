@@ -15,6 +15,7 @@ import {
 } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
+import PROMPT_PLAN from "../session/prompt/plan.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -30,15 +31,19 @@ import type { ModelsDev } from "../provider/models"
 import { Share } from "../share/share"
 import { Snapshot } from "../snapshot"
 import { Storage } from "../storage/storage"
-import type { Tool } from "../tool/tool"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
+import { Mode } from "./mode"
+import { LSP } from "../lsp"
+import { ReadTool } from "../tool/read"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  const OUTPUT_TOKEN_MAX = 32_000
 
   export const Info = z
     .object({
@@ -282,13 +287,12 @@ export namespace Session {
     sessionID: string
     providerID: string
     modelID: string
+    mode?: string
     parts: MessageV2.UserPart[]
-    system?: string[]
-    tools?: Tool.Info[]
   }) {
-    using abort = lock(input.sessionID)
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
+
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
     const session = await get(input.sessionID)
@@ -318,15 +322,13 @@ export namespace Session {
     }
 
     const previous = msgs.at(-1) as MessageV2.Assistant
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX)
 
     // auto summarize if too long
     if (previous) {
       const tokens =
         previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
-      if (
-        model.info.limit.context &&
-        tokens > Math.max((model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9, 0)
-      ) {
+      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
         await summarize({
           sessionID: input.sessionID,
           providerID: input.providerID,
@@ -335,6 +337,8 @@ export namespace Session {
         return chat(input)
       }
     }
+
+    using abort = lock(input.sessionID)
 
     const lastSummary = msgs.findLast((msg) => msg.role === "assistant" && msg.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
@@ -354,34 +358,75 @@ export namespace Session {
           const url = new URL(part.url)
           switch (url.protocol) {
             case "file:":
-              const filepath = path.join(app.path.cwd, url.pathname)
-              let file = Bun.file(filepath)
+              // have to normalize, symbol search returns absolute paths
+              // Decode the pathname since URL constructor doesn't automatically decode it
+              const pathname = decodeURIComponent(url.pathname)
+              const relativePath = pathname.replace(app.path.cwd, ".")
+              const filePath = path.join(app.path.cwd, relativePath)
 
               if (part.mime === "text/plain") {
-                let text = await file.text()
+                let offset: number | undefined = undefined
+                let limit: number | undefined = undefined
                 const range = {
                   start: url.searchParams.get("start"),
                   end: url.searchParams.get("end"),
                 }
-                if (range.start != null && part.mime === "text/plain") {
-                  const lines = text.split("\n")
-                  const start = parseInt(range.start)
-                  const end = range.end ? parseInt(range.end) : lines.length
-                  text = lines.slice(start, end).join("\n")
+                if (range.start != null) {
+                  const filePath = part.url.split("?")[0]
+                  let start = parseInt(range.start)
+                  let end = range.end ? parseInt(range.end) : undefined
+                  // some LSP servers (eg, gopls) don't give full range in
+                  // workspace/symbol searches, so we'll try to find the
+                  // symbol in the document to get the full range
+                  if (start === end) {
+                    const symbols = await LSP.documentSymbol(filePath)
+                    for (const symbol of symbols) {
+                      let range: LSP.Range | undefined
+                      if ("range" in symbol) {
+                        range = symbol.range
+                      } else if ("location" in symbol) {
+                        range = symbol.location.range
+                      }
+                      if (range?.start?.line && range?.start?.line === start) {
+                        start = range.start.line
+                        end = range?.end?.line ?? start
+                        break
+                      }
+                    }
+                    offset = Math.max(start - 2, 0)
+                    if (end) {
+                      limit = end - offset + 2
+                    }
+                  }
                 }
-                FileTime.read(input.sessionID, filepath)
+                const args = { filePath, offset, limit }
+                const result = await ReadTool.execute(args, {
+                  sessionID: input.sessionID,
+                  abort: abort.signal,
+                  messageID: "", // read tool doesn't use message ID
+                  metadata: async () => {},
+                })
                 return [
                   {
                     type: "text",
-                    text: ["Called the Read tool on " + url.pathname, "<results>", text, "</results>"].join("\n"),
+                    synthetic: true,
+                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                  },
+                  {
+                    type: "text",
+                    synthetic: true,
+                    text: result.output,
                   },
                 ]
               }
 
+              let file = Bun.file(filePath)
+              FileTime.read(input.sessionID, filePath)
               return [
                 {
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${url.pathname}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${pathname}\"}`,
+                  synthetic: true,
                 },
                 {
                   type: "file",
@@ -395,6 +440,13 @@ export namespace Session {
         return [part]
       }),
     ).then((x) => x.flat())
+
+    if (input.mode === "plan")
+      input.parts.push({
+        type: "text",
+        text: PROMPT_PLAN,
+        synthetic: true,
+      })
 
     if (msgs.length === 0 && !session.parentID) {
       generateText({
@@ -443,9 +495,13 @@ export namespace Session {
     await updateMessage(msg)
     msgs.push(msg)
 
-    const system = input.system ?? SystemPrompt.provider(input.providerID)
+    const mode = await Mode.get(input.mode ?? "build")
+    let system = mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.providerID, input.modelID)
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+    // max 2 system prompt messages for caching purposes
+    const [first, ...rest] = system
+    system = [first, rest.join("\n")]
 
     const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
@@ -474,7 +530,8 @@ export namespace Session {
     const tools: Record<string, AITool> = {}
 
     for (const item of await Provider.tools(input.providerID)) {
-      tools[item.id.replaceAll(".", "_")] = tool({
+      if (mode.tools[item.id] === false) continue
+      tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
@@ -506,6 +563,7 @@ export namespace Session {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (mode.tools[key] === false) continue
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
@@ -535,7 +593,7 @@ export namespace Session {
     const result = streamText({
       onError() {},
       maxRetries: 10,
-      maxOutputTokens: Math.max(0, model.info.limit.output) || undefined,
+      maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
       providerOptions: model.info.options,
@@ -674,6 +732,11 @@ export namespace Session {
             const usage = getUsage(model.info, value.usage, value.providerMetadata)
             next.cost += usage.cost
             next.tokens = usage.tokens
+            next.parts.push({
+              type: "step-finish",
+              tokens: usage.tokens,
+              cost: usage.cost,
+            })
             break
 
           case "text-start":

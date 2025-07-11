@@ -22,21 +22,27 @@ import (
 )
 
 type App struct {
-	Info           opencode.App
-	Version        string
-	StatePath      string
-	Config         *opencode.Config
-	Client         *opencode.Client
-	CommandsClient *commands.CommandsClient
-	State          *config.State
-	Provider       *opencode.Provider
-	Model          *opencode.Model
-	Session        *opencode.Session
-	Messages       []opencode.MessageUnion
-	Commands       commands.CommandRegistry
-	InitialModel   *string
-	InitialPrompt  *string
-	compactCancel  context.CancelFunc
+	Info             opencode.App
+	Modes            []opencode.Mode
+	Providers        []opencode.Provider
+	Version          string
+	StatePath        string
+	Config           *opencode.Config
+	Client           *opencode.Client
+	CommandsClient   *commands.CommandsClient
+	State            *config.State
+	ModeIndex        int
+	Mode             *opencode.Mode
+	Provider         *opencode.Provider
+	Model            *opencode.Model
+	Session          *opencode.Session
+	Messages         []opencode.MessageUnion
+	Commands         commands.CommandRegistry
+	InitialModel     *string
+	InitialPrompt    *string
+	IntitialMode     *string
+	compactCancel    context.CancelFunc
+	IsLeaderSequence bool
 }
 
 type (
@@ -47,7 +53,6 @@ type (
 		Model    opencode.Model
 	}
 )
-
 type (
 	SessionClearedMsg struct{}
 	CompactSessionMsg struct{}
@@ -56,7 +61,9 @@ type (
 		Attachments []opencode.FilePartParam
 	}
 )
-
+type SetEditorContentMsg struct {
+	Text string
+}
 type OptimisticMessageAddedMsg struct {
 	Message opencode.MessageUnion
 }
@@ -68,9 +75,11 @@ func New(
 	ctx context.Context,
 	version string,
 	appInfo opencode.App,
+	modes []opencode.Mode,
 	httpClient *opencode.Client,
-	model *string,
-	prompt *string,
+	initialModel *string,
+	initialPrompt *string,
+	initialMode *string,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -91,14 +100,36 @@ func New(
 		config.SaveState(appStatePath, appState)
 	}
 
+	if appState.ModeModel == nil {
+		appState.ModeModel = make(map[string]config.ModeModel)
+	}
+
 	if configInfo.Theme != "" {
 		appState.Theme = configInfo.Theme
 	}
 
-	if configInfo.Model != "" {
-		splits := strings.Split(configInfo.Model, "/")
-		appState.Provider = splits[0]
-		appState.Model = strings.Join(splits[1:], "/")
+	var modeIndex int
+	var mode *opencode.Mode
+	modeName := "build"
+	if appState.Mode != "" {
+		modeName = appState.Mode
+	}
+	if initialMode != nil && *initialMode != "" {
+		modeName = *initialMode
+	}
+	for i, m := range modes {
+		if m.Name == modeName {
+			modeIndex = i
+			break
+		}
+	}
+	mode = &modes[modeIndex]
+
+	if mode.Model.ModelID != "" {
+		appState.ModeModel[mode.Name] = config.ModeModel{
+			ProviderID: mode.Model.ProviderID,
+			ModelID:    mode.Model.ModelID,
+		}
 	}
 
 	if err := theme.LoadThemesFromDirectories(
@@ -126,21 +157,26 @@ func New(
 	if baseURL == "" {
 		baseURL = "http://localhost:4096" // Default fallback
 	}
+
 	commandsClient := commands.NewCommandsClient(baseURL)
 
 	app := &App{
 		Info:           appInfo,
+		Modes:          modes,
 		Version:        version,
 		StatePath:      appStatePath,
 		Config:         configInfo,
 		State:          appState,
 		Client:         httpClient,
 		CommandsClient: commandsClient,
+		ModeIndex:      modeIndex,
+		Mode:           mode,
 		Session:        &opencode.Session{},
 		Messages:       []opencode.MessageUnion{},
 		Commands:       commands.LoadFromConfig(configInfo),
-		InitialModel:   model,
-		InitialPrompt:  prompt,
+		InitialModel:   initialModel,
+		InitialPrompt:  initialPrompt,
+		IntitialMode:   initialMode,
 	}
 
 	// Create example command file if commands directory doesn't exist
@@ -177,6 +213,45 @@ func (a *App) SetClipboard(text string) tea.Cmd {
 	return tea.Sequence(cmds...)
 }
 
+func (a *App) SwitchMode() (*App, tea.Cmd) {
+	a.ModeIndex++
+	if a.ModeIndex >= len(a.Modes) {
+		a.ModeIndex = 0
+	}
+	a.Mode = &a.Modes[a.ModeIndex]
+
+	modelID := a.Mode.Model.ModelID
+	providerID := a.Mode.Model.ProviderID
+	if modelID == "" {
+		if model, ok := a.State.ModeModel[a.Mode.Name]; ok {
+			modelID = model.ModelID
+			providerID = model.ProviderID
+		}
+	}
+
+	if modelID != "" {
+		for _, provider := range a.Providers {
+			if provider.ID == providerID {
+				a.Provider = &provider
+				for _, model := range provider.Models {
+					if model.ID == modelID {
+						a.Model = &model
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	a.State.Mode = a.Mode.Name
+
+	return a, func() tea.Msg {
+		a.SaveState()
+		return nil
+	}
+}
+
 func (a *App) InitializeProvider() tea.Cmd {
 	providersResponse, err := a.Client.Config.Providers(context.Background())
 	if err != nil {
@@ -211,6 +286,14 @@ func (a *App) InitializeProvider() tea.Cmd {
 	if len(providers) == 0 {
 		slog.Error("No providers configured")
 		return nil
+	}
+
+	a.Providers = providers
+
+	// retains backwards compatibility with old state format
+	if model, ok := a.State.ModeModel[a.State.Mode]; ok {
+		a.State.Provider = model.ProviderID
+		a.State.Model = model.ModelID
 	}
 
 	var currentProvider *opencode.Provider
@@ -337,10 +420,14 @@ func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 			a.compactCancel = nil
 		}()
 
-		_, err := a.Client.Session.Summarize(compactCtx, a.Session.ID, opencode.SessionSummarizeParams{
-			ProviderID: opencode.F(a.Provider.ID),
-			ModelID:    opencode.F(a.Model.ID),
-		})
+		_, err := a.Client.Session.Summarize(
+			compactCtx,
+			a.Session.ID,
+			opencode.SessionSummarizeParams{
+				ProviderID: opencode.F(a.Provider.ID),
+				ModelID:    opencode.F(a.Model.ID),
+			},
+		)
 		if err != nil {
 			if compactCtx.Err() != context.Canceled {
 				slog.Error("Failed to compact session", "error", err)
@@ -432,6 +519,7 @@ func (a *App) SendChatMessage(
 			Parts:      opencode.F(parts),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
+			Mode:       opencode.F(a.Mode.Name),
 		})
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)

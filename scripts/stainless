@@ -9,8 +9,8 @@ SERVER_PID=$!
 echo "Waiting for server to start..."
 sleep 3
 
-echo "Fetching OpenAPI spec from http://localhost:4096/doc..."
-curl -s http://localhost:4096/doc > openapi.json
+echo "Fetching OpenAPI spec from http://127.0.0.1:4096/doc..."
+curl -s http://127.0.0.1:4096/doc > openapi.json
 
 echo "Stopping server..."
 kill $SERVER_PID

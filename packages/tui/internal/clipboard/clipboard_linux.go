@@ -79,7 +79,9 @@ func initialize() error {
 	}
 
 	if selectedTool < 0 {
-		slog.Warn("No clipboard utility found on system. Copy/paste functionality will be disabled.")
+		slog.Warn(
+			"No clipboard utility found on system. Copy/paste functionality will be disabled. See https://opencode.ai/docs/troubleshooting/ for more information.",
+		)
 		return fmt.Errorf(`%w: No clipboard utility found. Install one of the following:
 
 For X11 systems:
@@ -138,7 +140,8 @@ func readText(tool struct {
 			// xclip returns error when clipboard doesn't contain requested type
 			checkCmd := exec.Command("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o")
 			targets, _ := checkCmd.Output()
-			if bytes.Contains(targets, []byte("image/png")) && !bytes.Contains(targets, []byte("UTF8_STRING")) {
+			if bytes.Contains(targets, []byte("image/png")) &&
+				!bytes.Contains(targets, []byte("UTF8_STRING")) {
 				return nil, errUnavailable
 			}
 		}
@@ -168,7 +171,8 @@ func readImage(tool struct {
 	}
 
 	// Verify it's PNG data
-	if len(out) < 8 || !bytes.Equal(out[:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) {
+	if len(out) < 8 ||
+		!bytes.Equal(out[:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) {
 		return nil, errUnavailable
 	}
 

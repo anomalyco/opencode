@@ -11,9 +11,13 @@ opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.
 
 You can configure providers in your opencode config under the `provider` section.
 
+---
+
 ### Defaults
 
 Most popular providers are preloaded by default. If you've added the credentials for a provider through `opencode auth login`, they'll be available when you start opencode.
+
+---
 
 ### Custom
 
@@ -37,9 +41,44 @@ You can add custom providers by specifying the npm package for the provider and 
 }
 ```
 
+---
+
 ### Local
 
-To configure a local model, specify the npm package to use and the `baseURL`.
+You can configure local model like ones served through LM Studio or Ollama. To
+do so, you'll need to specify a couple of things. 
+
+Here's an example of configuring a local model from LM Studio:
+
+```json title="opencode.json" {4-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "google/gemma-3n-e4b": {
+          "name": "Gemma 3n-e4b (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+In this example:
+
+- `lmstudio` is the custom provider ID. We'll use this later.
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
+- `name` is the display name for the provider in the UI.
+- `options.baseURL` is the endpoint for the local server.
+- `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+
+Similarly, to configure a local model from Ollama:
 
 ```json title="opencode.json" {5,7}
 {
@@ -57,6 +96,18 @@ To configure a local model, specify the npm package to use and the `baseURL`.
   }
 }
 ```
+
+To set one of these as the default model, you can set the `model` key at the
+root.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Here the full ID is `provider_id/model_id`, where `provider_id` is the key in the `provider` list we set above and `model_id` is the key from the `provider.models` list.
 
 ---
 

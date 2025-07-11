@@ -46,7 +46,7 @@ export namespace FileWatcher {
   )
 
   export function init() {
-    if (Flag.OPENCODE_DISABLE_WATCHER) return
+    if (Flag.OPENCODE_DISABLE_WATCHER || true) return
     state()
   }
 }

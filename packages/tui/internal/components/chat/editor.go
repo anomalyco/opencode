@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,6 +44,7 @@ type EditorComponent interface {
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
+	SetValue(value string)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 }
@@ -101,7 +103,16 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ".pdf":
 			mediaType = "application/pdf"
 		default:
-			mediaType = "text/plain"
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + filePath,
+				URL:       fmt.Sprintf("file://./%s", filePath),
+				Filename:  filePath,
+				MediaType: "text/plain",
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
 		}
 
 		fileBytes, err := os.ReadFile(filePath)
@@ -132,13 +143,13 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := string(msg)
 		m.textarea.InsertRunesFromUserInput([]rune(text))
 	case dialog.ThemeSelectedMsg:
-		m.textarea = m.resetTextareaStyles()
+		m.textarea = updateTextareaStyles(m.textarea)
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
-		switch msg.ProviderID {
+		switch msg.Item.GetProviderID() {
 		case "commands":
-			commandName := strings.TrimPrefix(msg.CompletionValue, "/")
+			commandName := strings.TrimPrefix(msg.Item.GetValue(), "/")
 
 			// Check if this is a valid custom command (not a built-in command)
 			if !commands.IsBuiltinCommand(commandName) && commands.IsValidCustomCommandWithClient(commandName, m.app.Info.Path.Config, m.app.CommandsClient) {
@@ -159,7 +170,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			atIndex := m.textarea.LastRuneIndex('@')
 			if atIndex == -1 {
 				// Should not happen, but as a fallback, just insert.
-				m.textarea.InsertString(msg.CompletionValue + " ")
+				m.textarea.InsertString(msg.Item.GetValue() + " ")
 				return m, nil
 			}
 
@@ -170,7 +181,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Now, insert the attachment at the position where the '@' was.
 			// The cursor is now at `atIndex` after the replacement.
-			filePath := msg.CompletionValue
+			filePath := msg.Item.GetValue()
 			extension := filepath.Ext(filePath)
 			mediaType := ""
 			switch extension {
@@ -186,22 +197,39 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			attachment := &textarea.Attachment{
 				ID:        uuid.NewString(),
 				Display:   "@" + filePath,
-				URL:       fmt.Sprintf("file://./%s", filePath),
+				URL:       fmt.Sprintf("file://./%s", url.PathEscape(filePath)),
 				Filename:  filePath,
 				MediaType: mediaType,
 			}
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
 			return m, nil
-		default:
-			existingValue := m.textarea.Value()
-			lastSpaceIndex := strings.LastIndex(existingValue, " ")
-			if lastSpaceIndex == -1 {
-				m.textarea.SetValue(msg.CompletionValue + " ")
-			} else {
-				modifiedValue := existingValue[:lastSpaceIndex+1] + msg.CompletionValue
-				m.textarea.SetValue(modifiedValue + " ")
+		case "symbols":
+			atIndex := m.textarea.LastRuneIndex('@')
+			if atIndex == -1 {
+				// Should not happen, but as a fallback, just insert.
+				m.textarea.InsertString(msg.Item.GetValue() + " ")
+				return m, nil
 			}
+
+			cursorCol := m.textarea.CursorColumn()
+			m.textarea.ReplaceRange(atIndex, cursorCol, "")
+
+			symbol := msg.Item.GetRaw().(opencode.Symbol)
+			parts := strings.Split(symbol.Name, ".")
+			lastPart := parts[len(parts)-1]
+			attachment := &textarea.Attachment{
+				ID:        uuid.NewString(),
+				Display:   "@" + lastPart,
+				URL:       msg.Item.GetValue(),
+				Filename:  lastPart,
+				MediaType: "text/plain",
+			}
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
+		default:
+			slog.Debug("Unknown provider", "provider", msg.Item.GetProviderID())
 			return m, nil
 		}
 	case dialog.CompletionFilledMsg:
@@ -248,13 +276,17 @@ func (m *editorComponent) Content(width int) string {
 		prompt,
 		m.textarea.View(),
 	)
+	borderForeground := t.Border()
+	if m.app.IsLeaderSequence {
+		borderForeground = t.Accent()
+	}
 	textarea = styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Width(width).
 		PaddingTop(1).
 		PaddingBottom(1).
 		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(t.Border()).
+		BorderForeground(borderForeground).
 		BorderBackground(t.Background()).
 		BorderLeft(true).
 		BorderRight(true).
@@ -409,6 +441,10 @@ func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 	m.interruptKeyInDebounce = inDebounce
 }
 
+func (m *editorComponent) SetValue(value string) {
+	m.textarea.SetValue(value)
+}
+
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
 	m.exitKeyInDebounce = inDebounce
 }
@@ -425,13 +461,11 @@ func (m *editorComponent) getExitKeyText() string {
 	return m.app.Commands[commands.AppExitCommand].Keys()[0]
 }
 
-func (m *editorComponent) resetTextareaStyles() textarea.Model {
+func updateTextareaStyles(ta textarea.Model) textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
-
-	ta := m.textarea
 
 	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
 	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
@@ -480,6 +514,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
+	ta = updateTextareaStyles(ta)
 
 	m := &editorComponent{
 		app:                    app,
@@ -487,7 +522,6 @@ func NewEditorComponent(app *app.App) EditorComponent {
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}
-	m.resetTextareaStyles()
 
 	return m
 }

@@ -26,6 +26,21 @@ export namespace Filesystem {
     return result
   }
 
+  export async function* up(options: { targets: string[]; start: string; stop?: string }) {
+    const { targets, start, stop } = options
+    let current = start
+    while (true) {
+      for (const target of targets) {
+        const search = join(current, target)
+        if (await exists(search)) yield search
+      }
+      if (stop === current) break
+      const parent = dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  }
+
   export async function globUp(pattern: string, start: string, stop?: string) {
     let current = start
     const result = []

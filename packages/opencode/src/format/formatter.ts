@@ -1,5 +1,7 @@
 import { App } from "../app/app"
 import { BunProc } from "../bun"
+import { Filesystem } from "../util/filesystem"
+import path from "path"
 
 export interface Info {
   name: string
@@ -29,7 +31,7 @@ export const mix: Info = {
 
 export const prettier: Info = {
   name: "prettier",
-  command: [BunProc.which(), "run", "prettier", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "prettier", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -62,23 +64,12 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    // this is more complicated because we only want to use prettier if it's
-    // being used with the current project
-    try {
-      const proc = Bun.spawn({
-        cmd: [BunProc.which(), "run", "prettier", "--version"],
-        cwd: App.info().path.cwd,
-        env: {
-          BUN_BE_BUN: "1",
-        },
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      const exit = await proc.exited
-      return exit === 0
-    } catch {
-      return false
+    const app = App.info()
+    const nms = await Filesystem.findUp("node_modules", app.path.cwd, app.path.root)
+    for (const item of nms) {
+      if (await Bun.file(path.join(item, ".bin", "prettier")).exists()) return true
     }
+    return false
   },
 }
 
