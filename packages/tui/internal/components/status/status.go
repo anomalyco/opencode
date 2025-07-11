@@ -11,6 +11,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
+	"github.com/sst/opencode/internal/util"
 )
 
 type StatusComponent interface {
@@ -19,9 +20,10 @@ type StatusComponent interface {
 }
 
 type statusComponent struct {
-	app   *app.App
-	width int
-	cwd   string
+	app     *app.App
+	width   int
+	cwd     string
+	gitInfo *util.GitInfo
 }
 
 func (m statusComponent) Init() tea.Cmd {
@@ -59,11 +61,28 @@ func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
 
+	// Shorten the current working directory for less clutter
+	shortenedCwd := util.ShortenPath(m.cwd, 30)
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
 		Padding(0, 1).
-		Render(m.cwd)
+		Render(shortenedCwd)
+
+	// Git information display
+	var git string
+	if m.gitInfo != nil && m.gitInfo.IsRepo && m.gitInfo.Branch != "" {
+		gitText := m.gitInfo.Branch
+		if m.gitInfo.CommitHash != "" {
+			gitText += "@" + m.gitInfo.CommitHash
+		}
+		
+		git = styles.NewStyle().
+			Foreground(t.Info()).
+			Background(t.BackgroundPanel()).
+			Padding(0, 1).
+			Render(gitText)
+	}
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
@@ -122,11 +141,11 @@ func (m statusComponent) View() string {
 
 	space := max(
 		0,
-		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(mode),
+		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(git)-lipgloss.Width(mode),
 	)
 	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
 
-	status := logo + cwd + spacer + mode
+	status := logo + cwd + git + spacer + mode
 
 	blank := styles.NewStyle().Background(t.Background()).Width(m.width).Render("")
 	return blank + "\n" + status
@@ -143,6 +162,9 @@ func NewStatusCmp(app *app.App) StatusComponent {
 		cwdPath = "~" + cwdPath[len(homePath):]
 	}
 	statusComponent.cwd = cwdPath
+
+	// Get git information for the current directory
+	statusComponent.gitInfo = util.GetGitInfo()
 
 	return statusComponent
 }
