@@ -1,0 +1,7 @@
+.emptyState {
+  color: var(--sl-color-text-dimmed);
+  text-align: center;
+  padding: 2rem;
+  font-style: italic;
+  font-size: 0.875rem;
+}

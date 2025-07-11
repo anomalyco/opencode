@@ -1,0 +1,44 @@
+.helpSection {
+  margin-top: 3rem;
+  padding: 0.5rem calc(0.5rem + 3px);
+  background-color: var(--sl-color-bg-surface);
+  border: 1px solid var(--sl-color-divider);
+  border-radius: 0.25rem;
+}
+
+.helpSection h3 {
+  color: var(--sl-color-text);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+}
+
+.helpSection ol {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--sl-color-text-dimmed);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.helpSection li {
+  margin-bottom: 0.5rem;
+}
+
+.helpSection code {
+  background-color: var(--sl-color-bg-surface);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--sl-color-accent);
+  border: 1px solid var(--sl-color-divider);
+}
+
+.helpSection p {
+  margin: 1rem 0 0 0;
+  color: var(--sl-color-text-dimmed);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}

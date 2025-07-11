@@ -1,0 +1,23 @@
+.localSessions {
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  line-height: 1;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .localSessions {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  .localSessions {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+}

@@ -1,0 +1,14 @@
+.errorMessage {
+  background-color: var(--sl-color-bg-surface);
+  border: 1px solid var(--sl-color-red);
+  color: var(--sl-color-red-high);
+  padding: 0.5rem calc(0.5rem + 3px);
+  border-radius: 0.25rem;
+  margin: 1rem 0;
+}
+
+.errorMessage p {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--sl-color-text-dimmed);
+}

@@ -1,0 +1,84 @@
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.headerTitleContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.subheaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0 !important;
+}
+
+.projectPathSubheader {
+  font-size: 0.875rem;
+  color: var(--sl-color-text-dimmed);
+  margin: 0;
+  font-weight: 400;
+  line-height: 1.5;
+  opacity: 0.8;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.headerTitle {
+  font-size: 2.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.05em;
+  color: var(--sl-color-white);
+  margin: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.searchInput {
+  padding: 0.5rem calc(0.5rem + 3px);
+  border: 1px solid var(--sl-color-divider);
+  border-radius: 0.25rem;
+  background-color: var(--sl-color-bg-surface);
+  color: var(--sl-color-text);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  width: 100%;
+  transition: border-color 0.2s ease;
+  flex-shrink: 0;
+  width: auto;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--sl-color-accent);
+}
+
+.searchInput::placeholder {
+  color: var(--sl-color-text-dimmed);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .searchInput {
+    max-width: 100%;
+  }
+
+  .headerTitle {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+}
+
+@media (max-width: 30rem) {
+  .headerTitle {
+    font-size: 1.75rem;
+    line-height: 1.25;
+  }
+}

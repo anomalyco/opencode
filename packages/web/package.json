@@ -17,6 +17,7 @@
     "@astrojs/starlight": "0.34.3",
     "@fontsource/ibm-plex-mono": "5.2.5",
     "@shikijs/transformers": "3.4.2",
+    "@tanstack/solid-table": "8.21.3",
     "@types/luxon": "3.6.2",
     "ai": "catalog:",
     "astro": "5.7.13",
