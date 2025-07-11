@@ -46,12 +46,23 @@ export namespace Provider {
 
       // If any gateway/direct API configuration is present, skip OAuth
       if (baseUrl || authToken || apiKey) {
+        log.debug("skipping OAuth for Anthropic - using env vars", {
+          hasBaseUrl: !!baseUrl,
+          hasAuthToken: !!authToken,
+          hasApiKey: !!apiKey,
+        })
         return { autoload: false } // Let the env loader handle this
       }
 
       // Otherwise, use OAuth authentication
+      log.debug("attempting OAuth authentication for Anthropic")
       const access = await AuthAnthropic.access()
-      if (!access) return { autoload: false }
+      if (!access) {
+        log.debug("OAuth access not available for Anthropic")
+        return { autoload: false }
+      }
+
+      log.debug("OAuth access available for Anthropic")
       for (const model of Object.values(provider.models)) {
         model.cost = {
           input: 0,
@@ -326,6 +337,13 @@ export namespace Provider {
         if (baseUrl || authToken || apiKey) {
           const options: Record<string, any> = {}
 
+          log.debug("configuring Anthropic LLM Gateway", {
+            hasBaseUrl: !!baseUrl,
+            baseUrl: baseUrl || "not set",
+            hasAuthToken: !!authToken,
+            hasApiKey: !!apiKey,
+          })
+
           // Set base URL if provided
           if (baseUrl) {
             options["baseURL"] = baseUrl
@@ -336,23 +354,66 @@ export namespace Provider {
             options["apiKey"] = authToken
             // For LLM gateways, also add custom fetch to handle gateway-specific headers
             options["fetch"] = async (input: any, init: any) => {
+              log.debug("making request to Anthropic gateway", {
+                url: typeof input === "string" ? input : input?.url,
+                method: init?.method || "GET",
+                hasBody: !!init?.body,
+                bodyLength: init?.body ? String(init.body).length : 0,
+              })
+
               const headers = {
                 ...init.headers,
                 "Proxy-Authorization": `Bearer ${authToken}`,
                 "X-API-Key": authToken,
               }
-              return fetch(input, {
-                ...init,
-                headers,
+
+              log.debug("request headers", {
+                headers: Object.fromEntries(
+                  Object.entries(headers).map(([key, value]) => [
+                    key,
+                    key.toLowerCase().includes("auth") || key.toLowerCase().includes("key")
+                      ? `${String(value).substring(0, 10)}...`
+                      : value,
+                  ]),
+                ),
               })
+
+              try {
+                const response = await fetch(input, {
+                  ...init,
+                  headers,
+                })
+
+                log.debug("gateway response", {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: Object.fromEntries(response.headers.entries()),
+                })
+
+                return response
+              } catch (error) {
+                log.error("gateway request failed", {
+                  error: error instanceof Error ? error.message : String(error),
+                  stack: error instanceof Error ? error.stack : undefined,
+                })
+                throw error
+              }
             }
           } else if (apiKey) {
             options["apiKey"] = apiKey
+            log.debug("using direct ANTHROPIC_API_KEY authentication")
           } else if (baseUrl) {
             // If only baseURL is set, provide a placeholder API key
             // The gateway should handle authentication
             options["apiKey"] = "gateway-auth"
+            log.debug("using baseURL-only configuration with placeholder auth")
           }
+
+          log.debug("final Anthropic provider options", {
+            baseURL: options["baseURL"],
+            hasApiKey: !!options["apiKey"],
+            hasFetch: !!options["fetch"],
+          })
 
           mergeProvider(providerID, options, "env")
           continue
