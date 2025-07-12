@@ -51,7 +51,7 @@ export namespace Provider {
         return {
           autoload: true,
           options: {
-            apiKey: "dummy-key-for-gateway", // Required by SDK but overridden by fetch
+            apiKey: apiKey ?? "", // Use real API key if set, otherwise blank string
             baseURL: normalizedBaseUrl,
             async fetch(input: any, init: any) {
               const headers = {
