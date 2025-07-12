@@ -208,15 +208,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(cmds...)
 		}
 
-		// 4. Maximize editor responsiveness for printable characters
-		if msg.Text != "" {
-			updated, cmd := a.editor.Update(msg)
-			a.editor = updated.(chat.EditorComponent)
-			cmds = append(cmds, cmd)
-			return a, tea.Batch(cmds...)
-		}
-
-		// 5. Check for leader key activation
+		// 4. Check for leader key activation
 		if a.leaderBinding != nil &&
 			!a.app.IsLeaderSequence &&
 			key.Matches(msg, *a.leaderBinding) {
@@ -224,13 +216,33 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-		// 6 Handle input clear command
+		// 5. Check for commands that don't require leader (including tab for mode switching)
+		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
+		if len(matches) > 0 {
+			// Skip interrupt key if we're in debounce mode and app is busy
+			interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
+			if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
+				// Let it fall through to interrupt debounce handling below
+			} else {
+				return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
+			}
+		}
+
+		// 6. Maximize editor responsiveness for printable characters
+		if msg.Text != "" {
+			updated, cmd := a.editor.Update(msg)
+			a.editor = updated.(chat.EditorComponent)
+			cmds = append(cmds, cmd)
+			return a, tea.Batch(cmds...)
+		}
+
+		// 7. Handle input clear command
 		inputClearCommand := a.app.Commands[commands.InputClearCommand]
 		if inputClearCommand.Matches(msg, a.app.IsLeaderSequence) && a.editor.Length() > 0 {
 			return a, util.CmdHandler(commands.ExecuteCommandMsg(inputClearCommand))
 		}
 
-		// 7. Handle interrupt key debounce for session interrupt
+		// 8. Handle interrupt key debounce for session interrupt
 		interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
 		if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() {
 			switch a.interruptKeyState {
@@ -249,7 +261,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 8. Handle exit key debounce for app exit when using non-leader command
+		// 9. Handle exit key debounce for app exit when using non-leader command
 		exitCommand := a.app.Commands[commands.AppExitCommand]
 		if exitCommand.Matches(msg, a.app.IsLeaderSequence) {
 			switch a.exitKeyState {
@@ -268,17 +280,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
-		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
-		if len(matches) > 0 {
-			// Skip interrupt key if we're in debounce mode and app is busy
-			if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
-				return a, nil
-			}
-			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
-		}
-
-		// 10. Fallback to editor. This is for other characters like backspace, tab, etc.
+		// 10. Fallback to editor. This is for other characters like backspace, etc.
 		updatedEditor, cmd := a.editor.Update(msg)
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd
