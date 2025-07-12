@@ -331,7 +331,6 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        EditAuthCommand,
 			Description: "edit auth",
 			Keybindings: parseBindings("<leader>a"),
-			Trigger:     []string{"auth"},
 		},
 		{
 			Name:        AppExitCommand,
