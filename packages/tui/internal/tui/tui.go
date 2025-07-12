@@ -22,6 +22,7 @@ import (
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/fileviewer"
 	"github.com/sst/opencode/internal/components/modal"
+	"github.com/sst/opencode/internal/components/queue"
 	"github.com/sst/opencode/internal/components/status"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
@@ -64,6 +65,8 @@ type appModel struct {
 	status               status.StatusComponent
 	editor               chat.EditorComponent
 	messages             chat.MessagesComponent
+	queueStatus          *queue.StatusComponent
+	queueEditor          *queue.EditorComponent
 	completions          dialog.CompletionDialog
 	commandProvider      dialog.CompletionProvider
 	fileProvider         dialog.CompletionProvider
@@ -98,6 +101,7 @@ func (a appModel) Init() tea.Cmd {
 	cmds = append(cmds, a.toastManager.Init())
 	cmds = append(cmds, a.fileViewer.Init())
 
+
 	// Check if we should show the init dialog
 	cmds = append(cmds, func() tea.Msg {
 		shouldShow := a.app.Info.Git && a.app.Info.Time.Initialized > 0
@@ -115,7 +119,14 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
-		// 1. Handle active modal
+		// 1. Handle active queue editor
+		if a.queueEditor.IsActive() {
+			updated, cmd := a.queueEditor.Update(msg)
+			a.queueEditor = updated
+			return a, cmd
+		}
+
+		// 2. Handle active modal
 		if a.modal != nil {
 			switch keyString {
 			// Escape always closes current modal
@@ -269,7 +280,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
+
+		// 10. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
 		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
 		if len(matches) > 0 {
 			// Skip interrupt key if we're in debounce mode and app is busy
@@ -354,6 +366,24 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.editor.Focus()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
+	case app.ProcessQueueMsg:
+		// Attempt to process queued message
+		slog.Debug("ProcessQueueMsg received")
+		a.app, cmd = a.app.ProcessQueue(context.Background())
+		cmds = append(cmds, cmd)
+	case app.EditQueueMsg:
+		// Open queue editor
+		if !a.app.MessageQueue.IsEmpty() {
+			updated, cmd := a.queueEditor.Activate()
+			a.queueEditor = updated
+			cmds = append(cmds, cmd)
+		} else {
+			cmds = append(cmds, toast.NewInfoToast("No message in queue to edit"))
+		}
+	case app.ClearQueueMsg:
+		// Clear the message queue
+		a.app.ClearQueuedMessage()
+		cmds = append(cmds, toast.NewInfoToast("Queue cleared"))
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
 		a.fileCompletionActive = false
@@ -410,6 +440,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.app.Messages[messageIndex] = message
 			}
 		}
+	case opencode.EventListResponseEventSessionIdle:
+		// Session became idle - trigger queue processing
+		if msg.Properties.SessionID == a.app.Session.ID {
+			slog.Debug("Session idle event received, triggering queue processing", "sessionID", msg.Properties.SessionID)
+			cmds = append(cmds, util.CmdHandler(app.ProcessQueueMsg{}))
+		}
 	case opencode.EventListResponseEventMessageUpdated:
 		if msg.Properties.Info.SessionID == a.app.Session.ID {
 			matchIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
@@ -435,6 +471,16 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Info:  msg.Properties.Info.AsUnion(),
 					Parts: []opencode.PartUnion{},
 				})
+			}
+			
+			// If this is an assistant message completion, trigger queue processing
+			if msg.Properties.Info.Role == opencode.MessageRoleAssistant {
+				if assistantMsg, ok := msg.Properties.Info.AsUnion().(opencode.AssistantMessage); ok {
+					if assistantMsg.Time.Completed > 0 {
+						slog.Debug("Assistant message completed, triggering queue processing")
+						cmds = append(cmds, util.CmdHandler(app.ProcessQueueMsg{}))
+					}
+				}
 			}
 		}
 	case opencode.EventListResponseEventSessionError:
@@ -613,12 +659,34 @@ func (a appModel) View() string {
 	if a.modal != nil {
 		mainLayout = a.modal.Render(mainLayout)
 	}
+	
+	// Render queue editor if active
+	if a.queueEditor.IsActive() {
+		queueEditorView := a.queueEditor.View(a.width, a.height)
+		if queueEditorView != "" {
+			// Center the queue editor on screen
+			mainLayout = lipgloss.Place(
+				a.width, a.height,
+				lipgloss.Center, lipgloss.Center,
+				queueEditorView,
+			)
+		}
+	}
+	
 	mainLayout = a.toastManager.RenderOverlay(mainLayout)
 
 	if theme.CurrentThemeUsesAnsiColors() {
 		mainLayout = util.ConvertRGBToAnsi16Colors(mainLayout)
 	}
-	return mainLayout + "\n" + a.status.View()
+	
+	// Add queue status and main status
+	statusLine := a.status.View()
+	queueStatusView := a.queueStatus.View()
+	if queueStatusView != "" {
+		statusLine = queueStatusView + "\n" + statusLine
+	}
+	
+	return mainLayout + "\n" + statusLine
 }
 
 func (a appModel) openFile(filepath string) (tea.Model, tea.Cmd) {
@@ -903,6 +971,14 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		}
 		cmds = append(cmds, util.CmdHandler(chat.ToggleToolDetailsMsg{}))
 		cmds = append(cmds, toast.NewInfoToast(message))
+	case commands.QueueEditCommand:
+		if !a.app.MessageQueue.IsEmpty() {
+			updated, cmd := a.queueEditor.Activate()
+			a.queueEditor = updated
+			cmds = append(cmds, cmd)
+		} else {
+			cmds = append(cmds, toast.NewInfoToast("No message in queue to edit"))
+		}
 	case commands.ModelListCommand:
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
@@ -1037,6 +1113,8 @@ func NewModel(app *app.App) tea.Model {
 		app:                  app,
 		editor:               editor,
 		messages:             messages,
+		queueStatus:          queue.NewStatusComponent(app),
+		queueEditor:          queue.NewEditorComponent(app),
 		completions:          completions,
 		commandProvider:      commandProvider,
 		fileProvider:         fileProvider,

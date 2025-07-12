@@ -48,6 +48,7 @@ type App struct {
 	IntitialMode     *string
 	compactCancel    context.CancelFunc
 	IsLeaderSequence bool
+	MessageQueue     *MessageQueue
 }
 
 type SessionSelectedMsg = *opencode.Session
@@ -71,6 +72,9 @@ type OptimisticMessageAddedMsg struct {
 type FileRenderedMsg struct {
 	FilePath string
 }
+type EditQueueMsg struct{}
+type ClearQueueMsg struct{}
+type ProcessQueueMsg struct{}
 
 func New(
 	ctx context.Context,
@@ -169,6 +173,7 @@ func New(
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
 		IntitialMode:  initialMode,
+		MessageQueue:  NewMessageQueue(),
 	}
 
 	return app, nil
@@ -448,15 +453,57 @@ func (a *App) SendChatMessage(
 	text string,
 	attachments []opencode.FilePartParam,
 ) (*App, tea.Cmd) {
-	var cmds []tea.Cmd
+	// Ensure session exists
 	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
 			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
-		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+		return a, tea.Batch(
+			util.CmdHandler(SessionSelectedMsg(session)),
+			util.CmdHandler(SendMsg{Text: text, Attachments: attachments}),
+		)
 	}
+
+	// Check if session is busy and handle queuing
+	if a.isSessionBusy() {
+		return a.handleBusySession(text, attachments)
+	}
+
+	// Send message immediately
+	return a.sendMessageImmediate(ctx, text, attachments)
+}
+
+// isSessionBusy checks if there are any in-progress assistant messages
+// Uses the same logic as IsBusy() for consistency
+func (a *App) isSessionBusy() bool {
+	return a.IsBusy()
+}
+
+// handleBusySession manages queuing when session is busy
+func (a *App) handleBusySession(text string, attachments []opencode.FilePartParam) (*App, tea.Cmd) {
+	if a.MessageQueue.IsEmpty() {
+		// Queue the message
+		success := a.MessageQueue.Enqueue(text, attachments)
+		if success {
+			slog.Debug("Message queued successfully", "content", text[:min(50, len(text))])
+			return a, toast.NewInfoToast("Message queued. Press <leader>b to edit.")
+		}
+	}
+	
+	// Queue is full, show edit option
+	slog.Debug("Queue is full")
+	return a, toast.NewInfoToast("Queue full. Press <leader>b to edit queued message.")
+}
+
+// sendMessageImmediate sends a message immediately (extracted from original logic)
+func (a *App) sendMessageImmediate(
+	ctx context.Context,
+	text string,
+	attachments []opencode.FilePartParam,
+) (*App, tea.Cmd) {
+	var cmds []tea.Cmd
 
 	message := opencode.UserMessage{
 		ID:        id.Ascending(id.Message),
@@ -532,8 +579,49 @@ func (a *App) SendChatMessage(
 	})
 
 	// The actual response will come through SSE
-	// For now, just return success
 	return a, tea.Batch(cmds...)
+}
+
+// ProcessQueue attempts to send queued message when session becomes available
+func (a *App) ProcessQueue(ctx context.Context) (*App, tea.Cmd) {
+	slog.Debug("ProcessQueue called", "queueEmpty", a.MessageQueue.IsEmpty(), "sessionBusy", a.IsBusy())
+	
+	// If queue is empty or session still busy, do nothing
+	if a.MessageQueue.IsEmpty() || a.IsBusy() {
+		slog.Debug("Not processing queue", "queueEmpty", a.MessageQueue.IsEmpty(), "sessionBusy", a.IsBusy())
+		return a, nil
+	}
+
+	// Dequeue and send the message
+	queued := a.MessageQueue.Dequeue()
+	if queued == nil {
+		slog.Debug("Dequeue returned nil")
+		return a, nil
+	}
+
+	slog.Debug("Sending queued message", "content", queued.Content[:min(50, len(queued.Content))])
+	// Send the queued message immediately
+	return a.sendMessageImmediate(ctx, queued.Content, queued.Attachments)
+}
+
+
+// EditQueuedMessage returns the content of the queued message for editing
+func (a *App) EditQueuedMessage() (string, []opencode.FilePartParam, bool) {
+	queued := a.MessageQueue.Peek()
+	if queued == nil {
+		return "", nil, false
+	}
+	return queued.Content, queued.Attachments, true
+}
+
+// UpdateQueuedMessage updates the queued message content
+func (a *App) UpdateQueuedMessage(content string, attachments []opencode.FilePartParam) bool {
+	return a.MessageQueue.Update(content, attachments)
+}
+
+// ClearQueuedMessage removes the queued message
+func (a *App) ClearQueuedMessage() {
+	a.MessageQueue.Clear()
 }
 
 func (a *App) Cancel(ctx context.Context, sessionID string) error {

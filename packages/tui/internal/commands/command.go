@@ -117,6 +117,7 @@ const (
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
 	MessagesRevertCommand       CommandName = "messages_revert"
+	QueueEditCommand            CommandName = "queue_edit"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -204,6 +205,11 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "toggle tool details",
 			Keybindings: parseBindings("<leader>d"),
 			Trigger:     []string{"details"},
+		},
+		{
+			Name:        QueueEditCommand,
+			Description: "edit queued message",
+			Keybindings: parseBindings("<leader>b"),
 		},
 		{
 			Name:        ModelListCommand,
