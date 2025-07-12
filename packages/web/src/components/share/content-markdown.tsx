@@ -5,6 +5,7 @@ import { transformerNotationDiff } from "@shikijs/transformers"
 import { marked } from "marked"
 import markedShiki from "marked-shiki"
 import { codeToHtml } from "shiki"
+import { CopyButton } from "./copy-button"
 
 const markedWithShiki = marked.use(
   markedShiki({
@@ -41,6 +42,7 @@ export function ContentMarkdown(props: Props) {
       class={style.root}
       data-highlight={props.highlight === true ? true : undefined}
       data-expanded={expanded() || props.expand === true ? true : undefined}
+      style={{ position: "relative" }}
     >
       <div data-slot="markdown" ref={overflow.ref} innerHTML={html()} />
 
@@ -54,6 +56,7 @@ export function ContentMarkdown(props: Props) {
           {expanded() ? "Show less" : "Show more"}
         </button>
       )}
+      <CopyButton text={props.text} />
     </div>
   )
 }

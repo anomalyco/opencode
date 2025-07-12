@@ -1,6 +1,7 @@
 import style from "./content-text.module.css"
 import { createSignal } from "solid-js"
 import { createOverflow } from "./common"
+import { CopyButton } from "./copy-button"
 
 interface Props {
   text: string
@@ -16,6 +17,7 @@ export function ContentText(props: Props) {
       class={style.root}
       data-expanded={expanded() || props.expand === true ? true : undefined}
       data-compact={props.compact === true ? true : undefined}
+      style={{ position: "relative" }}
     >
       <pre data-slot="text" ref={overflow.ref}>
         {props.text}
@@ -30,6 +32,7 @@ export function ContentText(props: Props) {
           {expanded() ? "Show less" : "Show more"}
         </button>
       )}
+      <CopyButton text={props.text} />
     </div>
   )
 }

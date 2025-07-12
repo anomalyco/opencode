@@ -1,0 +1,47 @@
+.copyButtonWrapper {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.copyButton {
+  width: 18px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--sl-color-text-secondary);
+
+  svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  &[data-copied="true"] {
+    color: var(--sl-color-green-high);
+  }
+}
+
+/* Show copy button when parent is hovered */
+*:hover > .copyButtonWrapper {
+  opacity: 0.65;
+  visibility: visible;
+}
+
+.copyTooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 12px);
+  transform: translate(0, -50%);
+  padding: 0.375em 0.5em;
+  background: var(--sl-color-white);
+  color: var(--sl-color-text-invert);
+  font-size: 0.6875rem;
+  border-radius: 7px;
+  white-space: nowrap;
+  z-index: 11;
+}
