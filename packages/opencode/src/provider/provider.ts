@@ -45,14 +45,8 @@ export namespace Provider {
       const apiKey = process.env["ANTHROPIC_API_KEY"]
       // If gateway configuration is present, handle it directly
       if (baseUrl && authToken) {
-        log.debug("configuring Anthropic with LLM Gateway", {
-          baseUrl,
-          hasAuthToken: !!authToken,
-        })
-
         // Ensure the baseURL includes /v1 for the Anthropic API
         const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`
-        log.debug("using baseURL", { originalBaseUrl: baseUrl, normalizedBaseUrl })
 
         return {
           autoload: true,
@@ -60,13 +54,6 @@ export namespace Provider {
             apiKey: "dummy-key-for-gateway", // Required by SDK but overridden by fetch
             baseURL: normalizedBaseUrl,
             async fetch(input: any, init: any) {
-              log.debug("making request to Anthropic gateway", {
-                url: input,
-                method: init?.method || "GET",
-                hasBody: !!init?.body,
-                bodyLength: init?.body ? String(init.body).length : 0,
-              })
-
               const headers = {
                 ...init.headers,
                 authorization: `Bearer ${authToken}`,
@@ -74,17 +61,9 @@ export namespace Provider {
               // Remove the default x-api-key header since we're using Authorization
               delete headers["x-api-key"]
 
-              log.debug("request headers", { headers })
-
               const response = await fetch(input, {
                 ...init,
                 headers,
-              })
-
-              log.debug("gateway response", {
-                status: response.status,
-                statusText: response.statusText,
-                headers: Object.fromEntries(response.headers.entries()),
               })
 
               return response
@@ -95,19 +74,15 @@ export namespace Provider {
 
       // If direct API key is present, use standard configuration
       if (apiKey) {
-        log.debug("using direct Anthropic API key")
         return { autoload: false } // Let the env loader handle this
       }
 
       // Otherwise, use OAuth authentication
-      log.debug("attempting OAuth authentication for Anthropic")
       const access = await AuthAnthropic.access()
       if (!access) {
-        log.debug("OAuth access not available for Anthropic")
         return { autoload: false }
       }
 
-      log.debug("OAuth access available for Anthropic")
       for (const model of Object.values(provider.models)) {
         model.cost = {
           input: 0,
@@ -382,13 +357,6 @@ export namespace Provider {
         if (baseUrl || authToken || apiKey) {
           const options: Record<string, any> = {}
 
-          log.debug("configuring Anthropic LLM Gateway", {
-            hasBaseUrl: !!baseUrl,
-            baseUrl: baseUrl || "not set",
-            hasAuthToken: !!authToken,
-            hasApiKey: !!apiKey,
-          })
-
           // Set base URL if provided
           if (baseUrl) {
             options["baseURL"] = baseUrl
@@ -399,13 +367,6 @@ export namespace Provider {
             options["apiKey"] = "dummy" // The AI SDK requires an apiKey but we'll override the headers
             // For claude-nexus-proxy, send auth token as Authorization Bearer header
             options["fetch"] = async (input: any, init: any) => {
-              log.debug("making request to Anthropic gateway", {
-                url: typeof input === "string" ? input : input?.url,
-                method: init?.method || "GET",
-                hasBody: !!init?.body,
-                bodyLength: init?.body ? String(init.body).length : 0,
-              })
-
               const headers = {
                 ...init.headers,
                 Authorization: `Bearer ${authToken}`, // claude-nexus-proxy expects this format
@@ -414,53 +375,24 @@ export namespace Provider {
               // Remove the x-api-key header that the AI SDK adds by default
               delete headers["x-api-key"]
 
-              log.debug("request headers", {
-                headers: Object.fromEntries(
-                  Object.entries(headers).map(([key, value]) => [
-                    key,
-                    key.toLowerCase().includes("auth") || key.toLowerCase().includes("key")
-                      ? `${String(value).substring(0, 10)}...`
-                      : value,
-                  ]),
-                ),
-              })
-
               try {
                 const response = await fetch(input, {
                   ...init,
                   headers,
                 })
 
-                log.debug("gateway response", {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: Object.fromEntries(Array.from(response.headers.entries())),
-                })
-
                 return response
               } catch (error) {
-                log.error("gateway request failed", {
-                  error: error instanceof Error ? error.message : String(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                })
                 throw error
               }
             }
           } else if (apiKey) {
             options["apiKey"] = apiKey
-            log.debug("using direct ANTHROPIC_API_KEY authentication")
           } else if (baseUrl) {
             // If only baseURL is set, provide a placeholder API key
             // The gateway should handle authentication
             options["apiKey"] = "gateway-auth"
-            log.debug("using baseURL-only configuration with placeholder auth")
           }
-
-          log.debug("final Anthropic provider options", {
-            baseURL: options["baseURL"],
-            hasApiKey: !!options["apiKey"],
-            hasFetch: !!options["fetch"],
-          })
 
           mergeProvider(providerID, options, "env")
           continue
