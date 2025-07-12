@@ -43,14 +43,59 @@ export namespace Provider {
       const baseUrl = process.env["ANTHROPIC_BASE_URL"]
       const authToken = process.env["ANTHROPIC_AUTH_TOKEN"]
       const apiKey = process.env["ANTHROPIC_API_KEY"]
-
-      // If any gateway/direct API configuration is present, skip OAuth
-      if (baseUrl || authToken || apiKey) {
-        log.debug("skipping OAuth for Anthropic - using env vars", {
-          hasBaseUrl: !!baseUrl,
+      // If gateway configuration is present, handle it directly
+      if (baseUrl && authToken) {
+        log.debug("configuring Anthropic with LLM Gateway", {
+          baseUrl,
           hasAuthToken: !!authToken,
-          hasApiKey: !!apiKey,
         })
+
+        // Ensure the baseURL includes /v1 for the Anthropic API
+        const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`
+        log.debug("using baseURL", { originalBaseUrl: baseUrl, normalizedBaseUrl })
+
+        return {
+          autoload: true,
+          options: {
+            apiKey: "dummy-key-for-gateway", // Required by SDK but overridden by fetch
+            baseURL: normalizedBaseUrl,
+            async fetch(input: any, init: any) {
+              log.debug("making request to Anthropic gateway", {
+                url: input,
+                method: init?.method || "GET",
+                hasBody: !!init?.body,
+                bodyLength: init?.body ? String(init.body).length : 0,
+              })
+
+              const headers = {
+                ...init.headers,
+                authorization: `Bearer ${authToken}`,
+              }
+              // Remove the default x-api-key header since we're using Authorization
+              delete headers["x-api-key"]
+
+              log.debug("request headers", { headers })
+
+              const response = await fetch(input, {
+                ...init,
+                headers,
+              })
+
+              log.debug("gateway response", {
+                status: response.status,
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries()),
+              })
+
+              return response
+            },
+          },
+        }
+      }
+
+      // If direct API key is present, use standard configuration
+      if (apiKey) {
+        log.debug("using direct Anthropic API key")
         return { autoload: false } // Let the env loader handle this
       }
 
