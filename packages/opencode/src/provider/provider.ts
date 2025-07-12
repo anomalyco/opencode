@@ -202,6 +202,60 @@ export namespace Provider {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
+          async fetch(input: any, init: any) {
+            const response = await fetch(input, init)
+            
+            // For streaming responses, we need to transform the stream
+            if (response.body && (response.headers.get('content-type')?.includes('text/plain') || response.headers.get('content-type')?.includes('text/event-stream'))) {
+              const reader = response.body.getReader()
+              const stream = new ReadableStream({
+                start(controller) {
+                  function pump(): Promise<void> {
+                    return reader.read().then(({ done, value }) => {
+                      if (done) {
+                        controller.close()
+                        return
+                      }
+                      
+                      // Parse and fix tool_calls type
+                      const text = new TextDecoder().decode(value)
+                      const lines = text.split('\n')
+                      const fixedLines = lines.map(line => {
+                        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                          try {
+                            const data = JSON.parse(line.slice(6))
+                            if (data.choices?.[0]?.delta?.tool_calls) {
+                              for (const toolCall of data.choices[0].delta.tool_calls) {
+                                if (toolCall.type === "") {
+                                  toolCall.type = "function"
+                                }
+                              }
+                            }
+                            return 'data: ' + JSON.stringify(data)
+                          } catch (e) {
+                            return line
+                          }
+                        }
+                        return line
+                      })
+                      
+                      controller.enqueue(new TextEncoder().encode(fixedLines.join('\n')))
+                      return pump()
+                    })
+                  }
+                  return pump()
+                },
+              })
+              
+              return new Response(stream, {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+              })
+            }
+            
+            return response
+          },
         },
       }
     },
