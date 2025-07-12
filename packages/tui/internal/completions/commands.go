@@ -96,11 +96,16 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	// Sort by score (best matches first)
 	sort.Sort(matches)
 
-	// Convert matches to completion items
+	// Convert matches to completion items, deduplicating by command name
 	items := []dialog.CompletionItemI{}
+	seen := make(map[string]bool)
 	for _, match := range matches {
 		if item, ok := commandMap[match.Target]; ok {
-			items = append(items, item)
+			// Use the command's value (name) as the deduplication key
+			if !seen[item.GetValue()] {
+				seen[item.GetValue()] = true
+				items = append(items, item)
+			}
 		}
 	}
 	return items, nil
