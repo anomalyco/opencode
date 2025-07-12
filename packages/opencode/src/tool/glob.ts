@@ -4,52 +4,7 @@ import { Tool } from "./tool"
 import { App } from "../app/app"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
-
-const DEFAULT_LIMIT = 100
-
-interface FileInfo {
-  path: string
-  mtime: number
-}
-
-async function batchFileStat(filePaths: string[]): Promise<FileInfo[]> {
-  const BATCH_SIZE = 50
-  const results: FileInfo[] = []
-  
-  for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-    const batch = filePaths.slice(i, i + BATCH_SIZE)
-    const batchPromises = batch.map(async (filePath) => {
-      try {
-        const stats = await Bun.file(filePath).stat()
-        return {
-          path: filePath,
-          mtime: stats.mtime.getTime(),
-        }
-      } catch (error) {
-        console.warn(`Failed to stat file ${filePath}:`, error)
-        return {
-          path: filePath,
-          mtime: 0,
-        }
-      }
-    })
-    
-    const batchResults = await Promise.all(batchPromises)
-    results.push(...batchResults)
-  }
-  
-  return results
-}
-
-function resolvePath(searchPath: string | undefined, cwd: string): string {
-  const search = searchPath ?? cwd
-  return path.isAbsolute(search) ? search : path.resolve(cwd, search)
-}
-
-function formatTruncationMessage(truncated: boolean): string[] {
-  if (!truncated) return []
-  return ["", "(Results are truncated. Consider using a more specific path or pattern.)"]
-}
+import { batchFileStat, resolvePath, formatTruncationMessage, DEFAULT_LIMIT } from "../util/fs"
 
 export const GlobTool = Tool.define({
   id: "glob",
