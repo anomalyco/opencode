@@ -44,7 +44,7 @@ export namespace Provider {
       const authToken = process.env["ANTHROPIC_AUTH_TOKEN"]
       const apiKey = process.env["ANTHROPIC_API_KEY"]
       // If gateway configuration is present, handle it directly
-      if (baseUrl && authToken) {
+      if (baseUrl && (authToken || apiKey)) {
         // Ensure the baseURL includes /v1 for the Anthropic API
         const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`
 
@@ -56,16 +56,17 @@ export namespace Provider {
             async fetch(input: any, init: any) {
               const headers = {
                 ...init.headers,
-                authorization: `Bearer ${authToken}`,
               }
-              // Remove the default x-api-key header since we're using Authorization
-              delete headers["x-api-key"]
-
+              if (authToken) {
+                headers["authorization"] = `Bearer ${authToken}`
+              }
+              if (apiKey) {
+                headers["x-api-key"] = apiKey
+              }
               const response = await fetch(input, {
                 ...init,
                 headers,
               })
-
               return response
             },
           },
