@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -44,7 +45,7 @@ var (
 			writeImg: []string{"xsel", "--clipboard", "--input"},
 		},
 		{
-			name:     "wl-clipboard",
+			name:     "wl-copy",
 			readCmd:  []string{"wl-paste", "-n"},
 			writeCmd: []string{"wl-copy"},
 			readImg:  []string{"wl-paste", "-t", "image/png", "-n"},
@@ -66,14 +67,23 @@ func initialize() error {
 		return nil // Already initialized
 	}
 
-	// Check which clipboard tool is available
-	for i, tool := range clipboardTools {
-		cmd := exec.Command("which", tool.name)
-		if err := cmd.Run(); err == nil {
-			clipboardTools[i].available = true
-			if selectedTool < 0 {
-				selectedTool = i
-				slog.Debug("Clipboard tool found", "tool", tool.name)
+	order := []string{"xclip", "xsel", "wl-copy"}
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		order = []string{"wl-copy", "xclip", "xsel"}
+	}
+
+	for _, name := range order {
+		for i, tool := range clipboardTools {
+			if tool.name == name {
+				cmd := exec.Command("which", tool.name)
+				if err := cmd.Run(); err == nil {
+					clipboardTools[i].available = true
+					if selectedTool < 0 {
+						selectedTool = i
+						slog.Debug("Clipboard tool found", "tool", tool.name)
+					}
+				}
+				break
 			}
 		}
 	}
