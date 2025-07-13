@@ -434,12 +434,18 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
-		container := min(a.width, 84)
-		if a.fileViewer.HasFile() {
-			if a.width < fileViewerFullWidthCutoff {
-				container = a.width
-			} else {
-				container = min(min(a.width, max(a.width/2, 50)), 84)
+
+		var container int
+		if a.app.State.ChatWidth > 0.0 {
+			container = int(float64(a.width) * a.app.State.ChatWidth)
+		} else {
+			container = min(a.width, 84)
+			if a.fileViewer.HasFile() {
+				if a.width < fileViewerFullWidthCutoff {
+					container = a.width
+				} else {
+					container = min(min(a.width, max(a.width/2, 50)), 84)
+				}
 			}
 		}
 		layout.Current = &layout.LayoutInfo{

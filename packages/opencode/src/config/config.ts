@@ -140,6 +140,7 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      chat_width: z.number().optional().describe("Width of chat interface as percentage (0.0 to 1.0)"),
       experimental: z
         .object({
           hook: z

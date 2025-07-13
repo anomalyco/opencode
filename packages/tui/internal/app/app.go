@@ -103,6 +103,10 @@ func New(
 		appState.Theme = configInfo.Theme
 	}
 
+	if configInfo.ChatWidth > 0.0 {
+		appState.ChatWidth = configInfo.ChatWidth
+	}
+
 	var modeIndex int
 	var mode *opencode.Mode
 	modeName := "build"

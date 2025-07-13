@@ -30,6 +30,7 @@ type State struct {
 	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
 	MessagesRight      bool                 `toml:"messages_right"`
 	SplitDiff          bool                 `toml:"split_diff"`
+	ChatWidth          float64              `toml:"chat_width"`
 }
 
 func NewState() *State {
@@ -38,6 +39,7 @@ func NewState() *State {
 		Mode:               "build",
 		ModeModel:          make(map[string]ModeModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
+		ChatWidth:          0.0,
 	}
 }
 

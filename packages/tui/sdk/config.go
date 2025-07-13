@@ -55,6 +55,8 @@ type Config struct {
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
+	// Width of chat interface as percentage (0.0 to 1.0)
+	ChatWidth float64 `json:"chat_width"`
 	// Disable providers that are loaded automatically
 	DisabledProviders []string           `json:"disabled_providers"`
 	Experimental      ConfigExperimental `json:"experimental"`
@@ -81,6 +83,7 @@ type configJSON struct {
 	Schema            apijson.Field
 	Autoshare         apijson.Field
 	Autoupdate        apijson.Field
+	ChatWidth         apijson.Field
 	DisabledProviders apijson.Field
 	Experimental      apijson.Field
 	Instructions      apijson.Field
