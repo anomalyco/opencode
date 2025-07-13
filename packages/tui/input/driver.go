@@ -160,11 +160,11 @@ func (d *Reader) readEvents() ([]Event, error) {
 		}
 
 		switch ev.(type) {
-		case UnknownEvent:
-			// If the sequence is not recognized by the parser, try looking it up.
-			if k, ok := d.table[string(buf[i:i+nb])]; ok {
-				ev = KeyPressEvent(k)
-			}
+		// case UnknownEvent:
+		// 	// If the sequence is not recognized by the parser, try looking it up.
+		// 	if k, ok := d.table[string(buf[i:i+nb])]; ok {
+		// 		ev = KeyPressEvent(k)
+		// 	}
 		case PasteStartEvent:
 			d.paste = []byte{}
 		case PasteEndEvent:

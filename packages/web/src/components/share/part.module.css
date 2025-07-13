@@ -101,10 +101,12 @@
   }
 
   [data-component="content"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 0 0.375rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    flex-grow: 1;
   }
 
   [data-component="spacer"] {
@@ -115,6 +117,24 @@
     align-self: flex-start;
     font-size: 0.75rem;
     color: var(--sl-color-text-dimmed);
+  }
+
+  [data-component="user-text"] {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-grow: 1;
+    max-width: var(--md-tool-width);
+  }
+
+  [data-component="assistant-text"] {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-grow: 1;
+    max-width: var(--md-tool-width);
   }
 
   [data-component="step-start"] {
@@ -194,7 +214,31 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 0.375rem;
-    padding-bottom: 1rem;
+
+    &[data-tool="bash"] {
+      max-width: var(--sm-tool-width);
+    }
+
+    &[data-tool="error"] {
+      max-width: var(--md-tool-width);
+    }
+
+    &[data-tool="read"],
+    &[data-tool="edit"],
+    &[data-tool="list"],
+    &[data-tool="glob"],
+    &[data-tool="grep"],
+    &[data-tool="write"],
+    &[data-tool="webfetch"] {
+      [data-component="tool-result"] {
+        max-width: var(--sm-tool-width);
+      }
+    }
+    &[data-tool="edit"] {
+      [data-component="tool-result"] {
+        max-width: var(--lg-tool-width);
+      }
+    }
   }
 
   [data-component="tool-title"] {

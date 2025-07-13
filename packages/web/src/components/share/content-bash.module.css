@@ -1,10 +1,5 @@
 .root {
-  width: 100%;
-  max-width: var(--sm-tool-width);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
+  display: contents;
 
   [data-slot="expand-button"] {
     flex: 0 0 auto;
@@ -13,8 +8,6 @@
   }
 
   [data-slot="body"] {
-    display: flex;
-    flex-direction: column;
     border: 1px solid var(--sl-color-divider);
     border-radius: 0.25rem;
     overflow: hidden;

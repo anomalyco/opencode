@@ -53,7 +53,7 @@ export namespace Mode {
           providerID,
         }
       }
-      if (value.prompt) item.prompt = await Bun.file(value.prompt).text()
+      if (value.prompt) item.prompt = value.prompt
       if (value.tools) item.tools = value.tools
     }
 

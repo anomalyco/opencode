@@ -49,7 +49,7 @@ func (h *helpDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (h *helpDialog) View() string {
 	t := theme.CurrentTheme()
-	h.commandsComponent.SetBackgroundColor(t.BackgroundElement())
+	h.commandsComponent.SetBackgroundColor(t.BackgroundPanel())
 	return h.viewport.View()
 }
 
@@ -70,7 +70,7 @@ func NewHelpDialog(app *app.App) HelpDialog {
 	return &helpDialog{
 		app: app,
 		commandsComponent: commandsComponent.New(app,
-			commandsComponent.WithBackground(theme.CurrentTheme().BackgroundElement()),
+			commandsComponent.WithBackground(theme.CurrentTheme().BackgroundPanel()),
 			commandsComponent.WithShowAll(true),
 			commandsComponent.WithKeybinds(true),
 		),

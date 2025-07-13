@@ -157,7 +157,6 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        SwitchModeCommand,
 			Description: "switch mode",
 			Keybindings: parseBindings("tab"),
-			Trigger:     []string{"mode"},
 		},
 		{
 			Name:        EditorOpenCommand,

@@ -108,7 +108,7 @@ export class SyncServer extends DurableObject<Env> {
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
     const splits = url.pathname.split("/")
     const method = splits[1]
@@ -275,5 +275,7 @@ export default {
         headers: { "Content-Type": "application/json" },
       })
     }
+
+    return new Response("Not Found", { status: 404 })
   },
 }

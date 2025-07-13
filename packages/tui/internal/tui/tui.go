@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/x/input"
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -509,8 +508,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
-	case input.UnknownEvent:
-		return a, nil
 	}
 
 	s, cmd := a.status.Update(msg)
