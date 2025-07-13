@@ -437,7 +437,8 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		var container int
 		if a.app.State.ChatWidth > 0.0 {
-			container = int(float64(a.width) * a.app.State.ChatWidth)
+			chatWidth := max(0.1, min(1.0, a.app.State.ChatWidth))
+			container = int(float64(a.width) * chatWidth)
 		} else {
 			container = min(a.width, 84)
 			if a.fileViewer.HasFile() {

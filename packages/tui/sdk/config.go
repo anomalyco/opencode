@@ -55,7 +55,7 @@ type Config struct {
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
-	// Width of chat interface as percentage (0.0 to 1.0)
+	// Width of chat interface as percentage (0.1 to 1.0)
 	ChatWidth float64 `json:"chat_width"`
 	// Disable providers that are loaded automatically
 	DisabledProviders []string           `json:"disabled_providers"`

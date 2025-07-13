@@ -104,7 +104,7 @@ func New(
 	}
 
 	if configInfo.ChatWidth > 0.0 {
-		appState.ChatWidth = configInfo.ChatWidth
+		appState.ChatWidth = max(0.1, min(1.0, configInfo.ChatWidth))
 	}
 
 	var modeIndex int
