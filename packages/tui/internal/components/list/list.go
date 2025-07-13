@@ -42,6 +42,8 @@ type listKeyMap struct {
 	Down      key.Binding
 	UpAlpha   key.Binding
 	DownAlpha key.Binding
+	CtrlP     key.Binding
+	CtrlN     key.Binding
 }
 
 var simpleListKeys = listKeyMap{
@@ -61,6 +63,14 @@ var simpleListKeys = listKeyMap{
 		key.WithKeys("j"),
 		key.WithHelp("j", "next list item"),
 	),
+	CtrlP: key.NewBinding(
+		key.WithKeys("ctrl+p"),
+		key.WithHelp("ctrl+p", "previous list item"),
+	),
+	CtrlN: key.NewBinding(
+		key.WithKeys("ctrl+n"),
+		key.WithHelp("ctrl+n", "next list item"),
+	),
 }
 
 func (c *listComponent[T]) Init() tea.Cmd {
@@ -71,12 +81,12 @@ func (c *listComponent[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, simpleListKeys.Up) || (c.useAlphaNumericKeys && key.Matches(msg, simpleListKeys.UpAlpha)):
+		case key.Matches(msg, simpleListKeys.Up) || (c.useAlphaNumericKeys && key.Matches(msg, simpleListKeys.UpAlpha)) || key.Matches(msg, simpleListKeys.CtrlP):
 			if c.selectedIdx > 0 {
 				c.selectedIdx--
 			}
 			return c, nil
-		case key.Matches(msg, simpleListKeys.Down) || (c.useAlphaNumericKeys && key.Matches(msg, simpleListKeys.DownAlpha)):
+		case key.Matches(msg, simpleListKeys.Down) || (c.useAlphaNumericKeys && key.Matches(msg, simpleListKeys.DownAlpha)) || key.Matches(msg, simpleListKeys.CtrlN):
 			if c.selectedIdx < len(c.items)-1 {
 				c.selectedIdx++
 			}
