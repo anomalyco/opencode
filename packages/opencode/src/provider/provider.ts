@@ -73,6 +73,14 @@ export namespace Provider {
         }
       }
 
+      // If base URL is set but no auth credentials, log helpful error
+      if (baseUrl && !authToken && !apiKey) {
+        log.error("Anthropic LLM Gateway configured but missing authentication", {
+          baseUrl,
+          message: "Set either ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY environment variable",
+        })
+      }
+
       // If direct API key is present, use standard configuration
       if (apiKey) {
         return { autoload: false } // Let the env loader handle this
