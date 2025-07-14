@@ -1,4 +1,4 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec"
+import type { v1 } from "@standard-schema/spec"
 
 export namespace Tool {
   interface Metadata {
@@ -10,12 +10,12 @@ export namespace Tool {
     abort: AbortSignal
     metadata(input: { title?: string; metadata?: M }): void
   }
-  export interface Info<Parameters extends StandardSchemaV1 = StandardSchemaV1, M extends Metadata = Metadata> {
+  export interface Info<Parameters extends v1.StandardSchema = v1.StandardSchema, M extends Metadata = Metadata> {
     id: string
     description: string
     parameters: Parameters
     execute(
-      args: StandardSchemaV1.InferOutput<Parameters>,
+      args: v1.InferOutput<Parameters>,
       ctx: Context,
     ): Promise<{
       title: string
@@ -24,7 +24,7 @@ export namespace Tool {
     }>
   }
 
-  export function define<Parameters extends StandardSchemaV1, Result extends Metadata>(
+  export function define<Parameters extends v1.StandardSchema, Result extends Metadata>(
     input: Info<Parameters, Result>,
   ): Info<Parameters, Result> {
     return input

@@ -28,7 +28,7 @@ export const TodoWriteTool = Tool.define({
     const todos = state()
     todos[opts.sessionID] = params.todos
     return {
-      title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
+      title: `${params.todos.filter((x: TodoInfo) => x.status !== "completed").length} todos`,
       output: JSON.stringify(params.todos, null, 2),
       metadata: {
         todos: params.todos,
