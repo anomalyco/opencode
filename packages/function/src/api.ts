@@ -42,7 +42,11 @@ export class SyncServer extends DurableObject<Env> {
 
   async publish(key: string, content: any) {
     const sessionID = await this.getSessionID()
-    if (!key.startsWith(`session/info/${sessionID}`) && !key.startsWith(`session/message/${sessionID}/`))
+    if (
+      !key.startsWith(`session/info/${sessionID}`) &&
+      !key.startsWith(`session/message/${sessionID}/`) &&
+      !key.startsWith(`session/part/${sessionID}/`)
+    )
       return new Response("Error: Invalid key", { status: 400 })
 
     // store message
@@ -71,7 +75,7 @@ export class SyncServer extends DurableObject<Env> {
   }
 
   public async getData() {
-    const data = await this.ctx.storage.list()
+    const data = (await this.ctx.storage.list()) as Map<string, any>
     return Array.from(data.entries())
       .filter(([key, _]) => key.startsWith("session/"))
       .map(([key, content]) => ({ key, content }))
@@ -207,8 +211,13 @@ export default {
           return
         }
         if (type === "message") {
-          const [, messageID] = splits
-          messages[messageID] = d.content
+          messages[d.content.id] = {
+            parts: [],
+            ...d.content,
+          }
+        }
+        if (type === "part") {
+          messages[d.content.messageID].parts.push(d.content)
         }
       })
 

@@ -49,11 +49,14 @@ import (
 
 func main() {
 	client := opencode.NewClient()
-	events, err := client.Event.List(context.TODO())
+	stream := client.Event.ListStreaming(context.TODO())
+	for stream.Next() {
+		fmt.Printf("%+v\n", stream.Current())
+	}
+	err := stream.Err()
 	if err != nil {
 		panic(err.Error())
 	}
-	fmt.Printf("%+v\n", events)
 }
 
 ```
@@ -171,14 +174,14 @@ When the API returns a non-success status code, we return an error with type
 To handle errors, we recommend that you use the `errors.As` pattern:
 
 ```go
-_, err := client.Event.List(context.TODO())
-if err != nil {
+stream := client.Event.ListStreaming(context.TODO())
+if stream.Err() != nil {
 	var apierr *opencode.Error
-	if errors.As(err, &apierr) {
+	if errors.As(stream.Err(), &apierr) {
 		println(string(apierr.DumpRequest(true)))  // Prints the serialized HTTP request
 		println(string(apierr.DumpResponse(true))) // Prints the serialized HTTP response
 	}
-	panic(err.Error()) // GET "/event": 400 Bad Request { ... }
+	panic(stream.Err().Error()) // GET "/event": 400 Bad Request { ... }
 }
 ```
 
@@ -196,7 +199,7 @@ To set a per-retry timeout, use `option.WithRequestTimeout()`.
 // This sets the timeout for the request, including all the retries.
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 defer cancel()
-client.Event.List(
+client.Event.ListStreaming(
 	ctx,
 	// This sets the per-retry timeout
 	option.WithRequestTimeout(20*time.Second),
@@ -231,7 +234,7 @@ client := opencode.NewClient(
 )
 
 // Override per-request:
-client.Event.List(context.TODO(), option.WithMaxRetries(5))
+client.Event.ListStreaming(context.TODO(), option.WithMaxRetries(5))
 ```
 
 ### Accessing raw response data (e.g. response headers)
@@ -242,8 +245,8 @@ you need to examine response headers, status codes, or other details.
 ```go
 // Create a variable to store the HTTP response
 var response *http.Response
-events, err := client.Event.List(context.TODO(), option.WithResponseInto(&response))
-if err != nil {
+stream := client.Event.ListStreaming(context.TODO(), option.WithResponseInto(&response))
+if stream.Err() != nil {
 	// handle error
 }
 fmt.Printf("%+v\n", events)

@@ -88,10 +88,12 @@ resources:
     models:
       session: Session
       message: Message
+      part: Part
       textPart: TextPart
       filePart: FilePart
       toolPart: ToolPart
       stepStartPart: StepStartPart
+      stepFinishPart: StepFinishPart
       assistantMessage: AssistantMessage
       assistantMessagePart: AssistantMessagePart
       userMessage: UserMessage

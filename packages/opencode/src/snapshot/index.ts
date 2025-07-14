@@ -9,10 +9,8 @@ export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
   export async function create(sessionID: string) {
-    return
     log.info("creating snapshot")
     const app = App.info()
-    const git = gitdir(sessionID)
 
     // not a git repo, check if too big to snapshot
     if (!app.git) {
@@ -24,6 +22,7 @@ export namespace Snapshot {
       if (files.length > 1000) return
     }
 
+    const git = gitdir(sessionID)
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`
         .env({
@@ -39,23 +38,27 @@ export namespace Snapshot {
     await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
     log.info("added files")
 
-    const result =
-      await $`git --git-dir ${git} commit --allow-empty -m "snapshot" --author="opencode <mail@opencode.ai>"`
-        .quiet()
-        .cwd(app.path.cwd)
-        .nothrow()
-    log.info("commit")
+    const result = await $`git --git-dir ${git} commit -m "snapshot" --author="opencode <mail@opencode.ai>"`
+      .quiet()
+      .cwd(app.path.cwd)
+      .nothrow()
 
     const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
     if (!match) return
     return match![1]
   }
 
-  export async function restore(sessionID: string, commit: string) {
-    log.info("restore", { commit })
+  export async function restore(sessionID: string, snapshot: string) {
+    log.info("restore", { commit: snapshot })
     const app = App.info()
     const git = gitdir(sessionID)
-    await $`git --git-dir=${git} checkout ${commit} --force`.quiet().cwd(app.path.root)
+    await $`git --git-dir=${git} checkout ${snapshot} --force`.quiet().cwd(app.path.root)
+  }
+
+  export async function diff(sessionID: string, commit: string) {
+    const git = gitdir(sessionID)
+    const result = await $`git --git-dir=${git} diff -R ${commit}`.quiet().cwd(App.info().path.root)
+    return result.stdout.toString("utf8")
   }
 
   function gitdir(sessionID: string) {

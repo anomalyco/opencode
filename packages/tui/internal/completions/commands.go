@@ -55,7 +55,7 @@ func (c *CommandCompletionProvider) getCommandCompletionItem(
 		Title:      title,
 		Value:      value,
 		ProviderID: c.GetId(),
-	})
+	}, dialog.WithBackgroundColor(t.BackgroundElement()))
 }
 
 func getCustomCommandCompletionItem(cmd CustomCommandFile, space int, t theme.Theme) dialog.CompletionItemI {
@@ -180,16 +180,21 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	}
 
 	// Find fuzzy matches
-	matches := fuzzy.RankFind(query, commandNames)
+	matches := fuzzy.RankFindFold(query, commandNames)
 
 	// Sort by score (best matches first)
 	sort.Sort(matches)
 
-	// Convert matches to completion items
+	// Convert matches to completion items, deduplicating by command name
 	items := []dialog.CompletionItemI{}
+	seen := make(map[string]bool)
 	for _, match := range matches {
 		if item, ok := commandMap[match.Target]; ok {
-			items = append(items, item)
+			// Use the command's value (name) as the deduplication key
+			if !seen[item.GetValue()] {
+				seen[item.GetValue()] = true
+				items = append(items, item)
+			}
 		}
 	}
 	return items, nil

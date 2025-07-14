@@ -106,6 +106,13 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 		}
+	case opencode.EventListResponseEventMessagePartUpdated:
+		if msg.Properties.Part.SessionID == m.app.Session.ID {
+			m.renderView(m.width)
+			if m.tail {
+				m.viewport.GotoBottom()
+			}
+		}
 	}
 
 	viewport, cmd := m.viewport.Update(msg)
@@ -131,16 +138,16 @@ func (m *messagesComponent) renderView(width int) {
 		var content string
 		var cached bool
 
-		switch casted := message.(type) {
+		switch casted := message.Info.(type) {
 		case opencode.UserMessage:
 		userLoop:
-			for partIndex, part := range casted.Parts {
-				switch part := part.AsUnion().(type) {
+			for partIndex, part := range message.Parts {
+				switch part := part.(type) {
 				case opencode.TextPart:
-					remainingParts := casted.Parts[partIndex+1:]
+					remainingParts := message.Parts[partIndex+1:]
 					fileParts := make([]opencode.FilePart, 0)
 					for _, part := range remainingParts {
-						switch part := part.AsUnion().(type) {
+						switch part := part.(type) {
 						case opencode.FilePart:
 							fileParts = append(fileParts, part)
 						}
@@ -181,9 +188,9 @@ func (m *messagesComponent) renderView(width int) {
 					if !cached {
 						content = renderText(
 							m.app,
-							message,
+							message.Info,
 							part.Text,
-							m.app.Info.User,
+							m.app.Config.Username,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,
@@ -202,12 +209,12 @@ func (m *messagesComponent) renderView(width int) {
 
 		case opencode.AssistantMessage:
 			hasTextPart := false
-			for partIndex, p := range casted.Parts {
-				switch part := p.AsUnion().(type) {
+			for partIndex, p := range message.Parts {
+				switch part := p.(type) {
 				case opencode.TextPart:
 					hasTextPart = true
 					finished := casted.Time.Completed > 0
-					remainingParts := casted.Parts[partIndex+1:]
+					remainingParts := message.Parts[partIndex+1:]
 					toolCallParts := make([]opencode.ToolPart, 0)
 
 					// sometimes tool calls happen without an assistant message
@@ -222,7 +229,7 @@ func (m *messagesComponent) renderView(width int) {
 						if !remaining {
 							break
 						}
-						switch part := part.AsUnion().(type) {
+						switch part := part.(type) {
 						case opencode.TextPart:
 							// we only want tool calls associated with the current text part.
 							// if we hit another text part, we're done.
@@ -238,13 +245,13 @@ func (m *messagesComponent) renderView(width int) {
 					}
 
 					if finished {
-						key := m.cache.GenerateKey(casted.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
+						key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
 						content, cached = m.cache.Get(key)
 						if !cached {
 							content = renderText(
 								m.app,
-								message,
-								p.Text,
+								message.Info,
+								part.Text,
 								casted.ModelID,
 								m.showToolDetails,
 								m.partCount == m.selectedPart,
@@ -257,8 +264,8 @@ func (m *messagesComponent) renderView(width int) {
 					} else {
 						content = renderText(
 							m.app,
-							message,
-							p.Text,
+							message.Info,
+							part.Text,
 							casted.ModelID,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
@@ -268,7 +275,7 @@ func (m *messagesComponent) renderView(width int) {
 						)
 					}
 					if content != "" {
-						m = m.updateSelected(content, p.Text)
+						m = m.updateSelected(content, part.Text)
 						blocks = append(blocks, content)
 					}
 				case opencode.ToolPart:
@@ -314,7 +321,7 @@ func (m *messagesComponent) renderView(width int) {
 		}
 
 		error := ""
-		if assistant, ok := message.(opencode.AssistantMessage); ok {
+		if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
 			switch err := assistant.Error.AsUnion().(type) {
 			case nil:
 			case opencode.AssistantMessageErrorMessageOutputLengthError:
@@ -386,7 +393,7 @@ func (m *messagesComponent) header(width int) string {
 	contextWindow := m.app.Model.Limit.Context
 
 	for _, message := range m.app.Messages {
-		if assistant, ok := message.(opencode.AssistantMessage); ok {
+		if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
 			cost += assistant.Cost
 			usage := assistant.Tokens
 			if usage.Output > 0 {

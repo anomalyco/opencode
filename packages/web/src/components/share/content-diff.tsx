@@ -173,12 +173,9 @@ export function ContentDiff(props: Props) {
         {mobileRows().map((block) => (
           <div data-component="diff-block" data-type={block.type}>
             {block.lines.map((line) => (
-              <ContentCode
-                code={line}
-                lang={props.lang}
-                data-section="cell"
-                data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}
-              />
+              <div data-diff-type={block.type === "removed" ? "removed" : block.type === "added" ? "added" : ""}>
+                <ContentCode code={line} lang={props.lang} flush />
+              </div>
             ))}
           </div>
         ))}

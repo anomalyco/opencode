@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,7 +69,6 @@ type appModel struct {
 	fileProvider         dialog.CompletionProvider
 	symbolsProvider      dialog.CompletionProvider
 	showCompletionDialog bool
-	fileCompletionActive bool
 	leaderBinding        *key.Binding
 	// isLeaderSequence     bool
 	toastManager      *toast.ToastManager
@@ -154,7 +154,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!a.showCompletionDialog &&
 			a.editor.Value() == "" {
 			a.showCompletionDialog = true
-			a.fileCompletionActive = false
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
@@ -173,7 +172,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyString == "@" &&
 			!a.showCompletionDialog {
 			a.showCompletionDialog = true
-			a.fileCompletionActive = true
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
@@ -190,7 +188,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.showCompletionDialog {
 			switch keyString {
-			case "tab", "enter", "esc", "ctrl+c", "up", "down":
+			case "tab", "enter", "esc", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n":
 				updated, cmd := a.completions.Update(msg)
 				a.completions = updated.(dialog.CompletionDialog)
 				cmds = append(cmds, cmd)
@@ -368,7 +366,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
-		a.fileCompletionActive = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -377,55 +374,76 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventSessionDeleted:
 		if a.app.Session != nil && msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &opencode.Session{}
-			a.app.Messages = []opencode.MessageUnion{}
+			a.app.Messages = []app.Message{}
 		}
 		return a, toast.NewSuccessToast("Session deleted successfully")
 	case opencode.EventListResponseEventSessionUpdated:
 		if msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &msg.Properties.Info
 		}
+	case opencode.EventListResponseEventMessagePartUpdated:
+		slog.Info("message part updated", "message", msg.Properties.Part.MessageID, "part", msg.Properties.Part.ID)
+		if msg.Properties.Part.SessionID == a.app.Session.ID {
+			messageIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
+				switch casted := m.Info.(type) {
+				case opencode.UserMessage:
+					return casted.ID == msg.Properties.Part.MessageID
+				case opencode.AssistantMessage:
+					return casted.ID == msg.Properties.Part.MessageID
+				}
+				return false
+			})
+			if messageIndex > -1 {
+				message := a.app.Messages[messageIndex]
+				partIndex := slices.IndexFunc(message.Parts, func(p opencode.PartUnion) bool {
+					switch casted := p.(type) {
+					case opencode.TextPart:
+						return casted.ID == msg.Properties.Part.ID
+					case opencode.FilePart:
+						return casted.ID == msg.Properties.Part.ID
+					case opencode.ToolPart:
+						return casted.ID == msg.Properties.Part.ID
+					case opencode.StepStartPart:
+						return casted.ID == msg.Properties.Part.ID
+					case opencode.StepFinishPart:
+						return casted.ID == msg.Properties.Part.ID
+					}
+					return false
+				})
+				if partIndex > -1 {
+					message.Parts[partIndex] = msg.Properties.Part.AsUnion()
+				}
+				if partIndex == -1 {
+					message.Parts = append(message.Parts, msg.Properties.Part.AsUnion())
+				}
+				a.app.Messages[messageIndex] = message
+			}
+		}
 	case opencode.EventListResponseEventMessageUpdated:
 		if msg.Properties.Info.SessionID == a.app.Session.ID {
-			exists := false
-			optimisticReplaced := false
+			matchIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
+				switch casted := m.Info.(type) {
+				case opencode.UserMessage:
+					return casted.ID == msg.Properties.Info.ID
+				case opencode.AssistantMessage:
+					return casted.ID == msg.Properties.Info.ID
+				}
+				return false
+			})
 
-			// First check if this is replacing an optimistic message
-			if msg.Properties.Info.Role == opencode.MessageRoleUser {
-				// Look for optimistic messages to replace
-				for i, m := range a.app.Messages {
-					switch m := m.(type) {
-					case opencode.UserMessage:
-						if strings.HasPrefix(m.ID, "optimistic-") && m.Role == opencode.UserMessageRoleUser {
-							// Replace the optimistic message with the real one
-							a.app.Messages[i] = msg.Properties.Info.AsUnion()
-							exists = true
-							optimisticReplaced = true
-							break
-						}
-					}
+			if matchIndex > -1 {
+				match := a.app.Messages[matchIndex]
+				a.app.Messages[matchIndex] = app.Message{
+					Info:  msg.Properties.Info.AsUnion(),
+					Parts: match.Parts,
 				}
 			}
 
-			// If not replacing optimistic, check for existing message with same ID
-			if !optimisticReplaced {
-				for i, m := range a.app.Messages {
-					var id string
-					switch m := m.(type) {
-					case opencode.UserMessage:
-						id = m.ID
-					case opencode.AssistantMessage:
-						id = m.ID
-					}
-					if id == msg.Properties.Info.ID {
-						a.app.Messages[i] = msg.Properties.Info.AsUnion()
-						exists = true
-						break
-					}
-				}
-			}
-
-			if !exists {
-				a.app.Messages = append(a.app.Messages, msg.Properties.Info.AsUnion())
+			if matchIndex == -1 {
+				a.app.Messages = append(a.app.Messages, app.Message{
+					Info:  msg.Properties.Info.AsUnion(),
+					Parts: []opencode.PartUnion{},
+				})
 			}
 		}
 	case opencode.EventListResponseEventSessionError:
@@ -486,10 +504,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, toast.NewErrorToast("Failed to open session")
 		}
 		a.app.Session = msg
-		a.app.Messages = make([]opencode.MessageUnion, 0)
-		for _, message := range messages {
-			a.app.Messages = append(a.app.Messages, message.AsUnion())
-		}
+		a.app.Messages = messages
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
@@ -850,7 +865,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, nil
 		}
 		a.app.Session = &opencode.Session{}
-		a.app.Messages = []opencode.MessageUnion{}
+		a.app.Messages = []app.Message{}
 		cmds = append(cmds, util.CmdHandler(app.SessionClearedMsg{}))
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
@@ -1093,7 +1108,6 @@ func NewModel(app *app.App) tea.Model {
 		symbolsProvider:      symbolsProvider,
 		leaderBinding:        leaderBinding,
 		showCompletionDialog: false,
-		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
 		exitKeyState:         ExitKeyIdle,

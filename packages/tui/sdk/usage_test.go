@@ -23,10 +23,13 @@ func TestUsage(t *testing.T) {
 	client := opencode.NewClient(
 		option.WithBaseURL(baseURL),
 	)
-	events, err := client.Event.List(context.TODO())
+	stream := client.Event.ListStreaming(context.TODO())
+	for stream.Next() {
+		t.Logf("%+v\n", stream.Current())
+	}
+	err := stream.Err()
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	t.Logf("%+v\n", events)
 }

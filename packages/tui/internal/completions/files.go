@@ -54,7 +54,9 @@ func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
 				Value:      file.Path,
 				ProviderID: cg.GetId(),
 				Raw:        file,
-			})
+			},
+				dialog.WithBackgroundColor(t.BackgroundElement()),
+			)
 			items = append(items, item)
 		}
 	}
@@ -100,7 +102,9 @@ func (cg *filesContextGroup) GetChildEntries(
 				Value:      file,
 				ProviderID: cg.GetId(),
 				Raw:        file,
-			})
+			},
+				dialog.WithBackgroundColor(theme.CurrentTheme().BackgroundElement()),
+			)
 			items = append(items, item)
 		}
 	}

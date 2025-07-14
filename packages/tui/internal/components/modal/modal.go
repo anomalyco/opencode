@@ -95,7 +95,7 @@ func (m *Modal) Render(contentView string, background string) string {
 	var finalContent string
 	if m.title != "" {
 		titleStyle := baseStyle.
-			Foreground(t.Primary()).
+			Foreground(t.Text()).
 			Bold(true).
 			Padding(0, 1)
 
@@ -140,6 +140,6 @@ func (m *Modal) Render(contentView string, background string) string {
 		modalView,
 		background,
 		layout.WithOverlayBorder(),
-		layout.WithOverlayBorderColor(t.Primary()),
+		layout.WithOverlayBorderColor(t.BorderActive()),
 	)
 }

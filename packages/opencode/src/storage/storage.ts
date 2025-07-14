@@ -5,6 +5,7 @@ import path from "path"
 import z from "zod"
 import fs from "fs/promises"
 import { MessageV2 } from "../session/message-v2"
+import { Identifier } from "../id/id"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -28,12 +29,48 @@ export namespace Storage {
           log.info("migrating to v2 message", { file })
           try {
             const result = MessageV2.fromV1(content)
-            await Bun.write(file, JSON.stringify(result, null, 2))
+            await Bun.write(
+              file,
+              JSON.stringify(
+                {
+                  ...result.info,
+                  parts: result.parts,
+                },
+                null,
+                2,
+              ),
+            )
           } catch (e) {
             await fs.rename(file, file.replace("storage", "broken"))
           }
         }
       } catch {}
+    },
+    async (dir: string) => {
+      const files = new Bun.Glob("session/message/*/*.json").scanSync({
+        cwd: dir,
+        absolute: true,
+      })
+      for (const file of files) {
+        try {
+          const { parts, ...info } = await Bun.file(file).json()
+          if (!parts) continue
+          for (const part of parts) {
+            const id = Identifier.ascending("part")
+            await Bun.write(
+              [dir, "session", "part", info.sessionID, info.id, id + ".json"].join("/"),
+              JSON.stringify({
+                ...part,
+                id,
+                sessionID: info.sessionID,
+                messageID: info.id,
+                ...(part.type === "tool" ? { callID: part.id } : {}),
+              }),
+            )
+          }
+          await Bun.write(file, JSON.stringify(info, null, 2))
+        } catch (e) {}
+      }
     },
   ]
 

@@ -12,7 +12,6 @@ export namespace App {
 
   export const Info = z
     .object({
-      user: z.string(),
       hostname: z.string(),
       git: z.boolean(),
       path: z.object({
@@ -70,7 +69,6 @@ export namespace App {
     const root = git ?? input.cwd
 
     const info: Info = {
-      user: os.userInfo().username,
       hostname: os.hostname(),
       time: {
         initialized: state.initialized,

@@ -51,7 +51,8 @@ func (r *ConfigService) Providers(ctx context.Context, opts ...option.RequestOpt
 type Config struct {
 	// JSON schema reference for configuration validation
 	Schema string `json:"$schema"`
-	// Share newly created sessions automatically
+	// @deprecated Use 'share' field instead. Share newly created sessions
+	// automatically
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
@@ -71,9 +72,14 @@ type Config struct {
 	Model string `json:"model"`
 	// Custom provider configurations and model overrides
 	Provider map[string]ConfigProvider `json:"provider"`
+	// Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables
+	// all sharing
+	Share ConfigShare `json:"share"`
 	// Theme name to use for the interface
-	Theme string     `json:"theme"`
-	JSON  configJSON `json:"-"`
+	Theme string `json:"theme"`
+	// Custom username to display in conversations instead of system username
+	Username string     `json:"username"`
+	JSON     configJSON `json:"-"`
 }
 
 // configJSON contains the JSON metadata for the struct [Config]
@@ -90,7 +96,9 @@ type configJSON struct {
 	Mode              apijson.Field
 	Model             apijson.Field
 	Provider          apijson.Field
+	Share             apijson.Field
 	Theme             apijson.Field
+	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }
@@ -468,6 +476,23 @@ func (r *ConfigProviderModelsLimit) UnmarshalJSON(data []byte) (err error) {
 
 func (r configProviderModelsLimitJSON) RawJSON() string {
 	return r.raw
+}
+
+// Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables
+// all sharing
+type ConfigShare string
+
+const (
+	ConfigShareAuto     ConfigShare = "auto"
+	ConfigShareDisabled ConfigShare = "disabled"
+)
+
+func (r ConfigShare) IsKnown() bool {
+	switch r {
+	case ConfigShareAuto, ConfigShareDisabled:
+		return true
+	}
+	return false
 }
 
 type Keybinds struct {
