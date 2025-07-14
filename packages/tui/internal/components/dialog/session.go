@@ -173,7 +173,7 @@ func (s *sessionDialog) Render(background string) string {
 		Background: &bgColor,
 	}, layout.FlexItem{View: leftHelp}, layout.FlexItem{View: rightHelp})
 
-	helpText = styles.NewStyle().Background(t.BackgroundPanel()).PaddingLeft(1).PaddingTop(1).Render(helpText)
+	helpText = styles.NewStyle().PaddingLeft(1).PaddingTop(1).Render(helpText)
 
 	content := strings.Join([]string{listView, helpText}, "\n")
 
