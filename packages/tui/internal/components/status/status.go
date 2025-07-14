@@ -2,6 +2,7 @@ package status
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -59,11 +60,33 @@ func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
 
+	// Shorten long paths
+	displayCwd := m.cwd
+	if len(m.cwd) > 30 && strings.Contains(m.cwd, "/") {
+		parts := strings.Split(m.cwd, "/")
+		if len(parts) > 2 {
+			displayCwd = "~/.../"+strings.Join(parts[len(parts)-2:], "/")
+		}
+	}
+
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
 		Padding(0, 1).
-		Render(m.cwd)
+		Render(displayCwd)
+
+	// Git head display
+	var git string
+	if branch, err := exec.Command("git", "branch", "--show-current").Output(); err == nil {
+		if hash, err := exec.Command("git", "rev-parse", "--short=7", "HEAD").Output(); err == nil {
+			gitText := strings.TrimSpace(string(branch)) + "@" + strings.TrimSpace(string(hash))
+			git = styles.NewStyle().
+				Foreground(t.Info()).
+				Background(t.BackgroundPanel()).
+				Padding(0, 1).
+				Render(gitText)
+		}
+	}
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
@@ -122,11 +145,11 @@ func (m statusComponent) View() string {
 
 	space := max(
 		0,
-		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(mode),
+		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(git)-lipgloss.Width(mode),
 	)
 	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
 
-	status := logo + cwd + spacer + mode
+	status := logo + cwd + git + spacer + mode
 
 	blank := styles.NewStyle().Background(t.Background()).Width(m.width).Render("")
 	return blank + "\n" + status
