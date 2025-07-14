@@ -131,7 +131,11 @@ func (f *findDialogComponent) View() string {
 		Render(inputView)
 
 	listView := f.list.View()
-	return styles.NewStyle().Height(12).Render(inputView + "\n" + listView)
+	return styles.NewStyle().
+		Height(12).
+		Background(t.BackgroundElement()).
+		Width(f.width - 4).
+		Render(inputView + "\n" + listView)
 }
 
 func (f *findDialogComponent) SetWidth(width int) {
