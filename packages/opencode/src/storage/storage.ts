@@ -124,10 +124,17 @@ export namespace Storage {
   export async function* list(prefix: string) {
     const dir = await state().then((x) => x.dir)
     try {
+      const items = []
       for await (const item of glob.scan({
         cwd: path.join(dir, prefix),
         onlyFiles: true,
       })) {
+        items.push(item)
+      }
+
+      // Must sort due to inconsistent file system ordering with Bun.Glob.scan
+      items.sort()
+      for (const item of items) {
         const result = path.join(prefix, item.slice(0, -5))
         yield result
       }
