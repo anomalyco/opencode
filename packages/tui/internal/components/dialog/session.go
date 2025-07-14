@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -161,16 +160,19 @@ func (s *sessionDialog) Render(background string) string {
 
 	t := theme.CurrentTheme()
 	keyStyle := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundPanel()).Render
-	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
+	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
 
-	leftHelp := keyStyle("x/del") + mutedStyle(" delete session")
-	rightHelp := keyStyle("n") + mutedStyle(" new session")
+	leftHelp := keyStyle("n") + mutedStyle(" new session")
+	rightHelp := keyStyle("x/del") + mutedStyle(" delete session")
 
-	availableWidth := layout.Current.Container.Width - 16
-	space := availableWidth - lipgloss.Width(leftHelp) - lipgloss.Width(rightHelp)
+	bgColor := t.BackgroundPanel()
+	helpText := layout.Render(layout.FlexOptions{
+		Direction:  layout.Row,
+		Justify:    layout.JustifySpaceBetween,
+		Width:      layout.Current.Container.Width - 14,
+		Background: &bgColor,
+	}, layout.FlexItem{View: leftHelp}, layout.FlexItem{View: rightHelp})
 
-	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
-	helpText := leftHelp + spacer + rightHelp
 	helpText = styles.NewStyle().Background(t.BackgroundPanel()).PaddingLeft(1).PaddingTop(1).Render(helpText)
 
 	content := strings.Join([]string{listView, helpText}, "\n")
