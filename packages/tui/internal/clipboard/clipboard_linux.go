@@ -44,7 +44,7 @@ var (
 			writeImg: []string{"xsel", "--clipboard", "--input"},
 		},
 		{
-			name:     "wl-clipboard",
+			name:     "wl-copy",
 			readCmd:  []string{"wl-paste", "-n"},
 			writeCmd: []string{"wl-copy"},
 			readImg:  []string{"wl-paste", "-t", "image/png", "-n"},
