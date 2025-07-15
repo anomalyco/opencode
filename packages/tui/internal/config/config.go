@@ -69,6 +69,15 @@ func (s *State) UpdateModelUsage(providerID, modelID string) {
 	}
 }
 
+func (s *State) RemoveModelFromRecentlyUsed(providerID, modelID string) {
+	for i, usage := range s.RecentlyUsedModels {
+		if usage.ProviderID == providerID && usage.ModelID == modelID {
+			s.RecentlyUsedModels = append(s.RecentlyUsedModels[:i], s.RecentlyUsedModels[i+1:]...)
+			return
+		}
+	}
+}
+
 // SaveState writes the provided Config struct to the specified TOML file.
 // It will create the file if it doesn't exist, or overwrite it if it does.
 func SaveState(filePath string, state *State) error {

@@ -24,6 +24,12 @@ type SearchSelectionMsg struct {
 // SearchCancelledMsg is emitted when the search is cancelled
 type SearchCancelledMsg struct{}
 
+// SearchRemoveItemMsg is emitted when Ctrl+X is pressed to remove an item
+type SearchRemoveItemMsg struct {
+	Item  any
+	Index int
+}
+
 // SearchDialog is a reusable component that combines a text input with a list
 type SearchDialog struct {
 	textInput textinput.Model
@@ -38,6 +44,7 @@ type searchKeyMap struct {
 	Down   key.Binding
 	Enter  key.Binding
 	Escape key.Binding
+	Remove key.Binding
 }
 
 var searchKeys = searchKeyMap{
@@ -56,6 +63,10 @@ var searchKeys = searchKeyMap{
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "cancel"),
+	),
+	Remove: key.NewBinding(
+		key.WithKeys("ctrl+x"),
+		key.WithHelp("ctrl+x", "remove from recent"),
 	),
 }
 
@@ -145,6 +156,13 @@ func (s *SearchDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if selectedItem, idx := s.list.GetSelectedItem(); idx != -1 {
 				return s, func() tea.Msg {
 					return SearchSelectionMsg{Item: selectedItem, Index: idx}
+				}
+			}
+
+		case key.Matches(msg, searchKeys.Remove):
+			if selectedItem, idx := s.list.GetSelectedItem(); idx != -1 {
+				return s, func() tea.Msg {
+					return SearchRemoveItemMsg{Item: selectedItem, Index: idx}
 				}
 			}
 
