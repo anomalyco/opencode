@@ -139,6 +139,12 @@ export namespace Config {
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      small_model: z
+        .string()
+        .describe(
+          "Small model to use for tasks like summarization and title generation in the format of provider/model",
+        )
+        .optional(),
       username: z
         .string()
         .optional()

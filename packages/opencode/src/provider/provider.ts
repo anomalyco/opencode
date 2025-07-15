@@ -409,6 +409,13 @@ export namespace Provider {
   }
 
   export async function getSmallModel(providerID: string) {
+    const cfg = await Config.get()
+
+    if (cfg.small_model) {
+      const parsed = parseModel(cfg.small_model)
+      return getModel(parsed.providerID, parsed.modelID)
+    }
+
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
     const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"]
