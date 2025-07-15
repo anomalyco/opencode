@@ -457,15 +457,14 @@ func (a *App) SendChatMessage(
 	text string,
 	attachments []opencode.FilePartParam,
 ) (*App, tea.Cmd) {
-	// Ensure session exists
 	if a.Session.ID == "" {
 		session, err := a.CreateSession(ctx)
 		if err != nil {
 			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
-    cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 		return a, tea.Batch(
+			util.CmdHandler(SessionCreatedMsg{Session: a.Session}),
 			util.CmdHandler(SessionSelectedMsg(session)),
 			util.CmdHandler(SendMsg{Text: text, Attachments: attachments}),
 		)
