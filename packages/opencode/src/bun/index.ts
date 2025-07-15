@@ -66,20 +66,18 @@ export namespace BunProc {
       return result
     })
     if (parsed.dependencies[pkg] === version) return mod
-    await BunProc.run(
-      [
-        "add",
-        "--force",
-        "--exact",
-        "--cwd",
-        Global.Path.cache,
-        "--registry=https://registry.npmjs.org",
-        pkg + "@" + version,
-      ],
-      {
-        cwd: Global.Path.cache,
-      },
-    ).catch((e) => {
+
+    // Build command arguments
+    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+
+    // Let Bun handle registry resolution:
+    // - If .npmrc files exist, Bun will use them automatically
+    // - If no .npmrc files exist, Bun will default to https://registry.npmjs.org
+    log.info("installing package using Bun's default registry resolution", { pkg, version })
+
+    await BunProc.run(args, {
+      cwd: Global.Path.cache,
+    }).catch((e) => {
       throw new InstallFailedError(
         { pkg, version },
         {

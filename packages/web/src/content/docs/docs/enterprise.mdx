@@ -61,3 +61,30 @@ This can be switched to a centralized authentication system that your organizati
 
 The share feature can be self-hosted and the share pages can be made accessible
 only after the user has been authenticated.
+
+---
+
+### Private NPM registries
+
+opencode supports private npm registries through Bun's native `.npmrc` file support. If your organization uses a private registry (such as JFrog Artifactory, Nexus, or similar), ensure developers are authenticated before running opencode.
+
+To set up authentication with your private registry:
+
+```bash
+# Authenticate with your enterprise registry
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+
+# This creates ~/.npmrc with authentication
+# opencode will automatically use it through Bun's native support
+```
+
+Alternatively, you can manually configure a `.npmrc` file:
+
+```bash
+# ~/.npmrc
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+**Important**: Developers must be logged into the private registry before running opencode 
+to ensure packages can be installed from your enterprise registry.
