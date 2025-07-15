@@ -610,18 +610,14 @@ func (r eventListResponseEventMessagePartUpdatedJSON) RawJSON() string {
 func (r EventListResponseEventMessagePartUpdated) implementsEventListResponse() {}
 
 type EventListResponseEventMessagePartUpdatedProperties struct {
-	MessageID string                                                 `json:"messageID,required"`
-	Part      AssistantMessagePart                                   `json:"part,required"`
-	SessionID string                                                 `json:"sessionID,required"`
-	JSON      eventListResponseEventMessagePartUpdatedPropertiesJSON `json:"-"`
+	Part Part                                                   `json:"part,required"`
+	JSON eventListResponseEventMessagePartUpdatedPropertiesJSON `json:"-"`
 }
 
 // eventListResponseEventMessagePartUpdatedPropertiesJSON contains the JSON
 // metadata for the struct [EventListResponseEventMessagePartUpdatedProperties]
 type eventListResponseEventMessagePartUpdatedPropertiesJSON struct {
-	MessageID   apijson.Field
 	Part        apijson.Field
-	SessionID   apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

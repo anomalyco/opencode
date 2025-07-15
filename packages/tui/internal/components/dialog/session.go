@@ -30,9 +30,13 @@ type sessionItem struct {
 	isDeleteConfirming bool
 }
 
-func (s sessionItem) Render(selected bool, width int) string {
+func (s sessionItem) Render(
+	selected bool,
+	width int,
+	isFirstInViewport bool,
+	baseStyle styles.Style,
+) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle()
 
 	var text string
 	if s.isDeleteConfirming {
@@ -75,6 +79,10 @@ func (s sessionItem) Render(selected bool, width int) string {
 	return itemStyle.Render(truncatedStr)
 }
 
+func (s sessionItem) Selectable() bool {
+	return true
+}
+
 type sessionDialog struct {
 	width              int
 	height             int
@@ -110,6 +118,13 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					util.CmdHandler(app.SessionSelectedMsg(&selectedSession)),
 				)
 			}
+		case "n":
+			s.app.Session = &opencode.Session{}
+			s.app.Messages = []app.Message{}
+			return s, tea.Sequence(
+				util.CmdHandler(modal.CloseModalMsg{}),
+				util.CmdHandler(app.SessionClearedMsg{}),
+			)
 		case "x", "delete", "backspace":
 			if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
 				if s.deleteConfirmation == idx {
@@ -150,10 +165,21 @@ func (s *sessionDialog) Render(background string) string {
 	listView := s.list.View()
 
 	t := theme.CurrentTheme()
-	helpStyle := styles.NewStyle().PaddingLeft(1).PaddingTop(1)
-	helpText := styles.NewStyle().Foreground(t.Text()).Render("x/del")
-	helpText = helpText + styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Render(" delete session")
-	helpText = helpStyle.Render(helpText)
+	keyStyle := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundPanel()).Render
+	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
+
+	leftHelp := keyStyle("n") + mutedStyle(" new session")
+	rightHelp := keyStyle("x/del") + mutedStyle(" delete session")
+
+	bgColor := t.BackgroundPanel()
+	helpText := layout.Render(layout.FlexOptions{
+		Direction:  layout.Row,
+		Justify:    layout.JustifySpaceBetween,
+		Width:      layout.Current.Container.Width - 14,
+		Background: &bgColor,
+	}, layout.FlexItem{View: leftHelp}, layout.FlexItem{View: rightHelp})
+
+	helpText = styles.NewStyle().PaddingLeft(1).PaddingTop(1).Render(helpText)
 
 	content := strings.Join([]string{listView, helpText}, "\n")
 
@@ -206,12 +232,19 @@ func NewSessionDialog(app *app.App) SessionDialog {
 		})
 	}
 
-	// Create a generic list component
 	listComponent := list.NewListComponent(
-		items,
-		10, // maxVisibleSessions
-		"No sessions available",
-		true, // useAlphaNumericKeys
+		list.WithItems(items),
+		list.WithMaxVisibleHeight[sessionItem](10),
+		list.WithFallbackMessage[sessionItem]("No sessions available"),
+		list.WithAlphaNumericKeys[sessionItem](true),
+		list.WithRenderFunc(
+			func(item sessionItem, selected bool, width int, baseStyle styles.Style) string {
+				return item.Render(selected, width, false, baseStyle)
+			},
+		),
+		list.WithSelectableFunc(func(item sessionItem) bool {
+			return true
+		}),
 	)
 	listComponent.SetMaxWidth(layout.Current.Container.Width - 12)
 

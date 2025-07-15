@@ -78,6 +78,7 @@ resources:
       keybinds: KeybindsConfig
       mcpLocal: McpLocalConfig
       mcpRemote: McpRemoteConfig
+      mode: ModeConfig
       provider: Provider
       model: Model
     methods:
@@ -88,14 +89,15 @@ resources:
     models:
       session: Session
       message: Message
+      part: Part
       textPart: TextPart
       filePart: FilePart
       toolPart: ToolPart
       stepStartPart: StepStartPart
+      stepFinishPart: StepFinishPart
+      snapshotPart: SnapshotPart
       assistantMessage: AssistantMessage
-      assistantMessagePart: AssistantMessagePart
       userMessage: UserMessage
-      userMessagePart: UserMessagePart
       toolStatePending: ToolStatePending
       toolStateRunning: ToolStateRunning
       toolStateCompleted: ToolStateCompleted
@@ -124,9 +126,13 @@ readme:
   example_requests:
     default:
       type: request
-      endpoint: get /event
+      endpoint: get /session
       params: {}
     headline:
+      type: request
+      endpoint: get /session
+      params: {}
+    streaming:
       type: request
       endpoint: get /event
       params: {}

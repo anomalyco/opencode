@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "==> Running Go build"
-go build .
+go build ./...
 
 echo "==> Checking tests compile"
-go test -run=^$ .
+go test -run=^$ ./...

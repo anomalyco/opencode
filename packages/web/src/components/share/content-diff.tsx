@@ -1,5 +1,5 @@
-import { type Component, createMemo } from "solid-js"
 import { parsePatch } from "diff"
+import { createMemo } from "solid-js"
 import { ContentCode } from "./content-code"
 import styles from "./content-diff.module.css"
 
@@ -90,8 +90,8 @@ export function ContentDiff(props: Props) {
               i++
             } else if (prefix === " ") {
               diffRows.push({
-                left: content,
-                right: content,
+                left: content === "" ? " " : content,
+                right: content === "" ? " " : content,
                 type: "unchanged",
               })
               i++

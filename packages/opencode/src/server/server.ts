@@ -269,6 +269,7 @@ export namespace Server {
         zValidator(
           "json",
           z.object({
+            messageID: z.string(),
             providerID: z.string(),
             modelID: z.string(),
           }),
@@ -405,7 +406,14 @@ export namespace Server {
               description: "List of messages",
               content: {
                 "application/json": {
-                  schema: resolver(MessageV2.Info.array()),
+                  schema: resolver(
+                    z
+                      .object({
+                        info: MessageV2.Info,
+                        parts: MessageV2.Part.array(),
+                      })
+                      .array(),
+                  ),
                 },
               },
             },
@@ -446,10 +454,11 @@ export namespace Server {
         zValidator(
           "json",
           z.object({
+            messageID: z.string(),
             providerID: z.string(),
             modelID: z.string(),
             mode: z.string(),
-            parts: MessageV2.UserPart.array(),
+            parts: z.union([MessageV2.FilePart, MessageV2.TextPart]).array(),
           }),
         ),
         async (c) => {

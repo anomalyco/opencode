@@ -11,73 +11,15 @@ import (
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/muesli/reflow/truncate"
+	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
 
-type CompletionItem struct {
-	Title      string
-	Value      string
-	ProviderID string
-	Raw        any
-}
-
-type CompletionItemI interface {
-	list.ListItem
-	GetValue() string
-	DisplayValue() string
-	GetProviderID() string
-	GetRaw() any
-}
-
-func (ci *CompletionItem) Render(selected bool, width int) string {
-	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle().Foreground(t.Text())
-
-	truncatedStr := truncate.String(string(ci.DisplayValue()), uint(width-4))
-
-	itemStyle := baseStyle.
-		Background(t.BackgroundElement()).
-		Padding(0, 1)
-
-	if selected {
-		itemStyle = itemStyle.Foreground(t.Primary())
-	}
-
-	title := itemStyle.Render(truncatedStr)
-	return title
-}
-
-func (ci *CompletionItem) DisplayValue() string {
-	return ci.Title
-}
-
-func (ci *CompletionItem) GetValue() string {
-	return ci.Value
-}
-
-func (ci *CompletionItem) GetProviderID() string {
-	return ci.ProviderID
-}
-
-func (ci *CompletionItem) GetRaw() any {
-	return ci.Raw
-}
-
-func NewCompletionItem(completionItem CompletionItem) CompletionItemI {
-	return &completionItem
-}
-
-type CompletionProvider interface {
-	GetId() string
-	GetChildEntries(query string) ([]CompletionItemI, error)
-	GetEmptyMessage() string
-}
-
 type CompletionSelectedMsg struct {
-	Item         CompletionItemI
+	Item         completions.CompletionSuggestion
 	SearchString string
 }
 
@@ -96,11 +38,11 @@ type CompletionDialog interface {
 
 type completionDialogComponent struct {
 	query                string
-	providers            []CompletionProvider
+	providers            []completions.CompletionProvider
 	width                int
 	height               int
 	pseudoSearchTextArea textarea.Model
-	list                 list.List[CompletionItemI]
+	list                 list.List[completions.CompletionSuggestion]
 	trigger              string
 }
 
@@ -114,7 +56,7 @@ var completionDialogKeys = completionDialogKeyMap{
 		key.WithKeys("tab", "enter", "right"),
 	),
 	Cancel: key.NewBinding(
-		key.WithKeys(" ", "esc", "backspace", "ctrl+c"),
+		key.WithKeys(" ", "esc", "backspace", "ctrl+h", "ctrl+c"),
 	),
 }
 
@@ -124,7 +66,7 @@ func (c *completionDialogComponent) Init() tea.Cmd {
 
 func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 	return func() tea.Msg {
-		allItems := make([]CompletionItemI, 0)
+		allItems := make([]completions.CompletionSuggestion, 0)
 
 		// Collect results from all providers
 		for _, provider := range c.providers {
@@ -144,10 +86,12 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 
 		// If there's a query, use fuzzy ranking to sort results
 		if query != "" && len(allItems) > 0 {
+			t := theme.CurrentTheme()
+			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
 			// Create a slice of display values for fuzzy matching
 			displayValues := make([]string, len(allItems))
 			for i, item := range allItems {
-				displayValues[i] = item.DisplayValue()
+				displayValues[i] = item.Display(baseStyle)
 			}
 
 			// Get fuzzy matches with ranking
@@ -157,7 +101,7 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 			sort.Sort(matches)
 
 			// Reorder items based on fuzzy ranking
-			rankedItems := make([]CompletionItemI, 0, len(matches))
+			rankedItems := make([]completions.CompletionSuggestion, 0, len(matches))
 			for _, match := range matches {
 				rankedItems = append(rankedItems, allItems[match.OriginalIndex])
 			}
@@ -171,7 +115,7 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
-	case []CompletionItemI:
+	case []completions.CompletionSuggestion:
 		c.list.SetItems(msg)
 	case tea.KeyMsg:
 		if c.pseudoSearchTextArea.Focused() {
@@ -189,7 +133,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				u, cmd := c.list.Update(msg)
-				c.list = u.(list.List[CompletionItemI])
+				c.list = u.(list.List[completions.CompletionSuggestion])
 				cmds = append(cmds, cmd)
 			}
 
@@ -205,7 +149,7 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				width := lipgloss.Width(value)
 				triggerWidth := lipgloss.Width(c.trigger)
 				// Only close on backspace when there are no characters left, unless we're back to just the trigger
-				if msg.String() != "backspace" || (width <= triggerWidth && value != c.trigger) {
+				if (msg.String() != "backspace" && msg.String() != "ctrl+h") || (width <= triggerWidth && value != c.trigger) {
 					return c, c.close()
 				}
 			}
@@ -223,11 +167,11 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (c *completionDialogComponent) View() string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle().Foreground(t.Text())
 	c.list.SetMaxWidth(c.width)
 
-	return baseStyle.
-		Padding(0, 0).
+	return styles.NewStyle().
+		Padding(0, 1).
+		Foreground(t.Text()).
 		Background(t.BackgroundElement()).
 		BorderStyle(lipgloss.ThickBorder()).
 		BorderLeft(true).
@@ -246,7 +190,7 @@ func (c *completionDialogComponent) IsEmpty() bool {
 	return c.list.IsEmpty()
 }
 
-func (c *completionDialogComponent) complete(item CompletionItemI) tea.Cmd {
+func (c *completionDialogComponent) complete(item completions.CompletionSuggestion) tea.Cmd {
 	value := c.pseudoSearchTextArea.Value()
 	return tea.Batch(
 		util.CmdHandler(CompletionSelectedMsg{
@@ -265,7 +209,7 @@ func (c *completionDialogComponent) close() tea.Cmd {
 
 func NewCompletionDialogComponent(
 	trigger string,
-	providers ...CompletionProvider,
+	providers ...completions.CompletionProvider,
 ) CompletionDialog {
 	ti := textarea.New()
 	ti.SetValue(trigger)
@@ -276,11 +220,34 @@ func NewCompletionDialogComponent(
 		emptyMessage = providers[0].GetEmptyMessage()
 	}
 
+	// Define render function for completion suggestions
+	renderFunc := func(item completions.CompletionSuggestion, selected bool, width int, baseStyle styles.Style) string {
+		t := theme.CurrentTheme()
+		style := baseStyle
+
+		if selected {
+			style = style.Background(t.BackgroundElement()).Foreground(t.Primary())
+		} else {
+			style = style.Background(t.BackgroundElement()).Foreground(t.Text())
+		}
+
+		// The item.Display string already has any inline colors from the provider
+		truncatedStr := truncate.String(item.Display(style), uint(width-4))
+		return style.Width(width - 4).Render(truncatedStr)
+	}
+
+	// Define selectable function - all completion suggestions are selectable
+	selectableFunc := func(item completions.CompletionSuggestion) bool {
+		return true
+	}
+
 	li := list.NewListComponent(
-		[]CompletionItemI{},
-		7,
-		emptyMessage,
-		false,
+		list.WithItems([]completions.CompletionSuggestion{}),
+		list.WithMaxVisibleHeight[completions.CompletionSuggestion](7),
+		list.WithFallbackMessage[completions.CompletionSuggestion](emptyMessage),
+		list.WithAlphaNumericKeys[completions.CompletionSuggestion](false),
+		list.WithRenderFunc(renderFunc),
+		list.WithSelectableFunc(selectableFunc),
 	)
 
 	c := &completionDialogComponent{
@@ -293,7 +260,7 @@ func NewCompletionDialogComponent(
 
 	// Load initial items from all providers
 	go func() {
-		allItems := make([]CompletionItemI, 0)
+		allItems := make([]completions.CompletionSuggestion, 0)
 		for _, provider := range providers {
 			items, err := provider.GetChildEntries("")
 			if err != nil {

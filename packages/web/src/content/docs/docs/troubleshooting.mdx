@@ -115,4 +115,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode will automatically detect and use the first available clipboard tool in order of preference: `xclip`, `xsel`, then `wl-clipboard`.
+opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.

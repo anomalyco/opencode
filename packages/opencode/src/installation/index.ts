@@ -140,6 +140,12 @@ export namespace Installation {
   export async function latest() {
     return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
       .then((res) => res.json())
-      .then((data) => data.tag_name.slice(1) as string)
+      .then((data) => {
+        if (typeof data.tag_name !== "string") {
+          log.error("GitHub API error", data)
+          throw new Error("failed to fetch latest version")
+        }
+        return data.tag_name.slice(1) as string
+      })
   }
 }

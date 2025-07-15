@@ -42,7 +42,11 @@ export class SyncServer extends DurableObject<Env> {
 
   async publish(key: string, content: any) {
     const sessionID = await this.getSessionID()
-    if (!key.startsWith(`session/info/${sessionID}`) && !key.startsWith(`session/message/${sessionID}/`))
+    if (
+      !key.startsWith(`session/info/${sessionID}`) &&
+      !key.startsWith(`session/message/${sessionID}/`) &&
+      !key.startsWith(`session/part/${sessionID}/`)
+    )
       return new Response("Error: Invalid key", { status: 400 })
 
     // store message
@@ -71,7 +75,7 @@ export class SyncServer extends DurableObject<Env> {
   }
 
   public async getData() {
-    const data = await this.ctx.storage.list()
+    const data = (await this.ctx.storage.list()) as Map<string, any>
     return Array.from(data.entries())
       .filter(([key, _]) => key.startsWith("session/"))
       .map(([key, content]) => ({ key, content }))
@@ -207,8 +211,13 @@ export default {
           return
         }
         if (type === "message") {
-          const [, messageID] = splits
-          messages[messageID] = d.content
+          messages[d.content.id] = {
+            parts: [],
+            ...d.content,
+          }
+        }
+        if (type === "part") {
+          messages[d.content.messageID].parts.push(d.content)
         }
       })
 
@@ -223,6 +232,9 @@ export default {
       )
     }
 
+    /**
+     * Used by the GitHub action to get GitHub installation access token given the OIDC token
+     */
     if (request.method === "POST" && method === "exchange_github_app_token") {
       const EXPECTED_AUDIENCE = "opencode-github-action"
       const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
@@ -272,6 +284,38 @@ export default {
       const installationAuth = await auth({ type: "installation", installationId: installation.id })
 
       return new Response(JSON.stringify({ token: installationAuth.token }), {
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    /**
+     * Used by the opencode CLI to check if the GitHub app is installed
+     */
+    if (request.method === "GET" && method === "get_github_app_installation") {
+      const owner = url.searchParams.get("owner")
+      const repo = url.searchParams.get("repo")
+
+      const auth = createAppAuth({
+        appId: Resource.GITHUB_APP_ID.value,
+        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+      })
+      const appAuth = await auth({ type: "app" })
+
+      // Lookup installation
+      const octokit = new Octokit({ auth: appAuth.token })
+      let installation
+      try {
+        const ret = await octokit.apps.getRepoInstallation({ owner, repo })
+        installation = ret.data
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("Not Found")) {
+          // not installed
+        } else {
+          throw err
+        }
+      }
+
+      return new Response(JSON.stringify({ installation }), {
         headers: { "Content-Type": "application/json" },
       })
     }

@@ -303,7 +303,8 @@ func (p *Parser) parseCsi(b []byte) (int, Event) {
 		return i, CursorPositionEvent{Y: row - 1, X: col - 1}
 	case 'm' | '<'<<parser.PrefixShift, 'M' | '<'<<parser.PrefixShift:
 		// Handle SGR mouse
-		if paramsLen == 3 {
+		if paramsLen >= 3 {
+			pa = pa[:3]
 			return i, parseSGRMouseEvent(cmd, pa)
 		}
 	case 'm' | '>'<<parser.PrefixShift:

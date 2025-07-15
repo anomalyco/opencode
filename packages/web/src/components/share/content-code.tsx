@@ -1,4 +1,4 @@
-import { codeToHtml } from "shiki"
+import { codeToHtml, bundledLanguages } from "shiki"
 import { createResource, Suspense } from "solid-js"
 import { transformerNotationDiff } from "@shikijs/transformers"
 import style from "./content-code.module.css"
@@ -15,7 +15,7 @@ export function ContentCode(props: Props) {
       // TODO: For testing delays
       // await new Promise((resolve) => setTimeout(resolve, 3000))
       return (await codeToHtml(code || "", {
-        lang: lang || "text",
+        lang: lang && lang in bundledLanguages ? lang : "text",
         themes: {
           light: "github-light",
           dark: "github-dark",

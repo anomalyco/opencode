@@ -31,42 +31,20 @@ type win32InputState struct {
 
 // Reader represents an input event reader. It reads input events and parses
 // escape sequences from the terminal input buffer and translates them into
-// human-readable events.
+// human‑readable events.
 type Reader struct {
-	rd    cancelreader.CancelReader
-	table map[string]Key // table is a lookup table for key sequences.
-
-	term string // term is the terminal name $TERM.
-
-	// paste is the bracketed paste mode buffer.
-	// When nil, bracketed paste mode is disabled.
-	paste []byte
-
-	buf [256]byte // do we need a larger buffer?
-
-	// partialSeq holds incomplete escape sequences that need more data
-	partialSeq []byte
-
-	// keyState keeps track of the current Windows Console API key events state.
-	// It is used to decode ANSI escape sequences and utf16 sequences.
-	keyState win32InputState
-
-	parser Parser
-	logger Logger
+	rd         cancelreader.CancelReader
+	table      map[string]Key // table is a lookup table for key sequences.
+	term       string         // $TERM
+	paste      []byte         // bracketed paste buffer; nil when disabled
+	buf        [256]byte      // read buffer
+	partialSeq []byte         // holds incomplete escape sequences
+	keyState   win32InputState
+	parser     Parser
+	logger     Logger
 }
 
-// NewReader returns a new input event reader. The reader reads input events
-// from the terminal and parses escape sequences into human-readable events. It
-// supports reading Terminfo databases. See [Parser] for more information.
-//
-// Example:
-//
-//	r, _ := input.NewReader(os.Stdin, os.Getenv("TERM"), 0)
-//	defer r.Close()
-//	events, _ := r.ReadEvents()
-//	for _, ev := range events {
-//	  log.Printf("%v", ev)
-//	}
+// NewReader returns a new input event reader.
 func NewReader(r io.Reader, termType string, flags int) (*Reader, error) {
 	d := new(Reader)
 	cr, err := newCancelreader(r, flags)
@@ -82,46 +60,38 @@ func NewReader(r io.Reader, termType string, flags int) (*Reader, error) {
 }
 
 // SetLogger sets a logger for the reader.
-func (d *Reader) SetLogger(l Logger) {
-	d.logger = l
-}
+func (d *Reader) SetLogger(l Logger) { d.logger = l }
 
-// Read implements [io.Reader].
-func (d *Reader) Read(p []byte) (int, error) {
-	return d.rd.Read(p) //nolint:wrapcheck
-}
+// Read implements io.Reader.
+func (d *Reader) Read(p []byte) (int, error) { return d.rd.Read(p) }
 
 // Cancel cancels the underlying reader.
-func (d *Reader) Cancel() bool {
-	return d.rd.Cancel()
-}
+func (d *Reader) Cancel() bool { return d.rd.Cancel() }
 
 // Close closes the underlying reader.
-func (d *Reader) Close() error {
-	return d.rd.Close() //nolint:wrapcheck
-}
+func (d *Reader) Close() error { return d.rd.Close() }
 
 func (d *Reader) readEvents() ([]Event, error) {
 	nb, err := d.rd.Read(d.buf[:])
 	if err != nil {
-		return nil, err //nolint:wrapcheck
+		return nil, err
 	}
 
 	var events []Event
 
-	// Combine any partial sequence from previous read with new data
+	// Combine any partial sequence from previous read with new data.
 	var buf []byte
 	if len(d.partialSeq) > 0 {
 		buf = make([]byte, len(d.partialSeq)+nb)
 		copy(buf, d.partialSeq)
 		copy(buf[len(d.partialSeq):], d.buf[:nb])
-		d.partialSeq = nil // clear the partial sequence
+		d.partialSeq = nil
 	} else {
 		buf = d.buf[:nb]
 	}
 
-	// Lookup table first
-	if bytes.HasPrefix(buf, []byte{'\x1b'}) {
+	// Fast path: direct lookup for simple escape sequences.
+	if bytes.HasPrefix(buf, []byte{0x1b}) {
 		if k, ok := d.table[string(buf)]; ok {
 			if d.logger != nil {
 				d.logger.Printf("input: %q", buf)
@@ -133,24 +103,23 @@ func (d *Reader) readEvents() ([]Event, error) {
 
 	var i int
 	for i < len(buf) {
-		nb, ev := d.parser.parseSequence(buf[i:])
-		if d.logger != nil && nb > 0 {
-			d.logger.Printf("input: %q", buf[i:i+nb])
+		consumed, ev := d.parser.parseSequence(buf[i:])
+		if d.logger != nil && consumed > 0 {
+			d.logger.Printf("input: %q", buf[i:i+consumed])
 		}
 
-		// Handle incomplete sequences - when parseSequence returns (0, nil)
-		// it means we need more data to complete the sequence
-		if nb == 0 && ev == nil {
-			// Store the remaining data for the next read
-			remaining := len(buf) - i
-			if remaining > 0 {
-				d.partialSeq = make([]byte, remaining)
+		// Incomplete sequence – store remainder and exit.
+		if consumed == 0 && ev == nil {
+			rem := len(buf) - i
+			if rem > 0 {
+				d.partialSeq = make([]byte, rem)
 				copy(d.partialSeq, buf[i:])
 			}
 			break
 		}
 
-		// Handle bracketed-paste
+		// Handle bracketed paste specially so we don’t emit a paste event for
+		// every byte.
 		if d.paste != nil {
 			if _, ok := ev.(PasteEndEvent); !ok {
 				d.paste = append(d.paste, buf[i])
@@ -160,15 +129,9 @@ func (d *Reader) readEvents() ([]Event, error) {
 		}
 
 		switch ev.(type) {
-		// case UnknownEvent:
-		// 	// If the sequence is not recognized by the parser, try looking it up.
-		// 	if k, ok := d.table[string(buf[i:i+nb])]; ok {
-		// 		ev = KeyPressEvent(k)
-		// 	}
 		case PasteStartEvent:
 			d.paste = []byte{}
 		case PasteEndEvent:
-			// Decode the captured data into runes.
 			var paste []rune
 			for len(d.paste) > 0 {
 				r, w := utf8.DecodeRune(d.paste)
@@ -177,7 +140,7 @@ func (d *Reader) readEvents() ([]Event, error) {
 				}
 				d.paste = d.paste[w:]
 			}
-			d.paste = nil // reset the buffer
+			d.paste = nil
 			events = append(events, PasteEvent(paste))
 		case nil:
 			i++
@@ -189,8 +152,41 @@ func (d *Reader) readEvents() ([]Event, error) {
 		} else {
 			events = append(events, ev)
 		}
-		i += nb
+		i += consumed
 	}
 
+	// Collapse bursts of wheel/motion events into a single event each.
+	events = coalesceMouseEvents(events)
 	return events, nil
+}
+
+// coalesceMouseEvents reduces the volume of MouseWheelEvent and MouseMotionEvent
+// objects that arrive in rapid succession by keeping only the most recent
+// event in each contiguous run.
+func coalesceMouseEvents(in []Event) []Event {
+	if len(in) < 2 {
+		return in
+	}
+
+	out := make([]Event, 0, len(in))
+	for _, ev := range in {
+		switch ev.(type) {
+		case MouseWheelEvent:
+			if len(out) > 0 {
+				if _, ok := out[len(out)-1].(MouseWheelEvent); ok {
+					out[len(out)-1] = ev // replace previous wheel event
+					continue
+				}
+			}
+		case MouseMotionEvent:
+			if len(out) > 0 {
+				if _, ok := out[len(out)-1].(MouseMotionEvent); ok {
+					out[len(out)-1] = ev // replace previous motion event
+					continue
+				}
+			}
+		}
+		out = append(out, ev)
+	}
+	return out
 }

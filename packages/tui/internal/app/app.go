@@ -16,10 +16,16 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
+	"github.com/sst/opencode/internal/id"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
+
+type Message struct {
+	Info  opencode.MessageUnion
+	Parts []opencode.PartUnion
+}
 
 type App struct {
 	Info             opencode.App
@@ -35,7 +41,7 @@ type App struct {
 	Provider         *opencode.Provider
 	Model            *opencode.Model
 	Session          *opencode.Session
-	Messages         []opencode.MessageUnion
+	Messages         []Message
 	Commands         commands.CommandRegistry
 	InitialModel     *string
 	InitialPrompt    *string
@@ -44,6 +50,9 @@ type App struct {
 	IsLeaderSequence bool
 }
 
+type SessionCreatedMsg = struct {
+	Session *opencode.Session
+}
 type SessionSelectedMsg = *opencode.Session
 type SessionLoadedMsg struct{}
 type ModelSelectedMsg struct {
@@ -158,7 +167,7 @@ func New(
 		ModeIndex:     modeIndex,
 		Mode:          mode,
 		Session:       &opencode.Session{},
-		Messages:      []opencode.MessageUnion{},
+		Messages:      []Message{},
 		Commands:      commands.LoadFromConfig(configInfo),
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
@@ -351,7 +360,7 @@ func (a *App) IsBusy() bool {
 	}
 
 	lastMessage := a.Messages[len(a.Messages)-1]
-	if casted, ok := lastMessage.(opencode.AssistantMessage); ok {
+	if casted, ok := lastMessage.Info.(opencode.AssistantMessage); ok {
 		return casted.Time.Completed == 0
 	}
 	return false
@@ -374,10 +383,11 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 	}
 
 	a.Session = session
-	cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+	cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 
 	go func() {
 		_, err := a.Client.Session.Init(ctx, a.Session.ID, opencode.SessionInitParams{
+			MessageID:  opencode.F(id.Ascending(id.Message)),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
@@ -449,57 +459,70 @@ func (a *App) SendChatMessage(
 			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
-		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 	}
 
-	optimisticParts := []opencode.UserMessagePart{{
-		Type: opencode.UserMessagePartTypeText,
-		Text: text,
+	message := opencode.UserMessage{
+		ID:        id.Ascending(id.Message),
+		SessionID: a.Session.ID,
+		Role:      opencode.UserMessageRoleUser,
+		Time: opencode.UserMessageTime{
+			Created: float64(time.Now().UnixMilli()),
+		},
+	}
+
+	parts := []opencode.PartUnion{opencode.TextPart{
+		ID:        id.Ascending(id.Part),
+		MessageID: message.ID,
+		SessionID: a.Session.ID,
+		Type:      opencode.TextPartTypeText,
+		Text:      text,
 	}}
 	if len(attachments) > 0 {
 		for _, attachment := range attachments {
-			optimisticParts = append(optimisticParts, opencode.UserMessagePart{
-				Type:     opencode.UserMessagePartTypeFile,
-				Filename: attachment.Filename.Value,
-				Mime:     attachment.Mime.Value,
-				URL:      attachment.URL.Value,
+			parts = append(parts, opencode.FilePart{
+				ID:        id.Ascending(id.Part),
+				MessageID: message.ID,
+				SessionID: a.Session.ID,
+				Type:      opencode.FilePartTypeFile,
+				Filename:  attachment.Filename.Value,
+				Mime:      attachment.Mime.Value,
+				URL:       attachment.URL.Value,
 			})
 		}
 	}
 
-	optimisticMessage := opencode.UserMessage{
-		ID:        fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role:      opencode.UserMessageRoleUser,
-		Parts:     optimisticParts,
-		SessionID: a.Session.ID,
-		Time: opencode.UserMessageTime{
-			Created: float64(time.Now().Unix()),
-		},
-	}
-
-	a.Messages = append(a.Messages, optimisticMessage)
-	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
+	a.Messages = append(a.Messages, Message{Info: message, Parts: parts})
+	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: message}))
 
 	cmds = append(cmds, func() tea.Msg {
-		parts := []opencode.UserMessagePartUnionParam{
-			opencode.TextPartParam{
-				Type: opencode.F(opencode.TextPartTypeText),
-				Text: opencode.F(text),
-			},
-		}
-		if len(attachments) > 0 {
-			for _, attachment := range attachments {
-				parts = append(parts, opencode.FilePartParam{
-					Mime:     attachment.Mime,
-					Type:     attachment.Type,
-					URL:      attachment.URL,
-					Filename: attachment.Filename,
+		partsParam := []opencode.SessionChatParamsPartUnion{}
+		for _, part := range parts {
+			switch casted := part.(type) {
+			case opencode.TextPart:
+				partsParam = append(partsParam, opencode.TextPartParam{
+					ID:        opencode.F(casted.ID),
+					MessageID: opencode.F(casted.MessageID),
+					SessionID: opencode.F(casted.SessionID),
+					Type:      opencode.F(casted.Type),
+					Text:      opencode.F(casted.Text),
+				})
+			case opencode.FilePart:
+				partsParam = append(partsParam, opencode.FilePartParam{
+					ID:        opencode.F(casted.ID),
+					Mime:      opencode.F(casted.Mime),
+					MessageID: opencode.F(casted.MessageID),
+					SessionID: opencode.F(casted.SessionID),
+					Type:      opencode.F(casted.Type),
+					URL:       opencode.F(casted.URL),
+					Filename:  opencode.F(casted.Filename),
 				})
 			}
 		}
 
 		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			Parts:      opencode.F(parts),
+			Parts:      opencode.F(partsParam),
+			MessageID:  opencode.F(message.ID),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 			Mode:       opencode.F(a.Mode.Name),
@@ -557,15 +580,25 @@ func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func (a *App) ListMessages(ctx context.Context, sessionId string) ([]opencode.Message, error) {
+func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
 	response, err := a.Client.Session.Messages(ctx, sessionId)
 	if err != nil {
 		return nil, err
 	}
 	if response == nil {
-		return []opencode.Message{}, nil
+		return []Message{}, nil
 	}
-	messages := *response
+	messages := []Message{}
+	for _, message := range *response {
+		msg := Message{
+			Info:  message.Info.AsUnion(),
+			Parts: []opencode.PartUnion{},
+		}
+		for _, part := range message.Parts {
+			msg.Parts = append(msg.Parts, part.AsUnion())
+		}
+		messages = append(messages, msg)
+	}
 	return messages, nil
 }
 

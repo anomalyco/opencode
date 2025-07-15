@@ -132,20 +132,24 @@ export const AuthLoginCommand = cmd({
         options: [
           {
             label: "Claude Pro/Max",
-            value: "oauth",
+            value: "max",
           },
           {
-            label: "API Key",
+            label: "Create API Key",
+            value: "console",
+          },
+          {
+            label: "Manually enter API Key",
             value: "api",
           },
         ],
       })
       if (prompts.isCancel(method)) throw new UI.CancelledError()
 
-      if (method === "oauth") {
+      if (method === "max") {
         // some weird bug where program exits without this
         await new Promise((resolve) => setTimeout(resolve, 10))
-        const { url, verifier } = await AuthAnthropic.authorize()
+        const { url, verifier } = await AuthAnthropic.authorize("max")
         prompts.note("Trying to open browser...")
         try {
           await open(url)
@@ -162,13 +166,66 @@ export const AuthLoginCommand = cmd({
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
-        await AuthAnthropic.exchange(code, verifier)
-          .then(() => {
-            prompts.log.success("Login successful")
+        try {
+          const credentials = await AuthAnthropic.exchange(code, verifier)
+          await Auth.set("anthropic", {
+            type: "oauth",
+            refresh: credentials.refresh,
+            access: credentials.access,
+            expires: credentials.expires,
           })
-          .catch(() => {
-            prompts.log.error("Invalid code")
+          prompts.log.success("Login successful")
+        } catch {
+          prompts.log.error("Invalid code")
+        }
+        prompts.outro("Done")
+        return
+      }
+
+      if (method === "console") {
+        // some weird bug where program exits without this
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const { url, verifier } = await AuthAnthropic.authorize("console")
+        prompts.note("Trying to open browser...")
+        try {
+          await open(url)
+        } catch (e) {
+          prompts.log.error(
+            "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
+          )
+        }
+        prompts.log.info(url)
+
+        const code = await prompts.text({
+          message: "Paste the authorization code here: ",
+          validate: (x) => (x.length > 0 ? undefined : "Required"),
+        })
+        if (prompts.isCancel(code)) throw new UI.CancelledError()
+
+        try {
+          const credentials = await AuthAnthropic.exchange(code, verifier)
+          const accessToken = credentials.access
+          const response = await fetch("https://api.anthropic.com/api/oauth/claude_cli/create_api_key", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json, text/plain, */*",
+            },
           })
+          if (!response.ok) {
+            throw new Error("Failed to create API key")
+          }
+          const json = await response.json()
+          await Auth.set("anthropic", {
+            type: "api",
+            key: json.raw_key,
+          })
+
+          prompts.log.success("Login successful - API key created and saved")
+        } catch (error) {
+          prompts.log.error("Invalid code or failed to create API key")
+        }
         prompts.outro("Done")
         return
       }

@@ -23,4 +23,7 @@ rm -rf packages/tui/sdk
 mv opencode-go/ packages/tui/sdk/
 rm -rf packages/tui/sdk/.git
 
+echo "Kicking off production build..."
+stl builds create --branch main --wait false
+
 echo "Done!"

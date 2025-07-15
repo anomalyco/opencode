@@ -60,13 +60,22 @@ export namespace BunProc {
   export async function install(pkg: string, version = "latest") {
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(() => ({
-      dependencies: {},
-    }))
+    const parsed = await pkgjson.json().catch(async () => {
+      const result = { dependencies: {} }
+      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
+      return result
+    })
     if (parsed.dependencies[pkg] === version) return mod
-    parsed.dependencies[pkg] = version
     await BunProc.run(
-      ["add", "--exact", "--cwd", Global.Path.cache, "--registry=https://registry.npmjs.org", pkg + "@" + version],
+      [
+        "add",
+        "--force",
+        "--exact",
+        "--cwd",
+        Global.Path.cache,
+        "--registry=https://registry.npmjs.org",
+        pkg + "@" + version,
+      ],
       {
         cwd: Global.Path.cache,
       },
@@ -78,6 +87,8 @@ export namespace BunProc {
         },
       )
     })
+    parsed.dependencies[pkg] = version
+    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
 }

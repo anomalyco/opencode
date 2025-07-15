@@ -68,7 +68,6 @@ type App struct {
 	Hostname string  `json:"hostname,required"`
 	Path     AppPath `json:"path,required"`
 	Time     AppTime `json:"time,required"`
-	User     string  `json:"user,required"`
 	JSON     appJSON `json:"-"`
 }
 
@@ -78,7 +77,6 @@ type appJSON struct {
 	Hostname    apijson.Field
 	Path        apijson.Field
 	Time        apijson.Field
-	User        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

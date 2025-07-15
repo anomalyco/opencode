@@ -8,7 +8,6 @@ import (
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
-	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
@@ -58,8 +57,8 @@ const (
 
 func (cg *symbolsContextGroup) GetChildEntries(
 	query string,
-) ([]dialog.CompletionItemI, error) {
-	items := make([]dialog.CompletionItemI, 0)
+) ([]CompletionSuggestion, error) {
+	items := make([]CompletionSuggestion, 0)
 
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -78,40 +77,42 @@ func (cg *symbolsContextGroup) GetChildEntries(
 		return items, nil
 	}
 
-	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle().Background(t.BackgroundElement())
-	base := baseStyle.Render
-	muted := baseStyle.Foreground(t.TextMuted()).Render
-
 	for _, sym := range *symbols {
 		parts := strings.Split(sym.Name, ".")
 		lastPart := parts[len(parts)-1]
-		title := base(lastPart)
-
-		uriParts := strings.Split(sym.Location.Uri, "/")
-		lastTwoParts := uriParts[len(uriParts)-2:]
-		joined := strings.Join(lastTwoParts, "/")
-		title += muted(fmt.Sprintf(" %s", joined))
-
 		start := int(sym.Location.Range.Start.Line)
 		end := int(sym.Location.Range.End.Line)
-		title += muted(fmt.Sprintf(":L%d-%d", start, end))
+
+		displayFunc := func(s styles.Style) string {
+			t := theme.CurrentTheme()
+			base := s.Foreground(t.Text()).Render
+			muted := s.Foreground(t.TextMuted()).Render
+			display := base(lastPart)
+
+			uriParts := strings.Split(sym.Location.Uri, "/")
+			lastTwoParts := uriParts[len(uriParts)-2:]
+			joined := strings.Join(lastTwoParts, "/")
+			display += muted(fmt.Sprintf(" %s", joined))
+
+			display += muted(fmt.Sprintf(":L%d-%d", start, end))
+			return display
+		}
 
 		value := fmt.Sprintf("%s?start=%d&end=%d", sym.Location.Uri, start, end)
 
-		item := dialog.NewCompletionItem(dialog.CompletionItem{
-			Title:      title,
+		item := CompletionSuggestion{
+			Display:    displayFunc,
 			Value:      value,
 			ProviderID: cg.GetId(),
-			Raw:        sym,
-		})
+			RawData:    sym,
+		}
 		items = append(items, item)
 	}
 
 	return items, nil
 }
 
-func NewSymbolsContextGroup(app *app.App) dialog.CompletionProvider {
+func NewSymbolsContextGroup(app *app.App) CompletionProvider {
 	return &symbolsContextGroup{
 		app: app,
 	}

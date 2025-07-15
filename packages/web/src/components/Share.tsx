@@ -1,6 +1,6 @@
-import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, SuspenseList } from "solid-js"
+import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, SuspenseList, createEffect } from "solid-js"
 import { DateTime } from "luxon"
-import { createStore, reconcile } from "solid-js/store"
+import { createStore, reconcile, unwrap } from "solid-js/store"
 import { IconArrowDown } from "./icons"
 import { IconOpencode } from "./icons/custom"
 import styles from "./share.module.css"
@@ -8,6 +8,8 @@ import type { MessageV2 } from "opencode/session/message-v2"
 import type { Message } from "opencode/session/message"
 import type { Session } from "opencode/session/index"
 import { Part, ProviderIcon } from "./share/part"
+
+type MessageWithParts = MessageV2.Info & { parts: MessageV2.Part[] }
 
 type Status = "disconnected" | "connecting" | "connected" | "error" | "reconnecting"
 
@@ -39,7 +41,7 @@ export default function Share(props: {
   id: string
   api: string
   info: Session.Info
-  messages: Record<string, MessageV2.Info>
+  messages: Record<string, MessageWithParts>
 }) {
   let lastScrollY = 0
   let hasScrolledToAnchor = false
@@ -57,10 +59,13 @@ export default function Share(props: {
 
   const [store, setStore] = createStore<{
     info?: Session.Info
-    messages: Record<string, MessageV2.Info | Message.Info>
+    messages: Record<string, MessageWithParts>
   }>({ info: props.info, messages: props.messages })
   const messages = createMemo(() => Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)))
   const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected", "Disconnected"])
+  createEffect(() => {
+    console.log(unwrap(store))
+  })
 
   onMount(() => {
     const apiUrl = props.api
@@ -115,7 +120,21 @@ export default function Share(props: {
           }
           if (type === "message") {
             const [, messageID] = splits
+            if ("metadata" in d.content) {
+              d.content = fromV1(d.content)
+            }
+            d.content.parts = d.content.parts ?? store.messages[messageID]?.parts ?? []
             setStore("messages", messageID, reconcile(d.content))
+          }
+          if (type === "part") {
+            setStore("messages", d.content.messageID, "parts", arr => {
+              const index = arr.findIndex((x) => x.id === d.content.id)
+              if (index === -1)
+                arr.push(d.content)
+              if (index > -1)
+                arr[index] = d.content
+              return [...arr]
+            })
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error)
@@ -233,7 +252,7 @@ export default function Share(props: {
       rootDir: undefined as string | undefined,
       created: undefined as number | undefined,
       completed: undefined as number | undefined,
-      messages: [] as MessageV2.Info[],
+      messages: [] as MessageWithParts[],
       models: {} as Record<string, string[]>,
       cost: 0,
       tokens: {
@@ -247,7 +266,7 @@ export default function Share(props: {
 
     const msgs = messages()
     for (let i = 0; i < msgs.length; i++) {
-      const msg = "metadata" in msgs[i] ? fromV1(msgs[i] as Message.Info) : (msgs[i] as MessageV2.Info)
+      const msg = msgs[i]
 
       result.messages.push(msg)
 
@@ -321,6 +340,8 @@ export default function Share(props: {
                   const filteredParts = createMemo(() =>
                     msg.parts.filter((x, index) => {
                       if (x.type === "step-start" && index > 0) return false
+                      if (x.type === "snapshot") return false
+                      if (x.type === "step-finish") return false
                       if (x.type === "text" && x.synthetic === true) return false
                       if (x.type === "tool" && x.tool === "todoread") return false
                       if (x.type === "text" && !x.text) return false
@@ -463,9 +484,9 @@ export default function Share(props: {
   )
 }
 
-export function fromV1(v1: Message.Info): MessageV2.Info {
+export function fromV1(v1: Message.Info): MessageWithParts {
   if (v1.role === "assistant") {
-    const result: MessageV2.Assistant = {
+    return {
       id: v1.id,
       sessionID: v1.metadata.sessionID,
       role: "assistant",
@@ -476,15 +497,29 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
       cost: v1.metadata.assistant!.cost,
       path: v1.metadata.assistant!.path,
       summary: v1.metadata.assistant!.summary,
-      tokens: v1.metadata.assistant!.tokens,
+      tokens: v1.metadata.assistant!.tokens ?? {
+        input: 0,
+        output: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+        reasoning: 0,
+      },
       modelID: v1.metadata.assistant!.modelID,
       providerID: v1.metadata.assistant!.providerID,
       system: v1.metadata.assistant!.system,
       error: v1.metadata.error,
-      parts: v1.parts.flatMap((part): MessageV2.AssistantPart[] => {
+      parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
+        const base = {
+          id: index.toString(),
+          messageID: v1.id,
+          sessionID: v1.metadata.sessionID,
+        }
         if (part.type === "text") {
           return [
             {
+              ...base,
               type: "text",
               text: part.text,
             },
@@ -493,6 +528,7 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
         if (part.type === "step-start") {
           return [
             {
+              ...base,
               type: "step-start",
             },
           ]
@@ -500,8 +536,9 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
         if (part.type === "tool-invocation") {
           return [
             {
+              ...base,
               type: "tool",
-              id: part.toolInvocation.toolCallId,
+              callID: part.toolInvocation.toolCallId,
               tool: part.toolInvocation.toolName,
               state: (() => {
                 if (part.toolInvocation.state === "partial-call") {
@@ -539,21 +576,26 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
         return []
       }),
     }
-    return result
   }
 
   if (v1.role === "user") {
-    const result: MessageV2.User = {
+    return {
       id: v1.id,
       sessionID: v1.metadata.sessionID,
       role: "user",
       time: {
         created: v1.metadata.time.created,
       },
-      parts: v1.parts.flatMap((part): MessageV2.UserPart[] => {
+      parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
+        const base = {
+          id: index.toString(),
+          messageID: v1.id,
+          sessionID: v1.metadata.sessionID,
+        }
         if (part.type === "text") {
           return [
             {
+              ...base,
               type: "text",
               text: part.text,
             },
@@ -562,6 +604,7 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
         if (part.type === "file") {
           return [
             {
+              ...base,
               type: "file",
               mime: part.mediaType,
               filename: part.filename,
@@ -572,7 +615,6 @@ export function fromV1(v1: Message.Info): MessageV2.Info {
         return []
       }),
     }
-    return result
   }
 
   throw new Error("unknown message type")

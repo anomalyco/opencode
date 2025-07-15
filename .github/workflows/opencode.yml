@@ -1,0 +1,25 @@
+name: opencode
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  opencode:
+    if: startsWith(github.event.comment.body, 'hey opencode')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run opencode
+        uses: sst/opencode/sdks/github@dev
+        #uses: ./github-actions
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514

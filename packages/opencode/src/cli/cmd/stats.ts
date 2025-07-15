@@ -1,7 +1,4 @@
-import { Storage } from "../../storage/storage"
-import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
-import { bootstrap } from "../bootstrap"
 
 interface SessionStats {
   totalSessions: number
@@ -27,88 +24,10 @@ interface SessionStats {
 
 export const StatsCommand = cmd({
   command: "stats",
-  describe: "analyze and display statistics from message-v2 format",
-  handler: async () => {
-    await bootstrap({ cwd: process.cwd() }, async () => {
-      const stats: SessionStats = {
-        totalSessions: 0,
-        totalMessages: 0,
-        totalCost: 0,
-        totalTokens: {
-          input: 0,
-          output: 0,
-          reasoning: 0,
-          cache: {
-            read: 0,
-            write: 0,
-          },
-        },
-        toolUsage: {},
-        dateRange: {
-          earliest: Date.now(),
-          latest: 0,
-        },
-        days: 0,
-        costPerDay: 0,
-      }
-
-      const sessionMap = new Map<string, number>()
-
-      try {
-        for await (const messagePath of Storage.list("session/message")) {
-          try {
-            const message = await Storage.readJSON<MessageV2.Info>(messagePath)
-            if (!message.parts.find((part) => part.type === "step-finish")) continue
-
-            stats.totalMessages++
-
-            const sessionId = message.sessionID
-            sessionMap.set(sessionId, (sessionMap.get(sessionId) || 0) + 1)
-
-            if (message.time.created < stats.dateRange.earliest) {
-              stats.dateRange.earliest = message.time.created
-            }
-            if (message.time.created > stats.dateRange.latest) {
-              stats.dateRange.latest = message.time.created
-            }
-
-            if (message.role === "assistant") {
-              stats.totalCost += message.cost
-              stats.totalTokens.input += message.tokens.input
-              stats.totalTokens.output += message.tokens.output
-              stats.totalTokens.reasoning += message.tokens.reasoning
-              stats.totalTokens.cache.read += message.tokens.cache.read
-              stats.totalTokens.cache.write += message.tokens.cache.write
-
-              for (const part of message.parts) {
-                if (part.type === "tool") {
-                  stats.toolUsage[part.tool] = (stats.toolUsage[part.tool] || 0) + 1
-                }
-              }
-            }
-          } catch (e) {
-            continue
-          }
-        }
-      } catch (e) {
-        console.error("Failed to read storage:", e)
-        return
-      }
-
-      stats.totalSessions = sessionMap.size
-
-      if (stats.dateRange.latest > 0) {
-        const daysDiff = (stats.dateRange.latest - stats.dateRange.earliest) / (1000 * 60 * 60 * 24)
-        stats.days = Math.max(1, Math.ceil(daysDiff))
-        stats.costPerDay = stats.totalCost / stats.days
-      }
-
-      displayStats(stats)
-    })
-  },
+  handler: async () => {},
 })
 
-function displayStats(stats: SessionStats) {
+export function displayStats(stats: SessionStats) {
   const width = 56
 
   function renderRow(label: string, value: string): string {

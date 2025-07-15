@@ -18,7 +18,7 @@
       "typescript": "5.8.2",
       "@types/node": "22.13.9",
       "zod": "3.25.49",
-      "ai": "5.0.0-beta.7"
+      "ai": "5.0.0-beta.18"
     }
   },
   "devDependencies": {
@@ -39,7 +39,5 @@
     "protobufjs",
     "sharp"
   ],
-  "patchedDependencies": {
-    "ai@4.3.16": "patches/ai@4.3.16.patch"
-  }
+  "patchedDependencies": {}
 }

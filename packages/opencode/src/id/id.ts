@@ -6,6 +6,7 @@ export namespace Identifier {
     session: "ses",
     message: "msg",
     user: "usr",
+    part: "prt",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
