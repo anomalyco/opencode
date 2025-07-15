@@ -124,7 +124,9 @@ export const RunCommand = cmd({
 
         if (part.type === "tool" && part.state.status === "completed") {
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-          printEvent(color, tool, part.state.title || "Unknown")
+          const title =
+            part.state.title || Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown"
+          printEvent(color, tool, title)
         }
 
         if (part.type === "text") {
