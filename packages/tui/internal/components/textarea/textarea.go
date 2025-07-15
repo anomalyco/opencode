@@ -530,6 +530,11 @@ type Model struct {
 
 	// rune sanitizer for input.
 	rsan Sanitizer
+
+	// History navigation fields
+	history []string
+	historyIndex int
+	historyModified bool
 }
 
 // New creates a new model with default settings.
@@ -555,6 +560,10 @@ func New() Model {
 		focus: false,
 		col:   0,
 		row:   0,
+		
+		history:         []string{},
+		historyIndex:    -1,
+		historyModified: false,
 	}
 
 	m.SetWidth(defaultWidth)
@@ -648,6 +657,13 @@ func (m *Model) updateVirtualCursorStyle() {
 func (m *Model) SetValue(s string) {
 	m.Reset()
 	m.InsertString(s)
+}
+
+// SetHistory sets the history for the textarea.
+func (m *Model) SetHistory(history []string) {
+	m.history = history
+	m.historyIndex = len(history)
+	m.historyModified = false
 }
 
 // InsertString inserts a string at the cursor position.
@@ -1145,6 +1161,7 @@ func (m *Model) Reset() {
 	m.col = 0
 	m.row = 0
 	m.SetCursorColumn(0)
+	m.historyModified = false
 }
 
 // san initializes or retrieves the rune sanitizer.
@@ -1600,13 +1617,23 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.CharacterForward):
 			m.characterRight()
 		case key.Matches(msg, m.KeyMap.LineNext):
-			m.CursorDown()
+			// Check if we should navigate history instead of moving cursor down
+			if m.shouldNavigateHistory() && msg.String() == "down" {
+				m.navigateHistoryDown()
+			} else {
+				m.CursorDown()
+			}
 		case key.Matches(msg, m.KeyMap.WordForward):
 			m.wordRight()
 		case key.Matches(msg, m.KeyMap.CharacterBackward):
 			m.characterLeft(false /* insideLine */)
 		case key.Matches(msg, m.KeyMap.LinePrevious):
-			m.CursorUp()
+			// Check if we should navigate history instead of moving cursor up
+			if m.shouldNavigateHistory() && msg.String() == "up" {
+				m.navigateHistoryUp()
+			} else {
+				m.CursorUp()
+			}
 		case key.Matches(msg, m.KeyMap.WordBackward):
 			m.wordLeft()
 		case key.Matches(msg, m.KeyMap.InputBegin):
@@ -1623,6 +1650,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.transposeLeft()
 
 		default:
+			// Mark history as modified when user types
+			if msg.Text != "" {
+				m.historyModified = true
+			}
 			m.InsertRunesFromUserInput([]rune(msg.Text))
 		}
 
@@ -2145,4 +2176,76 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// shouldNavigateHistory checks if the conditions are met for history navigation
+func (m *Model) shouldNavigateHistory() bool {
+	// Check if we have history
+	if len(m.history) == 0 {
+		return false
+	}
+	
+	// Check if input is not multiline (only one line)
+	if len(m.value) != 1 {
+		return false
+	}
+	
+	// Check if cursor is at the beginning or end of the input
+	if m.col != 0 && m.col != len(m.value[0]) {
+		return false
+	}
+	
+	// Check if input is empty or matches current history entry and not modified
+	if len(m.value[0]) == 0 {
+		return true
+	}
+	
+	// If history was modified, don't allow navigation
+	if m.historyModified {
+		return false
+	}
+	
+	// Check if current input matches the current history entry
+	if m.historyIndex >= 0 && m.historyIndex < len(m.history) {
+		currentValue := m.Value()
+		return currentValue == m.history[m.historyIndex]
+	}
+	
+	return false
+}
+
+// navigateHistoryUp moves to the previous item in history
+func (m *Model) navigateHistoryUp() {
+	if len(m.history) == 0 {
+		return
+	}
+	
+	if m.historyIndex > 0 {
+		m.historyIndex--
+		m.SetValue(m.history[m.historyIndex])
+		m.historyModified = false
+	} else if m.historyIndex == -1 || m.historyIndex == len(m.history) {
+		// Start from the most recent entry
+		m.historyIndex = len(m.history) - 1
+		m.SetValue(m.history[m.historyIndex])
+		m.historyModified = false
+	}
+}
+
+// navigateHistoryDown moves to the next item in history
+func (m *Model) navigateHistoryDown() {
+	if len(m.history) == 0 {
+		return
+	}
+	
+	if m.historyIndex < len(m.history)-1 {
+		m.historyIndex++
+		m.SetValue(m.history[m.historyIndex])
+		m.historyModified = false
+	} else {
+		// Clear the input when going past the last history item
+		m.historyIndex = len(m.history)
+		m.SetValue("")
+		m.historyModified = false
+	}
 }

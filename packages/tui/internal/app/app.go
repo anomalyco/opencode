@@ -48,6 +48,8 @@ type App struct {
 	IntitialMode     *string
 	compactCancel    context.CancelFunc
 	IsLeaderSequence bool
+	PromptHistory    []string
+	PromptHistoryIndex int
 }
 
 type SessionCreatedMsg = struct {
@@ -172,6 +174,8 @@ func New(
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
 		IntitialMode:  initialMode,
+		PromptHistory: []string{},
+		PromptHistoryIndex: -1,
 	}
 
 	return app, nil

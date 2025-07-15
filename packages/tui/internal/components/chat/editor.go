@@ -316,9 +316,16 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		})
 	}
 
+	// Add the prompt to history before clearing
+	m.app.PromptHistory = append(m.app.PromptHistory, value)
+	m.app.PromptHistoryIndex = len(m.app.PromptHistory)
+
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
+	
+	// Update textarea history to match app history
+	m.textarea.SetHistory(m.app.PromptHistory)
 
 	cmds = append(cmds, util.CmdHandler(app.SendMsg{Text: value, Attachments: fileParts}))
 	return m, tea.Batch(cmds...)
@@ -472,6 +479,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
 	ta = updateTextareaStyles(ta)
+	ta.SetHistory(app.PromptHistory)
 
 	m := &editorComponent{
 		app:                    app,
