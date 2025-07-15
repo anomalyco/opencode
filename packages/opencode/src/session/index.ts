@@ -644,41 +644,67 @@ export namespace Session {
       tools[key] = item
     }
 
-    const stream = streamText({
-      onError() {},
-      maxRetries: 10,
-      maxOutputTokens: outputLimit,
-      abortSignal: abort.signal,
-      stopWhen: stepCountIs(1000),
-      providerOptions: model.info.options,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
+    const config = await Config.state.get()
+    const retryConfig = config.retry || {}
+    const maxRetries = retryConfig.maxRetries ?? 20
+    const initialDelay = retryConfig.initialDelay ?? 1000
+    const maxDelay = retryConfig.maxDelay ?? 30000
+
+    let retryCount = 0
+
+    while (retryCount < maxRetries) {
+      try {
+        const stream = streamText({
+          onError() {},
+          maxRetries: 10,
+          maxOutputTokens: outputLimit,
+          abortSignal: abort.signal,
+          stopWhen: stepCountIs(1000),
+          providerOptions: model.info.options,
+          messages: [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...MessageV2.toModelMessage(msgs),
+          ],
+          temperature: model.info.temperature ? 0 : undefined,
+          tools: model.info.tool_call === false ? undefined : tools,
+          model: wrapLanguageModel({
+            model: model.language,
+            middleware: [
+              {
+                async transformParams(args) {
+                  if (args.type === "stream") {
+                    // @ts-expect-error
+                    args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
+                  }
+                  return args.params
+                },
+              },
+            ],
           }),
-        ),
-        ...MessageV2.toModelMessage(msgs),
-      ],
-      temperature: model.info.temperature ? 0 : undefined,
-      tools: model.info.tool_call === false ? undefined : tools,
-      model: wrapLanguageModel({
-        model: model.language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-    })
-    const result = await processor.process(stream)
-    return result
+        })
+        const result = await processor.process(stream)
+        return result
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("overloaded_error") && retryCount < maxRetries - 1) {
+          retryCount++
+          let delay = initialDelay * Math.pow(2, retryCount - 1)
+          if (delay > maxDelay) {
+            delay = maxDelay
+          }
+          const jitter = Math.random() * delay * 0.25
+          delay = Math.round(delay - jitter)
+          log.info("Retrying due to overloaded error", { attempt: retryCount, delay, maxRetries })
+          await new Promise((resolve) => setTimeout(resolve, delay))
+        } else {
+          throw error
+        }
+      }
+    }
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
@@ -891,6 +917,15 @@ export namespace Session {
               break
             case LoadAPIKeyError.isInstance(e):
               assistantMsg.error = new MessageV2.AuthError(
+                {
+                  providerID: model.id,
+                  message: e.message,
+                },
+                { cause: e },
+              ).toObject()
+              break
+            case e instanceof Error && e.message.includes("overloaded_error"):
+              assistantMsg.error = new MessageV2.OverloadedError(
                 {
                   providerID: model.id,
                   message: e.message,

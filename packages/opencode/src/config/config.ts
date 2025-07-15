@@ -123,11 +123,41 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
+  export const RetryConfig = z
+    .object({
+      maxRetries: z
+        .number()
+        .min(0)
+        .max(50)
+        .optional()
+        .default(20)
+        .describe("Maximum number of retry attempts for overloaded errors"),
+      initialDelay: z
+        .number()
+        .min(100)
+        .max(10000)
+        .optional()
+        .default(1000)
+        .describe("Initial delay in milliseconds before first retry"),
+      maxDelay: z
+        .number()
+        .min(1000)
+        .max(60000)
+        .optional()
+        .default(30000)
+        .describe("Maximum delay in milliseconds between retries"),
+    })
+    .strict()
+    .openapi({
+      ref: "RetryConfig",
+    })
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      retry: RetryConfig.optional().describe("Retry configuration for handling overloaded errors"),
       share: z
         .enum(["auto", "disabled"])
         .optional()

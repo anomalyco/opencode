@@ -15,6 +15,13 @@ export namespace MessageV2 {
       message: z.string(),
     }),
   )
+  export const OverloadedError = NamedError.create(
+    "ServiceOverloadedError",
+    z.object({
+      providerID: z.string(),
+      message: z.string(),
+    }),
+  )
 
   export const ToolStatePending = z
     .object({
@@ -186,6 +193,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        OverloadedError.Schema,
       ])
       .optional(),
     system: z.string().array(),
