@@ -498,6 +498,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Session = msg
 		a.app.Messages = messages
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
+	case app.SessionCreatedMsg:
+		a.app.Session = msg.Session
+		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
