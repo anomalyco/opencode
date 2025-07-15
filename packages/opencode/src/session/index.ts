@@ -230,8 +230,7 @@ export namespace Session {
       info: MessageV2.Info
       parts: MessageV2.Part[]
     }[]
-    const list = Storage.list("session/message/" + sessionID)
-    for await (const p of list) {
+    for (const p of await Storage.list("session/message/" + sessionID)) {
       const read = await Storage.readJSON<MessageV2.Info>(p)
       result.push({
         info: read,
@@ -248,7 +247,7 @@ export namespace Session {
 
   export async function parts(sessionID: string, messageID: string) {
     const result = [] as MessageV2.Part[]
-    for await (const item of Storage.list("session/part/" + sessionID + "/" + messageID)) {
+    for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
       const read = await Storage.readJSON<MessageV2.Part>(item)
       result.push(read)
     }
@@ -257,7 +256,7 @@ export namespace Session {
   }
 
   export async function* list() {
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       yield get(sessionID)
     }
@@ -265,7 +264,7 @@ export namespace Session {
 
   export async function children(parentID: string) {
     const result = [] as Session.Info[]
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       const session = await get(sessionID)
       if (session.parentID !== parentID) continue
