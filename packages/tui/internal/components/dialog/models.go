@@ -23,6 +23,7 @@ const (
 	numVisibleModels = 10
 	minDialogWidth   = 40
 	maxDialogWidth   = 80
+	maxRecentModels  = 5
 )
 
 // ModelDialog interface for the model selection dialog
@@ -318,7 +319,7 @@ func (m *modelDialog) buildGroupedResults() []list.Item {
 	var items []list.Item
 
 	// Add Recent section
-	recentModels := m.getRecentModels(5)
+	recentModels := m.getRecentModels(maxRecentModels)
 	if len(recentModels) > 0 {
 		items = append(items, list.HeaderItem("Recent"))
 		for _, model := range recentModels {
@@ -415,7 +416,7 @@ func (m *modelDialog) isModelInRecentSection(model ModelWithProvider, index int)
 		return false
 	}
 
-	recentModels := m.getRecentModels(5)
+	recentModels := m.getRecentModels(maxRecentModels)
 	if len(recentModels) == 0 {
 		return false
 	}
