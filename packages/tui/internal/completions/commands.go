@@ -8,7 +8,6 @@ import (
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
-	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
@@ -17,7 +16,7 @@ type CommandCompletionProvider struct {
 	app *app.App
 }
 
-func NewCommandCompletionProvider(app *app.App) dialog.CompletionProvider {
+func NewCommandCompletionProvider(app *app.App) CompletionProvider {
 	return &CommandCompletionProvider{app: app}
 }
 
@@ -32,24 +31,28 @@ func (c *CommandCompletionProvider) GetEmptyMessage() string {
 func (c *CommandCompletionProvider) getCommandCompletionItem(
 	cmd commands.Command,
 	space int,
-	t theme.Theme,
-) dialog.CompletionItemI {
-	spacer := strings.Repeat(" ", space)
-	title := "  /" + cmd.PrimaryTrigger() + styles.NewStyle().
-		Foreground(t.TextMuted()).
-		Render(spacer+cmd.Description)
+) CompletionSuggestion {
+	displayFunc := func(s styles.Style) string {
+		t := theme.CurrentTheme()
+		spacer := strings.Repeat(" ", space)
+		display := "  /" + cmd.PrimaryTrigger() + s.
+			Foreground(t.TextMuted()).
+			Render(spacer+cmd.Description)
+		return display
+	}
+
 	value := string(cmd.Name)
-	return dialog.NewCompletionItem(dialog.CompletionItem{
-		Title:      title,
+	return CompletionSuggestion{
+		Display:    displayFunc,
 		Value:      value,
 		ProviderID: c.GetId(),
-	}, dialog.WithBackgroundColor(t.BackgroundElement()))
+		RawData:    cmd,
+	}
 }
 
 func (c *CommandCompletionProvider) GetChildEntries(
 	query string,
-) ([]dialog.CompletionItemI, error) {
-	t := theme.CurrentTheme()
+) ([]CompletionSuggestion, error) {
 	commands := c.app.Commands
 
 	space := 1
@@ -63,20 +66,20 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	sorted := commands.Sorted()
 	if query == "" {
 		// If no query, return all commands
-		items := []dialog.CompletionItemI{}
+		items := []CompletionSuggestion{}
 		for _, cmd := range sorted {
 			if !cmd.HasTrigger() {
 				continue
 			}
 			space := space - lipgloss.Width(cmd.PrimaryTrigger())
-			items = append(items, c.getCommandCompletionItem(cmd, space, t))
+			items = append(items, c.getCommandCompletionItem(cmd, space))
 		}
 		return items, nil
 	}
 
 	// Use fuzzy matching for commands
 	var commandNames []string
-	commandMap := make(map[string]dialog.CompletionItemI)
+	commandMap := make(map[string]CompletionSuggestion)
 
 	for _, cmd := range sorted {
 		if !cmd.HasTrigger() {
@@ -86,7 +89,7 @@ func (c *CommandCompletionProvider) GetChildEntries(
 		// Add all triggers as searchable options
 		for _, trigger := range cmd.Trigger {
 			commandNames = append(commandNames, trigger)
-			commandMap[trigger] = c.getCommandCompletionItem(cmd, space, t)
+			commandMap[trigger] = c.getCommandCompletionItem(cmd, space)
 		}
 	}
 
@@ -97,13 +100,13 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	sort.Sort(matches)
 
 	// Convert matches to completion items, deduplicating by command name
-	items := []dialog.CompletionItemI{}
+	items := []CompletionSuggestion{}
 	seen := make(map[string]bool)
 	for _, match := range matches {
 		if item, ok := commandMap[match.Target]; ok {
 			// Use the command's value (name) as the deduplication key
-			if !seen[item.GetValue()] {
-				seen[item.GetValue()] = true
+			if !seen[item.Value] {
+				seen[item.Value] = true
 				items = append(items, item)
 			}
 		}

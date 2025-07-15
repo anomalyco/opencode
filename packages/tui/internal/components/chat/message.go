@@ -305,10 +305,8 @@ func renderToolDetails(
 		return ""
 	}
 
-	if toolCall.State.Status == opencode.ToolPartStateStatusPending ||
-		toolCall.State.Status == opencode.ToolPartStateStatusRunning {
+	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolTitle(toolCall, width)
-		title = styles.NewStyle().Width(width - 6).Render(title)
 		return renderContentBlock(app, title, highlight, width)
 	}
 
@@ -339,11 +337,14 @@ func renderToolDetails(
 		borderColor = t.BorderActive()
 	}
 
-	if toolCall.State.Status == opencode.ToolPartStateStatusCompleted {
+	if toolCall.State.Metadata != nil {
 		metadata := toolCall.State.Metadata.(map[string]any)
 		switch toolCall.Tool {
 		case "read":
-			preview := metadata["preview"]
+			var preview any
+			if metadata != nil {
+				preview = metadata["preview"]
+			}
 			if preview != nil && toolInputMap["filePath"] != nil {
 				filename := toolInputMap["filePath"].(string)
 				body = preview.(string)
@@ -351,7 +352,10 @@ func renderToolDetails(
 			}
 		case "edit":
 			if filename, ok := toolInputMap["filePath"].(string); ok {
-				diffField := metadata["diff"]
+				var diffField any
+				if metadata != nil {
+					diffField = metadata["diff"]
+				}
 				if diffField != nil {
 					patch := diffField.(string)
 					var formattedDiff string
@@ -439,19 +443,17 @@ func renderToolDetails(
 			if summary != nil {
 				toolcalls := summary.([]any)
 				steps := []string{}
-				for _, toolcall := range toolcalls {
-					call := toolcall.(map[string]any)
-					if toolInvocation, ok := call["toolInvocation"].(map[string]any); ok {
-						data, _ := json.Marshal(toolInvocation)
-						var toolCall opencode.ToolPart
-						_ = json.Unmarshal(data, &toolCall)
-						step := renderToolTitle(toolCall, width)
-						step = "∟ " + step
-						steps = append(steps, step)
-					}
+				for _, item := range toolcalls {
+					data, _ := json.Marshal(item)
+					var toolCall opencode.ToolPart
+					_ = json.Unmarshal(data, &toolCall)
+					step := renderToolTitle(toolCall, width)
+					step = "∟ " + step
+					steps = append(steps, step)
 				}
 				body = strings.Join(steps, "\n")
 			}
+			body = styles.NewStyle().Width(width - 6).Render(body)
 		default:
 			if result == nil {
 				empty := ""
@@ -539,10 +541,9 @@ func renderToolTitle(
 	toolCall opencode.ToolPart,
 	width int,
 ) string {
-	// TODO: handle truncate to width
-
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
-		return renderToolAction(toolCall.Tool)
+		title := renderToolAction(toolCall.Tool)
+		return styles.NewStyle().Width(width - 6).Render(title)
 	}
 
 	toolArgs := ""
@@ -596,7 +597,7 @@ func renderToolTitle(
 func renderToolAction(name string) string {
 	switch name {
 	case "task":
-		return "Searching..."
+		return "Planning..."
 	case "bash":
 		return "Writing command..."
 	case "edit":

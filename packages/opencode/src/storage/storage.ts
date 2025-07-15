@@ -129,7 +129,7 @@ export namespace Storage {
           cwd: path.join(dir, prefix),
           onlyFiles: true,
         }),
-      )
+      ).then((items) => items.map((item) => path.join(prefix, item.slice(0, -5))))
       result.sort()
       return result
     } catch {

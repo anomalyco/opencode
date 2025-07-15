@@ -17,11 +17,13 @@
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
     "@ai-sdk/anthropic": "1.2.12",
+    "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
     "@types/bun": "latest",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "typescript": "catalog:",
+    "vscode-languageserver-types": "3.17.5",
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {

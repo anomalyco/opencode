@@ -5,17 +5,88 @@ import (
 
 	"github.com/charmbracelet/bubbles/v2/key"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
 
-type ListItem interface {
-	Render(selected bool, width int, isFirstInViewport bool) string
+// Item interface that all list items must implement
+type Item interface {
+	Render(selected bool, width int, baseStyle styles.Style) string
 	Selectable() bool
 }
 
-type List[T ListItem] interface {
+// RenderFunc defines how to render an item in the list
+type RenderFunc[T any] func(item T, selected bool, width int, baseStyle styles.Style) string
+
+// SelectableFunc defines whether an item is selectable
+type SelectableFunc[T any] func(item T) bool
+
+// Options holds configuration for the list component
+type Options[T any] struct {
+	items               []T
+	maxVisibleHeight    int
+	fallbackMsg         string
+	useAlphaNumericKeys bool
+	renderItem          RenderFunc[T]
+	isSelectable        SelectableFunc[T]
+	baseStyle           styles.Style
+}
+
+// Option is a function that configures the list component
+type Option[T any] func(*Options[T])
+
+// WithItems sets the initial items for the list
+func WithItems[T any](items []T) Option[T] {
+	return func(o *Options[T]) {
+		o.items = items
+	}
+}
+
+// WithMaxVisibleHeight sets the maximum visible height in lines
+func WithMaxVisibleHeight[T any](height int) Option[T] {
+	return func(o *Options[T]) {
+		o.maxVisibleHeight = height
+	}
+}
+
+// WithFallbackMessage sets the message to show when the list is empty
+func WithFallbackMessage[T any](msg string) Option[T] {
+	return func(o *Options[T]) {
+		o.fallbackMsg = msg
+	}
+}
+
+// WithAlphaNumericKeys enables j/k navigation keys
+func WithAlphaNumericKeys[T any](enabled bool) Option[T] {
+	return func(o *Options[T]) {
+		o.useAlphaNumericKeys = enabled
+	}
+}
+
+// WithRenderFunc sets the function to render items
+func WithRenderFunc[T any](fn RenderFunc[T]) Option[T] {
+	return func(o *Options[T]) {
+		o.renderItem = fn
+	}
+}
+
+// WithSelectableFunc sets the function to determine if items are selectable
+func WithSelectableFunc[T any](fn SelectableFunc[T]) Option[T] {
+	return func(o *Options[T]) {
+		o.isSelectable = fn
+	}
+}
+
+// WithStyle sets the base style that gets passed to render functions
+func WithStyle[T any](style styles.Style) Option[T] {
+	return func(o *Options[T]) {
+		o.baseStyle = style
+	}
+}
+
+type List[T any] interface {
 	tea.Model
 	tea.ViewModel
 	SetMaxWidth(maxWidth int)
@@ -25,19 +96,21 @@ type List[T ListItem] interface {
 	SetSelectedIndex(idx int)
 	SetEmptyMessage(msg string)
 	IsEmpty() bool
-	GetMaxVisibleItems() int
-	GetActualHeight() int
+	GetMaxVisibleHeight() int
 }
 
-type listComponent[T ListItem] struct {
+type listComponent[T any] struct {
 	fallbackMsg         string
 	items               []T
 	selectedIdx         int
 	maxWidth            int
-	maxVisibleItems     int
+	maxVisibleHeight    int
 	useAlphaNumericKeys bool
 	width               int
 	height              int
+	renderItem          RenderFunc[T]
+	isSelectable        SelectableFunc[T]
+	baseStyle           styles.Style
 }
 
 type listKeyMap struct {
@@ -94,7 +167,7 @@ func (c *listComponent[T]) moveUp() {
 
 	// Find the previous selectable item
 	for i := c.selectedIdx - 1; i >= 0; i-- {
-		if c.items[i].Selectable() {
+		if c.isSelectable(c.items[i]) {
 			c.selectedIdx = i
 			return
 		}
@@ -117,7 +190,7 @@ func (c *listComponent[T]) moveDown() {
 			break
 		}
 
-		if c.items[c.selectedIdx].Selectable() {
+		if c.isSelectable(c.items[c.selectedIdx]) {
 			return
 		}
 
@@ -129,7 +202,7 @@ func (c *listComponent[T]) moveDown() {
 }
 
 func (c *listComponent[T]) GetSelectedItem() (T, int) {
-	if len(c.items) > 0 && c.items[c.selectedIdx].Selectable() {
+	if len(c.items) > 0 && c.isSelectable(c.items[c.selectedIdx]) {
 		return c.items[c.selectedIdx], c.selectedIdx
 	}
 
@@ -142,7 +215,7 @@ func (c *listComponent[T]) SetItems(items []T) {
 	c.selectedIdx = 0
 
 	// Ensure initial selection is on a selectable item
-	if len(items) > 0 && !items[0].Selectable() {
+	if len(items) > 0 && !c.isSelectable(items[0]) {
 		c.moveDown()
 	}
 }
@@ -169,48 +242,8 @@ func (c *listComponent[T]) SetSelectedIndex(idx int) {
 	}
 }
 
-func (c *listComponent[T]) GetMaxVisibleItems() int {
-	return c.maxVisibleItems
-}
-
-func (c *listComponent[T]) GetActualHeight() int {
-	items := c.items
-	if len(items) == 0 {
-		return 1 // For empty message
-	}
-
-	maxVisibleItems := min(c.maxVisibleItems, len(items))
-	startIdx := 0
-
-	if len(items) > maxVisibleItems {
-		halfVisible := maxVisibleItems / 2
-		if c.selectedIdx >= halfVisible && c.selectedIdx < len(items)-halfVisible {
-			startIdx = c.selectedIdx - halfVisible
-		} else if c.selectedIdx >= len(items)-halfVisible {
-			startIdx = len(items) - maxVisibleItems
-		}
-	}
-
-	endIdx := min(startIdx+maxVisibleItems, len(items))
-
-	height := 0
-	for i := startIdx; i < endIdx; i++ {
-		item := items[i]
-		isFirstInViewport := (i == startIdx)
-
-		// Check if this is a HeaderItem and calculate its height
-		if _, ok := any(item).(HeaderItem); ok {
-			if isFirstInViewport {
-				height += 1 // No top margin
-			} else {
-				height += 2 // With top margin
-			}
-		} else {
-			height += 1 // Regular items take 1 line
-		}
-	}
-
-	return height
+func (c *listComponent[T]) GetMaxVisibleHeight() int {
+	return c.maxVisibleHeight
 }
 
 func (c *listComponent[T]) View() string {
@@ -224,95 +257,88 @@ func (c *listComponent[T]) View() string {
 		return c.fallbackMsg
 	}
 
-	// Calculate viewport based on actual heights, not item counts
+	// Calculate viewport based on actual heights
 	startIdx, endIdx := c.calculateViewport()
 
 	listItems := make([]string, 0, endIdx-startIdx)
 
 	for i := startIdx; i < endIdx; i++ {
 		item := items[i]
-		isFirstInViewport := (i == startIdx)
-		title := item.Render(i == c.selectedIdx, maxWidth, isFirstInViewport)
+
+		// Special handling for HeaderItem to remove top margin on first item
+		if i == startIdx {
+			// Check if this is a HeaderItem
+			if _, ok := any(item).(Item); ok {
+				if headerItem, isHeader := any(item).(HeaderItem); isHeader {
+					// Render header without top margin when it's first
+					t := theme.CurrentTheme()
+					truncatedStr := truncate.StringWithTail(string(headerItem), uint(maxWidth-1), "...")
+					headerStyle := c.baseStyle.
+						Foreground(t.Accent()).
+						Bold(true).
+						MarginBottom(0).
+						PaddingLeft(1)
+					listItems = append(listItems, headerStyle.Render(truncatedStr))
+					continue
+				}
+			}
+		}
+
+		title := c.renderItem(item, i == c.selectedIdx, maxWidth, c.baseStyle)
 		listItems = append(listItems, title)
 	}
 
 	return strings.Join(listItems, "\n")
 }
 
-// calculateViewport determines which items to show based on available height
+// calculateViewport determines which items to show based on available space
 func (c *listComponent[T]) calculateViewport() (startIdx, endIdx int) {
 	items := c.items
 	if len(items) == 0 {
 		return 0, 0
 	}
 
-	// Helper function to calculate height of an item at given position
-	getItemHeight := func(idx int, isFirst bool) int {
-		if _, ok := any(items[idx]).(HeaderItem); ok {
-			if isFirst {
-				return 1 // No top margin
-			} else {
-				return 2 // With top margin
-			}
-		}
-		return 1 // Regular items
+	// Calculate heights of all items
+	itemHeights := make([]int, len(items))
+	for i, item := range items {
+		rendered := c.renderItem(item, false, c.maxWidth, c.baseStyle)
+		itemHeights[i] = lipgloss.Height(rendered)
 	}
 
-	// If we have fewer items than max, show all
-	if len(items) <= c.maxVisibleItems {
-		return 0, len(items)
+	// Find the range of items that fit within maxVisibleHeight
+	// Start by trying to center the selected item
+	start := 0
+	end := len(items)
+
+	// Calculate height from start to selected
+	heightToSelected := 0
+	for i := 0; i <= c.selectedIdx && i < len(items); i++ {
+		heightToSelected += itemHeights[i]
 	}
 
-	// Try to center the selected item in the viewport
-	// Start by trying to put selected item in the middle
-	targetStart := c.selectedIdx - c.maxVisibleItems/2
-	if targetStart < 0 {
-		targetStart = 0
-	}
+	// If selected item is beyond visible height, scroll to show it
+	if heightToSelected > c.maxVisibleHeight {
+		// Start from selected and work backwards to find start
+		currentHeight := itemHeights[c.selectedIdx]
+		start = c.selectedIdx
 
-	// Find the actual start and end indices that fit within our height budget
-	bestStart := 0
-	bestEnd := 0
-	bestHeight := 0
-
-	// Try different starting positions around our target
-	for start := max(0, targetStart-2); start <= min(len(items)-1, targetStart+2); start++ {
-		currentHeight := 0
-		end := start
-
-		for end < len(items) && currentHeight < c.maxVisibleItems {
-			itemHeight := getItemHeight(end, end == start)
-			if currentHeight+itemHeight > c.maxVisibleItems {
-				break
-			}
-			currentHeight += itemHeight
-			end++
-		}
-
-		// Check if this viewport contains the selected item and is better than current best
-		if start <= c.selectedIdx && c.selectedIdx < end {
-			if currentHeight > bestHeight || (currentHeight == bestHeight && abs(start+end-2*c.selectedIdx) < abs(bestStart+bestEnd-2*c.selectedIdx)) {
-				bestStart = start
-				bestEnd = end
-				bestHeight = currentHeight
-			}
+		for i := c.selectedIdx - 1; i >= 0 && currentHeight+itemHeights[i] <= c.maxVisibleHeight; i-- {
+			currentHeight += itemHeights[i]
+			start = i
 		}
 	}
 
-	// If no good viewport found that contains selected item, just show from selected item
-	if bestEnd == 0 {
-		bestStart = c.selectedIdx
-		currentHeight := 0
-		for bestEnd = bestStart; bestEnd < len(items) && currentHeight < c.maxVisibleItems; bestEnd++ {
-			itemHeight := getItemHeight(bestEnd, bestEnd == bestStart)
-			if currentHeight+itemHeight > c.maxVisibleItems {
-				break
-			}
-			currentHeight += itemHeight
+	// Calculate end based on start
+	currentHeight := 0
+	for i := start; i < len(items); i++ {
+		if currentHeight+itemHeights[i] > c.maxVisibleHeight {
+			end = i
+			break
 		}
+		currentHeight += itemHeights[i]
 	}
 
-	return bestStart, bestEnd
+	return start, end
 }
 
 func abs(x int) int {
@@ -329,27 +355,32 @@ func max(a, b int) int {
 	return b
 }
 
-func NewListComponent[T ListItem](
-	items []T,
-	maxVisibleItems int,
-	fallbackMsg string,
-	useAlphaNumericKeys bool,
-) List[T] {
+func NewListComponent[T any](opts ...Option[T]) List[T] {
+	options := &Options[T]{
+		baseStyle: styles.NewStyle(), // Default empty style
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return &listComponent[T]{
-		fallbackMsg:         fallbackMsg,
-		items:               items,
-		maxVisibleItems:     maxVisibleItems,
-		useAlphaNumericKeys: useAlphaNumericKeys,
+		fallbackMsg:         options.fallbackMsg,
+		items:               options.items,
+		maxVisibleHeight:    options.maxVisibleHeight,
+		useAlphaNumericKeys: options.useAlphaNumericKeys,
 		selectedIdx:         0,
+		renderItem:          options.renderItem,
+		isSelectable:        options.isSelectable,
+		baseStyle:           options.baseStyle,
 	}
 }
 
-// StringItem is a simple implementation of ListItem for string values
+// StringItem is a simple implementation of Item for string values
 type StringItem string
 
-func (s StringItem) Render(selected bool, width int, isFirstInViewport bool) string {
+func (s StringItem) Render(selected bool, width int, baseStyle styles.Style) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle()
 
 	truncatedStr := truncate.StringWithTail(string(s), uint(width-1), "...")
 
@@ -376,22 +407,17 @@ func (s StringItem) Selectable() bool {
 // HeaderItem is a non-selectable header item for grouping
 type HeaderItem string
 
-func (h HeaderItem) Render(selected bool, width int, isFirstInViewport bool) string {
+func (h HeaderItem) Render(selected bool, width int, baseStyle styles.Style) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle()
 
 	truncatedStr := truncate.StringWithTail(string(h), uint(width-1), "...")
 
 	headerStyle := baseStyle.
 		Foreground(t.Accent()).
 		Bold(true).
+		MarginTop(1).
 		MarginBottom(0).
 		PaddingLeft(1)
-
-	// Only add top margin if this is not the first item in the viewport
-	if !isFirstInViewport {
-		headerStyle = headerStyle.MarginTop(1)
-	}
 
 	return headerStyle.Render(truncatedStr)
 }
@@ -400,16 +426,6 @@ func (h HeaderItem) Selectable() bool {
 	return false
 }
 
-// NewStringList creates a new list component with string items
-func NewStringList(
-	items []string,
-	maxVisibleItems int,
-	fallbackMsg string,
-	useAlphaNumericKeys bool,
-) List[StringItem] {
-	stringItems := make([]StringItem, len(items))
-	for i, item := range items {
-		stringItems[i] = StringItem(item)
-	}
-	return NewListComponent(stringItems, maxVisibleItems, fallbackMsg, useAlphaNumericKeys)
-}
+// Ensure StringItem and HeaderItem implement Item
+var _ Item = StringItem("")
+var _ Item = HeaderItem("")

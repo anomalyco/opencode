@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode/internal/styles"
 )
 
 // testItem is a simple test implementation of ListItem
@@ -11,8 +12,17 @@ type testItem struct {
 	value string
 }
 
-func (t testItem) Render(selected bool, width int) string {
+func (t testItem) Render(
+	selected bool,
+	width int,
+	isFirstInViewport bool,
+	baseStyle styles.Style,
+) string {
 	return t.value
+}
+
+func (t testItem) Selectable() bool {
+	return true
 }
 
 // createTestList creates a list with test items for testing
@@ -22,7 +32,24 @@ func createTestList() *listComponent[testItem] {
 		{value: "item2"},
 		{value: "item3"},
 	}
-	list := NewListComponent(items, 5, "empty", false)
+	list := NewListComponent(
+		WithItems(items),
+		WithMaxVisibleItems[testItem](5),
+		WithFallbackMessage[testItem]("empty"),
+		WithAlphaNumericKeys[testItem](false),
+		WithRenderFunc(
+			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
+				return item.Render(selected, width, false, baseStyle)
+			},
+		),
+		WithSelectableFunc(func(item testItem) bool {
+			return item.Selectable()
+		}),
+		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
+			return 1
+		}),
+	)
+
 	return list.(*listComponent[testItem])
 }
 
@@ -55,7 +82,23 @@ func TestJKKeyNavigation(t *testing.T) {
 		{value: "item3"},
 	}
 	// Create list with alpha keys enabled
-	list := NewListComponent(items, 5, "empty", true).(*listComponent[testItem])
+	list := NewListComponent(
+		WithItems(items),
+		WithMaxVisibleItems[testItem](5),
+		WithFallbackMessage[testItem]("empty"),
+		WithAlphaNumericKeys[testItem](true),
+		WithRenderFunc(
+			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
+				return item.Render(selected, width, false, baseStyle)
+			},
+		),
+		WithSelectableFunc(func(item testItem) bool {
+			return item.Selectable()
+		}),
+		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
+			return 1
+		}),
+	)
 
 	// Test j key (down)
 	jKey := tea.KeyPressMsg{Code: 'j', Text: "j"}
@@ -131,7 +174,23 @@ func TestNavigationBoundaries(t *testing.T) {
 }
 
 func TestEmptyList(t *testing.T) {
-	emptyList := NewListComponent([]testItem{}, 5, "empty", false).(*listComponent[testItem])
+	emptyList := NewListComponent(
+		WithItems([]testItem{}),
+		WithMaxVisibleItems[testItem](5),
+		WithFallbackMessage[testItem]("empty"),
+		WithAlphaNumericKeys[testItem](false),
+		WithRenderFunc(
+			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
+				return item.Render(selected, width, false, baseStyle)
+			},
+		),
+		WithSelectableFunc(func(item testItem) bool {
+			return item.Selectable()
+		}),
+		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
+			return 1
+		}),
+	)
 
 	// Test navigation on empty list (should not crash)
 	downKey := tea.KeyPressMsg{Code: tea.KeyDown}

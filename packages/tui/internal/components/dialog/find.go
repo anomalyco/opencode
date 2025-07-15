@@ -4,9 +4,12 @@ import (
 	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
+	"github.com/sst/opencode/internal/styles"
+	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
 
@@ -25,11 +28,39 @@ type FindDialog interface {
 	IsEmpty() bool
 }
 
+// findItem is a custom list item for file suggestions
+type findItem struct {
+	suggestion completions.CompletionSuggestion
+}
+
+func (f findItem) Render(
+	selected bool,
+	width int,
+	baseStyle styles.Style,
+) string {
+	t := theme.CurrentTheme()
+
+	itemStyle := baseStyle.
+		Background(t.BackgroundPanel()).
+		Foreground(t.TextMuted())
+
+	if selected {
+		itemStyle = itemStyle.Foreground(t.Primary())
+	}
+
+	return itemStyle.PaddingLeft(1).Render(f.suggestion.Display(itemStyle))
+}
+
+func (f findItem) Selectable() bool {
+	return true
+}
+
 type findDialogComponent struct {
-	completionProvider CompletionProvider
+	completionProvider completions.CompletionProvider
 	width, height      int
 	modal              *modal.Modal
 	searchDialog       *SearchDialog
+	suggestions        []completions.CompletionSuggestion
 }
 
 func (f *findDialogComponent) Init() tea.Cmd {
@@ -38,19 +69,20 @@ func (f *findDialogComponent) Init() tea.Cmd {
 
 func (f *findDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case []CompletionItemI:
-		// Convert CompletionItemI to list.ListItem
-		items := make([]list.ListItem, len(msg))
-		for i, item := range msg {
-			items[i] = item
+	case []completions.CompletionSuggestion:
+		// Store suggestions and convert to findItem for the search dialog
+		f.suggestions = msg
+		items := make([]list.Item, len(msg))
+		for i, suggestion := range msg {
+			items[i] = findItem{suggestion: suggestion}
 		}
 		f.searchDialog.SetItems(items)
 		return f, nil
 
 	case SearchSelectionMsg:
-		// Handle selection from search dialog
-		if item, ok := msg.Item.(CompletionItemI); ok {
-			return f, f.selectFile(item)
+		// Handle selection from search dialog - now we can directly access the suggestion
+		if item, ok := msg.Item.(findItem); ok {
+			return f, f.selectFile(item.suggestion)
 		}
 		return f, nil
 
@@ -91,11 +123,11 @@ func (f *findDialogComponent) IsEmpty() bool {
 	return f.searchDialog.GetQuery() == ""
 }
 
-func (f *findDialogComponent) selectFile(item CompletionItemI) tea.Cmd {
+func (f *findDialogComponent) selectFile(item completions.CompletionSuggestion) tea.Cmd {
 	return tea.Sequence(
 		f.Close(),
 		util.CmdHandler(FindSelectedMsg{
-			FilePath: item.GetValue(),
+			FilePath: item.Value,
 		}),
 	)
 }
@@ -110,8 +142,18 @@ func (f *findDialogComponent) Close() tea.Cmd {
 	return util.CmdHandler(modal.CloseModalMsg{})
 }
 
-func NewFindDialog(completionProvider CompletionProvider) FindDialog {
+func NewFindDialog(completionProvider completions.CompletionProvider) FindDialog {
 	searchDialog := NewSearchDialog("Search files...", 10)
+
+	component := &findDialogComponent{
+		completionProvider: completionProvider,
+		searchDialog:       searchDialog,
+		suggestions:        []completions.CompletionSuggestion{},
+		modal: modal.New(
+			modal.WithTitle("Find Files"),
+			modal.WithMaxWidth(80),
+		),
+	}
 
 	// Initialize with empty query to get initial items
 	go func() {
@@ -120,20 +162,14 @@ func NewFindDialog(completionProvider CompletionProvider) FindDialog {
 			slog.Error("Failed to get completion items", "error", err)
 			return
 		}
-		// Convert CompletionItemI to list.ListItem
-		listItems := make([]list.ListItem, len(items))
+		// Store suggestions and convert to findItem
+		component.suggestions = items
+		listItems := make([]list.Item, len(items))
 		for i, item := range items {
-			listItems[i] = item
+			listItems[i] = findItem{suggestion: item}
 		}
 		searchDialog.SetItems(listItems)
 	}()
 
-	return &findDialogComponent{
-		completionProvider: completionProvider,
-		searchDialog:       searchDialog,
-		modal: modal.New(
-			modal.WithTitle("Find Files"),
-			modal.WithMaxWidth(80),
-		),
-	}
+	return component
 }

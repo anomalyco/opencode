@@ -9,14 +9,13 @@ import (
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
-	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 )
 
 type filesContextGroup struct {
 	app      *app.App
-	gitFiles []dialog.CompletionItemI
+	gitFiles []CompletionSuggestion
 }
 
 func (cg *filesContextGroup) GetId() string {
@@ -27,12 +26,8 @@ func (cg *filesContextGroup) GetEmptyMessage() string {
 	return "no matching files"
 }
 
-func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
-	t := theme.CurrentTheme()
-	items := make([]dialog.CompletionItemI, 0)
-	base := styles.NewStyle().Background(t.BackgroundElement())
-	green := base.Foreground(t.Success()).Render
-	red := base.Foreground(t.Error()).Render
+func (cg *filesContextGroup) getGitFiles() []CompletionSuggestion {
+	items := make([]CompletionSuggestion, 0)
 
 	status, _ := cg.app.Client.File.Status(context.Background())
 	if status != nil {
@@ -42,21 +37,25 @@ func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
 		})
 
 		for _, file := range files {
-			title := file.Path
-			if file.Added > 0 {
-				title += green(" +" + strconv.Itoa(int(file.Added)))
+			displayFunc := func(s styles.Style) string {
+				t := theme.CurrentTheme()
+				green := s.Foreground(t.Success()).Render
+				red := s.Foreground(t.Error()).Render
+				display := file.Path
+				if file.Added > 0 {
+					display += green(" +" + strconv.Itoa(int(file.Added)))
+				}
+				if file.Removed > 0 {
+					display += red(" -" + strconv.Itoa(int(file.Removed)))
+				}
+				return display
 			}
-			if file.Removed > 0 {
-				title += red(" -" + strconv.Itoa(int(file.Removed)))
-			}
-			item := dialog.NewCompletionItem(dialog.CompletionItem{
-				Title:      title,
+			item := CompletionSuggestion{
+				Display:    displayFunc,
 				Value:      file.Path,
 				ProviderID: cg.GetId(),
-				Raw:        file,
-			},
-				dialog.WithBackgroundColor(t.BackgroundElement()),
-			)
+				RawData:    file,
+			}
 			items = append(items, item)
 		}
 	}
@@ -66,8 +65,8 @@ func (cg *filesContextGroup) getGitFiles() []dialog.CompletionItemI {
 
 func (cg *filesContextGroup) GetChildEntries(
 	query string,
-) ([]dialog.CompletionItemI, error) {
-	items := make([]dialog.CompletionItemI, 0)
+) ([]CompletionSuggestion, error) {
+	items := make([]CompletionSuggestion, 0)
 
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -89,7 +88,7 @@ func (cg *filesContextGroup) GetChildEntries(
 	for _, file := range *files {
 		exists := false
 		for _, existing := range cg.gitFiles {
-			if existing.GetValue() == file {
+			if existing.Value == file {
 				if query != "" {
 					items = append(items, existing)
 				}
@@ -97,14 +96,18 @@ func (cg *filesContextGroup) GetChildEntries(
 			}
 		}
 		if !exists {
-			item := dialog.NewCompletionItem(dialog.CompletionItem{
-				Title:      file,
+			displayFunc := func(s styles.Style) string {
+				// t := theme.CurrentTheme()
+				// return s.Foreground(t.Text()).Render(file)
+				return s.Render(file)
+			}
+
+			item := CompletionSuggestion{
+				Display:    displayFunc,
 				Value:      file,
 				ProviderID: cg.GetId(),
-				Raw:        file,
-			},
-				dialog.WithBackgroundColor(theme.CurrentTheme().BackgroundElement()),
-			)
+				RawData:    file,
+			}
 			items = append(items, item)
 		}
 	}
@@ -112,7 +115,7 @@ func (cg *filesContextGroup) GetChildEntries(
 	return items, nil
 }
 
-func NewFileContextGroup(app *app.App) dialog.CompletionProvider {
+func NewFileContextGroup(app *app.App) CompletionProvider {
 	cg := &filesContextGroup{
 		app: app,
 	}

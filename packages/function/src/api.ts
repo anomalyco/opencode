@@ -232,6 +232,9 @@ export default {
       )
     }
 
+    /**
+     * Used by the GitHub action to get GitHub installation access token given the OIDC token
+     */
     if (request.method === "POST" && method === "exchange_github_app_token") {
       const EXPECTED_AUDIENCE = "opencode-github-action"
       const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
@@ -281,6 +284,38 @@ export default {
       const installationAuth = await auth({ type: "installation", installationId: installation.id })
 
       return new Response(JSON.stringify({ token: installationAuth.token }), {
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    /**
+     * Used by the opencode CLI to check if the GitHub app is installed
+     */
+    if (request.method === "GET" && method === "get_github_app_installation") {
+      const owner = url.searchParams.get("owner")
+      const repo = url.searchParams.get("repo")
+
+      const auth = createAppAuth({
+        appId: Resource.GITHUB_APP_ID.value,
+        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+      })
+      const appAuth = await auth({ type: "app" })
+
+      // Lookup installation
+      const octokit = new Octokit({ auth: appAuth.token })
+      let installation
+      try {
+        const ret = await octokit.apps.getRepoInstallation({ owner, repo })
+        installation = ret.data
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("Not Found")) {
+          // not installed
+        } else {
+          throw err
+        }
+      }
+
+      return new Response(JSON.stringify({ installation }), {
         headers: { "Content-Type": "application/json" },
       })
     }

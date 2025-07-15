@@ -30,9 +30,13 @@ type sessionItem struct {
 	isDeleteConfirming bool
 }
 
-func (s sessionItem) Render(selected bool, width int, isFirstInViewport bool) string {
+func (s sessionItem) Render(
+	selected bool,
+	width int,
+	isFirstInViewport bool,
+	baseStyle styles.Style,
+) string {
 	t := theme.CurrentTheme()
-	baseStyle := styles.NewStyle()
 
 	var text string
 	if s.isDeleteConfirming {
@@ -228,12 +232,19 @@ func NewSessionDialog(app *app.App) SessionDialog {
 		})
 	}
 
-	// Create a generic list component
 	listComponent := list.NewListComponent(
-		items,
-		10, // maxVisibleSessions
-		"No sessions available",
-		true, // useAlphaNumericKeys
+		list.WithItems(items),
+		list.WithMaxVisibleHeight[sessionItem](10),
+		list.WithFallbackMessage[sessionItem]("No sessions available"),
+		list.WithAlphaNumericKeys[sessionItem](true),
+		list.WithRenderFunc(
+			func(item sessionItem, selected bool, width int, baseStyle styles.Style) string {
+				return item.Render(selected, width, false, baseStyle)
+			},
+		),
+		list.WithSelectableFunc(func(item sessionItem) bool {
+			return true
+		}),
 	)
 	listComponent.SetMaxWidth(layout.Current.Container.Width - 12)
 

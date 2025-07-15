@@ -15,7 +15,7 @@ import PROMPT_TITLE from "./prompt/title.txt"
 export namespace SystemPrompt {
   export function provider(providerID: string, modelID: string) {
     if (providerID === "anthropic") return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_ANTHROPIC]
-    if (modelID.includes("gpt-")) return [PROMPT_BEAST]
+    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
     return [PROMPT_ANTHROPIC]
   }
 

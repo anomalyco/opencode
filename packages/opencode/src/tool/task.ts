@@ -15,21 +15,15 @@ export const TaskTool = Tool.define({
   }),
   async execute(params, ctx) {
     const session = await Session.create(ctx.sessionID)
-    const msg = (await Session.getMessage(ctx.sessionID, ctx.messageID)) as MessageV2.Assistant
+    const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
+    if (msg.role !== "assistant") throw new Error("Not an assistant message")
 
-    const parts: Record<string, MessageV2.Part> = {}
-    function summary(input: MessageV2.Part[]) {
-      const result = []
-      for (const part of input) {
-        if (part.type === "tool" && part.state.status === "completed") {
-          result.push(part)
-        }
-      }
-      return result
-    }
-
+    const messageID = Identifier.ascending("message")
+    const parts: Record<string, MessageV2.ToolPart> = {}
     const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       if (evt.properties.part.sessionID !== session.id) return
+      if (evt.properties.part.messageID === messageID) return
+      if (evt.properties.part.type !== "tool") return
       parts[evt.properties.part.id] = evt.properties.part
       ctx.metadata({
         title: params.description,
@@ -42,7 +36,6 @@ export const TaskTool = Tool.define({
     ctx.abort.addEventListener("abort", () => {
       Session.abort(session.id)
     })
-    const messageID = Identifier.ascending("message")
     const result = await Session.chat({
       messageID,
       sessionID: session.id,
@@ -62,7 +55,7 @@ export const TaskTool = Tool.define({
     return {
       title: params.description,
       metadata: {
-        summary: summary(result.parts),
+        summary: result.parts.filter((x) => x.type === "tool"),
       },
       output: result.parts.findLast((x) => x.type === "text")!.text,
     }

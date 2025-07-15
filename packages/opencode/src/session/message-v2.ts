@@ -1,6 +1,5 @@
 import z from "zod"
 import { Bus } from "../bus"
-import { Provider } from "../provider/provider"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
 import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
@@ -9,6 +8,13 @@ import { Identifier } from "../id/id"
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({}))
+  export const AuthError = NamedError.create(
+    "ProviderAuthError",
+    z.object({
+      providerID: z.string(),
+      message: z.string(),
+    }),
+  )
 
   export const ToolStatePending = z
     .object({
@@ -173,7 +179,7 @@ export namespace MessageV2 {
     }),
     error: z
       .discriminatedUnion("name", [
-        Provider.AuthError.Schema,
+        AuthError.Schema,
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,

@@ -3,7 +3,6 @@ package dialog
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sort"
 	"time"
 
@@ -46,42 +45,41 @@ type ModelWithProvider struct {
 	Provider opencode.Provider
 }
 
-type ModelItem struct {
-	ModelName    string
-	ProviderName string
+// modelItem is a custom list item for model selections
+type modelItem struct {
+	model ModelWithProvider
 }
 
-func (m *ModelItem) Render(selected bool, width int, isFirstInViewport bool) string {
+func (m modelItem) Render(
+	selected bool,
+	width int,
+	baseStyle styles.Style,
+) string {
 	t := theme.CurrentTheme()
 
+	itemStyle := baseStyle.
+		Background(t.BackgroundPanel()).
+		Foreground(t.Text())
+
 	if selected {
-		displayText := fmt.Sprintf("%s (%s)", m.ModelName, m.ProviderName)
-		return styles.NewStyle().
-			Background(t.Primary()).
-			Foreground(t.BackgroundPanel()).
-			Width(width).
-			PaddingLeft(1).
-			Render(displayText)
-	} else {
-		modelStyle := styles.NewStyle().
-			Foreground(t.Text()).
-			Background(t.BackgroundPanel())
-		providerStyle := styles.NewStyle().
-			Foreground(t.TextMuted()).
-			Background(t.BackgroundPanel())
-
-		modelPart := modelStyle.Render(m.ModelName)
-		providerPart := providerStyle.Render(fmt.Sprintf(" (%s)", m.ProviderName))
-
-		combinedText := modelPart + providerPart
-		return styles.NewStyle().
-			Background(t.BackgroundPanel()).
-			PaddingLeft(1).
-			Render(combinedText)
+		itemStyle = itemStyle.Foreground(t.Primary())
 	}
+
+	providerStyle := baseStyle.
+		Foreground(t.TextMuted()).
+		Background(t.BackgroundPanel())
+
+	modelPart := itemStyle.Render(m.model.Model.Name)
+	providerPart := providerStyle.Render(fmt.Sprintf(" %s", m.model.Provider.Name))
+
+	combinedText := modelPart + providerPart
+	return baseStyle.
+		Background(t.BackgroundPanel()).
+		PaddingLeft(1).
+		Render(combinedText)
 }
 
-func (m *ModelItem) Selectable() bool {
+func (m modelItem) Selectable() bool {
 	return true
 }
 
@@ -110,23 +108,17 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SearchSelectionMsg:
 		// Handle selection from search dialog
-		if modelItem, ok := msg.Item.(*ModelItem); ok {
-			// Find the corresponding ModelWithProvider
-			for _, model := range m.allModels {
-				if model.Model.Name == modelItem.ModelName && model.Provider.Name == modelItem.ProviderName {
-					return m, tea.Sequence(
-						util.CmdHandler(modal.CloseModalMsg{}),
-						util.CmdHandler(
-							app.ModelSelectedMsg{
-								Provider: model.Provider,
-								Model:    model.Model,
-							}),
-					)
-				}
-			}
+		if item, ok := msg.Item.(modelItem); ok {
+			return m, tea.Sequence(
+				util.CmdHandler(modal.CloseModalMsg{}),
+				util.CmdHandler(
+					app.ModelSelectedMsg{
+						Provider: item.model.Provider,
+						Model:    item.model.Model,
+					}),
+			)
 		}
 		return m, util.CmdHandler(modal.CloseModalMsg{})
-
 	case SearchCancelledMsg:
 		return m, util.CmdHandler(modal.CloseModalMsg{})
 
@@ -152,13 +144,13 @@ func (m *modelDialog) View() string {
 	return m.searchDialog.View()
 }
 
-func (m *modelDialog) calculateOptimalWidth(modelItems []ModelItem) int {
+func (m *modelDialog) calculateOptimalWidth(models []ModelWithProvider) int {
 	maxWidth := minDialogWidth
 
-	for _, item := range modelItems {
+	for _, model := range models {
 		// Calculate the width needed for this item: "ModelName (ProviderName)"
 		// Add 4 for the parentheses, space, and some padding
-		itemWidth := len(item.ModelName) + len(item.ProviderName) + 4
+		itemWidth := len(model.Model.Name) + len(model.Provider.Name) + 4
 		if itemWidth > maxWidth {
 			maxWidth = itemWidth
 		}
@@ -187,14 +179,7 @@ func (m *modelDialog) setupAllModels() {
 	m.sortModels()
 
 	// Calculate optimal width based on all models
-	modelItems := make([]ModelItem, len(m.allModels))
-	for i, modelWithProvider := range m.allModels {
-		modelItems[i] = ModelItem{
-			ModelName:    modelWithProvider.Model.Name,
-			ProviderName: modelWithProvider.Provider.Name,
-		}
-	}
-	m.dialogWidth = m.calculateOptimalWidth(modelItems)
+	m.dialogWidth = m.calculateOptimalWidth(m.allModels)
 
 	// Initialize search dialog
 	m.searchDialog = NewSearchDialog("Search models...", numVisibleModels)
@@ -266,7 +251,7 @@ func (m *modelDialog) getModelUsageTime(providerID, modelID string) time.Time {
 }
 
 // buildDisplayList creates the list items based on search query
-func (m *modelDialog) buildDisplayList(query string) []list.ListItem {
+func (m *modelDialog) buildDisplayList(query string) []list.Item {
 	if query != "" {
 		// Search mode: use fuzzy matching
 		return m.buildSearchResults(query)
@@ -277,7 +262,7 @@ func (m *modelDialog) buildDisplayList(query string) []list.ListItem {
 }
 
 // buildSearchResults creates a flat list of search results using fuzzy matching
-func (m *modelDialog) buildSearchResults(query string) []list.ListItem {
+func (m *modelDialog) buildSearchResults(query string) []list.Item {
 	type modelMatch struct {
 		model ModelWithProvider
 		score int
@@ -300,39 +285,33 @@ func (m *modelDialog) buildSearchResults(query string) []list.ListItem {
 	matches := fuzzy.RankFindFold(query, modelNames)
 	sort.Sort(matches)
 
-	items := []list.ListItem{}
+	items := []list.Item{}
+	seenModels := make(map[string]bool)
+
 	for _, match := range matches {
 		model := modelMap[match.Target]
-		existingItem := slices.IndexFunc(items, func(item list.ListItem) bool {
-			castedItem := item.(*ModelItem)
-			return castedItem.ModelName == model.Model.Name &&
-				castedItem.ProviderName == model.Provider.Name
-		})
-		if existingItem != -1 {
+		// Create a unique key to avoid duplicates
+		key := fmt.Sprintf("%s:%s", model.Provider.ID, model.Model.ID)
+		if seenModels[key] {
 			continue
 		}
-		items = append(items, &ModelItem{
-			ModelName:    model.Model.Name,
-			ProviderName: model.Provider.Name,
-		})
+		seenModels[key] = true
+		items = append(items, modelItem{model: model})
 	}
 
 	return items
 }
 
 // buildGroupedResults creates a grouped list with Recent section and provider groups
-func (m *modelDialog) buildGroupedResults() []list.ListItem {
-	var items []list.ListItem
+func (m *modelDialog) buildGroupedResults() []list.Item {
+	var items []list.Item
 
 	// Add Recent section
 	recentModels := m.getRecentModels(5)
 	if len(recentModels) > 0 {
 		items = append(items, list.HeaderItem("Recent"))
 		for _, model := range recentModels {
-			items = append(items, &ModelItem{
-				ModelName:    model.Model.Name,
-				ProviderName: model.Provider.Name,
-			})
+			items = append(items, modelItem{model: model})
 		}
 	}
 
@@ -390,10 +369,7 @@ func (m *modelDialog) buildGroupedResults() []list.ListItem {
 
 		// Add models in this provider group
 		for _, model := range models {
-			items = append(items, &ModelItem{
-				ModelName:    model.Model.Name,
-				ProviderName: model.Provider.Name,
-			})
+			items = append(items, modelItem{model: model})
 		}
 	}
 

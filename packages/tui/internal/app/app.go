@@ -51,6 +51,9 @@ type App struct {
 	MessageQueue     *MessageQueue
 }
 
+type SessionCreatedMsg = struct {
+	Session *opencode.Session
+}
 type SessionSelectedMsg = *opencode.Session
 type SessionLoadedMsg struct{}
 type ModelSelectedMsg struct {
@@ -385,7 +388,7 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 	}
 
 	a.Session = session
-	cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+	cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 
 	go func() {
 		_, err := a.Client.Session.Init(ctx, a.Session.ID, opencode.SessionInitParams{
@@ -461,6 +464,7 @@ func (a *App) SendChatMessage(
 			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
+    cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 		return a, tea.Batch(
 			util.CmdHandler(SessionSelectedMsg(session)),
 			util.CmdHandler(SendMsg{Text: text, Attachments: attachments}),

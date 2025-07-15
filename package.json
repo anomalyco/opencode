@@ -18,7 +18,7 @@
       "typescript": "5.8.2",
       "@types/node": "22.13.9",
       "zod": "3.25.49",
-      "ai": "5.0.0-beta.15"
+      "ai": "5.0.0-beta.18"
     }
   },
   "devDependencies": {

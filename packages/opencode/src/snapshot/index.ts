@@ -19,7 +19,7 @@ export namespace Snapshot {
         limit: 1000,
       })
       log.info("found files", { count: files.length })
-      if (files.length > 1000) return
+      if (files.length >= 1000) return
     }
 
     const git = gitdir(sessionID)

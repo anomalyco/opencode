@@ -68,9 +68,9 @@ type appModel struct {
 	queueStatus          *queue.StatusComponent
 	queueEditor          *queue.EditorComponent
 	completions          dialog.CompletionDialog
-	commandProvider      dialog.CompletionProvider
-	fileProvider         dialog.CompletionProvider
-	symbolsProvider      dialog.CompletionProvider
+	commandProvider      completions.CompletionProvider
+	fileProvider         completions.CompletionProvider
+	symbolsProvider      completions.CompletionProvider
 	showCompletionDialog bool
 	leaderBinding        *key.Binding
 	// isLeaderSequence     bool
@@ -543,6 +543,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.app.Session = msg
 		a.app.Messages = messages
+		return a, util.CmdHandler(app.SessionLoadedMsg{})
+	case app.SessionCreatedMsg:
+		a.app.Session = msg.Session
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
