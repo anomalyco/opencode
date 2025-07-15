@@ -234,14 +234,14 @@ export namespace Config {
       return process.env[varName] || ""
     })
 
-    const fileMatches = text.match(/"?\{file:([^}]+)\}"?/g)
+    const fileMatches = text.match(/\{file:([^}]+)\}/g)
     if (fileMatches) {
       const configDir = path.dirname(configPath)
       for (const match of fileMatches) {
         const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
         const fileContent = await Bun.file(resolvedPath).text()
-        text = text.replace(match, JSON.stringify(fileContent))
+        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
       }
     }
 
