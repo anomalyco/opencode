@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/textarea"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/lipgloss/v2/compat"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode/internal/components/list"
@@ -18,10 +19,11 @@ import (
 )
 
 type CompletionItem struct {
-	Title      string
-	Value      string
-	ProviderID string
-	Raw        any
+	Title           string
+	Value           string
+	ProviderID      string
+	Raw             any
+	backgroundColor *compat.AdaptiveColor
 }
 
 type CompletionItemI interface {
@@ -32,14 +34,19 @@ type CompletionItemI interface {
 	GetRaw() any
 }
 
-func (ci *CompletionItem) Render(selected bool, width int) string {
+func (ci *CompletionItem) Render(selected bool, width int, isFirstInViewport bool) string {
 	t := theme.CurrentTheme()
 	baseStyle := styles.NewStyle().Foreground(t.Text())
 
 	truncatedStr := truncate.String(string(ci.DisplayValue()), uint(width-4))
 
+	backgroundColor := t.BackgroundPanel()
+	if ci.backgroundColor != nil {
+		backgroundColor = *ci.backgroundColor
+	}
+
 	itemStyle := baseStyle.
-		Background(t.BackgroundElement()).
+		Background(backgroundColor).
 		Padding(0, 1)
 
 	if selected {
@@ -66,7 +73,25 @@ func (ci *CompletionItem) GetRaw() any {
 	return ci.Raw
 }
 
-func NewCompletionItem(completionItem CompletionItem) CompletionItemI {
+func (ci *CompletionItem) Selectable() bool {
+	return true
+}
+
+type CompletionItemOption func(*CompletionItem)
+
+func WithBackgroundColor(color compat.AdaptiveColor) CompletionItemOption {
+	return func(ci *CompletionItem) {
+		ci.backgroundColor = &color
+	}
+}
+
+func NewCompletionItem(
+	completionItem CompletionItem,
+	opts ...CompletionItemOption,
+) CompletionItemI {
+	for _, opt := range opts {
+		opt(&completionItem)
+	}
 	return &completionItem
 }
 

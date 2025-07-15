@@ -389,6 +389,7 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 
 	go func() {
 		_, err := a.Client.Session.Init(ctx, a.Session.ID, opencode.SessionInitParams{
+			MessageID:  opencode.F(id.Ascending(id.Message)),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})

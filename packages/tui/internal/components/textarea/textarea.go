@@ -218,11 +218,11 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("left", "character backward"),
 		),
 		WordForward: key.NewBinding(
-			key.WithKeys("alt+right", "alt+f"),
+			key.WithKeys("alt+right", "ctrl+right", "alt+f"),
 			key.WithHelp("alt+right", "word forward"),
 		),
 		WordBackward: key.NewBinding(
-			key.WithKeys("alt+left", "alt+b"),
+			key.WithKeys("alt+left", "ctrl+left", "alt+b"),
 			key.WithHelp("alt+left", "word backward"),
 		),
 		LineNext: key.NewBinding(

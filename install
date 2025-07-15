@@ -48,7 +48,7 @@ if [ -z "$requested_version" ]; then
     url="https://github.com/sst/opencode/releases/latest/download/$filename"
     specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | awk -F'"' '/"tag_name": "/ {gsub(/^v/, "", $4); print $4}')
 
-    if [[ $? -ne 0 ]]; then
+    if [[ $? -ne 0 || -z "$specific_version" ]]; then
         echo "${RED}Failed to fetch version information${NC}"
         exit 1
     fi

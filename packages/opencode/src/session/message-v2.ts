@@ -79,6 +79,11 @@ export namespace MessageV2 {
     messageID: z.string(),
   })
 
+  export const SnapshotPart = PartBase.extend({
+    type: z.literal("snapshot"),
+    snapshot: z.string(),
+  })
+
   export const TextPart = PartBase.extend({
     type: z.literal("text"),
     text: z.string(),
@@ -154,7 +159,7 @@ export namespace MessageV2 {
   export type User = z.infer<typeof User>
 
   export const Part = z
-    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart])
+    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart])
     .openapi({
       ref: "Part",
     })

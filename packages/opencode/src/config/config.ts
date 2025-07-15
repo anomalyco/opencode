@@ -21,6 +21,17 @@ export namespace Config {
         result = mergeDeep(result, await load(resolved))
       }
     }
+
+    // Handle migration from autoshare to share field
+    if (result.autoshare === true && !result.share) {
+      result.share = "auto"
+    }
+
+    if (!result.username) {
+      const os = await import("os")
+      result.username = os.userInfo().username
+    }
+
     log.info("loaded", result)
 
     return result
@@ -117,11 +128,21 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
-      share: z.enum(["auto", "disabled"]).optional().describe("Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables all sharing"),
-      autoshare: z.boolean().optional().describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
+      share: z
+        .enum(["auto", "disabled"])
+        .optional()
+        .describe("Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables all sharing"),
+      autoshare: z
+        .boolean()
+        .optional()
+        .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      username: z
+        .string()
+        .optional()
+        .describe("Custom username to display in conversations instead of system username"),
       mode: z
         .object({
           build: Mode.optional(),
@@ -233,11 +254,6 @@ export namespace Config {
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
-      // Handle migration from autoshare to share field
-      if (parsed.data.autoshare === true && !parsed.data.share) {
-        parsed.data.share = "auto"
-      }
-      
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         await Bun.write(configPath, JSON.stringify(parsed.data, null, 2))
@@ -264,6 +280,4 @@ export namespace Config {
   export function get() {
     return state()
   }
-
-
 }

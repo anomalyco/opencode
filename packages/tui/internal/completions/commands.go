@@ -43,7 +43,7 @@ func (c *CommandCompletionProvider) getCommandCompletionItem(
 		Title:      title,
 		Value:      value,
 		ProviderID: c.GetId(),
-	})
+	}, dialog.WithBackgroundColor(t.BackgroundElement()))
 }
 
 func (c *CommandCompletionProvider) GetChildEntries(
@@ -91,7 +91,7 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	}
 
 	// Find fuzzy matches
-	matches := fuzzy.RankFind(query, commandNames)
+	matches := fuzzy.RankFindFold(query, commandNames)
 
 	// Sort by score (best matches first)
 	sort.Sort(matches)

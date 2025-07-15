@@ -605,6 +605,7 @@ type Part struct {
 	Cost      float64  `json:"cost"`
 	Filename  string   `json:"filename"`
 	Mime      string   `json:"mime"`
+	Snapshot  string   `json:"snapshot"`
 	// This field can have the runtime type of [ToolPartState].
 	State     interface{} `json:"state"`
 	Synthetic bool        `json:"synthetic"`
@@ -629,6 +630,7 @@ type partJSON struct {
 	Cost        apijson.Field
 	Filename    apijson.Field
 	Mime        apijson.Field
+	Snapshot    apijson.Field
 	State       apijson.Field
 	Synthetic   apijson.Field
 	Text        apijson.Field
@@ -657,13 +659,13 @@ func (r *Part) UnmarshalJSON(data []byte) (err error) {
 // for more type safety.
 //
 // Possible runtime types of the union are [TextPart], [FilePart], [ToolPart],
-// [StepStartPart], [StepFinishPart].
+// [StepStartPart], [StepFinishPart], [PartObject].
 func (r Part) AsUnion() PartUnion {
 	return r.union
 }
 
-// Union satisfied by [TextPart], [FilePart], [ToolPart], [StepStartPart] or
-// [StepFinishPart].
+// Union satisfied by [TextPart], [FilePart], [ToolPart], [StepStartPart],
+// [StepFinishPart] or [PartObject].
 type PartUnion interface {
 	implementsPart()
 }
@@ -671,33 +673,76 @@ type PartUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*PartUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(TextPart{}),
-			DiscriminatorValue: "text",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(TextPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(FilePart{}),
-			DiscriminatorValue: "file",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(FilePart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolPart{}),
-			DiscriminatorValue: "tool",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepStartPart{}),
-			DiscriminatorValue: "step-start",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepStartPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepFinishPart{}),
-			DiscriminatorValue: "step-finish",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepFinishPart{}),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(PartObject{}),
 		},
 	)
+}
+
+type PartObject struct {
+	ID        string         `json:"id,required"`
+	MessageID string         `json:"messageID,required"`
+	SessionID string         `json:"sessionID,required"`
+	Snapshot  string         `json:"snapshot,required"`
+	Type      PartObjectType `json:"type,required"`
+	JSON      partObjectJSON `json:"-"`
+}
+
+// partObjectJSON contains the JSON metadata for the struct [PartObject]
+type partObjectJSON struct {
+	ID          apijson.Field
+	MessageID   apijson.Field
+	SessionID   apijson.Field
+	Snapshot    apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *PartObject) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r partObjectJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r PartObject) implementsPart() {}
+
+type PartObjectType string
+
+const (
+	PartObjectTypeSnapshot PartObjectType = "snapshot"
+)
+
+func (r PartObjectType) IsKnown() bool {
+	switch r {
+	case PartObjectTypeSnapshot:
+		return true
+	}
+	return false
 }
 
 type PartType string
@@ -708,11 +753,12 @@ const (
 	PartTypeTool       PartType = "tool"
 	PartTypeStepStart  PartType = "step-start"
 	PartTypeStepFinish PartType = "step-finish"
+	PartTypeSnapshot   PartType = "snapshot"
 )
 
 func (r PartType) IsKnown() bool {
 	switch r {
-	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish:
+	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot:
 		return true
 	}
 	return false

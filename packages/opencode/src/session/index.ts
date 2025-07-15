@@ -147,13 +147,15 @@ export namespace Session {
     await Storage.writeJSON("session/info/" + result.id, result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
-      share(result.id).then((share) => {
-        update(result.id, (draft) => {
-          draft.share = share
+      share(result.id)
+        .then((share) => {
+          update(result.id, (draft) => {
+            draft.share = share
+          })
         })
-      }).catch(() => {
-        // Silently ignore sharing errors during session creation
-      })
+        .catch(() => {
+          // Silently ignore sharing errors during session creation
+        })
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -179,7 +181,7 @@ export namespace Session {
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
     }
-    
+
     const session = await get(id)
     if (session.share) return session.share
     const share = await Share.create(id)
@@ -228,8 +230,7 @@ export namespace Session {
       info: MessageV2.Info
       parts: MessageV2.Part[]
     }[]
-    const list = Storage.list("session/message/" + sessionID)
-    for await (const p of list) {
+    for (const p of await Storage.list("session/message/" + sessionID)) {
       const read = await Storage.readJSON<MessageV2.Info>(p)
       result.push({
         info: read,
@@ -246,7 +247,7 @@ export namespace Session {
 
   export async function parts(sessionID: string, messageID: string) {
     const result = [] as MessageV2.Part[]
-    for await (const item of Storage.list("session/part/" + sessionID + "/" + messageID)) {
+    for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
       const read = await Storage.readJSON<MessageV2.Part>(item)
       result.push(read)
     }
@@ -255,7 +256,7 @@ export namespace Session {
   }
 
   export async function* list() {
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       yield get(sessionID)
     }
@@ -263,7 +264,7 @@ export namespace Session {
 
   export async function children(parentID: string) {
     const result = [] as Session.Info[]
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       const session = await get(sessionID)
       if (session.parentID !== parentID) continue
@@ -363,7 +364,7 @@ export namespace Session {
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
     // auto summarize if too long
-    if (previous) {
+    if (previous && previous.tokens) {
       const tokens =
         previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
       if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
@@ -642,7 +643,7 @@ export namespace Session {
       tools[key] = item
     }
 
-    const result = streamText({
+    const stream = streamText({
       onError() {},
       maxRetries: 10,
       maxOutputTokens: outputLimit,
@@ -675,7 +676,8 @@ export namespace Session {
         ],
       }),
     })
-    return processStream(assistantMsg, model.info, result)
+    const result = await processStream(assistantMsg, model.info, stream)
+    return result
   }
 
   async function processStream(
@@ -693,6 +695,15 @@ export namespace Session {
         })
         switch (value.type) {
           case "start":
+            const snapshot = await Snapshot.create(assistantMsg.sessionID)
+            if (snapshot)
+              await updatePart({
+                id: Identifier.ascending("part"),
+                messageID: assistantMsg.id,
+                sessionID: assistantMsg.sessionID,
+                type: "snapshot",
+                snapshot,
+              })
             break
 
           case "tool-input-start":
@@ -748,6 +759,15 @@ export namespace Session {
                 },
               })
               delete toolCalls[value.toolCallId]
+              const snapshot = await Snapshot.create(assistantMsg.sessionID)
+              if (snapshot)
+                await updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "snapshot",
+                  snapshot,
+                })
             }
             break
           }
@@ -768,6 +788,15 @@ export namespace Session {
                 },
               })
               delete toolCalls[value.toolCallId]
+              const snapshot = await Snapshot.create(assistantMsg.sessionID)
+              if (snapshot)
+                await updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "snapshot",
+                  snapshot,
+                })
             }
             break
           }
@@ -977,7 +1006,7 @@ export namespace Session {
     }
     await updateMessage(next)
 
-    const result = streamText({
+    const stream = streamText({
       abortSignal: abort.signal,
       model: model.language,
       messages: [
@@ -1000,7 +1029,8 @@ export namespace Session {
       ],
     })
 
-    return processStream(next, model.info, result)
+    const result = await processStream(next, model.info, stream)
+    return result
   }
 
   function lock(sessionID: string) {

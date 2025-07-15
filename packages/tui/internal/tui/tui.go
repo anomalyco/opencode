@@ -72,7 +72,6 @@ type appModel struct {
 	fileProvider         dialog.CompletionProvider
 	symbolsProvider      dialog.CompletionProvider
 	showCompletionDialog bool
-	fileCompletionActive bool
 	leaderBinding        *key.Binding
 	// isLeaderSequence     bool
 	toastManager      *toast.ToastManager
@@ -119,6 +118,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
+
 		// 1. Handle active queue editor
 		if a.queueEditor.IsActive() {
 			updated, cmd := a.queueEditor.Update(msg)
@@ -127,6 +127,10 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 2. Handle active modal
+		// Handle Ctrl+Z for suspend
+		if keyString == "ctrl+z" {
+			return a, tea.Suspend
+		}
 		if a.modal != nil {
 			switch keyString {
 			// Escape always closes current modal
@@ -166,7 +170,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			!a.showCompletionDialog &&
 			a.editor.Value() == "" {
 			a.showCompletionDialog = true
-			a.fileCompletionActive = false
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
@@ -185,7 +188,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keyString == "@" &&
 			!a.showCompletionDialog {
 			a.showCompletionDialog = true
-			a.fileCompletionActive = true
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
@@ -202,7 +204,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if a.showCompletionDialog {
 			switch keyString {
-			case "tab", "enter", "esc", "ctrl+c", "up", "down":
+			case "tab", "enter", "esc", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n":
 				updated, cmd := a.completions.Update(msg)
 				a.completions = updated.(dialog.CompletionDialog)
 				cmds = append(cmds, cmd)
@@ -386,7 +388,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, toast.NewInfoToast("Queue cleared"))
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
-		a.fileCompletionActive = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -1121,7 +1122,6 @@ func NewModel(app *app.App) tea.Model {
 		symbolsProvider:      symbolsProvider,
 		leaderBinding:        leaderBinding,
 		showCompletionDialog: false,
-		fileCompletionActive: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
 		exitKeyState:         ExitKeyIdle,

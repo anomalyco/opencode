@@ -4,11 +4,11 @@ import { cmd } from "../cmd"
 
 export const SnapshotCommand = cmd({
   command: "snapshot",
-  builder: (yargs) => yargs.command(SnapshotCreateCommand).command(SnapshotRestoreCommand).demandCommand(),
+  builder: (yargs) => yargs.command(CreateCommand).command(RestoreCommand).command(DiffCommand).demandCommand(),
   async handler() {},
 })
 
-export const SnapshotCreateCommand = cmd({
+const CreateCommand = cmd({
   command: "create",
   async handler() {
     await bootstrap({ cwd: process.cwd() }, async () => {
@@ -18,7 +18,7 @@ export const SnapshotCreateCommand = cmd({
   },
 })
 
-export const SnapshotRestoreCommand = cmd({
+const RestoreCommand = cmd({
   command: "restore <commit>",
   builder: (yargs) =>
     yargs.positional("commit", {
@@ -30,6 +30,23 @@ export const SnapshotRestoreCommand = cmd({
     await bootstrap({ cwd: process.cwd() }, async () => {
       await Snapshot.restore("test", args.commit)
       console.log("restored")
+    })
+  },
+})
+
+export const DiffCommand = cmd({
+  command: "diff <commit>",
+  describe: "diff",
+  builder: (yargs) =>
+    yargs.positional("commit", {
+      type: "string",
+      description: "commit",
+      demandOption: true,
+    }),
+  async handler(args) {
+    await bootstrap({ cwd: process.cwd() }, async () => {
+      const diff = await Snapshot.diff("test", args.commit)
+      console.log(diff)
     })
   },
 })

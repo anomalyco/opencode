@@ -496,7 +496,15 @@ export function fromV1(v1: Message.Info): MessageWithParts {
       cost: v1.metadata.assistant!.cost,
       path: v1.metadata.assistant!.path,
       summary: v1.metadata.assistant!.summary,
-      tokens: v1.metadata.assistant!.tokens,
+      tokens: v1.metadata.assistant!.tokens ?? {
+        input: 0,
+        output: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+        reasoning: 0,
+      },
       modelID: v1.metadata.assistant!.modelID,
       providerID: v1.metadata.assistant!.providerID,
       system: v1.metadata.assistant!.system,

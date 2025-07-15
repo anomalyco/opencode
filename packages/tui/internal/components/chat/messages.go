@@ -190,7 +190,7 @@ func (m *messagesComponent) renderView(width int) {
 							m.app,
 							message.Info,
 							part.Text,
-							m.app.Info.User,
+							m.app.Config.Username,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,

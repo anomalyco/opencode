@@ -3,14 +3,10 @@ package dialog
 import (
 	"log/slog"
 
-	"github.com/charmbracelet/bubbles/v2/key"
-	"github.com/charmbracelet/bubbles/v2/textinput"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
-	"github.com/sst/opencode/internal/styles"
-	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
 
@@ -30,116 +26,61 @@ type FindDialog interface {
 }
 
 type findDialogComponent struct {
-	query              string
 	completionProvider CompletionProvider
 	width, height      int
 	modal              *modal.Modal
-	textInput          textinput.Model
-	list               list.List[CompletionItemI]
-}
-
-type findDialogKeyMap struct {
-	Select key.Binding
-	Cancel key.Binding
-}
-
-var findDialogKeys = findDialogKeyMap{
-	Select: key.NewBinding(
-		key.WithKeys("enter"),
-	),
-	Cancel: key.NewBinding(
-		key.WithKeys("esc"),
-	),
+	searchDialog       *SearchDialog
 }
 
 func (f *findDialogComponent) Init() tea.Cmd {
-	return textinput.Blink
+	return f.searchDialog.Init()
 }
 
 func (f *findDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
 	case []CompletionItemI:
-		f.list.SetItems(msg)
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			if f.textInput.Value() == "" {
-				return f, nil
-			}
-			f.textInput.SetValue("")
-			return f.update(msg)
+		// Convert CompletionItemI to list.ListItem
+		items := make([]list.ListItem, len(msg))
+		for i, item := range msg {
+			items[i] = item
 		}
+		f.searchDialog.SetItems(items)
+		return f, nil
 
-		switch {
-		case key.Matches(msg, findDialogKeys.Select):
-			item, i := f.list.GetSelectedItem()
-			if i == -1 {
-				return f, nil
-			}
+	case SearchSelectionMsg:
+		// Handle selection from search dialog
+		if item, ok := msg.Item.(CompletionItemI); ok {
 			return f, f.selectFile(item)
-		case key.Matches(msg, findDialogKeys.Cancel):
-			return f, f.Close()
-		default:
-			f.textInput, cmd = f.textInput.Update(msg)
-			cmds = append(cmds, cmd)
-
-			f, cmd = f.update(msg)
-			cmds = append(cmds, cmd)
 		}
-	}
+		return f, nil
 
-	return f, tea.Batch(cmds...)
-}
+	case SearchCancelledMsg:
+		return f, f.Close()
 
-func (f *findDialogComponent) update(msg tea.Msg) (*findDialogComponent, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
-	query := f.textInput.Value()
-	if query != f.query {
-		f.query = query
-		cmd = func() tea.Msg {
-			items, err := f.completionProvider.GetChildEntries(query)
+	case SearchQueryChangedMsg:
+		// Update completion items based on search query
+		return f, func() tea.Msg {
+			items, err := f.completionProvider.GetChildEntries(msg.Query)
 			if err != nil {
 				slog.Error("Failed to get completion items", "error", err)
 			}
 			return items
 		}
-		cmds = append(cmds, cmd)
 	}
 
-	u, cmd := f.list.Update(msg)
-	f.list = u.(list.List[CompletionItemI])
-	cmds = append(cmds, cmd)
-
-	return f, tea.Batch(cmds...)
+	// Forward all other messages to the search dialog
+	updatedDialog, cmd := f.searchDialog.Update(msg)
+	f.searchDialog = updatedDialog.(*SearchDialog)
+	return f, cmd
 }
 
 func (f *findDialogComponent) View() string {
-	t := theme.CurrentTheme()
-	f.textInput.SetWidth(f.width - 8)
-	f.list.SetMaxWidth(f.width - 4)
-	inputView := f.textInput.View()
-	inputView = styles.NewStyle().
-		Background(t.BackgroundElement()).
-		Height(1).
-		Width(f.width-4).
-		Padding(0, 0).
-		Render(inputView)
-
-	listView := f.list.View()
-	return styles.NewStyle().Height(12).Render(inputView + "\n" + listView)
+	return f.searchDialog.View()
 }
 
 func (f *findDialogComponent) SetWidth(width int) {
 	f.width = width
-	if width > 4 {
-		f.textInput.SetWidth(width - 4)
-		f.list.SetMaxWidth(width - 4)
-	}
+	f.searchDialog.SetWidth(width - 4)
 }
 
 func (f *findDialogComponent) SetHeight(height int) {
@@ -147,7 +88,7 @@ func (f *findDialogComponent) SetHeight(height int) {
 }
 
 func (f *findDialogComponent) IsEmpty() bool {
-	return f.list.IsEmpty()
+	return f.searchDialog.GetQuery() == ""
 }
 
 func (f *findDialogComponent) selectFile(item CompletionItemI) tea.Cmd {
@@ -164,67 +105,32 @@ func (f *findDialogComponent) Render(background string) string {
 }
 
 func (f *findDialogComponent) Close() tea.Cmd {
-	f.textInput.Reset()
-	f.textInput.Blur()
+	f.searchDialog.SetQuery("")
+	f.searchDialog.Blur()
 	return util.CmdHandler(modal.CloseModalMsg{})
 }
 
-func createTextInput(existing *textinput.Model) textinput.Model {
-	t := theme.CurrentTheme()
-	bgColor := t.BackgroundElement()
-	textColor := t.Text()
-	textMutedColor := t.TextMuted()
-
-	ti := textinput.New()
-
-	ti.Styles.Blurred.Placeholder = styles.NewStyle().
-		Foreground(textMutedColor).
-		Background(bgColor).
-		Lipgloss()
-	ti.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ti.Styles.Focused.Placeholder = styles.NewStyle().
-		Foreground(textMutedColor).
-		Background(bgColor).
-		Lipgloss()
-	ti.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ti.Styles.Cursor.Color = t.Primary()
-	ti.VirtualCursor = true
-
-	ti.Prompt = " "
-	ti.CharLimit = -1
-	ti.Focus()
-
-	if existing != nil {
-		ti.SetValue(existing.Value())
-		ti.SetWidth(existing.Width())
-	}
-
-	return ti
-}
-
 func NewFindDialog(completionProvider CompletionProvider) FindDialog {
-	ti := createTextInput(nil)
+	searchDialog := NewSearchDialog("Search files...", 10)
 
-	li := list.NewListComponent(
-		[]CompletionItemI{},
-		10, // max visible items
-		completionProvider.GetEmptyMessage(),
-		false,
-	)
-
+	// Initialize with empty query to get initial items
 	go func() {
 		items, err := completionProvider.GetChildEntries("")
 		if err != nil {
 			slog.Error("Failed to get completion items", "error", err)
+			return
 		}
-		li.SetItems(items)
+		// Convert CompletionItemI to list.ListItem
+		listItems := make([]list.ListItem, len(items))
+		for i, item := range items {
+			listItems[i] = item
+		}
+		searchDialog.SetItems(listItems)
 	}()
 
 	return &findDialogComponent{
-		query:              "",
 		completionProvider: completionProvider,
-		textInput:          ti,
-		list:               li,
+		searchDialog:       searchDialog,
 		modal: modal.New(
 			modal.WithTitle("Find Files"),
 			modal.WithMaxWidth(80),
