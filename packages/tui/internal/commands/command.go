@@ -94,6 +94,7 @@ const (
 	SessionUnshareCommand       CommandName = "session_unshare"
 	SessionInterruptCommand     CommandName = "session_interrupt"
 	SessionCompactCommand       CommandName = "session_compact"
+	ConversationExportCommand   CommandName = "editor_history"
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
 	ThemeListCommand            CommandName = "theme_list"
@@ -163,6 +164,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "open editor",
 			Keybindings: parseBindings("<leader>e"),
 			Trigger:     []string{"editor"},
+		},
+		{
+			Name:        ConversationExportCommand,
+			Description: "open conversation history in editor",
+			Keybindings: parseBindings("<leader>x"),
+			Trigger:     []string{"history"},
 		},
 		{
 			Name:        SessionNewCommand,

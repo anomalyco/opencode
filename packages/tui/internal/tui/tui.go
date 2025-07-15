@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -897,6 +898,56 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		}
 		// TODO: block until compaction is complete
 		a.app.CompactSession(context.Background())
+	case commands.ConversationExportCommand:
+		if a.app.Session.ID == "" {
+			return a, toast.NewErrorToast("No active session to export.")
+		}
+
+		// Use current conversation history
+		messages := a.app.Messages
+		if len(messages) == 0 {
+			return a, toast.NewInfoToast("No messages to export.")
+		}
+
+		// Format to Markdown
+		markdownContent := formatConversationToMarkdown(messages)
+
+		// Check if EDITOR is set
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			return a, toast.NewErrorToast("No EDITOR set, can't open editor")
+		}
+
+		// Create and write to temp file
+		tmpfile, err := os.CreateTemp("", "conversation-*.md")
+		if err != nil {
+			slog.Error("Failed to create temp file", "error", err)
+			return a, toast.NewErrorToast("Failed to create temporary file.")
+		}
+
+		_, err = tmpfile.WriteString(markdownContent)
+		if err != nil {
+			slog.Error("Failed to write to temp file", "error", err)
+			tmpfile.Close()
+			os.Remove(tmpfile.Name())
+			return a, toast.NewErrorToast("Failed to write conversation to file.")
+		}
+		tmpfile.Close()
+
+		// Open in editor
+		c := exec.Command(editor, tmpfile.Name())
+		c.Stdin = os.Stdin
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		cmd = tea.ExecProcess(c, func(err error) tea.Msg {
+			if err != nil {
+				slog.Error("Failed to open editor for conversation", "error", err)
+			}
+			// Clean up the file after editor closes
+			os.Remove(tmpfile.Name())
+			return nil
+		})
+		cmds = append(cmds, cmd)
 	case commands.ToolDetailsCommand:
 		message := "Tool details are now visible"
 		if a.messages.ToolDetailsVisible() {
@@ -1052,4 +1103,43 @@ func NewModel(app *app.App) tea.Model {
 	}
 
 	return model
+}
+
+func formatConversationToMarkdown(messages []app.Message) string {
+	var builder strings.Builder
+
+	builder.WriteString("# Conversation History\n\n")
+
+	for _, msg := range messages {
+		builder.WriteString("---\n\n")
+
+		var role string
+		var timestamp time.Time
+
+		switch info := msg.Info.(type) {
+		case opencode.UserMessage:
+			role = "User"
+			timestamp = time.UnixMilli(int64(info.Time.Created))
+		case opencode.AssistantMessage:
+			role = "Assistant"
+			timestamp = time.UnixMilli(int64(info.Time.Created))
+		default:
+			continue
+		}
+
+		builder.WriteString(fmt.Sprintf("**%s** (*%s*)\n\n", role, timestamp.Format("2006-01-02 15:04:05")))
+
+		for _, part := range msg.Parts {
+			switch p := part.(type) {
+			case opencode.TextPart:
+				builder.WriteString("> " + strings.ReplaceAll(p.Text, "\n", "\n> ") + "\n\n")
+			case opencode.FilePart:
+				builder.WriteString(fmt.Sprintf("> [File: %s]\n\n", p.Filename))
+			case opencode.ToolPart:
+				builder.WriteString(fmt.Sprintf("> [Tool: %s]\n\n", p.Tool))
+			}
+		}
+	}
+
+	return builder.String()
 }
