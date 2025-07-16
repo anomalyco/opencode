@@ -12,32 +12,47 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode-sdk-go"
+	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/config"
+	"github.com/sst/opencode/internal/id"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"golang.design/x/clipboard"
 )
 
-type App struct {
-	Info          opencode.App
-	Version       string
-	StatePath     string
-	Config        *opencode.Config
-	Client        *opencode.Client
-	State         *config.State
-	Provider      *opencode.Provider
-	Model         *opencode.Model
-	Session       *opencode.Session
-	Messages      []opencode.MessageUnion
-	Commands      commands.CommandRegistry
-	InitialModel  *string
-	InitialPrompt *string
-	compactCancel context.CancelFunc
+type Message struct {
+	Info  opencode.MessageUnion
+	Parts []opencode.PartUnion
 }
 
+type App struct {
+	Info             opencode.App
+	Modes            []opencode.Mode
+	Providers        []opencode.Provider
+	Version          string
+	StatePath        string
+	Config           *opencode.Config
+	Client           *opencode.Client
+	State            *config.State
+	ModeIndex        int
+	Mode             *opencode.Mode
+	Provider         *opencode.Provider
+	Model            *opencode.Model
+	Session          *opencode.Session
+	Messages         []Message
+	Commands         commands.CommandRegistry
+	InitialModel     *string
+	InitialPrompt    *string
+	IntitialMode     *string
+	compactCancel    context.CancelFunc
+	IsLeaderSequence bool
+}
+
+type SessionCreatedMsg = struct {
+	Session *opencode.Session
+}
 type SessionSelectedMsg = *opencode.Session
 type SessionLoadedMsg struct{}
 type ModelSelectedMsg struct {
@@ -50,6 +65,9 @@ type SendMsg struct {
 	Text        string
 	Attachments []opencode.FilePartParam
 }
+type SetEditorContentMsg struct {
+	Text string
+}
 type OptimisticMessageAddedMsg struct {
 	Message opencode.MessageUnion
 }
@@ -61,9 +79,11 @@ func New(
 	ctx context.Context,
 	version string,
 	appInfo opencode.App,
+	modes []opencode.Mode,
 	httpClient *opencode.Client,
-	model *string,
-	prompt *string,
+	initialModel *string,
+	initialPrompt *string,
+	initialMode *string,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -84,14 +104,36 @@ func New(
 		config.SaveState(appStatePath, appState)
 	}
 
+	if appState.ModeModel == nil {
+		appState.ModeModel = make(map[string]config.ModeModel)
+	}
+
 	if configInfo.Theme != "" {
 		appState.Theme = configInfo.Theme
 	}
 
-	if configInfo.Model != "" {
-		splits := strings.Split(configInfo.Model, "/")
-		appState.Provider = splits[0]
-		appState.Model = strings.Join(splits[1:], "/")
+	var modeIndex int
+	var mode *opencode.Mode
+	modeName := "build"
+	if appState.Mode != "" {
+		modeName = appState.Mode
+	}
+	if initialMode != nil && *initialMode != "" {
+		modeName = *initialMode
+	}
+	for i, m := range modes {
+		if m.Name == modeName {
+			modeIndex = i
+			break
+		}
+	}
+	mode = &modes[modeIndex]
+
+	if mode.Model.ModelID != "" {
+		appState.ModeModel[mode.Name] = config.ModeModel{
+			ProviderID: mode.Model.ProviderID,
+			ModelID:    mode.Model.ModelID,
+		}
 	}
 
 	if err := theme.LoadThemesFromDirectories(
@@ -116,16 +158,20 @@ func New(
 
 	app := &App{
 		Info:          appInfo,
+		Modes:         modes,
 		Version:       version,
 		StatePath:     appStatePath,
 		Config:        configInfo,
 		State:         appState,
 		Client:        httpClient,
+		ModeIndex:     modeIndex,
+		Mode:          mode,
 		Session:       &opencode.Session{},
-		Messages:      []opencode.MessageUnion{},
+		Messages:      []Message{},
 		Commands:      commands.LoadFromConfig(configInfo),
-		InitialModel:  model,
-		InitialPrompt: prompt,
+		InitialModel:  initialModel,
+		InitialPrompt: initialPrompt,
+		IntitialMode:  initialMode,
 	}
 
 	return app, nil
@@ -157,6 +203,45 @@ func (a *App) SetClipboard(text string) tea.Cmd {
 	// try to set the clipboard using OSC52 for terminals that support it
 	cmds = append(cmds, tea.SetClipboard(text))
 	return tea.Sequence(cmds...)
+}
+
+func (a *App) SwitchMode() (*App, tea.Cmd) {
+	a.ModeIndex++
+	if a.ModeIndex >= len(a.Modes) {
+		a.ModeIndex = 0
+	}
+	a.Mode = &a.Modes[a.ModeIndex]
+
+	modelID := a.Mode.Model.ModelID
+	providerID := a.Mode.Model.ProviderID
+	if modelID == "" {
+		if model, ok := a.State.ModeModel[a.Mode.Name]; ok {
+			modelID = model.ModelID
+			providerID = model.ProviderID
+		}
+	}
+
+	if modelID != "" {
+		for _, provider := range a.Providers {
+			if provider.ID == providerID {
+				a.Provider = &provider
+				for _, model := range provider.Models {
+					if model.ID == modelID {
+						a.Model = &model
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	a.State.Mode = a.Mode.Name
+
+	return a, func() tea.Msg {
+		a.SaveState()
+		return nil
+	}
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
@@ -193,6 +278,14 @@ func (a *App) InitializeProvider() tea.Cmd {
 	if len(providers) == 0 {
 		slog.Error("No providers configured")
 		return nil
+	}
+
+	a.Providers = providers
+
+	// retains backwards compatibility with old state format
+	if model, ok := a.State.ModeModel[a.State.Mode]; ok {
+		a.State.Provider = model.ProviderID
+		a.State.Model = model.ModelID
 	}
 
 	var currentProvider *opencode.Provider
@@ -267,7 +360,7 @@ func (a *App) IsBusy() bool {
 	}
 
 	lastMessage := a.Messages[len(a.Messages)-1]
-	if casted, ok := lastMessage.(opencode.AssistantMessage); ok {
+	if casted, ok := lastMessage.Info.(opencode.AssistantMessage); ok {
 		return casted.Time.Completed == 0
 	}
 	return false
@@ -290,10 +383,11 @@ func (a *App) InitializeProject(ctx context.Context) tea.Cmd {
 	}
 
 	a.Session = session
-	cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+	cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 
 	go func() {
 		_, err := a.Client.Session.Init(ctx, a.Session.ID, opencode.SessionInitParams{
+			MessageID:  opencode.F(id.Ascending(id.Message)),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 		})
@@ -319,10 +413,14 @@ func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 			a.compactCancel = nil
 		}()
 
-		_, err := a.Client.Session.Summarize(compactCtx, a.Session.ID, opencode.SessionSummarizeParams{
-			ProviderID: opencode.F(a.Provider.ID),
-			ModelID:    opencode.F(a.Model.ID),
-		})
+		_, err := a.Client.Session.Summarize(
+			compactCtx,
+			a.Session.ID,
+			opencode.SessionSummarizeParams{
+				ProviderID: opencode.F(a.Provider.ID),
+				ModelID:    opencode.F(a.Model.ID),
+			},
+		)
 		if err != nil {
 			if compactCtx.Err() != context.Canceled {
 				slog.Error("Failed to compact session", "error", err)
@@ -361,59 +459,73 @@ func (a *App) SendChatMessage(
 			return a, toast.NewErrorToast(err.Error())
 		}
 		a.Session = session
-		cmds = append(cmds, util.CmdHandler(SessionSelectedMsg(session)))
+		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 	}
 
-	optimisticParts := []opencode.UserMessagePart{{
-		Type: opencode.UserMessagePartTypeText,
-		Text: text,
+	message := opencode.UserMessage{
+		ID:        id.Ascending(id.Message),
+		SessionID: a.Session.ID,
+		Role:      opencode.UserMessageRoleUser,
+		Time: opencode.UserMessageTime{
+			Created: float64(time.Now().UnixMilli()),
+		},
+	}
+
+	parts := []opencode.PartUnion{opencode.TextPart{
+		ID:        id.Ascending(id.Part),
+		MessageID: message.ID,
+		SessionID: a.Session.ID,
+		Type:      opencode.TextPartTypeText,
+		Text:      text,
 	}}
 	if len(attachments) > 0 {
 		for _, attachment := range attachments {
-			optimisticParts = append(optimisticParts, opencode.UserMessagePart{
-				Type:     opencode.UserMessagePartTypeFile,
-				Filename: attachment.Filename.Value,
-				Mime:     attachment.Mime.Value,
-				URL:      attachment.URL.Value,
+			parts = append(parts, opencode.FilePart{
+				ID:        id.Ascending(id.Part),
+				MessageID: message.ID,
+				SessionID: a.Session.ID,
+				Type:      opencode.FilePartTypeFile,
+				Filename:  attachment.Filename.Value,
+				Mime:      attachment.Mime.Value,
+				URL:       attachment.URL.Value,
 			})
 		}
 	}
 
-	optimisticMessage := opencode.UserMessage{
-		ID:        fmt.Sprintf("optimistic-%d", time.Now().UnixNano()),
-		Role:      opencode.UserMessageRoleUser,
-		Parts:     optimisticParts,
-		SessionID: a.Session.ID,
-		Time: opencode.UserMessageTime{
-			Created: float64(time.Now().Unix()),
-		},
-	}
-
-	a.Messages = append(a.Messages, optimisticMessage)
-	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: optimisticMessage}))
+	a.Messages = append(a.Messages, Message{Info: message, Parts: parts})
+	cmds = append(cmds, util.CmdHandler(OptimisticMessageAddedMsg{Message: message}))
 
 	cmds = append(cmds, func() tea.Msg {
-		parts := []opencode.UserMessagePartUnionParam{
-			opencode.TextPartParam{
-				Type: opencode.F(opencode.TextPartTypeText),
-				Text: opencode.F(text),
-			},
-		}
-		if len(attachments) > 0 {
-			for _, attachment := range attachments {
-				parts = append(parts, opencode.FilePartParam{
-					Mime:     attachment.Mime,
-					Type:     attachment.Type,
-					URL:      attachment.URL,
-					Filename: attachment.Filename,
+		partsParam := []opencode.SessionChatParamsPartUnion{}
+		for _, part := range parts {
+			switch casted := part.(type) {
+			case opencode.TextPart:
+				partsParam = append(partsParam, opencode.TextPartParam{
+					ID:        opencode.F(casted.ID),
+					MessageID: opencode.F(casted.MessageID),
+					SessionID: opencode.F(casted.SessionID),
+					Type:      opencode.F(casted.Type),
+					Text:      opencode.F(casted.Text),
+				})
+			case opencode.FilePart:
+				partsParam = append(partsParam, opencode.FilePartParam{
+					ID:        opencode.F(casted.ID),
+					Mime:      opencode.F(casted.Mime),
+					MessageID: opencode.F(casted.MessageID),
+					SessionID: opencode.F(casted.SessionID),
+					Type:      opencode.F(casted.Type),
+					URL:       opencode.F(casted.URL),
+					Filename:  opencode.F(casted.Filename),
 				})
 			}
 		}
 
 		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			Parts:      opencode.F(parts),
+			Parts:      opencode.F(partsParam),
+			MessageID:  opencode.F(message.ID),
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
+			Mode:       opencode.F(a.Mode.Name),
 		})
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
@@ -468,15 +580,25 @@ func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func (a *App) ListMessages(ctx context.Context, sessionId string) ([]opencode.Message, error) {
+func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
 	response, err := a.Client.Session.Messages(ctx, sessionId)
 	if err != nil {
 		return nil, err
 	}
 	if response == nil {
-		return []opencode.Message{}, nil
+		return []Message{}, nil
 	}
-	messages := *response
+	messages := []Message{}
+	for _, message := range *response {
+		msg := Message{
+			Info:  message.Info.AsUnion(),
+			Parts: []opencode.PartUnion{},
+		}
+		for _, part := range message.Parts {
+			msg.Parts = append(msg.Parts, part.AsUnion())
+		}
+		messages = append(messages, msg)
+	}
 	return messages, nil
 }
 

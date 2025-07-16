@@ -51,7 +51,8 @@ func (r *ConfigService) Providers(ctx context.Context, opts ...option.RequestOpt
 type Config struct {
 	// JSON schema reference for configuration validation
 	Schema string `json:"$schema"`
-	// Share newly created sessions automatically
+	// @deprecated Use 'share' field instead. Share newly created sessions
+	// automatically
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
@@ -62,15 +63,23 @@ type Config struct {
 	Instructions []string `json:"instructions"`
 	// Custom keybind configurations
 	Keybinds Keybinds `json:"keybinds"`
+	// Minimum log level to write to log files
+	LogLevel LogLevel `json:"log_level"`
 	// MCP (Model Context Protocol) server configurations
-	Mcp map[string]ConfigMcp `json:"mcp"`
+	Mcp  map[string]ConfigMcp `json:"mcp"`
+	Mode ConfigMode           `json:"mode"`
 	// Model to use in the format of provider/model, eg anthropic/claude-2
 	Model string `json:"model"`
 	// Custom provider configurations and model overrides
 	Provider map[string]ConfigProvider `json:"provider"`
+	// Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables
+	// all sharing
+	Share ConfigShare `json:"share"`
 	// Theme name to use for the interface
-	Theme string     `json:"theme"`
-	JSON  configJSON `json:"-"`
+	Theme string `json:"theme"`
+	// Custom username to display in conversations instead of system username
+	Username string     `json:"username"`
+	JSON     configJSON `json:"-"`
 }
 
 // configJSON contains the JSON metadata for the struct [Config]
@@ -82,10 +91,14 @@ type configJSON struct {
 	Experimental      apijson.Field
 	Instructions      apijson.Field
 	Keybinds          apijson.Field
+	LogLevel          apijson.Field
 	Mcp               apijson.Field
+	Mode              apijson.Field
 	Model             apijson.Field
 	Provider          apijson.Field
+	Share             apijson.Field
 	Theme             apijson.Field
+	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }
@@ -273,6 +286,77 @@ func (r ConfigMcpType) IsKnown() bool {
 	return false
 }
 
+type ConfigMode struct {
+	Build       ConfigModeBuild       `json:"build"`
+	Plan        ConfigModePlan        `json:"plan"`
+	ExtraFields map[string]ConfigMode `json:"-,extras"`
+	JSON        configModeJSON        `json:"-"`
+}
+
+// configModeJSON contains the JSON metadata for the struct [ConfigMode]
+type configModeJSON struct {
+	Build       apijson.Field
+	Plan        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigMode) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModeJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModeBuild struct {
+	Model  string              `json:"model"`
+	Prompt string              `json:"prompt"`
+	Tools  map[string]bool     `json:"tools"`
+	JSON   configModeBuildJSON `json:"-"`
+}
+
+// configModeBuildJSON contains the JSON metadata for the struct [ConfigModeBuild]
+type configModeBuildJSON struct {
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Tools       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModeBuild) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModeBuildJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModePlan struct {
+	Model  string             `json:"model"`
+	Prompt string             `json:"prompt"`
+	Tools  map[string]bool    `json:"tools"`
+	JSON   configModePlanJSON `json:"-"`
+}
+
+// configModePlanJSON contains the JSON metadata for the struct [ConfigModePlan]
+type configModePlanJSON struct {
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Tools       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModePlan) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModePlanJSON) RawJSON() string {
+	return r.raw
+}
+
 type ConfigProvider struct {
 	Models  map[string]ConfigProviderModel `json:"models,required"`
 	ID      string                         `json:"id"`
@@ -394,73 +478,92 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 	return r.raw
 }
 
+// Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables
+// all sharing
+type ConfigShare string
+
+const (
+	ConfigShareAuto     ConfigShare = "auto"
+	ConfigShareDisabled ConfigShare = "disabled"
+)
+
+func (r ConfigShare) IsKnown() bool {
+	switch r {
+	case ConfigShareAuto, ConfigShareDisabled:
+		return true
+	}
+	return false
+}
+
 type Keybinds struct {
 	// Exit the application
-	AppExit string `json:"app_exit"`
+	AppExit string `json:"app_exit,required"`
 	// Show help dialog
-	AppHelp string `json:"app_help"`
+	AppHelp string `json:"app_help,required"`
 	// Open external editor
-	EditorOpen string `json:"editor_open"`
+	EditorOpen string `json:"editor_open,required"`
 	// Close file
-	FileClose string `json:"file_close"`
-	// Toggle split/unified diff
-	FileDiffToggle string `json:"file_diff_toggle"`
+	FileClose string `json:"file_close,required"`
+	// Split/unified diff
+	FileDiffToggle string `json:"file_diff_toggle,required"`
 	// List files
-	FileList string `json:"file_list"`
+	FileList string `json:"file_list,required"`
 	// Search file
-	FileSearch string `json:"file_search"`
+	FileSearch string `json:"file_search,required"`
 	// Clear input field
-	InputClear string `json:"input_clear"`
+	InputClear string `json:"input_clear,required"`
 	// Insert newline in input
-	InputNewline string `json:"input_newline"`
+	InputNewline string `json:"input_newline,required"`
 	// Paste from clipboard
-	InputPaste string `json:"input_paste"`
+	InputPaste string `json:"input_paste,required"`
 	// Submit input
-	InputSubmit string `json:"input_submit"`
+	InputSubmit string `json:"input_submit,required"`
 	// Leader key for keybind combinations
-	Leader string `json:"leader"`
+	Leader string `json:"leader,required"`
 	// Copy message
-	MessagesCopy string `json:"messages_copy"`
+	MessagesCopy string `json:"messages_copy,required"`
 	// Navigate to first message
-	MessagesFirst string `json:"messages_first"`
+	MessagesFirst string `json:"messages_first,required"`
 	// Scroll messages down by half page
-	MessagesHalfPageDown string `json:"messages_half_page_down"`
+	MessagesHalfPageDown string `json:"messages_half_page_down,required"`
 	// Scroll messages up by half page
-	MessagesHalfPageUp string `json:"messages_half_page_up"`
+	MessagesHalfPageUp string `json:"messages_half_page_up,required"`
 	// Navigate to last message
-	MessagesLast string `json:"messages_last"`
+	MessagesLast string `json:"messages_last,required"`
 	// Toggle layout
-	MessagesLayoutToggle string `json:"messages_layout_toggle"`
+	MessagesLayoutToggle string `json:"messages_layout_toggle,required"`
 	// Navigate to next message
-	MessagesNext string `json:"messages_next"`
+	MessagesNext string `json:"messages_next,required"`
 	// Scroll messages down by one page
-	MessagesPageDown string `json:"messages_page_down"`
+	MessagesPageDown string `json:"messages_page_down,required"`
 	// Scroll messages up by one page
-	MessagesPageUp string `json:"messages_page_up"`
+	MessagesPageUp string `json:"messages_page_up,required"`
 	// Navigate to previous message
-	MessagesPrevious string `json:"messages_previous"`
+	MessagesPrevious string `json:"messages_previous,required"`
 	// Revert message
-	MessagesRevert string `json:"messages_revert"`
+	MessagesRevert string `json:"messages_revert,required"`
 	// List available models
-	ModelList string `json:"model_list"`
-	// Initialize project configuration
-	ProjectInit string `json:"project_init"`
-	// Toggle compact mode for session
-	SessionCompact string `json:"session_compact"`
+	ModelList string `json:"model_list,required"`
+	// Create/update AGENTS.md
+	ProjectInit string `json:"project_init,required"`
+	// Compact the session
+	SessionCompact string `json:"session_compact,required"`
 	// Interrupt current session
-	SessionInterrupt string `json:"session_interrupt"`
+	SessionInterrupt string `json:"session_interrupt,required"`
 	// List all sessions
-	SessionList string `json:"session_list"`
+	SessionList string `json:"session_list,required"`
 	// Create a new session
-	SessionNew string `json:"session_new"`
+	SessionNew string `json:"session_new,required"`
 	// Share current session
-	SessionShare string `json:"session_share"`
+	SessionShare string `json:"session_share,required"`
 	// Unshare current session
-	SessionUnshare string `json:"session_unshare"`
+	SessionUnshare string `json:"session_unshare,required"`
+	// Switch mode
+	SwitchMode string `json:"switch_mode,required"`
 	// List available themes
-	ThemeList string `json:"theme_list"`
-	// Show tool details
-	ToolDetails string       `json:"tool_details"`
+	ThemeList string `json:"theme_list,required"`
+	// Toggle tool details
+	ToolDetails string       `json:"tool_details,required"`
 	JSON        keybindsJSON `json:"-"`
 }
 
@@ -497,6 +600,7 @@ type keybindsJSON struct {
 	SessionNew           apijson.Field
 	SessionShare         apijson.Field
 	SessionUnshare       apijson.Field
+	SwitchMode           apijson.Field
 	ThemeList            apijson.Field
 	ToolDetails          apijson.Field
 	raw                  string

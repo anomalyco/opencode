@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
 )
@@ -46,12 +47,27 @@ func (r *AppService) Init(ctx context.Context, opts ...option.RequestOption) (re
 	return
 }
 
+// Write a log entry to the server logs
+func (r *AppService) Log(ctx context.Context, body AppLogParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "log"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
+// List all modes
+func (r *AppService) Modes(ctx context.Context, opts ...option.RequestOption) (res *[]Mode, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "mode"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	return
+}
+
 type App struct {
 	Git      bool    `json:"git,required"`
 	Hostname string  `json:"hostname,required"`
 	Path     AppPath `json:"path,required"`
 	Time     AppTime `json:"time,required"`
-	User     string  `json:"user,required"`
 	JSON     appJSON `json:"-"`
 }
 
@@ -61,7 +77,6 @@ type appJSON struct {
 	Hostname    apijson.Field
 	Path        apijson.Field
 	Time        apijson.Field
-	User        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -120,4 +135,103 @@ func (r *AppTime) UnmarshalJSON(data []byte) (err error) {
 
 func (r appTimeJSON) RawJSON() string {
 	return r.raw
+}
+
+// Log level
+type LogLevel string
+
+const (
+	LogLevelDebug LogLevel = "DEBUG"
+	LogLevelInfo  LogLevel = "INFO"
+	LogLevelWarn  LogLevel = "WARN"
+	LogLevelError LogLevel = "ERROR"
+)
+
+func (r LogLevel) IsKnown() bool {
+	switch r {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
+		return true
+	}
+	return false
+}
+
+type Mode struct {
+	Name   string          `json:"name,required"`
+	Tools  map[string]bool `json:"tools,required"`
+	Model  ModeModel       `json:"model"`
+	Prompt string          `json:"prompt"`
+	JSON   modeJSON        `json:"-"`
+}
+
+// modeJSON contains the JSON metadata for the struct [Mode]
+type modeJSON struct {
+	Name        apijson.Field
+	Tools       apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *Mode) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modeJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModeModel struct {
+	ModelID    string        `json:"modelID,required"`
+	ProviderID string        `json:"providerID,required"`
+	JSON       modeModelJSON `json:"-"`
+}
+
+// modeModelJSON contains the JSON metadata for the struct [ModeModel]
+type modeModelJSON struct {
+	ModelID     apijson.Field
+	ProviderID  apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModeModel) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modeModelJSON) RawJSON() string {
+	return r.raw
+}
+
+type AppLogParams struct {
+	// Log level
+	Level param.Field[AppLogParamsLevel] `json:"level,required"`
+	// Log message
+	Message param.Field[string] `json:"message,required"`
+	// Service name for the log entry
+	Service param.Field[string] `json:"service,required"`
+	// Additional metadata for the log entry
+	Extra param.Field[map[string]interface{}] `json:"extra"`
+}
+
+func (r AppLogParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
+}
+
+// Log level
+type AppLogParamsLevel string
+
+const (
+	AppLogParamsLevelDebug AppLogParamsLevel = "debug"
+	AppLogParamsLevelInfo  AppLogParamsLevel = "info"
+	AppLogParamsLevelError AppLogParamsLevel = "error"
+	AppLogParamsLevelWarn  AppLogParamsLevel = "warn"
+)
+
+func (r AppLogParamsLevel) IsKnown() bool {
+	switch r {
+	case AppLogParamsLevelDebug, AppLogParamsLevelInfo, AppLogParamsLevelError, AppLogParamsLevelWarn:
+		return true
+	}
+	return false
 }

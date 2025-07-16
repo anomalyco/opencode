@@ -7,7 +7,6 @@
   align-items: flex-start;
   gap: 1rem;
   align-self: flex-start;
-  max-width: var(--md-tool-width);
 
   [data-section="content"] {
     pre {

@@ -117,10 +117,17 @@ func TestSessionChat(t *testing.T) {
 		context.TODO(),
 		"id",
 		opencode.SessionChatParams{
-			ModelID: opencode.F("modelID"),
-			Parts: opencode.F([]opencode.UserMessagePartUnionParam{opencode.TextPartParam{
-				Text: opencode.F("text"),
-				Type: opencode.F(opencode.TextPartTypeText),
+			MessageID: opencode.F("messageID"),
+			Mode:      opencode.F("mode"),
+			ModelID:   opencode.F("modelID"),
+			Parts: opencode.F([]opencode.SessionChatParamsPartUnion{opencode.FilePartParam{
+				ID:        opencode.F("id"),
+				MessageID: opencode.F("messageID"),
+				Mime:      opencode.F("mime"),
+				SessionID: opencode.F("sessionID"),
+				Type:      opencode.F(opencode.FilePartTypeFile),
+				URL:       opencode.F("url"),
+				Filename:  opencode.F("filename"),
 			}}),
 			ProviderID: opencode.F("providerID"),
 		},
@@ -150,6 +157,7 @@ func TestSessionInit(t *testing.T) {
 		context.TODO(),
 		"id",
 		opencode.SessionInitParams{
+			MessageID:  opencode.F("messageID"),
 			ModelID:    opencode.F("modelID"),
 			ProviderID: opencode.F("providerID"),
 		},

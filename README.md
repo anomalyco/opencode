@@ -9,7 +9,7 @@
 </p>
 <p align="center">AI coding agent, built for the terminal.</p>
 <p align="center">
-  <a href="https://discord.gg/opencode"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
@@ -38,10 +38,24 @@ For more info on how to configure opencode [**head over to our docs**](https://o
 
 ### Contributing
 
-For any new features we'd appreciate it if you could open an issue first to discuss what you'd like to implement. We're pretty responsive there and it'll save you from working on something that we don't end up using. No need to do this for simpler fixes.
+WE DO NOT ACCEPT PRs FOR CORE FEATURES
 
-> **Note**: Please talk to us via github issues before spending time working on
-> a new feature
+opencode is an opinionated tool so any fundamental feature needs to go through a
+design process with the core team.
+
+However we still merge a ton of PRs - you can contribute:
+
+- bug fixes
+- improvements to LLM performance
+- support for new providers
+- fixes for env specific quirks
+- missing standard behavior
+- documentation
+
+Take a look at the git history to see what kind of PRs we end up merging.
+
+> **Note**: If you do not follow the above guidelines we might close your PR
+> that you worked really hard on.
 
 To run opencode locally you need.
 

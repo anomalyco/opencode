@@ -4,9 +4,13 @@ import { Auth } from "./index"
 export namespace AuthAnthropic {
   const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
-  export async function authorize() {
+  export async function authorize(mode: "max" | "console") {
     const pkce = await generatePKCE()
-    const url = new URL("https://claude.ai/oauth/authorize", import.meta.url)
+
+    const url = new URL(
+      `https://${mode === "console" ? "console.anthropic.com" : "claude.ai"}/oauth/authorize`,
+      import.meta.url,
+    )
     url.searchParams.set("code", "true")
     url.searchParams.set("client_id", CLIENT_ID)
     url.searchParams.set("response_type", "code")
@@ -39,12 +43,11 @@ export namespace AuthAnthropic {
     })
     if (!result.ok) throw new ExchangeFailed()
     const json = await result.json()
-    await Auth.set("anthropic", {
-      type: "oauth",
+    return {
       refresh: json.refresh_token as string,
       access: json.access_token as string,
       expires: Date.now() + json.expires_in * 1000,
-    })
+    }
   }
 
   export async function access() {

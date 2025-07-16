@@ -8,6 +8,8 @@ import { Flag } from "../../flag/flag"
 import { Config } from "../../config/config"
 import { bootstrap } from "../bootstrap"
 import { MessageV2 } from "../../session/message-v2"
+import { Mode } from "../../session/mode"
+import { Identifier } from "../../id/id"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -52,6 +54,10 @@ export const RunCommand = cmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       })
+      .option("mode", {
+        type: "string",
+        describe: "mode to use",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -61,7 +67,9 @@ export const RunCommand = cmd({
     await bootstrap({ cwd: process.cwd() }, async () => {
       const session = await (async () => {
         if (args.continue) {
-          const first = await Session.list().next()
+          const list = Session.list()
+          const first = await list.next()
+          await list.return()
           if (first.done) return
           return first.value
         }
@@ -76,19 +84,22 @@ export const RunCommand = cmd({
         return
       }
 
-      const isPiped = !process.stdout.isTTY
-
       UI.empty()
       UI.println(UI.logo())
       UI.empty()
-      const displayMessage = message.length > 300 ? message.slice(0, 300) + "..." : message
-      UI.println(UI.Style.TEXT_NORMAL_BOLD + "> ", displayMessage)
-      UI.empty()
 
       const cfg = await Config.get()
-      if (cfg.autoshare || Flag.OPENCODE_AUTO_SHARE || args.share) {
-        await Session.share(session.id)
-        UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + session.id.slice(-8))
+      if (cfg.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share) {
+        try {
+          await Session.share(session.id)
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + session.id.slice(-8))
+        } catch (error) {
+          if (error instanceof Error && error.message.includes("disabled")) {
+            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
+          } else {
+            throw error
+          }
+        }
       }
       UI.empty()
 
@@ -105,23 +116,29 @@ export const RunCommand = cmd({
         )
       }
 
+      let text = ""
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-        if (evt.properties.sessionID !== session.id) return
+        if (evt.properties.part.sessionID !== session.id) return
+        if (evt.properties.part.messageID === messageID) return
         const part = evt.properties.part
 
         if (part.type === "tool" && part.state.status === "completed") {
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-          printEvent(color, tool, part.state.title || "Unknown")
+          const title =
+            part.state.title || Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown"
+          printEvent(color, tool, title)
         }
 
         if (part.type === "text") {
-          if (part.text.includes("\n")) {
+          text = part.text
+
+          if (part.time?.end) {
             UI.empty()
-            UI.println(part.text)
+            UI.println(UI.markdown(text))
             UI.empty()
+            text = ""
             return
           }
-          printEvent(UI.Style.TEXT_NORMAL_BOLD, "Text", part.text)
         }
       })
 
@@ -139,21 +156,34 @@ export const RunCommand = cmd({
         UI.error(err)
       })
 
+      const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
+
+      const messageID = Identifier.ascending("message")
       const result = await Session.chat({
         sessionID: session.id,
-        providerID,
-        modelID,
+        messageID,
+        ...(mode.model
+          ? mode.model
+          : {
+              providerID,
+              modelID,
+            }),
+        mode: mode.name,
         parts: [
           {
+            id: Identifier.ascending("part"),
+            sessionID: session.id,
+            messageID: messageID,
             type: "text",
             text: message,
           },
         ],
       })
 
+      const isPiped = !process.stdout.isTTY
       if (isPiped) {
         const match = result.parts.findLast((x) => x.type === "text")
-        if (match) process.stdout.write(match.text)
+        if (match) process.stdout.write(UI.markdown(match.text))
         if (errorMsg) process.stdout.write(errorMsg)
       }
       UI.empty()

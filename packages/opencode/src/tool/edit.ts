@@ -20,8 +20,8 @@ export const EditTool = Tool.define({
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     oldString: z.string().describe("The text to replace"),
-    newString: z.string().describe("The text to replace it with (must be different from old_string)"),
-    replaceAll: z.boolean().optional().describe("Replace all occurrences of old_string (default false)"),
+    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {

@@ -23,10 +23,10 @@ func TestUsage(t *testing.T) {
 	client := opencode.NewClient(
 		option.WithBaseURL(baseURL),
 	)
-	events, err := client.Event.List(context.TODO())
+	sessions, err := client.Session.List(context.TODO())
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	t.Logf("%+v\n", events)
+	t.Logf("%+v\n", sessions)
 }

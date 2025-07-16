@@ -60,6 +60,7 @@ async function fetchReleases(): Promise<Release[]> {
 
     if (batch.length < per) break
     page++
+    await new Promise((resolve) => setTimeout(resolve, 1000))
   }
 
   return releases

@@ -4,10 +4,25 @@ import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
 import { z } from "zod"
-import { Filesystem } from "../util/filesystem"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  export const Range = z
+    .object({
+      start: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+      end: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+    })
+    .openapi({
+      ref: "Range",
+    })
+  export type Range = z.infer<typeof Range>
 
   export const Symbol = z
     .object({
@@ -15,55 +30,33 @@ export namespace LSP {
       kind: z.number(),
       location: z.object({
         uri: z.string(),
-        range: z.object({
-          start: z.object({
-            line: z.number(),
-            character: z.number(),
-          }),
-          end: z.object({
-            line: z.number(),
-            character: z.number(),
-          }),
-        }),
+        range: Range,
       }),
     })
     .openapi({
-      ref: "LSP.Symbol",
+      ref: "Symbol",
     })
   export type Symbol = z.infer<typeof Symbol>
 
+  export const DocumentSymbol = z
+    .object({
+      name: z.string(),
+      detail: z.string().optional(),
+      kind: z.number(),
+      range: Range,
+      selectionRange: Range,
+    })
+    .openapi({
+      ref: "DocumentSymbol",
+    })
+  export type DocumentSymbol = z.infer<typeof DocumentSymbol>
+
   const state = App.state(
     "lsp",
-    async (app) => {
-      log.info("initializing")
+    async () => {
       const clients: LSPClient.Info[] = []
-
-      for (const server of Object.values(LSPServer)) {
-        const roots = await server.roots(app)
-
-        for (const root of roots) {
-          if (!Filesystem.overlaps(app.path.cwd, root)) continue
-          log.info("", {
-            root,
-            serverID: server.id,
-          })
-          const handle = await server.spawn(App.info(), root)
-          if (!handle) break
-          const client = await LSPClient.create({
-            serverID: server.id,
-            server: handle,
-            root,
-          }).catch((err) => {
-            handle.process.kill()
-            log.error("", { error: err })
-          })
-          if (!client) break
-          clients.push(client)
-        }
-      }
-
-      log.info("initialized")
       return {
+        broken: new Set<string>(),
         clients,
       }
     },
@@ -78,13 +71,43 @@ export namespace LSP {
     return state()
   }
 
+  async function getClients(file: string) {
+    const s = await state()
+    const extension = path.parse(file).ext
+    const result: LSPClient.Info[] = []
+    for (const server of Object.values(LSPServer)) {
+      if (!server.extensions.includes(extension)) continue
+      const root = await server.root(file, App.info())
+      if (!root) continue
+      if (s.broken.has(root + server.id)) continue
+
+      const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
+      if (match) {
+        result.push(match)
+        continue
+      }
+      const handle = await server.spawn(App.info(), root)
+      if (!handle) continue
+      const client = await LSPClient.create({
+        serverID: server.id,
+        server: handle,
+        root,
+      }).catch((err) => {
+        s.broken.add(root + server.id)
+        handle.process.kill()
+        log.error("", { error: err })
+      })
+      if (!client) continue
+      s.clients.push(client)
+      result.push(client)
+    }
+    return result
+  }
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
-    const extension = path.parse(input).ext
-    const matches = Object.values(LSPServer)
-      .filter((x) => x.extensions.includes(extension))
-      .map((x) => x.id)
+    const clients = await getClients(input)
     await run(async (client) => {
-      if (!matches.includes(client.serverID)) return
+      if (!clients.includes(client)) return
       const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
@@ -117,15 +140,70 @@ export namespace LSP {
     })
   }
 
+  enum SymbolKind {
+    File = 1,
+    Module = 2,
+    Namespace = 3,
+    Package = 4,
+    Class = 5,
+    Method = 6,
+    Property = 7,
+    Field = 8,
+    Constructor = 9,
+    Enum = 10,
+    Interface = 11,
+    Function = 12,
+    Variable = 13,
+    Constant = 14,
+    String = 15,
+    Number = 16,
+    Boolean = 17,
+    Array = 18,
+    Object = 19,
+    Key = 20,
+    Null = 21,
+    EnumMember = 22,
+    Struct = 23,
+    Event = 24,
+    Operator = 25,
+    TypeParameter = 26,
+  }
+
+  const kinds = [
+    SymbolKind.Class,
+    SymbolKind.Function,
+    SymbolKind.Method,
+    SymbolKind.Interface,
+    SymbolKind.Variable,
+    SymbolKind.Constant,
+    SymbolKind.Struct,
+    SymbolKind.Enum,
+  ]
+
   export async function workspaceSymbol(query: string) {
     return run((client) =>
       client.connection
         .sendRequest("workspace/symbol", {
           query,
         })
+        .then((result: any) => result.filter((x: LSP.Symbol) => kinds.includes(x.kind)))
         .then((result: any) => result.slice(0, 10))
         .catch(() => []),
     ).then((result) => result.flat() as LSP.Symbol[])
+  }
+
+  export async function documentSymbol(uri: string) {
+    return run((client) =>
+      client.connection
+        .sendRequest("textDocument/documentSymbol", {
+          textDocument: {
+            uri,
+          },
+        })
+        .catch(() => []),
+    )
+      .then((result) => result.flat() as (LSP.DocumentSymbol | LSP.Symbol)[])
+      .then((result) => result.filter(Boolean))
   }
 
   async function run<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {

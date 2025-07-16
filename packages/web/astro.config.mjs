@@ -7,6 +7,7 @@ import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
+import { spawnSync } from "child_process"
 
 const github = "https://github.com/sst/opencode"
 
@@ -26,7 +27,9 @@ export default defineConfig({
   markdown: {
     rehypePlugins: [rehypeHeadingIds, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
   },
+  build: {},
   integrations: [
+    configSchema(),
     solidJs(),
     starlight({
       title: "opencode",
@@ -59,12 +62,16 @@ export default defineConfig({
       sidebar: [
         "docs",
         "docs/cli",
+        "docs/share",
+        "docs/modes",
         "docs/rules",
         "docs/config",
         "docs/models",
         "docs/themes",
         "docs/keybinds",
+        "docs/enterprise",
         "docs/mcp-servers",
+        "docs/troubleshooting",
       ],
       components: {
         Hero: "./src/components/Hero.astro",
@@ -78,4 +85,19 @@ export default defineConfig({
       ],
     }),
   ],
+  redirects: {
+    "/discord": "https://discord.gg/opencode",
+  },
 })
+
+function configSchema() {
+  return {
+    name: "configSchema",
+    hooks: {
+      "astro:build:done": async () => {
+        console.log("generating config schema")
+        spawnSync("../opencode/script/schema.ts", ["./dist/config.json"])
+      },
+    },
+  }
+}

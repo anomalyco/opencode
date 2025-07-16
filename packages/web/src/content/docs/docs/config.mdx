@@ -3,12 +3,9 @@ title: Config
 description: Using the opencode JSON config.
 ---
 
-You can configure opencode using a JSON config file that can be placed in:
+You can configure opencode using a JSON config file.
 
-- Globally under `~/.config/opencode/config.json`.
-- Your project root under `opencode.json`. This is safe to be checked into Git and uses the same schema as the global one.
-
-```json
+```json title="opencode config"
 {
   "$schema": "https://opencode.ai/config.json",
   "theme": "opencode",
@@ -18,9 +15,23 @@ You can configure opencode using a JSON config file that can be placed in:
 }
 ```
 
-In most cases, you'll want to use the global config for things like themes, providers, or keybinds. Having a config per project is useful if you are using different providers for your company.
+This can be used to configure opencode globally or for a specific project.
+
+---
+
+### Global
+
+Place your global opencode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+
+---
+
+### Per project
+
+You can also add a `opencode.json` in your project. This is useful for configuring providers or modes specific to your project.
 
 When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+
+This is also safe to be checked into Git and uses the same schema as the global one.
 
 ---
 
@@ -29,6 +40,25 @@ When opencode starts up, it looks for a config file in the current directory or 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
 
 Your editor should be able to validate and autocomplete based on the schema.
+
+---
+
+### Modes
+
+opencode comes with two built-in modes: _build_, the default with all tools enabled. And _plan_, restricted mode with file modification tools disabled. You can override these built-in modes or define your own custom modes with the `mode` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "build": { },
+    "plan": { },
+    "my-custom-mode": { }
+  }
+}
+```
+
+[Learn more here](/docs/modes).
 
 ---
 
@@ -44,7 +74,7 @@ You can configure the providers and models you want to use in your opencode conf
 }
 ```
 
-[Learn more here](/docs/models).
+You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
 ---
 
@@ -60,6 +90,36 @@ You can configure the theme you want to use in your opencode config through the 
 ```
 
 [Learn more here](/docs/themes).
+
+---
+
+### Logging
+
+Logs are written to:
+
+- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **Windows**: `%APPDATA%\opencode\log\`
+
+You can configure the minimum log level through the `log_level` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "log_level": "INFO"
+}
+```
+
+With the following options:
+
+| Level   | Description                              |
+| ------- | ---------------------------------------- |
+| `DEBUG` | All messages including debug information |
+| `INFO`  | Informational messages and above         |
+| `WARN`  | Warnings and errors only                 |
+| `ERROR` | Errors only                              |
+
+The **default** log level is `INFO`. If you are running opencode locally in
+development mode it's set to `DEBUG`.
 
 ---
 
@@ -109,3 +169,58 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 - It won't be loaded even if environment variables are set
 - It won't be loaded even if API keys are configured through `opencode auth login`
 - The provider's models won't appear in the model selection list
+
+---
+
+## Variables
+
+You can use variable substitution in your config files to reference environment variables and file contents.
+
+---
+
+### Env vars
+
+Use `{env:VARIABLE_NAME}` to substitute environment variables:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "api_key": "{env:ANTHROPIC_API_KEY}"
+    }
+  }
+}
+```
+
+If the environment variable is not set, it will be replaced with an empty string.
+
+---
+
+### Files
+
+Use `{file:path/to/file}` to substitute the contents of a file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["{file:./custom-instructions.md}"],
+  "provider": {
+    "openai": {
+      "api_key": "{file:~/.secrets/openai-key}"
+    }
+  }
+}
+```
+
+File paths can be:
+
+- Relative to the config file directory
+- Or absolute paths starting with `/` or `~`
+
+These are useful for:
+
+- Keeping sensitive data like API keys in separate files.
+- Including large instruction files without cluttering your config.
+- Sharing common configuration snippets across multiple config files.

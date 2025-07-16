@@ -14,6 +14,8 @@ import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
+import { StatsCommand } from "./cli/cmd/stats"
+import { McpCommand } from "./cli/cmd/mcp"
 
 const cancel = new AbortController()
 
@@ -40,12 +42,31 @@ const cli = yargs(hideBin(process.argv))
   })
   .middleware(async () => {
     await Log.init({ print: process.argv.includes("--print-logs") })
+
+    try {
+      const { Config } = await import("./config/config")
+      const { App } = await import("./app/app")
+
+      App.provide({ cwd: process.cwd() }, async () => {
+        const cfg = await Config.get()
+        if (cfg.log_level) {
+          Log.setLevel(cfg.log_level as Log.Level)
+        } else {
+          const defaultLevel = Installation.isDev() ? "DEBUG" : "INFO"
+          Log.setLevel(defaultLevel)
+        }
+      })
+    } catch (e) {
+      Log.Default.error("failed to load config", { error: e })
+    }
+
     Log.Default.info("opencode", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
   })
   .usage("\n" + UI.logo())
+  .command(McpCommand)
   .command(TuiCommand)
   .command(RunCommand)
   .command(GenerateCommand)
@@ -54,6 +75,7 @@ const cli = yargs(hideBin(process.argv))
   .command(UpgradeCommand)
   .command(ServeCommand)
   .command(ModelsCommand)
+  .command(StatsCommand)
   .fail((msg) => {
     if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
       cli.showHelp("log")

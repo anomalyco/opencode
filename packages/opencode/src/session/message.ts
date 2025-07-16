@@ -1,9 +1,15 @@
 import z from "zod"
-import { Provider } from "../provider/provider"
 import { NamedError } from "../util/error"
 
 export namespace Message {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
+  export const AuthError = NamedError.create(
+    "ProviderAuthError",
+    z.object({
+      providerID: z.string(),
+      message: z.string(),
+    }),
+  )
 
   export const ToolCall = z
     .object({
@@ -134,11 +140,7 @@ export namespace Message {
             completed: z.number().optional(),
           }),
           error: z
-            .discriminatedUnion("name", [
-              Provider.AuthError.Schema,
-              NamedError.Unknown.Schema,
-              OutputLengthError.Schema,
-            ])
+            .discriminatedUnion("name", [AuthError.Schema, NamedError.Unknown.Schema, OutputLengthError.Schema])
             .optional(),
           sessionID: z.string(),
           tool: z.record(

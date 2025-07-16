@@ -4,6 +4,8 @@ export const domain = (() => {
   return `${$app.stage}.dev.opencode.ai`
 })()
 
+const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
+const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
 const bucket = new sst.cloudflare.Bucket("Bucket")
 
 export const api = new sst.cloudflare.Worker("Api", {
@@ -13,7 +15,7 @@ export const api = new sst.cloudflare.Worker("Api", {
     WEB_DOMAIN: domain,
   },
   url: true,
-  link: [bucket],
+  link: [bucket, GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY],
   transform: {
     worker: (args) => {
       args.logpush = true

@@ -16,18 +16,27 @@ type ModelUsage struct {
 	LastUsed   time.Time `toml:"last_used"`
 }
 
+type ModeModel struct {
+	ProviderID string `toml:"provider_id"`
+	ModelID    string `toml:"model_id"`
+}
+
 type State struct {
-	Theme              string       `toml:"theme"`
-	Provider           string       `toml:"provider"`
-	Model              string       `toml:"model"`
-	RecentlyUsedModels []ModelUsage `toml:"recently_used_models"`
-	MessagesRight      bool         `toml:"messages_right"`
-	SplitDiff          bool         `toml:"split_diff"`
+	Theme              string               `toml:"theme"`
+	ModeModel          map[string]ModeModel `toml:"mode_model"`
+	Provider           string               `toml:"provider"`
+	Model              string               `toml:"model"`
+	Mode               string               `toml:"mode"`
+	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
+	MessagesRight      bool                 `toml:"messages_right"`
+	SplitDiff          bool                 `toml:"split_diff"`
 }
 
 func NewState() *State {
 	return &State{
 		Theme:              "opencode",
+		Mode:               "build",
+		ModeModel:          make(map[string]ModeModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
 	}
 }
@@ -57,6 +66,15 @@ func (s *State) UpdateModelUsage(providerID, modelID string) {
 	s.RecentlyUsedModels = append([]ModelUsage{newUsage}, s.RecentlyUsedModels...)
 	if len(s.RecentlyUsedModels) > 50 {
 		s.RecentlyUsedModels = s.RecentlyUsedModels[:50]
+	}
+}
+
+func (s *State) RemoveModelFromRecentlyUsed(providerID, modelID string) {
+	for i, usage := range s.RecentlyUsedModels {
+		if usage.ProviderID == providerID && usage.ModelID == modelID {
+			s.RecentlyUsedModels = append(s.RecentlyUsedModels[:i], s.RecentlyUsedModels[i+1:]...)
+			return
+		}
 	}
 }
 

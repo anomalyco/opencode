@@ -5,16 +5,24 @@
 
 declare module "sst" {
   export interface Resource {
-    Api: {
-      type: "sst.cloudflare.Worker"
-      url: string
+    "Api": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
-    Bucket: {
-      type: "sst.cloudflare.Bucket"
+    "Bucket": {
+      "type": "sst.cloudflare.Bucket"
     }
-    Web: {
-      type: "sst.cloudflare.Astro"
-      url: string
+    "GITHUB_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GITHUB_APP_PRIVATE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "Web": {
+      "type": "sst.cloudflare.Astro"
+      "url": string
     }
   }
 }
