@@ -55,12 +55,11 @@ export const GrepTool = Tool.define({
     for (const line of lines) {
       if (!line) continue
 
-      const parts = line.split(":", 3)
-      if (parts.length < 3) continue
+      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
+      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
-      const filePath = parts[0]
-      const lineNum = parseInt(parts[1], 10)
-      const lineText = parts[2]
+      const lineNum = parseInt(lineNumStr, 10)
+      const lineText = lineTextParts.join(":")
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => null)
