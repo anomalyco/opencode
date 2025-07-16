@@ -139,9 +139,11 @@ export namespace Config {
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       share: z
-        .enum(["auto", "disabled"])
+        .enum(["manual", "auto", "disabled"])
         .optional()
-        .describe("Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables all sharing"),
+        .describe(
+          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+        ),
       autoshare: z
         .boolean()
         .optional()

@@ -135,28 +135,28 @@ With the following options:
 | `WARN`  | Warnings and errors only                 |
 | `ERROR` | Errors only                              |
 
-The **default** log level is `INFO`. If you are running opencode locally in
+The **default** log level is `INFO`. If you are running opencode locally in development mode it's set to `DEBUG`.
 
 ---
 
 ### Sharing
 
-You configure the [share](/docs/share) feature through the `share` option.
+You can configure the [share](/docs/share) feature through the `share` option.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "share": "auto"
+  "share": "manual"
 }
 ```
 
 This takes:
 
+- `"manual"` - Allow manual sharing via commands (default)
 - `"auto"` - Automatically share new conversations
 - `"disabled"` - Disable sharing entirely
 
-By default, you'll need to manually share new conversations.
-development mode it's set to `DEBUG`.
+By default, sharing is set to manual mode where you need to explicitly share conversations using the `/share` command.
 
 ---
 
@@ -256,7 +256,7 @@ Use `{env:VARIABLE_NAME}` to substitute environment variables:
     "anthropic": {
       "options": {
         "apiKey": "{env:ANTHROPIC_API_KEY}"
-        }
+      }
     }
   }
 }
