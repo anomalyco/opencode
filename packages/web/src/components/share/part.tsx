@@ -19,25 +19,25 @@ import {
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
 } from "../icons"
-import { IconMeta, IconOpenAI, IconGemini, IconAnthropic } from "../icons/custom"
-import { formatDuration } from "../share/common"
+import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic } from "../icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
-import { ContentError } from "./content-error"
-import { ContentMarkdown } from "./content-markdown"
 import { ContentBash } from "./content-bash"
+import { ContentError } from "./content-error"
+import { formatDuration } from "../share/common"
+import { ContentMarkdown } from "./content-markdown"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"
 
 import styles from "./part.module.css"
 
-const MIN_DURATION = 2
+const MIN_DURATION = 2000
 
 export interface PartProps {
   index: number
   message: MessageV2.Info
-  part: MessageV2.AssistantPart | MessageV2.UserPart
+  part: MessageV2.Part
   last: boolean
 }
 
@@ -114,7 +114,7 @@ export function Part(props: PartProps) {
                 <IconGlobeAlt width={18} height={18} />
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "task"}>
-                <IconRectangleStack width={18} height={18} />
+                <IconRobot width={18} height={18} />
               </Match>
               <Match when={true}>
                 <IconSparkles width={18} height={18} />
@@ -131,12 +131,13 @@ export function Part(props: PartProps) {
         {props.message.role === "user" && props.part.type === "text" && (
           <div data-component="user-text">
             <ContentText text={props.part.text} expand={props.last} />
-            <Spacer />
           </div>
         )}
         {props.message.role === "assistant" && props.part.type === "text" && (
           <div data-component="assistant-text">
-            <ContentMarkdown expand={props.last} text={props.part.text} />
+            <div data-component="assistant-text-markdown">
+              <ContentMarkdown expand={props.last} text={props.part.text} />
+            </div>
             {props.last && props.message.role === "assistant" && props.message.time.completed && (
               <Footer
                 title={DateTime.fromMillis(props.message.time.completed).toLocaleString(
@@ -146,7 +147,6 @@ export function Part(props: PartProps) {
                 {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
               </Footer>
             )}
-            <Spacer />
           </div>
         )}
         {props.message.role === "user" && props.part.type === "file" && (
@@ -245,6 +245,14 @@ export function Part(props: PartProps) {
                       state={props.part.state}
                     />
                   </Match>
+                  <Match when={props.part.tool === "task"}>
+                    <TaskTool
+                      id={props.part.id}
+                      tool={props.part.tool}
+                      message={props.message}
+                      state={props.part.state}
+                    />
+                  </Match>
                   <Match when={true}>
                     <FallbackTool
                       message={props.message}
@@ -256,11 +264,10 @@ export function Part(props: PartProps) {
                 </Switch>
               </div>
               <ToolFooter
-                time={
-                  DateTime.fromMillis(props.part.state.time.start)
-                    .diff(DateTime.fromMillis(props.part.state.time.end))
-                    .toMillis()
-                } />
+                time={DateTime.fromMillis(props.part.state.time.end)
+                  .diff(DateTime.fromMillis(props.part.state.time.start))
+                  .toMillis()}
+              />
             </>
           )}
       </div>
@@ -636,12 +643,25 @@ function Footer(props: ParentProps<{ title: string }>) {
 }
 
 function ToolFooter(props: { time: number }) {
-  return props.time > MIN_DURATION ? (
-    <Footer title={`${props.time}ms`}>
-      {formatDuration(props.time)}
-    </Footer>
-  ) : (
-    <Spacer />
+  return props.time > MIN_DURATION && <Footer title={`${props.time}ms`}>{formatDuration(props.time)}</Footer>
+}
+
+function TaskTool(props: ToolProps) {
+  return (
+    <>
+      <div data-component="tool-title">
+        <span data-slot="name">Task</span>
+        <span data-slot="target">{props.state.input.description}</span>
+      </div>
+      <div data-component="tool-input">
+        &ldquo;{props.state.input.prompt}&rdquo;
+      </div>
+      <ResultsButton showCopy="Show output" hideCopy="Hide output">
+        <div data-component="tool-output">
+          <ContentMarkdown expand text={props.state.output} />
+        </div>
+      </ResultsButton>
+    </>
   )
 }
 

@@ -33,6 +33,7 @@ export default defineConfig({
     solidJs(),
     starlight({
       title: "opencode",
+      lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
       social: [
         { icon: "github", label: "GitHub", href: config.github },

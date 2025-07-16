@@ -1,21 +1,13 @@
 .root {
-  border: 1px solid var(--sl-color-blue-high);
-  padding: 0.5rem calc(0.5rem + 3px);
-  border-radius: 0.25rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 1rem;
-  align-self: flex-start;
-
-  &[data-highlight="true"] {
-    background-color: var(--sl-color-blue-low);
-  }
 
   [data-slot="expand-button"] {
     flex: 0 0 auto;
     padding: 2px 0;
-    font-size: 0.75rem;
+    font-size: 0.857em;
   }
 
   [data-slot="markdown"] {
@@ -29,7 +21,7 @@
       display: block;
     }
 
-    font-size: 0.875rem;
+    font-size: 1em;
     line-height: 1.5;
 
     p,
@@ -61,7 +53,7 @@
     h4,
     h5,
     h6 {
-      font-size: 0.875rem;
+      font-size: 1em;
       font-weight: 600;
       margin-bottom: 0.5rem;
     }
@@ -75,7 +67,7 @@
       background-color: var(--sl-color-bg-surface) !important;
       padding: 0.5rem 0.75rem;
       line-height: 1.6;
-      font-size: 0.75rem;
+      font-size: 0.857em;
       white-space: pre-wrap;
       word-break: break-word;
 

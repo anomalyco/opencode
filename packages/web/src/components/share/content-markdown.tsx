@@ -1,10 +1,11 @@
-import style from "./content-markdown.module.css"
-import { createResource, createSignal } from "solid-js"
-import { createOverflow } from "./common"
-import { transformerNotationDiff } from "@shikijs/transformers"
 import { marked } from "marked"
-import markedShiki from "marked-shiki"
 import { codeToHtml } from "shiki"
+import markedShiki from "marked-shiki"
+import { createOverflow } from "./common"
+import { CopyButton } from "./copy-button"
+import { createResource, createSignal } from "solid-js"
+import { transformerNotationDiff } from "@shikijs/transformers"
+import style from "./content-markdown.module.css"
 
 const markedWithShiki = marked.use(
   markedShiki({
@@ -54,6 +55,7 @@ export function ContentMarkdown(props: Props) {
           {expanded() ? "Show less" : "Show more"}
         </button>
       )}
+      <CopyButton text={props.text} />
     </div>
   )
 }

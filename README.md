@@ -30,7 +30,8 @@ brew install sst/tap/opencode      # macOS
 paru -S opencode-bin               # Arch Linux
 ```
 
-> **Note:** Remove versions older than 0.1.x before installing
+> [!TIP]
+> Remove versions older than 0.1.x before installing.
 
 ### Documentation
 
@@ -38,24 +39,25 @@ For more info on how to configure opencode [**head over to our docs**](https://o
 
 ### Contributing
 
-WE DO NOT ACCEPT PRs FOR CORE FEATURES
-
 opencode is an opinionated tool so any fundamental feature needs to go through a
 design process with the core team.
 
+> [!IMPORTANT]
+> We do not accept PRs for core features.
+
 However we still merge a ton of PRs - you can contribute:
 
-- bug fixes
-- improvements to LLM performance
-- support for new providers
-- fixes for env specific quirks
-- missing standard behavior
-- documentation
+- Bug fixes
+- Improvements to LLM performance
+- Support for new providers
+- Fixes for env specific quirks
+- Missing standard behavior
+- Documentation
 
 Take a look at the git history to see what kind of PRs we end up merging.
 
-> **Note**: If you do not follow the above guidelines we might close your PR
-> that you worked really hard on.
+> [!NOTE]
+> If you do not follow the above guidelines we might close your PR.
 
 To run opencode locally you need.
 

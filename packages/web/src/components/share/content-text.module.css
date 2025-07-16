@@ -2,6 +2,7 @@
   color: var(--sl-color-text);
   background-color: var(--sl-color-bg-surface);
   padding: 0.5rem calc(0.5rem + 3px);
+  padding-right: calc(1rem + 18px);
   border-radius: 0.25rem;
   display: flex;
   flex-direction: column;

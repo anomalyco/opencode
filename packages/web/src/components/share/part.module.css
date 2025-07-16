@@ -103,7 +103,7 @@
   [data-component="content"] {
     flex: 1 1 auto;
     min-width: 0;
-    padding: 0 0 0.375rem;
+    padding: 0 0 1rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -135,6 +135,20 @@
     gap: 1rem;
     flex-grow: 1;
     max-width: var(--md-tool-width);
+
+    & > [data-component="assistant-text-markdown"] {
+      align-self: flex-start;
+      font-size: 0.875rem;
+      border: 1px solid var(--sl-color-blue-high);
+      padding: 0.5rem calc(0.5rem + 3px);
+      border-radius: 0.25rem;
+      position: relative;
+
+      [data-component="copy-button"] {
+        top: 0.5rem;
+        right: calc(0.5rem - 1px);
+      }
+    }
   }
 
   [data-component="step-start"] {
@@ -142,7 +156,6 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 0.375rem;
-    padding-bottom: 1rem;
 
     [data-slot="provider"] {
       line-height: 18px;
@@ -237,6 +250,32 @@
     &[data-tool="edit"] {
       [data-component="tool-result"] {
         max-width: var(--lg-tool-width);
+        align-items: stretch;
+        width: 100%;
+      }
+    }
+    &[data-tool="task"] {
+      [data-component="tool-input"] {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        max-width: var(--md-tool-width);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      [data-component="tool-output"] {
+        max-width: var(--sm-tool-width);
+        font-size: 0.75rem;
+        border: 1px solid var(--sl-color-divider);
+        padding: 0.5rem calc(0.5rem + 3px);
+        border-radius: 0.25rem;
+        position: relative;
+
+        [data-component="copy-button"] {
+          top: 0.5rem;
+          right: calc(0.5rem - 1px);
+        }
       }
     }
   }
