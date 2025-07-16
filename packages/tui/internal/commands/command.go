@@ -108,6 +108,7 @@ const (
 	InputPasteCommand           CommandName = "input_paste"
 	InputSubmitCommand          CommandName = "input_submit"
 	InputNewlineCommand         CommandName = "input_newline"
+	InputClearHistoryCommand    CommandName = "input_clear_history"
 	MessagesPageUpCommand       CommandName = "messages_page_up"
 	MessagesPageDownCommand     CommandName = "messages_page_down"
 	MessagesHalfPageUpCommand   CommandName = "messages_half_page_up"
@@ -261,6 +262,11 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        InputClearCommand,
 			Description: "clear input",
 			Keybindings: parseBindings("ctrl+c"),
+		},
+		{
+			Name:        InputClearHistoryCommand,
+			Description: "clear history",
+			Trigger:     []string{"clear-history"},
 		},
 		{
 			Name:        InputPasteCommand,

@@ -931,6 +931,16 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		updated, cmd := a.editor.Clear()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
+	case commands.InputClearHistoryCommand:
+		err := a.app.HistoryStore.Clear()
+		if err != nil {
+			return a, toast.NewErrorToast("Failed to clear history: " + err.Error())
+		}
+		// Update textarea history to reflect the cleared state
+		a.editor.SetValue("")
+		a.editor.SetHistory(a.app.HistoryStore.Entries())
+		cmds = append(cmds, toast.NewSuccessToast("Prompt history cleared."))
+		return a, tea.Batch(cmds...)
 	case commands.InputPasteCommand:
 		updated, cmd := a.editor.Paste()
 		a.editor = updated.(chat.EditorComponent)

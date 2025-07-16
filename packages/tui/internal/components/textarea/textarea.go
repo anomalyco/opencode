@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
+	"github.com/sst/opencode/packages/tui/internal/history"
 )
 
 const (
@@ -532,7 +533,7 @@ type Model struct {
 	rsan Sanitizer
 
 	// History navigation fields
-	history []string
+	history []history.HistoryEntry
 	historyIndex int
 	historyModified bool
 }
@@ -561,7 +562,7 @@ func New() Model {
 		col:   0,
 		row:   0,
 		
-		history:         []string{},
+		history:         []history.HistoryEntry{},
 		historyIndex:    -1,
 		historyModified: false,
 	}
@@ -660,7 +661,7 @@ func (m *Model) SetValue(s string) {
 }
 
 // SetHistory sets the history for the textarea.
-func (m *Model) SetHistory(history []string) {
+func (m *Model) SetHistory(history []history.HistoryEntry) {
 	m.history = history
 	m.historyIndex = len(history)
 	m.historyModified = false
@@ -2222,12 +2223,12 @@ func (m *Model) navigateHistoryUp() {
 	
 	if m.historyIndex > 0 {
 		m.historyIndex--
-		m.SetValue(m.history[m.historyIndex])
+		m.SetValue(m.history[m.historyIndex].Prompt)
 		m.historyModified = false
 	} else if m.historyIndex == -1 || m.historyIndex == len(m.history) {
 		// Start from the most recent entry
 		m.historyIndex = len(m.history) - 1
-		m.SetValue(m.history[m.historyIndex])
+		m.SetValue(m.history[m.historyIndex].Prompt)
 		m.historyModified = false
 	}
 }
@@ -2240,7 +2241,7 @@ func (m *Model) navigateHistoryDown() {
 	
 	if m.historyIndex < len(m.history)-1 {
 		m.historyIndex++
-		m.SetValue(m.history[m.historyIndex])
+		m.SetValue(m.history[m.historyIndex].Prompt)
 		m.historyModified = false
 	} else {
 		// Clear the input when going past the last history item
