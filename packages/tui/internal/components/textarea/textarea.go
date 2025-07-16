@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"image/color"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -533,8 +534,8 @@ type Model struct {
 	rsan Sanitizer
 
 	// History navigation fields
-	history []history.HistoryEntry
-	historyIndex int
+	history         []history.HistoryEntry
+	historyIndex    int
 	historyModified bool
 }
 
@@ -561,7 +562,7 @@ func New() Model {
 		focus: false,
 		col:   0,
 		row:   0,
-		
+
 		history:         []history.HistoryEntry{},
 		historyIndex:    -1,
 		historyModified: false,
@@ -2185,33 +2186,33 @@ func (m *Model) shouldNavigateHistory() bool {
 	if len(m.history) == 0 {
 		return false
 	}
-	
+
 	// Check if input is not multiline (only one line)
 	if len(m.value) != 1 {
 		return false
 	}
-	
+
 	// Check if cursor is at the beginning or end of the input
 	if m.col != 0 && m.col != len(m.value[0]) {
 		return false
 	}
-	
+
 	// Check if input is empty or matches current history entry and not modified
 	if len(m.value[0]) == 0 {
 		return true
 	}
-	
+
 	// If history was modified, don't allow navigation
 	if m.historyModified {
 		return false
 	}
-	
+
 	// Check if current input matches the current history entry
 	if m.historyIndex >= 0 && m.historyIndex < len(m.history) {
 		currentValue := m.Value()
 		return currentValue == m.history[m.historyIndex].Prompt
 	}
-	
+
 	return false
 }
 
@@ -2220,15 +2221,15 @@ func (m *Model) navigateHistoryUp() {
 	if len(m.history) == 0 {
 		return
 	}
-	
+
 	if m.historyIndex > 0 {
 		m.historyIndex--
-		m.SetValue(m.history[m.historyIndex].Prompt)
+		m.restoreHistoryEntry(m.history[m.historyIndex])
 		m.historyModified = false
 	} else if m.historyIndex == -1 || m.historyIndex == len(m.history) {
 		// Start from the most recent entry
 		m.historyIndex = len(m.history) - 1
-		m.SetValue(m.history[m.historyIndex].Prompt)
+		m.restoreHistoryEntry(m.history[m.historyIndex])
 		m.historyModified = false
 	}
 }
@@ -2238,15 +2239,101 @@ func (m *Model) navigateHistoryDown() {
 	if len(m.history) == 0 {
 		return
 	}
-	
+
 	if m.historyIndex < len(m.history)-1 {
 		m.historyIndex++
-		m.SetValue(m.history[m.historyIndex].Prompt)
+		m.restoreHistoryEntry(m.history[m.historyIndex])
 		m.historyModified = false
 	} else {
 		// Clear the input when going past the last history item
 		m.historyIndex = len(m.history)
 		m.SetValue("")
 		m.historyModified = false
+	}
+}
+
+// validateAttachmentFile checks if an attachment file is still accessible
+func (m *Model) validateAttachmentFile(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	// Check if file still exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
+}
+
+// reconstructAttachment converts a history attachment back to a textarea attachment
+func (m *Model) reconstructAttachment(histAtt history.Attachment) (*Attachment, error) {
+	// Generate a new unique ID for this attachment instance
+	id := fmt.Sprintf("att_%d", time.Now().UnixNano())
+
+	// Reconstruct the URL if needed
+	url := histAtt.URL
+	if url == "" && histAtt.Path != "" {
+		// Reconstruct file:// URL from path
+		url = "file://" + histAtt.Path
+	}
+
+	// For file:// URLs, validate that the file still exists
+	display := histAtt.Display
+	if strings.HasPrefix(url, "file://") && histAtt.Path != "" {
+		if !m.validateAttachmentFile(histAtt.Path) {
+			// File is missing, modify display to indicate this
+			display = histAtt.Display + " [missing]"
+		}
+	}
+
+	return &Attachment{
+		ID:        id,
+		Display:   display,
+		URL:       url,
+		Filename:  histAtt.Filename,
+		MediaType: histAtt.MediaType,
+	}, nil
+}
+
+// restoreHistoryEntry reconstructs a complete prompt with attachments from history
+func (m *Model) restoreHistoryEntry(entry history.HistoryEntry) {
+	// Clear current content
+	m.Reset()
+
+	// Parse the prompt text to identify attachment positions
+	promptRunes := []rune(entry.Prompt)
+	attachmentMap := make(map[string]*Attachment)
+
+	// Reconstruct attachment objects
+	for _, histAtt := range entry.Attachments {
+		if att, err := m.reconstructAttachment(histAtt); err == nil {
+			attachmentMap[histAtt.Display] = att
+		}
+	}
+
+	// Parse prompt and insert attachments at correct positions
+	i := 0
+	for i < len(promptRunes) {
+		if promptRunes[i] == '@' {
+			// Find the end of the attachment reference
+			start := i
+			for i < len(promptRunes) && !unicode.IsSpace(promptRunes[i]) {
+				i++
+			}
+
+			attachmentRef := string(promptRunes[start:i])
+			if att, exists := attachmentMap[attachmentRef]; exists {
+				// Insert the attachment object instead of text
+				m.InsertAttachment(att)
+			} else {
+				// Fallback: insert as text if attachment not found
+				m.InsertString(attachmentRef)
+			}
+		} else {
+			// Insert regular character
+			m.InsertRune(promptRunes[i])
+			i++
+		}
 	}
 }

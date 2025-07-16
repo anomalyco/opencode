@@ -21,10 +21,10 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
+	"github.com/sst/opencode/internal/history"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/internal/history"
 )
 
 type EditorComponent interface {
@@ -319,23 +319,32 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		})
 	}
 
+	// Convert textarea attachments to history attachments
+	historyAttachments := make([]history.Attachment, 0, len(attachments))
+	for _, att := range attachments {
+		historyAttachments = append(historyAttachments, history.Attachment{
+			Type:      "file",
+			Path:      extractPathFromURL(att.URL),
+			Display:   att.Display,
+			Filename:  att.Filename,
+			MediaType: att.MediaType,
+			URL:       att.URL,
+		})
+	}
+
 	// Create a new history entry
 	historyEntry := history.HistoryEntry{
 		Prompt:      value,
-		Attachments: make([]history.Attachment, 0),
+		Attachments: historyAttachments,
 		Timestamp:   time.Now(),
 	}
-	
-	// TODO: Parse attachments from the prompt text (stretch goal)
-	// For now, we'll just store the prompt text
-
 	// Add the prompt to history before clearing
 	m.app.HistoryStore.Add(historyEntry)
 
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
-	
+
 	// Update textarea history to match app history
 	m.textarea.SetHistory(m.app.HistoryStore.Entries())
 
@@ -485,6 +494,15 @@ func createSpinner() spinner.Model {
 				Lipgloss(),
 		),
 	)
+}
+
+func extractPathFromURL(url string) string {
+	if strings.HasPrefix(url, "file://") {
+		return strings.TrimPrefix(url, "file://")
+	}
+	// For data URLs, we might need to store them differently
+	// or reconstruct the original file path if available
+	return url
 }
 
 func NewEditorComponent(app *app.App) EditorComponent {
