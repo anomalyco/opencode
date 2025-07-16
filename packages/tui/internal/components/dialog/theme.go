@@ -17,8 +17,10 @@ import (
 const dialogWidth = 50
 
 // Theme messages
-type ThemeSelectedMsg struct{ ThemeName string }
-type ThemePreviewMsg struct{ ThemeName string }
+type (
+	ThemeSelectedMsg struct{ ThemeName string }
+	ThemePreviewMsg  struct{ ThemeName string }
+)
 
 type ThemeDialog interface {
 	layout.Modal
@@ -183,9 +185,13 @@ func (t *themeDialog) previewFirstTheme() {
 
 // NewThemeDialog creates a new theme selection dialog
 func NewThemeDialog(app *app.App) ThemeDialog {
-	return &themeDialog{
+	dialog := &themeDialog{
 		app:           app,
 		originalTheme: theme.CurrentThemeName(),
 		modal:         modal.New(modal.WithTitle("Select Theme"), modal.WithMaxWidth(dialogWidth+4)),
 	}
+
+	dialog.setupDialog()
+
+	return dialog
 }

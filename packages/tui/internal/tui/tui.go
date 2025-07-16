@@ -54,8 +54,10 @@ const (
 	ExitKeyFirstPress
 )
 
-const interruptDebounceTimeout = 1 * time.Second
-const exitDebounceTimeout = 1 * time.Second
+const (
+	interruptDebounceTimeout = 1 * time.Second
+	exitDebounceTimeout      = 1 * time.Second
+)
 
 type appModel struct {
 	width, height        int
@@ -910,7 +912,6 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog(a.app)
 		a.modal = themeDialog
-		cmds = append(cmds, themeDialog.Init())
 	// case commands.FileListCommand:
 	// 	a.editor.Blur()
 	// 	findDialog := dialog.NewFindDialog(a.fileProvider)
