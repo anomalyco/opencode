@@ -984,7 +984,10 @@ export namespace Session {
     const msgs = await messages(input.sessionID)
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
-    const model = await Provider.getModel(input.providerID, input.modelID)
+
+    const smallModel = await Provider.getSmallModel(input.providerID)
+    const model = smallModel ?? (await Provider.getModel(input.providerID, input.modelID))
+
     const app = App.info()
     const system = SystemPrompt.summarize(input.providerID)
 
