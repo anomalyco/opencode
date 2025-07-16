@@ -17,7 +17,7 @@ export namespace SystemPrompt {
   export function provider(providerID: string, modelID: string) {
     if (providerID === "anthropic") return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_ANTHROPIC]
     if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
-    if (providerID === "google") return [PROMPT_GEMINI]
+    if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
     return [PROMPT_ANTHROPIC]
   }
 
