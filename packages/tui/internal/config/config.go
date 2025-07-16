@@ -21,6 +21,10 @@ type ModeModel struct {
 	ModelID    string `toml:"model_id"`
 }
 
+type History struct {
+	MaxEntries int `toml:"max_entries,omitempty"`
+}
+
 type State struct {
 	Theme              string               `toml:"theme"`
 	ModeModel          map[string]ModeModel `toml:"mode_model"`
@@ -30,6 +34,7 @@ type State struct {
 	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
 	MessagesRight      bool                 `toml:"messages_right"`
 	SplitDiff          bool                 `toml:"split_diff"`
+	History            History              `toml:"history"`
 }
 
 func NewState() *State {
@@ -38,6 +43,9 @@ func NewState() *State {
 		Mode:               "build",
 		ModeModel:          make(map[string]ModeModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
+		History: History{
+			MaxEntries: 100,
+		},
 	}
 }
 

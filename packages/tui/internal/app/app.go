@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"github.com/sst/opencode/packages/tui/internal/history"
 )
 
 type Message struct {
@@ -48,8 +50,7 @@ type App struct {
 	IntitialMode     *string
 	compactCancel    context.CancelFunc
 	IsLeaderSequence bool
-	PromptHistory    []string
-	PromptHistoryIndex int
+	HistoryStore     *history.HistoryStore
 }
 
 type SessionCreatedMsg = struct {
@@ -158,6 +159,22 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
+	// Initialize HistoryStore
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user config directory: %w", err)
+	}
+	historyFilePath := filepath.Join(configDir, "opencode", "history.json")
+	maxEntries := appState.History.MaxEntries
+	if maxEntries == 0 {
+		maxEntries = 100 // fallback default
+	}
+	
+	historyStore, err := history.NewHistoryStore(historyFilePath, maxEntries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize history store: %w", err)
+	}
+
 	app := &App{
 		Info:          appInfo,
 		Modes:         modes,
@@ -174,8 +191,7 @@ func New(
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
 		IntitialMode:  initialMode,
-		PromptHistory: []string{},
-		PromptHistoryIndex: -1,
+		HistoryStore:  historyStore,
 	}
 
 	return app, nil
