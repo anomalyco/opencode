@@ -16,6 +16,11 @@ type ModelUsage struct {
 	LastUsed   time.Time `toml:"last_used"`
 }
 
+type ThemeUsage struct {
+	ThemeName string    `toml:"theme_name"`
+	LastUsed  time.Time `toml:"last_used"`
+}
+
 type ModeModel struct {
 	ProviderID string `toml:"provider_id"`
 	ModelID    string `toml:"model_id"`
@@ -28,6 +33,7 @@ type State struct {
 	Model              string               `toml:"model"`
 	Mode               string               `toml:"mode"`
 	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
+	RecentlyUsedThemes []ThemeUsage         `toml:"recently_used_themes"`
 	MessagesRight      bool                 `toml:"messages_right"`
 	SplitDiff          bool                 `toml:"split_diff"`
 }
@@ -38,6 +44,7 @@ func NewState() *State {
 		Mode:               "build",
 		ModeModel:          make(map[string]ModeModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
+		RecentlyUsedThemes: make([]ThemeUsage, 0),
 	}
 }
 
@@ -73,6 +80,40 @@ func (s *State) RemoveModelFromRecentlyUsed(providerID, modelID string) {
 	for i, usage := range s.RecentlyUsedModels {
 		if usage.ProviderID == providerID && usage.ModelID == modelID {
 			s.RecentlyUsedModels = append(s.RecentlyUsedModels[:i], s.RecentlyUsedModels[i+1:]...)
+			return
+		}
+	}
+}
+
+// UpdateThemeUsage updates the recently used themes list
+func (s *State) UpdateThemeUsage(themeName string) {
+	now := time.Now()
+
+	// Move existing theme to front
+	for i, usage := range s.RecentlyUsedThemes {
+		if usage.ThemeName == themeName {
+			s.RecentlyUsedThemes[i].LastUsed = now
+			usage := s.RecentlyUsedThemes[i]
+			copy(s.RecentlyUsedThemes[1:i+1], s.RecentlyUsedThemes[0:i])
+			s.RecentlyUsedThemes[0] = usage
+			return
+		}
+	}
+
+	// Add new theme at front
+	newUsage := ThemeUsage{ThemeName: themeName, LastUsed: now}
+	s.RecentlyUsedThemes = append([]ThemeUsage{newUsage}, s.RecentlyUsedThemes...)
+
+	// Keep only the most recent 20 themes
+	if len(s.RecentlyUsedThemes) > 20 {
+		s.RecentlyUsedThemes = s.RecentlyUsedThemes[:20]
+	}
+}
+
+func (s *State) RemoveThemeFromRecentlyUsed(themeName string) {
+	for i, usage := range s.RecentlyUsedThemes {
+		if usage.ThemeName == themeName {
+			s.RecentlyUsedThemes = append(s.RecentlyUsedThemes[:i], s.RecentlyUsedThemes[i+1:]...)
 			return
 		}
 	}

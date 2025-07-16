@@ -473,6 +473,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		a.app.SaveState()
+	case dialog.ThemePreviewMsg:
+		// Handle theme preview without saving state
+		a.app.State.Theme = msg.ThemeName
 	case toast.ShowToastMsg:
 		tm, cmd := a.toastManager.Update(msg)
 		a.toastManager = tm
@@ -905,8 +908,9 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
 	case commands.ThemeListCommand:
-		themeDialog := dialog.NewThemeDialog()
+		themeDialog := dialog.NewThemeDialog(a.app)
 		a.modal = themeDialog
+		cmds = append(cmds, themeDialog.Init())
 	// case commands.FileListCommand:
 	// 	a.editor.Blur()
 	// 	findDialog := dialog.NewFindDialog(a.fileProvider)

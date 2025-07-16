@@ -30,6 +30,12 @@ type SearchRemoveItemMsg struct {
 	Index int
 }
 
+// SearchSelectionChangedMsg is emitted when the selection changes
+type SearchSelectionChangedMsg struct {
+	Item  any
+	Index int
+}
+
 // SearchDialog is a reusable component that combines a text input with a list
 type SearchDialog struct {
 	textInput textinput.Model
@@ -167,19 +173,33 @@ func (s *SearchDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case key.Matches(msg, searchKeys.Up):
+			_, prevIdx := s.list.GetSelectedItem()
 			var cmd tea.Cmd
 			listModel, cmd := s.list.Update(msg)
 			s.list = listModel.(list.List[list.Item])
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			// Check if selection changed
+			if newItem, newIdx := s.list.GetSelectedItem(); newIdx != prevIdx {
+				cmds = append(cmds, func() tea.Msg {
+					return SearchSelectionChangedMsg{Item: newItem, Index: newIdx}
+				})
+			}
 
 		case key.Matches(msg, searchKeys.Down):
+			_, prevIdx := s.list.GetSelectedItem()
 			var cmd tea.Cmd
 			listModel, cmd := s.list.Update(msg)
 			s.list = listModel.(list.List[list.Item])
 			if cmd != nil {
 				cmds = append(cmds, cmd)
+			}
+			// Check if selection changed
+			if newItem, newIdx := s.list.GetSelectedItem(); newIdx != prevIdx {
+				cmds = append(cmds, func() tea.Msg {
+					return SearchSelectionChangedMsg{Item: newItem, Index: newIdx}
+				})
 			}
 
 		default:
@@ -244,4 +264,14 @@ func (s *SearchDialog) Focus() {
 func (s *SearchDialog) Blur() {
 	s.focused = false
 	s.textInput.Blur()
+}
+
+// SetSelectedIndex sets the selected index in the list
+func (s *SearchDialog) SetSelectedIndex(index int) {
+	s.list.SetSelectedIndex(index)
+}
+
+// GetSelectedItem returns the currently selected item and its index
+func (s *SearchDialog) GetSelectedItem() (list.Item, int) {
+	return s.list.GetSelectedItem()
 }
