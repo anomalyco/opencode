@@ -94,7 +94,7 @@ func (m statusComponent) View() string {
 		modeForeground = t.BackgroundPanel()
 	}
 
-	command := m.app.Commands[commands.SwitchModeCommand]
+	command := m.app.Commands[commands.NextModeCommand]
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {

@@ -205,10 +205,17 @@ func (a *App) SetClipboard(text string) tea.Cmd {
 	return tea.Sequence(cmds...)
 }
 
-func (a *App) SwitchMode() (*App, tea.Cmd) {
-	a.ModeIndex++
-	if a.ModeIndex >= len(a.Modes) {
-		a.ModeIndex = 0
+func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
+	if forward {
+		a.ModeIndex++
+		if a.ModeIndex >= len(a.Modes) {
+			a.ModeIndex = 0
+		}
+	} else {
+		a.ModeIndex--
+		if a.ModeIndex < 0 {
+			a.ModeIndex = len(a.Modes) - 1
+		}
 	}
 	a.Mode = &a.Modes[a.ModeIndex]
 
@@ -242,6 +249,14 @@ func (a *App) SwitchMode() (*App, tea.Cmd) {
 		a.SaveState()
 		return nil
 	}
+}
+
+func (a *App) NextMode() (*App, tea.Cmd) {
+	return a.cycleMode(true)
+}
+
+func (a *App) PreviousMode() (*App, tea.Cmd) {
+	return a.cycleMode(false)
 }
 
 func (a *App) InitializeProvider() tea.Cmd {

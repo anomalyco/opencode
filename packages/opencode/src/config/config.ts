@@ -81,7 +81,8 @@ export namespace Config {
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      switch_mode: z.string().optional().default("tab").describe("Switch mode"),
+      next_mode: z.string().optional().default("tab").describe("Next mode"),
+      previous_mode: z.string().optional().default("shift+tab").describe("Previous mode"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),

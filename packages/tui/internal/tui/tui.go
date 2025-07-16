@@ -806,8 +806,12 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.AppHelpCommand:
 		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
-	case commands.SwitchModeCommand:
-		updated, cmd := a.app.SwitchMode()
+	case commands.NextModeCommand:
+		updated, cmd := a.app.NextMode()
+		a.app = updated
+		cmds = append(cmds, cmd)
+	case commands.PreviousModeCommand:
+		updated, cmd := a.app.PreviousMode()
 		a.app = updated
 		cmds = append(cmds, cmd)
 	case commands.EditorOpenCommand:
