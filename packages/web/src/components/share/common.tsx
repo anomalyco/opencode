@@ -58,3 +58,20 @@ export function createOverflow() {
     },
   }
 }
+
+export function formatDuration(ms: number): string {
+  const ONE_SECOND = 1000
+  const ONE_MINUTE = 60 * ONE_SECOND
+
+  if (ms >= ONE_MINUTE) {
+    const minutes = Math.floor(ms / ONE_MINUTE)
+    return minutes === 1 ? `1min` : `${minutes}mins`
+  }
+
+  if (ms >= ONE_SECOND) {
+    const seconds = Math.floor(ms / ONE_SECOND)
+    return `${seconds}s`
+  }
+
+  return `${ms}ms`
+}

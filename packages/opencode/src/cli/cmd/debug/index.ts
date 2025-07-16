@@ -3,6 +3,7 @@ import { cmd } from "../cmd"
 import { FileCommand } from "./file"
 import { LSPCommand } from "./lsp"
 import { RipgrepCommand } from "./ripgrep"
+import { ScrapCommand } from "./scrap"
 import { SnapshotCommand } from "./snapshot"
 
 export const DebugCommand = cmd({
@@ -12,6 +13,7 @@ export const DebugCommand = cmd({
       .command(LSPCommand)
       .command(RipgrepCommand)
       .command(FileCommand)
+      .command(ScrapCommand)
       .command(SnapshotCommand)
       .command({
         command: "wait",

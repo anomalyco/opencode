@@ -6,10 +6,7 @@ import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
-import { unique } from "remeda"
-import { Ripgrep } from "../file/ripgrep"
-import type { LSPClient } from "./client"
-import { withTimeout } from "../util/timeout"
+import { Filesystem } from "../util/filesystem"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -17,20 +14,21 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
-    onInitialized?: (lsp: LSPClient.Info) => Promise<void>
   }
 
-  type RootsFunction = (app: App.Info) => Promise<string[]>
+  type RootFunction = (file: string, app: App.Info) => Promise<string | undefined>
 
-  const SimpleRoots = (patterns: string[]): RootsFunction => {
-    return async (app) => {
-      const glob = `**/*/{${patterns.join(",")}}`
-      const files = await Ripgrep.files({
-        glob: [glob],
-        cwd: app.path.root,
+  const NearestRoot = (patterns: string[]): RootFunction => {
+    return async (file, app) => {
+      const files = Filesystem.up({
+        targets: patterns,
+        start: path.dirname(file),
+        stop: app.path.root,
       })
-      const dirs = files.map((file) => path.dirname(file))
-      return unique(dirs).map((dir) => path.join(app.path.root, dir))
+      const first = await files.next()
+      await files.return()
+      if (!first.value) return app.path.root
+      return path.dirname(first.value)
     }
   }
 
@@ -38,13 +36,13 @@ export namespace LSPServer {
     id: string
     extensions: string[]
     global?: boolean
-    roots: (app: App.Info) => Promise<string[]>
+    root: RootFunction
     spawn(app: App.Info, root: string): Promise<Handle | undefined>
   }
 
   export const Typescript: Info = {
     id: "typescript",
-    roots: SimpleRoots(["tsconfig.json", "jsconfig.json", "package.json"]),
+    root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(app, root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", app.path.cwd).catch(() => {})
@@ -63,30 +61,17 @@ export namespace LSPServer {
             path: tsserver,
           },
         },
-        // tsserver sucks and won't start processing codebase until you open a file
-        onInitialized: async (lsp) => {
-          const [hint] = await Ripgrep.files({
-            cwd: lsp.root,
-            glob: ["*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.mts", "*.cts"],
-            limit: 1,
-          })
-          const wait = new Promise<void>(async (resolve) => {
-            const notif = lsp.connection.onNotification("$/progress", (params) => {
-              if (params.value.kind !== "end") return
-              notif.dispose()
-              resolve()
-            })
-            await lsp.notify.open({ path: path.join(lsp.root, hint) })
-          })
-          await withTimeout(wait, 5_000)
-        },
       }
     },
   }
 
   export const Gopls: Info = {
     id: "golang",
-    roots: SimpleRoots(["go.mod", "go.sum"]),
+    root: async (file, app) => {
+      const work = await NearestRoot(["go.work"])(file, app)
+      if (work) return work
+      return NearestRoot(["go.mod", "go.sum"])(file, app)
+    },
     extensions: [".go"],
     async spawn(_, root) {
       let bin = Bun.which("gopls", {
@@ -122,7 +107,7 @@ export namespace LSPServer {
 
   export const RubyLsp: Info = {
     id: "ruby-lsp",
-    roots: SimpleRoots(["Gemfile"]),
+    root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(_, root) {
       let bin = Bun.which("ruby-lsp", {
@@ -163,14 +148,7 @@ export namespace LSPServer {
   export const Pyright: Info = {
     id: "pyright",
     extensions: [".py", ".pyi"],
-    roots: SimpleRoots([
-      "pyproject.toml",
-      "setup.py",
-      "setup.cfg",
-      "requirements.txt",
-      "Pipfile",
-      "pyrightconfig.json",
-    ]),
+    root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
     async spawn(_, root) {
       const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
         cwd: root,
@@ -188,7 +166,7 @@ export namespace LSPServer {
   export const ElixirLS: Info = {
     id: "elixir-ls",
     extensions: [".ex", ".exs"],
-    roots: SimpleRoots(["mix.exs", "mix.lock"]),
+    root: NearestRoot(["mix.exs", "mix.lock"]),
     async spawn(_, root) {
       let binary = Bun.which("elixir-ls")
       if (!binary) {
@@ -234,6 +212,111 @@ export namespace LSPServer {
 
       return {
         process: spawn(binary, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Zls: Info = {
+    id: "zls",
+    extensions: [".zig", ".zon"],
+    root: NearestRoot(["build.zig"]),
+    async spawn(_, root) {
+      let bin = Bun.which("zls", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        const zig = Bun.which("zig")
+        if (!zig) {
+          log.error("Zig is required to use zls. Please install Zig first.")
+          return
+        }
+
+        log.info("downloading zls from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch zls release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        const arch = process.arch
+        let assetName = ""
+
+        let zlsArch: string = arch
+        if (arch === "arm64") zlsArch = "aarch64"
+        else if (arch === "x64") zlsArch = "x86_64"
+        else if (arch === "ia32") zlsArch = "x86"
+
+        let zlsPlatform: string = platform
+        if (platform === "darwin") zlsPlatform = "macos"
+        else if (platform === "win32") zlsPlatform = "windows"
+
+        const ext = platform === "win32" ? "zip" : "tar.xz"
+
+        assetName = `zls-${zlsArch}-${zlsPlatform}.${ext}`
+
+        const supportedCombos = [
+          "zls-x86_64-linux.tar.xz",
+          "zls-x86_64-macos.tar.xz",
+          "zls-x86_64-windows.zip",
+          "zls-aarch64-linux.tar.xz",
+          "zls-aarch64-macos.tar.xz",
+          "zls-aarch64-windows.zip",
+          "zls-x86-linux.tar.xz",
+          "zls-x86-windows.zip",
+        ]
+
+        if (!supportedCombos.includes(assetName)) {
+          log.error(`Platform ${platform} and architecture ${arch} is not supported by zls`)
+          return
+        }
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest zls release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download zls")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        if (ext === "zip") {
+          await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        } else {
+          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        }
+
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "zls" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract zls binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed zls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
           cwd: root,
         }),
       }

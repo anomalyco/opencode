@@ -1,0 +1,19 @@
+{
+  "name": "github",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@octokit/webhooks-types": "^7.6.1",
+    "@types/bun": "latest",
+    "@types/node": "^24.0.10"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "@octokit/graphql": "^9.0.1",
+    "@octokit/rest": "^22.0.0"
+  }
+}

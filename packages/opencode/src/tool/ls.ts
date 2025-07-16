@@ -16,6 +16,19 @@ export const IGNORE_PATTERNS = [
   "obj/",
   ".idea/",
   ".vscode/",
+  ".zig-cache/",
+  "zig-out",
+  ".coverage",
+  "coverage/",
+  "vendor/",
+  "tmp/",
+  "temp/",
+  ".cache/",
+  "cache/",
+  "logs/",
+  ".venv/",
+  "venv/",
+  "env/",
 ]
 
 const LIMIT = 100

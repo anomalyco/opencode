@@ -1,5 +1,4 @@
 .root {
-  max-width: var(--md-tool-width);
   border: 1px solid var(--sl-color-divider);
   background-color: var(--sl-color-bg-surface);
   border-radius: 0.25rem;
@@ -9,6 +8,7 @@
     border: none;
     background-color: transparent;
     padding: 0;
+    border-radius: 0;
   }
 
   pre {

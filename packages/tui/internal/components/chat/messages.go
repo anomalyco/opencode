@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/viewport"
@@ -105,6 +106,13 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 		}
+	case opencode.EventListResponseEventMessagePartUpdated:
+		if msg.Properties.Part.SessionID == m.app.Session.ID {
+			m.renderView(m.width)
+			if m.tail {
+				m.viewport.GotoBottom()
+			}
+		}
 	}
 
 	viewport, cmd := m.viewport.Update(msg)
@@ -130,16 +138,16 @@ func (m *messagesComponent) renderView(width int) {
 		var content string
 		var cached bool
 
-		switch casted := message.(type) {
+		switch casted := message.Info.(type) {
 		case opencode.UserMessage:
 		userLoop:
-			for partIndex, part := range casted.Parts {
-				switch part := part.AsUnion().(type) {
+			for partIndex, part := range message.Parts {
+				switch part := part.(type) {
 				case opencode.TextPart:
-					remainingParts := casted.Parts[partIndex+1:]
+					remainingParts := message.Parts[partIndex+1:]
 					fileParts := make([]opencode.FilePart, 0)
 					for _, part := range remainingParts {
-						switch part := part.AsUnion().(type) {
+						switch part := part.(type) {
 						case opencode.FilePart:
 							fileParts = append(fileParts, part)
 						}
@@ -180,9 +188,9 @@ func (m *messagesComponent) renderView(width int) {
 					if !cached {
 						content = renderText(
 							m.app,
-							message,
+							message.Info,
 							part.Text,
-							m.app.Info.User,
+							m.app.Config.Username,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
 							width,
@@ -201,12 +209,12 @@ func (m *messagesComponent) renderView(width int) {
 
 		case opencode.AssistantMessage:
 			hasTextPart := false
-			for partIndex, p := range casted.Parts {
-				switch part := p.AsUnion().(type) {
+			for partIndex, p := range message.Parts {
+				switch part := p.(type) {
 				case opencode.TextPart:
 					hasTextPart = true
 					finished := casted.Time.Completed > 0
-					remainingParts := casted.Parts[partIndex+1:]
+					remainingParts := message.Parts[partIndex+1:]
 					toolCallParts := make([]opencode.ToolPart, 0)
 
 					// sometimes tool calls happen without an assistant message
@@ -221,7 +229,7 @@ func (m *messagesComponent) renderView(width int) {
 						if !remaining {
 							break
 						}
-						switch part := part.AsUnion().(type) {
+						switch part := part.(type) {
 						case opencode.TextPart:
 							// we only want tool calls associated with the current text part.
 							// if we hit another text part, we're done.
@@ -237,13 +245,13 @@ func (m *messagesComponent) renderView(width int) {
 					}
 
 					if finished {
-						key := m.cache.GenerateKey(casted.ID, p.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
+						key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails, m.selectedPart == m.partCount)
 						content, cached = m.cache.Get(key)
 						if !cached {
 							content = renderText(
 								m.app,
-								message,
-								p.Text,
+								message.Info,
+								part.Text,
 								casted.ModelID,
 								m.showToolDetails,
 								m.partCount == m.selectedPart,
@@ -256,8 +264,8 @@ func (m *messagesComponent) renderView(width int) {
 					} else {
 						content = renderText(
 							m.app,
-							message,
-							p.Text,
+							message.Info,
+							part.Text,
 							casted.ModelID,
 							m.showToolDetails,
 							m.partCount == m.selectedPart,
@@ -267,7 +275,7 @@ func (m *messagesComponent) renderView(width int) {
 						)
 					}
 					if content != "" {
-						m = m.updateSelected(content, p.Text)
+						m = m.updateSelected(content, part.Text)
 						blocks = append(blocks, content)
 					}
 				case opencode.ToolPart:
@@ -313,7 +321,7 @@ func (m *messagesComponent) renderView(width int) {
 		}
 
 		error := ""
-		if assistant, ok := message.(opencode.AssistantMessage); ok {
+		if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
 			switch err := assistant.Error.AsUnion().(type) {
 			case nil:
 			case opencode.AssistantMessageErrorMessageOutputLengthError:
@@ -328,6 +336,7 @@ func (m *messagesComponent) renderView(width int) {
 		}
 
 		if error != "" {
+			error = styles.NewStyle().Width(width - 6).Render(error)
 			error = renderContentBlock(
 				m.app,
 				error,
@@ -370,11 +379,65 @@ func (m *messagesComponent) header(width int) string {
 		headerLines,
 		util.ToMarkdown("# "+m.app.Session.Title, width-6, t.Background()),
 	)
+
+	share := ""
 	if m.app.Session.Share.URL != "" {
-		headerLines = append(headerLines, muted(m.app.Session.Share.URL+"  /unshare"))
+		share = muted(m.app.Session.Share.URL + "  /unshare")
 	} else {
-		headerLines = append(headerLines, base("/share")+muted(" to create a shareable link"))
+		share = base("/share") + muted(" to create a shareable link")
 	}
+
+	sessionInfo := ""
+	tokens := float64(0)
+	cost := float64(0)
+	contextWindow := m.app.Model.Limit.Context
+
+	for _, message := range m.app.Messages {
+		if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
+			cost += assistant.Cost
+			usage := assistant.Tokens
+			if usage.Output > 0 {
+				if assistant.Summary {
+					tokens = usage.Output
+					continue
+				}
+				tokens = (usage.Input +
+					usage.Cache.Write +
+					usage.Cache.Read +
+					usage.Output +
+					usage.Reasoning)
+			}
+		}
+	}
+
+	// Check if current model is a subscription model (cost is 0 for both input and output)
+	isSubscriptionModel := m.app.Model != nil &&
+		m.app.Model.Cost.Input == 0 && m.app.Model.Cost.Output == 0
+
+	sessionInfo = styles.NewStyle().
+		Foreground(t.TextMuted()).
+		Background(t.Background()).
+		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
+
+	background := t.Background()
+	share = layout.Render(
+		layout.FlexOptions{
+			Background: &background,
+			Direction:  layout.Row,
+			Justify:    layout.JustifySpaceBetween,
+			Align:      layout.AlignStretch,
+			Width:      width - 6,
+		},
+		layout.FlexItem{
+			View: share,
+		},
+		layout.FlexItem{
+			View: sessionInfo,
+		},
+	)
+
+	headerLines = append(headerLines, share)
+
 	header := strings.Join(headerLines, "\n")
 
 	header = styles.NewStyle().
@@ -390,6 +453,50 @@ func (m *messagesComponent) header(width int) string {
 		Render(header)
 
 	return "\n" + header + "\n"
+}
+
+func formatTokensAndCost(
+	tokens float64,
+	contextWindow float64,
+	cost float64,
+	isSubscriptionModel bool,
+) string {
+	// Format tokens in human-readable format (e.g., 110K, 1.2M)
+	var formattedTokens string
+	switch {
+	case tokens >= 1_000_000:
+		formattedTokens = fmt.Sprintf("%.1fM", float64(tokens)/1_000_000)
+	case tokens >= 1_000:
+		formattedTokens = fmt.Sprintf("%.1fK", float64(tokens)/1_000)
+	default:
+		formattedTokens = fmt.Sprintf("%d", int(tokens))
+	}
+
+	// Remove .0 suffix if present
+	if strings.HasSuffix(formattedTokens, ".0K") {
+		formattedTokens = strings.Replace(formattedTokens, ".0K", "K", 1)
+	}
+	if strings.HasSuffix(formattedTokens, ".0M") {
+		formattedTokens = strings.Replace(formattedTokens, ".0M", "M", 1)
+	}
+
+	percentage := (float64(tokens) / float64(contextWindow)) * 100
+
+	if isSubscriptionModel {
+		return fmt.Sprintf(
+			"%s/%d%%",
+			formattedTokens,
+			int(percentage),
+		)
+	}
+
+	formattedCost := fmt.Sprintf("$%.2f", cost)
+	return fmt.Sprintf(
+		"%s/%d%% (%s)",
+		formattedTokens,
+		int(percentage),
+		formattedCost,
+	)
 }
 
 func (m *messagesComponent) View(width, height int) string {
