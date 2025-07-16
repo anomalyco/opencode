@@ -448,23 +448,30 @@ func (m *messagesComponent) renderHeader() string {
 		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
 
 	background := t.Background()
-	share = layout.Render(
+
+	var items []layout.FlexItem
+	justify := layout.JustifyEnd
+
+	if m.app.Config.Share != opencode.ConfigShareDisabled {
+		items = append(items, layout.FlexItem{View: share})
+		justify = layout.JustifySpaceBetween
+	}
+
+	items = append(items, layout.FlexItem{View: sessionInfo})
+
+	headerRow := layout.Render(
 		layout.FlexOptions{
 			Background: &background,
 			Direction:  layout.Row,
-			Justify:    layout.JustifySpaceBetween,
+			Justify:    justify,
 			Align:      layout.AlignStretch,
 			Width:      headerWidth - 6,
 		},
-		layout.FlexItem{
-			View: share,
-		},
-		layout.FlexItem{
-			View: sessionInfo,
-		},
+		items...,
 	)
 
-	headerLines = append(headerLines, share)
+	headerLines = append(headerLines, headerRow)
+
 	header := strings.Join(headerLines, "\n")
 	header = styles.NewStyle().
 		Background(t.Background()).
