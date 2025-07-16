@@ -2,8 +2,10 @@ package textarea
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode/internal/history"
 )
 
 func TestHistoryNavigation(t *testing.T) {
@@ -11,8 +13,12 @@ func TestHistoryNavigation(t *testing.T) {
 	m := New()
 	
 	// Set up some history
-	history := []string{"first command", "second command", "third command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "first command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "second command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "third command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Test that history is set correctly
 	if len(m.history) != 3 {
@@ -28,8 +34,12 @@ func TestHistoryNavigation(t *testing.T) {
 func TestHistoryNavigationUp(t *testing.T) {
 	m := New()
 	m.Focus() // Focus the model for key handling
-	history := []string{"first command", "second command", "third command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "first command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "second command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "third command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Test up arrow navigation (should go to most recent)
 	upKey := tea.KeyPressMsg{Code: tea.KeyUp}
@@ -53,8 +63,12 @@ func TestHistoryNavigationUp(t *testing.T) {
 func TestHistoryNavigationDown(t *testing.T) {
 	m := New()
 	m.Focus() // Focus the model for key handling
-	history := []string{"first command", "second command", "third command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "first command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "second command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+		{Prompt: "third command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Navigate up to get to a history item
 	upKey := tea.KeyPressMsg{Code: tea.KeyUp}
@@ -90,8 +104,10 @@ func TestHistoryNavigationDown(t *testing.T) {
 func TestHistoryModified(t *testing.T) {
 	m := New()
 	m.Focus() // Focus the model for key handling
-	history := []string{"command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Navigate to a history item
 	upKey := tea.KeyPressMsg{Code: tea.KeyUp}
@@ -123,8 +139,10 @@ func TestShouldNavigateHistory(t *testing.T) {
 	}
 	
 	// Add history
-	history := []string{"command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Empty input at beginning - should return true
 	if !m.shouldNavigateHistory() {
@@ -141,7 +159,7 @@ func TestShouldNavigateHistory(t *testing.T) {
 	
 	// Reset and test with history content
 	m.Reset()
-	m.SetHistory(history)
+	m.SetHistory(historyEntries)
 	m.InsertString("command") // Insert content that matches history
 	m.historyModified = false // Reset modification flag
 	m.historyIndex = 0 // Set to match the history entry
@@ -160,7 +178,7 @@ func TestShouldNavigateHistory(t *testing.T) {
 	
 	// Reset for next test
 	m.Reset()
-	m.SetHistory(history)
+	m.SetHistory(historyEntries)
 	
 	// Add some text and mark as modified
 	m.InsertString("test")
@@ -172,8 +190,10 @@ func TestShouldNavigateHistory(t *testing.T) {
 
 func TestHistoryNavigationConditions(t *testing.T) {
 	m := New()
-	history := []string{"command"}
-	m.SetHistory(history)
+	historyEntries := []history.HistoryEntry{
+		{Prompt: "command", Attachments: []history.Attachment{}, Timestamp: time.Now()},
+	}
+	m.SetHistory(historyEntries)
 	
 	// Add multiple lines (should prevent history navigation)
 	m.InsertString("line1\nline2")
@@ -183,7 +203,7 @@ func TestHistoryNavigationConditions(t *testing.T) {
 	
 	// Reset to single line
 	m.Reset()
-	m.SetHistory(history)
+	m.SetHistory(historyEntries)
 	
 	// Should work with empty single line
 	if !m.shouldNavigateHistory() {

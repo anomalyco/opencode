@@ -21,7 +21,7 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
-	"github.com/sst/opencode/packages/tui/internal/history"
+	"github.com/sst/opencode/internal/history"
 )
 
 type Message struct {

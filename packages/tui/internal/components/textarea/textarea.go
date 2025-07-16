@@ -18,7 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
-	"github.com/sst/opencode/packages/tui/internal/history"
+	"github.com/sst/opencode/internal/history"
 )
 
 const (
@@ -2209,7 +2209,7 @@ func (m *Model) shouldNavigateHistory() bool {
 	// Check if current input matches the current history entry
 	if m.historyIndex >= 0 && m.historyIndex < len(m.history) {
 		currentValue := m.Value()
-		return currentValue == m.history[m.historyIndex]
+		return currentValue == m.history[m.historyIndex].Prompt
 	}
 	
 	return false
