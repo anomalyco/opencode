@@ -56,7 +56,7 @@ var completionDialogKeys = completionDialogKeyMap{
 		key.WithKeys("tab", "enter", "right"),
 	),
 	Cancel: key.NewBinding(
-		key.WithKeys(" ", "esc", "backspace", "ctrl+h", "ctrl+c"),
+		key.WithKeys("space", " ", "esc", "backspace", "ctrl+h", "ctrl+c"),
 	),
 }
 
