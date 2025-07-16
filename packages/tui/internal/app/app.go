@@ -251,11 +251,11 @@ func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 	}
 }
 
-func (a *App) NextMode() (*App, tea.Cmd) {
+func (a *App) SwitchMode() (*App, tea.Cmd) {
 	return a.cycleMode(true)
 }
 
-func (a *App) PreviousMode() (*App, tea.Cmd) {
+func (a *App) SwitchModeReverse() (*App, tea.Cmd) {
 	return a.cycleMode(false)
 }
 

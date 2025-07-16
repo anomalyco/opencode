@@ -558,10 +558,10 @@ type Keybinds struct {
 	SessionShare string `json:"session_share,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
-	// Next mode
-	NextMode string `json:"next_mode,required"`
-	// Previous mode
-	PreviousMode string `json:"previous_mode,required"`
+	// Switch mode
+	SwitchMode string `json:"switch_mode,required"`
+	// Switch mode reverse
+	SwitchModeReverse string `json:"switch_mode_reverse,required"`
 	// List available themes
 	ThemeList string `json:"theme_list,required"`
 	// Toggle tool details
@@ -602,8 +602,8 @@ type keybindsJSON struct {
 	SessionNew           apijson.Field
 	SessionShare         apijson.Field
 	SessionUnshare       apijson.Field
-	NextMode             apijson.Field
-	PreviousMode         apijson.Field
+	SwitchMode           apijson.Field
+	SwitchModeReverse    apijson.Field
 	ThemeList            apijson.Field
 	ToolDetails          apijson.Field
 	raw                  string
