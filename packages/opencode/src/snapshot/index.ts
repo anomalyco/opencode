@@ -38,10 +38,11 @@ export namespace Snapshot {
     await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
     log.info("added files")
 
-    const result = await $`git --git-dir ${git} commit -m "snapshot" --author="opencode <mail@opencode.ai>"`
-      .quiet()
-      .cwd(app.path.cwd)
-      .nothrow()
+    const result =
+      await $`git --git-dir ${git} commit -m "snapshot" --no-gpg-sign --author="opencode <mail@opencode.ai>"`
+        .quiet()
+        .cwd(app.path.cwd)
+        .nothrow()
 
     const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
     if (!match) return
