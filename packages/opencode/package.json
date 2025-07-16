@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@clack/prompts": "0.11.0",
+    "@hono/swagger-ui": "0.5.2",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
     "ai": "catalog:",
