@@ -47,93 +47,93 @@ func (t themeItem) Render(selected bool, width int, baseStyle styles.Style) stri
 
 func (t themeItem) Selectable() bool { return true }
 
-func (d *themeDialog) Init() tea.Cmd {
-	d.setupDialog()
-	return d.searchDialog.Init()
+func (t *themeDialog) Init() tea.Cmd {
+	t.setupDialog()
+	return t.searchDialog.Init()
 }
 
-func (d *themeDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (t *themeDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SearchSelectionMsg:
 		if item, ok := msg.Item.(themeItem); ok {
 			theme.SetTheme(item.name)
-			d.themeApplied = true
-			return d, tea.Sequence(
+			t.themeApplied = true
+			return t, tea.Sequence(
 				util.CmdHandler(modal.CloseModalMsg{}),
 				util.CmdHandler(ThemeSelectedMsg{ThemeName: item.name}),
 			)
 		}
-		return d, util.CmdHandler(modal.CloseModalMsg{})
+		return t, util.CmdHandler(modal.CloseModalMsg{})
 
 	case SearchCancelledMsg:
-		return d, util.CmdHandler(modal.CloseModalMsg{})
+		return t, util.CmdHandler(modal.CloseModalMsg{})
 
 	case SearchRemoveItemMsg:
 		// No recent themes functionality
-		return d, nil
+		return t, nil
 
 	case SearchQueryChangedMsg:
-		d.refreshItems()
-		d.previewFirstTheme()
-		return d, nil
+		t.refreshItems()
+		t.previewFirstTheme()
+		return t, nil
 
 	case SearchSelectionChangedMsg:
 		if item, ok := msg.Item.(themeItem); ok {
 			theme.SetTheme(item.name)
-			return d, util.CmdHandler(ThemePreviewMsg{ThemeName: item.name})
+			return t, util.CmdHandler(ThemePreviewMsg{ThemeName: item.name})
 		}
-		return d, nil
+		return t, nil
 
 	case tea.WindowSizeMsg:
-		d.searchDialog.SetWidth(dialogWidth)
-		d.searchDialog.SetHeight(msg.Height)
+		t.searchDialog.SetWidth(dialogWidth)
+		t.searchDialog.SetHeight(msg.Height)
 	}
 
-	updatedDialog, cmd := d.searchDialog.Update(msg)
-	d.searchDialog = updatedDialog.(*SearchDialog)
-	return d, cmd
+	updatedDialog, cmd := t.searchDialog.Update(msg)
+	t.searchDialog = updatedDialog.(*SearchDialog)
+	return t, cmd
 }
 
-func (d *themeDialog) View() string {
-	return d.searchDialog.View()
+func (t *themeDialog) View() string {
+	return t.searchDialog.View()
 }
 
-func (d *themeDialog) Render(background string) string {
-	return d.modal.Render(d.View(), background)
+func (t *themeDialog) Render(background string) string {
+	return t.modal.Render(t.View(), background)
 }
 
-func (d *themeDialog) Close() tea.Cmd {
-	if !d.themeApplied {
-		theme.SetTheme(d.originalTheme)
-		return util.CmdHandler(ThemeSelectedMsg{ThemeName: d.originalTheme})
+func (t *themeDialog) Close() tea.Cmd {
+	if !t.themeApplied {
+		theme.SetTheme(t.originalTheme)
+		return util.CmdHandler(ThemeSelectedMsg{ThemeName: t.originalTheme})
 	}
 	return nil
 }
 
-func (d *themeDialog) setupDialog() {
-	d.searchDialog = NewSearchDialog("Search themes...", 10)
-	d.searchDialog.SetWidth(dialogWidth)
-	d.searchDialog.Focus()
-	d.refreshItems()
-	d.setCurrentThemeSelection()
+func (t *themeDialog) setupDialog() {
+	t.searchDialog = NewSearchDialog("Search themes...", 10)
+	t.searchDialog.SetWidth(dialogWidth)
+	t.searchDialog.Focus()
+	t.refreshItems()
+	t.setCurrentThemeSelection()
 }
 
-func (d *themeDialog) refreshItems() {
-	query := d.searchDialog.GetQuery()
-	items := d.buildItems(query)
-	d.searchDialog.SetItems(items)
+func (t *themeDialog) refreshItems() {
+	query := t.searchDialog.GetQuery()
+	items := t.buildItems(query)
+	t.searchDialog.SetItems(items)
 }
 
-func (d *themeDialog) buildItems(query string) []list.Item {
+func (t *themeDialog) buildItems(query string) []list.Item {
 	allThemes := theme.AvailableThemes()
 
 	if query != "" {
-		return d.buildSearchItems(query, allThemes)
+		return t.buildSearchItems(query, allThemes)
 	}
-	return d.buildAllThemes(allThemes)
+	return t.buildAllThemes(allThemes)
 }
 
-func (d *themeDialog) buildSearchItems(query string, themes []string) []list.Item {
+func (t *themeDialog) buildSearchItems(query string, themes []string) []list.Item {
 	matches := fuzzy.RankFindFold(query, themes)
 	sort.Sort(matches)
 
@@ -144,7 +144,7 @@ func (d *themeDialog) buildSearchItems(query string, themes []string) []list.Ite
 	return items
 }
 
-func (d *themeDialog) buildAllThemes(themes []string) []list.Item {
+func (t *themeDialog) buildAllThemes(themes []string) []list.Item {
 	var items []list.Item
 
 	// Sort themes alphabetically
@@ -159,20 +159,20 @@ func (d *themeDialog) buildAllThemes(themes []string) []list.Item {
 	return items
 }
 
-func (d *themeDialog) setCurrentThemeSelection() {
+func (t *themeDialog) setCurrentThemeSelection() {
 	current := theme.CurrentThemeName()
-	items := d.buildItems("")
+	items := t.buildItems("")
 
 	for i, item := range items {
 		if themeItem, ok := item.(themeItem); ok && themeItem.name == current {
-			d.searchDialog.SetSelectedIndex(i)
+			t.searchDialog.SetSelectedIndex(i)
 			break
 		}
 	}
 }
 
-func (d *themeDialog) previewFirstTheme() {
-	items := d.buildItems(d.searchDialog.GetQuery())
+func (t *themeDialog) previewFirstTheme() {
+	items := t.buildItems(t.searchDialog.GetQuery())
 	for _, item := range items {
 		if themeItem, ok := item.(themeItem); ok {
 			theme.SetTheme(themeItem.name)
