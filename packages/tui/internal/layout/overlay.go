@@ -15,6 +15,11 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
+var (
+	// ANSI escape sequence regex
+	ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+)
+
 // Split a string into lines, additionally returning the size of the widest line.
 func getLines(s string) (lines []string, widest int) {
 	lines = strings.Split(s, "\n")
@@ -272,9 +277,6 @@ func combineStyles(bgStyle ansiStyle, fgColor *compat.AdaptiveColor) string {
 
 // getStyleAtPosition extracts the active ANSI style at a given visual position
 func getStyleAtPosition(s string, targetPos int) ansiStyle {
-	// ANSI escape sequence regex
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
 	visualPos := 0
 	currentStyle := ansiStyle{}
 
