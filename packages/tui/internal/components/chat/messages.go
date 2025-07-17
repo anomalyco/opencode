@@ -380,6 +380,12 @@ func (m *messagesComponent) renderView() {
 				width,
 				WithBorderColor(t.Error()),
 			)
+			error = lipgloss.PlaceHorizontal(
+				m.width,
+				lipgloss.Center,
+				error,
+				styles.WhitespaceStyle(t.Background()),
+			)
 			blocks = append(blocks, error)
 			m.lineCount += lipgloss.Height(error) + 1
 		}
