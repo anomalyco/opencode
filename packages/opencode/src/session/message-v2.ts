@@ -8,6 +8,10 @@ import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({}))
+  export const PromptTooLongError = NamedError.create("MessagePromptTooLongError", z.object({
+    contextLimit: z.number().optional(),
+    promptTokens: z.number().optional(),
+  }))
 
   export const ToolStatePending = z
     .object({
@@ -176,6 +180,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        PromptTooLongError.Schema,
       ])
       .optional(),
     system: z.string().array(),

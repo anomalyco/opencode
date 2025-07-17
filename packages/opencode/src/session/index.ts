@@ -4,6 +4,7 @@ import { z, ZodSchema } from "zod"
 import {
   generateText,
   LoadAPIKeyError,
+  APICallError,
   streamText,
   tool,
   wrapLanguageModel,
@@ -764,32 +765,56 @@ export namespace Session {
       log.error("", {
         error: e,
       })
-      switch (true) {
-        case e instanceof DOMException && e.name === "AbortError":
-          next.error = new MessageV2.AbortedError(
-            { message: e.message },
-            {
-              cause: e,
-            },
-          ).toObject()
-          break
-        case MessageV2.OutputLengthError.isInstance(e):
-          next.error = e
-          break
-        case LoadAPIKeyError.isInstance(e):
-          next.error = new Provider.AuthError(
-            {
+      
+      if (e instanceof DOMException && e.name === "AbortError") {
+        next.error = new MessageV2.AbortedError(
+          { message: e.message },
+          {
+            cause: e,
+          },
+        ).toObject()
+      } else if (MessageV2.OutputLengthError.isInstance(e)) {
+        next.error = e
+      } else if (LoadAPIKeyError.isInstance(e)) {
+        next.error = new Provider.AuthError(
+          {
+            providerID: input.providerID,
+            message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      } else if (APICallError.isInstance(e)) {
+        // Check if this is a prompt length error
+        const errorMessage = e.message?.toLowerCase() || ''
+        if (errorMessage.includes("prompt is too long") || 
+            errorMessage.includes("context window") || 
+            errorMessage.includes("token limit exceeded")) {
+          // Try to automatically summarize and retry
+          try {
+            await summarize({
+              sessionID: input.sessionID,
               providerID: input.providerID,
-              message: e.message,
-            },
-            { cause: e },
-          ).toObject()
-          break
-        case e instanceof Error:
-          next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
-          break
-        default:
-          next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+              modelID: input.modelID,
+            })
+            // Retry the chat operation after summarization
+            return chat(input)
+          } catch (summarizeError) {
+            // If summarization fails, return the prompt too long error
+            next.error = new MessageV2.PromptTooLongError(
+              {
+                contextLimit: model.info.limit.context,
+                promptTokens: undefined, // We don't have exact prompt tokens
+              },
+              { cause: e },
+            ).toObject()
+          }
+        } else {
+          next.error = new NamedError.Unknown({ message: String(e) }, { cause: e }).toObject()
+        }
+      } else if (e instanceof Error) {
+        next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+      } else {
+        next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
       }
       Bus.publish(Event.Error, {
         sessionID: next.sessionID,
@@ -952,36 +977,48 @@ export namespace Session {
             break
         }
       }
-    } catch (e: any) {
+    } catch (e) {
       log.error("summarize stream error", {
         error: e,
       })
-      switch (true) {
-        case e instanceof DOMException && e.name === "AbortError":
-          next.error = new MessageV2.AbortedError(
-            { message: e.message },
+      
+      if (e instanceof DOMException && e.name === "AbortError") {
+        next.error = new MessageV2.AbortedError(
+          { message: e.message },
+          {
+            cause: e,
+          },
+        ).toObject()
+      } else if (MessageV2.OutputLengthError.isInstance(e)) {
+        next.error = e
+      } else if (LoadAPIKeyError.isInstance(e)) {
+        next.error = new Provider.AuthError(
+          {
+            providerID: input.providerID,
+            message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      } else if (APICallError.isInstance(e)) {
+        // For summarize, we can't retry with another summarize, so just report the error
+        const errorMessage = e.message?.toLowerCase() || ''
+        if (errorMessage.includes("prompt is too long") || 
+            errorMessage.includes("context window") || 
+            errorMessage.includes("token limit exceeded")) {
+          next.error = new MessageV2.PromptTooLongError(
             {
-              cause: e,
-            },
-          ).toObject()
-          break
-        case MessageV2.OutputLengthError.isInstance(e):
-          next.error = e
-          break
-        case LoadAPIKeyError.isInstance(e):
-          next.error = new Provider.AuthError(
-            {
-              providerID: input.providerID,
-              message: e.message,
+              contextLimit: model.info.limit.context,
+              promptTokens: undefined,
             },
             { cause: e },
           ).toObject()
-          break
-        case e instanceof Error:
-          next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
-          break
-        default:
-          next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+        } else {
+          next.error = new NamedError.Unknown({ message: String(e) }, { cause: e }).toObject()
+        }
+      } else if (e instanceof Error) {
+        next.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+      } else {
+        next.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
       }
       Bus.publish(Event.Error, {
         error: next.error,
