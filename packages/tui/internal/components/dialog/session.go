@@ -42,7 +42,7 @@ func (s sessionItem) Render(
 	if s.isDeleteConfirming {
 		text = "Press again to confirm delete"
 	} else {
-		text = s.title
+		text = strings.Split(s.title, "\n")[0]
 	}
 
 	truncatedStr := truncate.StringWithTail(text, uint(width-1), "...")
