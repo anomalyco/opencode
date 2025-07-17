@@ -120,7 +120,7 @@ export const AuthLoginCommand = cmd({
 
     if (provider === "amazon-bedrock") {
       prompts.log.info(
-        "Amazon bedrock can be configured with standard AWS environment variables like AWS_PROFILE or AWS_ACCESS_KEY_ID",
+        "Amazon bedrock can be configured with standard AWS environment variables like AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE or AWS_ACCESS_KEY_ID",
       )
       prompts.outro("Done")
       return
