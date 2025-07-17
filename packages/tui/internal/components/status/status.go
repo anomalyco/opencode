@@ -107,10 +107,6 @@ func (m statusComponent) View() string {
 	mode := modeNameStyle(strings.ToUpper(m.app.Mode.Name)) + modeDescStyle(" MODE")
 	mode = modeStyle.
 		Padding(0, 1).
-		BorderLeft(true).
-		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(modeBackground).
-		BorderBackground(t.BackgroundPanel()).
 		Render(mode)
 
 	mode = styles.NewStyle().
