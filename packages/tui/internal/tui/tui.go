@@ -110,11 +110,6 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
-		// Handle Ctrl+Z for suspend
-		if keyString == "ctrl+z" {
-			return a, tea.Suspend
-		}
-
 		// 1. Handle active modal
 		if a.modal != nil {
 			switch keyString {
@@ -275,6 +270,11 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
+		}
+
+		// Fallback: suspend if ctrl+z is pressed and no user keybind matched
+		if keyString == "ctrl+z" {
+			return a, tea.Suspend
 		}
 
 		// 10. Fallback to editor. This is for other characters like backspace, tab, etc.
