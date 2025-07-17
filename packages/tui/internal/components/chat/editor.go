@@ -322,9 +322,10 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	// Convert textarea attachments to history attachments
 	historyAttachments := make([]history.Attachment, 0, len(attachments))
 	for _, att := range attachments {
+		extractedPath := extractPathFromURL(att.URL)
 		historyAttachments = append(historyAttachments, history.Attachment{
 			Type:      "file",
-			Path:      extractPathFromURL(att.URL),
+			Path:      extractedPath,
 			Display:   att.Display,
 			Filename:  att.Filename,
 			MediaType: att.MediaType,
@@ -496,15 +497,19 @@ func createSpinner() spinner.Model {
 	)
 }
 
-func extractPathFromURL(url string) string {
-	if strings.HasPrefix(url, "file://") {
-		return strings.TrimPrefix(url, "file://")
+func extractPathFromURL(urlStr string) string {
+	if strings.HasPrefix(urlStr, "file://") {
+		path := strings.TrimPrefix(urlStr, "file://")
+		// URL decode the path to handle encoded characters
+		if decodedPath, err := url.PathUnescape(path); err == nil {
+			path = decodedPath
+		}
+		return path
 	}
 	// For data URLs, we might need to store them differently
 	// or reconstruct the original file path if available
-	return url
+	return urlStr
 }
-
 func NewEditorComponent(app *app.App) EditorComponent {
 	s := createSpinner()
 

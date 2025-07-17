@@ -107,9 +107,7 @@ func WithPaddingBottom(padding int) renderingOption {
 }
 
 func renderContentBlock(
-	app *app.App,
 	content string,
-	width int,
 	options ...renderingOption,
 ) string {
 	t := theme.CurrentTheme()
@@ -242,17 +240,13 @@ func renderText(
 	switch message.(type) {
 	case opencode.UserMessage:
 		return renderContentBlock(
-			app,
 			content,
-			width,
 			WithTextColor(t.Text()),
 			WithBorderColorRight(t.Secondary()),
 		)
 	case opencode.AssistantMessage:
 		return renderContentBlock(
-			app,
 			content,
-			width,
 			WithBorderColor(t.Accent()),
 		)
 	}
@@ -271,7 +265,7 @@ func renderToolDetails(
 
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolTitle(toolCall, width)
-		return renderContentBlock(app, title, width)
+		return renderContentBlock(title)
 	}
 
 	var result *string
@@ -349,9 +343,7 @@ func renderToolDetails(
 					title = style.Render(title)
 					content := title + "\n" + body
 					content = renderContentBlock(
-						app,
 						content,
-						width,
 						WithPadding(0),
 						WithBorderColor(borderColor),
 					)
@@ -455,7 +447,7 @@ func renderToolDetails(
 
 	title := renderToolTitle(toolCall, width)
 	content := title + "\n\n" + body
-	return renderContentBlock(app, content, width, WithBorderColor(borderColor))
+	return renderContentBlock(content, WithBorderColor(borderColor))
 }
 
 func renderToolName(name string) string {

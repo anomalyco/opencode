@@ -15,7 +15,6 @@ type testItem struct {
 func (t testItem) Render(
 	selected bool,
 	width int,
-	isFirstInViewport bool,
 	baseStyle styles.Style,
 ) string {
 	return t.value
@@ -34,19 +33,16 @@ func createTestList() *listComponent[testItem] {
 	}
 	list := NewListComponent(
 		WithItems(items),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](false),
 		WithRenderFunc(
 			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
-				return item.Render(selected, width, false, baseStyle)
+				return item.Render(selected, width, baseStyle)
 			},
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 
@@ -84,19 +80,16 @@ func TestJKKeyNavigation(t *testing.T) {
 	// Create list with alpha keys enabled
 	list := NewListComponent(
 		WithItems(items),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](true),
 		WithRenderFunc(
 			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
-				return item.Render(selected, width, false, baseStyle)
+				return item.Render(selected, width, baseStyle)
 			},
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 
@@ -176,19 +169,16 @@ func TestNavigationBoundaries(t *testing.T) {
 func TestEmptyList(t *testing.T) {
 	emptyList := NewListComponent(
 		WithItems([]testItem{}),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](false),
 		WithRenderFunc(
 			func(item testItem, selected bool, width int, baseStyle styles.Style) string {
-				return item.Render(selected, width, false, baseStyle)
+				return item.Render(selected, width, baseStyle)
 			},
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 

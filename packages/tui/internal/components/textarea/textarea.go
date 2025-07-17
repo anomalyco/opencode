@@ -2308,6 +2308,7 @@ func (m *Model) restoreHistoryEntry(entry history.HistoryEntry) {
 	// Reconstruct attachment objects
 	for _, histAtt := range entry.Attachments {
 		if att, err := m.reconstructAttachment(histAtt); err == nil {
+			// Use the original display name as the key to ensure proper lookup
 			attachmentMap[histAtt.Display] = att
 		}
 	}
