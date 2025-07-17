@@ -344,6 +344,10 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	marshalled, _ := json.Marshal(config.Keybinds)
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
+		// Remove share/unshare commands if sharing is disabled
+		if config.Share == opencode.ConfigShareDisabled && (command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
+			continue
+		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {
 			command.Keybindings = parseBindings(keybind)
 		}
