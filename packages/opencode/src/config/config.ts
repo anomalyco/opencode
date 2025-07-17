@@ -60,6 +60,7 @@ export namespace Config {
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
     })
     .strict()
     .openapi({

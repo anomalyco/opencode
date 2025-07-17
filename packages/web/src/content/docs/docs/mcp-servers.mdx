@@ -49,7 +49,10 @@ Add a remote MCP servers under `mcp.remotemcp`.
     "remotemcp": {
       "type": "remote",
       "url": "https://my-mcp-server.com",
-      "enabled": true
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
     }
   }
 }
