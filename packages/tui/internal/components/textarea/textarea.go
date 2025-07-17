@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"image/color"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -2258,8 +2259,14 @@ func (m *Model) validateAttachmentFile(path string) bool {
 		return false
 	}
 
+	// URL decode the path to handle encoded characters
+	decodedPath := path
+	if decoded, err := url.PathUnescape(path); err == nil {
+		decodedPath = decoded
+	}
+
 	// Check if file still exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(decodedPath); os.IsNotExist(err) {
 		return false
 	}
 
