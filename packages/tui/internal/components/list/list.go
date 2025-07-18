@@ -38,9 +38,6 @@ type Options[T any] struct {
 // Option is a function that configures the list component
 type Option[T any] func(*Options[T])
 
-// ListOption is a function that configures a listComponent.
-type ListOption[T any] func(*listComponent[T])
-
 // WithItems sets the initial items for the list
 func WithItems[T any](items []T) Option[T] {
 	return func(o *Options[T]) {
