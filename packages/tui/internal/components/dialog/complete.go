@@ -67,6 +67,7 @@ func (c *completionDialogComponent) Init() tea.Cmd {
 func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 	return func() tea.Msg {
 		allItems := make([]completions.CompletionSuggestion, 0)
+		providersWithResults := 0
 
 		// Collect results from all providers
 		for _, provider := range c.providers {
@@ -81,11 +82,14 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 				)
 				continue
 			}
-			allItems = append(allItems, items...)
+			if len(items) > 0 {
+				providersWithResults++
+				allItems = append(allItems, items...)
+			}
 		}
 
 		// If there's a query, use fuzzy ranking to sort results
-		if query != "" && len(allItems) > 0 && len(c.providers) > 1 {
+		if query != "" && providersWithResults > 1 {
 			t := theme.CurrentTheme()
 			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
 			// Create a slice of display values for fuzzy matching
