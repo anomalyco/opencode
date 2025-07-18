@@ -297,7 +297,8 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 	if len(value) > 0 && value[len(value)-1] == '\\' {
 		// If the last character is a backslash, remove it and add a newline
-		m.textarea.ReplaceRange(len(value)-1, len(value), "")
+		backslashCol := m.textarea.CurrentRowLength() - 1
+		m.textarea.ReplaceRange(backslashCol, backslashCol+1, "")
 		m.textarea.InsertString("\n")
 		return m, nil
 	}
