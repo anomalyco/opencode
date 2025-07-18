@@ -179,6 +179,7 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      disable_ai_attribution: z.boolean().optional().describe("Disable AI attribution in commits and pull requests"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       experimental: z
         .object({
