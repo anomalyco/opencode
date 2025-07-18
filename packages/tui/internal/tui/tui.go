@@ -334,7 +334,7 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case app.SetEditorContentMsg:
 		// Set the editor content without sending
-		a.editor.SetValue(msg.Text)
+		a.editor.SetValueWithAttachments(msg.Text)
 		updated, cmd := a.editor.Focus()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)

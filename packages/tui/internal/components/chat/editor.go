@@ -40,6 +40,7 @@ type EditorComponent interface {
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
 	SetValue(value string)
+	SetValueWithAttachments(value string)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 }
@@ -422,6 +423,80 @@ func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 
 func (m *editorComponent) SetValue(value string) {
 	m.textarea.SetValue(value)
+}
+
+func (m *editorComponent) SetValueWithAttachments(value string) {
+	m.textarea.Reset()
+
+	i := 0
+	for i < len(value) {
+		// Check if filepath and add attachment
+		if value[i] == '@' {
+			start := i + 1
+			end := start
+			for end < len(value) && value[end] != ' ' && value[end] != '\t' && value[end] != '\n' && value[end] != '\r' {
+				end++
+			}
+
+			if end > start {
+				filePath := value[start:end]
+				if _, err := os.Stat(filePath); err == nil {
+					// Valid file path, create attachment
+					ext := strings.ToLower(filepath.Ext(filePath))
+					mediaType := ""
+					var attachment *textarea.Attachment
+
+					switch ext {
+					case ".jpg":
+						mediaType = "image/jpeg"
+					case ".png", ".jpeg", ".gif", ".webp":
+						mediaType = "image/" + ext[1:]
+					case ".pdf":
+						mediaType = "application/pdf"
+					}
+
+					if mediaType != "" && (strings.HasPrefix(mediaType, "image/") || mediaType == "application/pdf") {
+						fileBytes, err := os.ReadFile(filePath)
+						if err == nil {
+							base64EncodedFile := base64.StdEncoding.EncodeToString(fileBytes)
+							url := fmt.Sprintf("data:%s;base64,%s", mediaType, base64EncodedFile)
+							attachments := m.textarea.GetAttachments()
+							attachmentIndex := len(attachments) + 1
+							label := "File"
+							if strings.HasPrefix(mediaType, "image/") {
+								label = "Image"
+							}
+							attachment = &textarea.Attachment{
+								ID:        uuid.NewString(),
+								Display:   fmt.Sprintf("[%s #%d]", label, attachmentIndex),
+								URL:       url,
+								Filename:  filePath,
+								MediaType: mediaType,
+							}
+						}
+					}
+
+					if attachment == nil {
+						attachment = &textarea.Attachment{
+							ID:        uuid.NewString(),
+							Display:   "@" + filePath,
+							URL:       fmt.Sprintf("file://./%s", filePath),
+							Filename:  filePath,
+							MediaType: "text/plain",
+						}
+					}
+
+					m.textarea.InsertAttachment(attachment)
+					i = end
+					continue
+				}
+			}
+		}
+
+		// Not a valid file path, insert the character normally
+		m.textarea.InsertRune(rune(value[i]))
+		i++
+	}
 }
 
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
