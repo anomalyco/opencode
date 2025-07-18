@@ -52,6 +52,20 @@ else
     INSTALL_DIR="$HOME/.opencode/bin"
 fi
 
+print_message() {
+    local level=$1
+    local message=$2
+    local color=""
+
+    case $level in
+        info) color="${GREEN}" ;;
+        warning) color="${YELLOW}" ;;
+        error) color="${RED}" ;;
+    esac
+
+    echo -e "${color}${message}${NC}"
+}
+
 mkdir -p "$INSTALL_DIR"
 
 print_message info "Installing to: ${YELLOW}$INSTALL_DIR${GREEN}"
@@ -68,20 +82,6 @@ else
     url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
     specific_version=$requested_version
 fi
-
-print_message() {
-    local level=$1
-    local message=$2
-    local color=""
-
-    case $level in
-        info) color="${GREEN}" ;;
-        warning) color="${YELLOW}" ;;
-        error) color="${RED}" ;;
-    esac
-
-    echo -e "${color}${message}${NC}"
-}
 
 check_version() {
     if command -v opencode >/dev/null 2>&1; then
