@@ -41,6 +41,7 @@ type EditorComponent interface {
 	Newline() (tea.Model, tea.Cmd)
 	SetValue(value string)
 	SetValueWithAttachments(value string)
+	RestoreMessage(text string, attachments []opencode.FilePartParam)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 }
@@ -404,6 +405,29 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
 	m.exitKeyInDebounce = inDebounce
+}
+
+func (m *editorComponent) RestoreMessage(text string, attachments []opencode.FilePartParam) {
+	m.textarea.Reset()
+
+	for _, attachment := range attachments {
+		fileDisplay := "@" + attachment.Filename.Value
+		textareaAttachment := &textarea.Attachment{
+			ID:        uuid.NewString(),
+			Display:   fileDisplay,
+			URL:       attachment.URL.Value,
+			Filename:  attachment.Filename.Value,
+			MediaType: attachment.Mime.Value,
+		}
+		m.textarea.InsertAttachment(textareaAttachment)
+		m.textarea.InsertString(" ")
+
+		// text already includes file name
+		text = strings.ReplaceAll(text, fileDisplay+" ", "")
+		text = strings.ReplaceAll(text, fileDisplay, "")
+	}
+
+	m.textarea.InsertString(text)
 }
 
 func (m *editorComponent) getInterruptKeyText() string {

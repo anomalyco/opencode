@@ -338,6 +338,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.editor.Focus()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
+	case app.SendFailedMsg:
+		a.editor.RestoreMessage(msg.Text, msg.Attachments)
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		cmds = append(cmds, cmd)
+		cmds = append(cmds, toast.NewErrorToast(msg.Error))
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
 	case opencode.EventListResponseEventInstallationUpdated:

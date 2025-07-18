@@ -74,6 +74,12 @@ type OptimisticMessageAddedMsg struct {
 type FileRenderedMsg struct {
 	FilePath string
 }
+type SendFailedMsg struct {
+	Text        string
+	Attachments []opencode.FilePartParam
+	Error       string
+	MessageID   string
+}
 
 func New(
 	ctx context.Context,
@@ -535,7 +541,7 @@ func (a *App) SendChatMessage(
 			}
 		}
 
-		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
+		_, err := a.Client.Session.Chat(ctx, "invalid id", opencode.SessionChatParams{
 			Parts:      opencode.F(partsParam),
 			MessageID:  opencode.F(message.ID),
 			ProviderID: opencode.F(a.Provider.ID),
@@ -545,7 +551,12 @@ func (a *App) SendChatMessage(
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
 			slog.Error(errormsg)
-			return toast.NewErrorToast(errormsg)()
+			return SendFailedMsg{
+				Text:        text,
+				Attachments: attachments,
+				Error:       errormsg,
+				MessageID:   message.ID,
+			}
 		}
 		return nil
 	})
