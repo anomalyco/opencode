@@ -541,7 +541,7 @@ func (a *App) SendChatMessage(
 			}
 		}
 
-		_, err := a.Client.Session.Chat(ctx, "invalid id", opencode.SessionChatParams{
+		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
 			Parts:      opencode.F(partsParam),
 			MessageID:  opencode.F(message.ID),
 			ProviderID: opencode.F(a.Provider.ID),
