@@ -282,12 +282,6 @@ func generateMarkdownStyleConfig(backgroundColor compat.AdaptiveColor) ansi.Styl
 			},
 		},
 		Table: ansi.StyleTable{
-			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{
-					BlockPrefix: "\n",
-					BlockSuffix: "\n",
-				},
-			},
 			CenterSeparator: stringPtr("┼"),
 			ColumnSeparator: stringPtr("│"),
 			RowSeparator:    stringPtr("─"),
