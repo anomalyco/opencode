@@ -378,7 +378,7 @@ func renderToolDetails(
 			stdout := metadata["stdout"]
 			if stdout != nil {
 				command := toolInputMap["command"].(string)
-				out := util.StripAnsi(fmt.Sprintf("%s", stdout))
+				out := ansi.Strip(fmt.Sprintf("%s", stdout))
 				body = fmt.Sprintf("```console\n> %s\n%s```", command, out)
 				body = util.ToMarkdown(body, width, backgroundColor)
 			}
