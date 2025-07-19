@@ -446,17 +446,16 @@ func (m *messagesComponent) renderHeader() string {
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
 		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
+
+	shareEnabled := m.app.Config.Share != opencode.ConfigShareDisabled
 	headerText := util.ToMarkdown("# "+m.app.Session.Title, headerWidth-len(sessionInfo), t.Background())
 
 	var items []layout.FlexItem
-	if m.app.Config.Share != opencode.ConfigShareDisabled {
-		share := ""
+	if shareEnabled {
+		share := base("/share") + muted(" to create a shareable link")
 		if m.app.Session.Share.URL != "" {
 			share = muted(m.app.Session.Share.URL + "  /unshare")
-		} else {
-			share = base("/share") + muted(" to create a shareable link")
 		}
-
 		items = []layout.FlexItem{{View: share}, {View: sessionInfo}}
 	} else {
 		items = []layout.FlexItem{{View: headerText}, {View: sessionInfo}}
@@ -475,7 +474,7 @@ func (m *messagesComponent) renderHeader() string {
 	)
 
 	var headerLines []string
-	if m.app.Config.Share != opencode.ConfigShareDisabled {
+	if shareEnabled {
 		headerLines = []string{headerText, headerRow}
 	} else {
 		headerLines = []string{headerRow}
