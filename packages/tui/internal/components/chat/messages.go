@@ -414,18 +414,6 @@ func (m *messagesComponent) renderHeader() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
-	headerLines := []string{}
-	headerLines = append(
-		headerLines,
-		util.ToMarkdown("# "+m.app.Session.Title, headerWidth-6, t.Background()),
-	)
-
-	share := ""
-	if m.app.Session.Share.URL != "" {
-		share = muted(m.app.Session.Share.URL + "  /unshare")
-	} else {
-		share = base("/share") + muted(" to create a shareable link")
-	}
 
 	sessionInfo := ""
 	tokens := float64(0)
@@ -458,31 +446,40 @@ func (m *messagesComponent) renderHeader() string {
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
 		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
-
-	background := t.Background()
+	headerText := util.ToMarkdown("# "+m.app.Session.Title, headerWidth-len(sessionInfo), t.Background())
 
 	var items []layout.FlexItem
-	justify := layout.JustifyEnd
-
 	if m.app.Config.Share != opencode.ConfigShareDisabled {
-		items = append(items, layout.FlexItem{View: share})
-		justify = layout.JustifySpaceBetween
+		share := ""
+		if m.app.Session.Share.URL != "" {
+			share = muted(m.app.Session.Share.URL + "  /unshare")
+		} else {
+			share = base("/share") + muted(" to create a shareable link")
+		}
+
+		items = []layout.FlexItem{{View: share}, {View: sessionInfo}}
+	} else {
+		items = []layout.FlexItem{{View: headerText}, {View: sessionInfo}}
 	}
 
-	items = append(items, layout.FlexItem{View: sessionInfo})
-
+	background := t.Background()
 	headerRow := layout.Render(
 		layout.FlexOptions{
 			Background: &background,
 			Direction:  layout.Row,
-			Justify:    justify,
+			Justify:    layout.JustifySpaceBetween,
 			Align:      layout.AlignStretch,
 			Width:      headerWidth - 6,
 		},
 		items...,
 	)
 
-	headerLines = append(headerLines, headerRow)
+	var headerLines []string
+	if m.app.Config.Share != opencode.ConfigShareDisabled {
+		headerLines = []string{headerText, headerRow}
+	} else {
+		headerLines = []string{headerRow}
+	}
 
 	header := strings.Join(headerLines, "\n")
 	header = styles.NewStyle().
