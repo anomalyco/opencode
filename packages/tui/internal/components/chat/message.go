@@ -378,7 +378,8 @@ func renderToolDetails(
 			stdout := metadata["stdout"]
 			if stdout != nil {
 				command := toolInputMap["command"].(string)
-				body = fmt.Sprintf("```console\n> %s\n%s```", command, stdout)
+				out := util.StripAnsi(fmt.Sprintf("%s", stdout))
+				body = fmt.Sprintf("```console\n> %s\n%s```", command, out)
 				body = util.ToMarkdown(body, width, backgroundColor)
 			}
 		case "webfetch":
