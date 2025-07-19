@@ -1,6 +1,7 @@
 package util
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss/v2"
@@ -9,8 +10,12 @@ import (
 // PreventHyphenBreaks replaces regular hyphens with non-breaking hyphens to prevent
 // sparse word breaks in hyphenated terms like "claude-code-action".
 // This improves readability by keeping hyphenated words together.
+// Only preserves hyphens within words, not markdown syntax like bullet points.
 func PreventHyphenBreaks(text string) string {
-	return strings.ReplaceAll(text, "-", "\u2011")
+	// Use regex to match hyphens that are between word characters
+	// This preserves hyphens in words like "claude-code-action" but not in "- [ ]"
+	re := regexp.MustCompile(`(\w)-(\w)`)
+	return re.ReplaceAllString(text, "$1\u2011$2")
 }
 
 // RestoreHyphens converts non-breaking hyphens back to regular hyphens.
