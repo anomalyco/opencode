@@ -540,7 +540,7 @@ export namespace Session {
     if (msgs.length === 0 && !session.parentID) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
-        maxOutputTokens: input.providerID === "google" ? 1024 : 20,
+        maxOutputTokens: small.info.reasoning ? 1024 : 20,
         providerOptions: {
           [input.providerID]: small.info.options,
         },
