@@ -3,13 +3,30 @@ import { defineConfig } from "astro/config"
 import starlight from "@astrojs/starlight"
 import solidJs from "@astrojs/solid-js"
 import cloudflare from "@astrojs/cloudflare"
+import starlightLlmsTxt from 'starlight-llms-txt'
 import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
 
+
 const github = "https://github.com/sst/opencode"
+
+const sidebar = [
+  "docs",
+  "docs/cli",
+  "docs/share",
+  "docs/modes",
+  "docs/rules",
+  "docs/config",
+  "docs/models",
+  "docs/themes",
+  "docs/keybinds",
+  "docs/enterprise",
+  "docs/mcp-servers",
+  "docs/troubleshooting",
+]
 
 // https://astro.build/config
 export default defineConfig({
@@ -60,20 +77,7 @@ export default defineConfig({
         dark: "./src/assets/logo-dark.svg",
         replacesTitle: true,
       },
-      sidebar: [
-        "docs",
-        "docs/cli",
-        "docs/share",
-        "docs/modes",
-        "docs/rules",
-        "docs/config",
-        "docs/models",
-        "docs/themes",
-        "docs/keybinds",
-        "docs/enterprise",
-        "docs/mcp-servers",
-        "docs/troubleshooting",
-      ],
+      sidebar: sidebar,
       components: {
         Hero: "./src/components/Hero.astro",
         Head: "./src/components/Head.astro",
@@ -82,6 +86,19 @@ export default defineConfig({
       plugins: [
         theme({
           headerLinks: config.headerLinks,
+        }),
+        starlightLlmsTxt({
+          customSets: [
+            ...sidebar.
+              filter((item) => item !== 'docs'). // no need to include the main docs link
+              map((item) => {
+                return {
+                  label: item.replace("docs/", ""),
+                  description: `Documentation for ${item.replace("docs/", "")}`,
+                  paths: [`content/docs/${item}.md`],
+                }
+              }),
+          ]
         }),
       ],
     }),

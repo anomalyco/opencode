@@ -31,6 +31,7 @@
     "sharp": "0.32.5",
     "shiki": "3.4.2",
     "solid-js": "1.9.7",
+    "starlight-llms-txt": "0.5.1",
     "toolbeam-docs-theme": "0.4.3"
   },
   "devDependencies": {
