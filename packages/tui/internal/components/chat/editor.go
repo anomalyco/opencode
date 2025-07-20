@@ -20,7 +20,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
-	"github.com/sst/opencode/internal/styles"
+	styles_pkg "github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
 )
@@ -48,7 +48,7 @@ type EditorComponent interface {
 type editorComponent struct {
 	app                    *app.App
 	width                  int
-	textarea               textarea.Model
+	textarea               *textarea.AdaptiveModel
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 	exitKeyInDebounce      bool
@@ -105,7 +105,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := string(msg)
 		m.textarea.InsertRunesFromUserInput([]rune(text))
 	case dialog.ThemeSelectedMsg:
-		m.textarea = updateTextareaStyles(m.textarea)
+		m.textarea.SetStyles(getTextareaStyles())
 		m.spinner = createSpinner()
 		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
 	case dialog.CompletionSelectedMsg:
@@ -183,9 +183,9 @@ func (m *editorComponent) Content() string {
 	}
 
 	t := theme.CurrentTheme()
-	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
-	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
-	promptStyle := styles.NewStyle().Foreground(t.Primary()).
+	base := styles_pkg.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
+	muted := styles_pkg.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	promptStyle := styles_pkg.NewStyle().Foreground(t.Primary()).
 		Padding(0, 0, 0, 1).
 		Bold(true)
 	prompt := promptStyle.Render(">")
@@ -200,7 +200,7 @@ func (m *editorComponent) Content() string {
 	if m.app.IsLeaderSequence {
 		borderForeground = t.Accent()
 	}
-	textarea = styles.NewStyle().
+	textarea = styles_pkg.NewStyle().
 		Background(t.BackgroundElement()).
 		Width(width).
 		PaddingTop(1).
@@ -239,10 +239,10 @@ func (m *editorComponent) Content() string {
 	}
 
 	space := width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
-	spacer := styles.NewStyle().Background(t.Background()).Width(space).Render("")
+	spacer := styles_pkg.NewStyle().Background(t.Background()).Width(space).Render("")
 
 	info := hint + spacer + model
-	info = styles.NewStyle().Background(t.Background()).Padding(0, 1).Render(info)
+	info = styles_pkg.NewStyle().Background(t.Background()).Padding(0, 1).Render(info)
 
 	content := strings.Join([]string{"", textarea, info}, "\n")
 	return content
@@ -261,7 +261,7 @@ func (m *editorComponent) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			"",
-			styles.WhitespaceStyle(theme.CurrentTheme().Background()),
+			styles_pkg.WhitespaceStyle(theme.CurrentTheme().Background()),
 		)
 	}
 	return m.Content()
@@ -425,31 +425,64 @@ func (m *editorComponent) getExitKeyText() string {
 	return m.app.Commands[commands.AppExitCommand].Keys()[0]
 }
 
+func getTextareaStyles() textarea.Styles {
+	t := theme.CurrentTheme()
+	bgColor := t.BackgroundElement()
+	textColor := t.Text()
+	textMutedColor := t.TextMuted()
+
+	var textareaStyles textarea.Styles
+	textareaStyles.Blurred.Base = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	textareaStyles.Blurred.CursorLine = styles_pkg.NewStyle().Background(bgColor).Lipgloss()
+	textareaStyles.Blurred.Placeholder = styles_pkg.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
+	textareaStyles.Blurred.Text = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	textareaStyles.Focused.Base = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	textareaStyles.Focused.CursorLine = styles_pkg.NewStyle().Background(bgColor).Lipgloss()
+	textareaStyles.Focused.Placeholder = styles_pkg.NewStyle().
+		Foreground(textMutedColor).
+		Background(bgColor).
+		Lipgloss()
+	textareaStyles.Focused.Text = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	textareaStyles.Attachment = styles_pkg.NewStyle().
+		Foreground(t.Secondary()).
+		Background(bgColor).
+		Lipgloss()
+	textareaStyles.SelectedAttachment = styles_pkg.NewStyle().
+		Foreground(t.Text()).
+		Background(t.Secondary()).
+		Lipgloss()
+	textareaStyles.Cursor.Color = t.Primary()
+	return textareaStyles
+}
+
 func updateTextareaStyles(ta textarea.Model) textarea.Model {
 	t := theme.CurrentTheme()
 	bgColor := t.BackgroundElement()
 	textColor := t.Text()
 	textMutedColor := t.TextMuted()
 
-	ta.Styles.Blurred.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Blurred.Placeholder = styles.NewStyle().
+	ta.Styles.Blurred.Base = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.CursorLine = styles_pkg.NewStyle().Background(bgColor).Lipgloss()
+	ta.Styles.Blurred.Placeholder = styles_pkg.NewStyle().
 		Foreground(textMutedColor).
 		Background(bgColor).
 		Lipgloss()
-	ta.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Base = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Focused.CursorLine = styles.NewStyle().Background(bgColor).Lipgloss()
-	ta.Styles.Focused.Placeholder = styles.NewStyle().
+	ta.Styles.Blurred.Text = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Base = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Focused.CursorLine = styles_pkg.NewStyle().Background(bgColor).Lipgloss()
+	ta.Styles.Focused.Placeholder = styles_pkg.NewStyle().
 		Foreground(textMutedColor).
 		Background(bgColor).
 		Lipgloss()
-	ta.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ta.Styles.Attachment = styles.NewStyle().
+	ta.Styles.Focused.Text = styles_pkg.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
+	ta.Styles.Attachment = styles_pkg.NewStyle().
 		Foreground(t.Secondary()).
 		Background(bgColor).
 		Lipgloss()
-	ta.Styles.SelectedAttachment = styles.NewStyle().
+	ta.Styles.SelectedAttachment = styles_pkg.NewStyle().
 		Foreground(t.Text()).
 		Background(t.Secondary()).
 		Lipgloss()
@@ -462,7 +495,7 @@ func createSpinner() spinner.Model {
 	return spinner.New(
 		spinner.WithSpinner(spinner.Ellipsis),
 		spinner.WithStyle(
-			styles.NewStyle().
+			styles_pkg.NewStyle().
 				Background(t.Background()).
 				Foreground(t.TextMuted()).
 				Width(3).
@@ -474,11 +507,11 @@ func createSpinner() spinner.Model {
 func NewEditorComponent(app *app.App) EditorComponent {
 	s := createSpinner()
 
-	ta := textarea.New()
-	ta.Prompt = " "
-	ta.ShowLineNumbers = false
-	ta.CharLimit = -1
-	ta = updateTextareaStyles(ta)
+	ta := textarea.NewAdaptive()
+	ta.SetPrompt(" ")
+	ta.SetShowLineNumbers(false)
+	ta.SetCharLimit(-1)
+	ta.SetStyles(getTextareaStyles())
 
 	m := &editorComponent{
 		app:                    app,

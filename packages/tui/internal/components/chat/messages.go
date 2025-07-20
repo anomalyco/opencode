@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
-	"github.com/sst/opencode/internal/components/dialog"
+	"github.com/sst/opencode/internal/cache"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
@@ -44,6 +44,8 @@ type messagesComponent struct {
 	tail            bool
 	partCount       int
 	lineCount       int
+	slidingWindow   *SlidingWindowRenderer
+	messageBroker   *MessageBroker
 }
 
 type ToggleToolDetailsMsg struct{}
@@ -56,45 +58,21 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		effectiveWidth := msg.Width - 4
-		// Clear cache on resize since width affects rendering
-		if m.width != effectiveWidth {
-			m.cache.Clear()
+		width := msg.Width
+		height := msg.Height
+		m.width = width
+		m.height = height
+		tail := m.viewport.AtBottom()
+		m.viewport.SetWidth(width)
+		m.viewport.SetHeight(height)
+		if tail {
+			m.viewport.GotoBottom()
 		}
-		m.width = effectiveWidth
-		m.height = msg.Height - 7
-		m.viewport.SetWidth(m.width)
-		m.loading = true
-		return m, m.Reload()
-	case app.SendMsg:
-		m.viewport.GotoBottom()
-		m.tail = true
-		return m, nil
-	case dialog.ThemeSelectedMsg:
-		m.cache.Clear()
-		m.loading = true
-		return m, m.Reload()
+		cmds = append(cmds, m.renderView())
 	case ToggleToolDetailsMsg:
 		m.showToolDetails = !m.showToolDetails
-		return m, m.Reload()
-	case app.SessionLoadedMsg, app.SessionClearedMsg:
-		m.cache.Clear()
-		m.tail = true
-		m.loading = true
-		return m, m.Reload()
-
-	case opencode.EventListResponseEventSessionUpdated:
-		if msg.Properties.Info.ID == m.app.Session.ID {
-			m.header = m.renderHeader()
-		}
-	case opencode.EventListResponseEventMessageUpdated:
-		if msg.Properties.Info.SessionID == m.app.Session.ID {
-			cmds = append(cmds, m.renderView())
-		}
-	case opencode.EventListResponseEventMessagePartUpdated:
-		if msg.Properties.Part.SessionID == m.app.Session.ID {
-			cmds = append(cmds, m.renderView())
-		}
+		m.slidingWindow.ClearCache() // Clear cache when toggling tool details
+		cmds = append(cmds, m.renderView())
 	case renderCompleteMsg:
 		m.partCount = msg.partCount
 		m.lineCount = msg.lineCount
@@ -143,265 +121,27 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		measure := util.Measure("messages.renderView")
 		defer measure()
 
-		t := theme.CurrentTheme()
-		blocks := make([]string, 0)
-		partCount := 0
-		lineCount := 0
-
-		orphanedToolCalls := make([]opencode.ToolPart, 0)
-
-		width := m.width // always use full width
-
-		for _, message := range m.app.Messages {
-			var content string
-			var cached bool
-
-			switch casted := message.Info.(type) {
-			case opencode.UserMessage:
-				for partIndex, part := range message.Parts {
-					switch part := part.(type) {
-					case opencode.TextPart:
-						if part.Synthetic {
-							continue
-						}
-						remainingParts := message.Parts[partIndex+1:]
-						fileParts := make([]opencode.FilePart, 0)
-						for _, part := range remainingParts {
-							switch part := part.(type) {
-							case opencode.FilePart:
-								fileParts = append(fileParts, part)
-							}
-						}
-						flexItems := []layout.FlexItem{}
-						if len(fileParts) > 0 {
-							fileStyle := styles.NewStyle().Background(t.BackgroundElement()).Foreground(t.TextMuted()).Padding(0, 1)
-							mediaTypeStyle := styles.NewStyle().Background(t.Secondary()).Foreground(t.BackgroundPanel()).Padding(0, 1)
-							for _, filePart := range fileParts {
-								mediaType := ""
-								switch filePart.Mime {
-								case "text/plain":
-									mediaType = "txt"
-								case "image/png", "image/jpeg", "image/gif", "image/webp":
-									mediaType = "img"
-									mediaTypeStyle = mediaTypeStyle.Background(t.Accent())
-								case "application/pdf":
-									mediaType = "pdf"
-									mediaTypeStyle = mediaTypeStyle.Background(t.Primary())
-								}
-								flexItems = append(flexItems, layout.FlexItem{
-									View: mediaTypeStyle.Render(mediaType) + fileStyle.Render(filePart.Filename),
-								})
-							}
-						}
-						bgColor := t.BackgroundPanel()
-						files := layout.Render(
-							layout.FlexOptions{
-								Background: &bgColor,
-								Width:      width - 6,
-								Direction:  layout.Column,
-							},
-							flexItems...,
-						)
-
-						key := m.cache.GenerateKey(casted.ID, part.Text, width, files)
-						content, cached = m.cache.Get(key)
-						if !cached {
-							content = renderText(
-								m.app,
-								message.Info,
-								part.Text,
-								m.app.Config.Username,
-								m.showToolDetails,
-								width,
-								files,
-							)
-							content = lipgloss.PlaceHorizontal(
-								m.width,
-								lipgloss.Center,
-								content,
-								styles.WhitespaceStyle(t.Background()),
-							)
-							m.cache.Set(key, content)
-						}
-						if content != "" {
-							partCount++
-							lineCount += lipgloss.Height(content) + 1
-							blocks = append(blocks, content)
-						}
-					}
-				}
-
-			case opencode.AssistantMessage:
-				hasTextPart := false
-				for partIndex, p := range message.Parts {
-					switch part := p.(type) {
-					case opencode.TextPart:
-						hasTextPart = true
-						finished := part.Time.End > 0
-						remainingParts := message.Parts[partIndex+1:]
-						toolCallParts := make([]opencode.ToolPart, 0)
-
-						// sometimes tool calls happen without an assistant message
-						// these should be included in this assistant message as well
-						if len(orphanedToolCalls) > 0 {
-							toolCallParts = append(toolCallParts, orphanedToolCalls...)
-							orphanedToolCalls = make([]opencode.ToolPart, 0)
-						}
-
-						remaining := true
-						for _, part := range remainingParts {
-							if !remaining {
-								break
-							}
-							switch part := part.(type) {
-							case opencode.TextPart:
-								// we only want tool calls associated with the current text part.
-								// if we hit another text part, we're done.
-								remaining = false
-							case opencode.ToolPart:
-								toolCallParts = append(toolCallParts, part)
-								if part.State.Status != opencode.ToolPartStateStatusCompleted && part.State.Status != opencode.ToolPartStateStatusError {
-									// i don't think there's a case where a tool call isn't in result state
-									// and the message time is 0, but just in case
-									finished = false
-								}
-							}
-						}
-
-						if finished {
-							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails)
-							content, cached = m.cache.Get(key)
-							if !cached {
-								content = renderText(
-									m.app,
-									message.Info,
-									part.Text,
-									casted.ModelID,
-									m.showToolDetails,
-									width,
-									"",
-									toolCallParts...,
-								)
-								content = lipgloss.PlaceHorizontal(
-									m.width,
-									lipgloss.Center,
-									content,
-									styles.WhitespaceStyle(t.Background()),
-								)
-								m.cache.Set(key, content)
-							}
-						} else {
-							content = renderText(
-								m.app,
-								message.Info,
-								part.Text,
-								casted.ModelID,
-								m.showToolDetails,
-								width,
-								"",
-								toolCallParts...,
-							)
-							content = lipgloss.PlaceHorizontal(
-								m.width,
-								lipgloss.Center,
-								content,
-								styles.WhitespaceStyle(t.Background()),
-							)
-						}
-						if content != "" {
-							partCount++
-							lineCount += lipgloss.Height(content) + 1
-							blocks = append(blocks, content)
-						}
-					case opencode.ToolPart:
-						if !m.showToolDetails {
-							if !hasTextPart {
-								orphanedToolCalls = append(orphanedToolCalls, part)
-							}
-							continue
-						}
-
-						if part.State.Status == opencode.ToolPartStateStatusCompleted || part.State.Status == opencode.ToolPartStateStatusError {
-							key := m.cache.GenerateKey(casted.ID,
-								part.ID,
-								m.showToolDetails,
-								width,
-							)
-							content, cached = m.cache.Get(key)
-							if !cached {
-								content = renderToolDetails(
-									m.app,
-									part,
-									width,
-								)
-								content = lipgloss.PlaceHorizontal(
-									m.width,
-									lipgloss.Center,
-									content,
-									styles.WhitespaceStyle(t.Background()),
-								)
-								m.cache.Set(key, content)
-							}
-						} else {
-							// if the tool call isn't finished, don't cache
-							content = renderToolDetails(
-								m.app,
-								part,
-								width,
-							)
-							content = lipgloss.PlaceHorizontal(
-								m.width,
-								lipgloss.Center,
-								content,
-								styles.WhitespaceStyle(t.Background()),
-							)
-						}
-						if content != "" {
-							partCount++
-							lineCount += lipgloss.Height(content) + 1
-							blocks = append(blocks, content)
-						}
-					}
-				}
-			}
-
-			error := ""
-			if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
-				switch err := assistant.Error.AsUnion().(type) {
-				case nil:
-				case opencode.AssistantMessageErrorMessageOutputLengthError:
-					error = "Message output length exceeded"
-				case opencode.ProviderAuthError:
-					error = err.Data.Message
-				case opencode.MessageAbortedError:
-					error = "Request was aborted"
-				case opencode.UnknownError:
-					error = err.Data.Message
-				}
-			}
-
-			if error != "" {
-				error = styles.NewStyle().Width(width - 6).Render(error)
-				error = renderContentBlock(
-					m.app,
-					error,
-					width,
-					WithBorderColor(t.Error()),
-				)
-				error = lipgloss.PlaceHorizontal(
-					m.width,
-					lipgloss.Center,
-					error,
-					styles.WhitespaceStyle(t.Background()),
-				)
-				blocks = append(blocks, error)
-				lineCount += lipgloss.Height(error) + 1
-			}
-		}
-
-		content := "\n" + strings.Join(blocks, "\n\n")
+		// Update sliding window viewport height
+		m.slidingWindow.SetViewportHeight(m.height - lipgloss.Height(m.header))
+		
+		// Update message index
+		m.slidingWindow.UpdateIndex(m.messageBroker, m.width)
+		
+		// Get visible content using sliding window
+		content, totalHeight := m.slidingWindow.GetVisibleContent(
+			m.messageBroker,
+			viewport.YOffset,
+			m.width,
+			m.showToolDetails,
+		)
+		
+		// Set content and height
 		viewport.SetHeight(m.height - lipgloss.Height(m.header))
 		viewport.SetContent(content)
+		
+		// Count parts for display (approximate based on visible messages)
+		partCount := len(m.app.Messages) // Simple approximation
+		lineCount := totalHeight
 
 		return renderCompleteMsg{
 			viewport:  viewport,
@@ -427,20 +167,28 @@ func (m *messagesComponent) renderHeader() string {
 	cost := float64(0)
 	contextWindow := m.app.Model.Limit.Context
 
-	for _, message := range m.app.Messages {
-		if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
-			cost += assistant.Cost
-			usage := assistant.Tokens
-			if usage.Output > 0 {
-				if assistant.Summary {
-					tokens = usage.Output
-					continue
+	// Calculate stats from message broker
+	messageCount := m.messageBroker.GetMessageCount()
+	batchSize := 100
+	for start := 0; start < messageCount; start += batchSize {
+		end := min(start+batchSize, messageCount)
+		messages := m.messageBroker.GetMessages(start, end)
+		
+		for _, message := range messages {
+			if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
+				cost += assistant.Cost
+				usage := assistant.Tokens
+				if usage.Output > 0 {
+					if assistant.Summary {
+						tokens = usage.Output
+						continue
+					}
+					tokens = (usage.Input +
+						usage.Cache.Write +
+						usage.Cache.Read +
+						usage.Output +
+						usage.Reasoning)
 				}
-				tokens = (usage.Input +
-					usage.Cache.Write +
-					usage.Cache.Read +
-					usage.Output +
-					usage.Reasoning)
 			}
 		}
 	}
@@ -616,20 +364,27 @@ func (m *messagesComponent) GotoBottom() (tea.Model, tea.Cmd) {
 }
 
 func (m *messagesComponent) CopyLastMessage() (tea.Model, tea.Cmd) {
-	if len(m.app.Messages) == 0 {
+	messageCount := m.messageBroker.GetMessageCount()
+	if messageCount == 0 {
 		return m, nil
 	}
-	lastMessage := m.app.Messages[len(m.app.Messages)-1]
+	lastMessage, ok := m.messageBroker.GetMessage(messageCount - 1)
+	if !ok {
+		return m, nil
+	}
 	var lastTextPart *opencode.TextPart
-	for _, part := range lastMessage.Parts {
-		if p, ok := part.(opencode.TextPart); ok {
-			lastTextPart = &p
+	switch lastMessage.Info.(type) {
+	case opencode.AssistantMessage:
+		for _, part := range lastMessage.Parts {
+			if textPart, ok := part.(opencode.TextPart); ok {
+				lastTextPart = &textPart
+			}
 		}
 	}
 	if lastTextPart == nil {
 		return m, nil
 	}
-	var cmds []tea.Cmd
+	cmds := []tea.Cmd{}
 	cmds = append(cmds, m.app.SetClipboard(lastTextPart.Text))
 	cmds = append(cmds, toast.NewSuccessToast("Message copied to clipboard"))
 	return m, tea.Batch(cmds...)
@@ -640,11 +395,19 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 	vp.KeyMap = viewport.KeyMap{}
 	vp.MouseWheelDelta = 4
 
+	partCache := NewPartCache()
+	// Create global cache with 500MB limit
+	globalCache := cache.NewMemoryBoundedCache(500)
+	// Create message broker with 100MB cache for message data
+	messageBroker := NewMessageBroker(app, 100)
+	
 	return &messagesComponent{
 		app:             app,
 		viewport:        vp,
 		showToolDetails: true,
-		cache:           NewPartCache(),
+		cache:           partCache,
 		tail:            true,
+		slidingWindow:   NewSlidingWindowRenderer(partCache, globalCache),
+		messageBroker:   messageBroker,
 	}
 }
