@@ -83,7 +83,7 @@ And run.
 
 ```bash
 $ bun install
-$ bun run packages/opencode/src/index.ts
+$ bun run dev
 ```
 
 #### Development Notes
