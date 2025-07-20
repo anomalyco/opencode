@@ -782,7 +782,8 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			return a, toast.NewErrorToast("Something went wrong, couldn't open editor")
 		}
 		tmpfile.Close()
-		c := exec.Command(editor, tmpfile.Name()) //nolint:gosec
+		parts := strings.Fields(editor)
+		c := exec.Command(parts[0], append(parts[1:], tmpfile.Name())...) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
