@@ -4,12 +4,21 @@ import path from "path"
 import fs from "fs/promises"
 import { Ripgrep } from "../file/ripgrep"
 import { Log } from "../util/log"
+import { Config } from "../config/config"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
   export async function create(sessionID: string) {
     log.info("creating snapshot")
+    
+    // Check if snapshots are disabled in config
+    const config = await Config.get()
+    if (config.snapshot === "disabled") {
+      log.info("skipping snapshot - disabled in config")
+      return
+    }
+    
     const app = App.info()
 
     // not a git repo, check if too big to snapshot

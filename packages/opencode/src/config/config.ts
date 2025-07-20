@@ -142,6 +142,13 @@ export namespace Config {
         .describe(
           "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
         ),
+      snapshot: z
+        .enum(["enabled", "disabled"])
+        .optional()
+        .default("enabled")
+        .describe(
+          "Control snapshot behavior: 'enabled' creates git snapshots for reverting changes, 'disabled' skips snapshot creation (improves performance on large codebases)",
+        ),
       autoshare: z
         .boolean()
         .optional()
