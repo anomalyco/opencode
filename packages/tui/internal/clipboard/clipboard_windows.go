@@ -311,13 +311,13 @@ func read(t Format) (buf []byte, err error) {
 		format = cFmtUnicodeText
 	}
 
-	// check if clipboard is avaliable for the requested format
+	// check if clipboard is available for the requested format
 	r, _, err := isClipboardFormatAvailable.Call(format)
 	if r == 0 {
 		return nil, errUnavailable
 	}
 
-	// try again until open clipboard successed
+	// try again until open clipboard succeeds
 	for {
 		r, _, _ = openClipboard.Call()
 		if r == 0 {

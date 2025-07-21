@@ -777,7 +777,7 @@ var seed = flag.Int64("seed", 0, "random seed (0 to autoselect)")
 // the seed flag was set.
 func genRandomData(logfn func(int64), length int) randTest {
 	// We'll use a random source. However, we give the user the option
-	// to override it to a specific value for reproduceability.
+	// to override it to a specific value for reproducibility.
 	s := *seed
 	if s == 0 {
 		s = time.Now().UnixNano()
