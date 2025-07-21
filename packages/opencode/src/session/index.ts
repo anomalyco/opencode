@@ -1294,7 +1294,7 @@ export namespace Session {
         }
         
         toolCalls.push({
-          id: Identifier.ascending("tool"),
+          id: Identifier.ascending("part"),
           name,
           args,
         })
@@ -1366,7 +1366,7 @@ export namespace Session {
             input: toolCall.args,
             error: errorMsg,
             time: {
-              start: errorToolPartTyped2.state.time.start,
+              start: errorToolPartTyped2.state.status === "running" ? errorToolPartTyped2.state.time.start : Date.now(),
               end: Date.now(),
             },
           },
@@ -1375,11 +1375,12 @@ export namespace Session {
       }
 
       // Execute tool with context
+      const abortController = new AbortController()
       const result = await tool.execute(toolCall.args, {
         sessionID: assistantMsg.sessionID,
         messageID: assistantMsg.id,
-        abort: () => {},
-        metadata: {},
+        abort: abortController.signal,
+        metadata: () => {},
       })
       
       // Update with result  
@@ -1393,7 +1394,7 @@ export namespace Session {
           metadata: result.metadata,
           title: result.title,
           time: {
-            start: toolPartTyped.state.time.start,
+            start: toolPartTyped.state.status === "running" ? toolPartTyped.state.time.start : Date.now(),
             end: Date.now(),
           },
         },
@@ -1425,7 +1426,7 @@ export namespace Session {
           input: toolCall.args,
           error: errorMsg,
           time: {
-            start: errorToolPartTyped.state.time.start,
+            start: errorToolPartTyped.state.status === "running" ? errorToolPartTyped.state.time.start : Date.now(),
             end: Date.now(),
           },
         },
