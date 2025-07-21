@@ -328,10 +328,6 @@ const testCases: TestCase[] = [
   },
 ]
 
-for (const idx of [19, 20, 21, 22]) {
-  if (testCases[idx]) testCases[idx].fail = true
-}
-
 describe("EditTool Replacers", () => {
   test.each(testCases)("case %#", (testCase) => {
     if (testCase.fail) {
