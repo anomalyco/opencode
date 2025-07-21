@@ -261,7 +261,7 @@ export namespace Provider {
           },
         }
       } catch (error: unknown) {
-        log.error("Ollama connection failed", error instanceof Error ? error : String(error))
+        log.error("Ollama connection failed", { error: error instanceof Error ? error.message : String(error) })
         return { autoload: false }
       }
     },
