@@ -22,8 +22,10 @@ export const BashTool = Tool.define({
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
 
-    const process = Bun.spawn({
-      cmd: ["bash", "-c", params.command],
+    const proc = Bun.spawn({
+      cmd: process.platform === "win32" 
+      ? ["powershell.exe", "-Command", params.command]
+      : ["bash", "-c", params.command],
       cwd: App.info().path.cwd,
       maxBuffer: MAX_OUTPUT_LENGTH,
       signal: ctx.abort,
@@ -31,16 +33,16 @@ export const BashTool = Tool.define({
       stdout: "pipe",
       stderr: "pipe",
     })
-    await process.exited
-    const stdout = await new Response(process.stdout).text()
-    const stderr = await new Response(process.stderr).text()
+    await proc.exited
+    const stdout = await new Response(proc.stdout).text()
+    const stderr = await new Response(proc.stderr).text()
 
     return {
       title: params.command,
       metadata: {
         stderr,
         stdout,
-        exit: process.exitCode,
+        exit: proc.exitCode,
         description: params.description,
       },
       output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),
