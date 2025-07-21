@@ -536,18 +536,23 @@ func (m *editorComponent) handleLongPaste(text string) {
 	m.pasteCounter++
 
 	// Create attachment with full text as base64 encoded data
-	base64EncodedText := base64.StdEncoding.EncodeToString([]byte(text))
+	fileBytes := []byte(text)
+	base64EncodedText := base64.StdEncoding.EncodeToString(fileBytes)
 	url := fmt.Sprintf("data:text/plain;base64,%s", base64EncodedText)
 
-	// Create display text showing line count with counter
+	fileName := fmt.Sprintf("pasted-text-%d.txt", m.pasteCounter)
 	displayText := fmt.Sprintf("[pasted #%d %d+ lines]", m.pasteCounter, lineCount)
 
 	attachment := &attachment.Attachment{
 		ID:        uuid.NewString(),
+		Type:      "text",
 		MediaType: "text/plain",
 		Display:   displayText,
 		URL:       url,
-		Filename:  fmt.Sprintf("pasted-text-%d.txt", m.pasteCounter),
+		Filename:  fileName,
+		Source: &attachment.TextSource{
+			Value: text,
+		},
 	}
 
 	m.textarea.InsertAttachment(attachment)

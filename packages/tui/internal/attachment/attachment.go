@@ -4,6 +4,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type TextSource struct {
+	Value string `toml:"value"`
+}
+
 type FileSource struct {
 	Path string `toml:"path"`
 	Mime string `toml:"mime"`
@@ -44,6 +48,14 @@ func NewAttachment() *Attachment {
 	return &Attachment{
 		ID: uuid.NewString(),
 	}
+}
+
+func (a *Attachment) GetTextSource() (*TextSource, bool) {
+	if a.Type != "text" {
+		return nil, false
+	}
+	ts, ok := a.Source.(*TextSource)
+	return ts, ok
 }
 
 // GetFileSource returns the source as FileSource if the attachment is a file type
