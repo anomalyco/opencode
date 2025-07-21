@@ -60,6 +60,10 @@ func (s selection) selecting() bool {
 	return s.startX >= 0 && s.startY >= 0
 }
 
+func (s selection) hasCompleteSelection() bool {
+	return s.startX >= 0 && s.startY >= 0 && s.endX >= 0 && s.endY >= 0
+}
+
 func (s selection) coords(offset int) selection {
 	// selecting backwards
 	if s.startY > s.endY && s.endY >= 0 {
@@ -127,7 +131,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseReleaseMsg:
-		if m.selection.selecting() {
+		if m.selection.hasCompleteSelection() {
 			m.selection = selection{
 				startX: -1,
 				startY: -1,
