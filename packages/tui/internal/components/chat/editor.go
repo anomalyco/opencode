@@ -542,7 +542,7 @@ func (m *editorComponent) handleLongPaste(text string) {
 	// Create display text showing line count with counter
 	displayText := fmt.Sprintf("[pasted #%d %d+ lines]", m.pasteCounter, lineCount)
 
-	attachment := &textarea.Attachment{
+	attachment := &attachment.Attachment{
 		ID:        uuid.NewString(),
 		MediaType: "text/plain",
 		Display:   displayText,
