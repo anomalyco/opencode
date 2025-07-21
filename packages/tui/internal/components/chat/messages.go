@@ -520,7 +520,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 					prefix := ansi.Cut(line, 0, left)
 					middle := strings.TrimRight(ansi.Strip(ansi.Cut(line, left, right)), " ")
-					suffix := ansi.Cut(line, left+ansi.StringWidth(middle), ansi.StringWidth(line))
+					suffix := ansi.Cut(line, left+ansi.StringWidth(middle), width)
 					clipboard = append(clipboard, middle)
 					line = prefix + styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Render(middle) + suffix
 				}
