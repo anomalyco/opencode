@@ -2,7 +2,7 @@ import z from "zod"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK, wrapLanguageModel } from "ai"
+import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { BashTool } from "../tool/bash"
@@ -260,7 +260,7 @@ export namespace Provider {
             return sdk.chat(modelID)
           },
         }
-      } catch (error) {
+      } catch (error: unknown) {
         log.error("Ollama connection failed", error)
         return { autoload: false }
       }

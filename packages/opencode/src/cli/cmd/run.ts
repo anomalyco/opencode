@@ -188,7 +188,7 @@ export const RunCommand = cmd({
           })
           
           // Check for errors in result
-          const errorPart = result.parts.find((x) => x.type === "error")
+          const errorPart = result.parts.find((x) => x.type === "text" && x.text.includes("Error"))
           if (errorPart) {
             console.error("DEBUG: API Error occurred:")
             console.error("DEBUG: Error details:", errorPart)

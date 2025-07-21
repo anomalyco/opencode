@@ -1349,7 +1349,7 @@ export namespace Session {
           start: Date.now(),
         },
       },
-    })
+    } as MessageV2.ToolPart)
 
     try {
       // Get available tools
@@ -1358,14 +1358,15 @@ export namespace Session {
       
       if (!tool) {
         const errorMsg = `Unknown tool: ${toolCall.name}`
+        const errorToolPartTyped2 = toolPart as MessageV2.ToolPart
         await updatePart({
-          ...toolPart as MessageV2.ToolPart,
+          ...errorToolPartTyped2,
           state: {
             status: "error" as const,
             input: toolCall.args,
             error: errorMsg,
             time: {
-              start: toolPart.state.time.start,
+              start: errorToolPartTyped2.state.time.start,
               end: Date.now(),
             },
           },
@@ -1376,11 +1377,15 @@ export namespace Session {
       // Execute tool with context
       const result = await tool.execute(toolCall.args, {
         sessionID: assistantMsg.sessionID,
+        messageID: assistantMsg.id,
+        abort: () => {},
+        metadata: {},
       })
       
-      // Update with result
+      // Update with result  
+      const toolPartTyped = toolPart as MessageV2.ToolPart
       await updatePart({
-        ...toolPart as MessageV2.ToolPart,
+        ...toolPartTyped,
         state: {
           status: "completed" as const,
           input: toolCall.args,
@@ -1388,7 +1393,7 @@ export namespace Session {
           metadata: result.metadata,
           title: result.title,
           time: {
-            start: toolPart.state.time.start,
+            start: toolPartTyped.state.time.start,
             end: Date.now(),
           },
         },
@@ -1412,14 +1417,15 @@ export namespace Session {
       const errorMsg = error instanceof Error ? error.message : String(error)
       log.error("tool execution failed", { tool: toolCall.name, error: errorMsg })
       
+      const errorToolPartTyped = toolPart as MessageV2.ToolPart
       await updatePart({
-        ...toolPart as MessageV2.ToolPart,
+        ...errorToolPartTyped,
         state: {
           status: "error" as const,
           input: toolCall.args,
           error: errorMsg,
           time: {
-            start: toolPart.state.time.start,
+            start: errorToolPartTyped.state.time.start,
             end: Date.now(),
           },
         },
