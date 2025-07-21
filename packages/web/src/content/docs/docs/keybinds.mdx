@@ -9,7 +9,6 @@ opencode has a list of keybinds that you can customize through the opencode conf
 {
   "$schema": "https://opencode.ai/config.json",
   "keybinds": {
-
     "leader": "ctrl+x",
     "app_help": "<leader>h",
     "switch_mode": "tab",
@@ -28,10 +27,6 @@ opencode has a list of keybinds that you can customize through the opencode conf
     "theme_list": "<leader>t",
     "project_init": "<leader>i",
 
-    "file_list": "<leader>f",
-    "file_close": "esc",
-    "file_diff_toggle": "<leader>v",
-
     "input_clear": "ctrl+c",
     "input_paste": "ctrl+v",
     "input_submit": "enter",
@@ -41,13 +36,10 @@ opencode has a list of keybinds that you can customize through the opencode conf
     "messages_page_down": "pgdown",
     "messages_half_page_up": "ctrl+alt+u",
     "messages_half_page_down": "ctrl+alt+d",
-    "messages_previous": "ctrl+up",
-    "messages_next": "ctrl+down",
     "messages_first": "ctrl+g",
     "messages_last": "ctrl+alt+g",
-    "messages_layout_toggle": "<leader>p",
     "messages_copy": "<leader>y",
-    "messages_revert": "<leader>r",
+
     "app_exit": "ctrl+c,<leader>q"
   }
 }
@@ -60,3 +52,16 @@ opencode uses a `leader` key for most keybinds. This avoids conflicts in your te
 By default, `ctrl+x` is the leader key and most actions require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
 
 You don't need to use a leader key for your keybinds but we recommend doing so.
+
+## Disable a keybind
+
+You can disable a keybind by adding the key to your config with a value of "none".
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {
+    "session_compact": "none",
+  }
+}
+```

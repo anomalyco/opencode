@@ -117,27 +117,3 @@ export DISPLAY=:99.0
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
 
----
-
-### How to select and copy text in the TUI
-
-There are several ways to copy text from opencode's TUI:
-
-- **Copy latest message**: Use `<leader>y` to copy the most recent message in your current session to the clipboard
-- **Export session**: Use `/export` (or `<leader>x`) to open the current session as plain text in your `$EDITOR` (requires the `EDITOR` environment variable to be set)
-
-We're working on adding click & drag text selection in a future update.
-
----
-
-### TUI not rendering full width
-
-By default, opencode's TUI uses an "auto" layout that centers content with padding. If you want the TUI to use the full width of your terminal, you can configure the layout setting:
-
-```json title="opencode.json"
-{
-  "layout": "stretch"
-}
-```
-
-Read more about this in the [config docs](/docs/config#layout).

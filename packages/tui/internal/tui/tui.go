@@ -25,7 +25,6 @@ import (
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/components/status"
 	"github.com/sst/opencode/internal/components/toast"
-	"github.com/sst/opencode/internal/config"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -331,9 +330,9 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case error:
 		return a, toast.NewErrorToast(msg.Error())
-	case app.SendMsg:
+	case app.SendPrompt:
 		a.showCompletionDialog = false
-		a.app, cmd = a.app.SendChatMessage(context.Background(), msg.Text, msg.Attachments)
+		a.app, cmd = a.app.SendPrompt(context.Background(), msg)
 		cmds = append(cmds, cmd)
 	case app.SetEditorContentMsg:
 		// Set the editor content without sending
@@ -467,15 +466,15 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
-		a.app.State.ModeModel[a.app.Mode.Name] = config.ModeModel{
+		a.app.State.ModeModel[a.app.Mode.Name] = app.ModeModel{
 			ProviderID: msg.Provider.ID,
 			ModelID:    msg.Model.ID,
 		}
 		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
-		a.app.SaveState()
+		cmds = append(cmds, a.app.SaveState())
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
-		a.app.SaveState()
+		cmds = append(cmds, a.app.SaveState())
 	case toast.ShowToastMsg:
 		tm, cmd := a.toastManager.Update(msg)
 		a.toastManager = tm
@@ -891,7 +890,8 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		tmpfile.Close()
 
 		// Open in editor
-		c := exec.Command(editor, tmpfile.Name())
+		parts := strings.Fields(editor)
+		c := exec.Command(parts[0], append(parts[1:], tmpfile.Name())...) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
@@ -927,9 +927,9 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		cmds = append(cmds, cmd)
 	case commands.FileDiffToggleCommand:
 		a.fileViewer, cmd = a.fileViewer.ToggleDiff()
-		a.app.State.SplitDiff = a.fileViewer.DiffStyle() == fileviewer.DiffStyleSplit
-		a.app.SaveState()
 		cmds = append(cmds, cmd)
+		a.app.State.SplitDiff = a.fileViewer.DiffStyle() == fileviewer.DiffStyleSplit
+		cmds = append(cmds, a.app.SaveState())
 	case commands.FileSearchCommand:
 		return a, nil
 	case commands.ProjectInitCommand:
@@ -1000,7 +1000,7 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 	case commands.MessagesLayoutToggleCommand:
 		a.messagesRight = !a.messagesRight
 		a.app.State.MessagesRight = a.messagesRight
-		a.app.SaveState()
+		cmds = append(cmds, a.app.SaveState())
 	case commands.MessagesCopyCommand:
 		updated, cmd := a.messages.CopyLastMessage()
 		a.messages = updated.(chat.MessagesComponent)

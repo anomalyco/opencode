@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
+	"github.com/sst/opencode/internal/attachment"
 )
 
 const (
@@ -31,15 +32,6 @@ const (
 	// XXX: in v2, make max lines dynamic and default max lines configurable.
 	maxLines = 10000
 )
-
-// Attachment represents a special object within the text, distinct from regular characters.
-type Attachment struct {
-	ID        string // A unique identifier for this attachment instance
-	Display   string // e.g., "@filename.txt"
-	URL       string
-	Filename  string
-	MediaType string
-}
 
 // Helper functions for converting between runes and any slices
 
@@ -59,7 +51,7 @@ func interfacesToRunes(items []any) []rune {
 		switch val := item.(type) {
 		case rune:
 			result = append(result, val)
-		case *Attachment:
+		case *attachment.Attachment:
 			result = append(result, []rune(val.Display)...)
 		}
 	}
@@ -80,7 +72,7 @@ func interfacesToString(items []any) string {
 		switch val := item.(type) {
 		case rune:
 			s.WriteRune(val)
-		case *Attachment:
+		case *attachment.Attachment:
 			s.WriteString(val.Display)
 		}
 	}
@@ -90,7 +82,7 @@ func interfacesToString(items []any) string {
 // isAttachmentAtCursor checks if the cursor is positioned on or immediately after an attachment.
 // This allows for proper highlighting even when the cursor is technically at the position
 // after the attachment object in the underlying slice.
-func (m Model) isAttachmentAtCursor() (*Attachment, int, int) {
+func (m Model) isAttachmentAtCursor() (*attachment.Attachment, int, int) {
 	if m.row >= len(m.value) {
 		return nil, -1, -1
 	}
@@ -104,7 +96,7 @@ func (m Model) isAttachmentAtCursor() (*Attachment, int, int) {
 
 	// Check if the cursor is at the same index as an attachment.
 	if col < len(row) {
-		if att, ok := row[col].(*Attachment); ok {
+		if att, ok := row[col].(*attachment.Attachment); ok {
 			return att, col, col
 		}
 	}
@@ -112,7 +104,7 @@ func (m Model) isAttachmentAtCursor() (*Attachment, int, int) {
 	// Check if the cursor is immediately after an attachment. This is a common
 	// state, for example, after just inserting one.
 	if col > 0 && col <= len(row) {
-		if att, ok := row[col-1].(*Attachment); ok {
+		if att, ok := row[col-1].(*attachment.Attachment); ok {
 			return att, col - 1, col - 1
 		}
 	}
@@ -132,7 +124,7 @@ func (m Model) renderLineWithAttachments(
 		switch val := item.(type) {
 		case rune:
 			s.WriteString(style.Render(string(val)))
-		case *Attachment:
+		case *attachment.Attachment:
 			// Check if this is the attachment the cursor is currently on
 			if currentAttachment != nil && currentAttachment.ID == val.ID {
 				// Cursor is on this attachment, highlight it
@@ -435,7 +427,7 @@ func (w line) Hash() string {
 		switch v := item.(type) {
 		case rune:
 			s.WriteRune(v)
-		case *Attachment:
+		case *attachment.Attachment:
 			s.WriteString(v.ID)
 		}
 	}
@@ -661,7 +653,7 @@ func (m *Model) InsertRune(r rune) {
 }
 
 // InsertAttachment inserts an attachment at the cursor position.
-func (m *Model) InsertAttachment(att *Attachment) {
+func (m *Model) InsertAttachment(att *attachment.Attachment) {
 	if m.CharLimit > 0 {
 		availSpace := m.CharLimit - m.Length()
 		// If the char limit's been reached, cancel.
@@ -716,16 +708,36 @@ func (m *Model) CurrentRowLength() int {
 	return len(m.value[m.row])
 }
 
-// GetAttachments returns all attachments in the textarea.
-func (m Model) GetAttachments() []*Attachment {
-	var attachments []*Attachment
-	for _, row := range m.value {
+// GetAttachments returns all attachments in the textarea with accurate position indices.
+func (m Model) GetAttachments() []*attachment.Attachment {
+	var attachments []*attachment.Attachment
+	position := 0 // Track absolute position in the text
+
+	for rowIdx, row := range m.value {
+		colPosition := 0 // Track position within the current row
+
 		for _, item := range row {
-			if att, ok := item.(*Attachment); ok {
-				attachments = append(attachments, att)
+			switch v := item.(type) {
+			case *attachment.Attachment:
+				// Clone the attachment to avoid modifying the original
+				att := *v
+				att.StartIndex = position + colPosition
+				att.EndIndex = position + colPosition + len(v.Display)
+				attachments = append(attachments, &att)
+				colPosition += len(v.Display)
+			case rune:
+				colPosition++
 			}
 		}
+
+		// Add newline character position (except for last row)
+		if rowIdx < len(m.value)-1 {
+			position += colPosition + 1 // +1 for newline
+		} else {
+			position += colPosition
+		}
 	}
+
 	return attachments
 }
 
@@ -829,7 +841,7 @@ func (m Model) Value() string {
 			switch val := item.(type) {
 			case rune:
 				v.WriteRune(val)
-			case *Attachment:
+			case *attachment.Attachment:
 				v.WriteString(val.Display)
 			}
 		}
@@ -847,7 +859,7 @@ func (m *Model) Length() int {
 			switch val := item.(type) {
 			case rune:
 				l += rw.RuneWidth(val)
-			case *Attachment:
+			case *attachment.Attachment:
 				l += uniseg.StringWidth(val.Display)
 			}
 		}
@@ -911,7 +923,7 @@ func (m *Model) mapVisualOffsetToSliceIndex(row int, charOffset int) int {
 		switch v := item.(type) {
 		case rune:
 			itemWidth = rw.RuneWidth(v)
-		case *Attachment:
+		case *attachment.Attachment:
 			itemWidth = uniseg.StringWidth(v.Display)
 		}
 
@@ -952,7 +964,7 @@ func (m *Model) CursorDown() {
 			switch v := item.(type) {
 			case rune:
 				itemWidth = rw.RuneWidth(v)
-			case *Attachment:
+			case *attachment.Attachment:
 				itemWidth = uniseg.StringWidth(v.Display)
 			}
 			if offset+itemWidth > charOffset {
@@ -988,7 +1000,7 @@ func (m *Model) CursorDown() {
 			switch v := item.(type) {
 			case rune:
 				itemWidth = rw.RuneWidth(v)
-			case *Attachment:
+			case *attachment.Attachment:
 				itemWidth = uniseg.StringWidth(v.Display)
 			}
 			if offset+itemWidth > charOffset {
@@ -1034,7 +1046,7 @@ func (m *Model) CursorUp() {
 			switch v := item.(type) {
 			case rune:
 				itemWidth = rw.RuneWidth(v)
-			case *Attachment:
+			case *attachment.Attachment:
 				itemWidth = uniseg.StringWidth(v.Display)
 			}
 			if offset+itemWidth > charOffset {
@@ -1070,7 +1082,7 @@ func (m *Model) CursorUp() {
 			switch v := item.(type) {
 			case rune:
 				itemWidth = rw.RuneWidth(v)
-			case *Attachment:
+			case *attachment.Attachment:
 				itemWidth = uniseg.StringWidth(v.Display)
 			}
 			if offset+itemWidth > charOffset {
@@ -1109,6 +1121,10 @@ func (m *Model) CursorStart() {
 // CursorEnd moves the cursor to the end of the input field.
 func (m *Model) CursorEnd() {
 	m.SetCursorColumn(len(m.value[m.row]))
+}
+
+func (m *Model) IsCursorAtEnd() bool {
+	return m.CursorColumn() == len(m.value[m.row])
 }
 
 // Focused returns the focus state on the model.
@@ -1414,14 +1430,14 @@ func (m Model) Width() int {
 	return m.width
 }
 
-// moveToBegin moves the cursor to the beginning of the input.
-func (m *Model) moveToBegin() {
+// MoveToBegin moves the cursor to the beginning of the input.
+func (m *Model) MoveToBegin() {
 	m.row = 0
 	m.SetCursorColumn(0)
 }
 
-// moveToEnd moves the cursor to the end of the input.
-func (m *Model) moveToEnd() {
+// MoveToEnd moves the cursor to the end of the input.
+func (m *Model) MoveToEnd() {
 	m.row = len(m.value) - 1
 	m.SetCursorColumn(len(m.value[m.row]))
 }
@@ -1610,9 +1626,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, m.KeyMap.WordBackward):
 			m.wordLeft()
 		case key.Matches(msg, m.KeyMap.InputBegin):
-			m.moveToBegin()
+			m.MoveToBegin()
 		case key.Matches(msg, m.KeyMap.InputEnd):
-			m.moveToEnd()
+			m.MoveToEnd()
 		case key.Matches(msg, m.KeyMap.LowercaseWordForward):
 			m.lowercaseRight()
 		case key.Matches(msg, m.KeyMap.UppercaseWordForward):
@@ -1725,7 +1741,7 @@ func (m Model) View() string {
 				} else if lineInfo.ColumnOffset < len(wrappedLine) {
 					// Render the item under the cursor
 					item := wrappedLine[lineInfo.ColumnOffset]
-					if att, ok := item.(*Attachment); ok {
+					if att, ok := item.(*attachment.Attachment); ok {
 						// Item at cursor is an attachment. Render it with the selection style.
 						// This becomes the "cursor" visually.
 						s.WriteString(m.Styles.SelectedAttachment.Render(att.Display))
@@ -2023,7 +2039,7 @@ func itemWidth(item any) int {
 	switch v := item.(type) {
 	case rune:
 		return rw.RuneWidth(v)
-	case *Attachment:
+	case *attachment.Attachment:
 		return uniseg.StringWidth(v.Display)
 	}
 	return 0
@@ -2052,7 +2068,7 @@ func wrapInterfaces(content []any, width int) [][]any {
 				isSpace = true
 			}
 			itemW = rw.RuneWidth(r)
-		} else if att, ok := item.(*Attachment); ok {
+		} else if att, ok := item.(*attachment.Attachment); ok {
 			itemW = uniseg.StringWidth(att.Display)
 		}
 

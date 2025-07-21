@@ -46,7 +46,7 @@ type messagesComponent struct {
 	tail            bool
 	partCount       int
 	lineCount       int
-	selection       selection
+	selection       *selection
 }
 
 type selection struct {
@@ -56,14 +56,10 @@ type selection struct {
 	endY   int
 }
 
-func (s selection) selecting() bool {
-	return s.startX >= 0 && s.startY >= 0
-}
-
-func (s selection) coords(offset int) selection {
+func (s selection) coords(offset int) *selection {
 	// selecting backwards
 	if s.startY > s.endY && s.endY >= 0 {
-		return selection{
+		return &selection{
 			startX: max(0, s.endX-1),
 			startY: s.endY - offset,
 			endX:   s.startX + 1,
@@ -73,7 +69,7 @@ func (s selection) coords(offset int) selection {
 
 	// selecting backwards same line
 	if s.startY == s.endY && s.startX >= s.endX {
-		return selection{
+		return &selection{
 			startY: s.startY - offset,
 			startX: max(0, s.endX-1),
 			endY:   s.endY - offset,
@@ -81,7 +77,7 @@ func (s selection) coords(offset int) selection {
 		}
 	}
 
-	return selection{
+	return &selection{
 		startX: s.startX,
 		startY: s.startY - offset,
 		endX:   s.endX,
@@ -104,7 +100,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset)
 		y := msg.Y + m.viewport.YOffset
 		if y > 0 {
-			m.selection = selection{
+			m.selection = &selection{
 				startY: y,
 				startX: msg.X,
 				endY:   -1,
@@ -116,8 +112,8 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMotionMsg:
-		if m.selection.selecting() {
-			m.selection = selection{
+		if m.selection != nil {
+			m.selection = &selection{
 				startX: m.selection.startX,
 				startY: m.selection.startY,
 				endX:   msg.X + 1,
@@ -127,16 +123,14 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseReleaseMsg:
-		if m.selection.selecting() {
-			m.selection = selection{
-				startX: -1,
-				startY: -1,
-				endX:   -1,
-				endY:   -1,
-			}
-			return m, tea.Batch(
-				app.SetClipboard(strings.Join(m.clipboard, "\n")),
+		if m.selection != nil && len(m.clipboard) > 0 {
+			content := strings.Join(m.clipboard, "\n")
+			m.selection = nil
+			m.clipboard = []string{}
+			return m, tea.Sequence(
 				m.renderView(),
+				app.SetClipboard(content),
+				toast.NewSuccessToast("Copied to clipboard"),
 			)
 		}
 	case tea.WindowSizeMsg:
@@ -150,7 +144,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetWidth(m.width)
 		m.loading = true
 		return m, m.renderView()
-	case app.SendMsg:
+	case app.SendPrompt:
 		m.viewport.GotoBottom()
 		m.tail = true
 		return m, nil
@@ -487,12 +481,14 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 		final := []string{}
 		clipboard := []string{}
-		selection := m.selection.coords(lipgloss.Height(header) + 1)
-		hasSelection := m.selection.selecting()
+		var selection *selection
+		if m.selection != nil {
+			selection = m.selection.coords(lipgloss.Height(header) + 1)
+		}
 		for _, block := range blocks {
 			lines := strings.Split(block, "\n")
 			for index, line := range lines {
-				if !hasSelection || index == 0 || index == len(lines)-1 {
+				if selection == nil || index == 0 || index == len(lines)-1 {
 					final = append(final, line)
 					continue
 				}
@@ -517,6 +513,10 @@ func (m *messagesComponent) renderView() tea.Cmd {
 					line = prefix + styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Render(ansi.Strip(middle)) + suffix
 				}
 				final = append(final, line)
+			}
+			y := len(final)
+			if selection != nil && y >= selection.startY && y < selection.endY {
+				clipboard = append(clipboard, "")
 			}
 			final = append(final, "")
 		}
@@ -581,7 +581,11 @@ func (m *messagesComponent) renderHeader() string {
 		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
 
 	shareEnabled := m.app.Config.Share != opencode.ConfigShareDisabled
-	headerText := util.ToMarkdown("# "+m.app.Session.Title, headerWidth-len(sessionInfo), t.Background())
+	headerText := util.ToMarkdown(
+		"# "+m.app.Session.Title,
+		headerWidth-len(sessionInfo),
+		t.Background(),
+	)
 
 	var items []layout.FlexItem
 	if shareEnabled {
@@ -768,11 +772,5 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 		showToolDetails: true,
 		cache:           NewPartCache(),
 		tail:            true,
-		selection: selection{
-			startX: -1,
-			startY: -1,
-			endX:   -1,
-			endY:   -1,
-		},
 	}
 }
