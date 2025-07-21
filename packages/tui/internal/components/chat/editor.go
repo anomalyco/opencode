@@ -107,7 +107,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.currentText = ""
 				} else {
 					m.RestoreFromHistory(m.historyIndex)
-					m.textarea.CursorEnd()
+					m.textarea.MoveToEnd()
 				}
 				return m, nil
 			} else if m.historyIndex > -1 && msg.String() == "down" {
