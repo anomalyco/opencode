@@ -1567,6 +1567,34 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				break
 			}
 			if len(m.value[m.row]) > 0 && m.col > 0 {
+				if att, ok := m.value[m.row][m.col-1].(*Attachment); ok {
+					var filePath string
+					if att.Filename != "" {
+						filePath = att.Filename
+					} else {
+						filePath = strings.TrimPrefix(att.Display, "@")
+					}
+
+					fullText := "@" + filePath
+					if len(fullText) > 1 {
+						fullText = fullText[:len(fullText)-1] 
+					}
+
+					m.value[m.row] = slices.Delete(m.value[m.row], m.col-1, m.col)
+
+					textRunes := []rune(fullText)
+					textInterfaces := make([]any, len(textRunes))
+					for i, r := range textRunes {
+						textInterfaces[i] = r
+					}
+					m.value[m.row] = slices.Insert(m.value[m.row], m.col-1, textInterfaces...)
+
+					m.SetCursorColumn(m.col - 1 + len(textRunes))
+
+					return m, func() tea.Msg {
+						return tea.KeyPressMsg{Text: fullText}
+					}
+				}
 				m.value[m.row] = slices.Delete(m.value[m.row], m.col-1, m.col)
 				m.SetCursorColumn(m.col - 1)
 			}

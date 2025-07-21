@@ -34,6 +34,7 @@ type CompletionDialog interface {
 	tea.ViewModel
 	SetWidth(width int)
 	IsEmpty() bool
+	SetInitialText(text string) tea.Cmd
 }
 
 type completionDialogComponent struct {
@@ -64,53 +65,58 @@ func (c *completionDialogComponent) Init() tea.Cmd {
 	return nil
 }
 
+// buildCompletionList queries providers and builds a ranked list of completions
+func (c *completionDialogComponent) buildCompletionList(query string) []completions.CompletionSuggestion {
+	allItems := make([]completions.CompletionSuggestion, 0)
+	providersWithResults := 0
+
+	// Collect results from all providers
+	for _, provider := range c.providers {
+		items, err := provider.GetChildEntries(query)
+		if err != nil {
+			slog.Error(
+				"Failed to get completion items",
+				"provider",
+				provider.GetId(),
+				"error",
+				err,
+			)
+			continue
+		}
+		if len(items) > 0 {
+			providersWithResults++
+			allItems = append(allItems, items...)
+		}
+	}
+
+	// If there's a query, use fuzzy ranking to sort results
+	if query != "" && providersWithResults > 1 {
+		t := theme.CurrentTheme()
+		baseStyle := styles.NewStyle().Background(t.BackgroundElement())
+		// Create a slice of display values for fuzzy matching
+		displayValues := make([]string, len(allItems))
+		for i, item := range allItems {
+			displayValues[i] = item.Display(baseStyle)
+		}
+
+		matches := fuzzy.RankFindFold(query, displayValues)
+		sort.Sort(matches)
+
+		// Reorder items based on fuzzy ranking
+		rankedItems := make([]completions.CompletionSuggestion, 0, len(matches))
+		for _, match := range matches {
+			rankedItems = append(rankedItems, allItems[match.OriginalIndex])
+		}
+
+		return rankedItems
+	}
+
+	return allItems
+}
+
 func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 	return func() tea.Msg {
-		allItems := make([]completions.CompletionSuggestion, 0)
-		providersWithResults := 0
-
-		// Collect results from all providers
-		for _, provider := range c.providers {
-			items, err := provider.GetChildEntries(query)
-			if err != nil {
-				slog.Error(
-					"Failed to get completion items",
-					"provider",
-					provider.GetId(),
-					"error",
-					err,
-				)
-				continue
-			}
-			if len(items) > 0 {
-				providersWithResults++
-				allItems = append(allItems, items...)
-			}
-		}
-
-		// If there's a query, use fuzzy ranking to sort results
-		if query != "" && providersWithResults > 1 {
-			t := theme.CurrentTheme()
-			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
-			// Create a slice of display values for fuzzy matching
-			displayValues := make([]string, len(allItems))
-			for i, item := range allItems {
-				displayValues[i] = item.Display(baseStyle)
-			}
-
-			matches := fuzzy.RankFindFold(query, displayValues)
-			sort.Sort(matches)
-
-			// Reorder items based on fuzzy ranking
-			rankedItems := make([]completions.CompletionSuggestion, 0, len(matches))
-			for _, match := range matches {
-				rankedItems = append(rankedItems, allItems[match.OriginalIndex])
-			}
-
-			return rankedItems
-		}
-
-		return allItems
+		return c.buildCompletionList(query)
 	}
 }
 func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -189,6 +195,21 @@ func (c *completionDialogComponent) SetWidth(width int) {
 
 func (c *completionDialogComponent) IsEmpty() bool {
 	return c.list.IsEmpty()
+}
+
+func (c *completionDialogComponent) SetInitialText(text string) tea.Cmd {
+	c.pseudoSearchTextArea.SetValue(text)
+	query := strings.TrimPrefix(text, c.trigger)
+	c.query = query
+
+	// Use the shared completion logic
+	allItems := c.buildCompletionList(query)
+
+	// Update the list with filtered results immediately
+	c.list.SetItems(allItems)
+
+	// Return focus command like the normal flow does
+	return c.pseudoSearchTextArea.Focus()
 }
 
 func (c *completionDialogComponent) complete(item completions.CompletionSuggestion) tea.Cmd {

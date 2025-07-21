@@ -167,20 +167,30 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Sequence(cmds...)
 		}
 
-		// Handle file completions trigger
-		if keyString == "@" &&
+		// Handle file completions trigger - both single @ and text starting with @
+		if (keyString == "@" || strings.HasPrefix(msg.Text, "@")) &&
 			!a.showCompletionDialog {
 			a.showCompletionDialog = true
 
-			updated, cmd := a.editor.Update(msg)
-			a.editor = updated.(chat.EditorComponent)
-			cmds = append(cmds, cmd)
+			if len(msg.Text) == 1 || keyString == "@" {
+				updated, cmd := a.editor.Update(msg)
+				a.editor = updated.(chat.EditorComponent)
+				cmds = append(cmds, cmd)
+			}
 
-			// Set both file and symbols providers for @ completion
 			a.completions = dialog.NewCompletionDialogComponent("@", a.fileProvider, a.symbolsProvider)
-			updated, cmd = a.completions.Update(msg)
-			a.completions = updated.(dialog.CompletionDialog)
-			cmds = append(cmds, cmd)
+
+			// If it's more than just "@", set the initial text and handle the returned command
+			if len(msg.Text) > 1 && strings.HasPrefix(msg.Text, "@") {
+				cmd := a.completions.SetInitialText(msg.Text)
+				cmds = append(cmds, cmd)
+				// Don't call Update - SetInitialText already handled the text and search
+			} else {
+				// Normal single "@" keypress - call Update to process the keypress
+				updated, cmd := a.completions.Update(msg)
+				a.completions = updated.(dialog.CompletionDialog)
+				cmds = append(cmds, cmd)
+			}
 
 			return a, tea.Sequence(cmds...)
 		}
