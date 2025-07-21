@@ -891,7 +891,8 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 		tmpfile.Close()
 
 		// Open in editor
-		c := exec.Command(editor, tmpfile.Name())
+		parts := strings.Fields(editor)
+		c := exec.Command(parts[0], append(parts[1:], tmpfile.Name())...) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
