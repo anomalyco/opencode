@@ -196,16 +196,20 @@ func renderText(
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		words := strings.Fields(text)
-		for i, word := range words {
-			if strings.HasPrefix(word, "@") {
-				words[i] = base.Foreground(t.Secondary()).Render(word + " ")
-			} else {
-				words[i] = base.Render(word + " ")
-			}
-		}
-		text = strings.Join(words, "")
 		text = ansi.WordwrapWc(text, width-6, " -")
+		lines := strings.Split(text, "\n")
+		for i, line := range lines {
+			words := strings.Fields(line)
+			for i, word := range words {
+				if strings.HasPrefix(word, "@") {
+					words[i] = base.Foreground(t.Secondary()).Render(word + " ")
+				} else {
+					words[i] = base.Render(word + " ")
+				}
+			}
+			lines[i] = strings.Join(words, "")
+		}
+		text = strings.Join(lines, "\n")
 		content = base.Width(width - 6).Render(text)
 	}
 

@@ -25,12 +25,32 @@ func (p Prompt) ToMessage(
 			Created: float64(time.Now().UnixMilli()),
 		},
 	}
+
+	text := p.Text
+	textAttachments := []*attachment.Attachment{}
+	for _, attachment := range p.Attachments {
+		if attachment.Type == "text" {
+			textAttachments = append(textAttachments, attachment)
+		}
+	}
+	for i := 0; i < len(textAttachments)-1; i++ {
+		for j := i + 1; j < len(textAttachments); j++ {
+			if textAttachments[i].StartIndex < textAttachments[j].StartIndex {
+				textAttachments[i], textAttachments[j] = textAttachments[j], textAttachments[i]
+			}
+		}
+	}
+	for _, att := range textAttachments {
+		source, _ := att.GetTextSource()
+		text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
+	}
+
 	parts := []opencode.PartUnion{opencode.TextPart{
 		ID:        id.Ascending(id.Part),
 		MessageID: messageID,
 		SessionID: sessionID,
 		Type:      opencode.TextPartTypeText,
-		Text:      p.Text,
+		Text:      text,
 	}}
 	for _, attachment := range p.Attachments {
 		text := opencode.FilePartSourceText{
@@ -40,6 +60,8 @@ func (p Prompt) ToMessage(
 		}
 		var source *opencode.FilePartSource
 		switch attachment.Type {
+		case "text":
+			continue
 		case "file":
 			fileSource, _ := attachment.GetFileSource()
 			source = &opencode.FilePartSource{

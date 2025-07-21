@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -102,6 +103,11 @@ func New(
 
 	if configInfo.Theme != "" {
 		appState.Theme = configInfo.Theme
+	}
+
+	themeEnv := os.Getenv("OPENCODE_THEME")
+	if themeEnv != "" {
+		appState.Theme = themeEnv
 	}
 
 	var modeIndex int

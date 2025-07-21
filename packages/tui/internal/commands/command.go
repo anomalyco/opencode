@@ -349,6 +349,9 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			continue
 		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {
+			if keybind == "none" {
+				continue
+			}
 			command.Keybindings = parseBindings(keybind)
 		}
 		registry[command.Name] = command

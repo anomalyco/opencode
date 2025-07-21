@@ -70,7 +70,6 @@ func main() {
 	}()
 
 	// Create main context for the application
-
 	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
 	if err != nil {
 		panic(err)
@@ -79,7 +78,6 @@ func main() {
 	program := tea.NewProgram(
 		tui.NewModel(app_),
 		tea.WithAltScreen(),
-		// tea.WithKeyboardEnhancements(),
 		tea.WithMouseCellMotion(),
 	)
 
