@@ -617,7 +617,7 @@ export namespace Session {
 
     const mode = await Mode.get(input.mode ?? "build")
     let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
-    system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
+    system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID, input.providerID)))
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
@@ -986,7 +986,30 @@ export namespace Session {
                     start: Date.now(),
                     end: Date.now(),
                   }
-                  await updatePart(currentText)
+                  
+                  // Check for text-based tool calls in Ollama models
+                  const toolCalls = parseToolCalls(currentText.text)
+                  if (toolCalls.length > 0) {
+                    log.info("parsed tool calls", { count: toolCalls.length })
+                    
+                    // Remove tool calls from display text
+                    currentText.text = removeToolCallsFromText(currentText.text)
+                    await updatePart(currentText)
+                    
+                    // Execute each tool call and collect results
+                    let toolResults: string[] = []
+                    for (const toolCall of toolCalls) {
+                      const result = await executeTextToolCall(assistantMsg, toolCall)
+                      toolResults.push(result)
+                    }
+                    
+                    // Send tool results back to model for further processing
+                    if (toolResults.length > 0) {
+                      await sendToolResultsToModel(assistantMsg, toolResults)
+                    }
+                  } else {
+                    await updatePart(currentText)
+                  }
                 }
                 currentText = undefined
                 break
@@ -1241,5 +1264,193 @@ export namespace Session {
       ],
     })
     await App.initialize()
+  }
+
+  // Text-based tool call parsing for Ollama models
+  interface TextToolCall {
+    id: string
+    name: string
+    args: Record<string, any>
+  }
+
+  function parseToolCalls(text: string): TextToolCall[] {
+    const toolCalls: TextToolCall[] = []
+    
+    // Parse <tool_call> format (primary format)
+    const xmlRegex = /[<‹]tool_call\s+name="([^"]+)"\s+args=(\{.*?\})[>›]?/gs
+    let match
+    
+    while ((match = xmlRegex.exec(text)) !== null) {
+      try {
+        const name = match[1]
+        const argsStr = match[2]
+        
+        let args: Record<string, any>
+        try {
+          args = JSON.parse(argsStr)
+        } catch (jsonError) {
+          // If JSON parsing fails, try to extract simple key-value pairs
+          args = extractSimpleArgs(argsStr)
+        }
+        
+        toolCalls.push({
+          id: Identifier.ascending("tool"),
+          name,
+          args,
+        })
+        log.info("parsed tool call", { name, args })
+      } catch (error) {
+        log.error("Failed to parse tool call", { match: match[0], error })
+      }
+    }
+
+    return toolCalls
+  }
+
+  function extractSimpleArgs(argsStr: string): Record<string, any> {
+    const args: Record<string, any> = {}
+    
+    // Remove braces and split by comma
+    const content = argsStr.replace(/^\{|\}$/g, '').trim()
+    const pairs = content.split(',')
+    
+    for (const pair of pairs) {
+      const [key, ...valueParts] = pair.split(':')
+      if (key && valueParts.length > 0) {
+        const cleanKey = key.trim().replace(/"/g, '')
+        const cleanValue = valueParts.join(':').trim().replace(/^"|"$/g, '')
+        args[cleanKey] = cleanValue
+      }
+    }
+    
+    return args
+  }
+
+  function removeToolCallsFromText(text: string): string {
+    // Remove <tool_call> format (including incomplete ones without closing >)
+    return text.replace(/[<‹]tool_call\s+name="[^"]+"\s+args=\{.*?\}[>›]?/gs, '').trim()
+  }
+
+  async function executeTextToolCall(assistantMsg: MessageV2.Assistant, toolCall: TextToolCall): Promise<string> {
+    log.info("executing text tool call", { name: toolCall.name, args: toolCall.args })
+    
+    // Create tool part
+    const toolPart = await updatePart({
+      id: Identifier.ascending("part"),
+      messageID: assistantMsg.id,
+      sessionID: assistantMsg.sessionID,
+      type: "tool",
+      tool: toolCall.name,
+      callID: toolCall.id,
+      state: {
+        status: "running" as const,
+        input: toolCall.args,
+        time: {
+          start: Date.now(),
+        },
+      },
+    })
+
+    try {
+      // Get available tools
+      const tools = await Provider.tools(assistantMsg.providerID)
+      const tool = tools.find(t => t.id === toolCall.name)
+      
+      if (!tool) {
+        const errorMsg = `Unknown tool: ${toolCall.name}`
+        await updatePart({
+          ...toolPart as MessageV2.ToolPart,
+          state: {
+            status: "error" as const,
+            input: toolCall.args,
+            error: errorMsg,
+            time: {
+              start: toolPart.state.time.start,
+              end: Date.now(),
+            },
+          },
+        })
+        return `Tool Error: ${errorMsg}`
+      }
+
+      // Execute tool with context
+      const result = await tool.execute(toolCall.args, {
+        sessionID: assistantMsg.sessionID,
+      })
+      
+      // Update with result
+      await updatePart({
+        ...toolPart as MessageV2.ToolPart,
+        state: {
+          status: "completed" as const,
+          input: toolCall.args,
+          output: result.output,
+          metadata: result.metadata,
+          title: result.title,
+          time: {
+            start: toolPart.state.time.start,
+            end: Date.now(),
+          },
+        },
+      })
+
+      // Create snapshot after tool execution
+      const snapshot = await Snapshot.create(assistantMsg.sessionID)
+      if (snapshot) {
+        await updatePart({
+          id: Identifier.ascending("part"),
+          messageID: assistantMsg.id,
+          sessionID: assistantMsg.sessionID,
+          type: "snapshot",
+          snapshot,
+        })
+      }
+
+      return `Tool Result (${toolCall.name}): ${result.output}`
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      log.error("tool execution failed", { tool: toolCall.name, error: errorMsg })
+      
+      await updatePart({
+        ...toolPart as MessageV2.ToolPart,
+        state: {
+          status: "error" as const,
+          input: toolCall.args,
+          error: errorMsg,
+          time: {
+            start: toolPart.state.time.start,
+            end: Date.now(),
+          },
+        },
+      })
+
+      return `Tool Error (${toolCall.name}): ${errorMsg}`
+    }
+  }
+
+  async function sendToolResultsToModel(assistantMsg: MessageV2.Assistant, toolResults: string[]) {
+    log.info("sending tool results back to model", { count: toolResults.length })
+    
+    // For text-based models, we need to inject the tool results as visible context
+    // This allows the model to see the results and continue its response accordingly
+    const toolResultsText = toolResults.join('\n')
+    const feedbackMessage = `\n[TOOL EXECUTION RESULTS]\n${toolResultsText}\n[END TOOL RESULTS]\n\n`
+    
+    // Add the feedback as a visible text part that appears in the conversation
+    // This ensures the model sees the tool results and can respond appropriately
+    await updatePart({
+      id: Identifier.ascending("part"),
+      messageID: assistantMsg.id,
+      sessionID: assistantMsg.sessionID,
+      type: "text",
+      text: feedbackMessage,
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    })
+    
+    log.info("tool results sent to model", { toolResultsText })
   }
 }

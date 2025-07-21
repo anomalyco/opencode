@@ -38,6 +38,7 @@
     "hono-openapi": "0.4.8",
     "isomorphic-git": "1.32.1",
     "open": "10.1.2",
+    "openai": "5.10.1",
     "remeda": "2.22.3",
     "turndown": "7.2.0",
     "vscode-jsonrpc": "8.2.1",

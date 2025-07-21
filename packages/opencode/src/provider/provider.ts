@@ -2,7 +2,7 @@ import z from "zod"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { NoSuchModelError, type LanguageModel, type Provider as SDK, wrapLanguageModel } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { BashTool } from "../tool/bash"
@@ -206,6 +206,65 @@ export namespace Provider {
         },
       }
     },
+    ollama: async (provider) => {
+      try {
+        log.info("Ollama loader starting")
+        const response = await fetch("http://localhost:11434/api/tags").catch(() => null)
+        if (!response || !response.ok) {
+          log.info("Ollama not available")
+          return { autoload: false }
+        }
+
+        const data = await response.json()
+        const models = data.models || []
+        
+        if (provider && models.length > 0) {
+          provider.models = {}
+          for (const model of models) {
+            const modelId = model.name.replace(":latest", "")
+            provider.models[modelId] = {
+              id: modelId,
+              name: model.name,
+              release_date: model.modified_at || new Date().toISOString(),
+              attachment: false,
+              reasoning: false,
+              temperature: true,
+              tool_call: false, // No native tools, but text-based tool support via parsing
+              cost: {
+                input: 0,
+                output: 0,
+                cache_read: 0,
+                cache_write: 0,
+              },
+              limit: {
+                context: 4096,
+                output: 2048,
+              },
+              options: {
+                size: model.size,
+                digest: model.digest,
+                details: model.details,
+              },
+            }
+          }
+        }
+
+        log.info("Ollama provider loaded", { models: models.length })
+        return {
+          autoload: models.length > 0,
+          options: {
+            baseURL: "http://localhost:11434/v1",
+            apiKey: "sk-dummy-key-for-ollama",
+          },
+          getModel: async (sdk: any, modelID: string) => {
+            return sdk.chat(modelID)
+          },
+        }
+      } catch (error) {
+        log.error("Ollama connection failed", error)
+        return { autoload: false }
+      }
+    },
   }
 
   const state = App.state("provider", async () => {
@@ -301,6 +360,18 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
+    // Add Ollama as default provider if not already in database
+    if (!database["ollama"]) {
+      database["ollama"] = {
+        id: "ollama",
+        name: "Ollama", 
+        env: [],
+        api: "http://localhost:11434/v1",
+        npm: "@ai-sdk/openai",
+        models: {},
+      }
+    }
+
     const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
@@ -366,7 +437,12 @@ export namespace Provider {
       if (existing) return existing
       const pkg = provider.npm ?? provider.id
       const mod = await import(await BunProc.install(pkg, "beta"))
+      
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      if (!fn) {
+        log.error("No create function found", { pkg, keys: Object.keys(mod) })
+        throw new Error(`No create function found in ${pkg}`)
+      }
       const loaded = fn({
         name: provider.id,
         ...s.providers[provider.id]?.options,
@@ -436,11 +512,14 @@ export namespace Provider {
     }
   }
 
-  const priority = ["gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
+  const priority = ["llama3", "hermes3", "codellama", "gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
-      [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
+      [(model) => {
+        const index = priority.findIndex((filter) => model.id.includes(filter))
+        return index === -1 ? 999 : index // Put unknown models last
+      }, "asc"],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],
     )
@@ -449,9 +528,21 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
-    const provider = await list()
-      .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
+    
+    // Always prefer Ollama if available (user requested this as default)
+    const providers = await list().then((val) => Object.values(val))
+    const ollamaProvider = providers.find((p) => p.info.id === "ollama")
+    if (ollamaProvider && Object.keys(ollamaProvider.info.models).length > 0) {
+      const [model] = sort(Object.values(ollamaProvider.info.models))
+      if (model) {
+        return {
+          providerID: "ollama",
+          modelID: model.id,
+        }
+      }
+    }
+    
+    const provider = providers.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.info.models))
     if (!model) throw new Error("no models found")

@@ -58,6 +58,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "mode to use",
       })
+      .option("debug", {
+        alias: ["d"],
+        type: "boolean",
+        describe: "debug mode for automatic agent development and quality test",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -159,6 +164,55 @@ export const RunCommand = cmd({
       const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
 
       const messageID = Identifier.ascending("message")
+      
+      if (args.debug) {
+        // Debug mode: test single prompt and exit with detailed error info
+        try {
+          const result = await Session.chat({
+            sessionID: session.id,
+            messageID,
+            ...(mode.model
+              ? mode.model
+              : {
+                  providerID,
+                  modelID,
+                }),
+            mode: mode.name,
+            parts: [
+              {
+                id: Identifier.ascending("part"),
+                type: "text",
+                text: message,
+              },
+            ],
+          })
+          
+          // Check for errors in result
+          const errorPart = result.parts.find((x) => x.type === "error")
+          if (errorPart) {
+            console.error("DEBUG: API Error occurred:")
+            console.error("DEBUG: Error details:", errorPart)
+            process.exit(1)
+          }
+          
+          // Success in debug mode
+          console.log("DEBUG: Message sent successfully")
+          const match = result.parts.findLast((x) => x.type === "text")
+          if (match) console.log("DEBUG: Response received:", match.text.slice(0, 100) + "...")
+          process.exit(0)
+        } catch (error) {
+          // Error in debug mode - show detailed error and exit
+          console.error("DEBUG: Error occurred:")
+          console.error(error)
+          if (error instanceof Error) {
+            console.error("DEBUG: Error name:", error.name)
+            console.error("DEBUG: Error message:", error.message)
+            if (error.cause) console.error("DEBUG: Error cause:", error.cause)
+          }
+          process.exit(1)
+        }
+      }
+      
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
