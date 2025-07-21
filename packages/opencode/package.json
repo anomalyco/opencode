@@ -44,6 +44,7 @@
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
     "zod": "catalog:",
-    "zod-openapi": "4.1.0"
+    "zod-openapi": "4.1.0",
+    "@ai-sdk/groq": "1.2.9"
   }
 }

@@ -206,6 +206,12 @@ export namespace Provider {
         },
       }
     },
+    groq: async () => {
+      return {
+        autoload: false,
+        options: {},
+      }
+    },
   }
 
   const state = App.state("provider", async () => {
