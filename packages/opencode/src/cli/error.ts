@@ -1,6 +1,7 @@
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { UI } from "./ui"
+import { Server } from "../server/server"
 
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
@@ -13,4 +14,8 @@ export function FormatError(input: unknown) {
     ].join("\n")
 
   if (UI.CancelledError.isInstance(input)) return ""
+
+  if (Server.ServerStartError.isInstance(input)) {
+    return input.data.message
+  }
 }

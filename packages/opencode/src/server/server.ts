@@ -766,12 +766,32 @@ export namespace Server {
   }
 
   export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
-      port: opts.port,
-      hostname: opts.hostname,
-      idleTimeout: 0,
-      fetch: app().fetch,
-    })
-    return server
+    try {
+      const server = Bun.serve({
+        port: opts.port,
+        hostname: opts.hostname,
+        idleTimeout: 0,
+        fetch: app().fetch,
+      })
+      return server
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new ServerStartError({
+          port: opts.port,
+          hostname: opts.hostname,
+          message: error.message,
+        })
+      }
+      throw error
+    }
   }
+
+  export const ServerStartError = NamedError.create(
+    "ServerStartError",
+    z.object({
+      port: z.number(),
+      hostname: z.string(),
+      message: z.string(),
+    }),
+  )
 }
