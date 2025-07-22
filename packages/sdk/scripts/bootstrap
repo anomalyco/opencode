@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [ -f "Brewfile" ] && [ "$(uname -s)" = "Darwin" ] && [ "$SKIP_BREW" != "1" ]; then
+  brew bundle check >/dev/null 2>&1 || {
+    echo "==> Installing Homebrew dependencies…"
+    brew bundle
+  }
+fi
+
+echo "==> Installing Node dependencies…"
+
+PACKAGE_MANAGER=$(command -v yarn >/dev/null 2>&1 && echo "yarn" || echo "npm")
+
+$PACKAGE_MANAGER install

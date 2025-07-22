@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["dist-deno"],
+  "exclude": [],
+  "compilerOptions": {
+    "rootDir": "./dist-deno",
+    "lib": ["es2020", "DOM"],
+    "noEmit": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist-deno",
+    "pretty": true,
+    "sourceMap": true
+  }
+}

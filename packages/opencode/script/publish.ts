@@ -90,7 +90,10 @@ if (!snapshot) {
   }
 
   const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
-    .then((res) => res.json())
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
     .then((data) => data.tag_name)
 
   console.log("finding commits between", previous, "and", "HEAD")

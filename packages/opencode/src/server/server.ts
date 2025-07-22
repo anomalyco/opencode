@@ -705,9 +705,9 @@ export namespace Server {
         },
       )
       .post(
-        "/tui/prompt",
+        "/tui/append-prompt",
         describeRoute({
-          description: "Send a prompt to the TUI",
+          description: "Append prompt to the TUI",
           responses: {
             200: {
               description: "Prompt processed successfully",
@@ -723,7 +723,6 @@ export namespace Server {
           "json",
           z.object({
             text: z.string(),
-            parts: MessageV2.Part.array(),
           }),
         ),
         async (c) => c.json(await callTui(c)),

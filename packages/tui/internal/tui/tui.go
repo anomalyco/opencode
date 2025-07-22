@@ -24,7 +24,6 @@ import (
 	cmdcomp "github.com/sst/opencode/internal/components/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/fileviewer"
-	"github.com/sst/opencode/internal/components/ide"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/components/status"
 	"github.com/sst/opencode/internal/components/toast"
@@ -510,13 +509,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/tui/open-help":
 			helpDialog := dialog.NewHelpDialog(a.app)
 			a.modal = helpDialog
-		case "/tui/prompt":
+		case "/tui/append-prompt":
 			var body struct {
-				Text  string          `json:"text"`
-				Parts []opencode.Part `json:"parts"`
+				Text string `json:"text"`
 			}
 			json.Unmarshal((msg.Body), &body)
-			a.editor.SetValue(body.Text)
+			existing := a.editor.Value()
+			text := body.Text
+			if existing != "" && !strings.HasSuffix(existing, " ") {
+				text = " " + text
+			}
+			a.editor.SetValueWithAttachments(existing + text + " ")
 		default:
 			break
 		}
@@ -654,14 +657,16 @@ func (a Model) home() string {
 
 	// Use limit of 4 for vscode, 6 for others
 	limit := 6
-	if os.Getenv("OPENCODE_CALLER") == "vscode" {
+	if util.IsVSCode() {
 		limit = 4
 	}
 
+	showVscode := util.IsVSCode()
 	commandsView := cmdcomp.New(
 		a.app,
 		cmdcomp.WithBackground(t.Background()),
 		cmdcomp.WithLimit(limit),
+		cmdcomp.WithVscode(showVscode),
 	)
 	cmds := lipgloss.PlaceHorizontal(
 		effectiveWidth,
@@ -670,19 +675,6 @@ func (a Model) home() string {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
-	// Add VSCode shortcuts if in VSCode environment
-	var ideShortcuts string
-	if os.Getenv("OPENCODE_CALLER") == "vscode" {
-		ideView := ide.New()
-		ideView.SetBackgroundColor(t.Background())
-		ideShortcuts = lipgloss.PlaceHorizontal(
-			effectiveWidth,
-			lipgloss.Center,
-			ideView.View(),
-			styles.WhitespaceStyle(t.Background()),
-		)
-	}
-
 	lines := []string{}
 	lines = append(lines, "")
 	lines = append(lines, "")
@@ -690,10 +682,6 @@ func (a Model) home() string {
 	lines = append(lines, "")
 	lines = append(lines, "")
 	lines = append(lines, cmds)
-	if os.Getenv("OPENCODE_CALLER") == "vscode" {
-		lines = append(lines, "")
-		lines = append(lines, ideShortcuts)
-	}
 	lines = append(lines, "")
 	lines = append(lines, "")
 

@@ -401,7 +401,7 @@ func renderToolDetails(
 						body += fmt.Sprintf("- [x] %s\n", content)
 					case "cancelled":
 						// strike through cancelled todo
-						body += fmt.Sprintf("- [~] ~~%s~~\n", content)
+						body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
 					case "in_progress":
 						// highlight in progress todo
 						body += fmt.Sprintf("- [ ] `%s`\n", content)

@@ -123,12 +123,12 @@ resources:
 
   tui:
     methods:
-      prompt: post /tui/prompt
+      appendPrompt: post /tui/append-prompt
       openHelp: post /tui/open-help
 
 settings:
   disable_mock_tests: true
-  license: Apache-2.0
+  license: MIT
 
 security:
   - {}

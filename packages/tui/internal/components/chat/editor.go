@@ -486,7 +486,9 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 
 			if end > start {
 				filePath := value[start:end]
-				if _, err := os.Stat(filePath); err == nil {
+				slog.Debug("test", "filePath", filePath)
+				if _, err := os.Stat(filepath.Join(m.app.Info.Path.Cwd, filePath)); err == nil {
+					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
 						m.textarea.InsertAttachment(attachment)
