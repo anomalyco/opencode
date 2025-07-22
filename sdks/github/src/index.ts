@@ -43,8 +43,8 @@ let state:
 
 async function run() {
   try {
-    const match = body.match(/^hey\s*opencode,?\s*(.*)$/)
-    if (!match?.[1]) throw new Error("Command must start with `hey opencode`")
+    const match = body.match(/^hey\s*opencode,/)
+    if (!match?.[1]) throw new Error("Command must start with `hey opencode,`")
     const userPrompt = match[1]
 
     const oidcToken = await generateGitHubToken()
