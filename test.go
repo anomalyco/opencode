@@ -1,1 +1,0 @@
-package main\nimport \"fmt\"\nfunc main() {\n    fmt.Println(\"Hello
