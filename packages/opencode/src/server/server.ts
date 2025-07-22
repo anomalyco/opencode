@@ -1,3 +1,4 @@
+import { cors } from "hono/cors"
 import { Log } from "../util/log"
 import { Bus } from "../bus"
 import { describeRoute, generateSpecs, openAPISpecs } from "hono-openapi"
@@ -42,8 +43,12 @@ export namespace Server {
 
   export type Routes = ReturnType<typeof app>
 
-  function app() {
+  function app({ corsOrigins }: { corsOrigins?: string[] } = {}) {
     const app = new Hono()
+
+    if (corsOrigins && corsOrigins.length > 0) {
+      app.use(cors({ origin: corsOrigins }))
+    }
 
     const result = app
       .onError((err, c) => {
@@ -722,12 +727,12 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string }) {
+  export function listen(opts: { port: number; hostname: string; corsOrigins?: string[] }) {
     const server = Bun.serve({
       port: opts.port,
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: app().fetch,
+      fetch: app(opts).fetch,
     })
     return server
   }
