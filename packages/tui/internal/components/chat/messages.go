@@ -128,6 +128,9 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				endY:   viewportRelativeY + m.viewport.YOffset,
 			}
 
+			// Disable tail mode during selection to allow free scrolling
+			m.tail = false
+
 			// Auto-scroll when selecting near edges
 			viewportHeight := m.viewport.Height()
 			scrollMargin := 2
@@ -143,6 +146,8 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseReleaseMsg:
+		// Re-enable tail mode when selection ends
+		m.tail = true
 		// Just handle the mouse release, don't auto-copy or clear selection
 		// Selection state remains visible for user to manually copy if desired
 		return m, nil
