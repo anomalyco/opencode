@@ -507,7 +507,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		clipboard := []string{}
 		var selection *selection
 		if m.selection != nil {
-			selection = m.selection.coords(lipgloss.Height(header) + 1)
+			selection = m.selection.coords(0)
 		}
 		for _, block := range blocks {
 			lines := strings.Split(block, "\n")
