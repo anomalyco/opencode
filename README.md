@@ -16,6 +16,12 @@
 
 [![opencode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
+### Local Model Support
+
+opencode works seamlessly with local models like llama3 through Ollama, giving you full privacy and control over your AI coding assistant.
+
+![Local model integration with llama3](local.png)
+
 ---
 
 ### Installation
