@@ -23,6 +23,7 @@ type ModeModel struct {
 
 type State struct {
 	Theme              string               `toml:"theme"`
+	ScrollSpeed        *int                 `toml:"scroll_speed"`
 	ModeModel          map[string]ModeModel `toml:"mode_model"`
 	Provider           string               `toml:"provider"`
 	Model              string               `toml:"model"`
