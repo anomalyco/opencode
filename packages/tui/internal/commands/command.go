@@ -63,17 +63,37 @@ func (r CommandRegistry) Sorted() []Command {
 		commands = append(commands, command)
 	}
 	slices.SortFunc(commands, func(a, b Command) int {
+		// Priority order: session_new, session_share, model_list, app_help first, app_exit last
+		priorityOrder := map[CommandName]int{
+			SessionNewCommand:   0,
+			AppHelpCommand:      1,
+			SessionShareCommand: 2,
+			ModelListCommand:    3,
+		}
+
+		aPriority, aHasPriority := priorityOrder[a.Name]
+		bPriority, bHasPriority := priorityOrder[b.Name]
+
+		if aHasPriority && bHasPriority {
+			return aPriority - bPriority
+		}
+		if aHasPriority {
+			return -1
+		}
+		if bHasPriority {
+			return 1
+		}
 		if a.Name == AppExitCommand {
 			return 1
 		}
 		if b.Name == AppExitCommand {
 			return -1
 		}
+
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
 	return commands
 }
-
 func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 	var matched []Command
 	for _, command := range r.Sorted() {

@@ -371,7 +371,7 @@ func (a *App) IsBusy() bool {
 	if casted, ok := lastMessage.Info.(opencode.AssistantMessage); ok {
 		return casted.Time.Completed == 0
 	}
-	return false
+	return true
 }
 
 func (a *App) SaveState() tea.Cmd {

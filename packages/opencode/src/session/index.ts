@@ -118,11 +118,22 @@ export namespace Session {
       const sessions = new Map<string, Info>()
       const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
+      const queued = new Map<
+        string,
+        {
+          input: ChatInput
+          message: MessageV2.User
+          parts: MessageV2.Part[]
+          processed: boolean
+          callback: (input: { info: MessageV2.Assistant; parts: MessageV2.Part[] }) => void
+        }[]
+      >()
 
       return {
         sessions,
         messages,
         pending,
+        queued,
       }
     },
     async (state) => {
@@ -351,63 +362,13 @@ export namespace Session {
       ]),
     ),
   })
+  export type ChatInput = z.infer<typeof ChatInput>
 
-  export async function chat(input: z.infer<typeof ChatInput>) {
+  export async function chat(
+    input: z.infer<typeof ChatInput>,
+  ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
-
-    const model = await Provider.getModel(input.providerID, input.modelID)
-    let msgs = await messages(input.sessionID)
-    const session = await get(input.sessionID)
-
-    if (session.revert) {
-      const trimmed = []
-      for (const msg of msgs) {
-        if (
-          msg.info.id > session.revert.messageID ||
-          (msg.info.id === session.revert.messageID && session.revert.part === 0)
-        ) {
-          await Storage.remove("session/message/" + input.sessionID + "/" + msg.info.id)
-          await Bus.publish(MessageV2.Event.Removed, {
-            sessionID: input.sessionID,
-            messageID: msg.info.id,
-          })
-          continue
-        }
-
-        if (msg.info.id === session.revert.messageID) {
-          if (session.revert.part === 0) break
-          msg.parts = msg.parts.slice(0, session.revert.part)
-        }
-        trimmed.push(msg)
-      }
-      msgs = trimmed
-      await update(input.sessionID, (draft) => {
-        draft.revert = undefined
-      })
-    }
-
-    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
-
-    // auto summarize if too long
-    if (previous && previous.tokens) {
-      const tokens =
-        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
-      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
-        await summarize({
-          sessionID: input.sessionID,
-          providerID: input.providerID,
-          modelID: input.modelID,
-        })
-        return chat(input)
-      }
-    }
-
-    using abort = lock(input.sessionID)
-
-    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
-    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
@@ -469,7 +430,7 @@ export namespace Session {
                 const args = { filePath, offset, limit }
                 const result = await ReadTool.execute(args, {
                   sessionID: input.sessionID,
-                  abort: abort.signal,
+                  abort: new AbortController().signal,
                   messageID: userMsg.id,
                   metadata: async () => {},
                 })
@@ -533,7 +494,6 @@ export namespace Session {
         ]
       }),
     ).then((x) => x.flat())
-
     if (input.mode === "plan")
       userParts.push({
         id: Identifier.ascending("part"),
@@ -544,7 +504,79 @@ export namespace Session {
         synthetic: true,
       })
 
-    if (msgs.length === 0 && !session.parentID) {
+    await updateMessage(userMsg)
+    for (const part of userParts) {
+      await updatePart(part)
+    }
+
+    if (isLocked(input.sessionID)) {
+      return new Promise((resolve) => {
+        const queue = state().queued.get(input.sessionID) ?? []
+        queue.push({
+          input: input,
+          message: userMsg,
+          parts: userParts,
+          processed: false,
+          callback: resolve,
+        })
+        state().queued.set(input.sessionID, queue)
+      })
+    }
+
+    const model = await Provider.getModel(input.providerID, input.modelID)
+    let msgs = await messages(input.sessionID)
+    const session = await get(input.sessionID)
+
+    if (session.revert) {
+      const trimmed = []
+      for (const msg of msgs) {
+        if (
+          msg.info.id > session.revert.messageID ||
+          (msg.info.id === session.revert.messageID && session.revert.part === 0)
+        ) {
+          await Storage.remove("session/message/" + input.sessionID + "/" + msg.info.id)
+          await Bus.publish(MessageV2.Event.Removed, {
+            sessionID: input.sessionID,
+            messageID: msg.info.id,
+          })
+          continue
+        }
+
+        if (msg.info.id === session.revert.messageID) {
+          if (session.revert.part === 0) break
+          msg.parts = msg.parts.slice(0, session.revert.part)
+        }
+        trimmed.push(msg)
+      }
+      msgs = trimmed
+      await update(input.sessionID, (draft) => {
+        draft.revert = undefined
+      })
+    }
+
+    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
+    // auto summarize if too long
+    if (previous && previous.tokens) {
+      const tokens =
+        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
+      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
+        await summarize({
+          sessionID: input.sessionID,
+          providerID: input.providerID,
+          modelID: input.modelID,
+        })
+        return chat(input)
+      }
+    }
+
+    using abort = lock(input.sessionID)
+
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
+
+    if (msgs.length === 1 && !session.parentID) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
@@ -582,11 +614,6 @@ export namespace Session {
         })
         .catch(() => {})
     }
-    await updateMessage(userMsg)
-    for (const part of userParts) {
-      await updatePart(part)
-    }
-    msgs.push({ info: userMsg, parts: userParts })
 
     const mode = await Mode.get(input.mode ?? "build")
     let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
@@ -692,6 +719,51 @@ export namespace Session {
 
     const stream = streamText({
       onError() {},
+      async prepareStep({ messages }) {
+        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
+        if (queue.length) {
+          for (const item of queue) {
+            if (item.processed) continue
+            messages.push(
+              ...MessageV2.toModelMessage([
+                {
+                  info: item.message,
+                  parts: item.parts,
+                },
+              ]),
+            )
+            item.processed = true
+          }
+          assistantMsg.time.completed = Date.now()
+          await updateMessage(assistantMsg)
+          Object.assign(assistantMsg, {
+            id: Identifier.ascending("message"),
+            role: "assistant",
+            system,
+            path: {
+              cwd: app.path.cwd,
+              root: app.path.root,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: input.modelID,
+            providerID: input.providerID,
+            time: {
+              created: Date.now(),
+            },
+            sessionID: input.sessionID,
+          })
+          await updateMessage(assistantMsg)
+        }
+        return {
+          messages,
+        }
+      },
       maxRetries: 10,
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
@@ -726,6 +798,16 @@ export namespace Session {
       }),
     })
     const result = await processor.process(stream)
+    const queued = state().queued.get(input.sessionID) ?? []
+    const unprocessed = queued.find((x) => !x.processed)
+    if (unprocessed) {
+      unprocessed.processed = true
+      return chat(unprocessed.input)
+    }
+    for (const item of queued) {
+      item.callback(result)
+    }
+    state().queued.delete(input.sessionID)
     return result
   }
 
@@ -1085,6 +1167,10 @@ export namespace Session {
 
     const result = await processor.process(stream)
     return result
+  }
+
+  function isLocked(sessionID: string) {
+    return state().pending.has(sessionID)
   }
 
   function lock(sessionID: string) {

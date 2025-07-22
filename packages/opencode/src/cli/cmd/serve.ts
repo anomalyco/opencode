@@ -1,6 +1,5 @@
 import { Provider } from "../../provider/provider"
 import { Server } from "../../server/server"
-import { Share } from "../../share/share"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 
@@ -38,7 +37,6 @@ export const ServeCommand = cmd({
       const port = args.port
       const corsOrigins = (args["cors-origins"] ?? []).map(String)
 
-      await Share.init()
       const server = Server.listen({
         port,
         hostname,

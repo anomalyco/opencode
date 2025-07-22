@@ -121,6 +121,11 @@ resources:
       messages: get /session/{id}/message
       chat: post /session/{id}/message
 
+  tui:
+    methods:
+      prompt: post /tui/prompt
+      openHelp: post /tui/open-help
+
 settings:
   disable_mock_tests: true
   license: Apache-2.0

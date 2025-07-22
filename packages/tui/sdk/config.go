@@ -57,8 +57,6 @@ type Config struct {
 	Keybinds KeybindsConfig `json:"keybinds"`
 	// @deprecated Always uses stretch layout.
 	Layout ConfigLayout `json:"layout"`
-	// Minimum log level to write to log files
-	LogLevel LogLevel `json:"log_level"`
 	// MCP (Model Context Protocol) server configurations
 	Mcp map[string]ConfigMcp `json:"mcp"`
 	// Modes configuration, see https://opencode.ai/docs/modes
@@ -90,7 +88,6 @@ type configJSON struct {
 	Instructions      apijson.Field
 	Keybinds          apijson.Field
 	Layout            apijson.Field
-	LogLevel          apijson.Field
 	Mcp               apijson.Field
 	Mode              apijson.Field
 	Model             apijson.Field

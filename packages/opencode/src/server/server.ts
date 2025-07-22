@@ -18,6 +18,7 @@ import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
+import { callTui, TuiRoute } from "./tui"
 
 const ERRORS = {
   400: {
@@ -708,6 +709,48 @@ export namespace Server {
           return c.json(modes)
         },
       )
+      .post(
+        "/tui/prompt",
+        describeRoute({
+          description: "Send a prompt to the TUI",
+          responses: {
+            200: {
+              description: "Prompt processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            text: z.string(),
+            parts: MessageV2.Part.array(),
+          }),
+        ),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/open-help",
+        describeRoute({
+          description: "Open the help dialog",
+          responses: {
+            200: {
+              description: "Help dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .route("/tui/control", TuiRoute)
 
     return result
   }

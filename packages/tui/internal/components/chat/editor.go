@@ -75,11 +75,12 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 	case tea.KeyPressMsg:
-		// Handle up/down arrows for history navigation
+		// Handle up/down arrows and ctrl+p/ctrl+n for history navigation
 		switch msg.String() {
-		case "up":
-			// Only navigate history if cursor is at the first line and column
-			if m.textarea.Line() == 0 && m.textarea.CursorColumn() == 0 && len(m.app.State.MessageHistory) > 0 {
+		case "up", "ctrl+p":
+			// Only navigate history if cursor is at the first line and column (for arrow keys)
+			// or allow ctrl+p from anywhere
+			if (msg.String() == "ctrl+p" || (m.textarea.Line() == 0 && m.textarea.CursorColumn() == 0)) && len(m.app.State.MessageHistory) > 0 {
 				if m.historyIndex == -1 {
 					// Save current text before entering history
 					m.currentText = m.textarea.Value()
@@ -93,9 +94,10 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-		case "down":
-			// Only navigate history if cursor is at the last line and we're in history navigation
-			if m.textarea.IsCursorAtEnd() && m.historyIndex > -1 {
+		case "down", "ctrl+n":
+			// Only navigate history if cursor is at the last line and we're in history navigation (for arrow keys)
+			// or allow ctrl+n from anywhere if we're in history navigation
+			if (msg.String() == "ctrl+n" || m.textarea.IsCursorAtEnd()) && m.historyIndex > -1 {
 				// Move down in history (newer messages)
 				m.historyIndex--
 				if m.historyIndex == -1 {
@@ -108,7 +110,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.textarea.MoveToEnd()
 				}
 				return m, nil
-			} else if m.historyIndex > -1 {
+			} else if m.historyIndex > -1 && msg.String() == "down" {
 				m.textarea.MoveToEnd()
 				return m, nil
 			}

@@ -93,13 +93,16 @@ if (!snapshot) {
     .then((res) => res.json())
     .then((data) => data.tag_name)
 
+  console.log("finding commits between", previous, "and", "HEAD")
   const commits = await fetch(`https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`)
     .then((res) => res.json())
     .then((data) => data.commits || [])
 
+  const raw = commits.map((commit: any) => `- ${commit.commit.message.split("\n").join(" ")}`)
+  console.log(raw)
+
   const notes =
-    commits
-      .map((commit: any) => `- ${commit.commit.message.split("\n")[0]}`)
+    raw
       .filter((x: string) => {
         const lower = x.toLowerCase()
         return (

@@ -26,13 +26,26 @@
     "commands": [
       {
         "command": "opencode.openTerminal",
-        "title": "Open Terminal with Opencode"
+        "title": "Open Terminal with Opencode",
+        "icon": {
+          "light": "images/button-dark.svg",
+          "dark": "images/button-light.svg"
+        }
       },
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "Add Filepath to Terminal"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "opencode.openTerminal",
+          "when": "editorTextFocus",
+          "group": "navigation"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "opencode.openTerminal",

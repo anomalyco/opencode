@@ -41,8 +41,9 @@ func (p Prompt) ToMessage(
 		}
 	}
 	for _, att := range textAttachments {
-		source, _ := att.GetTextSource()
-		text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
+		if source, ok := att.GetTextSource(); ok {
+			text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
+		}
 	}
 
 	parts := []opencode.PartUnion{opencode.TextPart{
@@ -58,35 +59,37 @@ func (p Prompt) ToMessage(
 			End:   int64(attachment.EndIndex),
 			Value: attachment.Display,
 		}
-		var source *opencode.FilePartSource
+		source := &opencode.FilePartSource{}
 		switch attachment.Type {
 		case "text":
 			continue
 		case "file":
-			fileSource, _ := attachment.GetFileSource()
-			source = &opencode.FilePartSource{
-				Text: text,
-				Path: fileSource.Path,
-				Type: opencode.FilePartSourceTypeFile,
+			if fileSource, ok := attachment.GetFileSource(); ok {
+				source = &opencode.FilePartSource{
+					Text: text,
+					Path: fileSource.Path,
+					Type: opencode.FilePartSourceTypeFile,
+				}
 			}
 		case "symbol":
-			symbolSource, _ := attachment.GetSymbolSource()
-			source = &opencode.FilePartSource{
-				Text: text,
-				Path: symbolSource.Path,
-				Type: opencode.FilePartSourceTypeSymbol,
-				Kind: int64(symbolSource.Kind),
-				Name: symbolSource.Name,
-				Range: opencode.SymbolSourceRange{
-					Start: opencode.SymbolSourceRangeStart{
-						Line:      float64(symbolSource.Range.Start.Line),
-						Character: float64(symbolSource.Range.Start.Char),
+			if symbolSource, ok := attachment.GetSymbolSource(); ok {
+				source = &opencode.FilePartSource{
+					Text: text,
+					Path: symbolSource.Path,
+					Type: opencode.FilePartSourceTypeSymbol,
+					Kind: int64(symbolSource.Kind),
+					Name: symbolSource.Name,
+					Range: opencode.SymbolSourceRange{
+						Start: opencode.SymbolSourceRangeStart{
+							Line:      float64(symbolSource.Range.Start.Line),
+							Character: float64(symbolSource.Range.Start.Char),
+						},
+						End: opencode.SymbolSourceRangeEnd{
+							Line:      float64(symbolSource.Range.End.Line),
+							Character: float64(symbolSource.Range.End.Char),
+						},
 					},
-					End: opencode.SymbolSourceRangeEnd{
-						Line:      float64(symbolSource.Range.End.Line),
-						Character: float64(symbolSource.Range.End.Char),
-					},
-				},
+				}
 			}
 		}
 		parts = append(parts, opencode.FilePart{

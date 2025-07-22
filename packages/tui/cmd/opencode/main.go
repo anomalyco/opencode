@@ -13,6 +13,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode/internal/api"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/tui"
@@ -99,6 +100,8 @@ func main() {
 			program.Send(err)
 		}
 	}()
+
+	go api.Start(ctx, program, httpClient)
 
 	// Handle signals in a separate goroutine
 	go func() {

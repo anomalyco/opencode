@@ -11,6 +11,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
+	"github.com/sst/opencode/internal/util"
 )
 
 type CommandsComponent interface {
@@ -24,6 +25,7 @@ type commandsComponent struct {
 	width, height int
 	showKeybinds  bool
 	showAll       bool
+	showVscode    bool
 	background    *compat.AdaptiveColor
 	limit         *int
 }
@@ -71,6 +73,30 @@ func (c *commandsComponent) View() string {
 
 	if c.limit != nil && len(commandsToShow) > *c.limit {
 		commandsToShow = commandsToShow[:*c.limit]
+	}
+
+	if c.showVscode {
+		commandsToShow = append(commandsToShow,
+			// empty line
+			commands.Command{
+				Name:        "",
+				Description: "",
+			},
+			commands.Command{
+				Name:        commands.CommandName(util.Ide()),
+				Description: "open opencode",
+				Keybindings: []commands.Keybinding{
+					{Key: "cmd+esc", RequiresLeader: false},
+				},
+			},
+			commands.Command{
+				Name:        commands.CommandName(util.Ide()),
+				Description: "reference file",
+				Keybindings: []commands.Keybinding{
+					{Key: "cmd+opt+k", RequiresLeader: false},
+				},
+			},
+		)
 	}
 
 	if len(commandsToShow) == 0 {
@@ -193,6 +219,12 @@ func WithLimit(limit int) Option {
 func WithShowAll(showAll bool) Option {
 	return func(c *commandsComponent) {
 		c.showAll = showAll
+	}
+}
+
+func WithVscode(showVscode bool) Option {
+	return func(c *commandsComponent) {
+		c.showVscode = showVscode
 	}
 }
 
