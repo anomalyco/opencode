@@ -98,8 +98,11 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.MouseClickMsg:
-		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset)
-		y := msg.Y + m.viewport.YOffset
+		headerHeight := lipgloss.Height(m.renderHeader())
+		// Account for header and the newline separator
+		offset := headerHeight + 1
+		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset, "offset", offset)
+		y := (msg.Y - offset) + m.viewport.YOffset
 		if y > 0 {
 			m.selection = &selection{
 				startY: y,
@@ -114,26 +117,35 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.MouseMotionMsg:
 		if m.selection != nil {
+			headerHeight := lipgloss.Height(m.renderHeader())
+			// Account for header and the newline separator
+			offset := headerHeight + 1
+			viewportRelativeY := msg.Y - offset
 			m.selection = &selection{
 				startX: m.selection.startX,
 				startY: m.selection.startY,
 				endX:   msg.X + 1,
-				endY:   msg.Y + m.viewport.YOffset,
+				endY:   viewportRelativeY + m.viewport.YOffset,
+			}
+
+			// Auto-scroll when selecting near edges
+			viewportHeight := m.viewport.Height()
+			scrollMargin := 2
+
+			if viewportRelativeY < scrollMargin && m.viewport.YOffset > 0 {
+				// Scroll up
+				m.viewport.LineUp(1)
+			} else if viewportRelativeY > viewportHeight-scrollMargin {
+				// Scroll down
+				m.viewport.LineDown(1)
 			}
 			return m, m.renderView()
 		}
 
 	case tea.MouseReleaseMsg:
-		if m.selection != nil && len(m.clipboard) > 0 {
-			content := strings.Join(m.clipboard, "\n")
-			m.selection = nil
-			m.clipboard = []string{}
-			return m, tea.Sequence(
-				m.renderView(),
-				app.SetClipboard(content),
-				toast.NewSuccessToast("Copied to clipboard"),
-			)
-		}
+		// Just handle the mouse release, don't auto-copy or clear selection
+		// Selection state remains visible for user to manually copy if desired
+		return m, nil
 	case tea.WindowSizeMsg:
 		effectiveWidth := msg.Width - 4
 		// Clear cache on resize since width affects rendering
