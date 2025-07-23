@@ -11,7 +11,6 @@ import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
-import { Mode } from "../../session/mode"
 import { Ide } from "../../ide"
 
 export const TuiCommand = cmd({
@@ -57,7 +56,7 @@ export const TuiCommand = cmd({
         UI.error("Failed to change directory to " + cwd)
         return
       }
-      const result = await bootstrap({ cwd }, async (app) => {
+      const result = await bootstrap({ cwd }, async (_app) => {
         FileWatcher.init()
         const providers = await Provider.list()
         if (Object.keys(providers).length === 0) {
@@ -104,8 +103,6 @@ export const TuiCommand = cmd({
             ...process.env,
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
-            OPENCODE_APP_INFO: JSON.stringify(app),
-            OPENCODE_MODES: JSON.stringify(await Mode.list()),
           },
           onExit: () => {
             server.stop()

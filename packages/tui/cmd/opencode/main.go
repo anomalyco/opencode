@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -36,19 +35,22 @@ func main() {
 
 	url := os.Getenv("OPENCODE_SERVER")
 
-	appInfoStr := os.Getenv("OPENCODE_APP_INFO")
-	var appInfo opencode.App
-	err := json.Unmarshal([]byte(appInfoStr), &appInfo)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	httpClient := opencode.NewClient(
+		option.WithBaseURL(url),
+	)
+
+	appInfo, err := httpClient.App.Get(ctx)
 	if err != nil {
-		slog.Error("Failed to unmarshal app info", "error", err)
+		slog.Error("Failed to fetch app info. Is the server running at "+url+"\n", "error", err)
 		os.Exit(1)
 	}
 
-	modesStr := os.Getenv("OPENCODE_MODES")
-	var modes []opencode.Mode
-	err = json.Unmarshal([]byte(modesStr), &modes)
+	modes, err := httpClient.App.Modes(ctx)
 	if err != nil {
-		slog.Error("Failed to unmarshal modes", "error", err)
+		slog.Error("Failed to fetch modes. Is the server running at "+url+"\n", "error", err)
 		os.Exit(1)
 	}
 
@@ -76,17 +78,11 @@ func main() {
 		}
 	}
 
-	httpClient := opencode.NewClient(
-		option.WithBaseURL(url),
-	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	apiHandler := util.NewAPILogHandler(ctx, httpClient, "tui", slog.LevelDebug)
 	logger := slog.New(apiHandler)
 	slog.SetDefault(logger)
 
-	slog.Debug("TUI launched", "app", appInfoStr, "modes", modesStr)
+	slog.Debug("TUI launched", "app", appInfo, "modes", modes)
 
 	go func() {
 		err = clipboard.Init()
@@ -96,7 +92,7 @@ func main() {
 	}()
 
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
+	app_, err := app.New(ctx, version, *appInfo, *modes, httpClient, model, prompt, mode)
 	if err != nil {
 		panic(err)
 	}
