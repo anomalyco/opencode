@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"log/slog"
@@ -519,9 +518,6 @@ func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
 		return []opencode.Session{}, nil
 	}
 	sessions := *response
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].Time.Created-sessions[j].Time.Created > 0
-	})
 	return sessions, nil
 }
 

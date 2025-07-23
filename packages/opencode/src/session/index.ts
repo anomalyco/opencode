@@ -508,6 +508,8 @@ export namespace Session {
     for (const part of userParts) {
       await updatePart(part)
     }
+    // mark session as updated since a message has been added to it
+    await update(input.sessionID, (_draft) => {})
 
     if (isLocked(input.sessionID)) {
       return new Promise((resolve) => {
