@@ -143,9 +143,9 @@ export namespace Session {
     },
   )
 
-  export async function create(parentID?: string) {
+  export async function create(parentID?: string, customId?: string) {
     const result: Info = {
-      id: Identifier.descending("session"),
+      id: customId ? customId : Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
       title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),

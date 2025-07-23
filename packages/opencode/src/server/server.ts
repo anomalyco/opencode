@@ -215,8 +215,17 @@ export namespace Server {
             },
           },
         }),
+        zValidator(
+          "query",
+          z.object({
+            id: z.string().optional(),
+            parentId: z.string().optional()
+          }),
+        ),
         async (c) => {
-          const session = await Session.create()
+          const id = c.req.valid("query").id
+          const parentId = c.req.valid("query").parentId
+          const session = await Session.create(parentId, id)
           return c.json(session)
         },
       )
