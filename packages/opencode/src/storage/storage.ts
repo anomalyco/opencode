@@ -80,7 +80,7 @@ export namespace Storage {
       for (const file of files) {
         try {
           const content = await Bun.file(file).json()
-          if (!content.mode) {
+          if (content.role === "assistant" && !content.mode) {
             log.info("adding mode field to message", { file })
             content.mode = "build"
             await Bun.write(file, JSON.stringify(content, null, 2))

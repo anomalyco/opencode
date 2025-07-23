@@ -374,7 +374,6 @@ export namespace Session {
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
-      mode: inputMode,
       sessionID: input.sessionID,
       time: {
         created: Date.now(),
@@ -599,7 +598,6 @@ export namespace Session {
               info: {
                 id: Identifier.ascending("message"),
                 role: "user",
-                mode: inputMode,
                 sessionID: input.sessionID,
                 time: {
                   created: Date.now(),
