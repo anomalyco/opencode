@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Auth } from "./index"
 import { NamedError } from "../util/error"
+import { Installation } from "../installation"
 
 export namespace AuthGithubCopilot {
   const CLIENT_ID = "Iv1.b507a08c87ecfe98"
@@ -37,7 +38,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": "opencode/"+Installation.VERSION,
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -60,7 +61,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": "opencode/"+Installation.VERSION,
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -101,9 +102,9 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${info.refresh}`,
-        "User-Agent": "GitHubCopilotChat/0.26.7",
-        "Editor-Version": "vscode/1.99.3",
-        "Editor-Plugin-Version": "copilot-chat/0.26.7",
+        "User-Agent": "opencode"+Installation.VERSION,
+        "Editor-Version": "opencode"+Installation.VERSION,
+        "Editor-Plugin-Version": "opencode"+Installation.VERSION,
       },
     })
 
