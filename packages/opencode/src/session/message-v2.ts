@@ -190,11 +190,11 @@ export namespace MessageV2 {
   const Base = z.object({
     id: z.string(),
     sessionID: z.string(),
+    mode: z.string(),
   })
 
   export const User = Base.extend({
     role: z.literal("user"),
-    mode: z.string(),
     time: z.object({
       created: z.number(),
     }),
@@ -227,7 +227,6 @@ export namespace MessageV2 {
     system: z.string().array(),
     modelID: z.string(),
     providerID: z.string(),
-    mode: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
