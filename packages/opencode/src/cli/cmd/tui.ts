@@ -46,8 +46,28 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("attach", {
+        alias: ["a"],
+        type: "string",
+        describe: "hostname of the running opencode server",
       }),
   handler: async (args) => {
+    if (args.attach) {
+      let host = args.attach
+      if (!host.startsWith("http://") && !host.startsWith("https://")) {
+        host = `http://${host}`
+      }
+      const proc = await startTui({
+        model: args.model,
+        prompt: args.prompt,
+        mode: args.mode,
+        hostname: host,
+      })
+      await proc.exited
+      return
+    }
+
     while (true) {
       const cwd = args.project ? path.resolve(args.project) : process.cwd()
       try {
@@ -66,47 +86,6 @@ export const TuiCommand = cmd({
         const server = Server.listen({
           port: args.port,
           hostname: args.hostname,
-        })
-
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
-        if (Bun.embeddedFiles.length > 0) {
-          const blob = Bun.embeddedFiles[0] as File
-          let binaryName = blob.name
-          if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
-            binaryName += ".exe"
-          }
-          const binary = path.join(Global.Path.cache, "tui", binaryName)
-          const file = Bun.file(binary)
-          if (!(await file.exists())) {
-            await Bun.write(file, blob, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
-          }
-          cwd = process.cwd()
-          cmd = [binary]
-        }
-        Log.Default.info("tui", {
-          cmd,
-        })
-        const proc = Bun.spawn({
-          cmd: [
-            ...cmd,
-            ...(args.model ? ["--model", args.model] : []),
-            ...(args.prompt ? ["--prompt", args.prompt] : []),
-            ...(args.mode ? ["--mode", args.mode] : []),
-          ],
-          cwd,
-          stdout: "inherit",
-          stderr: "inherit",
-          stdin: "inherit",
-          env: {
-            ...process.env,
-            CGO_ENABLED: "0",
-            OPENCODE_SERVER: server.url.toString(),
-          },
-          onExit: () => {
-            server.stop()
-          },
         })
 
         ;(async () => {
@@ -136,6 +115,15 @@ export const TuiCommand = cmd({
             .catch(() => {})
         })()
 
+        const proc = await startTui({
+          model: args.model,
+          prompt: args.prompt,
+          mode: args.mode,
+          hostname: server.url.toString(),
+          onExit: () => {
+            server.stop()
+          },
+        })
         await proc.exited
         server.stop()
 
@@ -158,6 +146,61 @@ export const TuiCommand = cmd({
     }
   },
 })
+
+async function startTui({
+  model,
+  prompt,
+  mode,
+  hostname,
+  onExit,
+}: {
+  model?: string
+  prompt?: string
+  mode?: string
+  hostname?: string
+  onExit?: () => void
+}) {
+  let cmd = ["go", "run", "./main.go"]
+  let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+  if (Bun.embeddedFiles.length > 0) {
+    const blob = Bun.embeddedFiles[0] as File
+    let binaryName = blob.name
+    if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
+      binaryName += ".exe"
+    }
+    const binary = path.join(Global.Path.cache, "tui", binaryName)
+    const file = Bun.file(binary)
+    if (!(await file.exists())) {
+      await Bun.write(file, blob, { mode: 0o755 })
+      await fs.chmod(binary, 0o755)
+    }
+    cwd = process.cwd()
+    cmd = [binary]
+  }
+  Log.Default.info("tui", {
+    cmd,
+  })
+  const proc = Bun.spawn({
+    cmd: [
+      ...cmd,
+      ...(model ? ["--model", model] : []),
+      ...(prompt ? ["--prompt", prompt] : []),
+      ...(mode ? ["--mode", mode] : []),
+    ],
+    cwd,
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "inherit",
+    env: {
+      ...process.env,
+      CGO_ENABLED: "0",
+      OPENCODE_SERVER: hostname,
+    },
+    onExit: onExit,
+  })
+
+  return proc
+}
 
 /**
  * Get the correct command to run opencode CLI

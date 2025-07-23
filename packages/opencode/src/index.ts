@@ -18,7 +18,6 @@ import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { InstallGithubCommand } from "./cli/cmd/install-github"
 import { Trace } from "./trace"
-import { AttachCommand } from "./cli/cmd/attach"
 
 Trace.init()
 
@@ -69,7 +68,6 @@ const cli = yargs(hideBin(process.argv))
   .usage("\n" + UI.logo())
   .command(McpCommand)
   .command(TuiCommand)
-  .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
