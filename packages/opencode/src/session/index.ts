@@ -370,10 +370,11 @@ export namespace Session {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
 
+    const inputMode = input.mode ?? "build"
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
-      mode: input.mode ?? "build",
+      mode: inputMode,
       sessionID: input.sessionID,
       time: {
         created: Date.now(),
@@ -495,7 +496,7 @@ export namespace Session {
         ]
       }),
     ).then((x) => x.flat())
-    if (input.mode === "plan")
+    if (inputMode === "plan")
       userParts.push({
         id: Identifier.ascending("part"),
         messageID: userMsg.id,
@@ -598,7 +599,7 @@ export namespace Session {
               info: {
                 id: Identifier.ascending("message"),
                 role: "user",
-                mode: input.mode ?? "build",
+                mode: inputMode,
                 sessionID: input.sessionID,
                 time: {
                   created: Date.now(),
@@ -619,7 +620,7 @@ export namespace Session {
         .catch(() => {})
     }
 
-    const mode = await Mode.get(input.mode ?? "build")
+    const mode = await Mode.get(inputMode)
     let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
     system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
     system.push(...(await SystemPrompt.environment()))
@@ -632,7 +633,7 @@ export namespace Session {
       id: Identifier.ascending("message"),
       role: "assistant",
       system,
-      mode: input.mode ?? "build",
+      mode: inputMode,
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
