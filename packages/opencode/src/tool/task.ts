@@ -41,6 +41,7 @@ export const TaskTool = Tool.define({
       sessionID: session.id,
       modelID: msg.modelID,
       providerID: msg.providerID,
+      mode: msg.mode,
       tools: {
         todoread: false,
         todowrite: false,

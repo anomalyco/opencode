@@ -194,6 +194,7 @@ export namespace MessageV2 {
 
   export const User = Base.extend({
     role: z.literal("user"),
+    mode: z.string(),
     time: z.object({
       created: z.number(),
     }),
@@ -226,6 +227,7 @@ export namespace MessageV2 {
     system: z.string().array(),
     modelID: z.string(),
     providerID: z.string(),
+    mode: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
@@ -290,6 +292,7 @@ export namespace MessageV2 {
         modelID: v1.metadata.assistant!.modelID,
         providerID: v1.metadata.assistant!.providerID,
         system: v1.metadata.assistant!.system,
+        mode: "build",
         error: v1.metadata.error,
       }
       const parts = v1.parts.flatMap((part): Part[] => {
@@ -368,6 +371,7 @@ export namespace MessageV2 {
         id: v1.id,
         sessionID: v1.metadata.sessionID,
         role: "user",
+        mode: "build",
         time: {
           created: v1.metadata.time.created,
         },

@@ -373,6 +373,7 @@ export namespace Session {
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
+      mode: input.mode ?? "build",
       sessionID: input.sessionID,
       time: {
         created: Date.now(),
@@ -597,6 +598,7 @@ export namespace Session {
               info: {
                 id: Identifier.ascending("message"),
                 role: "user",
+                mode: input.mode ?? "build",
                 sessionID: input.sessionID,
                 time: {
                   created: Date.now(),
@@ -630,6 +632,7 @@ export namespace Session {
       id: Identifier.ascending("message"),
       role: "assistant",
       system,
+      mode: input.mode ?? "build",
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
@@ -1122,6 +1125,7 @@ export namespace Session {
       role: "assistant",
       sessionID: input.sessionID,
       system,
+      mode: "build",
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
