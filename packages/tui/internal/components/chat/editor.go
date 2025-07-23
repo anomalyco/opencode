@@ -176,7 +176,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.ThemeSelectedMsg:
 		m.textarea = updateTextareaStyles(m.textarea)
 		m.spinner = createSpinner()
-		return m, m.textarea.Focus()
+		return m, tea.Batch(m.textarea.Focus(), m.spinner.Tick)
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
