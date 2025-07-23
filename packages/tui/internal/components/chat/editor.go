@@ -128,6 +128,22 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.PasteMsg:
 		text := string(msg)
+
+		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
+			statPath := filePath
+			if !filepath.IsAbs(filePath) {
+				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+			}
+			if _, err := os.Stat(statPath); err == nil {
+				attachment := m.createAttachmentFromPath(filePath)
+				if attachment != nil {
+					m.textarea.InsertAttachment(attachment)
+					m.textarea.InsertString(" ")
+					return m, nil
+				}
+			}
+		}
+
 		text = strings.ReplaceAll(text, "\\", "")
 		text, err := strconv.Unquote(`"` + text + `"`)
 		if err != nil {
