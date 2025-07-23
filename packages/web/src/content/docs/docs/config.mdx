@@ -99,26 +99,6 @@ Logs are written to:
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: `%APPDATA%\opencode\log\`
 
-You can configure the minimum log level through the `log_level` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "log_level": "INFO"
-}
-```
-
-With the following options:
-
-| Level   | Description                              |
-| ------- | ---------------------------------------- |
-| `DEBUG` | All messages including debug information |
-| `INFO`  | Informational messages and above         |
-| `WARN`  | Warnings and errors only                 |
-| `ERROR` | Errors only                              |
-
-The **default** log level is `INFO`. If you are running opencode locally in development mode it's set to `DEBUG`.
-
 ---
 
 ### Sharing
