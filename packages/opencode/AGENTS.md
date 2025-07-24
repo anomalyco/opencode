@@ -38,3 +38,12 @@
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
 - **API Client**: Go TUI communicates with TypeScript server via stainless SDK. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, ask the user to generate a new client SDK to proceed with client-side changes.
+
+## Tests
+
+- **Collocate files:** Prefer tests to be in the same directory as the code they
+  test (eg: `src/tool/tool.ts` and `src/tool/tool.test.ts`)
+
+## Troubleshooting test errors
+
+- Test errors about `.openapi is undefined` may be solved by adding `import "zod-openapi/extend"` to the top of the test file
