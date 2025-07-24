@@ -20,15 +20,8 @@ export const EditTool = Tool.define({
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     oldString: z.string().describe("The text to replace"),
-    newString: z
-      .string()
-      .describe(
-        "The text to replace it with (must be different from old_string)",
-      ),
-    replaceAll: z
-      .boolean()
-      .optional()
-      .describe("Replace all occurrences of old_string (default false)"),
+    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
@@ -40,9 +33,7 @@ export const EditTool = Tool.define({
     }
 
     const app = App.info()
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(app.path.cwd, params.filePath)
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
 
     await Permission.ask({
       id: "edit",
@@ -70,17 +61,11 @@ export const EditTool = Tool.define({
       const file = Bun.file(filepath)
       const stats = await file.stat().catch(() => {})
       if (!stats) throw new Error(`File ${filepath} not found`)
-      if (stats.isDirectory())
-        throw new Error(`Path is a directory, not a file: ${filepath}`)
+      if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filepath}`)
       await FileTime.assert(ctx.sessionID, filepath)
       contentOld = await file.text()
 
-      contentNew = replace(
-        contentOld,
-        params.oldString,
-        params.newString,
-        params.replaceAll,
-      )
+      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
       await file.write(contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filepath,
@@ -88,9 +73,7 @@ export const EditTool = Tool.define({
       contentNew = await file.text()
     })()
 
-    const diff = trimDiff(
-      createTwoFilesPatch(filepath, filepath, contentOld, contentNew),
-    )
+    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
 
     FileTime.read(ctx.sessionID, filepath)
 
@@ -103,24 +86,24 @@ export const EditTool = Tool.define({
         output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
         continue
       }
-      output += `\n<project_diagnostics>\n${file}\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</project_diagnostics>\n`
+      output += `\n<project_diagnostics>\n${file}\n${issues
+        .filter((item) => item.severity === 1)
+        .map(LSP.Diagnostic.pretty)
+        .join("\n")}\n</project_diagnostics>\n`
     }
 
     return {
       metadata: {
         diagnostics,
         diff,
-        title: `${path.relative(app.path.root, filepath)}`,
       },
+      title: `${path.relative(app.path.root, filepath)}`,
       output,
     }
   },
 })
 
-export type Replacer = (
-  content: string,
-  find: string,
-) => Generator<string, void, unknown>
+export type Replacer = (content: string, find: string) => Generator<string, void, unknown>
 
 export const SimpleReplacer: Replacer = function* (_content, find) {
   yield find
@@ -208,10 +191,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
   }
 }
 
-export const WhitespaceNormalizedReplacer: Replacer = function* (
-  content,
-  find,
-) {
+export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) {
   const normalizeWhitespace = (text: string) => text.replace(/\s+/g, " ").trim()
   const normalizedFind = normalizeWhitespace(find)
 
@@ -229,9 +209,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
       // Find the actual substring in the original line that matches
       const words = find.trim().split(/\s+/)
       if (words.length > 0) {
-        const pattern = words
-          .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-          .join("\\s+")
+        const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
         try {
           const regex = new RegExp(pattern)
           const match = line.match(regex)
@@ -270,9 +248,7 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
       }),
     )
 
-    return lines
-      .map((line) => (line.trim().length === 0 ? line : line.slice(minIndent)))
-      .join("\n")
+    return lines.map((line) => (line.trim().length === 0 ? line : line.slice(minIndent))).join("\n")
   }
 
   const normalizedFind = removeIndentation(find)
@@ -423,10 +399,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
             }
           }
 
-          if (
-            totalNonEmptyLines === 0 ||
-            matchingLines / totalNonEmptyLines >= 0.5
-          ) {
+          if (totalNonEmptyLines === 0 || matchingLines / totalNonEmptyLines >= 0.5) {
             yield block
             break // Only match the first occurrence
           }
@@ -473,12 +446,7 @@ function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
-export function replace(
-  content: string,
-  oldString: string,
-  newString: string,
-  replaceAll = false,
-): string {
+export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
     throw new Error("oldString and newString must be different")
   }
@@ -489,10 +457,10 @@ export function replace(
     BlockAnchorReplacer,
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
-    EscapeNormalizedReplacer,
-    TrimmedBoundaryReplacer,
-    ContextAwareReplacer,
-    MultiOccurrenceReplacer,
+    // EscapeNormalizedReplacer,
+    // TrimmedBoundaryReplacer,
+    // ContextAwareReplacer,
+    // MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
@@ -502,11 +470,7 @@ export function replace(
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
-      return (
-        content.substring(0, index) +
-        newString +
-        content.substring(index + search.length)
-      )
+      return content.substring(0, index) + newString + content.substring(index + search.length)
     }
   }
   throw new Error("oldString not found in content or was found multiple times")

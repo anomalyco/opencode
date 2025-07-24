@@ -23,7 +23,7 @@ func Generate(text string) (string, int, error) {
 	}
 
 	// Create lipgloss style for QR code with theme colors
-	qrStyle := styles.NewStyleWithColors(t.Text(), t.Background())
+	qrStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 
 	var result strings.Builder
 

@@ -15,11 +15,7 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs
-      .command(AuthLoginCommand)
-      .command(AuthLogoutCommand)
-      .command(AuthListCommand)
-      .demandCommand(),
+    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
   async handler() {},
 })
 
@@ -31,9 +27,7 @@ export const AuthListCommand = cmd({
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
-    const displayPath = authPath.startsWith(homedir)
-      ? authPath.replace(homedir, "~")
-      : authPath
+    const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
     const results = await Auth.all().then((x) => Object.entries(x))
     const database = await ModelsDev.get()
@@ -84,6 +78,8 @@ export const AuthLoginCommand = cmd({
       "github-copilot": 1,
       openai: 2,
       google: 3,
+      openrouter: 4,
+      vercel: 5,
     }
     let provider = await prompts.select({
       message: "Select provider",
@@ -114,8 +110,7 @@ export const AuthLoginCommand = cmd({
     if (provider === "other") {
       provider = await prompts.text({
         message: "Enter provider id",
-        validate: (x) =>
-          x.match(/^[a-z-]+$/) ? undefined : "a-z and hyphens only",
+        validate: (x) => (x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       })
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
       provider = provider.replace(/^@ai-sdk\//, "")
@@ -127,7 +122,7 @@ export const AuthLoginCommand = cmd({
 
     if (provider === "amazon-bedrock") {
       prompts.log.info(
-        "Amazon bedrock can be configured with standard AWS environment variables like AWS_PROFILE or AWS_ACCESS_KEY_ID",
+        "Amazon bedrock can be configured with standard AWS environment variables like AWS_BEARER_TOKEN_BEDROCK, AWS_PROFILE or AWS_ACCESS_KEY_ID",
       )
       prompts.outro("Done")
       return
@@ -139,20 +134,24 @@ export const AuthLoginCommand = cmd({
         options: [
           {
             label: "Claude Pro/Max",
-            value: "oauth",
+            value: "max",
           },
           {
-            label: "API Key",
+            label: "Create API Key",
+            value: "console",
+          },
+          {
+            label: "Manually enter API Key",
             value: "api",
           },
         ],
       })
       if (prompts.isCancel(method)) throw new UI.CancelledError()
 
-      if (method === "oauth") {
+      if (method === "max") {
         // some weird bug where program exits without this
         await new Promise((resolve) => setTimeout(resolve, 10))
-        const { url, verifier } = await AuthAnthropic.authorize()
+        const { url, verifier } = await AuthAnthropic.authorize("max")
         prompts.note("Trying to open browser...")
         try {
           await open(url)
@@ -169,13 +168,66 @@ export const AuthLoginCommand = cmd({
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
-        await AuthAnthropic.exchange(code, verifier)
-          .then(() => {
-            prompts.log.success("Login successful")
+        try {
+          const credentials = await AuthAnthropic.exchange(code, verifier)
+          await Auth.set("anthropic", {
+            type: "oauth",
+            refresh: credentials.refresh,
+            access: credentials.access,
+            expires: credentials.expires,
           })
-          .catch(() => {
-            prompts.log.error("Invalid code")
+          prompts.log.success("Login successful")
+        } catch {
+          prompts.log.error("Invalid code")
+        }
+        prompts.outro("Done")
+        return
+      }
+
+      if (method === "console") {
+        // some weird bug where program exits without this
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const { url, verifier } = await AuthAnthropic.authorize("console")
+        prompts.note("Trying to open browser...")
+        try {
+          await open(url)
+        } catch (e) {
+          prompts.log.error(
+            "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
+          )
+        }
+        prompts.log.info(url)
+
+        const code = await prompts.text({
+          message: "Paste the authorization code here: ",
+          validate: (x) => (x.length > 0 ? undefined : "Required"),
+        })
+        if (prompts.isCancel(code)) throw new UI.CancelledError()
+
+        try {
+          const credentials = await AuthAnthropic.exchange(code, verifier)
+          const accessToken = credentials.access
+          const response = await fetch("https://api.anthropic.com/api/oauth/claude_cli/create_api_key", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json, text/plain, */*",
+            },
           })
+          if (!response.ok) {
+            throw new Error("Failed to create API key")
+          }
+          const json = await response.json()
+          await Auth.set("anthropic", {
+            type: "api",
+            key: json.raw_key,
+          })
+
+          prompts.log.success("Login successful - API key created and saved")
+        } catch (error) {
+          prompts.log.error("Invalid code or failed to create API key")
+        }
         prompts.outro("Done")
         return
       }
@@ -186,17 +238,13 @@ export const AuthLoginCommand = cmd({
       await new Promise((resolve) => setTimeout(resolve, 10))
       const deviceInfo = await copilot.authorize()
 
-      prompts.note(
-        `Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`,
-      )
+      prompts.note(`Please visit: ${deviceInfo.verification}\nEnter code: ${deviceInfo.user}`)
 
       const spinner = prompts.spinner()
       spinner.start("Waiting for authorization...")
 
       while (true) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, deviceInfo.interval * 1000),
-        )
+        await new Promise((resolve) => setTimeout(resolve, deviceInfo.interval * 1000))
         const response = await copilot.poll(deviceInfo.device)
         if (response.status === "pending") continue
         if (response.status === "success") {
@@ -217,6 +265,10 @@ export const AuthLoginCommand = cmd({
 
       prompts.outro("Done")
       return
+    }
+
+    if (provider === "vercel") {
+      prompts.log.info("You can create an api key in the dashboard")
     }
 
     const key = await prompts.password({
@@ -248,12 +300,7 @@ export const AuthLogoutCommand = cmd({
     const providerID = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
-        label:
-          (database[key]?.name || key) +
-          UI.Style.TEXT_DIM +
-          " (" +
-          value.type +
-          ")",
+        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
     })

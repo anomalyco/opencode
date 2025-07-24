@@ -14,9 +14,7 @@ export const WebFetchTool = Tool.define({
     url: z.string().describe("The URL to fetch content from"),
     format: z
       .enum(["text", "markdown", "html"])
-      .describe(
-        "The format to return the content in (text, markdown, or html)",
-      ),
+      .describe("The format to return the content in (text, markdown, or html)"),
     timeout: z
       .number()
       .min(0)
@@ -26,17 +24,11 @@ export const WebFetchTool = Tool.define({
   }),
   async execute(params, ctx) {
     // Validate URL
-    if (
-      !params.url.startsWith("http://") &&
-      !params.url.startsWith("https://")
-    ) {
+    if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
 
-    const timeout = Math.min(
-      (params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000,
-      MAX_TIMEOUT,
-    )
+    const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
@@ -46,8 +38,7 @@ export const WebFetchTool = Tool.define({
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
     })
@@ -79,16 +70,14 @@ export const WebFetchTool = Tool.define({
           const text = await extractTextFromHTML(content)
           return {
             output: text,
-            metadata: {
-              title,
-            },
+            title,
+            metadata: {},
           }
         }
         return {
           output: content,
-          metadata: {
-            title,
-          },
+          title,
+          metadata: {},
         }
 
       case "markdown":
@@ -96,32 +85,28 @@ export const WebFetchTool = Tool.define({
           const markdown = convertHTMLToMarkdown(content)
           return {
             output: markdown,
-            metadata: {
-              title,
-            },
+            title,
+            metadata: {},
           }
         }
         return {
           output: "```\n" + content + "\n```",
-          metadata: {
-            title,
-          },
+          title,
+          metadata: {},
         }
 
       case "html":
         return {
           output: content,
-          metadata: {
-            title,
-          },
+          title,
+          metadata: {},
         }
 
       default:
         return {
           output: content,
-          metadata: {
-            title,
-          },
+          title,
+          metadata: {},
         }
     }
   },
@@ -143,16 +128,7 @@ async function extractTextFromHTML(html: string) {
     .on("*", {
       element(element) {
         // Reset skip flag when entering other elements
-        if (
-          ![
-            "script",
-            "style",
-            "noscript",
-            "iframe",
-            "object",
-            "embed",
-          ].includes(element.tagName)
-        ) {
+        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
           skipContent = false
         }
       },

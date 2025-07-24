@@ -1,6 +1,8 @@
 import { App } from "../app/app"
+import { Log } from "../util/log"
 
 export namespace FileTime {
+  const log = Log.create({ service: "file.time" })
   export const state = App.state("tool.filetimes", () => {
     const read: {
       [sessionID: string]: {
@@ -13,6 +15,7 @@ export namespace FileTime {
   })
 
   export function read(sessionID: string, file: string) {
+    log.info("read", { sessionID, file })
     const { read } = state()
     read[sessionID] = read[sessionID] || {}
     read[sessionID][file] = new Date()
@@ -24,10 +27,7 @@ export namespace FileTime {
 
   export async function assert(sessionID: string, filepath: string) {
     const time = get(sessionID, filepath)
-    if (!time)
-      throw new Error(
-        `You must read the file ${filepath} before overwriting it. Use the Read tool first`,
-      )
+    if (!time) throw new Error(`You must read the file ${filepath} before overwriting it. Use the Read tool first`)
     const stats = await Bun.file(filepath).stat()
     if (stats.mtime.getTime() > time.getTime()) {
       throw new Error(

@@ -34,6 +34,7 @@ resources:
     models:
       unknownError: UnknownError
       providerAuthError: ProviderAuthError
+      messageAbortedError: MessageAbortedError
 
   event:
     methods:
@@ -47,17 +48,29 @@ resources:
   app:
     models:
       app: App
+      logLevel: LogLevel
+      provider: Provider
+      model: Model
+      mode: Mode
     methods:
       get: get /app
       init: post /app/init
+      log: post /log
+      modes: get /mode
+      providers: get /config/providers
 
   find:
+    models:
+      match: Match
+      symbol: Symbol
     methods:
       text: get /find
       files: get /find/file
       symbols: get /find/symbol
 
   file:
+    models:
+      file: File
     methods:
       read: get /file
       status: get /file/status
@@ -65,29 +78,37 @@ resources:
   config:
     models:
       config: Config
-      keybinds: KeybindsConfig
-      mcpLocal: McpLocalConfig
-      mcpRemote: McpRemoteConfig
-      provider: Provider
-      model: Model
+      keybindsConfig: KeybindsConfig
+      mcpLocalConfig: McpLocalConfig
+      mcpRemoteConfig: McpRemoteConfig
+      modeConfig: ModeConfig
     methods:
       get: get /config
-      providers: get /config/providers
 
   session:
     models:
       session: Session
       message: Message
-      toolCall: ToolCall
-      toolPartialCall: ToolPartialCall
-      toolResult: ToolResult
+      part: Part
       textPart: TextPart
-      reasoningPart: ReasoningPart
-      toolInvocationPart: ToolInvocationPart
-      sourceUrlPart: SourceUrlPart
+      textPartInput: TextPartInput
       filePart: FilePart
+      filePartInput: FilePartInput
+      filePartSourceText: FilePartSourceText
+      filePartSource: FilePartSource
+      fileSource: FileSource
+      symbolSource: SymbolSource
+      toolPart: ToolPart
       stepStartPart: StepStartPart
-      messagePart: MessagePart
+      stepFinishPart: StepFinishPart
+      snapshotPart: SnapshotPart
+      assistantMessage: AssistantMessage
+      userMessage: UserMessage
+      toolStatePending: ToolStatePending
+      toolStateRunning: ToolStateRunning
+      toolStateCompleted: ToolStateCompleted
+      toolStateError: ToolStateError
+
     methods:
       list: get /session
       create: post /session
@@ -99,10 +120,17 @@ resources:
       summarize: post /session/{id}/summarize
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      revert: post /session/{id}/revert
+      unrevert: post /session/{id}/unrevert
+
+  tui:
+    methods:
+      appendPrompt: post /tui/append-prompt
+      openHelp: post /tui/open-help
 
 settings:
   disable_mock_tests: true
-  license: Apache-2.0
+  license: MIT
 
 security:
   - {}
@@ -111,9 +139,13 @@ readme:
   example_requests:
     default:
       type: request
-      endpoint: get /event
+      endpoint: get /session
       params: {}
     headline:
+      type: request
+      endpoint: get /session
+      params: {}
+    streaming:
       type: request
       endpoint: get /event
       params: {}

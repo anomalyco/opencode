@@ -6,3 +6,6 @@ cd "$(dirname "$0")/.."
 
 echo "==> Running Go build"
 go build ./...
+
+echo "==> Checking tests compile"
+go test -run=^$ ./...

@@ -36,6 +36,10 @@ if (isDocs) {
 }
 ---
 
+{ slug === "" && (
+<title>{title} | AI coding agent built for the terminal</title>
+)}
+
 <Default {...Astro.props}><slot /></Default>
 
 { (isDocs || !slug.startsWith("s")) && (

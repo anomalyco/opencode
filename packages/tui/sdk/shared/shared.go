@@ -6,6 +6,47 @@ import (
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 )
 
+type MessageAbortedError struct {
+	Data interface{}             `json:"data,required"`
+	Name MessageAbortedErrorName `json:"name,required"`
+	JSON messageAbortedErrorJSON `json:"-"`
+}
+
+// messageAbortedErrorJSON contains the JSON metadata for the struct
+// [MessageAbortedError]
+type messageAbortedErrorJSON struct {
+	Data        apijson.Field
+	Name        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *MessageAbortedError) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r messageAbortedErrorJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r MessageAbortedError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
+
+func (r MessageAbortedError) ImplementsAssistantMessageError() {}
+
+type MessageAbortedErrorName string
+
+const (
+	MessageAbortedErrorNameMessageAbortedError MessageAbortedErrorName = "MessageAbortedError"
+)
+
+func (r MessageAbortedErrorName) IsKnown() bool {
+	switch r {
+	case MessageAbortedErrorNameMessageAbortedError:
+		return true
+	}
+	return false
+}
+
 type ProviderAuthError struct {
 	Data ProviderAuthErrorData `json:"data,required"`
 	Name ProviderAuthErrorName `json:"name,required"`
@@ -31,7 +72,7 @@ func (r providerAuthErrorJSON) RawJSON() string {
 
 func (r ProviderAuthError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
 
-func (r ProviderAuthError) ImplementsMessageMetadataError() {}
+func (r ProviderAuthError) ImplementsAssistantMessageError() {}
 
 type ProviderAuthErrorData struct {
 	Message    string                    `json:"message,required"`
@@ -94,7 +135,7 @@ func (r unknownErrorJSON) RawJSON() string {
 
 func (r UnknownError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
 
-func (r UnknownError) ImplementsMessageMetadataError() {}
+func (r UnknownError) ImplementsAssistantMessageError() {}
 
 type UnknownErrorData struct {
 	Message string               `json:"message,required"`

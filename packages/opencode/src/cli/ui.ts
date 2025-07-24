@@ -76,4 +76,8 @@ export namespace UI {
   export function error(message: string) {
     println(Style.TEXT_DANGER_BOLD + "Error: " + Style.TEXT_NORMAL + message)
   }
+
+  export function markdown(text: string): string {
+    return text
+  }
 }

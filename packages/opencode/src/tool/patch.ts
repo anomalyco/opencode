@@ -6,9 +6,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./patch.txt"
 
 const PatchParams = z.object({
-  patchText: z
-    .string()
-    .describe("The full patch text that describes all changes to be made"),
+  patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
 
 interface Change {
@@ -42,10 +40,7 @@ function identifyFilesNeeded(patchText: string): string[] {
   const files: string[] = []
   const lines = patchText.split("\n")
   for (const line of lines) {
-    if (
-      line.startsWith("*** Update File:") ||
-      line.startsWith("*** Delete File:")
-    ) {
+    if (line.startsWith("*** Update File:") || line.startsWith("*** Delete File:")) {
       const filePath = line.split(":", 2)[1]?.trim()
       if (filePath) files.push(filePath)
     }
@@ -65,10 +60,7 @@ function identifyFilesAdded(patchText: string): string[] {
   return files
 }
 
-function textToPatch(
-  patchText: string,
-  _currentFiles: Record<string, string>,
-): [PatchOperation[], number] {
+function textToPatch(patchText: string, _currentFiles: Record<string, string>): [PatchOperation[], number] {
   const operations: PatchOperation[] = []
   const lines = patchText.split("\n")
   let i = 0
@@ -93,11 +85,7 @@ function textToPatch(
           const changes: PatchChange[] = []
           i++
 
-          while (
-            i < lines.length &&
-            !lines[i].startsWith("@@") &&
-            !lines[i].startsWith("***")
-          ) {
+          while (i < lines.length && !lines[i].startsWith("@@") && !lines[i].startsWith("***")) {
             const changeLine = lines[i]
             if (changeLine.startsWith(" ")) {
               changes.push({ type: "keep", content: changeLine.substring(1) })
@@ -151,10 +139,7 @@ function textToPatch(
   return [operations, fuzz]
 }
 
-function patchToCommit(
-  operations: PatchOperation[],
-  currentFiles: Record<string, string>,
-): Commit {
+function patchToCommit(operations: PatchOperation[], currentFiles: Record<string, string>): Commit {
   const changes: Record<string, Change> = {}
 
   for (const op of operations) {
@@ -173,9 +158,7 @@ function patchToCommit(
       const lines = originalContent.split("\n")
 
       for (const hunk of op.hunks) {
-        const contextIndex = lines.findIndex((line) =>
-          line.includes(hunk.contextLine),
-        )
+        const contextIndex = lines.findIndex((line) => line.includes(hunk.contextLine))
         if (contextIndex === -1) {
           throw new Error(`Context line not found: ${hunk.contextLine}`)
         }
@@ -204,11 +187,7 @@ function patchToCommit(
   return { changes }
 }
 
-function generateDiff(
-  oldContent: string,
-  newContent: string,
-  filePath: string,
-): [string, number, number] {
+function generateDiff(oldContent: string, newContent: string, filePath: string): [string, number, number] {
   // Mock implementation - would need actual diff generation
   const lines1 = oldContent.split("\n")
   const lines2 = newContent.split("\n")
@@ -296,9 +275,7 @@ export const PatchTool = Tool.define({
     // Process the patch
     const [patch, fuzz] = textToPatch(params.patchText, currentFiles)
     if (fuzz > 3) {
-      throw new Error(
-        `patch contains fuzzy matches (fuzz level: ${fuzz}). Please make your context lines more precise`,
-      )
+      throw new Error(`patch contains fuzzy matches (fuzz level: ${fuzz}). Please make your context lines more precise`)
     }
 
     // Convert patch to commit
@@ -343,11 +320,7 @@ export const PatchTool = Tool.define({
       const newContent = change.new_content || ""
 
       // Calculate diff statistics
-      const [, additions, removals] = generateDiff(
-        oldContent,
-        newContent,
-        filePath,
-      )
+      const [, additions, removals] = generateDiff(oldContent, newContent, filePath)
       totalAdditions += additions
       totalRemovals += removals
 
@@ -358,11 +331,11 @@ export const PatchTool = Tool.define({
     const output = result
 
     return {
+      title: `${filesToRead.length} files`,
       metadata: {
         changed: changedFiles,
         additions: totalAdditions,
         removals: totalRemovals,
-        title: `${filesToRead.length} files`,
       },
       output,
     }

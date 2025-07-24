@@ -9,7 +9,7 @@
 </p>
 <p align="center">AI coding agent, built for the terminal.</p>
 <p align="center">
-  <a href="https://opencode.ai/docs"><img alt="View docs" src="https://img.shields.io/badge/view-docs-blue?style=flat-square" /></a>
+  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
@@ -30,7 +30,23 @@ brew install sst/tap/opencode      # macOS
 paru -S opencode-bin               # Arch Linux
 ```
 
-> **Note:** Remove versions older than 0.1.x before installing
+> [!TIP]
+> Remove versions older than 0.1.x before installing.
+
+#### Installation Directory
+
+The install script respects the following priority order for the installation path:
+
+1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
+2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
+3. `$HOME/bin` - Standard user binary directory (if exists or can be created)
+4. `$HOME/.opencode/bin` - Default fallback
+
+```bash
+# Examples
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+```
 
 ### Documentation
 
@@ -38,10 +54,25 @@ For more info on how to configure opencode [**head over to our docs**](https://o
 
 ### Contributing
 
-For any new features we'd appreciate it if you could open an issue first to discuss what you'd like to implement. We're pretty responsive there and it'll save you from working on something that we don't end up using. No need to do this for simpler fixes.
+opencode is an opinionated tool so any fundamental feature needs to go through a
+design process with the core team.
 
-> **Note**: Please talk to us via github issues before spending time working on
-> a new feature
+> [!IMPORTANT]
+> We do not accept PRs for core features.
+
+However we still merge a ton of PRs - you can contribute:
+
+- Bug fixes
+- Improvements to LLM performance
+- Support for new providers
+- Fixes for env specific quirks
+- Missing standard behavior
+- Documentation
+
+Take a look at the git history to see what kind of PRs we end up merging.
+
+> [!NOTE]
+> If you do not follow the above guidelines we might close your PR.
 
 To run opencode locally you need.
 
@@ -76,4 +107,4 @@ The other confusingly named repo has no relation to this one. You can [read the 
 
 ---
 
-**Join our community** [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/SST_dev)
+**Join our community** [Discord](https://discord.gg/opencode) | [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/SST_dev)

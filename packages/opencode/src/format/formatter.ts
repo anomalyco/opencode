@@ -1,5 +1,7 @@
 import { App } from "../app/app"
 import { BunProc } from "../bun"
+import { Filesystem } from "../util/filesystem"
+import path from "path"
 
 export interface Info {
   name: string
@@ -29,7 +31,7 @@ export const mix: Info = {
 
 export const prettier: Info = {
   name: "prettier",
-  command: [BunProc.which(), "run", "prettier", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "prettier", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -62,23 +64,12 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    // this is more complicated because we only want to use prettier if it's
-    // being used with the current project
-    try {
-      const proc = Bun.spawn({
-        cmd: [BunProc.which(), "run", "prettier", "--version"],
-        cwd: App.info().path.cwd,
-        env: {
-          BUN_BE_BUN: "1",
-        },
-        stdout: "ignore",
-        stderr: "ignore",
-      })
-      const exit = await proc.exited
-      return exit === 0
-    } catch {
-      return false
+    const app = App.info()
+    const nms = await Filesystem.findUp("node_modules", app.path.cwd, app.path.root)
+    for (const item of nms) {
+      if (await Bun.file(path.join(item, ".bin", "prettier")).exists()) return true
     }
+    return false
   },
 }
 
@@ -94,21 +85,7 @@ export const zig: Info = {
 export const clang: Info = {
   name: "clang-format",
   command: ["clang-format", "-i", "$FILE"],
-  extensions: [
-    ".c",
-    ".cc",
-    ".cpp",
-    ".cxx",
-    ".c++",
-    ".h",
-    ".hh",
-    ".hpp",
-    ".hxx",
-    ".h++",
-    ".ino",
-    ".C",
-    ".H",
-  ],
+  extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
     return Bun.which("clang-format") !== null
   },
@@ -128,7 +105,29 @@ export const ruff: Info = {
   command: ["ruff", "format", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
-    return Bun.which("ruff") !== null
+    if (!Bun.which("ruff")) return false
+    const app = App.info()
+    const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, app.path.cwd, app.path.root)
+      if (found.length > 0) {
+        if (config === "pyproject.toml") {
+          const content = await Bun.file(found[0]).text()
+          if (content.includes("[tool.ruff]")) return true
+        } else {
+          return true
+        }
+      }
+    }
+    const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
+    for (const dep of deps) {
+      const found = await Filesystem.findUp(dep, app.path.cwd, app.path.root)
+      if (found.length > 0) {
+        const content = await Bun.file(found[0]).text()
+        if (content.includes("ruff")) return true
+      }
+    }
+    return false
   },
 }
 

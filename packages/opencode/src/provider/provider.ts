@@ -21,7 +21,7 @@ import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
-// import { TaskTool } from "../tool/task"
+import { TaskTool } from "../tool/task"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -91,8 +91,7 @@ export namespace Provider {
             if (!info || info.type !== "oauth") return
             if (!info.access || info.expires < Date.now()) {
               const tokens = await copilot.access(info.refresh)
-              if (!tokens)
-                throw new Error("GitHub Copilot authentication expired")
+              if (!tokens) throw new Error("GitHub Copilot authentication expired")
               await Auth.set("github-copilot", {
                 type: "oauth",
                 ...tokens,
@@ -100,24 +99,26 @@ export namespace Provider {
               info.access = tokens.access
             }
             let isAgentCall = false
+            let isVisionRequest = false
             try {
-              const body =
-                typeof init.body === "string"
-                  ? JSON.parse(init.body)
-                  : init.body
+              const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body
               if (body?.messages) {
-                isAgentCall = body.messages.some(
+                isAgentCall = body.messages.some((msg: any) => msg.role && ["tool", "assistant"].includes(msg.role))
+                isVisionRequest = body.messages.some(
                   (msg: any) =>
-                    msg.role && ["tool", "assistant"].includes(msg.role),
+                    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                 )
               }
             } catch {}
-            const headers = {
+            const headers: Record<string, string> = {
               ...init.headers,
               ...copilot.HEADERS,
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
               "X-Initiator": isAgentCall ? "agent" : "user",
+            }
+            if (isVisionRequest) {
+              headers["Copilot-Vision-Request"] = "true"
             }
             delete headers["x-api-key"]
             return fetch(input, {
@@ -138,14 +139,12 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"])
+      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"] && !process.env["AWS_BEARER_TOKEN_BEDROCK"])
         return { autoload: false }
 
       const region = process.env["AWS_REGION"] ?? "us-east-1"
 
-      const { fromNodeProviderChain } = await import(
-        await BunProc.install("@aws-sdk/credential-providers")
-      )
+      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
@@ -157,9 +156,7 @@ export namespace Provider {
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = ["claude", "deepseek"].some((m) =>
-                modelID.includes(m),
-              )
+              const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
               if (modelRequiresPrefix) {
                 modelID = `${regionPrefix}.${modelID}`
               }
@@ -174,25 +171,18 @@ export namespace Provider {
                 "eu-south-1",
                 "eu-south-2",
               ].some((r) => region.includes(r))
-              const modelRequiresPrefix = [
-                "claude",
-                "nova-lite",
-                "nova-micro",
-                "llama3",
-                "pixtral",
-              ].some((m) => modelID.includes(m))
+              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
+                modelID.includes(m),
+              )
               if (regionRequiresPrefix && modelRequiresPrefix) {
                 modelID = `${regionPrefix}.${modelID}`
               }
               break
             }
             case "ap": {
-              const modelRequiresPrefix = [
-                "claude",
-                "nova-lite",
-                "nova-micro",
-                "nova-pro",
-              ].some((m) => modelID.includes(m))
+              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                modelID.includes(m),
+              )
               if (modelRequiresPrefix) {
                 regionPrefix = "apac"
                 modelID = `${regionPrefix}.${modelID}`
@@ -230,10 +220,7 @@ export namespace Provider {
         options: Record<string, any>
       }
     } = {}
-    const models = new Map<
-      string,
-      { info: ModelsDev.Model; language: LanguageModel }
-    >()
+    const models = new Map<string, { info: ModelsDev.Model; language: LanguageModel }>()
     const sdk = new Map<string, SDK>()
 
     log.info("init")
@@ -248,7 +235,7 @@ export namespace Provider {
       if (!provider) {
         const info = database[id]
         if (!info) return
-        if (info.api) options["baseURL"] = info.api
+        if (info.api && !options["baseURL"]) options["baseURL"] = info.api
         providers[id] = {
           source,
           info,
@@ -285,14 +272,20 @@ export namespace Provider {
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
           temperature: model.temperature ?? existing?.temperature ?? false,
           tool_call: model.tool_call ?? existing?.tool_call ?? true,
-          cost: {
-            ...existing?.cost,
-            ...model.cost,
-            input: 0,
-            output: 0,
-            cache_read: 0,
-            cache_write: 0,
-          },
+          cost:
+            !model.cost && !existing?.cost
+              ? {
+                  input: 0,
+                  output: 0,
+                  cache_read: 0,
+                  cache_write: 0,
+                }
+              : {
+                  cache_read: 0,
+                  cache_write: 0,
+                  ...existing?.cost,
+                  ...model.cost,
+                },
           options: {
             ...existing?.options,
             ...model.options,
@@ -308,9 +301,7 @@ export namespace Provider {
       database[providerID] = parsed
     }
 
-    const disabled = await Config.get().then(
-      (cfg) => new Set(cfg.disabled_providers ?? []),
-    )
+    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
@@ -337,12 +328,7 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       const result = await fn(database[providerID])
       if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(
-          providerID,
-          result.options ?? {},
-          "custom",
-          result.getModel,
-        )
+        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
       }
     }
 
@@ -379,9 +365,12 @@ export namespace Provider {
       const existing = s.sdk.get(provider.id)
       if (existing) return existing
       const pkg = provider.npm ?? provider.id
-      const mod = await import(await BunProc.install(pkg, "latest"))
+      const mod = await import(await BunProc.install(pkg, "beta"))
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn(s.providers[provider.id]?.options)
+      const loaded = fn({
+        name: provider.id,
+        ...s.providers[provider.id]?.options,
+      })
       s.sdk.set(provider.id, loaded)
       return loaded as SDK
     })().catch((e) => {
@@ -406,9 +395,7 @@ export namespace Provider {
     const sdk = await getSDK(provider.info)
 
     try {
-      const language = provider.getModel
-        ? await provider.getModel(sdk, modelID)
-        : sdk.languageModel(modelID)
+      const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         info,
@@ -431,14 +418,29 @@ export namespace Provider {
     }
   }
 
+  export async function getSmallModel(providerID: string) {
+    const cfg = await Config.get()
+
+    if (cfg.small_model) {
+      const parsed = parseModel(cfg.small_model)
+      return getModel(parsed.providerID, parsed.modelID)
+    }
+
+    const provider = await state().then((state) => state.providers[providerID])
+    if (!provider) return
+    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"]
+    for (const item of priority) {
+      for (const model of Object.keys(provider.info.models)) {
+        if (model.includes(item)) return getModel(providerID, model)
+      }
+    }
+  }
+
   const priority = ["gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
-      [
-        (model) => priority.findIndex((filter) => model.id.includes(filter)),
-        "desc",
-      ],
+      [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],
     )
@@ -449,11 +451,7 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
     const provider = await list()
       .then((val) => Object.values(val))
-      .then((x) =>
-        x.find(
-          (p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id),
-        ),
-      )
+      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.info.models))
     if (!model) throw new Error("no models found")
@@ -486,7 +484,7 @@ export namespace Provider {
     WriteTool,
     TodoWriteTool,
     TodoReadTool,
-    // TaskTool,
+    TaskTool,
   ]
 
   const TOOL_MAPPING: Record<string, Tool.Info[]> = {
@@ -499,7 +497,10 @@ export namespace Provider {
       ...t,
       parameters: optionalToNullable(t.parameters),
     })),
-    google: TOOLS,
+    google: TOOLS.map((t) => ({
+      ...t,
+      parameters: sanitizeGeminiParameters(t.parameters),
+    })),
   }
 
   export async function tools(providerID: string) {
@@ -513,6 +514,60 @@ export namespace Provider {
     return TOOL_MAPPING[providerID] ?? TOOLS
   }
 
+  function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {
+    if (!schema || visited.has(schema)) {
+      return schema
+    }
+    visited.add(schema)
+
+    if (schema instanceof z.ZodDefault) {
+      const innerSchema = schema.removeDefault()
+      // Handle Gemini's incompatibility with `default` on `anyOf` (unions).
+      if (innerSchema instanceof z.ZodUnion) {
+        // The schema was `z.union(...).default(...)`, which is not allowed.
+        // We strip the default and return the sanitized union.
+        return sanitizeGeminiParameters(innerSchema, visited)
+      }
+      // Otherwise, the default is on a regular type, which is allowed.
+      // We recurse on the inner type and then re-apply the default.
+      return sanitizeGeminiParameters(innerSchema, visited).default(schema._def.defaultValue())
+    }
+
+    if (schema instanceof z.ZodOptional) {
+      return z.optional(sanitizeGeminiParameters(schema.unwrap(), visited))
+    }
+
+    if (schema instanceof z.ZodObject) {
+      const newShape: Record<string, z.ZodTypeAny> = {}
+      for (const [key, value] of Object.entries(schema.shape)) {
+        newShape[key] = sanitizeGeminiParameters(value as z.ZodTypeAny, visited)
+      }
+      return z.object(newShape)
+    }
+
+    if (schema instanceof z.ZodArray) {
+      return z.array(sanitizeGeminiParameters(schema.element, visited))
+    }
+
+    if (schema instanceof z.ZodUnion) {
+      // This schema corresponds to `anyOf` in JSON Schema.
+      // We recursively sanitize each option in the union.
+      const sanitizedOptions = schema.options.map((option: z.ZodTypeAny) => sanitizeGeminiParameters(option, visited))
+      return z.union(sanitizedOptions as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+    }
+
+    if (schema instanceof z.ZodString) {
+      const newSchema = z.string({ description: schema.description })
+      const safeChecks = ["min", "max", "length", "regex", "startsWith", "endsWith", "includes", "trim"]
+      // rome-ignore lint/suspicious/noExplicitAny: <explanation>
+      ;(newSchema._def as any).checks = (schema._def as z.ZodStringDef).checks.filter((check) =>
+        safeChecks.includes(check.kind),
+      )
+      return newSchema
+    }
+
+    return schema
+  }
   function optionalToNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
     if (schema instanceof z.ZodObject) {
       const shape = schema.shape
@@ -536,9 +591,11 @@ export namespace Provider {
 
     if (schema instanceof z.ZodUnion) {
       return z.union(
-        schema.options.map((option: z.ZodTypeAny) =>
-          optionalToNullable(option),
-        ) as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]],
+        schema.options.map((option: z.ZodTypeAny) => optionalToNullable(option)) as [
+          z.ZodTypeAny,
+          z.ZodTypeAny,
+          ...z.ZodTypeAny[],
+        ],
       )
     }
 
@@ -557,14 +614,6 @@ export namespace Provider {
     "ProviderInitError",
     z.object({
       providerID: z.string(),
-    }),
-  )
-
-  export const AuthError = NamedError.create(
-    "ProviderAuthError",
-    z.object({
-      providerID: z.string(),
-      message: z.string(),
     }),
   )
 }

@@ -42,11 +42,53 @@ func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...op
 }
 
 // Get file status
-func (r *FileService) Status(ctx context.Context, opts ...option.RequestOption) (res *[]FileStatusResponse, err error) {
+func (r *FileService) Status(ctx context.Context, opts ...option.RequestOption) (res *[]File, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "file/status"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return
+}
+
+type File struct {
+	Added   int64      `json:"added,required"`
+	Path    string     `json:"path,required"`
+	Removed int64      `json:"removed,required"`
+	Status  FileStatus `json:"status,required"`
+	JSON    fileJSON   `json:"-"`
+}
+
+// fileJSON contains the JSON metadata for the struct [File]
+type fileJSON struct {
+	Added       apijson.Field
+	Path        apijson.Field
+	Removed     apijson.Field
+	Status      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *File) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r fileJSON) RawJSON() string {
+	return r.raw
+}
+
+type FileStatus string
+
+const (
+	FileStatusAdded    FileStatus = "added"
+	FileStatusDeleted  FileStatus = "deleted"
+	FileStatusModified FileStatus = "modified"
+)
+
+func (r FileStatus) IsKnown() bool {
+	switch r {
+	case FileStatusAdded, FileStatusDeleted, FileStatusModified:
+		return true
+	}
+	return false
 }
 
 type FileReadResponse struct {
@@ -82,49 +124,6 @@ const (
 func (r FileReadResponseType) IsKnown() bool {
 	switch r {
 	case FileReadResponseTypeRaw, FileReadResponseTypePatch:
-		return true
-	}
-	return false
-}
-
-type FileStatusResponse struct {
-	Added   int64                    `json:"added,required"`
-	File    string                   `json:"file,required"`
-	Removed int64                    `json:"removed,required"`
-	Status  FileStatusResponseStatus `json:"status,required"`
-	JSON    fileStatusResponseJSON   `json:"-"`
-}
-
-// fileStatusResponseJSON contains the JSON metadata for the struct
-// [FileStatusResponse]
-type fileStatusResponseJSON struct {
-	Added       apijson.Field
-	File        apijson.Field
-	Removed     apijson.Field
-	Status      apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *FileStatusResponse) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r fileStatusResponseJSON) RawJSON() string {
-	return r.raw
-}
-
-type FileStatusResponseStatus string
-
-const (
-	FileStatusResponseStatusAdded    FileStatusResponseStatus = "added"
-	FileStatusResponseStatusDeleted  FileStatusResponseStatus = "deleted"
-	FileStatusResponseStatusModified FileStatusResponseStatus = "modified"
-)
-
-func (r FileStatusResponseStatus) IsKnown() bool {
-	switch r {
-	case FileStatusResponseStatusAdded, FileStatusResponseStatusDeleted, FileStatusResponseStatusModified:
 		return true
 	}
 	return false

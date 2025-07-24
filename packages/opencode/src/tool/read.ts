@@ -7,7 +7,6 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { App } from "../app/app"
 
-const MAX_READ_SIZE = 250 * 1024
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 
@@ -16,14 +15,8 @@ export const ReadTool = Tool.define({
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The path to the file to read"),
-    offset: z
-      .number()
-      .describe("The line number to start reading from (0-based)")
-      .optional(),
-    limit: z
-      .number()
-      .describe("The number of lines to read (defaults to 2000)")
-      .optional(),
+    offset: z.number().describe("The line number to start reading from (0-based)").optional(),
+    limit: z.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
     let filePath = params.filePath
@@ -40,38 +33,25 @@ export const ReadTool = Tool.define({
       const suggestions = dirEntries
         .filter(
           (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) ||
-            base.toLowerCase().includes(entry.toLowerCase()),
+            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
         )
         .map((entry) => path.join(dir, entry))
         .slice(0, 3)
 
       if (suggestions.length > 0) {
-        throw new Error(
-          `File not found: ${filePath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`,
-        )
+        throw new Error(`File not found: ${filePath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
       }
 
       throw new Error(`File not found: ${filePath}`)
     }
-    const stats = await file.stat()
 
-    if (stats.size > MAX_READ_SIZE)
-      throw new Error(
-        `File is too large (${stats.size} bytes). Maximum size is ${MAX_READ_SIZE} bytes`,
-      )
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const isImage = isImageFile(filePath)
-    if (isImage)
-      throw new Error(
-        `This is an image file of type: ${isImage}\nUse a different tool to process images`,
-      )
+    if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
     const lines = await file.text().then((text) => text.split("\n"))
     const raw = lines.slice(offset, offset + limit).map((line) => {
-      return line.length > MAX_LINE_LENGTH
-        ? line.substring(0, MAX_LINE_LENGTH) + "..."
-        : line
+      return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
     })
     const content = raw.map((line, index) => {
       return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
@@ -82,21 +62,19 @@ export const ReadTool = Tool.define({
     output += content.join("\n")
 
     if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${
-        offset + content.length
-      })`
+      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
     }
     output += "\n</file>"
 
     // just warms the lsp client
-    await LSP.touchFile(filePath, false)
+    LSP.touchFile(filePath, false)
     FileTime.read(ctx.sessionID, filePath)
 
     return {
+      title: path.relative(App.info().path.root, filePath),
       output,
       metadata: {
         preview,
-        title: path.relative(App.info().path.root, filePath),
       },
     }
   },

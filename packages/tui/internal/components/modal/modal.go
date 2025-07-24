@@ -90,12 +90,12 @@ func (m *Modal) Render(contentView string, background string) string {
 
 	innerWidth := outerWidth - 4
 
-	baseStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement())
+	baseStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel())
 
 	var finalContent string
 	if m.title != "" {
 		titleStyle := baseStyle.
-			Foreground(t.Primary()).
+			Foreground(t.Text()).
 			Bold(true).
 			Padding(0, 1)
 

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -eux
+
+npm config set '//registry.npmjs.org/:_authToken' "$NPM_TOKEN"
+
+yarn build
+cd dist
+
+# Get package name and version from package.json
+PACKAGE_NAME="$(jq -r -e '.name' ./package.json)"
+VERSION="$(jq -r -e '.version' ./package.json)"
+
+# Get latest version from npm
+#
+# If the package doesn't exist, npm will return:
+# {
+#   "error": {
+#     "code": "E404",
+#     "summary": "Unpublished on 2025-06-05T09:54:53.528Z",
+#     "detail": "'the_package' is not in this registry..."
+#   }
+# }
+NPM_INFO="$(npm view "$PACKAGE_NAME" version --json 2>/dev/null || true)"
+
+# Check if we got an E404 error
+if echo "$NPM_INFO" | jq -e '.error.code == "E404"' > /dev/null 2>&1; then
+  # Package doesn't exist yet, no last version
+  LAST_VERSION=""
+elif echo "$NPM_INFO" | jq -e '.error' > /dev/null 2>&1; then
+  # Report other errors
+  echo "ERROR: npm returned unexpected data:"
+  echo "$NPM_INFO"
+  exit 1
+else
+  # Success - get the version
+  LAST_VERSION=$(echo "$NPM_INFO" | jq -r '.') # strip quotes
+fi
+
+# Check if current version is pre-release (e.g. alpha / beta / rc)
+CURRENT_IS_PRERELEASE=false
+if [[ "$VERSION" =~ -([a-zA-Z]+) ]]; then
+  CURRENT_IS_PRERELEASE=true
+  CURRENT_TAG="${BASH_REMATCH[1]}"
+fi
+
+# Check if last version is a stable release
+LAST_IS_STABLE_RELEASE=true
+if [[ -z "$LAST_VERSION" || "$LAST_VERSION" =~ -([a-zA-Z]+) ]]; then
+  LAST_IS_STABLE_RELEASE=false
+fi
+
+# Use a corresponding alpha/beta tag if there already is a stable release and we're publishing a prerelease.
+if $CURRENT_IS_PRERELEASE && $LAST_IS_STABLE_RELEASE; then
+  TAG="$CURRENT_TAG"
+else
+  TAG="latest"
+fi
+
+# Publish with the appropriate tag
+yarn publish --access public --tag "$TAG"

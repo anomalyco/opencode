@@ -39,12 +39,12 @@ opencode run Explain the use of context in Go
 
 #### Flags
 
-| Flag              | Short | Description |
-| ----------------- | ----- | --------------------- |
-| `--continue`          | `-c`  | Continue the last session |
-| `--session`          | `-s`  | Session ID to continue |
-| `--share`          |   | Share the session |
-| `--model`          | `-m`  | Model to use in the form of provider/model |
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--continue` | `-c`  | Continue the last session                  |
+| `--session`  | `-s`  | Session ID to continue                     |
+| `--share`    |       | Share the session                          |
+| `--model`    | `-m`  | Model to use in the form of provider/model |
 
 ---
 
@@ -60,13 +60,13 @@ opencode auth [command]
 
 #### login
 
-Logs you into a provider and saves them in the credentials file in `~/.local/share/opencode/auth.json`.
+opencode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-When opencode starts up it will loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When opencode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
@@ -122,8 +122,11 @@ opencode upgrade v0.1.48
 
 The opencode CLI takes the following flags.
 
-| Flag              | Short | Description |
-| ----------------- | ----- | --------------------- |
-| `--help`          | `-h`  | Display help |
-| `--version`       |       | Print version number |
-| `--print-logs`    |       | Print logs to stderr |
+| Flag           | Short | Description          |
+| -------------- | ----- | -------------------- |
+| `--help`       | `-h`  | Display help         |
+| `--version`    |       | Print version number |
+| `--print-logs` |       | Print logs to stderr |
+| `--prompt`     | `-p`  | Prompt to use        |
+| `--model`      | `-m`  | Model to use in the form of provider/model |
+| `--mode`       |       | Mode to use          |

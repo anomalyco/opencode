@@ -18,18 +18,24 @@ You can define MCP servers in your opencode config under `mcp`.
 
 ### Local
 
-Add a local MCP servers under `mcp.localmcp`.
+Add local MCP servers under `mcp` with `"type": "local"`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "localmcp": {
+    "my-local-mcp-server": {
       "type": "local",
       "command": ["bun", "x", "my-mcp-command"],
       "enabled": true,
       "environment": {
         "MY_ENV_VAR": "my_env_var_value"
+      }
+    }, {
+    "my-different-local-mcp-server": {
+      "type": "local",
+      "command": ["bun", "x", "my-other-mcp-command"],
+      "enabled": true
     }
   }
 }
@@ -39,16 +45,19 @@ You can also disable a server by setting `enabled` to `false`. This is useful if
 
 ### Remote
 
-Add a remote MCP servers under `mcp.remotemcp`.
+Add remote MCP servers under `mcp` with `"type": "remote"`.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "remotemcp": {
+    "my-remote-mcp": {
       "type": "remote",
       "url": "https://my-mcp-server.com",
-      "enabled": true
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
     }
   }
 }

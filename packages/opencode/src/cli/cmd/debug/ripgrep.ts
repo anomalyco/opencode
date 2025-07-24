@@ -5,12 +5,7 @@ import { cmd } from "../cmd"
 
 export const RipgrepCommand = cmd({
   command: "rg",
-  builder: (yargs) =>
-    yargs
-      .command(TreeCommand)
-      .command(FilesCommand)
-      .command(SearchCommand)
-      .demandCommand(),
+  builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
 })
 
@@ -50,7 +45,7 @@ const FilesCommand = cmd({
       const files = await Ripgrep.files({
         cwd: app.path.cwd,
         query: args.query,
-        glob: args.glob,
+        glob: args.glob ? [args.glob] : undefined,
         limit: args.limit,
       })
       console.log(files.join("\n"))

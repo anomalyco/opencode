@@ -165,6 +165,7 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
+        if (config.extension === "zip") {
         const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])));
         const entries = await zipFileReader.getEntries();
         let rgEntry: any;
@@ -173,7 +174,7 @@ export namespace Ripgrep {
             rgEntry = entry;
             break;
           }
-        }
+          }
 
         if (!rgEntry) {
           throw new ExtractionFailedError({
@@ -191,6 +192,7 @@ export namespace Ripgrep {
         }
         await Bun.write(filepath, await rgBlob.arrayBuffer());
         await zipFileReader.close();
+      }
       }
       await fs.unlink(archivePath)
       if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)

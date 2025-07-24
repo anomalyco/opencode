@@ -3,9 +3,8 @@ package dialog
 import (
 	"log/slog"
 
-	"github.com/charmbracelet/bubbles/v2/key"
-	"github.com/charmbracelet/bubbles/v2/textinput"
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
@@ -14,11 +13,19 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
+const (
+	findDialogWidth = 76
+)
+
 type FindSelectedMsg struct {
 	FilePath string
 }
 
 type FindDialogCloseMsg struct{}
+
+type findInitialSuggestionsMsg struct {
+	suggestions []completions.CompletionSuggestion
+}
 
 type FindDialog interface {
 	layout.Modal
@@ -29,117 +36,157 @@ type FindDialog interface {
 	IsEmpty() bool
 }
 
+// findItem is a custom list item for file suggestions
+type findItem struct {
+	suggestion completions.CompletionSuggestion
+}
+
+func (f findItem) Render(
+	selected bool,
+	width int,
+	baseStyle styles.Style,
+) string {
+	t := theme.CurrentTheme()
+
+	itemStyle := baseStyle.
+		Background(t.BackgroundPanel()).
+		Foreground(t.TextMuted())
+
+	if selected {
+		itemStyle = itemStyle.Foreground(t.Primary())
+	}
+
+	return itemStyle.PaddingLeft(1).Render(f.suggestion.Display(itemStyle))
+}
+
+func (f findItem) Selectable() bool {
+	return true
+}
+
 type findDialogComponent struct {
-	query              string
-	completionProvider CompletionProvider
+	completionProvider completions.CompletionProvider
+	allSuggestions     []completions.CompletionSuggestion
 	width, height      int
 	modal              *modal.Modal
-	textInput          textinput.Model
-	list               list.List[CompletionItemI]
-}
-
-type findDialogKeyMap struct {
-	Select key.Binding
-	Cancel key.Binding
-}
-
-var findDialogKeys = findDialogKeyMap{
-	Select: key.NewBinding(
-		key.WithKeys("enter"),
-	),
-	Cancel: key.NewBinding(
-		key.WithKeys("esc"),
-	),
+	searchDialog       *SearchDialog
+	dialogWidth        int
 }
 
 func (f *findDialogComponent) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(
+		f.loadInitialSuggestions(),
+		f.searchDialog.Init(),
+	)
+}
+
+func (f *findDialogComponent) loadInitialSuggestions() tea.Cmd {
+	return func() tea.Msg {
+		items, err := f.completionProvider.GetChildEntries("")
+		if err != nil {
+			slog.Error("Failed to get initial completion items", "error", err)
+			return findInitialSuggestionsMsg{suggestions: []completions.CompletionSuggestion{}}
+		}
+		return findInitialSuggestionsMsg{suggestions: items}
+	}
 }
 
 func (f *findDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
-	case []CompletionItemI:
-		f.list.SetItems(msg)
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			if f.textInput.Value() == "" {
-				return f, nil
-			}
-			f.textInput.SetValue("")
-			return f.update(msg)
+	case findInitialSuggestionsMsg:
+		// Handle initial suggestions setup
+		f.allSuggestions = msg.suggestions
+
+		// Calculate dialog width
+		f.dialogWidth = f.calculateDialogWidth()
+
+		// Initialize search dialog with calculated width
+		f.searchDialog = NewSearchDialog("Search files...", 10)
+		f.searchDialog.SetWidth(f.dialogWidth)
+
+		// Convert to list items
+		items := make([]list.Item, len(f.allSuggestions))
+		for i, suggestion := range f.allSuggestions {
+			items[i] = findItem{suggestion: suggestion}
 		}
+		f.searchDialog.SetItems(items)
 
-		switch {
-		case key.Matches(msg, findDialogKeys.Select):
-			item, i := f.list.GetSelectedItem()
-			if i == -1 {
-				return f, nil
-			}
-			return f, f.selectFile(item)
-		case key.Matches(msg, findDialogKeys.Cancel):
-			return f, f.Close()
-		default:
-			f.textInput, cmd = f.textInput.Update(msg)
-			cmds = append(cmds, cmd)
+		// Update modal with calculated width
+		f.modal = modal.New(
+			modal.WithTitle("Find Files"),
+			modal.WithMaxWidth(f.dialogWidth+4),
+		)
 
-			f, cmd = f.update(msg)
-			cmds = append(cmds, cmd)
+		return f, f.searchDialog.Init()
+
+	case []completions.CompletionSuggestion:
+		// Store suggestions and convert to findItem for the search dialog
+		f.allSuggestions = msg
+		items := make([]list.Item, len(msg))
+		for i, suggestion := range msg {
+			items[i] = findItem{suggestion: suggestion}
 		}
-	}
+		f.searchDialog.SetItems(items)
+		return f, nil
 
-	return f, tea.Batch(cmds...)
-}
+	case SearchSelectionMsg:
+		// Handle selection from search dialog - now we can directly access the suggestion
+		if item, ok := msg.Item.(findItem); ok {
+			return f, f.selectFile(item.suggestion)
+		}
+		return f, nil
 
-func (f *findDialogComponent) update(msg tea.Msg) (*findDialogComponent, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
+	case SearchCancelledMsg:
+		return f, f.Close()
 
-	query := f.textInput.Value()
-	if query != f.query {
-		f.query = query
-		cmd = func() tea.Msg {
-			items, err := f.completionProvider.GetChildEntries(query)
+	case SearchQueryChangedMsg:
+		// Update completion items based on search query
+		return f, func() tea.Msg {
+			items, err := f.completionProvider.GetChildEntries(msg.Query)
 			if err != nil {
 				slog.Error("Failed to get completion items", "error", err)
+				return []completions.CompletionSuggestion{}
 			}
 			return items
 		}
-		cmds = append(cmds, cmd)
+
+	case tea.WindowSizeMsg:
+		f.width = msg.Width
+		f.height = msg.Height
+		// Recalculate width based on new viewport size
+		oldWidth := f.dialogWidth
+		f.dialogWidth = f.calculateDialogWidth()
+		if oldWidth != f.dialogWidth {
+			f.searchDialog.SetWidth(f.dialogWidth)
+			// Update modal max width too
+			f.modal = modal.New(
+				modal.WithTitle("Find Files"),
+				modal.WithMaxWidth(f.dialogWidth+4),
+			)
+		}
+		f.searchDialog.SetHeight(msg.Height)
 	}
 
-	u, cmd := f.list.Update(msg)
-	f.list = u.(list.List[CompletionItemI])
-	cmds = append(cmds, cmd)
-
-	return f, tea.Batch(cmds...)
+	// Forward all other messages to the search dialog
+	updatedDialog, cmd := f.searchDialog.Update(msg)
+	f.searchDialog = updatedDialog.(*SearchDialog)
+	return f, cmd
 }
 
 func (f *findDialogComponent) View() string {
-	t := theme.CurrentTheme()
-	f.textInput.SetWidth(f.width - 8)
-	f.list.SetMaxWidth(f.width - 4)
-	inputView := f.textInput.View()
-	inputView = styles.NewStyle().
-		Background(t.BackgroundPanel()).
-		Height(1).
-		Width(f.width-4).
-		Padding(0, 0).
-		Render(inputView)
+	return f.searchDialog.View()
+}
 
-	listView := f.list.View()
-	return styles.NewStyle().Height(12).Render(inputView + "\n" + listView)
+func (f *findDialogComponent) calculateDialogWidth() int {
+	// Use fixed width unless viewport is smaller
+	if f.width > 0 && f.width < findDialogWidth+10 {
+		return f.width - 10
+	}
+	return findDialogWidth
 }
 
 func (f *findDialogComponent) SetWidth(width int) {
 	f.width = width
-	if width > 4 {
-		f.textInput.SetWidth(width - 4)
-		f.list.SetMaxWidth(width - 4)
-	}
+	f.searchDialog.SetWidth(f.dialogWidth)
 }
 
 func (f *findDialogComponent) SetHeight(height int) {
@@ -147,14 +194,14 @@ func (f *findDialogComponent) SetHeight(height int) {
 }
 
 func (f *findDialogComponent) IsEmpty() bool {
-	return f.list.IsEmpty()
+	return f.searchDialog.GetQuery() == ""
 }
 
-func (f *findDialogComponent) selectFile(item CompletionItemI) tea.Cmd {
+func (f *findDialogComponent) selectFile(item completions.CompletionSuggestion) tea.Cmd {
 	return tea.Sequence(
 		f.Close(),
 		util.CmdHandler(FindSelectedMsg{
-			FilePath: item.GetValue(),
+			FilePath: item.Value,
 		}),
 	)
 }
@@ -164,70 +211,26 @@ func (f *findDialogComponent) Render(background string) string {
 }
 
 func (f *findDialogComponent) Close() tea.Cmd {
-	f.textInput.Reset()
-	f.textInput.Blur()
+	f.searchDialog.SetQuery("")
+	f.searchDialog.Blur()
 	return util.CmdHandler(modal.CloseModalMsg{})
 }
 
-func createTextInput(existing *textinput.Model) textinput.Model {
-	t := theme.CurrentTheme()
-	bgColor := t.BackgroundPanel()
-	textColor := t.Text()
-	textMutedColor := t.TextMuted()
-
-	ti := textinput.New()
-
-	ti.Styles.Blurred.Placeholder = styles.NewStyle().
-		Foreground(textMutedColor).
-		Background(bgColor).
-		Lipgloss()
-	ti.Styles.Blurred.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ti.Styles.Focused.Placeholder = styles.NewStyle().
-		Foreground(textMutedColor).
-		Background(bgColor).
-		Lipgloss()
-	ti.Styles.Focused.Text = styles.NewStyle().Foreground(textColor).Background(bgColor).Lipgloss()
-	ti.Styles.Cursor.Color = t.Primary()
-	ti.VirtualCursor = true
-
-	ti.Prompt = " "
-	ti.CharLimit = -1
-	ti.Focus()
-
-	if existing != nil {
-		ti.SetValue(existing.Value())
-		ti.SetWidth(existing.Width())
+func NewFindDialog(completionProvider completions.CompletionProvider) FindDialog {
+	component := &findDialogComponent{
+		completionProvider: completionProvider,
+		dialogWidth:        findDialogWidth,
+		allSuggestions:     []completions.CompletionSuggestion{},
 	}
 
-	return ti
-}
+	// Create search dialog and modal with fixed width
+	component.searchDialog = NewSearchDialog("Search files...", 10)
+	component.searchDialog.SetWidth(findDialogWidth)
 
-func NewFindDialog(completionProvider CompletionProvider) FindDialog {
-	ti := createTextInput(nil)
-
-	li := list.NewListComponent(
-		[]CompletionItemI{},
-		10, // max visible items
-		completionProvider.GetEmptyMessage(),
-		false,
+	component.modal = modal.New(
+		modal.WithTitle("Find Files"),
+		modal.WithMaxWidth(findDialogWidth+4),
 	)
 
-	go func() {
-		items, err := completionProvider.GetChildEntries("")
-		if err != nil {
-			slog.Error("Failed to get completion items", "error", err)
-		}
-		li.SetItems(items)
-	}()
-
-	return &findDialogComponent{
-		query:              "",
-		completionProvider: completionProvider,
-		textInput:          ti,
-		list:               li,
-		modal: modal.New(
-			modal.WithTitle("Find Files"),
-			modal.WithMaxWidth(80),
-		),
-	}
+	return component
 }

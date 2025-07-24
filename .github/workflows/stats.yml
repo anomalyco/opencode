@@ -28,5 +28,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add STATS.md
-          git diff --staged --quiet || git commit -m "Update download stats $(date -I)"
+          git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
           git push

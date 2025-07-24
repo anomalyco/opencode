@@ -9,22 +9,34 @@ By default, opencode uses our own `opencode` theme.
 
 ---
 
+## Terminal requirements
+
+For themes to display correctly with their full color palette, your terminal must support **truecolor** (24-bit color). Most modern terminals support this by default, but you may need to enable it:
+
+- **Check support**: Run `echo $COLORTERM` - it should output `truecolor` or `24bit`
+- **Enable truecolor**: Set the environment variable `COLORTERM=truecolor` in your shell profile
+- **Terminal compatibility**: Ensure your terminal emulator supports 24-bit color (most modern terminals like iTerm2, Alacritty, Kitty, Windows Terminal, and recent versions of GNOME Terminal do)
+
+Without truecolor support, themes may appear with reduced color accuracy or fall back to the nearest 256-color approximation.
+
+---
+
 ## Built-in themes
 
 opencode comes with several built-in themes.
 
-| Name | Description |
-| --- | --- |
-| `system` | Adapts to your terminal's background color |
-| `tokyonight` | Based on the Tokyonight theme |
-| `everforest` | Based on the Everforest theme |
-| `ayu` | Based on the Ayu dark theme |
-| `catppuccin` | Based on the Catppuccin theme |
-| `gruvbox` | Based on the Gruvbox theme |
-| `kanagawa` | Based on the Kanagawa theme |
-| `nord` | Based on the Nord theme |
-| `matrix` | Hacker-style green on black theme |
-| `one-dark` | Based on the Atom One Dark theme |
+| Name         | Description                                |
+| ------------ | ------------------------------------------ |
+| `system`     | Adapts to your terminal's background color |
+| `tokyonight` | Based on the Tokyonight theme              |
+| `everforest` | Based on the Everforest theme              |
+| `ayu`        | Based on the Ayu dark theme                |
+| `catppuccin` | Based on the Catppuccin theme              |
+| `gruvbox`    | Based on the Gruvbox theme                 |
+| `kanagawa`   | Based on the Kanagawa theme                |
+| `nord`       | Based on the Nord theme                    |
+| `matrix`     | Hacker-style green on black theme          |
+| `one-dark`   | Based on the Atom One Dark theme           |
 
 And more, we are constantly adding new themes.
 
@@ -61,7 +73,7 @@ You can select a theme by bringing up the theme select with the `/theme` command
 
 ## Custom themes
 
-opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily. 
+opencode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
 
 ---
 

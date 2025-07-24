@@ -38,6 +38,10 @@ const (
 	LineRemoved                 // Line removed from the old file
 )
 
+var (
+	ansiRegex = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-9?]*(?:;[0-9?]*)*[@-~])`)
+)
+
 // Segment represents a portion of a line for intra-line highlighting
 type Segment struct {
 	Start int
@@ -548,7 +552,6 @@ func createStyles(t theme.Theme) (removedLineStyle, addedLineStyle, contextLineS
 // applyHighlighting applies intra-line highlighting to a piece of text
 func applyHighlighting(content string, segments []Segment, segmentType LineType, highlightBg compat.AdaptiveColor) string {
 	// Find all ANSI sequences in the content
-	ansiRegex := regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-9?]*(?:;[0-9?]*)*[@-~])`)
 	ansiMatches := ansiRegex.FindAllStringIndex(content, -1)
 
 	// Build a mapping of visible character positions to their actual indices

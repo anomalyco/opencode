@@ -7,23 +7,17 @@ import path from "path"
 import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
+import PROMPT_BEAST from "./prompt/beast.txt"
+import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 
 export namespace SystemPrompt {
-  export function provider(providerID: string) {
-    const result = []
-    switch (providerID) {
-      case "anthropic":
-        result.push(PROMPT_ANTHROPIC_SPOOF.trim())
-        result.push(PROMPT_ANTHROPIC)
-        break
-      default:
-        result.push(PROMPT_ANTHROPIC)
-        break
-    }
-    return result
+  export function provider(modelID: string) {
+    if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
+    if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
+    return [PROMPT_ANTHROPIC]
   }
 
   export async function environment() {

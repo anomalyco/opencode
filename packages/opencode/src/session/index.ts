@@ -1,43 +1,51 @@
 import path from "path"
-import { App } from "../app/app"
-import { Identifier } from "../id/id"
-import { Storage } from "../storage/storage"
-import { Log } from "../util/log"
+import { Decimal } from "decimal.js"
+import { z, ZodSchema } from "zod"
 import {
   generateText,
   LoadAPIKeyError,
-  convertToCoreMessages,
   streamText,
   tool,
+  wrapLanguageModel,
   type Tool as AITool,
   type LanguageModelUsage,
-  type CoreMessage,
-  type UIMessage,
   type ProviderMetadata,
-  wrapLanguageModel,
+  type ModelMessage,
+  stepCountIs,
+  type StreamTextResult,
 } from "ai"
-import { z, ZodSchema } from "zod"
-import { Decimal } from "decimal.js"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
+import PROMPT_PLAN from "../session/prompt/plan.txt"
+import PROMPT_ANTHROPIC_SPOOF from "../session/prompt/anthropic_spoof.txt"
 
-import { Share } from "../share/share"
-import { Message } from "./message"
+import { App } from "../app/app"
 import { Bus } from "../bus"
-import { Provider } from "../provider/provider"
-import { MCP } from "../mcp"
-import { NamedError } from "../util/error"
-import type { Tool } from "../tool/tool"
-import { SystemPrompt } from "./system"
-import { Flag } from "../flag/flag"
-import type { ModelsDev } from "../provider/models"
-import { Installation } from "../installation"
 import { Config } from "../config/config"
+import { Flag } from "../flag/flag"
+import { Identifier } from "../id/id"
+import { Installation } from "../installation"
+import { MCP } from "../mcp"
+import { Provider } from "../provider/provider"
 import { ProviderTransform } from "../provider/transform"
+import type { ModelsDev } from "../provider/models"
+import { Share } from "../share/share"
 import { Snapshot } from "../snapshot"
+import { Storage } from "../storage/storage"
+import { Log } from "../util/log"
+import { NamedError } from "../util/error"
+import { SystemPrompt } from "./system"
+import { FileTime } from "../file/time"
+import { MessageV2 } from "./message-v2"
+import { Mode } from "./mode"
+import { LSP } from "../lsp"
+import { ReadTool } from "../tool/read"
+import { splitWhen } from "remeda"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+
+  const OUTPUT_TOKEN_MAX = 32_000
 
   export const Info = z
     .object({
@@ -57,7 +65,7 @@ export namespace Session {
       revert: z
         .object({
           messageID: z.string(),
-          part: z.number(),
+          partID: z.string().optional(),
           snapshot: z.string().optional(),
         })
         .optional(),
@@ -99,7 +107,8 @@ export namespace Session {
     Error: Bus.event(
       "session.error",
       z.object({
-        error: Message.Info.shape.metadata.shape.error,
+        sessionID: z.string().optional(),
+        error: MessageV2.Assistant.shape.error,
       }),
     ),
   }
@@ -108,13 +117,24 @@ export namespace Session {
     "session",
     () => {
       const sessions = new Map<string, Info>()
-      const messages = new Map<string, Message.Info[]>()
+      const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
+      const queued = new Map<
+        string,
+        {
+          input: ChatInput
+          message: MessageV2.User
+          parts: MessageV2.Part[]
+          processed: boolean
+          callback: (input: { info: MessageV2.Assistant; parts: MessageV2.Part[] }) => void
+        }[]
+      >()
 
       return {
         sessions,
         messages,
         pending,
+        queued,
       }
     },
     async (state) => {
@@ -129,9 +149,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title:
-        (parentID ? "Child session - " : "New Session - ") +
-        new Date().toISOString(),
+      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -141,12 +159,16 @@ export namespace Session {
     state().sessions.set(result.id, result)
     await Storage.writeJSON("session/info/" + result.id, result)
     const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.autoshare))
-      share(result.id).then((share) => {
-        update(result.id, (draft) => {
-          draft.share = share
+    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
+      share(result.id)
+        .then((share) => {
+          update(result.id, (draft) => {
+            draft.share = share
+          })
         })
-      })
+        .catch(() => {
+          // Silently ignore sharing errors during session creation
+        })
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -168,6 +190,11 @@ export namespace Session {
   }
 
   export async function share(id: string) {
+    const cfg = await Config.get()
+    if (cfg.share === "disabled") {
+      throw new Error("Sharing is disabled in configuration")
+    }
+
     const session = await get(id)
     if (session.share) return session.share
     const share = await Share.create(id)
@@ -179,17 +206,22 @@ export namespace Session {
     await Storage.writeJSON<ShareInfo>("session/share/" + id, share)
     await Share.sync("session/info/" + id, session)
     for (const msg of await messages(id)) {
-      await Share.sync("session/message/" + id + "/" + msg.id, msg)
+      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
+      for (const part of msg.parts) {
+        await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
+      }
     }
     return share
   }
 
   export async function unshare(id: string) {
+    const share = await getShare(id)
+    if (!share) return
     await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id)
+    await Share.remove(id, share.secret)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -207,24 +239,37 @@ export namespace Session {
   }
 
   export async function messages(sessionID: string) {
-    const result = [] as Message.Info[]
-    const list = Storage.list("session/message/" + sessionID)
-    for await (const p of list) {
-      const read = await Storage.readJSON<Message.Info>(p)
+    const result = [] as {
+      info: MessageV2.Info
+      parts: MessageV2.Part[]
+    }[]
+    for (const p of await Storage.list("session/message/" + sessionID)) {
+      const read = await Storage.readJSON<MessageV2.Info>(p)
+      result.push({
+        info: read,
+        parts: await getParts(sessionID, read.id),
+      })
+    }
+    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+    return result
+  }
+
+  export async function getMessage(sessionID: string, messageID: string) {
+    return Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID)
+  }
+
+  export async function getParts(sessionID: string, messageID: string) {
+    const result = [] as MessageV2.Part[]
+    for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
+      const read = await Storage.readJSON<MessageV2.Part>(item)
       result.push(read)
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   }
 
-  export async function getMessage(sessionID: string, messageID: string) {
-    return Storage.readJSON<Message.Info>(
-      "session/message/" + sessionID + "/" + messageID,
-    )
-  }
-
   export async function* list() {
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       yield get(sessionID)
     }
@@ -232,7 +277,7 @@ export namespace Session {
 
   export async function children(parentID: string) {
     const result = [] as Session.Info[]
-    for await (const item of Storage.list("session/info")) {
+    for (const item of await Storage.list("session/info")) {
       const sessionID = path.basename(item, ".json")
       const session = await get(sessionID)
       if (session.parentID !== parentID) continue
@@ -271,76 +316,252 @@ export namespace Session {
     }
   }
 
-  async function updateMessage(msg: Message.Info) {
-    await Storage.writeJSON(
-      "session/message/" + msg.metadata.sessionID + "/" + msg.id,
-      msg,
-    )
-    Bus.publish(Message.Event.Updated, {
+  async function updateMessage(msg: MessageV2.Info) {
+    await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
+    Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
   }
 
-  export async function chat(input: {
-    sessionID: string
-    providerID: string
-    modelID: string
-    parts: Message.MessagePart[]
-    system?: string[]
-    tools?: Tool.Info[]
-  }) {
+  async function updatePart(part: MessageV2.Part) {
+    await Storage.writeJSON(["session", "part", part.sessionID, part.messageID, part.id].join("/"), part)
+    Bus.publish(MessageV2.Event.PartUpdated, {
+      part,
+    })
+    return part
+  }
+
+  export const ChatInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message").optional(),
+    providerID: z.string(),
+    modelID: z.string(),
+    mode: z.string().optional(),
+    tools: z.record(z.boolean()).optional(),
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .openapi({
+            ref: "TextPartInput",
+          }),
+        MessageV2.FilePart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .openapi({
+            ref: "FilePartInput",
+          }),
+      ]),
+    ),
+  })
+  export type ChatInput = z.infer<typeof ChatInput>
+
+  export async function chat(
+    input: z.infer<typeof ChatInput>,
+  ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
+
+    const inputMode = input.mode ?? "build"
+    const userMsg: MessageV2.Info = {
+      id: input.messageID ?? Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+    }
+
+    const app = App.info()
+    const userParts = await Promise.all(
+      input.parts.map(async (part): Promise<MessageV2.Part[]> => {
+        if (part.type === "file") {
+          const url = new URL(part.url)
+          switch (url.protocol) {
+            case "file:":
+              // have to normalize, symbol search returns absolute paths
+              // Decode the pathname since URL constructor doesn't automatically decode it
+              const pathname = decodeURIComponent(url.pathname)
+              const relativePath = pathname.replace(app.path.cwd, ".")
+              const filePath = path.join(app.path.cwd, relativePath)
+
+              if (part.mime === "text/plain") {
+                let offset: number | undefined = undefined
+                let limit: number | undefined = undefined
+                const range = {
+                  start: url.searchParams.get("start"),
+                  end: url.searchParams.get("end"),
+                }
+                if (range.start != null) {
+                  const filePath = part.url.split("?")[0]
+                  let start = parseInt(range.start)
+                  let end = range.end ? parseInt(range.end) : undefined
+                  // some LSP servers (eg, gopls) don't give full range in
+                  // workspace/symbol searches, so we'll try to find the
+                  // symbol in the document to get the full range
+                  if (start === end) {
+                    const symbols = await LSP.documentSymbol(filePath)
+                    for (const symbol of symbols) {
+                      let range: LSP.Range | undefined
+                      if ("range" in symbol) {
+                        range = symbol.range
+                      } else if ("location" in symbol) {
+                        range = symbol.location.range
+                      }
+                      if (range?.start?.line && range?.start?.line === start) {
+                        start = range.start.line
+                        end = range?.end?.line ?? start
+                        break
+                      }
+                    }
+                    offset = Math.max(start - 2, 0)
+                    if (end) {
+                      limit = end - offset + 2
+                    }
+                  }
+                }
+                const args = { filePath, offset, limit }
+                const result = await ReadTool.execute(args, {
+                  sessionID: input.sessionID,
+                  abort: new AbortController().signal,
+                  messageID: userMsg.id,
+                  metadata: async () => {},
+                })
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: result.output,
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
+
+              let file = Bun.file(filePath)
+              FileTime.read(input.sessionID, filePath)
+              return [
+                {
+                  id: Identifier.ascending("part"),
+                  messageID: userMsg.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${pathname}\"}`,
+                  synthetic: true,
+                },
+                {
+                  id: part.id ?? Identifier.ascending("part"),
+                  messageID: userMsg.id,
+                  sessionID: input.sessionID,
+                  type: "file",
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
+                  mime: part.mime,
+                  filename: part.filename!,
+                  source: part.source,
+                },
+              ]
+          }
+        }
+        return [
+          {
+            id: Identifier.ascending("part"),
+            ...part,
+            messageID: userMsg.id,
+            sessionID: input.sessionID,
+          },
+        ]
+      }),
+    ).then((x) => x.flat())
+    if (inputMode === "plan")
+      userParts.push({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: PROMPT_PLAN,
+        synthetic: true,
+      })
+
+    await updateMessage(userMsg)
+    for (const part of userParts) {
+      await updatePart(part)
+    }
+    // mark session as updated since a message has been added to it
+    await update(input.sessionID, (_draft) => {})
+
+    if (isLocked(input.sessionID)) {
+      return new Promise((resolve) => {
+        const queue = state().queued.get(input.sessionID) ?? []
+        queue.push({
+          input: input,
+          message: userMsg,
+          parts: userParts,
+          processed: false,
+          callback: resolve,
+        })
+        state().queued.set(input.sessionID, queue)
+      })
+    }
+
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
     const session = await get(input.sessionID)
 
     if (session.revert) {
-      const trimmed = []
-      for (const msg of msgs) {
-        if (
-          msg.id > session.revert.messageID ||
-          (msg.id === session.revert.messageID && session.revert.part === 0)
-        ) {
-          await Storage.remove(
-            "session/message/" + input.sessionID + "/" + msg.id,
-          )
-          await Bus.publish(Message.Event.Removed, {
-            sessionID: input.sessionID,
-            messageID: msg.id,
-          })
-          continue
-        }
-
-        if (msg.id === session.revert.messageID) {
-          if (session.revert.part === 0) break
-          msg.parts = msg.parts.slice(0, session.revert.part)
-        }
-        trimmed.push(msg)
+      const messageID = session.revert.messageID
+      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+      msgs = preserve
+      for (const msg of remove) {
+        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
       }
-      msgs = trimmed
-      await update(input.sessionID, (draft) => {
-        draft.revert = undefined
-      })
+      const last = preserve.at(-1)
+      if (session.revert.partID && last) {
+        const partID = session.revert.partID
+        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+        last.parts = preserveParts
+        for (const part of removeParts) {
+          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }
+      }
     }
 
-    const previous = msgs.at(-1)
+    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
     // auto summarize if too long
-    if (previous?.metadata.assistant) {
+    if (previous && previous.tokens) {
       const tokens =
-        previous.metadata.assistant.tokens.input +
-        previous.metadata.assistant.tokens.cache.read +
-        previous.metadata.assistant.tokens.cache.write +
-        previous.metadata.assistant.tokens.output
-      if (
-        model.info.limit.context &&
-        tokens >
-          Math.max(
-            (model.info.limit.context - (model.info.limit.output ?? 0)) * 0.9,
-            0,
-          )
-      ) {
+        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
+      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
         await summarize({
           sessionID: input.sessionID,
           providerID: input.providerID,
@@ -352,32 +573,38 @@ export namespace Session {
 
     using abort = lock(input.sessionID)
 
-    const lastSummary = msgs.findLast(
-      (msg) => msg.metadata.assistant?.summary === true,
-    )
-    if (lastSummary) msgs = msgs.filter((msg) => msg.id >= lastSummary.id)
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    const app = App.info()
-    if (msgs.length === 0 && !session.parentID) {
+    if (msgs.length === 1 && !session.parentID) {
+      const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
-        maxTokens: input.providerID === "google" ? 1024 : 20,
-        providerOptions: model.info.options,
+        maxOutputTokens: small.info.reasoning ? 1024 : 20,
+        providerOptions: {
+          [input.providerID]: small.info.options,
+        },
         messages: [
           ...SystemPrompt.title(input.providerID).map(
-            (x): CoreMessage => ({
+            (x): ModelMessage => ({
               role: "system",
               content: x,
             }),
           ),
-          ...convertToCoreMessages([
+          ...MessageV2.toModelMessage([
             {
-              role: "user",
-              content: "",
-              parts: toParts(input.parts),
+              info: {
+                id: Identifier.ascending("message"),
+                role: "user",
+                sessionID: input.sessionID,
+                time: {
+                  created: Date.now(),
+                },
+              },
+              parts: userParts,
             },
           ]),
         ],
-        model: model.language,
+        model: small.language,
       })
         .then((result) => {
           if (result.text)
@@ -387,217 +614,172 @@ export namespace Session {
         })
         .catch(() => {})
     }
-    const snapshot = await Snapshot.create(input.sessionID)
-    const msg: Message.Info = {
-      role: "user",
-      id: Identifier.ascending("message"),
-      parts: input.parts,
-      metadata: {
-        time: {
-          created: Date.now(),
-        },
-        sessionID: input.sessionID,
-        tool: {},
-        snapshot,
-      },
-    }
-    await updateMessage(msg)
-    msgs.push(msg)
 
-    const system = input.system ?? SystemPrompt.provider(input.providerID)
+    const mode = await Mode.get(inputMode)
+    let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
+    system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
+    // max 2 system prompt messages for caching purposes
+    const [first, ...rest] = system
+    system = [first, rest.join("\n")]
 
-    const next: Message.Info = {
+    const assistantMsg: MessageV2.Info = {
       id: Identifier.ascending("message"),
       role: "assistant",
-      parts: [],
-      metadata: {
-        snapshot,
-        assistant: {
-          system,
-          path: {
-            cwd: app.path.cwd,
-            root: app.path.root,
-          },
-          cost: 0,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: input.modelID,
-          providerID: input.providerID,
-        },
-        time: {
-          created: Date.now(),
-        },
-        sessionID: input.sessionID,
-        tool: {},
+      system,
+      mode: inputMode,
+      path: {
+        cwd: app.path.cwd,
+        root: app.path.root,
       },
+      cost: 0,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: input.modelID,
+      providerID: input.providerID,
+      time: {
+        created: Date.now(),
+      },
+      sessionID: input.sessionID,
     }
-    await updateMessage(next)
+    await updateMessage(assistantMsg)
     const tools: Record<string, AITool> = {}
 
+    const processor = createProcessor(assistantMsg, model.info)
+
     for (const item of await Provider.tools(input.providerID)) {
-      tools[item.id.replaceAll(".", "_")] = tool({
+      if (mode.tools[item.id] === false) continue
+      if (input.tools?.[item.id] === false) continue
+      if (session.parentID && item.id === "task") continue
+      tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
-        parameters: item.parameters as ZodSchema,
-        async execute(args, opts) {
-          const start = Date.now()
-          try {
-            const result = await item.execute(args, {
-              sessionID: input.sessionID,
-              abort: abort.signal,
-              messageID: next.id,
-              metadata: async (val) => {
-                next.metadata.tool[opts.toolCallId] = {
-                  ...val,
-                  time: {
-                    start: 0,
-                    end: 0,
+        inputSchema: item.parameters as ZodSchema,
+        async execute(args, options) {
+          const result = await item.execute(args, {
+            sessionID: input.sessionID,
+            abort: abort.signal,
+            messageID: assistantMsg.id,
+            metadata: async (val) => {
+              const match = processor.partFromToolCall(options.toolCallId)
+              if (match && match.state.status === "running") {
+                await updatePart({
+                  ...match,
+                  state: {
+                    title: val.title,
+                    metadata: val.metadata,
+                    status: "running",
+                    input: args,
+                    time: {
+                      start: Date.now(),
+                    },
                   },
-                }
-                await updateMessage(next)
-              },
-            })
-            next.metadata!.tool![opts.toolCallId] = {
-              ...result.metadata,
-              snapshot: await Snapshot.create(input.sessionID),
-              time: {
-                start,
-                end: Date.now(),
-              },
-            }
-            await updateMessage(next)
-            return result.output
-          } catch (e: any) {
-            next.metadata!.tool![opts.toolCallId] = {
-              error: true,
-              message: e.toString(),
-              title: e.toString(),
-              snapshot: await Snapshot.create(input.sessionID),
-              time: {
-                start,
-                end: Date.now(),
-              },
-            }
-            await updateMessage(next)
-            return e.toString()
+                })
+              }
+            },
+          })
+          return result
+        },
+        toModelOutput(result) {
+          return {
+            type: "text",
+            value: result.output,
           }
         },
       })
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
+      if (mode.tools[key] === false) continue
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        const start = Date.now()
-        try {
-          const result = await execute(args, opts)
-          next.metadata!.tool![opts.toolCallId] = {
-            ...result.metadata,
-            snapshot: await Snapshot.create(input.sessionID),
-            time: {
-              start,
-              end: Date.now(),
-            },
-          }
-          await updateMessage(next)
-          return result.content
-            .filter((x: any) => x.type === "text")
-            .map((x: any) => x.text)
-            .join("\n\n")
-        } catch (e: any) {
-          next.metadata!.tool![opts.toolCallId] = {
-            error: true,
-            message: e.toString(),
-            snapshot: await Snapshot.create(input.sessionID),
-            title: "mcp",
-            time: {
-              start,
-              end: Date.now(),
-            },
-          }
-          await updateMessage(next)
-          return e.toString()
+        const result = await execute(args, opts)
+        const output = result.content
+          .filter((x: any) => x.type === "text")
+          .map((x: any) => x.text)
+          .join("\n\n")
+
+        return {
+          output,
+        }
+      }
+      item.toModelOutput = (result) => {
+        return {
+          type: "text",
+          value: result.output,
         }
       }
       tools[key] = item
     }
 
-    let text: Message.TextPart | undefined
-    const result = streamText({
-      onStepFinish: async (step) => {
-        log.info("step finish", { finishReason: step.finishReason })
-        const assistant = next.metadata!.assistant!
-        const usage = getUsage(model.info, step.usage, step.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
-        await updateMessage(next)
-        if (text) {
-          Bus.publish(Message.Event.PartUpdated, {
-            part: text,
-            messageID: next.id,
-            sessionID: next.metadata.sessionID,
-          })
-        }
-        text = undefined
-      },
-      onError(err) {
-        log.error("callback error", err)
-        switch (true) {
-          case LoadAPIKeyError.isInstance(err.error):
-            next.metadata.error = new Provider.AuthError(
-              {
-                providerID: input.providerID,
-                message: err.error.message,
-              },
-              { cause: err.error },
-            ).toObject()
-            break
-          case err.error instanceof Error:
-            next.metadata.error = new NamedError.Unknown(
-              { message: err.error.toString() },
-              { cause: err.error },
-            ).toObject()
-            break
-          default:
-            next.metadata.error = new NamedError.Unknown(
-              { message: JSON.stringify(err.error) },
-              { cause: err.error },
+    const stream = streamText({
+      onError() {},
+      async prepareStep({ messages }) {
+        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
+        if (queue.length) {
+          for (const item of queue) {
+            if (item.processed) continue
+            messages.push(
+              ...MessageV2.toModelMessage([
+                {
+                  info: item.message,
+                  parts: item.parts,
+                },
+              ]),
             )
+            item.processed = true
+          }
+          assistantMsg.time.completed = Date.now()
+          await updateMessage(assistantMsg)
+          Object.assign(assistantMsg, {
+            id: Identifier.ascending("message"),
+            role: "assistant",
+            system,
+            path: {
+              cwd: app.path.cwd,
+              root: app.path.root,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: input.modelID,
+            providerID: input.providerID,
+            time: {
+              created: Date.now(),
+            },
+            sessionID: input.sessionID,
+          })
+          await updateMessage(assistantMsg)
         }
-        Bus.publish(Event.Error, {
-          error: next.metadata.error,
-        })
+        return {
+          messages,
+        }
       },
-      // async prepareStep(step) {
-      //   next.parts.push({
-      //     type: "step-start",
-      //   })
-      //   await updateMessage(next)
-      //   return step
-      // },
-      toolCallStreaming: true,
       maxRetries: 10,
-      maxTokens: Math.max(0, model.info.limit.output) || undefined,
+      maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
-      maxSteps: 1000,
-      providerOptions: model.info.options,
+      stopWhen: stepCountIs(1000),
+      providerOptions: {
+        [input.providerID]: model.info.options,
+      },
       messages: [
         ...system.map(
-          (x): CoreMessage => ({
+          (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...convertToCoreMessages(
-          msgs.map(toUIMessage).filter((x) => x.parts.length > 0),
-        ),
+        ...MessageV2.toModelMessage(msgs),
       ],
       temperature: model.info.temperature ? 0 : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
@@ -607,11 +789,8 @@ export namespace Session {
           {
             async transformParams(args) {
               if (args.type === "stream") {
-                args.params.prompt = ProviderTransform.message(
-                  args.params.prompt,
-                  input.providerID,
-                  input.modelID,
-                )
+                // @ts-expect-error
+                args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
               }
               return args.params
             },
@@ -619,271 +798,369 @@ export namespace Session {
         ],
       }),
     })
-    try {
-      for await (const value of result.fullStream) {
-        l.info("part", {
-          type: value.type,
-        })
-        switch (value.type) {
-          case "step-start":
-            next.parts.push({
-              type: "step-start",
-            })
-            break
-          case "text-delta":
-            if (!text) {
-              text = {
-                type: "text",
-                text: value.textDelta,
-              }
-              next.parts.push(text)
-              break
-            } else text.text += value.textDelta
-            break
+    const result = await processor.process(stream)
+    const queued = state().queued.get(input.sessionID) ?? []
+    const unprocessed = queued.find((x) => !x.processed)
+    if (unprocessed) {
+      unprocessed.processed = true
+      return chat(unprocessed.input)
+    }
+    for (const item of queued) {
+      item.callback(result)
+    }
+    state().queued.delete(input.sessionID)
+    return result
+  }
 
-          case "tool-call": {
-            const [match] = next.parts.flatMap((p) =>
-              p.type === "tool-invocation" &&
-              p.toolInvocation.toolCallId === value.toolCallId
-                ? [p]
-                : [],
-            )
-            if (!match) break
-            match.toolInvocation.args = value.args
-            match.toolInvocation.state = "call"
-            Bus.publish(Message.Event.PartUpdated, {
-              part: match,
-              messageID: next.id,
-              sessionID: next.metadata.sessionID,
-            })
-            break
-          }
+  function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
+    const toolCalls: Record<string, MessageV2.ToolPart> = {}
+    return {
+      partFromToolCall(toolCallID: string) {
+        return toolCalls[toolCallID]
+      },
+      async process(stream: StreamTextResult<Record<string, AITool>, never>) {
+        try {
+          let currentText: MessageV2.TextPart | undefined
 
-          case "tool-call-streaming-start":
-            next.parts.push({
-              type: "tool-invocation",
-              toolInvocation: {
-                state: "partial-call",
-                toolName: value.toolName,
-                toolCallId: value.toolCallId,
-                args: {},
-              },
-            })
-            Bus.publish(Message.Event.PartUpdated, {
-              part: next.parts[next.parts.length - 1],
-              messageID: next.id,
-              sessionID: next.metadata.sessionID,
-            })
-            break
-
-          case "tool-call-delta":
-            continue
-
-          // for some reason ai sdk claims to not send this part but it does
-          // @ts-expect-error
-          case "tool-result":
-            const match = next.parts.find(
-              (p) =>
-                p.type === "tool-invocation" &&
-                // @ts-expect-error
-                p.toolInvocation.toolCallId === value.toolCallId,
-            )
-            if (match && match.type === "tool-invocation") {
-              match.toolInvocation = {
-                // @ts-expect-error
-                args: value.args,
-                // @ts-expect-error
-                toolCallId: value.toolCallId,
-                // @ts-expect-error
-                toolName: value.toolName,
-                state: "result",
-                // @ts-expect-error
-                result: value.result as string,
-              }
-              Bus.publish(Message.Event.PartUpdated, {
-                part: match,
-                messageID: next.id,
-                sessionID: next.metadata.sessionID,
-              })
-            }
-            break
-
-          case "finish":
-            log.info("message finish", {
-              reason: value.finishReason,
-            })
-            const assistant = next.metadata!.assistant!
-            const usage = getUsage(
-              model.info,
-              value.usage,
-              value.providerMetadata,
-            )
-            assistant.cost += usage.cost
-            await updateMessage(next)
-            if (value.finishReason === "length")
-              throw new Message.OutputLengthError({})
-            break
-          default:
-            l.info("unhandled", {
+          for await (const value of stream.fullStream) {
+            log.info("part", {
               type: value.type,
             })
-            continue
+            switch (value.type) {
+              case "start":
+                const snapshot = await Snapshot.create()
+                if (snapshot)
+                  await updatePart({
+                    id: Identifier.ascending("part"),
+                    messageID: assistantMsg.id,
+                    sessionID: assistantMsg.sessionID,
+                    type: "snapshot",
+                    snapshot,
+                  })
+                break
+
+              case "tool-input-start":
+                const part = await updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "tool",
+                  tool: value.toolName,
+                  callID: value.id,
+                  state: {
+                    status: "pending",
+                  },
+                })
+                toolCalls[value.id] = part as MessageV2.ToolPart
+                break
+
+              case "tool-input-delta":
+                break
+
+              case "tool-call": {
+                const match = toolCalls[value.toolCallId]
+                if (match) {
+                  const part = await updatePart({
+                    ...match,
+                    state: {
+                      status: "running",
+                      input: value.input,
+                      time: {
+                        start: Date.now(),
+                      },
+                    },
+                  })
+                  toolCalls[value.toolCallId] = part as MessageV2.ToolPart
+                }
+                break
+              }
+              case "tool-result": {
+                const match = toolCalls[value.toolCallId]
+                if (match && match.state.status === "running") {
+                  await updatePart({
+                    ...match,
+                    state: {
+                      status: "completed",
+                      input: value.input,
+                      output: value.output.output,
+                      metadata: value.output.metadata,
+                      title: value.output.title,
+                      time: {
+                        start: match.state.time.start,
+                        end: Date.now(),
+                      },
+                    },
+                  })
+                  delete toolCalls[value.toolCallId]
+                  const snapshot = await Snapshot.create()
+                  if (snapshot)
+                    await updatePart({
+                      id: Identifier.ascending("part"),
+                      messageID: assistantMsg.id,
+                      sessionID: assistantMsg.sessionID,
+                      type: "snapshot",
+                      snapshot,
+                    })
+                }
+                break
+              }
+
+              case "tool-error": {
+                const match = toolCalls[value.toolCallId]
+                if (match && match.state.status === "running") {
+                  await updatePart({
+                    ...match,
+                    state: {
+                      status: "error",
+                      input: value.input,
+                      error: (value.error as any).toString(),
+                      time: {
+                        start: match.state.time.start,
+                        end: Date.now(),
+                      },
+                    },
+                  })
+                  delete toolCalls[value.toolCallId]
+                  const snapshot = await Snapshot.create()
+                  if (snapshot)
+                    await updatePart({
+                      id: Identifier.ascending("part"),
+                      messageID: assistantMsg.id,
+                      sessionID: assistantMsg.sessionID,
+                      type: "snapshot",
+                      snapshot,
+                    })
+                }
+                break
+              }
+
+              case "error":
+                throw value.error
+
+              case "start-step":
+                await updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "step-start",
+                })
+                break
+
+              case "finish-step":
+                const usage = getUsage(model, value.usage, value.providerMetadata)
+                assistantMsg.cost += usage.cost
+                assistantMsg.tokens = usage.tokens
+                await updatePart({
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "step-finish",
+                  tokens: usage.tokens,
+                  cost: usage.cost,
+                })
+                await updateMessage(assistantMsg)
+                break
+
+              case "text-start":
+                currentText = {
+                  id: Identifier.ascending("part"),
+                  messageID: assistantMsg.id,
+                  sessionID: assistantMsg.sessionID,
+                  type: "text",
+                  text: "",
+                  time: {
+                    start: Date.now(),
+                  },
+                }
+                break
+
+              case "text":
+                if (currentText) {
+                  currentText.text += value.text
+                  await updatePart(currentText)
+                }
+                break
+
+              case "text-end":
+                if (currentText && currentText.text) {
+                  currentText.time = {
+                    start: Date.now(),
+                    end: Date.now(),
+                  }
+                  await updatePart(currentText)
+                }
+                currentText = undefined
+                break
+
+              case "finish":
+                assistantMsg.time.completed = Date.now()
+                await updateMessage(assistantMsg)
+                break
+
+              default:
+                log.info("unhandled", {
+                  ...value,
+                })
+                continue
+            }
+          }
+        } catch (e) {
+          log.error("", {
+            error: e,
+          })
+          switch (true) {
+            case e instanceof DOMException && e.name === "AbortError":
+              assistantMsg.error = new MessageV2.AbortedError(
+                { message: e.message },
+                {
+                  cause: e,
+                },
+              ).toObject()
+              break
+            case MessageV2.OutputLengthError.isInstance(e):
+              assistantMsg.error = e
+              break
+            case LoadAPIKeyError.isInstance(e):
+              assistantMsg.error = new MessageV2.AuthError(
+                {
+                  providerID: model.id,
+                  message: e.message,
+                },
+                { cause: e },
+              ).toObject()
+              break
+            case e instanceof Error:
+              assistantMsg.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+              break
+            default:
+              assistantMsg.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+          }
+          Bus.publish(Event.Error, {
+            sessionID: assistantMsg.sessionID,
+            error: assistantMsg.error,
+          })
         }
-        await updateMessage(next)
-      }
-    } catch (e: any) {
-      log.error("stream error", {
-        error: e,
-      })
-      switch (true) {
-        case Message.OutputLengthError.isInstance(e):
-          next.metadata.error = e
-          break
-        case LoadAPIKeyError.isInstance(e):
-          next.metadata.error = new Provider.AuthError(
-            {
-              providerID: input.providerID,
-              message: e.message,
-            },
-            { cause: e },
-          ).toObject()
-          break
-        case e instanceof Error:
-          next.metadata.error = new NamedError.Unknown(
-            { message: e.toString() },
-            { cause: e },
-          ).toObject()
-          break
-        default:
-          next.metadata.error = new NamedError.Unknown(
-            { message: JSON.stringify(e) },
-            { cause: e },
-          )
-      }
-      Bus.publish(Event.Error, {
-        error: next.metadata.error,
-      })
-    }
-    next.metadata!.time.completed = Date.now()
-    for (const part of next.parts) {
-      if (
-        part.type === "tool-invocation" &&
-        part.toolInvocation.state !== "result"
-      ) {
-        part.toolInvocation = {
-          ...part.toolInvocation,
-          state: "result",
-          result: "request was aborted",
+        const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
+        for (const part of p) {
+          if (part.type === "tool" && part.state.status !== "completed") {
+            updatePart({
+              ...part,
+              state: {
+                status: "error",
+                error: "Tool execution aborted",
+                time: {
+                  start: Date.now(),
+                  end: Date.now(),
+                },
+                input: {},
+              },
+            })
+          }
         }
+        assistantMsg.time.completed = Date.now()
+        await updateMessage(assistantMsg)
+        return { info: assistantMsg, parts: p }
+      },
+    }
+  }
+
+  export const RevertInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message"),
+    partID: Identifier.schema("part").optional(),
+  })
+  export type RevertInput = z.infer<typeof RevertInput>
+
+  export async function revert(input: RevertInput) {
+    const all = await messages(input.sessionID)
+    const session = await get(input.sessionID)
+    let lastUser: MessageV2.User | undefined
+    let lastSnapshot: MessageV2.SnapshotPart | undefined
+    for (const msg of all) {
+      if (msg.info.role === "user") lastUser = msg.info
+      const remaining = []
+      for (const part of msg.parts) {
+        if (part.type === "snapshot") lastSnapshot = part
+        if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
+          // if no useful parts left in message, same as reverting whole message
+          const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
+          const snapshot = session.revert?.snapshot ?? (await Snapshot.create())
+          log.info("revert snapshot", { snapshot })
+          if (lastSnapshot) await Snapshot.restore(lastSnapshot.snapshot)
+          const next = await update(input.sessionID, (draft) => {
+            draft.revert = {
+              // if not part id jump to the last user message
+              messageID: !partID && lastUser ? lastUser.id : msg.info.id,
+              partID,
+              snapshot,
+            }
+          })
+          return next
+        }
+        remaining.push(part)
       }
     }
-    await updateMessage(next)
+  }
+
+  export async function unrevert(input: { sessionID: string }) {
+    log.info("unreverting", input)
+    const session = await get(input.sessionID)
+    if (!session.revert) return session
+    if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
+    const next = await update(input.sessionID, (draft) => {
+      draft.revert = undefined
+    })
     return next
   }
 
-  export async function revert(input: {
-    sessionID: string
-    messageID: string
-    part: number
-  }) {
-    const message = await getMessage(input.sessionID, input.messageID)
-    if (!message) return
-    const part = message.parts[input.part]
-    if (!part) return
-    const session = await get(input.sessionID)
-    const snapshot =
-      session.revert?.snapshot ?? (await Snapshot.create(input.sessionID))
-    const old = (() => {
-      if (message.role === "assistant") {
-        const lastTool = message.parts.findLast(
-          (part, index) =>
-            part.type === "tool-invocation" && index < input.part,
-        )
-        if (lastTool && lastTool.type === "tool-invocation")
-          return message.metadata.tool[lastTool.toolInvocation.toolCallId]
-            .snapshot
-      }
-      return message.metadata.snapshot
-    })()
-    if (old) await Snapshot.restore(input.sessionID, old)
-    await update(input.sessionID, (draft) => {
-      draft.revert = {
-        messageID: input.messageID,
-        part: input.part,
-        snapshot,
-      }
-    })
-  }
-
-  export async function unrevert(sessionID: string) {
-    const session = await get(sessionID)
-    if (!session) return
-    if (!session.revert) return
-    if (session.revert.snapshot)
-      await Snapshot.restore(sessionID, session.revert.snapshot)
-    update(sessionID, (draft) => {
-      draft.revert = undefined
-    })
-  }
-
-  export async function summarize(input: {
-    sessionID: string
-    providerID: string
-    modelID: string
-  }) {
+  export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
     using abort = lock(input.sessionID)
     const msgs = await messages(input.sessionID)
-    const lastSummary = msgs.findLast(
-      (msg) => msg.metadata.assistant?.summary === true,
-    )?.id
-    const filtered = msgs.filter((msg) => !lastSummary || msg.id >= lastSummary)
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+    const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const app = App.info()
     const system = SystemPrompt.summarize(input.providerID)
 
-    const next: Message.Info = {
+    const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
       role: "assistant",
-      parts: [],
-      metadata: {
-        tool: {},
-        sessionID: input.sessionID,
-        assistant: {
-          system,
-          path: {
-            cwd: app.path.cwd,
-            root: app.path.root,
-          },
-          summary: true,
-          cost: 0,
-          modelID: input.modelID,
-          providerID: input.providerID,
-          tokens: {
-            input: 0,
-            output: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-        },
-        time: {
-          created: Date.now(),
-        },
+      sessionID: input.sessionID,
+      system,
+      mode: "build",
+      path: {
+        cwd: app.path.cwd,
+        root: app.path.root,
+      },
+      summary: true,
+      cost: 0,
+      modelID: input.modelID,
+      providerID: input.providerID,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      time: {
+        created: Date.now(),
       },
     }
     await updateMessage(next)
 
-    let text: Message.TextPart | undefined
-    const result = streamText({
+    const processor = createProcessor(next, model.info)
+    const stream = streamText({
+      maxRetries: 10,
       abortSignal: abort.signal,
       model: model.language,
       messages: [
         ...system.map(
-          (x): CoreMessage => ({
+          (x): ModelMessage => ({
             role: "system",
             content: x,
           }),
         ),
-        ...convertToCoreMessages(filtered.map(toUIMessage)),
+        ...MessageV2.toModelMessage(filtered),
         {
           role: "user",
           content: [
@@ -894,46 +1171,14 @@ export namespace Session {
           ],
         },
       ],
-      onStepFinish: async (step) => {
-        const assistant = next.metadata!.assistant!
-        const usage = getUsage(model.info, step.usage, step.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
-        await updateMessage(next)
-        if (text) {
-          Bus.publish(Message.Event.PartUpdated, {
-            part: text,
-            messageID: next.id,
-            sessionID: next.metadata.sessionID,
-          })
-        }
-        text = undefined
-      },
-      async onFinish(input) {
-        const assistant = next.metadata!.assistant!
-        const usage = getUsage(model.info, input.usage, input.providerMetadata)
-        assistant.cost += usage.cost
-        assistant.tokens = usage.tokens
-        next.metadata!.time.completed = Date.now()
-        await updateMessage(next)
-      },
     })
 
-    for await (const value of result.fullStream) {
-      switch (value.type) {
-        case "text-delta":
-          if (!text) {
-            text = {
-              type: "text",
-              text: value.textDelta,
-            }
-            next.parts.push(text)
-          } else text.text += value.textDelta
+    const result = await processor.process(stream)
+    return result
+  }
 
-          await updateMessage(next)
-          break
-      }
-    }
+  function isLocked(sessionID: string) {
+    return state().pending.has(sessionID)
   }
 
   function lock(sessionID: string) {
@@ -953,40 +1198,25 @@ export namespace Session {
     }
   }
 
-  function getUsage(
-    model: ModelsDev.Model,
-    usage: LanguageModelUsage,
-    metadata?: ProviderMetadata,
-  ) {
+  function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {
     const tokens = {
-      input: usage.promptTokens ?? 0,
-      output: usage.completionTokens ?? 0,
+      input: usage.inputTokens ?? 0,
+      output: usage.outputTokens ?? 0,
       reasoning: 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error
           metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
           0) as number,
-        read: (metadata?.["anthropic"]?.["cacheReadInputTokens"] ??
-          // @ts-expect-error
-          metadata?.["bedrock"]?.["usage"]?.["cacheReadInputTokens"] ??
-          0) as number,
+        read: usage.cachedInputTokens ?? 0,
       },
     }
     return {
       cost: new Decimal(0)
         .add(new Decimal(tokens.input).mul(model.cost.input).div(1_000_000))
         .add(new Decimal(tokens.output).mul(model.cost.output).div(1_000_000))
-        .add(
-          new Decimal(tokens.cache.read)
-            .mul(model.cost.cache_read ?? 0)
-            .div(1_000_000),
-        )
-        .add(
-          new Decimal(tokens.cache.write)
-            .mul(model.cost.cache_write ?? 0)
-            .div(1_000_000),
-        )
+        .add(new Decimal(tokens.cache.read).mul(model.cost.cache_read ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.write).mul(model.cost.cache_write ?? 0).div(1_000_000))
         .toNumber(),
       tokens,
     }
@@ -1002,14 +1232,17 @@ export namespace Session {
     sessionID: string
     modelID: string
     providerID: string
+    messageID: string
   }) {
     const app = App.info()
     await Session.chat({
       sessionID: input.sessionID,
+      messageID: input.messageID,
       providerID: input.providerID,
       modelID: input.modelID,
       parts: [
         {
+          id: Identifier.ascending("part"),
           type: "text",
           text: PROMPT_INITIALIZE.replace("${path}", app.path.root),
         },
@@ -1017,58 +1250,4 @@ export namespace Session {
     })
     await App.initialize()
   }
-}
-
-function toUIMessage(msg: Message.Info): UIMessage {
-  if (msg.role === "assistant") {
-    return {
-      id: msg.id,
-      role: "assistant",
-      content: "",
-      parts: toParts(msg.parts),
-    }
-  }
-
-  if (msg.role === "user") {
-    return {
-      id: msg.id,
-      role: "user",
-      content: "",
-      parts: toParts(msg.parts),
-    }
-  }
-
-  throw new Error("not implemented")
-}
-
-function toParts(parts: Message.MessagePart[]): UIMessage["parts"] {
-  const result: UIMessage["parts"] = []
-  for (const part of parts) {
-    switch (part.type) {
-      case "text":
-        result.push({ type: "text", text: part.text })
-        break
-      case "file":
-        result.push({
-          type: "file",
-          data: part.url,
-          mimeType: part.mediaType,
-        })
-        break
-      case "tool-invocation":
-        result.push({
-          type: "tool-invocation",
-          toolInvocation: part.toolInvocation,
-        })
-        break
-      case "step-start":
-        result.push({
-          type: "step-start",
-        })
-        break
-      default:
-        break
-    }
-  }
-  return result
 }

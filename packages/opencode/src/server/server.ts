@@ -6,7 +6,6 @@ import { streamSSE } from "hono/streaming"
 import { Session } from "../session"
 import { resolver, validator as zValidator } from "hono-openapi/zod"
 import { z } from "zod"
-import { Message } from "../session/message"
 import { Provider } from "../provider/provider"
 import { App } from "../app/app"
 import { mapValues } from "remeda"
@@ -16,6 +15,9 @@ import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
+import { MessageV2 } from "../session/message-v2"
+import { Mode } from "../session/mode"
+import { callTui, TuiRoute } from "./tui"
 
 const ERRORS = {
   400: {
@@ -51,23 +53,25 @@ export namespace Server {
             status: 400,
           })
         }
-        return c.json(
-          new NamedError.Unknown({ message: err.toString() }).toObject(),
-          {
-            status: 400,
-          },
-        )
+        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
+          status: 400,
+        })
       })
       .use(async (c, next) => {
-        log.info("request", {
-          method: c.req.method,
-          path: c.req.path,
-        })
+        const skipLogging = c.req.path === "/log"
+        if (!skipLogging) {
+          log.info("request", {
+            method: c.req.method,
+            path: c.req.path,
+          })
+        }
         const start = Date.now()
         await next()
-        log.info("response", {
-          duration: Date.now() - start,
-        })
+        if (!skipLogging) {
+          log.info("response", {
+            duration: Date.now() - start,
+          })
+        }
       })
       .get(
         "/doc",
@@ -197,6 +201,7 @@ export namespace Server {
         }),
         async (c) => {
           const sessions = await Array.fromAsync(Session.list())
+          sessions.sort((a, b) => b.time.updated - a.time.updated)
           return c.json(sessions)
         },
       )
@@ -271,6 +276,7 @@ export namespace Server {
         zValidator(
           "json",
           z.object({
+            messageID: z.string(),
             providerID: z.string(),
             modelID: z.string(),
           }),
@@ -407,7 +413,14 @@ export namespace Server {
               description: "List of messages",
               content: {
                 "application/json": {
-                  schema: resolver(Message.Info.array()),
+                  schema: resolver(
+                    z
+                      .object({
+                        info: MessageV2.Info,
+                        parts: MessageV2.Part.array(),
+                      })
+                      .array(),
+                  ),
                 },
               },
             },
@@ -433,7 +446,7 @@ export namespace Server {
               description: "Created message",
               content: {
                 "application/json": {
-                  schema: resolver(Message.Info),
+                  schema: resolver(MessageV2.Assistant),
                 },
               },
             },
@@ -445,19 +458,68 @@ export namespace Server {
             id: z.string().openapi({ description: "Session ID" }),
           }),
         ),
-        zValidator(
-          "json",
-          z.object({
-            providerID: z.string(),
-            modelID: z.string(),
-            parts: Message.MessagePart.array(),
-          }),
-        ),
+        zValidator("json", Session.ChatInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
           const msg = await Session.chat({ ...body, sessionID })
           return c.json(msg)
+        },
+      )
+      .post(
+        "/session/:id/revert",
+        describeRoute({
+          description: "Revert a message",
+          responses: {
+            200: {
+              description: "Updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        zValidator("json", Session.RevertInput.omit({ sessionID: true })),
+        async (c) => {
+          const id = c.req.valid("param").id
+          log.info("revert", c.req.valid("json"))
+          const session = await Session.revert({ sessionID: id, ...c.req.valid("json") })
+          return c.json(session)
+        },
+      )
+      .post(
+        "/session/:id/unrevert",
+        describeRoute({
+          description: "Restore all reverted messages",
+          responses: {
+            200: {
+              description: "Updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const session = await Session.unrevert({ sessionID: id })
+          return c.json(session)
         },
       )
       .get(
@@ -481,15 +543,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = await Provider.list().then((x) =>
-            mapValues(x, (item) => item.info),
-          )
+          const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(
-              providers,
-              (item) => Provider.sort(Object.values(item.models))[0].id,
-            ),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           })
         },
       )
@@ -566,7 +623,7 @@ export namespace Server {
               description: "Symbols",
               content: {
                 "application/json": {
-                  schema: resolver(z.unknown().array()),
+                  schema: resolver(LSP.Symbol.array()),
                 },
               },
             },
@@ -629,16 +686,7 @@ export namespace Server {
               description: "File status",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        file: z.string(),
-                        added: z.number().int(),
-                        removed: z.number().int(),
-                        status: z.enum(["added", "deleted", "modified"]),
-                      })
-                      .array(),
-                  ),
+                  schema: resolver(File.Info.array()),
                 },
               },
             },
@@ -649,6 +697,116 @@ export namespace Server {
           return c.json(content)
         },
       )
+      .post(
+        "/log",
+        describeRoute({
+          description: "Write a log entry to the server logs",
+          responses: {
+            200: {
+              description: "Log entry written successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            service: z.string().openapi({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
+            message: z.string().openapi({ description: "Log message" }),
+            extra: z
+              .record(z.string(), z.any())
+              .optional()
+              .openapi({ description: "Additional metadata for the log entry" }),
+          }),
+        ),
+        async (c) => {
+          const { service, level, message, extra } = c.req.valid("json")
+          const logger = Log.create({ service })
+
+          switch (level) {
+            case "debug":
+              logger.debug(message, extra)
+              break
+            case "info":
+              logger.info(message, extra)
+              break
+            case "error":
+              logger.error(message, extra)
+              break
+            case "warn":
+              logger.warn(message, extra)
+              break
+          }
+
+          return c.json(true)
+        },
+      )
+      .get(
+        "/mode",
+        describeRoute({
+          description: "List all modes",
+          responses: {
+            200: {
+              description: "List of modes",
+              content: {
+                "application/json": {
+                  schema: resolver(Mode.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const modes = await Mode.list()
+          return c.json(modes)
+        },
+      )
+      .post(
+        "/tui/append-prompt",
+        describeRoute({
+          description: "Append prompt to the TUI",
+          responses: {
+            200: {
+              description: "Prompt processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            text: z.string(),
+          }),
+        ),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/open-help",
+        describeRoute({
+          description: "Open the help dialog",
+          responses: {
+            200: {
+              description: "Help dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .route("/tui/control", TuiRoute)
 
     return result
   }

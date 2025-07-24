@@ -39,8 +39,30 @@ export function IconGemini(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
 export function IconOpencode(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 70 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path fill-rule="evenodd" clip-rule="evenodd" d="M0 13H35V58H0V13ZM26.25 22.1957H8.75V48.701H26.25V22.1957Z" fill="currentColor" />
+      <path
+        fill-rule="evenodd"
+        clip-rule="evenodd"
+        d="M0 13H35V58H0V13ZM26.25 22.1957H8.75V48.701H26.25V22.1957Z"
+        fill="currentColor"
+      />
       <path d="M43.75 13H70V22.1957H52.5V48.701H70V57.8967H43.75V13Z" fill="currentColor" />
     </svg>
+  )
+}
+
+// https://icones.js.org/collection/ri?s=meta&icon=ri:meta-fill
+export function IconMeta(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M16.92 4.5c-1.851 0-3.298 1.394-4.608 3.165C10.512 5.373 9.007 4.5 7.206 4.5C3.534 4.5.72 9.28.72 14.338c0 3.165 1.531 5.162 4.096 5.162c1.846 0 3.174-.87 5.535-4.997c0 0 .984-1.737 1.66-2.934q.356.574.75 1.238l1.107 1.862c2.156 3.608 3.358 4.831 5.534 4.831c2.5 0 3.89-2.024 3.89-5.255c0-5.297-2.877-9.745-6.372-9.745m-8.37 8.886c-1.913 3-2.575 3.673-3.64 3.673c-1.097 0-1.749-.963-1.749-2.68c0-3.672 1.831-7.427 4.014-7.427c1.182 0 2.17.682 3.683 2.848c-1.437 2.204-2.307 3.586-2.307 3.586m7.224-.377L14.45 10.8a45 45 0 0 0-1.032-1.608c1.193-1.841 2.176-2.759 3.347-2.759c2.43 0 4.375 3.58 4.375 7.976c0 1.676-.549 2.649-1.686 2.649c-1.09 0-1.61-.72-3.68-4.05" />
+    </svg>
+  )
+}
+
+// https://icones.js.org/collection/ri?s=robot&icon=ri:robot-2-line
+export function IconRobot(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M13.5 2c0 .444-.193.843-.5 1.118V5h5a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h5V3.118A1.5 1.5 0 1 1 13.5 2M6 7a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm-4 3H0v6h2zm20 0h2v6h-2zM9 14.5a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3m6 0a1.5 1.5 0 1 0 0-3a1.5 1.5 0 0 0 0 3" /></svg>
   )
 }

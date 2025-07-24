@@ -22,9 +22,7 @@ export namespace ConfigHooks {
           command: item.command,
         })
         Bun.spawn({
-          cmd: item.command.map((x) =>
-            x.replace("$FILE", payload.properties.file),
-          ),
+          cmd: item.command.map((x) => x.replace("$FILE", payload.properties.file)),
           env: item.environment,
           cwd: app.path.cwd,
           stdout: "ignore",
@@ -33,9 +31,13 @@ export namespace ConfigHooks {
       }
     })
 
-    Bus.subscribe(Session.Event.Idle, async () => {
+    Bus.subscribe(Session.Event.Idle, async (payload) => {
       const cfg = await Config.get()
       if (cfg.experimental?.hook?.session_completed) {
+        const session = await Session.get(payload.properties.sessionID)
+        // Only fire hook for top-level sessions (not subagent sessions)
+        if (session.parentID) return
+
         for (const item of cfg.experimental.hook.session_completed) {
           log.info("session_completed", {
             command: item.command,

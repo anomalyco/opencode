@@ -122,10 +122,7 @@ export namespace AuthGithubCopilot {
     return tokenData.token
   }
 
-  export const DeviceCodeError = NamedError.create(
-    "DeviceCodeError",
-    z.object({}),
-  )
+  export const DeviceCodeError = NamedError.create("DeviceCodeError", z.object({}))
 
   export const TokenExchangeError = NamedError.create(
     "TokenExchangeError",

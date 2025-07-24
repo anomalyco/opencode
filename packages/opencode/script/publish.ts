@@ -9,7 +9,7 @@ const snapshot = process.argv.includes("--snapshot")
 
 const version = snapshot
   ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  : await $`git describe --tags --exact-match HEAD`
+  : await $`git describe --tags --abbrev=0`
       .text()
       .then((x) => x.substring(1).trim())
       .catch(() => {
@@ -22,11 +22,13 @@ console.log(`publishing ${version}`)
 const GOARCH: Record<string, string> = {
   arm64: "arm64",
   x64: "amd64",
+  "x64-baseline": "amd64",
 }
 
 const targets = [
   ["linux", "arm64"],
   ["linux", "x64"],
+  ["linux", "x64-baseline"],
   ["darwin", "x64"],
   ["darwin", "arm64"],
   ["windows", "x64"],
@@ -57,8 +59,7 @@ for (const [os, arch] of targets) {
       2,
     ),
   )
-  if (!dry)
-    await $`cd dist/${name} && bun publish --access public --tag ${npmTag}`
+  if (!dry) await $`cd dist/${name} && bun publish --access public --tag ${npmTag}`
   optionalDependencies[name] = version
 }
 
@@ -82,8 +83,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-if (!dry)
-  await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${npmTag}`
+if (!dry) await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${npmTag}`
 
 if (!snapshot) {
   // Github Release
@@ -91,52 +91,43 @@ if (!snapshot) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
 
-  const previous = await fetch(
-    "https://api.github.com/repos/sst/opencode/releases/latest",
-  )
-    .then((res) => res.json())
+  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
     .then((data) => data.tag_name)
 
-  const commits = await fetch(
-    `https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`,
-  )
+  console.log("finding commits between", previous, "and", "HEAD")
+  const commits = await fetch(`https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`)
     .then((res) => res.json())
     .then((data) => data.commits || [])
 
-  const notes = commits
-    .map((commit: any) => `- ${commit.commit.message.split("\n")[0]}`)
-    .filter((x: string) => {
-      const lower = x.toLowerCase()
-      return (
-        !lower.includes("ignore:") &&
-        !lower.includes("ci:") &&
-        !lower.includes("wip:") &&
-        !lower.includes("docs:") &&
-        !lower.includes("doc:")
-      )
-    })
-    .join("\n")
+  const raw = commits.map((commit: any) => `- ${commit.commit.message.split("\n").join(" ")}`)
+  console.log(raw)
 
-  if (!dry)
-    await $`gh release create v${version} --title "v${version}" --notes ${notes} ./dist/*.zip`
+  const notes =
+    raw
+      .filter((x: string) => {
+        const lower = x.toLowerCase()
+        return (
+          !lower.includes("ignore:") &&
+          !lower.includes("chore:") &&
+          !lower.includes("ci:") &&
+          !lower.includes("wip:") &&
+          !lower.includes("docs:") &&
+          !lower.includes("doc:")
+        )
+      })
+      .join("\n") || "No notable changes"
+
+  if (!dry) await $`gh release create v${version} --title "v${version}" --notes ${notes} ./dist/*.zip`
 
   // Calculate SHA values
-  const arm64Sha =
-    await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`
-      .text()
-      .then((x) => x.trim())
-  const x64Sha =
-    await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`
-      .text()
-      .then((x) => x.trim())
-  const macX64Sha =
-    await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`
-      .text()
-      .then((x) => x.trim())
-  const macArm64Sha =
-    await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`
-      .text()
-      .then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
   // AUR package
   const pkgbuild = [
@@ -170,9 +161,8 @@ if (!snapshot) {
   for (const pkg of ["opencode", "opencode-bin"]) {
     await $`rm -rf ./dist/aur-${pkg}`
     await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
-    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(
-      pkgbuild.replace("${pkg}", pkg),
-    )
+    await $`cd ./dist/aur-${pkg} && git checkout master`
+    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
     await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
