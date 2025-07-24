@@ -147,7 +147,7 @@ export namespace Config {
 
     npm?: string;
 
-    options?: { [key: string]: unknown };
+    options?: Provider.Options;
   }
 
   export namespace Provider {
@@ -189,6 +189,14 @@ export namespace Config {
 
         output: number;
       }
+    }
+
+    export interface Options {
+      apiKey?: string;
+
+      baseURL?: string;
+
+      [k: string]: unknown;
     }
   }
 }

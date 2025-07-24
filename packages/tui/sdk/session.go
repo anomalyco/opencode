@@ -175,6 +175,7 @@ func (r *SessionService) Unshare(ctx context.Context, id string, opts ...option.
 type AssistantMessage struct {
 	ID         string                 `json:"id,required"`
 	Cost       float64                `json:"cost,required"`
+	Mode       string                 `json:"mode,required"`
 	ModelID    string                 `json:"modelID,required"`
 	Path       AssistantMessagePath   `json:"path,required"`
 	ProviderID string                 `json:"providerID,required"`
@@ -193,6 +194,7 @@ type AssistantMessage struct {
 type assistantMessageJSON struct {
 	ID          apijson.Field
 	Cost        apijson.Field
+	Mode        apijson.Field
 	ModelID     apijson.Field
 	Path        apijson.Field
 	ProviderID  apijson.Field
@@ -735,6 +737,7 @@ type Message struct {
 	Cost float64     `json:"cost"`
 	// This field can have the runtime type of [AssistantMessageError].
 	Error   interface{} `json:"error"`
+	Mode    string      `json:"mode"`
 	ModelID string      `json:"modelID"`
 	// This field can have the runtime type of [AssistantMessagePath].
 	Path       interface{} `json:"path"`
@@ -756,6 +759,7 @@ type messageJSON struct {
 	Time        apijson.Field
 	Cost        apijson.Field
 	Error       apijson.Field
+	Mode        apijson.Field
 	ModelID     apijson.Field
 	Path        apijson.Field
 	ProviderID  apijson.Field
@@ -825,16 +829,19 @@ func (r MessageRole) IsKnown() bool {
 }
 
 type Part struct {
-	ID        string         `json:"id,required"`
-	MessageID string         `json:"messageID,required"`
-	SessionID string         `json:"sessionID,required"`
-	Type      PartType       `json:"type,required"`
-	CallID    string         `json:"callID"`
-	Cost      float64        `json:"cost"`
-	Filename  string         `json:"filename"`
-	Mime      string         `json:"mime"`
-	Snapshot  string         `json:"snapshot"`
-	Source    FilePartSource `json:"source"`
+	ID        string   `json:"id,required"`
+	MessageID string   `json:"messageID,required"`
+	SessionID string   `json:"sessionID,required"`
+	Type      PartType `json:"type,required"`
+	CallID    string   `json:"callID"`
+	Cost      float64  `json:"cost"`
+	Filename  string   `json:"filename"`
+	// This field can have the runtime type of [[]string].
+	Files    interface{}    `json:"files"`
+	Hash     string         `json:"hash"`
+	Mime     string         `json:"mime"`
+	Snapshot string         `json:"snapshot"`
+	Source   FilePartSource `json:"source"`
 	// This field can have the runtime type of [ToolPartState].
 	State     interface{} `json:"state"`
 	Synthetic bool        `json:"synthetic"`
@@ -858,6 +865,8 @@ type partJSON struct {
 	CallID      apijson.Field
 	Cost        apijson.Field
 	Filename    apijson.Field
+	Files       apijson.Field
+	Hash        apijson.Field
 	Mime        apijson.Field
 	Snapshot    apijson.Field
 	Source      apijson.Field
@@ -889,13 +898,13 @@ func (r *Part) UnmarshalJSON(data []byte) (err error) {
 // for more type safety.
 //
 // Possible runtime types of the union are [TextPart], [FilePart], [ToolPart],
-// [StepStartPart], [StepFinishPart], [SnapshotPart].
+// [StepStartPart], [StepFinishPart], [SnapshotPart], [PartPatchPart].
 func (r Part) AsUnion() PartUnion {
 	return r.union
 }
 
 // Union satisfied by [TextPart], [FilePart], [ToolPart], [StepStartPart],
-// [StepFinishPart] or [SnapshotPart].
+// [StepFinishPart], [SnapshotPart] or [PartPatchPart].
 type PartUnion interface {
 	implementsPart()
 }
@@ -934,7 +943,58 @@ func init() {
 			Type:               reflect.TypeOf(SnapshotPart{}),
 			DiscriminatorValue: "snapshot",
 		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(PartPatchPart{}),
+			DiscriminatorValue: "patch",
+		},
 	)
+}
+
+type PartPatchPart struct {
+	ID        string            `json:"id,required"`
+	Files     []string          `json:"files,required"`
+	Hash      string            `json:"hash,required"`
+	MessageID string            `json:"messageID,required"`
+	SessionID string            `json:"sessionID,required"`
+	Type      PartPatchPartType `json:"type,required"`
+	JSON      partPatchPartJSON `json:"-"`
+}
+
+// partPatchPartJSON contains the JSON metadata for the struct [PartPatchPart]
+type partPatchPartJSON struct {
+	ID          apijson.Field
+	Files       apijson.Field
+	Hash        apijson.Field
+	MessageID   apijson.Field
+	SessionID   apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *PartPatchPart) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r partPatchPartJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r PartPatchPart) implementsPart() {}
+
+type PartPatchPartType string
+
+const (
+	PartPatchPartTypePatch PartPatchPartType = "patch"
+)
+
+func (r PartPatchPartType) IsKnown() bool {
+	switch r {
+	case PartPatchPartTypePatch:
+		return true
+	}
+	return false
 }
 
 type PartType string
@@ -946,11 +1006,12 @@ const (
 	PartTypeStepStart  PartType = "step-start"
 	PartTypeStepFinish PartType = "step-finish"
 	PartTypeSnapshot   PartType = "snapshot"
+	PartTypePatch      PartType = "patch"
 )
 
 func (r PartType) IsKnown() bool {
 	switch r {
-	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot:
+	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot, PartTypePatch:
 		return true
 	}
 	return false

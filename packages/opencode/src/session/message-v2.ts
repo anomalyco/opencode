@@ -94,6 +94,15 @@ export namespace MessageV2 {
   })
   export type SnapshotPart = z.infer<typeof SnapshotPart>
 
+  export const PatchPart = PartBase.extend({
+    type: z.literal("patch"),
+    hash: z.string(),
+    files: z.string().array(),
+  }).openapi({
+    ref: "PatchPart",
+  })
+  export type PatchPart = z.infer<typeof PatchPart>
+
   export const TextPart = PartBase.extend({
     type: z.literal("text"),
     text: z.string(),
@@ -203,7 +212,7 @@ export namespace MessageV2 {
   export type User = z.infer<typeof User>
 
   export const Part = z
-    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart])
+    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart, PatchPart])
     .openapi({
       ref: "Part",
     })

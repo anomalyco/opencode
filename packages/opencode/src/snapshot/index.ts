@@ -2,10 +2,9 @@ import { App } from "../app/app"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
-import { Ripgrep } from "../file/ripgrep"
 import { Log } from "../util/log"
 import { Global } from "../global"
-import { Installation } from "../installation"
+import { z } from "zod"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -24,21 +23,9 @@ export namespace Snapshot {
     })
   }
 
-  export async function create() {
-    log.info("creating snapshot")
+  export async function track() {
     const app = App.info()
-
-    // not a git repo, check if too big to snapshot
-    if (!app.git || !Installation.isDev()) {
-      return
-      const files = await Ripgrep.files({
-        cwd: app.path.cwd,
-        limit: 1000,
-      })
-      log.info("found files", { count: files.length })
-      if (files.length >= 1000) return
-    }
-
+    if (!app.git) return
     const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`
@@ -51,33 +38,60 @@ export namespace Snapshot {
         .nothrow()
       log.info("initialized")
     }
-
     await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
-    log.info("added files")
+    const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(app.path.cwd).text()
+    return hash.trim()
+  }
 
-    const result =
-      await $`git --git-dir ${git} commit --allow-empty -m "snapshot" --no-gpg-sign --author="opencode <mail@opencode.ai>"`
-        .quiet()
-        .cwd(app.path.cwd)
-        .nothrow()
+  export const Patch = z.object({
+    hash: z.string(),
+    files: z.string().array(),
+  })
+  export type Patch = z.infer<typeof Patch>
 
-    const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
-    if (!match) return
-    return match![1]
+  export async function patch(hash: string): Promise<Patch> {
+    const app = App.info()
+    const git = gitdir()
+    await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
+    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(app.path.cwd).text()
+    return {
+      hash,
+      files: files
+        .trim()
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .map((x) => path.join(app.path.cwd, x)),
+    }
   }
 
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const app = App.info()
     const git = gitdir()
-    await $`git --git-dir=${git} reset --hard ${snapshot}`.quiet().cwd(app.path.root)
+    await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
+      .quiet()
+      .cwd(app.path.root)
   }
 
-  export async function diff(commit: string) {
+  export async function revert(patches: Patch[]) {
+    const files = new Set<string>()
     const git = gitdir()
-    const result = await $`git --git-dir=${git} diff -R ${commit}`.quiet().cwd(App.info().path.root)
-    const text = result.stdout.toString("utf8")
-    return text
+    for (const item of patches) {
+      for (const file of item.files) {
+        if (files.has(file)) continue
+        log.info("reverting", { file, hash: item.hash })
+        const result = await $`git --git-dir=${git} checkout ${item.hash} -- ${file}`
+          .quiet()
+          .cwd(App.info().path.root)
+          .nothrow()
+        if (result.exitCode !== 0) {
+          log.info("file not found in history, deleting", { file })
+          await fs.unlink(file).catch(() => {})
+        }
+        files.add(file)
+      }
+    }
   }
 
   function gitdir() {

@@ -333,7 +333,7 @@ type ConfigProvider struct {
 	Env     []string                       `json:"env"`
 	Name    string                         `json:"name"`
 	Npm     string                         `json:"npm"`
-	Options map[string]interface{}         `json:"options"`
+	Options ConfigProviderOptions          `json:"options"`
 	JSON    configProviderJSON             `json:"-"`
 }
 
@@ -444,6 +444,30 @@ func (r *ConfigProviderModelsLimit) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r configProviderModelsLimitJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigProviderOptions struct {
+	APIKey      string                    `json:"apiKey"`
+	BaseURL     string                    `json:"baseURL"`
+	ExtraFields map[string]interface{}    `json:"-,extras"`
+	JSON        configProviderOptionsJSON `json:"-"`
+}
+
+// configProviderOptionsJSON contains the JSON metadata for the struct
+// [ConfigProviderOptions]
+type configProviderOptionsJSON struct {
+	APIKey      apijson.Field
+	BaseURL     apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigProviderOptions) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configProviderOptionsJSON) RawJSON() string {
 	return r.raw
 }
 

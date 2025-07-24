@@ -55,6 +55,7 @@ type EventListResponse struct {
 	// [EventListResponseEventMessageUpdatedProperties],
 	// [EventListResponseEventMessageRemovedProperties],
 	// [EventListResponseEventMessagePartUpdatedProperties],
+	// [EventListResponseEventMessagePartRemovedProperties],
 	// [EventListResponseEventStorageWriteProperties],
 	// [EventListResponseEventSessionUpdatedProperties],
 	// [EventListResponseEventSessionDeletedProperties],
@@ -99,6 +100,7 @@ func (r *EventListResponse) UnmarshalJSON(data []byte) (err error) {
 // [EventListResponseEventInstallationUpdated],
 // [EventListResponseEventMessageUpdated], [EventListResponseEventMessageRemoved],
 // [EventListResponseEventMessagePartUpdated],
+// [EventListResponseEventMessagePartRemoved],
 // [EventListResponseEventStorageWrite], [EventListResponseEventSessionUpdated],
 // [EventListResponseEventSessionDeleted], [EventListResponseEventSessionIdle],
 // [EventListResponseEventSessionError],
@@ -113,6 +115,7 @@ func (r EventListResponse) AsUnion() EventListResponseUnion {
 // [EventListResponseEventInstallationUpdated],
 // [EventListResponseEventMessageUpdated], [EventListResponseEventMessageRemoved],
 // [EventListResponseEventMessagePartUpdated],
+// [EventListResponseEventMessagePartRemoved],
 // [EventListResponseEventStorageWrite], [EventListResponseEventSessionUpdated],
 // [EventListResponseEventSessionDeleted], [EventListResponseEventSessionIdle],
 // [EventListResponseEventSessionError], [EventListResponseEventFileWatcherUpdated]
@@ -159,6 +162,11 @@ func init() {
 			TypeFilter:         gjson.JSON,
 			Type:               reflect.TypeOf(EventListResponseEventMessagePartUpdated{}),
 			DiscriminatorValue: "message.part.updated",
+		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(EventListResponseEventMessagePartRemoved{}),
+			DiscriminatorValue: "message.part.removed",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
@@ -646,6 +654,68 @@ const (
 func (r EventListResponseEventMessagePartUpdatedType) IsKnown() bool {
 	switch r {
 	case EventListResponseEventMessagePartUpdatedTypeMessagePartUpdated:
+		return true
+	}
+	return false
+}
+
+type EventListResponseEventMessagePartRemoved struct {
+	Properties EventListResponseEventMessagePartRemovedProperties `json:"properties,required"`
+	Type       EventListResponseEventMessagePartRemovedType       `json:"type,required"`
+	JSON       eventListResponseEventMessagePartRemovedJSON       `json:"-"`
+}
+
+// eventListResponseEventMessagePartRemovedJSON contains the JSON metadata for the
+// struct [EventListResponseEventMessagePartRemoved]
+type eventListResponseEventMessagePartRemovedJSON struct {
+	Properties  apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventMessagePartRemoved) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventMessagePartRemovedJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r EventListResponseEventMessagePartRemoved) implementsEventListResponse() {}
+
+type EventListResponseEventMessagePartRemovedProperties struct {
+	MessageID string                                                 `json:"messageID,required"`
+	PartID    string                                                 `json:"partID,required"`
+	JSON      eventListResponseEventMessagePartRemovedPropertiesJSON `json:"-"`
+}
+
+// eventListResponseEventMessagePartRemovedPropertiesJSON contains the JSON
+// metadata for the struct [EventListResponseEventMessagePartRemovedProperties]
+type eventListResponseEventMessagePartRemovedPropertiesJSON struct {
+	MessageID   apijson.Field
+	PartID      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventMessagePartRemovedProperties) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventMessagePartRemovedPropertiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type EventListResponseEventMessagePartRemovedType string
+
+const (
+	EventListResponseEventMessagePartRemovedTypeMessagePartRemoved EventListResponseEventMessagePartRemovedType = "message.part.removed"
+)
+
+func (r EventListResponseEventMessagePartRemovedType) IsKnown() bool {
+	switch r {
+	case EventListResponseEventMessagePartRemovedTypeMessagePartRemoved:
 		return true
 	}
 	return false
@@ -1236,6 +1306,7 @@ const (
 	EventListResponseTypeMessageUpdated       EventListResponseType = "message.updated"
 	EventListResponseTypeMessageRemoved       EventListResponseType = "message.removed"
 	EventListResponseTypeMessagePartUpdated   EventListResponseType = "message.part.updated"
+	EventListResponseTypeMessagePartRemoved   EventListResponseType = "message.part.removed"
 	EventListResponseTypeStorageWrite         EventListResponseType = "storage.write"
 	EventListResponseTypeSessionUpdated       EventListResponseType = "session.updated"
 	EventListResponseTypeSessionDeleted       EventListResponseType = "session.deleted"
@@ -1247,7 +1318,7 @@ const (
 
 func (r EventListResponseType) IsKnown() bool {
 	switch r {
-	case EventListResponseTypeLspClientDiagnostics, EventListResponseTypePermissionUpdated, EventListResponseTypeFileEdited, EventListResponseTypeInstallationUpdated, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeStorageWrite, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionIdle, EventListResponseTypeSessionError, EventListResponseTypeFileWatcherUpdated, EventListResponseTypeIdeInstalled:
+	case EventListResponseTypeLspClientDiagnostics, EventListResponseTypePermissionUpdated, EventListResponseTypeFileEdited, EventListResponseTypeInstallationUpdated, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeMessagePartRemoved, EventListResponseTypeStorageWrite, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionIdle, EventListResponseTypeSessionError, EventListResponseTypeFileWatcherUpdated, EventListResponseTypeIdeInstalled:
 		return true
 	}
 	return false

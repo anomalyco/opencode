@@ -24,6 +24,7 @@ export type EventListResponse =
   | EventListResponse.EventMessageUpdated
   | EventListResponse.EventMessageRemoved
   | EventListResponse.EventMessagePartUpdated
+  | EventListResponse.EventMessagePartRemoved
   | EventListResponse.EventStorageWrite
   | EventListResponse.EventSessionUpdated
   | EventListResponse.EventSessionDeleted
@@ -132,6 +133,20 @@ export namespace EventListResponse {
   export namespace EventMessagePartUpdated {
     export interface Properties {
       part: SessionAPI.Part;
+    }
+  }
+
+  export interface EventMessagePartRemoved {
+    properties: EventMessagePartRemoved.Properties;
+
+    type: 'message.part.removed';
+  }
+
+  export namespace EventMessagePartRemoved {
+    export interface Properties {
+      messageID: string;
+
+      partID: string;
     }
   }
 
