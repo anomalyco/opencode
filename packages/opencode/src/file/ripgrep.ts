@@ -7,6 +7,7 @@ import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 import { Fzf } from "./fzf"
+import { Config } from "../config/config"
 
 export namespace Ripgrep {
   const Stats = z.object({
@@ -187,8 +188,17 @@ export namespace Ripgrep {
     return filepath
   }
 
+  export function buildRipgrepCommand(config: Config.Info | undefined, filepath: string): string {
+    const baseFlags = ["--files", "--follow", "--hidden", "--glob='!.git/*'"]
+    if (config?.include_ignored_files) {
+      baseFlags.push("--no-ignore")
+    }
+    return `${$.escape(filepath)} ${baseFlags.join(" ")}`
+  }
+
   export async function files(input: { cwd: string; query?: string; glob?: string[]; limit?: number }) {
-    const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*'`]
+    const config = await Config.get().catch(() => undefined)
+    const commands = [buildRipgrepCommand(config, await filepath())]
 
     if (input.glob) {
       for (const g of input.glob) {

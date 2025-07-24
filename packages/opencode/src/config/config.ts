@@ -164,6 +164,10 @@ export namespace Config {
         .string()
         .optional()
         .describe("Custom username to display in conversations instead of system username"),
+      include_ignored_files: z
+        .boolean()
+        .optional()
+        .describe("Include files ignored by .gitignore in file search results"),
       mode: z
         .object({
           build: Mode.optional(),
