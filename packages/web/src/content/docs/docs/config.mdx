@@ -211,15 +211,13 @@ You can configure opencode to include files that are normally ignored by `.gitig
 }
 ```
 
-By default, opencode will skip files listed in `.gitignore` and similar ignore files. Setting `include_ignored_files` to `true` will include these files in searches, edits, and other operations.
+By default, opencode will skip files listed in `.gitignore` and similar ignore files. Setting `include_ignored_files` to `true` will include these files in operations like attachment auto suggestions (`@`).
 
 This is useful for:
 
 - Working with files that are intentionally ignored from version control but still relevant to your workflow
 - Including build artifacts or generated files in your analysis
 - Accessing configuration files that may be gitignored
-
-Note that enabling this option may impact performance if your project has many ignored files.
 
 ---
 
