@@ -569,8 +569,8 @@ export function replace(content: string, oldString: string, newString: string, r
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
-    WhitespaceNormalizedReplacer,
     BlockAnchorReplacer,
+    WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
     // TrimmedBoundaryReplacer,
