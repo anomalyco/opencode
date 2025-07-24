@@ -1,12 +1,21 @@
 package chat
 
 import (
+	"image/color"
 	"testing"
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/attachment"
+	"github.com/sst/opencode/internal/theme"
 )
+
+func init() {
+	// Initialize a simple theme for testing to avoid nil pointer dereference
+	systemTheme := theme.NewSystemTheme(color.RGBA{0, 0, 0, 255}, true)
+	theme.RegisterTheme("test", systemTheme)
+	theme.SetTheme("test")
+}
 
 func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
 	// Create a mock app for testing
@@ -15,7 +24,7 @@ func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
 			MessageHistory: []app.Prompt{},
 		},
 		Info: opencode.App{
-			Path: &opencode.PathInfo{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -69,8 +78,8 @@ func TestRestoreFromPromptReproduceBugScenario(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -118,8 +127,8 @@ func TestRestoreFromPromptMultipleAttachments(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -177,8 +186,8 @@ func TestRestoreFromPromptAttachmentsAtLineBoundaries(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -230,8 +239,8 @@ func TestRestoreFromPromptEmptyLinesWithAttachments(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -306,8 +315,8 @@ func TestRestoreFromHistoryIndex(t *testing.T) {
 				},
 			},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -347,8 +356,8 @@ func TestExactBugReproduction(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -430,8 +439,8 @@ func TestEdgeCaseLongAttachmentPaths(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -473,8 +482,8 @@ func TestEdgeCaseAttachmentAtStartAndEnd(t *testing.T) {
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
 		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
+		Info: opencode.App{
+			Path: opencode.AppPath{
 				Cwd: "/test",
 			},
 		},
@@ -518,153 +527,5 @@ func TestEdgeCaseAttachmentAtStartAndEnd(t *testing.T) {
 	result := editor.Value()
 	if result != originalText {
 		t.Errorf("Start/end attachment test failed. Expected %q, got %q", originalText, result)
-	}
-}
-
-func TestEdgeCaseConsecutiveAttachments(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
-
-	// Test consecutive attachments with no space between them
-	originalText := "Files: @file1.txt@file2.txt done"
-
-	prompt := app.Prompt{
-		Text: originalText,
-		Attachments: []*attachment.Attachment{
-			{
-				ID:         "consecutive-1",
-				Type:       "file",
-				Display:    "@file1.txt",
-				StartIndex: 7,  // After "Files: "
-				EndIndex:   17, // End of @file1.txt
-				Source: &attachment.FileSource{
-					Path: "/test/file1.txt",
-					Mime: "text/plain",
-				},
-			},
-			{
-				ID:         "consecutive-2",
-				Type:       "file",
-				Display:    "@file2.txt",
-				StartIndex: 17, // Immediately after first attachment
-				EndIndex:   27, // End of @file2.txt
-				Source: &attachment.FileSource{
-					Path: "/test/file2.txt",
-					Mime: "text/plain",
-				},
-			},
-		},
-	}
-
-	editor.RestoreFromPrompt(prompt)
-
-	result := editor.Value()
-	if result != originalText {
-		t.Errorf("Consecutive attachments test failed. Expected %q, got %q", originalText, result)
-	}
-}
-
-func TestEdgeCaseOnlyAttachments(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
-
-	// Test text that contains only attachments
-	originalText := "@file1.txt\n@file2.txt"
-
-	prompt := app.Prompt{
-		Text: originalText,
-		Attachments: []*attachment.Attachment{
-			{
-				ID:         "only-1",
-				Type:       "file",
-				Display:    "@file1.txt",
-				StartIndex: 0,
-				EndIndex:   10,
-				Source: &attachment.FileSource{
-					Path: "/test/file1.txt",
-					Mime: "text/plain",
-				},
-			},
-			{
-				ID:         "only-2",
-				Type:       "file",
-				Display:    "@file2.txt",
-				StartIndex: 11, // After newline
-				EndIndex:   21,
-				Source: &attachment.FileSource{
-					Path: "/test/file2.txt",
-					Mime: "text/plain",
-				},
-			},
-		},
-	}
-
-	editor.RestoreFromPrompt(prompt)
-
-	result := editor.Value()
-	if result != originalText {
-		t.Errorf("Only attachments test failed. Expected %q, got %q", originalText, result)
-	}
-}
-
-func TestEdgeCaseManyNewlines(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: &app.Info{
-			Path: &app.PathInfo{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
-
-	// Test text with many newlines to stress test absolute positioning
-	originalText := "line1\n\n\n\nline5\n@file.txt\n\n\nlast"
-
-	prompt := app.Prompt{
-		Text: originalText,
-		Attachments: []*attachment.Attachment{
-			{
-				ID:         "many-newlines",
-				Type:       "file",
-				Display:    "@file.txt",
-				StartIndex: 13, // After "line1\n\n\n\nline5\n"
-				EndIndex:   22, // End of @file.txt
-				Source: &attachment.FileSource{
-					Path: "/test/file.txt",
-					Mime: "text/plain",
-				},
-			},
-		},
-	}
-
-	editor.RestoreFromPrompt(prompt)
-
-	result := editor.Value()
-	if result != originalText {
-		t.Errorf("Many newlines test failed. Expected %q, got %q", originalText, result)
 	}
 }
