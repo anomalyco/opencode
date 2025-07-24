@@ -677,7 +677,7 @@ func (m *editorComponent) RestoreFromPrompt(prompt app.Prompt) {
 	m.textarea.SetValue(prompt.Text)
 
 	// Sort attachments by start index in reverse order (process from end to beginning)
-	// This prevents index shifting issues
+	// This prevents index shifting issues when using absolute positioning
 	attachmentsCopy := make([]*attachment.Attachment, len(prompt.Attachments))
 	copy(attachmentsCopy, prompt.Attachments)
 
@@ -689,9 +689,10 @@ func (m *editorComponent) RestoreFromPrompt(prompt app.Prompt) {
 		}
 	}
 
+	// Use absolute position replacement to correctly handle multi-line text
 	for _, att := range attachmentsCopy {
-		m.textarea.SetCursorColumn(att.StartIndex)
-		m.textarea.ReplaceRange(att.StartIndex, att.EndIndex, "")
+		// Replace the text range with empty string, then insert the attachment
+		m.textarea.ReplaceRangeAbsolute(att.StartIndex, att.EndIndex, "")
 		m.textarea.InsertAttachment(att)
 	}
 }

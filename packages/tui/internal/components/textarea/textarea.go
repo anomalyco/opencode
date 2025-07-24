@@ -700,6 +700,128 @@ func (m *Model) ReplaceRange(startCol, endCol int, replacement string) {
 	m.SetCursorColumn(m.col)
 }
 
+// ReplaceRangeAbsolute replaces text from startPos to endPos using absolute positions 
+// across the entire text including newlines. This correctly handles multi-line text
+// replacement for attachment restoration.
+func (m *Model) ReplaceRangeAbsolute(startPos, endPos int, replacement string) {
+	if startPos < 0 || endPos < startPos {
+		return
+	}
+
+	// Convert absolute positions to row/column coordinates
+	startRow, startCol := m.absolutePosToRowCol(startPos)
+	endRow, endCol := m.absolutePosToRowCol(endPos)
+
+	if startRow < 0 || startRow >= len(m.value) || endRow < 0 || endRow >= len(m.value) {
+		return
+	}
+
+	// Ensure bounds are within the rows
+	startCol = max(0, min(startCol, len(m.value[startRow])))
+	endCol = max(0, min(endCol, len(m.value[endRow])))
+
+	replacementRunes := runesToInterfaces([]rune(replacement))
+
+	if startRow == endRow {
+		// Replacement within single row
+		before := m.value[startRow][:startCol]
+		after := m.value[startRow][endCol:]
+		
+		newRow := make([]any, 0, len(before)+len(replacementRunes)+len(after))
+		newRow = append(newRow, before...)
+		newRow = append(newRow, replacementRunes...)
+		newRow = append(newRow, after...)
+		
+		m.value[startRow] = newRow
+		
+		// Position cursor at end of replacement
+		m.row = startRow
+		m.col = startCol + len(replacementRunes)
+	} else {
+		// Replacement spans multiple rows
+		before := m.value[startRow][:startCol]
+		after := m.value[endRow][endCol:]
+		
+		// Create new row with before + replacement + after
+		newRow := make([]any, 0, len(before)+len(replacementRunes)+len(after))
+		newRow = append(newRow, before...)
+		newRow = append(newRow, replacementRunes...)
+		newRow = append(newRow, after...)
+		
+		// Replace startRow with the new content
+		m.value[startRow] = newRow
+		
+		// Remove rows between startRow+1 and endRow (inclusive)
+		if endRow > startRow {
+			numRowsToRemove := endRow - startRow
+			copy(m.value[startRow+1:], m.value[endRow+1:])
+			m.value = m.value[:len(m.value)-numRowsToRemove]
+		}
+		
+		// Position cursor at end of replacement
+		m.row = startRow
+		m.col = startCol + len(replacementRunes)
+	}
+	
+	m.SetCursorColumn(m.col)
+}
+
+// absolutePosToRowCol converts an absolute position (accounting for newlines) 
+// to row and column coordinates
+func (m *Model) absolutePosToRowCol(absolutePos int) (int, int) {
+	position := 0
+	
+	for rowIdx, row := range m.value {
+		rowLength := 0
+		for _, item := range row {
+			switch v := item.(type) {
+			case rune:
+				rowLength++
+			case *attachment.Attachment:
+				rowLength += len(v.Display)
+			}
+		}
+		
+		// Check if position is within this row
+		if position+rowLength >= absolutePos {
+			colPosition := absolutePos - position
+			// Convert display position back to slice index
+			sliceIndex := 0
+			displayPos := 0
+			for i, item := range row {
+				var itemLength int
+				switch v := item.(type) {
+				case rune:
+					itemLength = 1
+				case *attachment.Attachment:
+					itemLength = len(v.Display)
+				}
+				
+				if displayPos+itemLength > colPosition {
+					return rowIdx, i
+				}
+				displayPos += itemLength
+				sliceIndex = i + 1
+			}
+			return rowIdx, sliceIndex
+		}
+		
+		// Add row length + 1 for newline (except for last row)
+		if rowIdx < len(m.value)-1 {
+			position += rowLength + 1
+		} else {
+			position += rowLength
+		}
+	}
+	
+	// Position is beyond text, return last valid position
+	if len(m.value) > 0 {
+		lastRow := len(m.value) - 1
+		return lastRow, len(m.value[lastRow])
+	}
+	return 0, 0
+}
+
 // CurrentRowLength returns the length of the current row.
 func (m *Model) CurrentRowLength() int {
 	if m.row >= len(m.value) {
