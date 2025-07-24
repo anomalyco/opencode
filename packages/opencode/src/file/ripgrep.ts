@@ -187,8 +187,19 @@ export namespace Ripgrep {
     return filepath
   }
 
+  export async function checkOpencodeignore(cwd: string): Promise<string | null> {
+    const opencodeignorePath = path.join(cwd, '.opencodeignore')
+    const file = Bun.file(opencodeignorePath)
+    return (await file.exists()) ? opencodeignorePath : null
+  }
+
   export async function files(input: { cwd: string; query?: string; glob?: string[]; limit?: number }) {
     const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*'`]
+
+    const opencodeignorePath = await checkOpencodeignore(input.cwd)
+    if (opencodeignorePath) {
+      commands[0] += ` --ignore-file=${opencodeignorePath}`
+    }
 
     if (input.glob) {
       for (const g of input.glob) {
@@ -305,6 +316,11 @@ export namespace Ripgrep {
 
   export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+
+    const opencodeignorePath = await checkOpencodeignore(input.cwd)
+    if (opencodeignorePath) {
+      args.push(`--ignore-file=${opencodeignorePath}`)
+    }
 
     if (input.glob) {
       for (const g of input.glob) {

@@ -1,0 +1,79 @@
+---
+title: Ignore files
+description: Control which files opencode includes using .gitignore and .opencodeignore.
+---
+
+opencode respects ignore files to control which files are included when scanning your project.
+
+- .gitignore patterns are automatically respected
+- .opencodeignore files provide additional opencode-specific patterns
+- Use the `!` prefix to unignore files
+
+---
+
+## .gitignore support
+
+opencode automatically respects your existing `.gitignore` files. Any files or patterns specified in `.gitignore` will be excluded from opencode's file operations.
+
+This means:
+- All gitignored files are automatically excluded from file listing and search
+- No additional configuration is needed
+- Opencode follows the same ignore rules as git
+
+## .opencodeignore files
+
+You can create a `.opencodeignore` file in your project root to specify additional files and patterns that opencode should ignore. This is useful for excluding files that are specific to opencode usage but should remain in your git repository.
+
+### Basic usage
+
+Create a `.opencodeignore` file in your project root:
+
+```text title=".opencodeignore"
+# Exclude temporary files
+*.tmp
+temp/
+
+# Exclude large data files
+data/
+*.db
+
+# Exclude build artifacts
+dist/
+build/
+```
+
+### Unignoring files
+
+You can use the `!` prefix to unignore files that would otherwise be ignored by `.gitignore`:
+
+```text title=".opencodeignore"
+# Include notes directory even if ignored by .gitignore
+!notes/
+
+# Include specific config files
+!config/local.json
+
+# Include documentation that might be gitignored
+!docs/private/
+```
+
+This is particularly useful when you want opencode to have access to files like documentation, notes, or configuration that might be ignored by git but are valuable for context during development.
+
+### Pattern syntax
+
+The `.opencodeignore` file uses the same pattern syntax as `.gitignore`:
+
+- `*` matches any number of characters except `/`
+- `**` matches any number of characters including `/`
+- `?` matches a single character
+- `[abc]` matches any character in brackets
+- Lines starting with `#` are comments
+- Lines starting with `!` negate the pattern (unignore)
+
+```text title=".opencodeignore"
+# Comments are supported
+*.log
+temp/**
+!temp/important.txt
+test/fixtures/
+```
