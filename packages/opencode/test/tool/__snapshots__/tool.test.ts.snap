@@ -7,3 +7,8 @@ exports[`tool.ls basic 1`] = `
   ink.tsx
 "
 `;
+
+exports[`tool.glob tool.ls basic 1`] = `
+"/Users/rami/Code/opencode/packages/opencode/example/
+"
+`;
