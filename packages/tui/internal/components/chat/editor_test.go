@@ -17,8 +17,7 @@ func init() {
 	theme.SetTheme("test")
 }
 
-func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
-	// Create a mock app for testing
+func createTestEditor() *editorComponent {
 	appInstance := &app.App{
 		State: &app.State{
 			MessageHistory: []app.Prompt{},
@@ -29,24 +28,30 @@ func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
 			},
 		},
 	}
+	return NewEditorComponent(appInstance).(*editorComponent)
+}
 
-	editor := NewEditorComponent(appInstance).(*editorComponent)
+func createFileAttachment(id, display string, startIndex, endIndex int, path string) *attachment.Attachment {
+	return &attachment.Attachment{
+		ID:         id,
+		Type:       "file",
+		Display:    display,
+		StartIndex: startIndex,
+		EndIndex:   endIndex,
+		Source: &attachment.FileSource{
+			Path: path,
+			Mime: "text/plain",
+		},
+	}
+}
 
-	// Test case 1: Multi-line text with attachment on second line
+func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
+	editor := createTestEditor()
+
 	prompt := app.Prompt{
 		Text: "read this:\n@path/to/my/file.txt\nand then proceed",
 		Attachments: []*attachment.Attachment{
-			{
-				ID:         "test-attachment-1",
-				Type:       "file",
-				Display:    "@path/to/my/file.txt",
-				StartIndex: 11, // Position of "@path..." in the text
-				EndIndex:   31, // End of "@path/to/my/file.txt"
-				Source: &attachment.FileSource{
-					Path: "/test/path/to/my/file.txt",
-					Mime: "text/plain",
-				},
-			},
+			createFileAttachment("test-attachment-1", "@path/to/my/file.txt", 11, 31, "/test/path/to/my/file.txt"),
 		},
 	}
 
@@ -73,19 +78,7 @@ func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
 }
 
 func TestRestoreFromPromptReproduceBugScenario(t *testing.T) {
-	// Reproduce the exact bug scenario described in the spec
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: opencode.App{
-			Path: opencode.AppPath{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
+	editor := createTestEditor()
 
 	// Original message: "read this:\n@path/to/my/file.txt"
 	originalText := "read this:\n@path/to/my/file.txt"
@@ -93,17 +86,7 @@ func TestRestoreFromPromptReproduceBugScenario(t *testing.T) {
 	prompt := app.Prompt{
 		Text: originalText,
 		Attachments: []*attachment.Attachment{
-			{
-				ID:         "bug-test",
-				Type:       "file",
-				Display:    "@path/to/my/file.txt",
-				StartIndex: 11, // After "read this:\n"
-				EndIndex:   31, // End of attachment path
-				Source: &attachment.FileSource{
-					Path: "/test/path/to/my/file.txt",
-					Mime: "text/plain",
-				},
-			},
+			createFileAttachment("bug-test", "@path/to/my/file.txt", 11, 31, "/test/path/to/my/file.txt"),
 		},
 	}
 
@@ -123,18 +106,7 @@ func TestRestoreFromPromptReproduceBugScenario(t *testing.T) {
 }
 
 func TestRestoreFromPromptMultipleAttachments(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: opencode.App{
-			Path: opencode.AppPath{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
+	editor := createTestEditor()
 
 	// Test with multiple attachments in multi-line text
 	originalText := "Check these files:\n@file1.txt\nand also:\n@file2.txt\nbefore proceeding"
@@ -142,28 +114,8 @@ func TestRestoreFromPromptMultipleAttachments(t *testing.T) {
 	prompt := app.Prompt{
 		Text: originalText,
 		Attachments: []*attachment.Attachment{
-			{
-				ID:         "attachment-1",
-				Type:       "file",
-				Display:    "@file1.txt",
-				StartIndex: 19, // Position of first attachment
-				EndIndex:   29,
-				Source: &attachment.FileSource{
-					Path: "/test/file1.txt",
-					Mime: "text/plain",
-				},
-			},
-			{
-				ID:         "attachment-2",
-				Type:       "file",
-				Display:    "@file2.txt",
-				StartIndex: 40, // Position of second attachment
-				EndIndex:   50,
-				Source: &attachment.FileSource{
-					Path: "/test/file2.txt",
-					Mime: "text/plain",
-				},
-			},
+			createFileAttachment("attachment-1", "@file1.txt", 19, 29, "/test/file1.txt"),
+			createFileAttachment("attachment-2", "@file2.txt", 40, 50, "/test/file2.txt"),
 		},
 	}
 
@@ -182,18 +134,7 @@ func TestRestoreFromPromptMultipleAttachments(t *testing.T) {
 }
 
 func TestRestoreFromPromptAttachmentsAtLineBoundaries(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: opencode.App{
-			Path: opencode.AppPath{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
+	editor := createTestEditor()
 
 	// Test attachment at line boundary
 	originalText := "@start.txt\nsecond line\n@end.txt"
@@ -201,28 +142,8 @@ func TestRestoreFromPromptAttachmentsAtLineBoundaries(t *testing.T) {
 	prompt := app.Prompt{
 		Text: originalText,
 		Attachments: []*attachment.Attachment{
-			{
-				ID:         "start-attachment",
-				Type:       "file",
-				Display:    "@start.txt",
-				StartIndex: 0, // Start of first line
-				EndIndex:   10,
-				Source: &attachment.FileSource{
-					Path: "/test/start.txt",
-					Mime: "text/plain",
-				},
-			},
-			{
-				ID:         "end-attachment",
-				Type:       "file",
-				Display:    "@end.txt",
-				StartIndex: 23, // Start of last line
-				EndIndex:   31,
-				Source: &attachment.FileSource{
-					Path: "/test/end.txt",
-					Mime: "text/plain",
-				},
-			},
+			createFileAttachment("start-attachment", "@start.txt", 0, 10, "/test/start.txt"),
+			createFileAttachment("end-attachment", "@end.txt", 23, 31, "/test/end.txt"),
 		},
 	}
 
@@ -235,18 +156,7 @@ func TestRestoreFromPromptAttachmentsAtLineBoundaries(t *testing.T) {
 }
 
 func TestRestoreFromPromptEmptyLinesWithAttachments(t *testing.T) {
-	appInstance := &app.App{
-		State: &app.State{
-			MessageHistory: []app.Prompt{},
-		},
-		Info: opencode.App{
-			Path: opencode.AppPath{
-				Cwd: "/test",
-			},
-		},
-	}
-
-	editor := NewEditorComponent(appInstance).(*editorComponent)
+	editor := createTestEditor()
 
 	// Test with empty lines between text and attachments
 	originalText := "first line\n\n@file.txt\n\nlast line"
@@ -254,17 +164,7 @@ func TestRestoreFromPromptEmptyLinesWithAttachments(t *testing.T) {
 	prompt := app.Prompt{
 		Text: originalText,
 		Attachments: []*attachment.Attachment{
-			{
-				ID:         "empty-lines-test",
-				Type:       "file",
-				Display:    "@file.txt",
-				StartIndex: 12, // After "first line\n\n"
-				EndIndex:   21,
-				Source: &attachment.FileSource{
-					Path: "/test/file.txt",
-					Mime: "text/plain",
-				},
-			},
+			createFileAttachment("empty-lines-test", "@file.txt", 12, 21, "/test/file.txt"),
 		},
 	}
 
@@ -284,33 +184,13 @@ func TestRestoreFromHistoryIndex(t *testing.T) {
 				{
 					Text: "first message\n@file1.txt",
 					Attachments: []*attachment.Attachment{
-						{
-							ID:         "hist-1",
-							Type:       "file",
-							Display:    "@file1.txt",
-							StartIndex: 14,
-							EndIndex:   24,
-							Source: &attachment.FileSource{
-								Path: "/test/file1.txt",
-								Mime: "text/plain",
-							},
-						},
+						createFileAttachment("hist-1", "@file1.txt", 14, 24, "/test/file1.txt"),
 					},
 				},
 				{
 					Text: "second message\n@file2.txt",
 					Attachments: []*attachment.Attachment{
-						{
-							ID:         "hist-2",
-							Type:       "file",
-							Display:    "@file2.txt",
-							StartIndex: 15,
-							EndIndex:   25,
-							Source: &attachment.FileSource{
-								Path: "/test/file2.txt",
-								Mime: "text/plain",
-							},
-						},
+						createFileAttachment("hist-2", "@file2.txt", 15, 25, "/test/file2.txt"),
 					},
 				},
 			},
