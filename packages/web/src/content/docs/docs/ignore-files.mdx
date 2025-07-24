@@ -22,24 +22,10 @@ This means:
 
 ## .opencodeignore files
 
-You can create a `.opencodeignore` file in your project root to specify additional files and patterns that opencode should ignore. This is useful for excluding files that are specific to opencode usage but should remain in your git repository.
-
-### Basic usage
-
-Create a `.opencodeignore` file in your project root:
+You can create a `.opencodeignore` file in your project root to specify additional files and patterns that opencode should ignore. Create a `.opencodeignore` file in your project root:
 
 ```text title=".opencodeignore"
-# Exclude temporary files
-*.tmp
-temp/
-
-# Exclude large data files
-data/
-*.db
-
-# Exclude build artifacts
-dist/
-build/
+config/production.config.yml
 ```
 
 ### Unignoring files
@@ -50,11 +36,8 @@ You can use the `!` prefix to unignore files that would otherwise be ignored by 
 # Include notes directory even if ignored by .gitignore
 !notes/
 
-# Include specific config files
-!config/local.json
-
 # Include documentation that might be gitignored
-!docs/private/
+!AGENTS.local.md
 ```
 
 This is particularly useful when you want opencode to have access to files like documentation, notes, or configuration that might be ignored by git but are valuable for context during development.
