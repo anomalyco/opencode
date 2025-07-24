@@ -73,6 +73,7 @@ export default defineConfig({
         "docs/keybinds",
         "docs/enterprise",
         "docs/mcp-servers",
+        "docs/ignore-files",
         "docs/troubleshooting",
       ],
       components: {

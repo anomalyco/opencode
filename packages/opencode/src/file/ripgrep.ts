@@ -188,7 +188,7 @@ export namespace Ripgrep {
   }
 
   export async function checkOpencodeignore(cwd: string): Promise<string | null> {
-    const opencodeignorePath = path.join(cwd, '.opencodeignore')
+    const opencodeignorePath = path.join(cwd, ".opencodeignore")
     const file = Bun.file(opencodeignorePath)
     return (await file.exists()) ? opencodeignorePath : null
   }

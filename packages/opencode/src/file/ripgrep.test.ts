@@ -35,7 +35,7 @@ describe("Ripgrep .opencodeignore functionality", () => {
     const file = Bun.file(opencodeignorePath)
     const exists = await file.exists()
     const result = exists ? opencodeignorePath : null
-    
+
     expect(result).toBe(opencodeignorePath)
   })
 
@@ -45,7 +45,7 @@ describe("Ripgrep .opencodeignore functionality", () => {
     const file = Bun.file(opencodeignorePath)
     const exists = await file.exists()
     const result = exists ? opencodeignorePath : null
-    
+
     expect(result).toBeNull()
   })
 
@@ -58,9 +58,11 @@ describe("Ripgrep .opencodeignore functionality", () => {
     await fs.writeFile(path.join(tempDir, ".opencodeignore"), "test1.txt\n")
 
     // Run ripgrep with ignore file
-    const result = await $`rg --files --follow --hidden --glob='!.git/*' --ignore-file=.opencodeignore`.cwd(tempDir).text()
+    const result = await $`rg --files --follow --hidden --glob='!.git/*' --ignore-file=.opencodeignore`
+      .cwd(tempDir)
+      .text()
     const files = result.split("\n").filter(Boolean)
-    
+
     // test1.txt should be excluded, test2.txt should be included
     expect(files).not.toContain("test1.txt")
     expect(files).toContain("test2.txt")
@@ -75,7 +77,7 @@ describe("Ripgrep .opencodeignore functionality", () => {
     // Run ripgrep without ignore file
     const result = await $`rg --files --follow --hidden --glob='!.git/*'`.cwd(tempDir).text()
     const files = result.split("\n").filter(Boolean)
-    
+
     // Both files should be included
     expect(files).toContain("test1.txt")
     expect(files).toContain("test2.txt")
@@ -90,15 +92,18 @@ describe("Ripgrep .opencodeignore functionality", () => {
     await fs.writeFile(path.join(tempDir, ".opencodeignore"), "test1.txt\n")
 
     // Run ripgrep search with ignore file
-    const result = await $`rg --json --hidden --glob='!.git/*' --ignore-file=.opencodeignore 'search pattern'`.cwd(tempDir).nothrow().text()
-    
+    const result = await $`rg --json --hidden --glob='!.git/*' --ignore-file=.opencodeignore 'search pattern'`
+      .cwd(tempDir)
+      .nothrow()
+      .text()
+
     // Parse JSON results to get file paths
     const lines = result.trim().split("\n").filter(Boolean)
     const matches = lines
-      .map(line => JSON.parse(line))
-      .filter(parsed => parsed.type === "match")
-      .map(parsed => parsed.data.path.text)
-    
+      .map((line) => JSON.parse(line))
+      .filter((parsed) => parsed.type === "match")
+      .map((parsed) => parsed.data.path.text)
+
     // test1.txt should be excluded, test2.txt should be included
     expect(matches).not.toContain("test1.txt")
     expect(matches).toContain("test2.txt")
@@ -116,9 +121,11 @@ describe("Ripgrep .opencodeignore functionality", () => {
     await fs.writeFile(path.join(tempDir, ".opencodeignore"), "*.tmp\ntemp/\n*.log\n")
 
     // Run ripgrep with ignore file
-    const result = await $`rg --files --follow --hidden --glob='!.git/*' --ignore-file=.opencodeignore`.cwd(tempDir).text()
+    const result = await $`rg --files --follow --hidden --glob='!.git/*' --ignore-file=.opencodeignore`
+      .cwd(tempDir)
+      .text()
     const files = result.split("\n").filter(Boolean)
-    
+
     // Should include keep.txt and .opencodeignore, exclude others
     expect(files).toContain("keep.txt")
     expect(files).toContain(".opencodeignore")
@@ -127,3 +134,4 @@ describe("Ripgrep .opencodeignore functionality", () => {
     expect(files).not.toContain("regular.log")
   })
 })
+
