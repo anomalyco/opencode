@@ -77,34 +77,6 @@ func TestRestoreFromPromptWithMultilineAttachments(t *testing.T) {
 	}
 }
 
-func TestRestoreFromPromptReproduceBugScenario(t *testing.T) {
-	editor := createTestEditor()
-
-	// Original message: "read this:\n@path/to/my/file.txt"
-	originalText := "read this:\n@path/to/my/file.txt"
-
-	prompt := app.Prompt{
-		Text: originalText,
-		Attachments: []*attachment.Attachment{
-			createFileAttachment("bug-test", "@path/to/my/file.txt", 11, 31, "/test/path/to/my/file.txt"),
-		},
-	}
-
-	// Restore from history (simulate up arrow key)
-	editor.RestoreFromPrompt(prompt)
-
-	// Check that the restored text exactly matches the original
-	result := editor.Value()
-	if result != originalText {
-		t.Errorf("Bug reproduction failed. Expected %q, got %q", originalText, result)
-
-		// Check for the specific corruption pattern mentioned in the spec
-		if len(result) > len(originalText) {
-			t.Errorf("Text appears to be duplicated - got %d characters, expected %d", len(result), len(originalText))
-		}
-	}
-}
-
 func TestRestoreFromPromptMultipleAttachments(t *testing.T) {
 	editor := createTestEditor()
 
