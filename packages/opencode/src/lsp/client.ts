@@ -128,12 +128,22 @@ export namespace LSPClient {
           const text = await file.text()
           const version = files[input.path]
           if (version !== undefined) {
-            diagnostics.delete(input.path)
-            await connection.sendNotification("textDocument/didClose", {
+            // File is already open, send didChange instead of close/open
+            const newVersion = version + 1
+            log.info("textDocument/didChange", input)
+            await connection.sendNotification("textDocument/didChange", {
               textDocument: {
                 uri: `file://` + input.path,
+                version: newVersion,
               },
+              contentChanges: [
+                {
+                  text,
+                },
+              ],
             })
+            files[input.path] = newVersion
+            return
           }
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)

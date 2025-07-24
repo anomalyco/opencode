@@ -96,4 +96,9 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".cjs": "javascript",
   ".zig": "zig",
   ".zon": "zig",
+  ".tf": "terraform",
+  ".tfvars": "terraform-vars",
+  ".tfcomponent.hcl": "terraform-stack",
+  ".tfstack.hcl": "terraform-stack",
+  ".tfdeploy.hcl": "terraform-deploy",
 } as const

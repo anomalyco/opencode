@@ -361,4 +361,107 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const TofuLS: Info = {
+    id: "tofu-ls",
+    root: NearestRoot([
+      "main.tf",
+      "variables.tf",
+      "outputs.tf",
+      "provider.tf",
+      "terraform.tfvars",
+      ".terraform.lock.hcl",
+    ]),
+    extensions: [".tf", ".tfvars", ".tofu"],
+    async spawn(_, root) {
+      let bin = Bun.which("tofu-ls", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        log.info("downloading tofu-ls from opentofu releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/opentofu/tofu-ls/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch tofu-ls release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        const arch = process.arch
+        let assetName = ""
+
+        let tofuLsArch: string = arch
+        if (arch === "arm64") tofuLsArch = "arm64"
+        else if (arch === "x64") tofuLsArch = "x86_64"
+        else if (arch === "ia32") tofuLsArch = "i386"
+
+        let tofuLsPlatform: string = platform
+        if (platform === "darwin") tofuLsPlatform = "Darwin"
+        else if (platform === "win32") tofuLsPlatform = "Windows"
+        else if (platform === "linux") tofuLsPlatform = "Linux"
+
+        const ext = "tar.gz"
+
+        assetName = `tofu-ls_${tofuLsPlatform}_${tofuLsArch}.${ext}`
+
+        const supportedCombos = [
+          "tofu-ls_Darwin_arm64.tar.gz",
+          "tofu-ls_Darwin_x86_64.tar.gz",
+          "tofu-ls_Linux_arm64.tar.gz",
+          "tofu-ls_Linux_i386.tar.gz",
+          "tofu-ls_Linux_x86_64.tar.gz",
+          "tofu-ls_Windows_arm64.tar.gz",
+          "tofu-ls_Windows_i386.tar.gz",
+          "tofu-ls_Windows_x86_64.tar.gz",
+        ]
+
+        if (!supportedCombos.includes(assetName)) {
+          log.error(`Platform ${platform} and architecture ${arch} is not supported by tofu-ls`)
+          return
+        }
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest tofu-ls release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download tofu-ls")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        await $`tar -xzvf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "tofu-ls" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract tofu-ls binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed tofu-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["serve"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
 }
