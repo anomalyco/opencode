@@ -700,7 +700,7 @@ func (m *Model) ReplaceRange(startCol, endCol int, replacement string) {
 	m.SetCursorColumn(m.col)
 }
 
-// ReplaceRangeAbsolute replaces text from startPos to endPos using absolute positions 
+// ReplaceRangeAbsolute replaces text from startPos to endPos using absolute positions
 // across the entire text including newlines. This correctly handles multi-line text
 // replacement for attachment restoration.
 func (m *Model) ReplaceRangeAbsolute(startPos, endPos int, replacement string) {
@@ -726,14 +726,14 @@ func (m *Model) ReplaceRangeAbsolute(startPos, endPos int, replacement string) {
 		// Replacement within single row
 		before := m.value[startRow][:startCol]
 		after := m.value[startRow][endCol:]
-		
+
 		newRow := make([]any, 0, len(before)+len(replacementRunes)+len(after))
 		newRow = append(newRow, before...)
 		newRow = append(newRow, replacementRunes...)
 		newRow = append(newRow, after...)
-		
+
 		m.value[startRow] = newRow
-		
+
 		// Position cursor at end of replacement
 		m.row = startRow
 		m.col = startCol + len(replacementRunes)
@@ -741,36 +741,36 @@ func (m *Model) ReplaceRangeAbsolute(startPos, endPos int, replacement string) {
 		// Replacement spans multiple rows
 		before := m.value[startRow][:startCol]
 		after := m.value[endRow][endCol:]
-		
+
 		// Create new row with before + replacement + after
 		newRow := make([]any, 0, len(before)+len(replacementRunes)+len(after))
 		newRow = append(newRow, before...)
 		newRow = append(newRow, replacementRunes...)
 		newRow = append(newRow, after...)
-		
+
 		// Replace startRow with the new content
 		m.value[startRow] = newRow
-		
+
 		// Remove rows between startRow+1 and endRow (inclusive)
 		if endRow > startRow {
 			numRowsToRemove := endRow - startRow
 			copy(m.value[startRow+1:], m.value[endRow+1:])
 			m.value = m.value[:len(m.value)-numRowsToRemove]
 		}
-		
+
 		// Position cursor at end of replacement
 		m.row = startRow
 		m.col = startCol + len(replacementRunes)
 	}
-	
+
 	m.SetCursorColumn(m.col)
 }
 
-// absolutePosToRowCol converts an absolute position (accounting for newlines) 
+// absolutePosToRowCol converts an absolute position (accounting for newlines)
 // to row and column coordinates
 func (m *Model) absolutePosToRowCol(absolutePos int) (int, int) {
 	position := 0
-	
+
 	for rowIdx, row := range m.value {
 		rowLength := 0
 		for _, item := range row {
@@ -781,12 +781,11 @@ func (m *Model) absolutePosToRowCol(absolutePos int) (int, int) {
 				rowLength += len(v.Display)
 			}
 		}
-		
+
 		// Check if position is within this row
 		if position+rowLength >= absolutePos {
 			colPosition := absolutePos - position
 			// Convert display position back to slice index
-			sliceIndex := 0
 			displayPos := 0
 			for i, item := range row {
 				var itemLength int
@@ -796,16 +795,15 @@ func (m *Model) absolutePosToRowCol(absolutePos int) (int, int) {
 				case *attachment.Attachment:
 					itemLength = len(v.Display)
 				}
-				
+
 				if displayPos+itemLength > colPosition {
 					return rowIdx, i
 				}
 				displayPos += itemLength
-				sliceIndex = i + 1
 			}
-			return rowIdx, sliceIndex
+			return rowIdx, len(row)
 		}
-		
+
 		// Add row length + 1 for newline (except for last row)
 		if rowIdx < len(m.value)-1 {
 			position += rowLength + 1
@@ -813,7 +811,7 @@ func (m *Model) absolutePosToRowCol(absolutePos int) (int, int) {
 			position += rowLength
 		}
 	}
-	
+
 	// Position is beyond text, return last valid position
 	if len(m.value) > 0 {
 		lastRow := len(m.value) - 1

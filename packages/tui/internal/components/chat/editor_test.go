@@ -259,7 +259,7 @@ func TestRestoreFromPromptEmptyLinesWithAttachments(t *testing.T) {
 				Type:       "file",
 				Display:    "@file.txt",
 				StartIndex: 12, // After "first line\n\n"
-				EndIndex:   20,
+				EndIndex:   21,
 				Source: &attachment.FileSource{
 					Path: "/test/file.txt",
 					Mime: "text/plain",
@@ -289,7 +289,7 @@ func TestRestoreFromHistoryIndex(t *testing.T) {
 							Type:       "file",
 							Display:    "@file1.txt",
 							StartIndex: 14,
-							EndIndex:   23,
+							EndIndex:   24,
 							Source: &attachment.FileSource{
 								Path: "/test/file1.txt",
 								Mime: "text/plain",
@@ -305,7 +305,7 @@ func TestRestoreFromHistoryIndex(t *testing.T) {
 							Type:       "file",
 							Display:    "@file2.txt",
 							StartIndex: 15,
-							EndIndex:   24,
+							EndIndex:   25,
 							Source: &attachment.FileSource{
 								Path: "/test/file2.txt",
 								Mime: "text/plain",
