@@ -66,12 +66,22 @@ func (h *APILogHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	h.mu.Lock()
 	for _, attr := range h.attrs {
-		extra[attr.Key] = attr.Value.Any()
+		val := attr.Value.Any()
+		if err, ok := val.(error); ok {
+			extra[attr.Key] = err.Error()
+		} else {
+			extra[attr.Key] = val
+		}
 	}
 	h.mu.Unlock()
 
 	r.Attrs(func(attr slog.Attr) bool {
-		extra[attr.Key] = attr.Value.Any()
+		val := attr.Value.Any()
+		if err, ok := val.(error); ok {
+			extra[attr.Key] = err.Error()
+		} else {
+			extra[attr.Key] = val
+		}
 		return true
 	})
 
