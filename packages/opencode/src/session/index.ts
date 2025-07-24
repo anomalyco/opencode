@@ -1120,7 +1120,7 @@ export namespace Session {
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const app = App.info()
-    const system = SystemPrompt.summarize(input.providerID)
+    const system = [...SystemPrompt.summarize(input.providerID), ...(await SystemPrompt.custom())]
 
     const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
