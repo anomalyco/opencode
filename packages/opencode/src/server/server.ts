@@ -872,13 +872,14 @@ export namespace Server {
 
           // Resolve the command content with arguments
           const { CommandResolver } = await import("../command/resolver")
-          const resolver = new CommandResolver()
+          const appInfo = App.info()
+          const resolver = new CommandResolver(appInfo)
           const context = {
             command,
             arguments: args || "",
             sessionId: "", // Not needed for resolution
             messageId: "", // Not needed for resolution
-            workingDirectory: App.info().path.cwd,
+            workingDirectory: appInfo.path.cwd,
           }
 
           try {

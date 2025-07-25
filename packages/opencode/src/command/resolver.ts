@@ -1,9 +1,11 @@
 import * as path from "path"
 import type { CommandExecutionContext } from "./types"
 import { File } from "../file"
+import { Global } from "../global"
+import { App } from "../app/app"
 
 export class CommandResolver {
-  constructor() {}
+  constructor(private app?: App.Info) {}
 
   async resolve(content: string, context: CommandExecutionContext): Promise<string> {
     // Validate argument count if specified
@@ -49,6 +51,20 @@ export class CommandResolver {
     }
   }
 
+  private getBaseDirectory(context: CommandExecutionContext): string {
+    // For user (global) commands, file references should be relative to the user's config directory
+    // For project commands, file references should be relative to the project root
+
+    if (context.command.scope === "user") {
+      // Use the global config directory as base for user commands
+      return Global.Path.config
+    } else {
+      // Use the project root for project commands (if available)
+      // Fall back to working directory if app context is not available
+      return this.app?.path.root || context.workingDirectory
+    }
+  }
+
   private async resolveFileReferences(content: string, context: CommandExecutionContext): Promise<string> {
     // Match @{file/path} pattern
     const fileRegex = /@\{([^}]+)\}/g
@@ -58,9 +74,29 @@ export class CommandResolver {
       const [fullMatch, filePath] = match
 
       try {
-        // Resolve relative to command file directory
-        const commandDir = path.dirname(context.command.path)
-        const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(commandDir, filePath)
+        let absolutePath: string
+
+        if (path.isAbsolute(filePath)) {
+          // If absolute path, use as-is
+          absolutePath = filePath
+        } else {
+          // For relative paths, we have two resolution strategies:
+          // 1. First try relative to the command file itself
+          // 2. If that fails, try relative to the base directory
+
+          const commandDir = path.dirname(context.command.path)
+          const pathRelativeToCommand = path.resolve(commandDir, filePath)
+
+          // Check if file exists relative to command
+          try {
+            await File.read(pathRelativeToCommand)
+            absolutePath = pathRelativeToCommand
+          } catch {
+            // If not found relative to command, try base directory
+            const baseDir = this.getBaseDirectory(context)
+            absolutePath = path.resolve(baseDir, filePath)
+          }
+        }
 
         const fileContent = await File.read(absolutePath)
 
