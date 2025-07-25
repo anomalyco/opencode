@@ -6,6 +6,9 @@ export class CommandResolver {
   constructor() {}
 
   async resolve(content: string, context: CommandExecutionContext): Promise<string> {
+    // Validate argument count if specified
+    this.validateArgumentCount(context)
+
     let resolved = content
 
     // Step 1: Resolve bash commands
@@ -20,9 +23,38 @@ export class CommandResolver {
     return resolved
   }
 
+  private validateArgumentCount(context: CommandExecutionContext): void {
+    // Count the number of $ARGUMENTS or {{args}} placeholders in the content
+    const content = context.command.rawContent
+    const placeholderMatches = content.match(/(\$ARGUMENTS|\{\{args\}\})/g)
+
+    if (!placeholderMatches || placeholderMatches.length === 0) {
+      // No placeholders, no arguments expected
+      if (context.arguments.trim()) {
+        throw new Error(`Command '${context.command.name}' does not accept arguments`)
+      }
+      return
+    }
+
+    const expectedCount = placeholderMatches.length
+
+    // Count the number of arguments provided
+    const args = context.arguments.trim()
+    const argArray = args ? args.split(/\s+/) : []
+    const providedCount = argArray.length
+
+    if (providedCount !== expectedCount) {
+      throw new Error(
+        `Command '${context.command.name}' expects exactly ${expectedCount} argument${
+          expectedCount === 1 ? "" : "s"
+        }, but ${providedCount} ${providedCount === 1 ? "was" : "were"} provided`,
+      )
+    }
+  }
+
   private async resolveBashCommands(content: string, context: CommandExecutionContext): Promise<string> {
-    // Match !`command` pattern
-    const bashRegex = /!\`([^`]+)\`/g
+    // Match $(command) pattern
+    const bashRegex = /\$\(([^)]+)\)/g
     const matches = Array.from(content.matchAll(bashRegex))
 
     for (const match of matches) {
@@ -51,8 +83,8 @@ export class CommandResolver {
   }
 
   private async resolveFileReferences(content: string, context: CommandExecutionContext): Promise<string> {
-    // Match @file/path pattern
-    const fileRegex = /@([\w\-./]+)/g
+    // Match @{file/path} pattern
+    const fileRegex = /@\{([^}]+)\}/g
     const matches = Array.from(content.matchAll(fileRegex))
 
     for (const match of matches) {
@@ -79,7 +111,27 @@ export class CommandResolver {
   }
 
   private resolveArguments(content: string, args: string): string {
-    // Replace both $ARGUMENTS and {{args}} patterns
-    return content.replace(/\$ARGUMENTS/g, args).replace(/\{\{args\}\}/g, args)
+    // Split arguments into array
+    const argArray = args.trim() ? args.trim().split(/\s+/) : []
+    let argIndex = 0
+
+    // Replace $ARGUMENTS placeholders one by one
+    content = content.replace(/\$ARGUMENTS/g, () => {
+      if (argIndex < argArray.length) {
+        return argArray[argIndex++]
+      }
+      return "" // This shouldn't happen due to validation
+    })
+
+    // Reset index for {{args}} pattern
+    argIndex = 0
+    content = content.replace(/\{\{args\}\}/g, () => {
+      if (argIndex < argArray.length) {
+        return argArray[argIndex++]
+      }
+      return "" // This shouldn't happen due to validation
+    })
+
+    return content
   }
 }
