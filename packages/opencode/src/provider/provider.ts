@@ -499,7 +499,7 @@ export namespace Provider {
       case "azure":
         return result.map((t) => ({
           ...t,
-          parameters: optionalToNullable(t.parameters),
+          parameters: t.parameters,
         }))
       case "google":
         return result.map((t) => ({
