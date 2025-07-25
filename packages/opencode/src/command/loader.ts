@@ -70,7 +70,13 @@ export class CommandLoader {
 
       // Also store without prefix for backward compatibility during lookup
       const unprefixedName = commandName.replace(/^(user|project):/, "")
-      this.unprefixedMap.set(unprefixedName, commandName)
+
+      // Only update unprefixedMap if:
+      // 1. It doesn't exist yet, OR
+      // 2. This is a project command (project commands take priority)
+      if (!this.unprefixedMap.has(unprefixedName) || scope === "project") {
+        this.unprefixedMap.set(unprefixedName, commandName)
+      }
     } catch (error) {
       this.log.error(`Failed to load command from ${filePath}:`, error as any)
     }
@@ -81,12 +87,12 @@ export class CommandLoader {
     let command = this.commands.get(name)
     if (command) return command
 
-    // Try with user: prefix
-    command = this.commands.get(`user:${name}`)
+    // Try with project: prefix first (higher priority)
+    command = this.commands.get(`project:${name}`)
     if (command) return command
 
-    // Try with project: prefix
-    command = this.commands.get(`project:${name}`)
+    // Try with user: prefix second (lower priority)
+    command = this.commands.get(`user:${name}`)
     if (command) return command
 
     // Try unprefixed lookup for backward compatibility
