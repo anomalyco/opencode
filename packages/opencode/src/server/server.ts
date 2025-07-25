@@ -18,6 +18,7 @@ import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
+import { Command } from "../command"
 
 const ERRORS = {
   400: {
@@ -765,6 +766,120 @@ export namespace Server {
           const modes = await Mode.list()
           return c.json(modes)
         },
+      )
+      .get(
+        "/command",
+        describeRoute({
+          description: "List all custom commands",
+          responses: {
+            200: {
+              description: "List of custom commands",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      commands: z.array(
+                        z.object({
+                          name: z.string(),
+                          description: z.string().optional(),
+                          argumentHint: z.string().optional(),
+                          scope: z.enum(["project", "user"]),
+                          namespace: z.string().optional(),
+                        })
+                      ),
+                    })
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Command.list()
+          return c.json({
+            commands: commands.map(cmd => ({
+              name: cmd.name,
+              description: cmd.metadata.description,
+              argumentHint: cmd.metadata["argument-hint"],
+              scope: cmd.scope,
+              namespace: cmd.namespace,
+            })),
+          })
+        }
+      )
+      .get(
+        "/command/:name",
+        describeRoute({
+          description: "Get a specific custom command",
+          responses: {
+            200: {
+              description: "Command details",
+              content: {
+                "application/json": {
+                  schema: resolver(Command.CustomCommandSchema),
+                },
+              },
+            },
+            404: {
+              description: "Command not found",
+            },
+          },
+        }),
+        async (c) => {
+          const command = await Command.get(c.req.param("name"))
+          if (!command) {
+            return c.json({ error: "Command not found" }, 404)
+          }
+          return c.json(command)
+        }
+      )
+      .post(
+        "/command/execute",
+        describeRoute({
+          description: "Execute a custom command",
+          body: {
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    name: z.string(),
+                    arguments: z.string().optional(),
+                    sessionId: z.string(),
+                    messageId: z.string(),
+                  })
+                ),
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "Execution result",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                      output: z.string().optional(),
+                      error: z.string().optional(),
+                    })
+                  ),
+                },
+              },
+            },
+            400: ERRORS[400],
+          },
+        }),
+        zValidator("json", z.object({
+          name: z.string(),
+          arguments: z.string().optional(),
+          sessionId: z.string(),
+          messageId: z.string(),
+        })),
+        async (c) => {
+          const { name, arguments: args, sessionId, messageId } = c.req.valid("json")
+          const result = await Command.execute(name, args || "", sessionId, messageId)
+          return c.json(result)
+        }
       )
       .post(
         "/tui/append-prompt",

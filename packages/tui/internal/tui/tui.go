@@ -1059,12 +1059,53 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case commands.AppExitCommand:
 		return a, tea.Quit
+	default:
+		// Check if it's a custom command
+		if commands.IsCustomCommand(command.Name) {
+			if a.app.CustomHandler != nil {
+				// Get the original custom command name
+				customName := commands.GetCustomCommandName(command.Name)
+				if customName != "" {
+					// Get current message context
+					if len(a.app.Messages) > 0 {
+						lastMsg := a.app.Messages[len(a.app.Messages)-1]
+						var messageID string
+						switch info := lastMsg.Info.(type) {
+						case opencode.UserMessage:
+							messageID = info.ID
+						case opencode.AssistantMessage:
+							messageID = info.ID
+						}
+
+						if messageID != "" && a.app.Session.ID != "" {
+							// Execute the custom command
+							go func() {
+								ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+								defer cancel()
+
+								err := a.app.CustomHandler.Execute(
+									ctx,
+									customName,
+									"", // No arguments for now
+									a.app.Session.ID,
+									messageID,
+								)
+
+								if err != nil {
+									slog.Error("Failed to execute custom command", "command", customName, "error", err)
+								}
+							}()
+						}
+					}
+				}
+			}
+		}
 	}
 	return a, tea.Batch(cmds...)
 }
 
 func NewModel(app *app.App) tea.Model {
-	commandProvider := completions.NewCommandCompletionProvider(app)
+	commandProvider := completions.NewCommandCompletionProvider(app, app.CustomHandler)
 	fileProvider := completions.NewFileContextGroup(app)
 	symbolsProvider := completions.NewSymbolsContextGroup(app)
 

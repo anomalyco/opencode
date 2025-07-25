@@ -226,7 +226,20 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := m.Clear()
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
-			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+
+			// Check if it's a custom command
+			if commands.IsCustomCommand(commands.CommandName(commandName)) {
+				// Create a synthetic command for custom commands
+				customCmd := commands.Command{
+					Name:        commands.CommandName(commandName),
+					Description: "Custom command",
+					Trigger:     []string{commands.GetCustomCommandName(commands.CommandName(commandName))},
+				}
+				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(customCmd)))
+			} else {
+				// Regular built-in command
+				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+			}
 			return m, tea.Batch(cmds...)
 		case "files":
 			atIndex := m.textarea.LastRuneIndex('@')
