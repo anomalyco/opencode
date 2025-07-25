@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -44,6 +45,7 @@ type EditorComponent interface {
 	SetValueWithAttachments(value string)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
+	SetBashMode(inBashMode bool)
 	RestoreFromHistory(index int)
 }
 
@@ -54,6 +56,7 @@ type editorComponent struct {
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 	exitKeyInDebounce      bool
+	isBashMode             bool
 	historyIndex           int    // -1 means current (not in history)
 	currentText            string // Store current text when navigating history
 	pasteCounter           int
@@ -315,6 +318,9 @@ func (m *editorComponent) Content() string {
 		Padding(0, 0, 0, 1).
 		Bold(true)
 	prompt := promptStyle.Render(">")
+	if m.isBashMode {
+		prompt = promptStyle.Render("!")
+	}
 
 	m.textarea.SetWidth(width - 6)
 	textarea := lipgloss.JoinHorizontal(
@@ -436,6 +442,18 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// If in bash mode, execute the command
+	if m.isBashMode {
+		m.isBashMode = false
+		cmd := exec.Command("bash", "-c", value)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			value = fmt.Sprintf("$ %s\n%s", value, string(output))
+		} else {
+			value = fmt.Sprintf("$ %s\n%s", value, string(output))
+		}
+	}
+
 	var cmds []tea.Cmd
 	attachments := m.textarea.GetAttachments()
 
@@ -448,6 +466,7 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	cmds = append(cmds, util.CmdHandler(app.SendPrompt(prompt)))
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -548,6 +567,10 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
 	m.exitKeyInDebounce = inDebounce
+}
+
+func (m *editorComponent) SetBashMode(inBashMode bool) {
+	m.isBashMode = inBashMode
 }
 
 func (m *editorComponent) getInterruptKeyText() string {

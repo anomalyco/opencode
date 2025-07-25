@@ -76,6 +76,7 @@ type Model struct {
 	exitKeyState         ExitKeyState
 	messagesRight        bool
 	fileViewer           fileviewer.Model
+	isBashMode           bool
 }
 
 func (a Model) Init() tea.Cmd {
@@ -165,6 +166,22 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			return a, tea.Sequence(cmds...)
+		}
+
+		// 4. Handle Bash mode
+		if keyString == "!" &&
+			!a.showCompletionDialog &&
+			a.editor.Value() == "" {
+			a.isBashMode = true
+			a.editor.SetBashMode(true)
+			return a, nil
+		}
+
+		// Handle exiting bash mode
+		if a.isBashMode && (keyString == "backspace" && a.editor.Value() == "" || keyString == "esc") {
+			a.isBashMode = false
+			a.editor.SetBashMode(false)
+			return a, nil
 		}
 
 		// Handle file completions trigger
@@ -683,8 +700,8 @@ func (a Model) home() string {
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
 
 	open := `
-█▀▀█ █▀▀█ █▀▀ █▀▀▄ 
-█░░█ █░░█ █▀▀ █░░█ 
+█▀▀█ █▀▀█ █▀▀ █▀▀▄
+█░░█ █░░█ █▀▀ █░░█
 ▀▀▀▀ █▀▀▀ ▀▀▀ ▀  ▀ `
 	code := `
 █▀▀ █▀▀█ █▀▀▄ █▀▀
@@ -1149,6 +1166,7 @@ func NewModel(app *app.App) tea.Model {
 		exitKeyState:         ExitKeyIdle,
 		fileViewer:           fileviewer.New(app),
 		messagesRight:        app.State.MessagesRight,
+		isBashMode:           false,
 	}
 
 	return model
