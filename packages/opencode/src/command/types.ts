@@ -3,7 +3,6 @@ import { z } from "zod"
 // Zod schemas for validation
 export const CommandMetadataSchema = z.object({
   description: z.string().optional(),
-  "allowed-tools": z.array(z.string()).optional(),
   "argument-hint": z.string().optional(),
 })
 
@@ -34,10 +33,4 @@ export interface CommandExecutionResult {
   success: boolean
   output?: string
   error?: string
-}
-
-// Tool restriction parser
-export interface ParsedToolRestriction {
-  toolName: string
-  allowedCommands?: string[]
 }
