@@ -670,15 +670,21 @@ func (m *messagesComponent) renderHeader() string {
 	isSubscriptionModel := m.app.Model != nil &&
 		m.app.Model.Cost.Input == 0 && m.app.Model.Cost.Output == 0
 
+	sessionInfoText := formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel)
 	sessionInfo = styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
-		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
+		Render(sessionInfoText)
 
 	shareEnabled := m.app.Config.Share != opencode.ConfigShareDisabled
+	headerTextWidth := headerWidth
+	if !shareEnabled {
+		// +1 is to ensure there is always at least one space between header and session info
+		headerTextWidth -= len(sessionInfoText) + 1
+	}
 	headerText := util.ToMarkdown(
 		"# "+m.app.Session.Title,
-		headerWidth,
+		headerTextWidth,
 		t.Background(),
 	)
 
@@ -705,11 +711,9 @@ func (m *messagesComponent) renderHeader() string {
 		items...,
 	)
 
-	var headerLines []string
+	headerLines := []string{headerRow}
 	if shareEnabled {
 		headerLines = []string{headerText, headerRow}
-	} else {
-		headerLines = []string{headerRow}
 	}
 
 	header := strings.Join(headerLines, "\n")
