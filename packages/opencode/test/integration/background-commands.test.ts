@@ -33,7 +33,9 @@ describe("Background Commands Integration Tests", () => {
       const start = Date.now()
 
       // Execute background command
-      const bgResult = await BashTool.execute(
+      const bgResult = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 0.5 &",
           description: "Long background sleep",
@@ -49,7 +51,9 @@ describe("Background Commands Integration Tests", () => {
 
       // TUI should still be able to execute other commands immediately
       const followupStart = Date.now()
-      const followupResult = await BashTool.execute(
+      const followupResult = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'TUI is responsive'",
           description: "Test TUI responsiveness",
@@ -73,7 +77,9 @@ describe("Background Commands Integration Tests", () => {
       const start = Date.now()
 
       for (const command of commands) {
-        const result = await BashTool.execute(
+        const result = await (
+          await BashTool()
+        ).execute(
           {
             command,
             description: `Background command: ${command}`,
@@ -97,7 +103,9 @@ describe("Background Commands Integration Tests", () => {
       const start = Date.now()
 
       // Start the test Node server in background
-      const serverResult = await BashTool.execute(
+      const serverResult = await (
+        await BashTool()
+      ).execute(
         {
           command: "node -e \"require('http').createServer().listen(0); setInterval(() => {}, 1000)\" &",
           description: "Start Node server in background",
@@ -116,7 +124,9 @@ describe("Background Commands Integration Tests", () => {
 
       // TUI should still be responsive for other commands
       const testStart = Date.now()
-      const testResult = await BashTool.execute(
+      const testResult = await (
+        await BashTool()
+      ).execute(
         {
           command: "ps aux | grep -c node || echo 'grep failed'",
           description: "Check if Node processes are running",
@@ -130,7 +140,9 @@ describe("Background Commands Integration Tests", () => {
       expect(testResult.metadata.exit).toBe(0)
 
       // Clean up any background Node processes
-      await BashTool.execute(
+      await (
+        await BashTool()
+      ).execute(
         {
           command: "pkill -f 'node -e' || true",
           description: "Clean up test Node processes",
@@ -146,7 +158,9 @@ describe("Background Commands Integration Tests", () => {
 
     await App.provide({ cwd: testDir }, async () => {
       // Start background processes that create files
-      await BashTool.execute(
+      await (
+        await BashTool()
+      ).execute(
         {
           command: `sleep 0.03 && echo 'background task 1' > ${path.basename(testFile1)} &`,
           description: "Background file creation 1",
@@ -154,7 +168,9 @@ describe("Background Commands Integration Tests", () => {
         ctx,
       )
 
-      await BashTool.execute(
+      await (
+        await BashTool()
+      ).execute(
         {
           command: `sleep 0.05 && echo 'background task 2' > ${path.basename(testFile2)} &`,
           description: "Background file creation 2",
@@ -167,7 +183,9 @@ describe("Background Commands Integration Tests", () => {
       expect(fs.existsSync(testFile2)).toBe(false)
 
       // Execute a foreground command while background tasks run
-      const foregroundResult = await BashTool.execute(
+      const foregroundResult = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'foreground task completed'",
           description: "Foreground task during background execution",
@@ -196,7 +214,9 @@ describe("Background Commands Integration Tests", () => {
   test("background command error handling", async () => {
     await App.provide({ cwd: testDir }, async () => {
       // Test background command with invalid syntax
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "invalid-command-that-does-not-exist &",
           description: "Invalid background command",
@@ -219,7 +239,9 @@ describe("Background Commands Integration Tests", () => {
 
       // Background command
       results.push(
-        await BashTool.execute(
+        await (
+          await BashTool()
+        ).execute(
           {
             command: "sleep 0.3 &",
             description: "Background sleep",
@@ -230,7 +252,9 @@ describe("Background Commands Integration Tests", () => {
 
       // Foreground command
       results.push(
-        await BashTool.execute(
+        await (
+          await BashTool()
+        ).execute(
           {
             command: "echo 'foreground 1'",
             description: "Foreground echo 1",
@@ -241,7 +265,9 @@ describe("Background Commands Integration Tests", () => {
 
       // Another background command
       results.push(
-        await BashTool.execute(
+        await (
+          await BashTool()
+        ).execute(
           {
             command: "sleep 0.2 &",
             description: "Another background sleep",
@@ -252,7 +278,9 @@ describe("Background Commands Integration Tests", () => {
 
       // Another foreground command
       results.push(
-        await BashTool.execute(
+        await (
+          await BashTool()
+        ).execute(
           {
             command: "echo 'foreground 2'",
             description: "Foreground echo 2",
@@ -282,7 +310,9 @@ describe("Background Commands Integration Tests", () => {
       const start = Date.now()
 
       // Background command with very long sleep and custom timeout
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 5 &",
           description: "Very long background sleep",

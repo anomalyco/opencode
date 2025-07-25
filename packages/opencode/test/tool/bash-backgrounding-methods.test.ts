@@ -16,7 +16,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "nohup sleep 0.2 > /dev/null 2>&1",
           description: "nohup foreground command",
@@ -36,7 +38,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "nohup sleep 0.5 > /dev/null 2>&1 &",
           description: "nohup with & background command",
@@ -56,7 +60,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 0.3 & disown",
           description: "disown background command",
@@ -75,7 +81,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "setsid sleep 0.2 > /dev/null 2>&1",
           description: "setsid foreground command",
@@ -95,7 +103,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "(sleep 0.3 &) &",
           description: "daemon-style double fork",
@@ -115,7 +125,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "(sleep 0.2; echo 'done') &",
           description: "subshell with background",
@@ -135,7 +147,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "timeout 0.2s sleep 1",
           description: "timeout command",
@@ -157,7 +171,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "screen -dm sleep 0.3",
           description: "screen detached session",
@@ -178,7 +194,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "tmux new-session -d 'sleep 0.3'",
           description: "tmux detached session",
@@ -199,7 +217,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'sleep 0.1' | at now + 1 minute 2>/dev/null || echo 'at not available'",
           description: "at scheduled command",
@@ -219,7 +239,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "systemd-run --user --scope sleep 0.2 2>/dev/null || echo 'systemd-run not available'",
           description: "systemd-run service",
@@ -238,7 +260,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 0.3 </dev/null >/dev/null 2>&1 &",
           description: "background with explicit I/O redirection",
@@ -258,7 +282,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "{ sleep 0.2; echo 'done'; } &",
           description: "background process group",
@@ -278,7 +304,9 @@ describe("BashTool various backgrounding methods", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "set -m; sleep 0.3 &",
           description: "background with job control enabled",
@@ -300,7 +328,9 @@ describe("BashTool backgrounding edge cases", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "nohup setsid sleep 0.3 > /dev/null 2>&1 &",
           description: "multiple backgrounding methods",
@@ -327,7 +357,9 @@ describe("BashTool backgrounding edge cases", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: `(sleep 0.05 && touch ${testFile} &) &`,
           description: "nested background processes",

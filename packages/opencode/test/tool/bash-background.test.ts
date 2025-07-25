@@ -16,7 +16,9 @@ describe("BashTool background commands", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 0.5 &",
           description: "Background sleep command",
@@ -36,7 +38,9 @@ describe("BashTool background commands", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: 'node -e "setTimeout(() => {}, 300)" > /dev/null 2>&1 &',
           description: "Background Node command with output redirection",
@@ -56,7 +60,9 @@ describe("BashTool background commands", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "node -e \"require('http').createServer().listen(0); setInterval(() => {}, 1000)\" &",
           description: "Background Node server",
@@ -76,7 +82,9 @@ describe("BashTool background commands", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 0.3 & sleep 0.2 & echo 'done'",
           description: "Multiple background commands with foreground echo",
@@ -103,7 +111,9 @@ describe("BashTool background commands", () => {
 
     await App.provide({ cwd: process.cwd() }, async () => {
       // Start background process that creates a file after 50ms
-      await BashTool.execute(
+      await (
+        await BashTool()
+      ).execute(
         {
           command: `sleep 0.05 && touch ${testFile} &`,
           description: "Background command that creates a file",
@@ -127,7 +137,9 @@ describe("BashTool background commands", () => {
 
   test("regular commands without & should still work normally", async () => {
     await App.provide({ cwd: process.cwd() }, async () => {
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'hello world'",
           description: "Regular echo command",
@@ -142,7 +154,9 @@ describe("BashTool background commands", () => {
 
   test("command with escaped ampersand should not be treated as background", async () => {
     await App.provide({ cwd: process.cwd() }, async () => {
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'hello \\& world'",
           description: "Command with escaped ampersand",
@@ -157,7 +171,9 @@ describe("BashTool background commands", () => {
 
   test("command with & in middle should not be treated as background", async () => {
     await App.provide({ cwd: process.cwd() }, async () => {
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "echo 'hello & world' && echo 'done'",
           description: "Command with & in middle, not at end",
@@ -175,7 +191,9 @@ describe("BashTool background commands", () => {
     await App.provide({ cwd: process.cwd() }, async () => {
       const start = Date.now()
 
-      const result = await BashTool.execute(
+      const result = await (
+        await BashTool()
+      ).execute(
         {
           command: "sleep 1 &",
           description: "Long background sleep",
