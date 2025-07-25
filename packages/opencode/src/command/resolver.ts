@@ -11,13 +11,10 @@ export class CommandResolver {
 
     let resolved = content
 
-    // Step 1: Resolve bash commands
-    resolved = await this.resolveBashCommands(resolved, context)
-
-    // Step 2: Resolve file references
+    // Step 1: Resolve file references
     resolved = await this.resolveFileReferences(resolved, context)
 
-    // Step 3: Resolve arguments
+    // Step 2: Resolve arguments
     resolved = this.resolveArguments(resolved, context.arguments)
 
     return resolved
@@ -50,36 +47,6 @@ export class CommandResolver {
         }, but ${providedCount} ${providedCount === 1 ? "was" : "were"} provided`,
       )
     }
-  }
-
-  private async resolveBashCommands(content: string, context: CommandExecutionContext): Promise<string> {
-    // Match $(command) pattern
-    const bashRegex = /\$\(([^)]+)\)/g
-    const matches = Array.from(content.matchAll(bashRegex))
-
-    for (const match of matches) {
-      const [fullMatch, command] = match
-
-      try {
-        // Execute command with timeout
-        const proc = Bun.spawn(["bash", "-c", command], {
-          cwd: context.workingDirectory,
-          env: process.env,
-        })
-
-        const timeout = setTimeout(() => proc.kill(), 30000) // 30s timeout
-        const output = await new Response(proc.stdout).text()
-        const error = await new Response(proc.stderr).text()
-        clearTimeout(timeout)
-
-        const result = proc.exitCode === 0 ? output : `${output}\n${error}`
-        content = content.replace(fullMatch, result.trim())
-      } catch (error) {
-        content = content.replace(fullMatch, `[Error executing: ${command}]`)
-      }
-    }
-
-    return content
   }
 
   private async resolveFileReferences(content: string, context: CommandExecutionContext): Promise<string> {
@@ -115,17 +82,8 @@ export class CommandResolver {
     const argArray = args.trim() ? args.trim().split(/\s+/) : []
     let argIndex = 0
 
-    // Replace $ARGUMENTS placeholders one by one
-    content = content.replace(/\$ARGUMENTS/g, () => {
-      if (argIndex < argArray.length) {
-        return argArray[argIndex++]
-      }
-      return "" // This shouldn't happen due to validation
-    })
-
-    // Reset index for {{args}} pattern
-    argIndex = 0
-    content = content.replace(/\{\{args\}\}/g, () => {
+    // Replace both $ARGUMENTS and {{args}} placeholders in order
+    content = content.replace(/(\$ARGUMENTS|\{\{args\}\})/g, () => {
       if (argIndex < argArray.length) {
         return argArray[argIndex++]
       }
