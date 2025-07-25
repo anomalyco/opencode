@@ -10,6 +10,7 @@ import { bootstrap } from "../bootstrap"
 import { MessageV2 } from "../../session/message-v2"
 import { Mode } from "../../session/mode"
 import { Identifier } from "../../id/id"
+import { Agent } from "../../agent/agent.ts"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -57,6 +58,11 @@ export const RunCommand = cmd({
       .option("mode", {
         type: "string",
         describe: "mode to use",
+      })
+      .option("agent", {
+        type: "string",
+        alias: ["a"],
+        describe: "agent to use",
       })
   },
   handler: async (args) => {
@@ -156,18 +162,23 @@ export const RunCommand = cmd({
         UI.error(err)
       })
 
+      const agent = args.agent ? await Agent.get(args.agent) : undefined
       const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
 
       const messageID = Identifier.ascending("message")
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(mode.model
-          ? mode.model
-          : {
-              providerID,
-              modelID,
-            }),
+        ...(agent?.model
+          ? agent.model
+          : mode.model
+            ? mode.model
+            : {
+                providerID,
+                modelID,
+              }),
+        system: agent?.prompt,
+        tools: agent?.tools,
         mode: mode.name,
         parts: [
           {

@@ -130,6 +130,12 @@ Common tools you might want to control:
 
 Agents are automatically available through the Task tool when configured. The main assistant will use them for specialized tasks based on their descriptions.
 
+You can also run agents directly with the `run` command by using the `-a` or `--agent` flag. This is useful for scripting and automating tasks.
+
+```bash
+opencode run -a <agent-name> "your prompt for the agent"
+```
+
 ## Best Practices
 
 1. **Clear descriptions** - Write specific descriptions that help the main assistant know when to use each agent
@@ -157,6 +163,12 @@ Focus on:
 - Proper structure
 - Code examples
 - User-friendly language
+```
+
+You can then pipe a file to the agent to have it generate documentation for that file.
+
+```bash
+cat path/to/your/file.ts | opencode run -a docs-writer "write documentation for this file"
 ```
 
 ### Security Auditor

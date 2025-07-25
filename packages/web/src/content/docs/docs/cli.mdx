@@ -37,6 +37,12 @@ This is useful for scripting, automation, or when you want a quick answer withou
 opencode run Explain the use of context in Go
 ```
 
+To execute an agent.
+
+```bash "opencode run --agent"
+opencode run --agent <agent-name> "Your prompt for the agent"
+```
+
 #### Flags
 
 | Flag         | Short | Description                                |
@@ -45,7 +51,7 @@ opencode run Explain the use of context in Go
 | `--session`  | `-s`  | Session ID to continue                     |
 | `--share`    |       | Share the session                          |
 | `--model`    | `-m`  | Model to use in the form of provider/model |
-
+| `--agent`    | `-a`  | Agent to use                               |
 ---
 
 ### auth
