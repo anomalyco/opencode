@@ -7,21 +7,38 @@ export namespace ProviderTransform {
       const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
       const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
+      const providerOptions = {
+        anthropic: {
+          cacheControl: { type: "ephemeral" },
+        },
+        openrouter: {
+          cache_control: { type: "ephemeral" },
+        },
+        bedrock: {
+          cachePoint: { type: "ephemeral" },
+        },
+        openaiCompatible: {
+          cache_control: { type: "ephemeral" },
+        },
+      }
+
       for (const msg of unique([...system, ...final])) {
+        const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+        
+        if (shouldUseContentOptions) {
+          const lastContent = msg.content[msg.content.length - 1]
+          if (lastContent && typeof lastContent === "object") {
+            lastContent.providerOptions = {
+              ...lastContent.providerOptions,
+              ...providerOptions,
+            }
+            continue
+          }
+        }
+        
         msg.providerOptions = {
           ...msg.providerOptions,
-          anthropic: {
-            cacheControl: { type: "ephemeral" },
-          },
-          openrouter: {
-            cache_control: { type: "ephemeral" },
-          },
-          bedrock: {
-            cachePoint: { type: "ephemeral" },
-          },
-          openaiCompatible: {
-            cache_control: { type: "ephemeral" },
-          },
+          ...providerOptions,
         }
       }
     }
