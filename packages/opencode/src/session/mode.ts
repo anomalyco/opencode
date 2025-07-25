@@ -2,6 +2,8 @@ import { App } from "../app/app"
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
+import { SystemPrompt } from "./system.ts"
+import path from "path"
 
 export namespace Mode {
   export const Info = z
@@ -15,6 +17,7 @@ export namespace Mode {
         .optional(),
       prompt: z.string().optional(),
       tools: z.record(z.boolean()),
+      path: z.string().optional(),
     })
     .openapi({
       ref: "Mode",
@@ -50,6 +53,7 @@ export namespace Mode {
         item.model = Provider.parseModel(model)
       }
       if (value.prompt) item.prompt = value.prompt
+      if (value.path) item.path = value.path
       if (value.tools)
         item.tools = {
           ...value.tools,
@@ -66,5 +70,12 @@ export namespace Mode {
 
   export async function list() {
     return state().then((x) => Object.values(x))
+  }
+
+  export async function resolvePrompt(mode: Info): Promise<string | undefined> {
+    if (!mode.prompt) return
+    if (!mode.path) return mode.prompt
+
+    return SystemPrompt.resolve(mode.prompt, path.dirname(mode.path), mode.name)
   }
 }

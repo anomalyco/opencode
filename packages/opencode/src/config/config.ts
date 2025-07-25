@@ -35,6 +35,7 @@ export namespace Config {
 
       const config = {
         name: path.basename(item, ".md"),
+        path: item,
         ...md.data,
         prompt: md.content.trim(),
       }
@@ -102,6 +103,7 @@ export namespace Config {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
+      path: z.string().optional(),
     })
     .openapi({
       ref: "ModeConfig",
@@ -327,6 +329,12 @@ export namespace Config {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         await Bun.write(configPath, JSON.stringify(parsed.data, null, 2))
+      }
+
+      if (parsed.data.mode) {
+        Object.values(parsed.data.mode).forEach((mode) => {
+          mode.path = configPath
+        })
       }
       return parsed.data
     }

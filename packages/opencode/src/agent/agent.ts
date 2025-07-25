@@ -5,6 +5,7 @@ import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
+import path from "path"
 
 export namespace Agent {
   export const Info = z
@@ -19,6 +20,7 @@ export namespace Agent {
       description: z.string(),
       prompt: z.string().optional(),
       tools: z.record(z.boolean()),
+      path: z.string().optional(),
     })
     .openapi({
       ref: "Agent",
@@ -48,6 +50,7 @@ export namespace Agent {
             todowrite: false,
             todoread: false,
           },
+          path: value.path,
         }
       const model = value.model ?? cfg.model
       if (model) item.model = Provider.parseModel(model)
@@ -98,5 +101,12 @@ export namespace Agent {
       }),
     })
     return result.object
+  }
+
+  export async function resolvePrompt(agent: Info): Promise<string | undefined> {
+    if (!agent.prompt) return
+    if (!agent.path) return agent.prompt
+
+    return SystemPrompt.resolve(agent.prompt, path.dirname(agent.path), agent.name)
   }
 }

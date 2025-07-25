@@ -620,11 +620,14 @@ export namespace Session {
     const mode = await Mode.get(inputMode)
     let system = SystemPrompt.header(input.providerID)
     system.push(
-      ...(() => {
+      ...(await (async () => {
         if (input.system) return [input.system]
-        if (mode.prompt) return [mode.prompt]
+        if (mode.prompt) {
+          if (mode.path) return [(await Mode.resolvePrompt(mode))!]
+          return [mode.prompt]
+        }
         return SystemPrompt.provider(input.modelID)
-      })(),
+      })()),
     )
     system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
     system.push(...(await SystemPrompt.environment()))

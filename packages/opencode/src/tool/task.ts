@@ -52,7 +52,7 @@ export const TaskTool = Tool.define(async () => {
         modelID: model.modelID,
         providerID: model.providerID,
         mode: msg.mode,
-        system: agent.prompt,
+        system: await Agent.resolvePrompt(agent),
         tools: agent.tools,
         parts: [
           {
