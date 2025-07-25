@@ -52,6 +52,7 @@ export namespace Filesystem {
           absolute: true,
           onlyFiles: true,
           dot: true,
+          followSymlinks: true
         })) {
           result.push(match)
         }
