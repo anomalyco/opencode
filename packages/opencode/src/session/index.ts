@@ -611,7 +611,9 @@ export namespace Session {
         .then((result) => {
           if (result.text)
             return Session.update(input.sessionID, (draft) => {
-              draft.title = result.text
+              const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+              draft.title = title
             })
         })
         .catch(() => {})
