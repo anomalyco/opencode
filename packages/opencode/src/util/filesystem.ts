@@ -49,10 +49,11 @@ export namespace Filesystem {
         const glob = new Bun.Glob(pattern)
         for await (const match of glob.scan({
           cwd: current,
+          absolute: true,
           onlyFiles: true,
           dot: true,
         })) {
-          result.push(join(current, match))
+          result.push(match)
         }
       } catch {
         // Skip invalid glob patterns

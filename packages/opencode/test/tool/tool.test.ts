@@ -9,10 +9,13 @@ const ctx = {
   abort: AbortSignal.any([]),
   metadata: () => {},
 }
+const glob = await GlobTool()
+const list = await ListTool()
+
 describe("tool.glob", () => {
   test("truncate", async () => {
     await App.provide({ cwd: process.cwd() }, async () => {
-      let result = await GlobTool.execute(
+      let result = await glob.execute(
         {
           pattern: "../../node_modules/**/*",
           path: undefined,
@@ -24,7 +27,7 @@ describe("tool.glob", () => {
   })
   test("basic", async () => {
     await App.provide({ cwd: process.cwd() }, async () => {
-      let result = await GlobTool.execute(
+      let result = await glob.execute(
         {
           pattern: "*.json",
           path: undefined,
@@ -42,7 +45,7 @@ describe("tool.glob", () => {
 describe("tool.ls", () => {
   test("basic", async () => {
     const result = await App.provide({ cwd: process.cwd() }, async () => {
-      return await ListTool.execute({ path: "./example", ignore: [".git"] }, ctx)
+      return await list.execute({ path: "./example", ignore: [".git"] }, ctx)
     })
     expect(result.output).toMatchSnapshot()
   })

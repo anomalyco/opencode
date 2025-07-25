@@ -1,7 +1,7 @@
-import { mergeDeep } from "remeda"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import z from "zod"
+import { Provider } from "../provider/provider"
 
 export namespace Mode {
   export const Info = z
@@ -22,38 +22,39 @@ export namespace Mode {
   export type Info = z.infer<typeof Info>
   const state = App.state("mode", async () => {
     const cfg = await Config.get()
-    const mode = mergeDeep(
-      {
-        build: {},
-        plan: {
-          tools: {
-            write: false,
-            edit: false,
-            patch: false,
-          },
+    const result: Record<string, Info> = {
+      build: {
+        name: "build",
+        tools: {},
+      },
+      plan: {
+        name: "plan",
+        tools: {
+          write: false,
+          edit: false,
+          patch: false,
         },
       },
-      cfg.mode ?? {},
-    )
-    const result: Record<string, Info> = {}
-    for (const [key, value] of Object.entries(mode)) {
+    }
+    for (const [key, value] of Object.entries(cfg.mode ?? {})) {
+      if (value.disable) continue
       let item = result[key]
       if (!item)
         item = result[key] = {
           name: key,
           tools: {},
         }
+      item.name = key
       const model = value.model ?? cfg.model
       if (model) {
-        const [providerID, ...rest] = model.split("/")
-        const modelID = rest.join("/")
-        item.model = {
-          modelID,
-          providerID,
-        }
+        item.model = Provider.parseModel(model)
       }
       if (value.prompt) item.prompt = value.prompt
-      if (value.tools) item.tools = value.tools
+      if (value.tools)
+        item.tools = {
+          ...value.tools,
+          ...item.tools,
+        }
     }
 
     return result

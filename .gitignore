@@ -1,8 +1,8 @@
 .DS_Store
 node_modules
-.opencode
 .sst
 .env
 .idea
 .vscode
 openapi.json
+scratch

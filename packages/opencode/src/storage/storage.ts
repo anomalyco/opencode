@@ -18,8 +18,26 @@ export namespace Storage {
   const atomicWriter = new StreamHandler.AtomicFileWriter(streamHandler)
   const migrationManager = new MigrationManager.Manager()
 
-  // Register default migrations
+  // Register default migrations and new mode migration
   MigrationManager.defaultMigrations.forEach(m => migrationManager.register(m))
+  
+  // Add the new mode migration
+  migrationManager.register(async (dir: string) => {
+    const files = new Bun.Glob("session/message/*/*.json").scanSync({
+      cwd: dir,
+      absolute: true,
+    })
+    for (const file of files) {
+      try {
+        const content = await Bun.file(file).json()
+        if (content.role === "assistant" && !content.mode) {
+          log.info("adding mode field to message", { file })
+          content.mode = "build"
+          await Bun.write(file, JSON.stringify(content, null, 2))
+        }
+      } catch (e) {}
+    }
+  })
 
   const state = App.state("storage", async () => {
     const app = App.info()

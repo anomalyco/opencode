@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -exuo pipefail
+
+cd "$(dirname "$0")/.."
+
+node scripts/utils/check-version.cjs
+
+# Build into dist and will publish the package from there,
+# so that src/resources/foo.ts becomes <package root>/resources/foo.js
+# This way importing from `"@opencode-ai/sdk/resources/foo"` works
+# even with `"moduleResolution": "node"`
+
+rm -rf dist; mkdir dist
+# Copy src to dist/src and build from dist/src into dist, so that
+# the source map for index.js.map will refer to ./src/index.ts etc
+cp -rp src README.md dist
+for file in LICENSE CHANGELOG.md; do
+  if [ -e "${file}" ]; then cp "${file}" dist; fi
+done
+if [ -e "bin/cli" ]; then
+  mkdir -p dist/bin
+  cp -p "bin/cli" dist/bin/;
+fi
+if [ -e "bin/migration-config.json" ]; then
+  mkdir -p dist/bin
+  cp -p "bin/migration-config.json" dist/bin/;
+fi
+# this converts the export map paths for the dist directory
+# and does a few other minor things
+node scripts/utils/make-dist-package-json.cjs > dist/package.json
+
+# build to .js/.mjs/.d.ts files
+./node_modules/.bin/tsc-multi
+# we need to patch index.js so that `new module.exports()` works for cjs backwards
+# compat. No way to get that from index.ts because it would cause compile errors
+# when building .mjs
+node scripts/utils/fix-index-exports.cjs
+cp tsconfig.dist-src.json dist/src/tsconfig.json
+
+node scripts/utils/postprocess-files.cjs
+
+# make sure that nothing crashes when we require the output CJS or
+# import the output ESM
+(cd dist && node -e 'require("@opencode-ai/sdk")')
+(cd dist && node -e 'import("@opencode-ai/sdk")' --input-type=module)
+
+if [ -e ./scripts/build-deno ]
+then
+  ./scripts/build-deno
+fi

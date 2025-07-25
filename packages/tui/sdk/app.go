@@ -145,24 +145,6 @@ func (r appTimeJSON) RawJSON() string {
 	return r.raw
 }
 
-// Log level
-type LogLevel string
-
-const (
-	LogLevelDebug LogLevel = "DEBUG"
-	LogLevelInfo  LogLevel = "INFO"
-	LogLevelWarn  LogLevel = "WARN"
-	LogLevelError LogLevel = "ERROR"
-)
-
-func (r LogLevel) IsKnown() bool {
-	switch r {
-	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
-		return true
-	}
-	return false
-}
-
 type Mode struct {
 	Name   string          `json:"name,required"`
 	Tools  map[string]bool `json:"tools,required"`

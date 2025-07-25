@@ -25,8 +25,8 @@ export namespace Tool {
   }
 
   export function define<Parameters extends StandardSchemaV1, Result extends Metadata>(
-    input: Info<Parameters, Result>,
-  ): Info<Parameters, Result> {
-    return input
+    input: Info<Parameters, Result> | (() => Promise<Info<Parameters, Result>>),
+  ): () => Promise<Info<Parameters, Result>> {
+    return input instanceof Function ? input : async () => input
   }
 }

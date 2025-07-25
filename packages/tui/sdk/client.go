@@ -22,6 +22,7 @@ type Client struct {
 	File    *FileService
 	Config  *ConfigService
 	Session *SessionService
+	Tui     *TuiService
 }
 
 // DefaultClientOptions read from the environment (OPENCODE_BASE_URL). This should
@@ -49,6 +50,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 	r.File = NewFileService(opts...)
 	r.Config = NewConfigService(opts...)
 	r.Session = NewSessionService(opts...)
+	r.Tui = NewTuiService(opts...)
 
 	return
 }

@@ -22,11 +22,13 @@ console.log(`publishing ${version}`)
 const GOARCH: Record<string, string> = {
   arm64: "arm64",
   x64: "amd64",
+  "x64-baseline": "amd64",
 }
 
 const targets = [
   ["linux", "arm64"],
   ["linux", "x64"],
+  ["linux", "x64-baseline"],
   ["darwin", "x64"],
   ["darwin", "arm64"],
   ["windows", "x64"],
@@ -90,7 +92,10 @@ if (!snapshot) {
   }
 
   const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
-    .then((res) => res.json())
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
     .then((data) => data.tag_name)
 
   console.log("finding commits between", previous, "and", "HEAD")

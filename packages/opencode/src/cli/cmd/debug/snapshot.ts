@@ -4,49 +4,30 @@ import { cmd } from "../cmd"
 
 export const SnapshotCommand = cmd({
   command: "snapshot",
-  builder: (yargs) => yargs.command(CreateCommand).command(RestoreCommand).command(DiffCommand).demandCommand(),
+  builder: (yargs) => yargs.command(TrackCommand).command(PatchCommand).demandCommand(),
   async handler() {},
 })
 
-const CreateCommand = cmd({
-  command: "create",
+const TrackCommand = cmd({
+  command: "track",
   async handler() {
     await bootstrap({ cwd: process.cwd() }, async () => {
-      const result = await Snapshot.create("test")
-      console.log(result)
+      console.log(await Snapshot.track())
     })
   },
 })
 
-const RestoreCommand = cmd({
-  command: "restore <commit>",
+const PatchCommand = cmd({
+  command: "patch <hash>",
   builder: (yargs) =>
-    yargs.positional("commit", {
+    yargs.positional("hash", {
       type: "string",
-      description: "commit",
+      description: "hash",
       demandOption: true,
     }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
-      await Snapshot.restore("test", args.commit)
-      console.log("restored")
-    })
-  },
-})
-
-export const DiffCommand = cmd({
-  command: "diff <commit>",
-  describe: "diff",
-  builder: (yargs) =>
-    yargs.positional("commit", {
-      type: "string",
-      description: "commit",
-      demandOption: true,
-    }),
-  async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
-      const diff = await Snapshot.diff("test", args.commit)
-      console.log(diff)
+      console.log(await Snapshot.patch(args.hash))
     })
   },
 })

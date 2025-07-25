@@ -13,7 +13,6 @@ import { GrepTool } from "../tool/grep"
 import { ListTool } from "../tool/ls"
 import { PatchTool } from "../tool/patch"
 import { ReadTool } from "../tool/read"
-import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
@@ -487,31 +486,29 @@ export namespace Provider {
     TaskTool,
   ]
 
-  const TOOL_MAPPING: Record<string, Tool.Info[]> = {
-    anthropic: TOOLS.filter((t) => t.id !== "patch"),
-    openai: TOOLS.map((t) => ({
-      ...t,
-      parameters: optionalToNullable(t.parameters),
-    })),
-    azure: TOOLS.map((t) => ({
-      ...t,
-      parameters: optionalToNullable(t.parameters),
-    })),
-    google: TOOLS.map((t) => ({
-      ...t,
-      parameters: sanitizeGeminiParameters(t.parameters),
-    })),
-  }
-
   export async function tools(providerID: string) {
-    /*
-    const cfg = await Config.get()
-    if (cfg.tool?.provider?.[providerID])
-      return cfg.tool.provider[providerID].map(
-        (id) => TOOLS.find((t) => t.id === id)!,
-      )
-        */
-    return TOOL_MAPPING[providerID] ?? TOOLS
+    const result = await Promise.all(TOOLS.map((t) => t()))
+    switch (providerID) {
+      case "anthropic":
+        return result.filter((t) => t.id !== "patch")
+      case "openai":
+        return result.map((t) => ({
+          ...t,
+          parameters: optionalToNullable(t.parameters),
+        }))
+      case "azure":
+        return result.map((t) => ({
+          ...t,
+          parameters: optionalToNullable(t.parameters),
+        }))
+      case "google":
+        return result.map((t) => ({
+          ...t,
+          parameters: sanitizeGeminiParameters(t.parameters),
+        }))
+      default:
+        return result
+    }
   }
 
   function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {

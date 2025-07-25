@@ -42,6 +42,7 @@ export namespace TreeBuilder {
     }
 
     for (const file of files) {
+      if (file.includes(".opencode")) continue
       const parts = file.split(path.sep)
       let current = root
 
