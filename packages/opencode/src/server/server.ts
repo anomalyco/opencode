@@ -785,9 +785,9 @@ export namespace Server {
                           argumentHint: z.string().optional(),
                           scope: z.enum(["project", "user"]),
                           namespace: z.string().optional(),
-                        })
+                        }),
                       ),
-                    })
+                    }),
                   ),
                 },
               },
@@ -797,7 +797,7 @@ export namespace Server {
         async (c) => {
           const commands = await Command.list()
           return c.json({
-            commands: commands.map(cmd => ({
+            commands: commands.map((cmd) => ({
               name: cmd.name,
               description: cmd.metadata.description,
               argumentHint: cmd.metadata["argument-hint"],
@@ -805,7 +805,7 @@ export namespace Server {
               namespace: cmd.namespace,
             })),
           })
-        }
+        },
       )
       .get(
         "/command/:name",
@@ -831,23 +831,23 @@ export namespace Server {
             return c.json({ error: "Command not found" }, 404)
           }
           return c.json(command)
-        }
+        },
       )
       .post(
-        "/command/execute",
+        "/command/resolve",
         describeRoute({
-          description: "Execute a custom command",
+          description: "Resolve a custom command's content",
           responses: {
             200: {
-              description: "Execution result",
+              description: "Resolved command content",
               content: {
                 "application/json": {
                   schema: resolver(
                     z.object({
                       success: z.boolean(),
-                      output: z.string().optional(),
+                      content: z.string().optional(),
                       error: z.string().optional(),
-                    })
+                    }),
                   ),
                 },
               },
@@ -859,21 +859,41 @@ export namespace Server {
           z.object({
             name: z.string(),
             arguments: z.string().optional(),
-            sessionId: z.string(),
-            messageId: z.string(),
-          })
+          }),
         ),
-        zValidator("json", z.object({
-          name: z.string(),
-          arguments: z.string().optional(),
-          sessionId: z.string(),
-          messageId: z.string(),
-        })),
         async (c) => {
-          const { name, arguments: args, sessionId, messageId } = c.req.valid("json")
-          const result = await Command.execute(name, args || "", sessionId, messageId)
-          return c.json(result)
-        }
+          const { name, arguments: args } = c.req.valid("json")
+
+          // Get the command
+          const command = await Command.get(name)
+          if (!command) {
+            return c.json({ success: false, error: "Command not found" }, 404)
+          }
+
+          // Resolve the command content with arguments
+          const { CommandResolver } = await import("../command/resolver")
+          const resolver = new CommandResolver()
+          const context = {
+            command,
+            arguments: args || "",
+            sessionId: "", // Not needed for resolution
+            messageId: "", // Not needed for resolution
+            workingDirectory: App.info().path.cwd,
+          }
+
+          try {
+            const resolvedContent = await resolver.resolve(command.rawContent, context)
+            return c.json({
+              success: true,
+              content: resolvedContent,
+            })
+          } catch (error) {
+            return c.json({
+              success: false,
+              error: error instanceof Error ? error.message : "Failed to resolve command",
+            })
+          }
+        },
       )
       .post(
         "/tui/append-prompt",

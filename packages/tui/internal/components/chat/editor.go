@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
@@ -222,23 +223,62 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
-			commandName := strings.TrimPrefix(msg.Item.Value, "/")
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
+			commandName := msg.Item.Value
 
 			// Check if it's a custom command
 			if commands.IsCustomCommand(commands.CommandName(commandName)) {
-				// Create a synthetic command for custom commands
-				customCmd := commands.Command{
-					Name:        commands.CommandName(commandName),
-					Description: "Custom command",
-					Trigger:     []string{commands.GetCustomCommandName(commands.CommandName(commandName))},
+				// Extract the actual command name (e.g., "custom_user_hello" -> "user:hello")
+				actualName := strings.ReplaceAll(strings.TrimPrefix(commandName, "custom_"), "_", ":")
+
+				// Get the current input text to extract arguments
+				content := m.textarea.Value()
+				slashIndex := strings.LastIndex(content, "/")
+				args := ""
+				if slashIndex != -1 {
+					// Extract everything after the command name as arguments
+					afterSlash := content[slashIndex+1:]
+					parts := strings.SplitN(afterSlash, " ", 2)
+					if len(parts) > 1 {
+						args = strings.TrimSpace(parts[1])
+					}
 				}
-				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(customCmd)))
+
+				// Clear the current input
+				m.textarea.SetValue("")
+
+				// Fetch and resolve the command content, then submit it
+				cmds = append(cmds, func() tea.Msg {
+					// Call the server to resolve the command
+					var result struct {
+						Success bool   `json:"success"`
+						Content string `json:"content"`
+						Error   string `json:"error"`
+					}
+
+					payload := map[string]string{
+						"name":      actualName,
+						"arguments": args,
+					}
+
+					err := m.app.Client.Post(context.Background(), "/command/resolve", payload, &result)
+					if err != nil {
+						// Return an error message to be displayed
+						return toast.NewErrorToast(fmt.Sprintf("Failed to resolve command: %v", err))()
+					}
+
+					if !result.Success {
+						return toast.NewErrorToast(result.Error)()
+					}
+
+					// Create and send the prompt with the resolved content
+					prompt := app.Prompt{Text: result.Content}
+					return app.SendPrompt(prompt)
+				})
 			} else {
-				// Regular built-in command
-				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+				// Handle built-in command
+				if cmd, ok := m.app.Commands[commands.CommandName(commandName)]; ok {
+					cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(cmd)))
+				}
 			}
 			return m, tea.Batch(cmds...)
 		case "files":

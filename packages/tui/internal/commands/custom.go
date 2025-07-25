@@ -55,37 +55,7 @@ func (h *CustomCommandHandler) GetCommands() []CustomCommand {
 	return append([]CustomCommand{}, h.commands...)
 }
 
-func (h *CustomCommandHandler) Execute(
-	ctx context.Context,
-	name string,
-	args string,
-	sessionID string,
-	messageID string,
-) error {
-	body := map[string]interface{}{
-		"name":      name,
-		"arguments": args,
-		"sessionId": sessionID,
-		"messageId": messageID,
-	}
-
-	var result struct {
-		Success bool   `json:"success"`
-		Output  string `json:"output"`
-		Error   string `json:"error"`
-	}
-
-	err := h.client.Post(ctx, "/command/execute", body, &result)
-	if err != nil {
-		return fmt.Errorf("failed to execute command: %w", err)
-	}
-
-	if !result.Success {
-		return fmt.Errorf("command execution failed: %s", result.Error)
-	}
-
-	return nil
-}
+// Execute method removed - custom commands are now resolved and submitted as regular messages
 
 // Convert custom commands to registry commands
 func (h *CustomCommandHandler) ToRegistryCommands() []Command {
