@@ -353,6 +353,7 @@ export namespace Session {
   }
 
   export const ChatInput = z.object({
+    rawTitle: z.boolean().optional(),
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message").optional(),
     providerID: z.string(),
@@ -400,6 +401,7 @@ export namespace Session {
   export async function chat(
     input: z.infer<typeof ChatInput>,
   ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
+    const cfg = await Config.get()
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
 
@@ -674,7 +676,9 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    if (msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)) {
+    const shouldMakeTitle = msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)
+    const dontGenerateTitle = input.rawTitle || cfg.disable_title_generation
+    if (shouldMakeTitle && !dontGenerateTitle) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
@@ -713,6 +717,13 @@ export namespace Session {
             })
         })
         .catch(() => {})
+    } else if (shouldMakeTitle) {
+      Session.update(input.sessionID, (draft) => {
+        const firstUserText = userParts?.find((part) => part.type === "text")?.text
+        if (firstUserText) {
+          draft.title = firstUserText.length > 50 ? firstUserText.substring(0, 50) + "..." : firstUserText
+        }
+      })
     }
 
     const agent = await Agent.get(inputAgent)

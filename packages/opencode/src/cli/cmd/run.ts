@@ -58,6 +58,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "agent to use",
       })
+      .option("raw-title", {
+        type: "boolean",
+        describe: "use prompt as title instead of generating one",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -170,6 +174,7 @@ export const RunCommand = cmd({
 
       const messageID = Identifier.ascending("message")
       const result = await Session.chat({
+        rawTitle: args.rawTitle,
         sessionID: session.id,
         messageID,
         ...(agent.model
