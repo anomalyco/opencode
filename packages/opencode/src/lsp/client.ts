@@ -160,11 +160,19 @@ export namespace LSPClient {
         let unsub: () => void
         return await withTimeout(
           new Promise<void>((resolve) => {
+            let eventCount = 0
+            const maxEvents = result.serverID === "pyright" ? 2 : 1
+
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
               if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
-                log.info("got diagnostics", input)
-                unsub?.()
-                resolve()
+                eventCount++
+                log.info("got diagnostics", { ...input, eventCount, maxEvents })
+
+                if (eventCount >= maxEvents) {
+                  log.info("diagnostics complete", input)
+                  unsub?.()
+                  resolve()
+                }
               }
             })
           }),
