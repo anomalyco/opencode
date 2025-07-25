@@ -1,53 +1,53 @@
 import { Global } from "../global"
 import { Installation } from "../installation"
 import path from "path"
+import { BufferedWriter } from "./buffered-writer"
+import { RequestInterceptor } from "./request-interceptor"
 
 export namespace Trace {
-  export function init() {
+  let interceptor: RequestInterceptor.FetchInterceptor | null = null
+  let writerManager: BufferedWriter.Manager | null = null
+
+  export function init(): void {
     if (!Installation.isDev()) return
-    const writer = Bun.file(path.join(Global.Path.data, "log", "fetch.log")).writer()
 
-    const originalFetch = globalThis.fetch
-    // @ts-expect-error
-    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-      const method = init?.method || "GET"
+    // Initialize writer manager
+    writerManager = new BufferedWriter.Manager()
+    
+    // Get buffered writer for fetch logs
+    const logPath = path.join(Global.Path.data, "log", "fetch.log")
+    const writer = writerManager.getWriter(logPath, {
+      bufferSize: 50,
+      flushInterval: 1000,
+      autoFlush: true,
+    })
 
-      const urlObj = new URL(url)
+    // Create and install fetch interceptor
+    interceptor = new RequestInterceptor.FetchInterceptor(writer, {
+      logRequests: true,
+      logResponses: true,
+      logResponseBodies: true,
+      maxBodyLength: 1024 * 1024, // 1MB
+    })
 
-      writer.write(`\n${method} ${urlObj.pathname}${urlObj.search} HTTP/1.1\n`)
-      writer.write(`Host: ${urlObj.host}\n`)
+    interceptor.install()
+  }
 
-      if (init?.headers) {
-        if (init.headers instanceof Headers) {
-          init.headers.forEach((value, key) => {
-            writer.write(`${key}: ${value}\n`)
-          })
-        } else {
-          for (const [key, value] of Object.entries(init.headers)) {
-            writer.write(`${key}: ${value}\n`)
-          }
-        }
-      }
+  export async function shutdown(): Promise<void> {
+    if (interceptor) {
+      interceptor.uninstall()
+      interceptor = null
+    }
 
-      if (init?.body) {
-        writer.write(`\n${init.body}`)
-      }
-      writer.flush()
-      const response = await originalFetch(input, init)
-      const clonedResponse = response.clone()
-      writer.write(`\nHTTP/1.1 ${response.status} ${response.statusText}\n`)
-      response.headers.forEach((value, key) => {
-        writer.write(`${key}: ${value}\n`)
-      })
-      if (clonedResponse.body) {
-        clonedResponse.text().then(async (x) => {
-          writer.write(`\n${x}\n`)
-        })
-      }
-      writer.flush()
+    if (writerManager) {
+      await writerManager.closeAll()
+      writerManager = null
+    }
+  }
 
-      return response
+  export async function flush(): Promise<void> {
+    if (writerManager) {
+      await writerManager.flushAll()
     }
   }
 }

@@ -1,21 +1,20 @@
 import path from "path"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
-import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { App } from "../app/app"
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
-import { Bus } from "../bus"
 import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
-import { withTimeout } from "../util/timeout"
+import { TimeoutManager } from "./timeout-manager"
+import { DiagnosticsManager } from "./diagnostics-manager"
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
 
   export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
 
-  export type Diagnostic = VSCodeDiagnostic
+  export type Diagnostic = DiagnosticsManager.Diagnostic
 
   export const InitializeError = NamedError.create(
     "LSPInitializeError",
@@ -23,16 +22,6 @@ export namespace LSPClient {
       serverID: z.string(),
     }),
   )
-
-  export const Event = {
-    Diagnostics: Bus.event(
-      "lsp.client.diagnostics",
-      z.object({
-        serverID: z.string(),
-        path: z.string(),
-      }),
-    ),
-  }
 
   export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
     const app = App.info()
@@ -44,16 +33,13 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin),
     )
 
-    const diagnostics = new Map<string, Diagnostic[]>()
+    const timeoutManager = new TimeoutManager.AdaptiveTimeout(TimeoutManager.DEFAULT_CONFIGS)
+    const diagnosticsManager = new DiagnosticsManager.Manager(input.serverID, {
+      suppressInitialEvents: true
+    })
+
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const path = new URL(params.uri).pathname
-      l.info("textDocument/publishDiagnostics", {
-        path,
-      })
-      const exists = diagnostics.has(path)
-      diagnostics.set(path, params.diagnostics)
-      if (!exists && input.serverID === "typescript") return
-      Bus.publish(Event.Diagnostics, { path, serverID: input.serverID })
+      diagnosticsManager.onDiagnosticsUpdate(params)
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
       l.info("window/workDoneProgress/create", params)
@@ -65,7 +51,9 @@ export namespace LSPClient {
     connection.listen()
 
     l.info("sending initialize")
-    await withTimeout(
+    
+    await timeoutManager.withTimeout(
+      'initialize',
       connection.sendRequest("initialize", {
         rootUri: "file://" + input.root,
         processId: input.server.process.pid,
@@ -96,7 +84,6 @@ export namespace LSPClient {
           },
         },
       }),
-      5_000,
     ).catch((err) => {
       l.error("initialize error", { error: err })
       throw new InitializeError(
@@ -128,7 +115,7 @@ export namespace LSPClient {
           const text = await file.text()
           const version = files[input.path]
           if (version !== undefined) {
-            diagnostics.delete(input.path)
+            diagnosticsManager.delete(input.path)
             await connection.sendNotification("textDocument/didClose", {
               textDocument: {
                 uri: `file://` + input.path,
@@ -152,28 +139,14 @@ export namespace LSPClient {
         },
       },
       get diagnostics() {
-        return diagnostics
+        return diagnosticsManager
       },
       async waitForDiagnostics(input: { path: string }) {
         input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
         log.info("waiting for diagnostics", input)
-        let unsub: () => void
-        return await withTimeout(
-          new Promise<void>((resolve) => {
-            unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
-                log.info("got diagnostics", input)
-                unsub?.()
-                resolve()
-              }
-            })
-          }),
-          3000,
-        )
-          .catch(() => {})
-          .finally(() => {
-            unsub?.()
-          })
+        
+        const timeout = timeoutManager.getTimeout('diagnostics')
+        return await diagnosticsManager.waitForDiagnostics(input.path, timeout)
       },
       async shutdown() {
         l.info("shutting down")
