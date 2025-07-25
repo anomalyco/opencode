@@ -440,7 +440,27 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	attachments := m.textarea.GetAttachments()
 
-	prompt := app.Prompt{Text: value, Attachments: attachments}
+	// Deduplicate by path
+	seen := make(map[string]bool)
+	deduped := make([]*attachment.Attachment, 0, len(attachments))
+	for _, att := range attachments {
+		var path string
+		if fs, ok := att.GetFileSource(); ok {
+			path = fs.Path
+		} else if ss, ok := att.GetSymbolSource(); ok {
+			path = ss.Path
+		} else {
+			// Not a file or symbol source, just add it
+			deduped = append(deduped, att)
+			continue
+		}
+
+		if path != "" && !seen[path] {
+			seen[path] = true
+			deduped = append(deduped, att)
+		}
+	}
+	prompt := app.Prompt{Text: value, Attachments: deduped}
 	m.app.State.AddPromptToHistory(prompt)
 	cmds = append(cmds, m.app.SaveState())
 
