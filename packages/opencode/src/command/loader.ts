@@ -1,7 +1,7 @@
-import * as fs from "fs/promises"
 import * as path from "path"
 import matter from "gray-matter"
-import { CustomCommand, CommandMetadataSchema } from "./types"
+import type { CustomCommand } from "./types"
+import { CommandMetadataSchema } from "./types"
 import { App } from "../app/app"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
@@ -80,7 +80,7 @@ export class CommandLoader {
       
       this.commands.set(commandName, command)
     } catch (error) {
-      this.log.error(`Failed to load command from ${filePath}:`, error)
+      this.log.error(`Failed to load command from ${filePath}:`, error as any)
     }
   }
 
@@ -97,8 +97,8 @@ export class CommandLoader {
     const chokidar = await import("chokidar")
     
     const watchPaths = [
-      path.join(process.env.HOME || "", ".opencode", "commands"),
-      path.join(this.app.cwd, ".opencode", "commands"),
+      path.join(process.env["HOME"] || "", ".opencode", "commands"),
+      path.join(this.app.path.cwd, ".opencode", "commands"),
     ]
     
     this.fileWatcher = chokidar.watch(watchPaths, {
@@ -108,7 +108,7 @@ export class CommandLoader {
     
     this.fileWatcher.on("all", async (event: string, filePath: string) => {
       if (filePath.endsWith(".md")) {
-        Log.info(`Command file ${event}: ${filePath}`)
+        this.log.info(`Command file ${event}: ${filePath}`)
         await this.loadCommands()
       }
     })

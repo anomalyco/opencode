@@ -1,8 +1,7 @@
-import { CommandExecutionContext, CommandExecutionResult, CustomCommand } from "./types"
+import type { CommandExecutionContext, CommandExecutionResult, CustomCommand } from "./types"
 import { CommandResolver } from "./resolver"
 import { CommandParser } from "./parser"
 import { Session } from "../session"
-import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { App } from "../app/app"
 import { Log } from "../util/log"
@@ -12,7 +11,7 @@ export class CommandExecutor {
   private log = Log.create({ service: "command-executor" })
   
   constructor(private app: App.Info) {
-    this.resolver = new CommandResolver(app)
+    this.resolver = new CommandResolver()
   }
 
   async execute(
@@ -43,16 +42,21 @@ export class CommandExecutor {
       
       // Create a synthetic user message
       const newMessageId = Identifier.ascending("message")
-      const parts: MessageV2.Part[] = [
+      const parts = [
         {
           id: Identifier.ascending("part"),
-          type: "text",
+          type: "text" as const,
           text: processedContent,
         },
       ]
       
       // Get current session and model info
       const msg = await Session.getMessage(sessionId, messageId)
+      
+      // Check if it's an assistant message (has model info)
+      if (msg.role !== "assistant") {
+        throw new Error("Cannot execute command from user message")
+      }
       
       // Build tools object based on restrictions
       const tools: Record<string, boolean> = {}
@@ -85,7 +89,7 @@ export class CommandExecutor {
         output: result.parts.find(p => p.type === "text")?.text || "",
       }
     } catch (error) {
-      this.log.error("Command execution failed:", error)
+      this.log.error("Command execution failed:", error as any)
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

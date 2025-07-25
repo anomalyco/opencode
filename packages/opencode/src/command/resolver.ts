@@ -1,10 +1,9 @@
 import * as path from "path"
-import { CommandExecutionContext } from "./types"
-import { App } from "../app/app"
+import type { CommandExecutionContext } from "./types"
 import { File } from "../file"
 
 export class CommandResolver {
-  constructor(private app: App.Info) {}
+  constructor() {}
 
   async resolve(
     content: string,

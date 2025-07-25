@@ -15,8 +15,13 @@ describe("CommandLoader", () => {
       path: {
         cwd: testDir,
         root: testDir,
+        config: path.join(testDir, ".config"),
+        data: path.join(testDir, ".data"),
+        state: path.join(testDir, ".state"),
       },
-      cwd: testDir,
+      hostname: "test-host",
+      git: false,
+      time: {},
     } as App.Info
     loader = new CommandLoader(app)
   })

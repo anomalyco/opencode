@@ -1,8 +1,8 @@
 import { App } from "../app/app"
 import { CommandLoader } from "./loader"
 import { CommandExecutor } from "./executor"
-import { CustomCommand, CustomCommandSchema as _CustomCommandSchema } from "./types"
-import { z } from "zod"
+import type { CustomCommand } from "./types"
+import { CustomCommandSchema as _CustomCommandSchema } from "./types"
 
 export namespace Command {
   // Re-export schema for API use

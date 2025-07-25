@@ -837,20 +837,6 @@ export namespace Server {
         "/command/execute",
         describeRoute({
           description: "Execute a custom command",
-          body: {
-            content: {
-              "application/json": {
-                schema: resolver(
-                  z.object({
-                    name: z.string(),
-                    arguments: z.string().optional(),
-                    sessionId: z.string(),
-                    messageId: z.string(),
-                  })
-                ),
-              },
-            },
-          },
           responses: {
             200: {
               description: "Execution result",
@@ -866,9 +852,17 @@ export namespace Server {
                 },
               },
             },
-            400: ERRORS[400],
           },
         }),
+        zValidator(
+          "json",
+          z.object({
+            name: z.string(),
+            arguments: z.string().optional(),
+            sessionId: z.string(),
+            messageId: z.string(),
+          })
+        ),
         zValidator("json", z.object({
           name: z.string(),
           arguments: z.string().optional(),

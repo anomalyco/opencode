@@ -1,4 +1,4 @@
-import { ParsedToolRestriction } from "./types"
+import type { ParsedToolRestriction } from "./types"
 
 export class CommandParser {
   /**
