@@ -34,6 +34,7 @@
         "@clack/prompts": "0.11.0",
         "@hono/zod-validator": "0.4.2",
         "@modelcontextprotocol/sdk": "1.15.1",
+        "@octokit/rest": "22.0.0",
         "@openauthjs/openauth": "0.4.3",
         "@standard-schema/spec": "1.0.0",
         "@zip.js/zip.js": "2.7.62",
@@ -56,7 +57,6 @@
       "devDependencies": {
         "@ai-sdk/amazon-bedrock": "2.2.10",
         "@ai-sdk/anthropic": "1.2.12",
-        "@octokit/rest": "22.0.0",
         "@octokit/webhooks-types": "7.6.1",
         "@standard-schema/spec": "1.0.0",
         "@tsconfig/bun": "1.0.7",
