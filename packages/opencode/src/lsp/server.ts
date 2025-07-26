@@ -361,4 +361,22 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const YamlLanguageServer: Info = {
+    id: "yaml",
+    root: NearestRoot(["package.json", ".git"]),
+    extensions: [".yml", ".yaml"],
+    async spawn(_, root) {
+      const proc = spawn(BunProc.which(), ["x", "yaml-language-server", "--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
 }
