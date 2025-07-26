@@ -2,6 +2,7 @@ package status
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -13,15 +14,26 @@ import (
 	"github.com/sst/opencode/internal/theme"
 )
 
+func getCurrentGitBranch(cwd string) string {
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = cwd
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
 type StatusComponent interface {
 	tea.Model
 	tea.ViewModel
 }
 
 type statusComponent struct {
-	app   *app.App
-	width int
-	cwd   string
+	app    *app.App
+	width  int
+	cwd    string
+	branch string
 }
 
 func (m statusComponent) Init() tea.Cmd {
@@ -59,11 +71,17 @@ func (m statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
 
+	// Build cwd display with git branch if available
+	cwdDisplay := m.cwd
+	if m.branch != "" {
+		cwdDisplay += " 🌿 " + m.branch
+	}
+
 	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
 		Padding(0, 1).
-		Render(m.cwd)
+		Render(cwdDisplay)
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
@@ -143,6 +161,10 @@ func NewStatusCmp(app *app.App) StatusComponent {
 		cwdPath = "~" + cwdPath[len(homePath):]
 	}
 	statusComponent.cwd = cwdPath
+
+	// Get git branch if we're in a git repository
+	branch := getCurrentGitBranch(app.Info.Path.Cwd)
+	statusComponent.branch = branch
 
 	return statusComponent
 }
