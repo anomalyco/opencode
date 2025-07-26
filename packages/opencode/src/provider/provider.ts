@@ -209,7 +209,10 @@ export namespace Provider {
     ollama: async (provider) => {
       try {
         log.info("Ollama loader starting")
-        const response = await fetch("http://localhost:11434/api/tags").catch(() => null)
+        const config = await Config.get()
+        const baseURL = provider?.api || config.provider?.["ollama"]?.api || "http://localhost:11434"
+        const tagsUrl = baseURL.replace(/\/v1$/, "") + "/api/tags"
+        const response = await fetch(tagsUrl).catch(() => null)
         if (!response || !response.ok) {
           log.info("Ollama not available")
           return { autoload: false }
@@ -237,8 +240,8 @@ export namespace Provider {
                 cache_write: 0,
               },
               limit: {
-                context: 4096,
-                output: 2048,
+                context: 32768,
+                output: 4096,
               },
               options: {
                 size: model.size,
@@ -253,7 +256,7 @@ export namespace Provider {
         return {
           autoload: models.length > 0,
           options: {
-            baseURL: "http://localhost:11434/v1",
+            baseURL: baseURL + (baseURL.endsWith("/v1") ? "" : "/v1"),
             apiKey: "sk-dummy-key-for-ollama",
           },
           getModel: async (sdk: any, modelID: string) => {
@@ -362,11 +365,13 @@ export namespace Provider {
 
     // Add Ollama as default provider if not already in database
     if (!database["ollama"]) {
+      const config = await Config.get()
+      const defaultAPI = config.provider?.["ollama"]?.api || "http://localhost:11434/v1"
       database["ollama"] = {
         id: "ollama",
         name: "Ollama", 
         env: [],
-        api: "http://localhost:11434/v1",
+        api: defaultAPI,
         npm: "@ai-sdk/openai",
         models: {},
       }
@@ -512,7 +517,7 @@ export namespace Provider {
     }
   }
 
-  const priority = ["llama3", "hermes3", "codellama", "gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
+  const priority = ["llama3", "gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
