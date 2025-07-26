@@ -65,9 +65,10 @@ export namespace Permission {
     metadata: Info["metadata"]
   }) {
     const { pending, approved } = state()
-    log.info("asking", {
+    log.info("asking for permission", {
       sessionID: input.sessionID,
       permissionID: input.id,
+      title: input.title,
     })
     if (approved[input.sessionID]?.[input.id]) {
       log.info("previously approved", {
@@ -115,10 +116,18 @@ export namespace Permission {
     permissionID: Info["id"]
     response: "once" | "always" | "reject"
   }) {
-    log.info("response", input)
+    log.info("response received", input)
     const { pending, approved } = state()
+    log.info("pending permissions", { pending: Object.keys(pending), sessionID: input.sessionID })
+    if (pending[input.sessionID]) {
+      log.info("session permissions", { permissions: Object.keys(pending[input.sessionID]) })
+    }
     const match = pending[input.sessionID]?.[input.permissionID]
-    if (!match) return
+    if (!match) {
+      log.error("no matching permission found", { sessionID: input.sessionID, permissionID: input.permissionID })
+      return
+    }
+    log.info("resolving permission", { sessionID: input.sessionID, permissionID: input.permissionID })
     delete pending[input.sessionID][input.permissionID]
     if (input.response === "reject") {
       match.reject(new RejectedError(input.sessionID, input.permissionID))

@@ -25,7 +25,6 @@ import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 import { MCP } from "../mcp"
-import { Permission } from "../permission"
 import { Provider } from "../provider/provider"
 import { ProviderTransform } from "../provider/transform"
 import type { ModelsDev } from "../provider/models"
@@ -1459,40 +1458,8 @@ export namespace Session {
       // Execute tool with context (including permission checks)
       const abortController = new AbortController()
       
-      // IMPORTANT: Manually check permissions for text-based tool calls
-      // since we bypass the normal AI-SDK pipeline that handles permissions automatically
-      if (toolCall.name === "bash") {
-        await Permission.ask({
-          id: "bash",
-          sessionID: assistantMsg.sessionID,
-          title: "Execute bash command: " + (toolCall.args["command"] || "unknown command"),
-          metadata: {
-            command: toolCall.args["command"],
-            description: toolCall.args["description"],
-          },
-        })
-      } else if (toolCall.name === "write") {
-        await Permission.ask({
-          id: "write", 
-          sessionID: assistantMsg.sessionID,
-          title: "Write file: " + (toolCall.args["filePath"] || "unknown file"),
-          metadata: {
-            filePath: toolCall.args["filePath"],
-            content: toolCall.args["content"],
-          },
-        })
-      } else if (toolCall.name === "edit") {
-        await Permission.ask({
-          id: "edit",
-          sessionID: assistantMsg.sessionID, 
-          title: "Edit file: " + (toolCall.args["filePath"] || "unknown file"),
-          metadata: {
-            filePath: toolCall.args["filePath"],
-            oldString: toolCall.args["oldString"],
-            newString: toolCall.args["newString"],
-          },
-        })
-      }
+      // NOTE: Permission checking is handled by the individual tools themselves
+      // We don't need to manually check permissions here as the tool.execute() call will handle it
       
       const result = await tool.execute(toolCall.args as any, {
         sessionID: assistantMsg.sessionID,
