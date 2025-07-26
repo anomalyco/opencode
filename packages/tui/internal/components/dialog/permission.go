@@ -199,8 +199,12 @@ func (p *permissionDialog) respondToPermission(response string) tea.Cmd {
 			baseURL := os.Getenv("OPENCODE_SERVER")
 			if baseURL == "" {
 				baseURL = "http://localhost:3000"
+				fmt.Printf("OPENCODE_SERVER not set, using fallback: %s\n", baseURL)
+			} else {
+				fmt.Printf("OPENCODE_SERVER found: %s\n", baseURL)
 			}
 			url := fmt.Sprintf("%s/permission/%s/%s/respond", baseURL, p.sessionID, p.permissionID)
+			fmt.Printf("Permission response URL: %s\n", url)
 			
 			// Create request body
 			requestBody := map[string]string{
