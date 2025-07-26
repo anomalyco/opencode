@@ -10,6 +10,7 @@ import { bootstrap } from "../bootstrap"
 import { MessageV2 } from "../../session/message-v2"
 import { Mode } from "../../session/mode"
 import { Identifier } from "../../id/id"
+import path from "path"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -69,7 +70,9 @@ export const RunCommand = cmd({
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    // Support OPENCODE_USER_CWD environment variable for cross-directory usage
+    const cwd = process.env["OPENCODE_USER_CWD"] ? path.resolve(process.env["OPENCODE_USER_CWD"]) : process.cwd()
+    await bootstrap({ cwd }, async () => {
       const session = await (async () => {
         if (args.continue) {
           const list = Session.list()

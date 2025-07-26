@@ -2,6 +2,7 @@ import { z } from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { App } from "../app/app"
+import { Permission } from "../permission"
 
 const MAX_OUTPUT_LENGTH = 30000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
@@ -19,6 +20,17 @@ export const BashTool = Tool.define("bash", {
       ),
   }),
   async execute(params, ctx) {
+    // Ask for permission before executing bash commands
+    await Permission.ask({
+      id: "bash",
+      sessionID: ctx.sessionID,
+      title: "Execute bash command: " + params.command,
+      metadata: {
+        command: params.command,
+        description: params.description,
+      },
+    })
+
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
 
     const process = Bun.spawn({

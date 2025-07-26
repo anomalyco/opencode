@@ -54,6 +54,24 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+#### Working Directory
+
+opencode respects the `OPENCODE_USER_CWD` environment variable to set the working directory for operations. The path is automatically resolved to an absolute path. This is useful when creating wrapper scripts that allow calling opencode from any location while operating in a specific directory:
+
+```bash
+# Set working directory via environment variable (absolute or relative paths supported)
+OPENCODE_USER_CWD=/path/to/project opencode run "analyze this codebase"
+OPENCODE_USER_CWD=../other-project opencode run "check this code"
+
+# Example wrapper script that preserves current directory
+cat > ~/.local/bin/opencode << 'EOF'
+#!/bin/bash
+export OPENCODE_USER_CWD="$(pwd)"
+exec /path/to/opencode "$@"
+EOF
+chmod +x ~/.local/bin/opencode
+```
+
 ### Documentation
 
 For more info on how to configure opencode [**head over to our docs**](https://opencode.ai/docs).

@@ -17,6 +17,7 @@ import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
+import { Permission } from "../permission"
 import { callTui, TuiRoute } from "./tui"
 
 const ERRORS = {
@@ -805,6 +806,44 @@ export namespace Server {
           },
         }),
         async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/permission/:sessionID/:permissionID/respond",
+        describeRoute({
+          description: "Respond to a permission request",
+          responses: {
+            200: {
+              description: "Permission response processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.boolean() })),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            response: z.enum(["once", "always", "reject"]),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.param("sessionID")
+          const permissionID = c.req.param("permissionID")
+          const { response } = c.req.valid("json")
+          
+          log.info("permission response received", { sessionID, permissionID, response })
+          
+          Permission.respond({
+            sessionID,
+            permissionID,
+            response,
+          })
+          
+          return c.json({ success: true })
+        },
       )
       .route("/tui/control", TuiRoute)
 

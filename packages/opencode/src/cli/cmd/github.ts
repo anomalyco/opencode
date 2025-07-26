@@ -357,7 +357,9 @@ export const GithubRunCommand = cmd({
         describe: "GitHub personal access token (github_pat_********)",
       }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    // Support OPENCODE_USER_CWD environment variable for cross-directory usage
+    const cwd = process.env["OPENCODE_USER_CWD"] ? path.resolve(process.env["OPENCODE_USER_CWD"]) : process.cwd()
+    await bootstrap({ cwd }, async () => {
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context

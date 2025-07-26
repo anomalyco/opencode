@@ -198,7 +198,7 @@ export namespace Provider {
       try {
         log.info("Ollama loader starting")
         const config = await Config.get()
-        const baseURL = provider?.api || config.provider?.["ollama"]?.api || "http://localhost:11434"
+        const baseURL = provider?.api || config.provider?.["ollama"]?.options?.baseURL || "http://localhost:11434"
         const tagsUrl = baseURL.replace(/\/v1$/, "") + "/api/tags"
         const response = await fetch(tagsUrl).catch(() => null)
         if (!response || !response.ok) {
@@ -354,7 +354,7 @@ export namespace Provider {
     // Add Ollama as default provider if not already in database
     if (!database["ollama"]) {
       const config = await Config.get()
-      const defaultAPI = config.provider?.["ollama"]?.api || "http://localhost:11434/v1"
+      const defaultAPI = config.provider?.["ollama"]?.options?.baseURL || "http://localhost:11434/v1"
       database["ollama"] = {
         id: "ollama",
         name: "Ollama", 

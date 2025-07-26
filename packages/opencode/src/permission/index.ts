@@ -93,13 +93,20 @@ export namespace Permission {
         resolve,
         reject,
       }
-      setTimeout(() => {
-        respond({
-          sessionID: input.sessionID,
-          permissionID: input.id,
-          response: "always",
-        })
-      }, 1000)
+      // Auto-approve in headless/CLI environments, but wait for user input in TUI
+      const isHeadless = !process.stdout.isTTY || process.env.NODE_ENV === "test"
+      
+      if (isHeadless) {
+        // In CLI/headless environments, auto-approve after short delay for better UX
+        setTimeout(() => {
+          respond({
+            sessionID: input.sessionID,
+            permissionID: input.id,
+            response: "always",
+          })
+        }, 100) // Shorter delay for CLI
+      }
+      
       Bus.publish(Event.Updated, info)
     })
   }

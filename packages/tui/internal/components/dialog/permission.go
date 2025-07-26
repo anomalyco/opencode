@@ -1,6 +1,11 @@
 package dialog
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -181,9 +186,54 @@ func (p *permissionDialog) Close() tea.Cmd {
 
 func (p *permissionDialog) respondToPermission(response string) tea.Cmd {
 	return func() tea.Msg {
-		// TODO: Implement permission response API
-		// For now, just log the response and continue
-		// This will be implemented when the permission API endpoint is added
+		// Log the permission response
+		fmt.Printf("Sending permission response: sessionID=%s, permissionID=%s, response=%s\n", 
+			p.sessionID, p.permissionID, response)
+		
+		// Make the HTTP request to the new permission response API
+		go func() {
+			ctx := context.Background()
+			
+			// Get the server URL (assuming localhost:3000 for development)
+			// TODO: Get this from the app configuration
+			baseURL := "http://localhost:3000"
+			url := fmt.Sprintf("%s/permission/%s/%s/respond", baseURL, p.sessionID, p.permissionID)
+			
+			// Create request body
+			requestBody := map[string]string{
+				"response": response,
+			}
+			
+			jsonBody, err := json.Marshal(requestBody)
+			if err != nil {
+				fmt.Printf("Error marshaling permission response: %v\n", err)
+				return
+			}
+			
+			// Make HTTP POST request
+			req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+			if err != nil {
+				fmt.Printf("Error creating permission response request: %v\n", err)
+				return
+			}
+			
+			req.Header.Set("Content-Type", "application/json")
+			
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				fmt.Printf("Error sending permission response: %v\n", err)
+				return
+			}
+			defer resp.Body.Close()
+			
+			if resp.StatusCode == 200 {
+				fmt.Printf("Permission response sent successfully\n")
+			} else {
+				fmt.Printf("Permission response failed with status: %d\n", resp.StatusCode)
+			}
+		}()
+		
 		return nil
 	}
 }

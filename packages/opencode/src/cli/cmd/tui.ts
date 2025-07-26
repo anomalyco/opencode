@@ -50,7 +50,8 @@ export const TuiCommand = cmd({
       }),
   handler: async (args) => {
     while (true) {
-      const cwd = args.project ? path.resolve(args.project) : process.cwd()
+      // Support OPENCODE_USER_CWD environment variable for cross-directory usage
+      const cwd = args.project ? path.resolve(args.project) : (process.env["OPENCODE_USER_CWD"] ? path.resolve(process.env["OPENCODE_USER_CWD"]) : process.cwd())
       try {
         process.chdir(cwd)
       } catch (e) {
@@ -70,7 +71,7 @@ export const TuiCommand = cmd({
         })
 
         let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+        let tuiCwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
         if (Bun.embeddedFiles.length > 0) {
           const blob = Bun.embeddedFiles[0] as File
           let binaryName = blob.name
@@ -83,7 +84,7 @@ export const TuiCommand = cmd({
             await Bun.write(file, blob, { mode: 0o755 })
             await fs.chmod(binary, 0o755)
           }
-          cwd = process.cwd()
+          tuiCwd = cwd  // Use the project working directory (respects OPENCODE_USER_CWD)
           cmd = [binary]
         }
         Log.Default.info("tui", {
@@ -96,7 +97,7 @@ export const TuiCommand = cmd({
             ...(args.prompt ? ["--prompt", args.prompt] : []),
             ...(args.mode ? ["--mode", args.mode] : []),
           ],
-          cwd,
+          cwd: tuiCwd,
           stdout: "inherit",
           stderr: "inherit",
           stdin: "inherit",
