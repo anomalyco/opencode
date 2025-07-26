@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -194,9 +195,11 @@ func (p *permissionDialog) respondToPermission(response string) tea.Cmd {
 		go func() {
 			ctx := context.Background()
 			
-			// Get the server URL (assuming localhost:3000 for development)
-			// TODO: Get this from the app configuration
-			baseURL := "http://localhost:3000"
+			// Get the server URL from environment variable, fallback to localhost:3000
+			baseURL := os.Getenv("OPENCODE_SERVER")
+			if baseURL == "" {
+				baseURL = "http://localhost:3000"
+			}
 			url := fmt.Sprintf("%s/permission/%s/%s/respond", baseURL, p.sessionID, p.permissionID)
 			
 			// Create request body
