@@ -56,6 +56,7 @@
       "devDependencies": {
         "@ai-sdk/amazon-bedrock": "2.2.10",
         "@ai-sdk/anthropic": "1.2.12",
+        "@octokit/rest": "22.0.0",
         "@octokit/webhooks-types": "7.6.1",
         "@standard-schema/spec": "1.0.0",
         "@tsconfig/bun": "1.0.7",
