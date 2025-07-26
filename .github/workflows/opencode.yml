@@ -6,7 +6,9 @@ on:
 
 jobs:
   opencode:
-    if: startsWith(github.event.comment.body, 'hey opencode')
+    if: |
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -17,7 +19,7 @@ jobs:
           fetch-depth: 1
 
       - name: Run opencode
-        uses: sst/opencode/sdks/github@github-v1
+        uses: sst/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:

@@ -9,8 +9,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
 
-export const WriteTool = Tool.define({
-  id: "write",
+export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),

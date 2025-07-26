@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/layout"
@@ -31,6 +33,8 @@ type MessagesComponent interface {
 	GotoTop() (tea.Model, tea.Cmd)
 	GotoBottom() (tea.Model, tea.Cmd)
 	CopyLastMessage() (tea.Model, tea.Cmd)
+	UndoLastMessage() (tea.Model, tea.Cmd)
+	RedoLastMessage() (tea.Model, tea.Cmd)
 }
 
 type messagesComponent struct {
@@ -161,10 +165,22 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tail = true
 		m.loading = true
 		return m, m.renderView()
+	case app.SessionUnrevertedMsg:
+		if msg.Session.ID == m.app.Session.ID {
+			m.cache.Clear()
+			m.tail = true
+			return m, m.renderView()
+		}
+	case app.MessageRevertedMsg:
+		if msg.Session.ID == m.app.Session.ID {
+			m.cache.Clear()
+			m.tail = true
+			return m, m.renderView()
+		}
 
 	case opencode.EventListResponseEventSessionUpdated:
 		if msg.Properties.Info.ID == m.app.Session.ID {
-			m.header = m.renderHeader()
+			cmds = append(cmds, m.renderView())
 		}
 	case opencode.EventListResponseEventMessageUpdated:
 		if msg.Properties.Info.SessionID == m.app.Session.ID {
@@ -205,7 +221,6 @@ type renderCompleteMsg struct {
 }
 
 func (m *messagesComponent) renderView() tea.Cmd {
-
 	if m.rendering {
 		slog.Debug("pending render, skipping")
 		m.dirty = true
@@ -233,6 +248,9 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 		width := m.width // always use full width
 
+		reverted := false
+		revertedMessageCount := 0
+		revertedToolCount := 0
 		lastAssistantMessage := "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
 		for _, msg := range slices.Backward(m.app.Messages) {
 			if assistant, ok := msg.Info.(opencode.AssistantMessage); ok {
@@ -246,6 +264,17 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 			switch casted := message.Info.(type) {
 			case opencode.UserMessage:
+				if casted.ID == m.app.Session.Revert.MessageID {
+					reverted = true
+					revertedMessageCount = 1
+					revertedToolCount = 0
+					continue
+				}
+				if reverted {
+					revertedMessageCount++
+					continue
+				}
+
 				for partIndex, part := range message.Parts {
 					switch part := part.(type) {
 					case opencode.TextPart:
@@ -324,10 +353,18 @@ func (m *messagesComponent) renderView() tea.Cmd {
 				}
 
 			case opencode.AssistantMessage:
+				if casted.ID == m.app.Session.Revert.MessageID {
+					reverted = true
+					revertedMessageCount = 1
+					revertedToolCount = 0
+				}
 				hasTextPart := false
 				for partIndex, p := range message.Parts {
 					switch part := p.(type) {
 					case opencode.TextPart:
+						if reverted {
+							continue
+						}
 						hasTextPart = true
 						finished := part.Time.End > 0
 						remainingParts := message.Parts[partIndex+1:]
@@ -406,6 +443,10 @@ func (m *messagesComponent) renderView() tea.Cmd {
 							blocks = append(blocks, content)
 						}
 					case opencode.ToolPart:
+						if reverted {
+							revertedToolCount++
+							continue
+						}
 						if !m.showToolDetails {
 							if !hasTextPart {
 								orphanedToolCalls = append(orphanedToolCalls, part)
@@ -472,7 +513,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 				}
 			}
 
-			if error != "" {
+			if error != "" && !reverted {
 				error = styles.NewStyle().Width(width - 6).Render(error)
 				error = renderContentBlock(
 					m.app,
@@ -489,6 +530,44 @@ func (m *messagesComponent) renderView() tea.Cmd {
 				blocks = append(blocks, error)
 				lineCount += lipgloss.Height(error) + 1
 			}
+		}
+
+		if revertedMessageCount > 0 || revertedToolCount > 0 {
+			messagePlural := ""
+			toolPlural := ""
+			if revertedMessageCount != 1 {
+				messagePlural = "s"
+			}
+			if revertedToolCount != 1 {
+				toolPlural = "s"
+			}
+			revertedStyle := styles.NewStyle().
+				Background(t.BackgroundPanel()).
+				Foreground(t.TextMuted())
+
+			content := revertedStyle.Render(fmt.Sprintf(
+				"%d message%s reverted, %d tool call%s reverted",
+				revertedMessageCount,
+				messagePlural,
+				revertedToolCount,
+				toolPlural,
+			))
+			hintStyle := styles.NewStyle().Background(t.BackgroundPanel()).Foreground(t.Text())
+			hint := hintStyle.Render(m.app.Keybind(commands.MessagesRedoCommand))
+			hint += revertedStyle.Render(" (or /redo) to restore")
+
+			content += "\n" + hint
+			content = styles.NewStyle().
+				Background(t.BackgroundPanel()).
+				Width(width - 6).
+				Render(content)
+			content = renderContentBlock(
+				m.app,
+				content,
+				width,
+				WithBorderColor(t.BackgroundPanel()),
+			)
+			blocks = append(blocks, content)
 		}
 
 		final := []string{}
@@ -520,9 +599,13 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 					prefix := ansi.Cut(line, 0, left)
 					middle := strings.TrimRight(ansi.Strip(ansi.Cut(line, left, right)), " ")
-					suffix := ansi.Cut(line, left+len(middle), width)
+					suffix := ansi.Cut(line, left+ansi.StringWidth(middle), width)
 					clipboard = append(clipboard, middle)
-					line = prefix + styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Render(ansi.Strip(middle)) + suffix
+					line = prefix + styles.NewStyle().
+						Background(t.Accent()).
+						Foreground(t.BackgroundPanel()).
+						Render(ansi.Strip(middle)) +
+						suffix
 				}
 				final = append(final, line)
 			}
@@ -587,15 +670,21 @@ func (m *messagesComponent) renderHeader() string {
 	isSubscriptionModel := m.app.Model != nil &&
 		m.app.Model.Cost.Input == 0 && m.app.Model.Cost.Output == 0
 
+	sessionInfoText := formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel)
 	sessionInfo = styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
-		Render(formatTokensAndCost(tokens, contextWindow, cost, isSubscriptionModel))
+		Render(sessionInfoText)
 
 	shareEnabled := m.app.Config.Share != opencode.ConfigShareDisabled
+	headerTextWidth := headerWidth
+	if !shareEnabled {
+		// +1 is to ensure there is always at least one space between header and session info
+		headerTextWidth -= len(sessionInfoText) + 1
+	}
 	headerText := util.ToMarkdown(
 		"# "+m.app.Session.Title,
-		headerWidth-len(sessionInfo),
+		headerTextWidth,
 		t.Background(),
 	)
 
@@ -622,11 +711,9 @@ func (m *messagesComponent) renderHeader() string {
 		items...,
 	)
 
-	var headerLines []string
+	headerLines := []string{headerRow}
 	if shareEnabled {
 		headerLines = []string{headerText, headerRow}
-	} else {
-		headerLines = []string{headerRow}
 	}
 
 	header := strings.Join(headerLines, "\n")
@@ -773,10 +860,171 @@ func (m *messagesComponent) CopyLastMessage() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *messagesComponent) UndoLastMessage() (tea.Model, tea.Cmd) {
+	after := float64(0)
+	var revertedMessage app.Message
+	reversedMessages := []app.Message{}
+	for i := len(m.app.Messages) - 1; i >= 0; i-- {
+		reversedMessages = append(reversedMessages, m.app.Messages[i])
+		switch casted := m.app.Messages[i].Info.(type) {
+		case opencode.UserMessage:
+			if casted.ID == m.app.Session.Revert.MessageID {
+				after = casted.Time.Created
+			}
+		case opencode.AssistantMessage:
+			if casted.ID == m.app.Session.Revert.MessageID {
+				after = casted.Time.Created
+			}
+		}
+		if m.app.Session.Revert.PartID != "" {
+			for _, part := range m.app.Messages[i].Parts {
+				switch casted := part.(type) {
+				case opencode.TextPart:
+					if casted.ID == m.app.Session.Revert.PartID {
+						after = casted.Time.Start
+					}
+				case opencode.ToolPart:
+					// TODO: handle tool parts
+				}
+			}
+		}
+	}
+
+	messageID := ""
+	for _, msg := range reversedMessages {
+		switch casted := msg.Info.(type) {
+		case opencode.UserMessage:
+			if after > 0 && casted.Time.Created >= after {
+				continue
+			}
+			messageID = casted.ID
+			revertedMessage = msg
+		}
+		if messageID != "" {
+			break
+		}
+	}
+
+	if messageID == "" {
+		return m, nil
+	}
+
+	return m, func() tea.Msg {
+		response, err := m.app.Client.Session.Revert(
+			context.Background(),
+			m.app.Session.ID,
+			opencode.SessionRevertParams{
+				MessageID: opencode.F(messageID),
+			},
+		)
+		if err != nil {
+			slog.Error("Failed to undo message", "error", err)
+			return toast.NewErrorToast("Failed to undo message")
+		}
+		if response == nil {
+			return toast.NewErrorToast("Failed to undo message")
+		}
+		return app.MessageRevertedMsg{Session: *response, Message: revertedMessage}
+	}
+}
+
+func (m *messagesComponent) RedoLastMessage() (tea.Model, tea.Cmd) {
+	// Check if there's a revert state to redo from
+	if m.app.Session.Revert.MessageID == "" {
+		return m, func() tea.Msg {
+			return toast.NewErrorToast("Nothing to redo")
+		}
+	}
+
+	before := float64(0)
+	var revertedMessage app.Message
+	for _, message := range m.app.Messages {
+		switch casted := message.Info.(type) {
+		case opencode.UserMessage:
+			if casted.ID == m.app.Session.Revert.MessageID {
+				before = casted.Time.Created
+			}
+		case opencode.AssistantMessage:
+			if casted.ID == m.app.Session.Revert.MessageID {
+				before = casted.Time.Created
+			}
+		}
+		if m.app.Session.Revert.PartID != "" {
+			for _, part := range message.Parts {
+				switch casted := part.(type) {
+				case opencode.TextPart:
+					if casted.ID == m.app.Session.Revert.PartID {
+						before = casted.Time.Start
+					}
+				case opencode.ToolPart:
+					// TODO: handle tool parts
+				}
+			}
+		}
+	}
+
+	messageID := ""
+	for _, msg := range m.app.Messages {
+		switch casted := msg.Info.(type) {
+		case opencode.UserMessage:
+			if casted.Time.Created <= before {
+				continue
+			}
+			messageID = casted.ID
+			revertedMessage = msg
+		}
+		if messageID != "" {
+			break
+		}
+	}
+
+	if messageID == "" {
+		return m, func() tea.Msg {
+			// unrevert back to original state
+			response, err := m.app.Client.Session.Unrevert(
+				context.Background(),
+				m.app.Session.ID,
+			)
+			if err != nil {
+				slog.Error("Failed to unrevert session", "error", err)
+				return toast.NewErrorToast("Failed to redo message")
+			}
+			if response == nil {
+				return toast.NewErrorToast("Failed to redo message")
+			}
+			return app.SessionUnrevertedMsg{Session: *response}
+		}
+	}
+
+	return m, func() tea.Msg {
+		// calling revert on a "later" message is like a redo
+		response, err := m.app.Client.Session.Revert(
+			context.Background(),
+			m.app.Session.ID,
+			opencode.SessionRevertParams{
+				MessageID: opencode.F(messageID),
+			},
+		)
+		if err != nil {
+			slog.Error("Failed to redo message", "error", err)
+			return toast.NewErrorToast("Failed to redo message")
+		}
+		if response == nil {
+			return toast.NewErrorToast("Failed to redo message")
+		}
+		return app.MessageRevertedMsg{Session: *response, Message: revertedMessage}
+	}
+}
+
 func NewMessagesComponent(app *app.App) MessagesComponent {
 	vp := viewport.New()
 	vp.KeyMap = viewport.KeyMap{}
-	vp.MouseWheelDelta = 4
+
+	if app.State.ScrollSpeed != nil && *app.State.ScrollSpeed > 0 {
+		vp.MouseWheelDelta = *app.State.ScrollSpeed
+	} else {
+		vp.MouseWheelDelta = 4
+	}
 
 	return &messagesComponent{
 		app:             app,

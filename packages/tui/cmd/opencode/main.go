@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode/internal/api"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/tui"
@@ -48,6 +50,30 @@ func main() {
 	if err != nil {
 		slog.Error("Failed to unmarshal modes", "error", err)
 		os.Exit(1)
+	}
+
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		slog.Error("Failed to stat stdin", "error", err)
+		os.Exit(1)
+	}
+
+	// Check if there's data piped to stdin
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		stdin, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			slog.Error("Failed to read stdin", "error", err)
+			os.Exit(1)
+		}
+		stdinContent := strings.TrimSpace(string(stdin))
+		if stdinContent != "" {
+			if prompt == nil || *prompt == "" {
+				prompt = &stdinContent
+			} else {
+				combined := *prompt + "\n" + stdinContent
+				prompt = &combined
+			}
+		}
 	}
 
 	httpClient := opencode.NewClient(
@@ -99,6 +125,8 @@ func main() {
 			program.Send(err)
 		}
 	}()
+
+	go api.Start(ctx, program, httpClient)
 
 	// Handle signals in a separate goroutine
 	go func() {

@@ -1,6 +1,5 @@
 import { Provider } from "../../provider/provider"
 import { Server } from "../../server/server"
-import { Share } from "../../share/share"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 
@@ -32,7 +31,6 @@ export const ServeCommand = cmd({
       const hostname = args.hostname
       const port = args.port
 
-      await Share.init()
       const server = Server.listen({
         port,
         hostname,

@@ -27,14 +27,15 @@ type RequestOption = requestconfig.RequestOption
 // For security reasons, ensure that the base URL is trusted.
 func WithBaseURL(base string) RequestOption {
 	u, err := url.Parse(base)
+	if err == nil && u.Path != "" && !strings.HasSuffix(u.Path, "/") {
+		u.Path += "/"
+	}
+
 	return requestconfig.RequestOptionFunc(func(r *requestconfig.RequestConfig) error {
 		if err != nil {
-			return fmt.Errorf("requestoption: WithBaseURL failed to parse url %s\n", err)
+			return fmt.Errorf("requestoption: WithBaseURL failed to parse url %s", err)
 		}
 
-		if u.Path != "" && !strings.HasSuffix(u.Path, "/") {
-			u.Path += "/"
-		}
 		r.BaseURL = u
 		return nil
 	})

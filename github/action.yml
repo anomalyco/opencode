@@ -1,0 +1,29 @@
+name: "opencode GitHub Action"
+description: "Run opencode in GitHub Actions workflows"
+branding:
+  icon: "code"
+  color: "orange"
+
+inputs:
+  model:
+    description: "Model to use"
+    required: true
+
+  share:
+    description: "Share the opencode session (defaults to true for public repos)"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install opencode
+      shell: bash
+      run: curl -fsSL https://opencode.ai/install | bash
+
+    - name: Run opencode
+      shell: bash
+      id: run_opencode
+      run: opencode github run
+      env:
+        MODEL: ${{ inputs.model }}
+        SHARE: ${{ inputs.share }}

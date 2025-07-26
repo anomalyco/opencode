@@ -18,8 +18,7 @@ const state = App.state("todo-tool", () => {
   return todos
 })
 
-export const TodoWriteTool = Tool.define({
-  id: "todowrite",
+export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,
   parameters: z.object({
     todos: z.array(TodoInfo).describe("The updated todo list"),
@@ -37,8 +36,7 @@ export const TodoWriteTool = Tool.define({
   },
 })
 
-export const TodoReadTool = Tool.define({
-  id: "todoread",
+export const TodoReadTool = Tool.define("todoread", {
   description: "Use this tool to read your todo list",
   parameters: z.object({}),
   async execute(_params, opts) {

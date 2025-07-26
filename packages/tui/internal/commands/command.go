@@ -63,17 +63,37 @@ func (r CommandRegistry) Sorted() []Command {
 		commands = append(commands, command)
 	}
 	slices.SortFunc(commands, func(a, b Command) int {
+		// Priority order: session_new, session_share, model_list, app_help first, app_exit last
+		priorityOrder := map[CommandName]int{
+			SessionNewCommand:   0,
+			AppHelpCommand:      1,
+			SessionShareCommand: 2,
+			ModelListCommand:    3,
+		}
+
+		aPriority, aHasPriority := priorityOrder[a.Name]
+		bPriority, bHasPriority := priorityOrder[b.Name]
+
+		if aHasPriority && bHasPriority {
+			return aPriority - bPriority
+		}
+		if aHasPriority {
+			return -1
+		}
+		if bHasPriority {
+			return 1
+		}
 		if a.Name == AppExitCommand {
 			return 1
 		}
 		if b.Name == AppExitCommand {
 			return -1
 		}
+
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
 	return commands
 }
-
 func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 	var matched []Command
 	for _, command := range r.Sorted() {
@@ -118,7 +138,8 @@ const (
 	MessagesLastCommand         CommandName = "messages_last"
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
-	MessagesRevertCommand       CommandName = "messages_revert"
+	MessagesUndoCommand         CommandName = "messages_undo"
+	MessagesRedoCommand         CommandName = "messages_redo"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -328,9 +349,16 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Keybindings: parseBindings("<leader>y"),
 		},
 		{
-			Name:        MessagesRevertCommand,
-			Description: "revert message",
+			Name:        MessagesUndoCommand,
+			Description: "undo last message",
+			Keybindings: parseBindings("<leader>u"),
+			Trigger:     []string{"undo"},
+		},
+		{
+			Name:        MessagesRedoCommand,
+			Description: "redo message",
 			Keybindings: parseBindings("<leader>r"),
+			Trigger:     []string{"redo"},
 		},
 		{
 			Name:        AppExitCommand,
@@ -345,7 +373,8 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
 		// Remove share/unshare commands if sharing is disabled
-		if config.Share == opencode.ConfigShareDisabled && (command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
+		if config.Share == opencode.ConfigShareDisabled &&
+			(command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
 			continue
 		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {

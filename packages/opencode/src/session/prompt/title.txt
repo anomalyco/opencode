@@ -10,7 +10,7 @@ You are generating titles for a coding assistant conversation.
 - Max 50 chars, single line
 - Focus on the specific action or question
 - Keep technical terms, numbers, and filenames exactly as written
-- Preserve HTTP status codes (401, 404, 500, etc) as numbers
+- Preserve HTTP status codes (401, 404, 500, etc.) as numbers
 - For file references, include the filename
 - Avoid filler words: the, this, my, a, an, properly
 - NEVER assume their tech stack or domain

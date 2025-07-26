@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"time"
 
 	"github.com/sst/opencode-sdk-go"
@@ -41,8 +42,9 @@ func (p Prompt) ToMessage(
 		}
 	}
 	for _, att := range textAttachments {
-		source, _ := att.GetTextSource()
-		text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
+		if source, ok := att.GetTextSource(); ok {
+			text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
+		}
 	}
 
 	parts := []opencode.PartUnion{opencode.TextPart{
@@ -58,35 +60,37 @@ func (p Prompt) ToMessage(
 			End:   int64(attachment.EndIndex),
 			Value: attachment.Display,
 		}
-		var source *opencode.FilePartSource
+		source := &opencode.FilePartSource{}
 		switch attachment.Type {
 		case "text":
 			continue
 		case "file":
-			fileSource, _ := attachment.GetFileSource()
-			source = &opencode.FilePartSource{
-				Text: text,
-				Path: fileSource.Path,
-				Type: opencode.FilePartSourceTypeFile,
+			if fileSource, ok := attachment.GetFileSource(); ok {
+				source = &opencode.FilePartSource{
+					Text: text,
+					Path: fileSource.Path,
+					Type: opencode.FilePartSourceTypeFile,
+				}
 			}
 		case "symbol":
-			symbolSource, _ := attachment.GetSymbolSource()
-			source = &opencode.FilePartSource{
-				Text: text,
-				Path: symbolSource.Path,
-				Type: opencode.FilePartSourceTypeSymbol,
-				Kind: int64(symbolSource.Kind),
-				Name: symbolSource.Name,
-				Range: opencode.SymbolSourceRange{
-					Start: opencode.SymbolSourceRangeStart{
-						Line:      float64(symbolSource.Range.Start.Line),
-						Character: float64(symbolSource.Range.Start.Char),
+			if symbolSource, ok := attachment.GetSymbolSource(); ok {
+				source = &opencode.FilePartSource{
+					Text: text,
+					Path: symbolSource.Path,
+					Type: opencode.FilePartSourceTypeSymbol,
+					Kind: int64(symbolSource.Kind),
+					Name: symbolSource.Name,
+					Range: opencode.SymbolSourceRange{
+						Start: opencode.SymbolSourceRangeStart{
+							Line:      float64(symbolSource.Range.Start.Line),
+							Character: float64(symbolSource.Range.Start.Char),
+						},
+						End: opencode.SymbolSourceRangeEnd{
+							Line:      float64(symbolSource.Range.End.Line),
+							Character: float64(symbolSource.Range.End.Char),
+						},
 					},
-					End: opencode.SymbolSourceRangeEnd{
-						Line:      float64(symbolSource.Range.End.Line),
-						Character: float64(symbolSource.Range.End.Char),
-					},
-				},
+				}
 			}
 		}
 		parts = append(parts, opencode.FilePart{
@@ -104,6 +108,73 @@ func (p Prompt) ToMessage(
 		Info:  message,
 		Parts: parts,
 	}
+}
+
+func (m Message) ToPrompt() (*Prompt, error) {
+	switch m.Info.(type) {
+	case opencode.UserMessage:
+		text := ""
+		attachments := []*attachment.Attachment{}
+		for _, part := range m.Parts {
+			switch p := part.(type) {
+			case opencode.TextPart:
+				if p.Synthetic {
+					continue
+				}
+				text += p.Text + " "
+			case opencode.FilePart:
+				switch p.Source.Type {
+				case "file":
+					attachments = append(attachments, &attachment.Attachment{
+						ID:         p.ID,
+						Type:       "file",
+						Display:    p.Source.Text.Value,
+						URL:        p.URL,
+						Filename:   p.Filename,
+						MediaType:  p.Mime,
+						StartIndex: int(p.Source.Text.Start),
+						EndIndex:   int(p.Source.Text.End),
+						Source: &attachment.FileSource{
+							Path: p.Source.Path,
+							Mime: p.Mime,
+						},
+					})
+				case "symbol":
+					r := p.Source.Range.(opencode.SymbolSourceRange)
+					attachments = append(attachments, &attachment.Attachment{
+						ID:         p.ID,
+						Type:       "symbol",
+						Display:    p.Source.Text.Value,
+						URL:        p.URL,
+						Filename:   p.Filename,
+						MediaType:  p.Mime,
+						StartIndex: int(p.Source.Text.Start),
+						EndIndex:   int(p.Source.Text.End),
+						Source: &attachment.SymbolSource{
+							Path: p.Source.Path,
+							Name: p.Source.Name,
+							Kind: int(p.Source.Kind),
+							Range: attachment.SymbolRange{
+								Start: attachment.Position{
+									Line: int(r.Start.Line),
+									Char: int(r.Start.Character),
+								},
+								End: attachment.Position{
+									Line: int(r.End.Line),
+									Char: int(r.End.Character),
+								},
+							},
+						},
+					})
+				}
+			}
+		}
+		return &Prompt{
+			Text:        text,
+			Attachments: attachments,
+		}, nil
+	}
+	return nil, errors.New("unknown message type")
 }
 
 func (m Message) ToSessionChatParams() []opencode.SessionChatParamsPartUnion {

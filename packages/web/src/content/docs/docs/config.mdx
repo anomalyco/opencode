@@ -50,9 +50,9 @@ opencode comes with two built-in modes: _build_, the default with all tools enab
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
-    "build": { },
-    "plan": { },
-    "my-custom-mode": { }
+    "build": {},
+    "plan": {},
+    "my-custom-mode": {}
   }
 }
 ```
@@ -98,26 +98,6 @@ Logs are written to:
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: `%APPDATA%\opencode\log\`
-
-You can configure the minimum log level through the `log_level` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "log_level": "INFO"
-}
-```
-
-With the following options:
-
-| Level   | Description                              |
-| ------- | ---------------------------------------- |
-| `DEBUG` | All messages including debug information |
-| `INFO`  | Informational messages and above         |
-| `WARN`  | Warnings and errors only                 |
-| `ERROR` | Errors only                              |
-
-The **default** log level is `INFO`. If you are running opencode locally in development mode it's set to `DEBUG`.
 
 ---
 
@@ -198,6 +178,31 @@ You can configure the instructions for the model you're using through the `instr
 
 This takes an array of paths and glob patterns to instruction files. [Learn more
 about rules here](/docs/rules).
+
+---
+
+### Agents
+
+You can configure specialized agents for specific tasks through the `agent` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
 
 ---
 

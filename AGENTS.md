@@ -1,5 +1,3 @@
-# TUI Agent Guidelines
-
 ## Style
 
 - prefer single word variable/function names

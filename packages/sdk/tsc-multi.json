@@ -1,0 +1,15 @@
+{
+  "targets": [
+    {
+      "extname": ".js",
+      "module": "commonjs",
+      "shareHelpers": "internal/tslib.js"
+    },
+    {
+      "extname": ".mjs",
+      "module": "esnext",
+      "shareHelpers": "internal/tslib.mjs"
+    }
+  ],
+  "projects": ["tsconfig.build.json"]
+}
