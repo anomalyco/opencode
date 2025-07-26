@@ -367,7 +367,15 @@ export namespace LSPServer {
     root: NearestRoot(["package.json", ".git"]),
     extensions: [".yml", ".yaml"],
     async spawn(_, root) {
-      const proc = spawn(BunProc.which(), ["x", "yaml-language-server", "--stdio"], {
+      const bin = Bun.which("yaml-language-server", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+      if (!bin) {
+        log.error("yaml-language-server is not available. Please install it and try again.")
+        return
+      }
+
+      const proc = spawn(bin, ["--stdio"], {
         cwd: root,
         env: {
           ...process.env,
