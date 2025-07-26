@@ -63,15 +63,18 @@ opencode comes with two built-in modes: _build_, the default with all tools enab
 
 ### Models
 
-You can configure the providers and models you want to use in your opencode config through the `provider` and `model` options.
+You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": ""
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "small_model": "anthropic/claude-3-5-haiku-20241022"
 }
 ```
+
+The `small_model` option configures a separate model for lightweight tasks like summarization and title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
