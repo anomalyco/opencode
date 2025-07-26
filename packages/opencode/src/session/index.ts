@@ -419,9 +419,7 @@ export namespace Session {
             case "file:":
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const pathname = decodeURIComponent(url.pathname)
-              const relativePath = pathname.replace(app.path.cwd, ".")
-              const filePath = path.join(app.path.cwd, relativePath)
+              const filePath = decodeURIComponent(url.pathname)
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -501,7 +499,7 @@ export namespace Session {
                   messageID: userMsg.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${pathname}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
                   synthetic: true,
                 },
                 {

@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -732,7 +731,7 @@ func (m *editorComponent) createAttachmentFromFile(filePath string) *attachment.
 			ID:        uuid.NewString(),
 			Type:      "file",
 			Display:   "@" + filePath,
-			URL:       fmt.Sprintf("file://./%s", filePath),
+			URL:       fmt.Sprintf("file://%s", absolutePath),
 			Filename:  filePath,
 			MediaType: mediaType,
 			Source: &attachment.FileSource{
@@ -783,7 +782,7 @@ func (m *editorComponent) createAttachmentFromPath(filePath string) *attachment.
 		ID:        uuid.NewString(),
 		Type:      "file",
 		Display:   "@" + filePath,
-		URL:       fmt.Sprintf("file://./%s", url.PathEscape(filePath)),
+		URL:       fmt.Sprintf("file://%s", absolutePath),
 		Filename:  filePath,
 		MediaType: mediaType,
 		Source: &attachment.FileSource{
