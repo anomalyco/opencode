@@ -64,7 +64,6 @@ export namespace Permission {
     title: Info["title"]
     metadata: Info["metadata"]
   }) {
-    return
     const { pending, approved } = state()
     log.info("asking", {
       sessionID: input.sessionID,

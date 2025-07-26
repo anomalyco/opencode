@@ -344,6 +344,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
+	case dialog.PermissionDialogCloseMsg:
+		// Permission dialog closed, remove modal
+		a.modal = nil
+		a.editor.Focus()
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -363,6 +367,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventSessionUpdated:
 		if msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &msg.Properties.Info
+		}
+	case opencode.EventListResponseEventPermissionUpdated:
+		// Show permission dialog when permission request is received
+		if msg.Properties.SessionID == a.app.Session.ID {
+			slog.Info("permission request received", "sessionID", msg.Properties.SessionID, "permissionID", msg.Properties.ID, "title", msg.Properties.Title)
+			permissionDialog := dialog.NewPermissionDialog(a.app, msg.Properties)
+			a.modal = permissionDialog
 		}
 	case opencode.EventListResponseEventMessagePartUpdated:
 		slog.Info("message part updated", "message", msg.Properties.Part.MessageID, "part", msg.Properties.Part.ID)
