@@ -420,8 +420,13 @@ export namespace Session {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const pathname = decodeURIComponent(url.pathname)
-              const relativePath = pathname.replace(app.path.cwd, ".")
-              const filePath = path.join(app.path.cwd, relativePath)
+              let filePath: string
+              if (path.isAbsolute(pathname)) {
+                filePath = pathname
+              } else {
+                const relativePath = pathname.replace(app.path.cwd, ".")
+                filePath = path.join(app.path.cwd, relativePath)
+              }
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
