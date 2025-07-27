@@ -172,8 +172,6 @@ export const RunCommand = cmd({
         parts: [
           {
             id: Identifier.ascending("part"),
-            sessionID: session.id,
-            messageID: messageID,
             type: "text",
             text: message,
           },

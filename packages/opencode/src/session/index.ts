@@ -17,7 +17,6 @@ import {
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
-import PROMPT_ANTHROPIC_SPOOF from "../session/prompt/anthropic_spoof.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -40,6 +39,8 @@ import { MessageV2 } from "./message-v2"
 import { Mode } from "./mode"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
+import { mergeDeep, pipe, splitWhen } from "remeda"
+import { ToolRegistry } from "../tool/registry"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -64,7 +65,7 @@ export namespace Session {
       revert: z
         .object({
           messageID: z.string(),
-          part: z.number(),
+          partID: z.string().optional(),
           snapshot: z.string().optional(),
         })
         .optional(),
@@ -118,11 +119,22 @@ export namespace Session {
       const sessions = new Map<string, Info>()
       const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
+      const queued = new Map<
+        string,
+        {
+          input: ChatInput
+          message: MessageV2.User
+          parts: MessageV2.Part[]
+          processed: boolean
+          callback: (input: { info: MessageV2.Assistant; parts: MessageV2.Part[] }) => void
+        }[]
+      >()
 
       return {
         sessions,
         messages,
         pending,
+        queued,
       }
     },
     async (state) => {
@@ -235,7 +247,7 @@ export namespace Session {
       const read = await Storage.readJSON<MessageV2.Info>(p)
       result.push({
         info: read,
-        parts: await parts(sessionID, read.id),
+        parts: await getParts(sessionID, read.id),
       })
     }
     result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
@@ -246,7 +258,7 @@ export namespace Session {
     return Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID)
   }
 
-  export async function parts(sessionID: string, messageID: string) {
+  export async function getParts(sessionID: string, messageID: string) {
     const result = [] as MessageV2.Part[]
     for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
       const read = await Storage.readJSON<MessageV2.Part>(item)
@@ -319,72 +331,50 @@ export namespace Session {
     return part
   }
 
-  export async function chat(input: {
-    sessionID: string
-    messageID: string
-    providerID: string
-    modelID: string
-    mode?: string
-    parts: (MessageV2.TextPart | MessageV2.FilePart)[]
-  }) {
+  export const ChatInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message").optional(),
+    providerID: z.string(),
+    modelID: z.string(),
+    mode: z.string().optional(),
+    system: z.string().optional(),
+    tools: z.record(z.boolean()).optional(),
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .openapi({
+            ref: "TextPartInput",
+          }),
+        MessageV2.FilePart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .openapi({
+            ref: "FilePartInput",
+          }),
+      ]),
+    ),
+  })
+  export type ChatInput = z.infer<typeof ChatInput>
+
+  export async function chat(
+    input: z.infer<typeof ChatInput>,
+  ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
 
-    const model = await Provider.getModel(input.providerID, input.modelID)
-    let msgs = await messages(input.sessionID)
-    const session = await get(input.sessionID)
-
-    if (session.revert) {
-      const trimmed = []
-      for (const msg of msgs) {
-        if (
-          msg.info.id > session.revert.messageID ||
-          (msg.info.id === session.revert.messageID && session.revert.part === 0)
-        ) {
-          await Storage.remove("session/message/" + input.sessionID + "/" + msg.info.id)
-          await Bus.publish(MessageV2.Event.Removed, {
-            sessionID: input.sessionID,
-            messageID: msg.info.id,
-          })
-          continue
-        }
-
-        if (msg.info.id === session.revert.messageID) {
-          if (session.revert.part === 0) break
-          msg.parts = msg.parts.slice(0, session.revert.part)
-        }
-        trimmed.push(msg)
-      }
-      msgs = trimmed
-      await update(input.sessionID, (draft) => {
-        draft.revert = undefined
-      })
-    }
-
-    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
-
-    // auto summarize if too long
-    if (previous && previous.tokens) {
-      const tokens =
-        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
-      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
-        await summarize({
-          sessionID: input.sessionID,
-          providerID: input.providerID,
-          modelID: input.modelID,
-        })
-        return chat(input)
-      }
-    }
-
-    using abort = lock(input.sessionID)
-
-    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
-    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
-
+    const inputMode = input.mode ?? "build"
     const userMsg: MessageV2.Info = {
-      id: input.messageID,
+      id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
       sessionID: input.sessionID,
       time: {
@@ -398,12 +388,38 @@ export namespace Session {
         if (part.type === "file") {
           const url = new URL(part.url)
           switch (url.protocol) {
+            case "data:":
+              if (part.mime === "text/plain") {
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: Buffer.from(part.url, "base64url").toString(),
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
+              break
             case "file:":
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const pathname = decodeURIComponent(url.pathname)
-              const relativePath = pathname.replace(app.path.cwd, ".")
-              const filePath = path.join(app.path.cwd, relativePath)
+              const filePath = decodeURIComponent(url.pathname)
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -441,12 +457,14 @@ export namespace Session {
                   }
                 }
                 const args = { filePath, offset, limit }
-                const result = await ReadTool.execute(args, {
-                  sessionID: input.sessionID,
-                  abort: abort.signal,
-                  messageID: userMsg.id,
-                  metadata: async () => {},
-                })
+                const result = await ReadTool.init().then((t) =>
+                  t.execute(args, {
+                    sessionID: input.sessionID,
+                    abort: new AbortController().signal,
+                    messageID: userMsg.id,
+                    metadata: async () => {},
+                  }),
+                )
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -464,6 +482,12 @@ export namespace Session {
                     synthetic: true,
                     text: result.output,
                   },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                  },
                 ]
               }
 
@@ -475,26 +499,33 @@ export namespace Session {
                   messageID: userMsg.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${pathname}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
                   synthetic: true,
                 },
                 {
-                  id: Identifier.ascending("part"),
+                  id: part.id ?? Identifier.ascending("part"),
                   messageID: userMsg.id,
                   sessionID: input.sessionID,
                   type: "file",
                   url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
+                  source: part.source,
                 },
               ]
           }
         }
-        return [part]
+        return [
+          {
+            id: Identifier.ascending("part"),
+            ...part,
+            messageID: userMsg.id,
+            sessionID: input.sessionID,
+          },
+        ]
       }),
     ).then((x) => x.flat())
-
-    if (input.mode === "plan")
+    if (inputMode === "plan")
       userParts.push({
         id: Identifier.ascending("part"),
         messageID: userMsg.id,
@@ -504,11 +535,83 @@ export namespace Session {
         synthetic: true,
       })
 
-    if (msgs.length === 0 && !session.parentID) {
+    await updateMessage(userMsg)
+    for (const part of userParts) {
+      await updatePart(part)
+    }
+    // mark session as updated since a message has been added to it
+    await update(input.sessionID, (_draft) => {})
+
+    if (isLocked(input.sessionID)) {
+      return new Promise((resolve) => {
+        const queue = state().queued.get(input.sessionID) ?? []
+        queue.push({
+          input: input,
+          message: userMsg,
+          parts: userParts,
+          processed: false,
+          callback: resolve,
+        })
+        state().queued.set(input.sessionID, queue)
+      })
+    }
+
+    const model = await Provider.getModel(input.providerID, input.modelID)
+    let msgs = await messages(input.sessionID)
+    const session = await get(input.sessionID)
+
+    if (session.revert) {
+      const messageID = session.revert.messageID
+      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+      msgs = preserve
+      for (const msg of remove) {
+        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
+      }
+      const last = preserve.at(-1)
+      if (session.revert.partID && last) {
+        const partID = session.revert.partID
+        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+        last.parts = preserveParts
+        for (const part of removeParts) {
+          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }
+      }
+    }
+
+    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
+    // auto summarize if too long
+    if (previous && previous.tokens) {
+      const tokens =
+        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
+      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
+        await summarize({
+          sessionID: input.sessionID,
+          providerID: input.providerID,
+          modelID: input.modelID,
+        })
+        return chat(input)
+      }
+    }
+
+    using abort = lock(input.sessionID)
+
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
+
+    if (msgs.length === 1 && !session.parentID) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
-        maxOutputTokens: input.providerID === "google" ? 1024 : 20,
-        providerOptions: model.info.options,
+        maxOutputTokens: small.info.reasoning ? 1024 : 20,
+        providerOptions: {
+          [input.providerID]: small.info.options,
+        },
         messages: [
           ...SystemPrompt.title(input.providerID).map(
             (x): ModelMessage => ({
@@ -535,20 +638,23 @@ export namespace Session {
         .then((result) => {
           if (result.text)
             return Session.update(input.sessionID, (draft) => {
-              draft.title = result.text
+              const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+              draft.title = title
             })
         })
         .catch(() => {})
     }
-    await updateMessage(userMsg)
-    for (const part of userParts) {
-      await updatePart(part)
-    }
-    msgs.push({ info: userMsg, parts: userParts })
 
-    const mode = await Mode.get(input.mode ?? "build")
-    let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
-    system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
+    const mode = await Mode.get(inputMode)
+    let system = SystemPrompt.header(input.providerID)
+    system.push(
+      ...(() => {
+        if (input.system) return [input.system]
+        if (mode.prompt) return [mode.prompt]
+        return SystemPrompt.provider(input.modelID)
+      })(),
+    )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
@@ -559,6 +665,7 @@ export namespace Session {
       id: Identifier.ascending("message"),
       role: "assistant",
       system,
+      mode: inputMode,
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
@@ -582,14 +689,19 @@ export namespace Session {
 
     const processor = createProcessor(assistantMsg, model.info)
 
-    for (const item of await Provider.tools(input.providerID)) {
-      if (mode.tools[item.id] === false) continue
-      if (session.parentID && item.id === "task") continue
+    const enabledTools = pipe(
+      mode.tools,
+      mergeDeep(ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(input.tools ?? {}),
+    )
+    for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
+      if (enabledTools[item.id] === false) continue
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args, options) {
+          await processor.track(options.toolCallId)
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: abort.signal,
@@ -628,6 +740,7 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        await processor.track(opts.toolCallId)
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
@@ -649,11 +762,59 @@ export namespace Session {
 
     const stream = streamText({
       onError() {},
+      async prepareStep({ messages }) {
+        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
+        if (queue.length) {
+          for (const item of queue) {
+            if (item.processed) continue
+            messages.push(
+              ...MessageV2.toModelMessage([
+                {
+                  info: item.message,
+                  parts: item.parts,
+                },
+              ]),
+            )
+            item.processed = true
+          }
+          assistantMsg.time.completed = Date.now()
+          await updateMessage(assistantMsg)
+          Object.assign(assistantMsg, {
+            id: Identifier.ascending("message"),
+            role: "assistant",
+            system,
+            path: {
+              cwd: app.path.cwd,
+              root: app.path.root,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: input.modelID,
+            providerID: input.providerID,
+            mode: inputMode,
+            time: {
+              created: Date.now(),
+            },
+            sessionID: input.sessionID,
+          })
+          await updateMessage(assistantMsg)
+        }
+        return {
+          messages,
+        }
+      },
       maxRetries: 10,
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
-      providerOptions: model.info.options,
+      providerOptions: {
+        [input.providerID]: model.info.options,
+      },
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -663,7 +824,9 @@ export namespace Session {
         ),
         ...MessageV2.toModelMessage(msgs),
       ],
-      temperature: model.info.temperature ? 0 : undefined,
+      temperature: model.info.temperature
+        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+        : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
         model: model.language,
@@ -681,12 +844,27 @@ export namespace Session {
       }),
     })
     const result = await processor.process(stream)
+    const queued = state().queued.get(input.sessionID) ?? []
+    const unprocessed = queued.find((x) => !x.processed)
+    if (unprocessed) {
+      unprocessed.processed = true
+      return chat(unprocessed.input)
+    }
+    for (const item of queued) {
+      item.callback(result)
+    }
+    state().queued.delete(input.sessionID)
     return result
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
     const toolCalls: Record<string, MessageV2.ToolPart> = {}
+    const snapshots: Record<string, string> = {}
     return {
+      async track(toolCallID: string) {
+        const hash = await Snapshot.track()
+        if (hash) snapshots[toolCallID] = hash
+      },
       partFromToolCall(toolCallID: string) {
         return toolCalls[toolCallID]
       },
@@ -700,15 +878,6 @@ export namespace Session {
             })
             switch (value.type) {
               case "start":
-                const snapshot = await Snapshot.create(assistantMsg.sessionID)
-                if (snapshot)
-                  await updatePart({
-                    id: Identifier.ascending("part"),
-                    messageID: assistantMsg.id,
-                    sessionID: assistantMsg.sessionID,
-                    type: "snapshot",
-                    snapshot,
-                  })
                 break
 
               case "tool-input-start":
@@ -727,6 +896,9 @@ export namespace Session {
                 break
 
               case "tool-input-delta":
+                break
+
+              case "tool-input-end":
                 break
 
               case "tool-call": {
@@ -764,15 +936,20 @@ export namespace Session {
                     },
                   })
                   delete toolCalls[value.toolCallId]
-                  const snapshot = await Snapshot.create(assistantMsg.sessionID)
-                  if (snapshot)
-                    await updatePart({
-                      id: Identifier.ascending("part"),
-                      messageID: assistantMsg.id,
-                      sessionID: assistantMsg.sessionID,
-                      type: "snapshot",
-                      snapshot,
-                    })
+                  const snapshot = snapshots[value.toolCallId]
+                  if (snapshot) {
+                    const patch = await Snapshot.patch(snapshot)
+                    if (patch.files.length) {
+                      await updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: assistantMsg.id,
+                        sessionID: assistantMsg.sessionID,
+                        type: "patch",
+                        hash: patch.hash,
+                        files: patch.files,
+                      })
+                    }
+                  }
                 }
                 break
               }
@@ -793,15 +970,18 @@ export namespace Session {
                     },
                   })
                   delete toolCalls[value.toolCallId]
-                  const snapshot = await Snapshot.create(assistantMsg.sessionID)
-                  if (snapshot)
+                  const snapshot = snapshots[value.toolCallId]
+                  if (snapshot) {
+                    const patch = await Snapshot.patch(snapshot)
                     await updatePart({
                       id: Identifier.ascending("part"),
                       messageID: assistantMsg.id,
                       sessionID: assistantMsg.sessionID,
-                      type: "snapshot",
-                      snapshot,
+                      type: "patch",
+                      hash: patch.hash,
+                      files: patch.files,
                     })
+                  }
                 }
                 break
               }
@@ -859,6 +1039,7 @@ export namespace Session {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  currentText.text = currentText.text.trimEnd()
                   await updatePart(currentText)
                 }
                 currentText = undefined
@@ -912,7 +1093,7 @@ export namespace Session {
             error: assistantMsg.error,
           })
         }
-        const p = await parts(assistantMsg.sessionID, assistantMsg.id)
+        const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
         for (const part of p) {
           if (part.type === "tool" && part.state.status !== "completed") {
             updatePart({
@@ -936,47 +1117,65 @@ export namespace Session {
     }
   }
 
-  export async function revert(_input: { sessionID: string; messageID: string; part: number }) {
-    // TODO
-    /*
-    const message = await getMessage(input.sessionID, input.messageID)
-    if (!message) return
-    const part = message.parts[input.part]
-    if (!part) return
+  export const RevertInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message"),
+    partID: Identifier.schema("part").optional(),
+  })
+  export type RevertInput = z.infer<typeof RevertInput>
+
+  export async function revert(input: RevertInput) {
+    const all = await messages(input.sessionID)
+    let lastUser: MessageV2.User | undefined
     const session = await get(input.sessionID)
-    const snapshot =
-      session.revert?.snapshot ?? (await Snapshot.create(input.sessionID))
-    const old = (() => {
-      if (message.role === "assistant") {
-        const lastTool = message.parts.findLast(
-          (part, index) =>
-            part.type === "tool-invocation" && index < input.part,
-        )
-        if (lastTool && lastTool.type === "tool-invocation")
-          return message.metadata.tool[lastTool.toolInvocation.toolCallId]
-            .snapshot
+
+    let revert: Info["revert"]
+    const patches: Snapshot.Patch[] = []
+    for (const msg of all) {
+      if (msg.info.role === "user") lastUser = msg.info
+      const remaining = []
+      for (const part of msg.parts) {
+        if (revert) {
+          if (part.type === "patch") {
+            patches.push(part)
+          }
+          continue
+        }
+
+        if (!revert) {
+          if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
+            // if no useful parts left in message, same as reverting whole message
+            const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
+            revert = {
+              messageID: !partID && lastUser ? lastUser.id : msg.info.id,
+              partID,
+            }
+          }
+          remaining.push(part)
+        }
       }
-      return message.metadata.snapshot
-    })()
-    if (old) await Snapshot.restore(input.sessionID, old)
-    await update(input.sessionID, (draft) => {
-      draft.revert = {
-        messageID: input.messageID,
-        part: input.part,
-        snapshot,
-      }
-    })
-    */
+    }
+
+    if (revert) {
+      const session = await get(input.sessionID)
+      revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
+      await Snapshot.revert(patches)
+      return update(input.sessionID, (draft) => {
+        draft.revert = revert
+      })
+    }
+    return session
   }
 
-  export async function unrevert(sessionID: string) {
-    const session = await get(sessionID)
-    if (!session) return
-    if (!session.revert) return
-    if (session.revert.snapshot) await Snapshot.restore(sessionID, session.revert.snapshot)
-    update(sessionID, (draft) => {
+  export async function unrevert(input: { sessionID: string }) {
+    log.info("unreverting", input)
+    const session = await get(input.sessionID)
+    if (!session.revert) return session
+    if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
+    const next = await update(input.sessionID, (draft) => {
       draft.revert = undefined
     })
+    return next
   }
 
   export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
@@ -989,13 +1188,18 @@ export namespace Session {
     const model = smallModel ?? (await Provider.getModel(input.providerID, input.modelID))
 
     const app = App.info()
-    const system = SystemPrompt.summarize(input.providerID)
+    const system = [
+      ...SystemPrompt.summarize(input.providerID),
+      ...(await SystemPrompt.environment()),
+      ...(await SystemPrompt.custom()),
+    ]
 
     const next: MessageV2.Info = {
       id: Identifier.ascending("message"),
       role: "assistant",
       sessionID: input.sessionID,
       system,
+      mode: "build",
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
@@ -1043,6 +1247,10 @@ export namespace Session {
 
     const result = await processor.process(stream)
     return result
+  }
+
+  function isLocked(sessionID: string) {
+    return state().pending.has(sessionID)
   }
 
   function lock(sessionID: string) {
@@ -1107,8 +1315,6 @@ export namespace Session {
       parts: [
         {
           id: Identifier.ascending("part"),
-          sessionID: input.sessionID,
-          messageID: input.messageID,
           type: "text",
           text: PROMPT_INITIALIZE.replace("${path}", app.path.root),
         },

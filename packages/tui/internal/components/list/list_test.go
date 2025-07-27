@@ -34,7 +34,7 @@ func createTestList() *listComponent[testItem] {
 	}
 	list := NewListComponent(
 		WithItems(items),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](false),
 		WithRenderFunc(
@@ -44,9 +44,6 @@ func createTestList() *listComponent[testItem] {
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 
@@ -84,7 +81,7 @@ func TestJKKeyNavigation(t *testing.T) {
 	// Create list with alpha keys enabled
 	list := NewListComponent(
 		WithItems(items),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](true),
 		WithRenderFunc(
@@ -94,9 +91,6 @@ func TestJKKeyNavigation(t *testing.T) {
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 
@@ -176,7 +170,7 @@ func TestNavigationBoundaries(t *testing.T) {
 func TestEmptyList(t *testing.T) {
 	emptyList := NewListComponent(
 		WithItems([]testItem{}),
-		WithMaxVisibleItems[testItem](5),
+		WithMaxVisibleHeight[testItem](5),
 		WithFallbackMessage[testItem]("empty"),
 		WithAlphaNumericKeys[testItem](false),
 		WithRenderFunc(
@@ -186,9 +180,6 @@ func TestEmptyList(t *testing.T) {
 		),
 		WithSelectableFunc(func(item testItem) bool {
 			return item.Selectable()
-		}),
-		WithHeightFunc(func(item testItem, isFirstInViewport bool) int {
-			return 1
 		}),
 	)
 

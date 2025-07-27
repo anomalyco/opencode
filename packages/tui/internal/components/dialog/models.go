@@ -127,9 +127,9 @@ func (m *modelDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if item, ok := msg.Item.(modelItem); ok {
 			if m.isModelInRecentSection(item.model, msg.Index) {
 				m.app.State.RemoveModelFromRecentlyUsed(item.model.Provider.ID, item.model.Model.ID)
-				m.app.SaveState()
 				items := m.buildDisplayList(m.searchDialog.GetQuery())
 				m.searchDialog.SetItems(items)
+				return m, m.app.SaveState()
 			}
 		}
 		return m, nil
@@ -425,7 +425,8 @@ func (m *modelDialog) isModelInRecentSection(model ModelWithProvider, index int)
 	if index >= 1 && index <= len(recentModels) {
 		if index-1 < len(recentModels) {
 			recentModel := recentModels[index-1]
-			return recentModel.Provider.ID == model.Provider.ID && recentModel.Model.ID == model.Model.ID
+			return recentModel.Provider.ID == model.Provider.ID &&
+				recentModel.Model.ID == model.Model.ID
 		}
 	}
 

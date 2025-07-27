@@ -63,17 +63,37 @@ func (r CommandRegistry) Sorted() []Command {
 		commands = append(commands, command)
 	}
 	slices.SortFunc(commands, func(a, b Command) int {
+		// Priority order: session_new, session_share, model_list, app_help first, app_exit last
+		priorityOrder := map[CommandName]int{
+			SessionNewCommand:   0,
+			AppHelpCommand:      1,
+			SessionShareCommand: 2,
+			ModelListCommand:    3,
+		}
+
+		aPriority, aHasPriority := priorityOrder[a.Name]
+		bPriority, bHasPriority := priorityOrder[b.Name]
+
+		if aHasPriority && bHasPriority {
+			return aPriority - bPriority
+		}
+		if aHasPriority {
+			return -1
+		}
+		if bHasPriority {
+			return 1
+		}
 		if a.Name == AppExitCommand {
 			return 1
 		}
 		if b.Name == AppExitCommand {
 			return -1
 		}
+
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
 	return commands
 }
-
 func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 	var matched []Command
 	for _, command := range r.Sorted() {
@@ -87,6 +107,7 @@ func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 const (
 	AppHelpCommand              CommandName = "app_help"
 	SwitchModeCommand           CommandName = "switch_mode"
+	SwitchModeReverseCommand    CommandName = "switch_mode_reverse"
 	EditorOpenCommand           CommandName = "editor_open"
 	SessionNewCommand           CommandName = "session_new"
 	SessionListCommand          CommandName = "session_list"
@@ -117,7 +138,8 @@ const (
 	MessagesLastCommand         CommandName = "messages_last"
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
-	MessagesRevertCommand       CommandName = "messages_revert"
+	MessagesUndoCommand         CommandName = "messages_undo"
+	MessagesRedoCommand         CommandName = "messages_redo"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -156,8 +178,13 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		},
 		{
 			Name:        SwitchModeCommand,
-			Description: "switch mode",
+			Description: "next mode",
 			Keybindings: parseBindings("tab"),
+		},
+		{
+			Name:        SwitchModeReverseCommand,
+			Description: "previous mode",
+			Keybindings: parseBindings("shift+tab"),
 		},
 		{
 			Name:        EditorOpenCommand,
@@ -224,12 +251,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Keybindings: parseBindings("<leader>t"),
 			Trigger:     []string{"themes"},
 		},
-		{
-			Name:        FileListCommand,
-			Description: "list files",
-			Keybindings: parseBindings("<leader>f"),
-			Trigger:     []string{"files"},
-		},
+		// {
+		// 	Name:        FileListCommand,
+		// 	Description: "list files",
+		// 	Keybindings: parseBindings("<leader>f"),
+		// 	Trigger:     []string{"files"},
+		// },
 		{
 			Name:        FileCloseCommand,
 			Description: "close file",
@@ -322,15 +349,22 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Keybindings: parseBindings("<leader>y"),
 		},
 		{
-			Name:        MessagesRevertCommand,
-			Description: "revert message",
+			Name:        MessagesUndoCommand,
+			Description: "undo last message",
+			Keybindings: parseBindings("<leader>u"),
+			Trigger:     []string{"undo"},
+		},
+		{
+			Name:        MessagesRedoCommand,
+			Description: "redo message",
 			Keybindings: parseBindings("<leader>r"),
+			Trigger:     []string{"redo"},
 		},
 		{
 			Name:        AppExitCommand,
 			Description: "exit the app",
 			Keybindings: parseBindings("ctrl+c", "<leader>q"),
-			Trigger:     []string{"exit", "quit"},
+			Trigger:     []string{"exit", "quit", "q"},
 		},
 	}
 	registry := make(CommandRegistry)
@@ -338,7 +372,15 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	marshalled, _ := json.Marshal(config.Keybinds)
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
+		// Remove share/unshare commands if sharing is disabled
+		if config.Share == opencode.ConfigShareDisabled &&
+			(command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
+			continue
+		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {
+			if keybind == "none" {
+				continue
+			}
 			command.Keybindings = parseBindings(keybind)
 		}
 		registry[command.Name] = command

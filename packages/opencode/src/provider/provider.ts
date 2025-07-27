@@ -5,23 +5,11 @@ import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { BashTool } from "../tool/bash"
-import { EditTool } from "../tool/edit"
-import { WebFetchTool } from "../tool/webfetch"
-import { GlobTool } from "../tool/glob"
-import { GrepTool } from "../tool/grep"
-import { ListTool } from "../tool/ls"
-import { PatchTool } from "../tool/patch"
-import { ReadTool } from "../tool/read"
-import type { Tool } from "../tool/tool"
-import { WriteTool } from "../tool/write"
-import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
-import { TaskTool } from "../tool/task"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -139,7 +127,8 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"]) return { autoload: false }
+      if (!process.env["AWS_PROFILE"] && !process.env["AWS_ACCESS_KEY_ID"] && !process.env["AWS_BEARER_TOKEN_BEDROCK"])
+        return { autoload: false }
 
       const region = process.env["AWS_REGION"] ?? "us-east-1"
 
@@ -271,14 +260,20 @@ export namespace Provider {
           reasoning: model.reasoning ?? existing?.reasoning ?? false,
           temperature: model.temperature ?? existing?.temperature ?? false,
           tool_call: model.tool_call ?? existing?.tool_call ?? true,
-          cost: {
-            ...existing?.cost,
-            ...model.cost,
-            input: 0,
-            output: 0,
-            cache_read: 0,
-            cache_write: 0,
-          },
+          cost:
+            !model.cost && !existing?.cost
+              ? {
+                  input: 0,
+                  output: 0,
+                  cache_read: 0,
+                  cache_write: 0,
+                }
+              : {
+                  cache_read: 0,
+                  cache_write: 0,
+                  ...existing?.cost,
+                  ...model.cost,
+                },
           options: {
             ...existing?.options,
             ...model.options,
@@ -360,7 +355,10 @@ export namespace Provider {
       const pkg = provider.npm ?? provider.id
       const mod = await import(await BunProc.install(pkg, "beta"))
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn(s.providers[provider.id]?.options)
+      const loaded = fn({
+        name: provider.id,
+        ...s.providers[provider.id]?.options,
+      })
       s.sdk.set(provider.id, loaded)
       return loaded as SDK
     })().catch((e) => {
@@ -409,6 +407,13 @@ export namespace Provider {
   }
 
   export async function getSmallModel(providerID: string) {
+    const cfg = await Config.get()
+
+    if (cfg.small_model) {
+      const parsed = parseModel(cfg.small_model)
+      return getModel(parsed.providerID, parsed.modelID)
+    }
+
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
     const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"]
@@ -450,82 +455,6 @@ export namespace Provider {
       providerID: providerID,
       modelID: rest.join("/"),
     }
-  }
-
-  const TOOLS = [
-    BashTool,
-    EditTool,
-    WebFetchTool,
-    GlobTool,
-    GrepTool,
-    ListTool,
-    // LspDiagnosticTool,
-    // LspHoverTool,
-    PatchTool,
-    ReadTool,
-    // MultiEditTool,
-    WriteTool,
-    TodoWriteTool,
-    TodoReadTool,
-    TaskTool,
-  ]
-
-  const TOOL_MAPPING: Record<string, Tool.Info[]> = {
-    anthropic: TOOLS.filter((t) => t.id !== "patch"),
-    openai: TOOLS.map((t) => ({
-      ...t,
-      parameters: optionalToNullable(t.parameters),
-    })),
-    azure: TOOLS.map((t) => ({
-      ...t,
-      parameters: optionalToNullable(t.parameters),
-    })),
-    google: TOOLS,
-  }
-
-  export async function tools(providerID: string) {
-    /*
-    const cfg = await Config.get()
-    if (cfg.tool?.provider?.[providerID])
-      return cfg.tool.provider[providerID].map(
-        (id) => TOOLS.find((t) => t.id === id)!,
-      )
-        */
-    return TOOL_MAPPING[providerID] ?? TOOLS
-  }
-
-  function optionalToNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
-    if (schema instanceof z.ZodObject) {
-      const shape = schema.shape
-      const newShape: Record<string, z.ZodTypeAny> = {}
-
-      for (const [key, value] of Object.entries(shape)) {
-        const zodValue = value as z.ZodTypeAny
-        if (zodValue instanceof z.ZodOptional) {
-          newShape[key] = zodValue.unwrap().nullable()
-        } else {
-          newShape[key] = optionalToNullable(zodValue)
-        }
-      }
-
-      return z.object(newShape)
-    }
-
-    if (schema instanceof z.ZodArray) {
-      return z.array(optionalToNullable(schema.element))
-    }
-
-    if (schema instanceof z.ZodUnion) {
-      return z.union(
-        schema.options.map((option: z.ZodTypeAny) => optionalToNullable(option)) as [
-          z.ZodTypeAny,
-          z.ZodTypeAny,
-          ...z.ZodTypeAny[],
-        ],
-      )
-    }
-
-    return schema
   }
 
   export const ModelNotFoundError = NamedError.create(

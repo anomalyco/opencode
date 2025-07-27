@@ -28,6 +28,7 @@ type SessionDialog interface {
 type sessionItem struct {
 	title              string
 	isDeleteConfirming bool
+	isCurrentSession   bool
 }
 
 func (s sessionItem) Render(
@@ -42,7 +43,11 @@ func (s sessionItem) Render(
 	if s.isDeleteConfirming {
 		text = "Press again to confirm delete"
 	} else {
-		text = s.title
+		if s.isCurrentSession {
+			text = "● " + s.title
+		} else {
+			text = s.title
+		}
 	}
 
 	truncatedStr := truncate.StringWithTail(text, uint(width-1), "...")
@@ -56,6 +61,14 @@ func (s sessionItem) Render(
 				Foreground(t.BackgroundElement()).
 				Width(width).
 				PaddingLeft(1)
+		} else if s.isCurrentSession {
+			// Different style for current session when selected
+			itemStyle = baseStyle.
+				Background(t.Primary()).
+				Foreground(t.BackgroundElement()).
+				Width(width).
+				PaddingLeft(1).
+				Bold(true)
 		} else {
 			// Normal selection
 			itemStyle = baseStyle.
@@ -70,6 +83,12 @@ func (s sessionItem) Render(
 			itemStyle = baseStyle.
 				Foreground(t.Error()).
 				PaddingLeft(1)
+		} else if s.isCurrentSession {
+			// Highlight current session when not selected
+			itemStyle = baseStyle.
+				Foreground(t.Primary()).
+				PaddingLeft(1).
+				Bold(true)
 		} else {
 			itemStyle = baseStyle.
 				PaddingLeft(1)
@@ -194,6 +213,7 @@ func (s *sessionDialog) updateListItems() {
 		item := sessionItem{
 			title:              sess.Title,
 			isDeleteConfirming: s.deleteConfirmation == i,
+			isCurrentSession:   s.app.Session != nil && s.app.Session.ID == sess.ID,
 		}
 		items = append(items, item)
 	}
@@ -229,6 +249,7 @@ func NewSessionDialog(app *app.App) SessionDialog {
 		items = append(items, sessionItem{
 			title:              sess.Title,
 			isDeleteConfirming: false,
+			isCurrentSession:   app.Session != nil && app.Session.ID == sess.ID,
 		})
 	}
 

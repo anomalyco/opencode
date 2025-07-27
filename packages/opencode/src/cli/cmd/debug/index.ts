@@ -1,3 +1,4 @@
+import { Global } from "../../../global"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { FileCommand } from "./file"
@@ -15,6 +16,7 @@ export const DebugCommand = cmd({
       .command(FileCommand)
       .command(ScrapCommand)
       .command(SnapshotCommand)
+      .command(PathsCommand)
       .command({
         command: "wait",
         async handler() {
@@ -25,4 +27,13 @@ export const DebugCommand = cmd({
       })
       .demandCommand(),
   async handler() {},
+})
+
+const PathsCommand = cmd({
+  command: "paths",
+  handler() {
+    for (const [key, value] of Object.entries(Global.Path)) {
+      console.log(key.padEnd(10), value)
+    }
+  },
 })

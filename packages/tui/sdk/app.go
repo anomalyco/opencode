@@ -63,6 +63,14 @@ func (r *AppService) Modes(ctx context.Context, opts ...option.RequestOption) (r
 	return
 }
 
+// List all providers
+func (r *AppService) Providers(ctx context.Context, opts ...option.RequestOption) (res *AppProvidersResponse, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "config/providers"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	return
+}
+
 type App struct {
 	Git      bool    `json:"git,required"`
 	Hostname string  `json:"hostname,required"`
@@ -137,24 +145,6 @@ func (r appTimeJSON) RawJSON() string {
 	return r.raw
 }
 
-// Log level
-type LogLevel string
-
-const (
-	LogLevelDebug LogLevel = "DEBUG"
-	LogLevelInfo  LogLevel = "INFO"
-	LogLevelWarn  LogLevel = "WARN"
-	LogLevelError LogLevel = "ERROR"
-)
-
-func (r LogLevel) IsKnown() bool {
-	switch r {
-	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
-		return true
-	}
-	return false
-}
-
 type Mode struct {
 	Name   string          `json:"name,required"`
 	Tools  map[string]bool `json:"tools,required"`
@@ -200,6 +190,145 @@ func (r *ModeModel) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r modeModelJSON) RawJSON() string {
+	return r.raw
+}
+
+type Model struct {
+	ID          string                 `json:"id,required"`
+	Attachment  bool                   `json:"attachment,required"`
+	Cost        ModelCost              `json:"cost,required"`
+	Limit       ModelLimit             `json:"limit,required"`
+	Name        string                 `json:"name,required"`
+	Options     map[string]interface{} `json:"options,required"`
+	Reasoning   bool                   `json:"reasoning,required"`
+	ReleaseDate string                 `json:"release_date,required"`
+	Temperature bool                   `json:"temperature,required"`
+	ToolCall    bool                   `json:"tool_call,required"`
+	JSON        modelJSON              `json:"-"`
+}
+
+// modelJSON contains the JSON metadata for the struct [Model]
+type modelJSON struct {
+	ID          apijson.Field
+	Attachment  apijson.Field
+	Cost        apijson.Field
+	Limit       apijson.Field
+	Name        apijson.Field
+	Options     apijson.Field
+	Reasoning   apijson.Field
+	ReleaseDate apijson.Field
+	Temperature apijson.Field
+	ToolCall    apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *Model) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modelJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModelCost struct {
+	Input      float64       `json:"input,required"`
+	Output     float64       `json:"output,required"`
+	CacheRead  float64       `json:"cache_read"`
+	CacheWrite float64       `json:"cache_write"`
+	JSON       modelCostJSON `json:"-"`
+}
+
+// modelCostJSON contains the JSON metadata for the struct [ModelCost]
+type modelCostJSON struct {
+	Input       apijson.Field
+	Output      apijson.Field
+	CacheRead   apijson.Field
+	CacheWrite  apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModelCost) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modelCostJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModelLimit struct {
+	Context float64        `json:"context,required"`
+	Output  float64        `json:"output,required"`
+	JSON    modelLimitJSON `json:"-"`
+}
+
+// modelLimitJSON contains the JSON metadata for the struct [ModelLimit]
+type modelLimitJSON struct {
+	Context     apijson.Field
+	Output      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModelLimit) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modelLimitJSON) RawJSON() string {
+	return r.raw
+}
+
+type Provider struct {
+	ID     string           `json:"id,required"`
+	Env    []string         `json:"env,required"`
+	Models map[string]Model `json:"models,required"`
+	Name   string           `json:"name,required"`
+	API    string           `json:"api"`
+	Npm    string           `json:"npm"`
+	JSON   providerJSON     `json:"-"`
+}
+
+// providerJSON contains the JSON metadata for the struct [Provider]
+type providerJSON struct {
+	ID          apijson.Field
+	Env         apijson.Field
+	Models      apijson.Field
+	Name        apijson.Field
+	API         apijson.Field
+	Npm         apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *Provider) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r providerJSON) RawJSON() string {
+	return r.raw
+}
+
+type AppProvidersResponse struct {
+	Default   map[string]string        `json:"default,required"`
+	Providers []Provider               `json:"providers,required"`
+	JSON      appProvidersResponseJSON `json:"-"`
+}
+
+// appProvidersResponseJSON contains the JSON metadata for the struct
+// [AppProvidersResponse]
+type appProvidersResponseJSON struct {
+	Default     apijson.Field
+	Providers   apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *AppProvidersResponse) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r appProvidersResponseJSON) RawJSON() string {
 	return r.raw
 }
 

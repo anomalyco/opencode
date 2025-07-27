@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "==> Running eslint"
+./node_modules/.bin/eslint .
+
+echo "==> Building"
+./scripts/build
+
+echo "==> Checking types"
+./node_modules/typescript/bin/tsc
+
+echo "==> Running Are The Types Wrong?"
+./node_modules/.bin/attw --pack dist -f json >.attw.json || true
+node scripts/utils/attw-report.cjs
+
+echo "==> Running publint"
+./node_modules/.bin/publint dist

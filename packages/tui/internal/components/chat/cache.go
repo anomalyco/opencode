@@ -1,28 +1,28 @@
 package chat
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash/fnv"
 	"sync"
 )
 
-// MessageCache caches rendered messages to avoid re-rendering
-type MessageCache struct {
+// PartCache caches rendered messages to avoid re-rendering
+type PartCache struct {
 	mu    sync.RWMutex
 	cache map[string]string
 }
 
-// NewMessageCache creates a new message cache
-func NewMessageCache() *MessageCache {
-	return &MessageCache{
+// NewPartCache creates a new message cache
+func NewPartCache() *PartCache {
+	return &PartCache{
 		cache: make(map[string]string),
 	}
 }
 
 // generateKey creates a unique key for a message based on its content and rendering parameters
-func (c *MessageCache) GenerateKey(params ...any) string {
-	h := sha256.New()
+func (c *PartCache) GenerateKey(params ...any) string {
+	h := fnv.New64a()
 	for _, param := range params {
 		h.Write(fmt.Appendf(nil, ":%v", param))
 	}
@@ -30,7 +30,7 @@ func (c *MessageCache) GenerateKey(params ...any) string {
 }
 
 // Get retrieves a cached rendered message
-func (c *MessageCache) Get(key string) (string, bool) {
+func (c *PartCache) Get(key string) (string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -39,14 +39,14 @@ func (c *MessageCache) Get(key string) (string, bool) {
 }
 
 // Set stores a rendered message in the cache
-func (c *MessageCache) Set(key string, content string) {
+func (c *PartCache) Set(key string, content string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache[key] = content
 }
 
 // Clear removes all entries from the cache
-func (c *MessageCache) Clear() {
+func (c *PartCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -54,7 +54,7 @@ func (c *MessageCache) Clear() {
 }
 
 // Size returns the number of cached entries
-func (c *MessageCache) Size() int {
+func (c *PartCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

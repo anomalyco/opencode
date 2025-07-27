@@ -77,7 +77,6 @@ func (c *CommandCompletionProvider) GetChildEntries(
 		return items, nil
 	}
 
-	// Use fuzzy matching for commands
 	var commandNames []string
 	commandMap := make(map[string]CompletionSuggestion)
 
@@ -86,17 +85,13 @@ func (c *CommandCompletionProvider) GetChildEntries(
 			continue
 		}
 		space := space - lipgloss.Width(cmd.PrimaryTrigger())
-		// Add all triggers as searchable options
 		for _, trigger := range cmd.Trigger {
 			commandNames = append(commandNames, trigger)
 			commandMap[trigger] = c.getCommandCompletionItem(cmd, space)
 		}
 	}
 
-	// Find fuzzy matches
 	matches := fuzzy.RankFindFold(query, commandNames)
-
-	// Sort by score (best matches first)
 	sort.Sort(matches)
 
 	// Convert matches to completion items, deduplicating by command name

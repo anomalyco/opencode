@@ -4,11 +4,12 @@ import path from "path"
 
 export const AuthCopilot = lazy(async () => {
   const file = Bun.file(path.join(Global.Path.state, "plugin", "copilot.ts"))
+  const exists = await file.exists()
   const response = fetch("https://raw.githubusercontent.com/sst/opencode-github-copilot/refs/heads/main/auth.ts")
     .then((x) => Bun.write(file, x))
     .catch(() => {})
 
-  if (!file.exists()) {
+  if (!exists) {
     const worked = await response
     if (!worked) return
   }

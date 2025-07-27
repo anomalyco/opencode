@@ -5,8 +5,7 @@ import { LSP } from "../lsp"
 import { App } from "../app/app"
 import DESCRIPTION from "./lsp-hover.txt"
 
-export const LspHoverTool = Tool.define({
-  id: "lsp_hover",
+export const LspHoverTool = Tool.define("lsp_hover", {
   description: DESCRIPTION,
   parameters: z.object({
     file: z.string().describe("The path to the file to get diagnostics."),

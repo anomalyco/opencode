@@ -105,7 +105,29 @@ export const ruff: Info = {
   command: ["ruff", "format", "$FILE"],
   extensions: [".py", ".pyi"],
   async enabled() {
-    return Bun.which("ruff") !== null
+    if (!Bun.which("ruff")) return false
+    const app = App.info()
+    const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, app.path.cwd, app.path.root)
+      if (found.length > 0) {
+        if (config === "pyproject.toml") {
+          const content = await Bun.file(found[0]).text()
+          if (content.includes("[tool.ruff]")) return true
+        } else {
+          return true
+        }
+      }
+    }
+    const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
+    for (const dep of deps) {
+      const found = await Filesystem.findUp(dep, app.path.cwd, app.path.root)
+      if (found.length > 0) {
+        const content = await Bun.file(found[0]).text()
+        if (content.includes("ruff")) return true
+      }
+    }
+    return false
   },
 }
 

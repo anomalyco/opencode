@@ -49,12 +49,15 @@ resources:
     models:
       app: App
       logLevel: LogLevel
+      provider: Provider
+      model: Model
       mode: Mode
     methods:
       get: get /app
       init: post /app/init
       log: post /log
       modes: get /mode
+      providers: get /config/providers
 
   find:
     models:
@@ -75,15 +78,12 @@ resources:
   config:
     models:
       config: Config
-      keybinds: KeybindsConfig
-      mcpLocal: McpLocalConfig
-      mcpRemote: McpRemoteConfig
-      mode: ModeConfig
-      provider: Provider
-      model: Model
+      keybindsConfig: KeybindsConfig
+      mcpLocalConfig: McpLocalConfig
+      mcpRemoteConfig: McpRemoteConfig
+      modeConfig: ModeConfig
     methods:
       get: get /config
-      providers: get /config/providers
 
   session:
     models:
@@ -91,7 +91,13 @@ resources:
       message: Message
       part: Part
       textPart: TextPart
+      textPartInput: TextPartInput
       filePart: FilePart
+      filePartInput: FilePartInput
+      filePartSourceText: FilePartSourceText
+      filePartSource: FilePartSource
+      fileSource: FileSource
+      symbolSource: SymbolSource
       toolPart: ToolPart
       stepStartPart: StepStartPart
       stepFinishPart: StepFinishPart
@@ -114,10 +120,17 @@ resources:
       summarize: post /session/{id}/summarize
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      revert: post /session/{id}/revert
+      unrevert: post /session/{id}/unrevert
+
+  tui:
+    methods:
+      appendPrompt: post /tui/append-prompt
+      openHelp: post /tui/open-help
 
 settings:
   disable_mock_tests: true
-  license: Apache-2.0
+  license: MIT
 
 security:
   - {}

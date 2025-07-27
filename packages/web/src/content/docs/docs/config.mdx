@@ -10,7 +10,6 @@ You can configure opencode using a JSON config file.
   "$schema": "https://opencode.ai/config.json",
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-20250514",
-  "autoshare": false,
   "autoupdate": true
 }
 ```
@@ -51,9 +50,9 @@ opencode comes with two built-in modes: _build_, the default with all tools enab
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
-    "build": { },
-    "plan": { },
-    "my-custom-mode": { }
+    "build": {},
+    "plan": {},
+    "my-custom-mode": {}
   }
 }
 ```
@@ -64,15 +63,18 @@ opencode comes with two built-in modes: _build_, the default with all tools enab
 
 ### Models
 
-You can configure the providers and models you want to use in your opencode config through the `provider` and `model` options.
+You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": ""
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "small_model": "anthropic/claude-3-5-haiku-20241022"
 }
 ```
+
+The `small_model` option configures a separate model for lightweight tasks like summarization and title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -100,26 +102,26 @@ Logs are written to:
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: `%APPDATA%\opencode\log\`
 
-You can configure the minimum log level through the `log_level` option.
+---
+
+### Sharing
+
+You can configure the [share](/docs/share) feature through the `share` option.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "log_level": "INFO"
+  "share": "manual"
 }
 ```
 
-With the following options:
+This takes:
 
-| Level   | Description                              |
-| ------- | ---------------------------------------- |
-| `DEBUG` | All messages including debug information |
-| `INFO`  | Informational messages and above         |
-| `WARN`  | Warnings and errors only                 |
-| `ERROR` | Errors only                              |
+- `"manual"` - Allow manual sharing via commands (default)
+- `"auto"` - Automatically share new conversations
+- `"disabled"` - Disable sharing entirely
 
-The **default** log level is `INFO`. If you are running opencode locally in
-development mode it's set to `DEBUG`.
+By default, sharing is set to manual mode where you need to explicitly share conversations using the `/share` command.
 
 ---
 
@@ -138,6 +140,19 @@ You can customize your keybinds through the `keybinds` option.
 
 ---
 
+### Autoupdate
+
+opencode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+---
+
 ### MCP servers
 
 You can configure MCP servers you want to use through the `mcp` option.
@@ -150,6 +165,47 @@ You can configure MCP servers you want to use through the `mcp` option.
 ```
 
 [Learn more here](/docs/mcp-servers).
+
+---
+
+### Instructions
+
+You can configure the instructions for the model you're using through the `instructions` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+This takes an array of paths and glob patterns to instruction files. [Learn more
+about rules here](/docs/rules).
+
+---
+
+### Agents
+
+You can configure specialized agents for specific tasks through the `agent` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -188,7 +244,9 @@ Use `{env:VARIABLE_NAME}` to substitute environment variables:
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
-      "api_key": "{env:ANTHROPIC_API_KEY}"
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
     }
   }
 }
@@ -208,7 +266,9 @@ Use `{file:path/to/file}` to substitute the contents of a file:
   "instructions": ["{file:./custom-instructions.md}"],
   "provider": {
     "openai": {
-      "api_key": "{file:~/.secrets/openai-key}"
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
     }
   }
 }

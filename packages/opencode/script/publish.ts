@@ -22,11 +22,13 @@ console.log(`publishing ${version}`)
 const GOARCH: Record<string, string> = {
   arm64: "arm64",
   x64: "amd64",
+  "x64-baseline": "amd64",
 }
 
 const targets = [
   ["linux", "arm64"],
   ["linux", "x64"],
+  ["linux", "x64-baseline"],
   ["darwin", "x64"],
   ["darwin", "arm64"],
   ["windows", "x64"],
@@ -90,27 +92,34 @@ if (!snapshot) {
   }
 
   const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
-    .then((res) => res.json())
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
     .then((data) => data.tag_name)
 
+  console.log("finding commits between", previous, "and", "HEAD")
   const commits = await fetch(`https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`)
     .then((res) => res.json())
     .then((data) => data.commits || [])
 
-  const notes = commits
-    .map((commit: any) => `- ${commit.commit.message.split("\n")[0]}`)
-    .filter((x: string) => {
-      const lower = x.toLowerCase()
-      return (
-        !lower.includes("ignore:") &&
-        !lower.includes("chore:") &&
-        !lower.includes("ci:") &&
-        !lower.includes("wip:") &&
-        !lower.includes("docs:") &&
-        !lower.includes("doc:")
-      )
-    })
-    .join("\n")
+  const raw = commits.map((commit: any) => `- ${commit.commit.message.split("\n").join(" ")}`)
+  console.log(raw)
+
+  const notes =
+    raw
+      .filter((x: string) => {
+        const lower = x.toLowerCase()
+        return (
+          !lower.includes("ignore:") &&
+          !lower.includes("chore:") &&
+          !lower.includes("ci:") &&
+          !lower.includes("wip:") &&
+          !lower.includes("docs:") &&
+          !lower.includes("doc:")
+        )
+      })
+      .join("\n") || "No notable changes"
 
   if (!dry) await $`gh release create v${version} --title "v${version}" --notes ${notes} ./dist/*.zip`
 
@@ -152,6 +161,7 @@ if (!snapshot) {
   for (const pkg of ["opencode", "opencode-bin"]) {
     await $`rm -rf ./dist/aur-${pkg}`
     await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+    await $`cd ./dist/aur-${pkg} && git checkout master`
     await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
     await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`

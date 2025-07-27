@@ -23,7 +23,7 @@ Since opencode is open source and does not store any of your code or context dat
 
 **opencode does not store your code or context data.** All processing happens locally or through direct API calls to your AI provider.
 
-The only caveat here is the optional `/share` feature that must be manually enabled.
+The only caveat here is the optional `/share` feature.
 
 ---
 
@@ -32,6 +32,17 @@ The only caveat here is the optional `/share` feature that must be manually enab
 If a user enables the `/share` feature, the conversation and the data associated with it are sent to the service we use to host these shares pages at opencode.ai.
 
 The data is currently served through our CDN's edge network, and is cached on the edge near your users.
+
+We recommend you disable this for your trial.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[Learn more about sharing](/docs/share).
 
 ---
 
@@ -51,9 +62,37 @@ pricing and implementation options.
 
 ### SSO
 
-SSO integration can be implemented for enterprise deployments after your trial. Currently users manage and configure individual API keys locally.
+SSO integration can be implemented for enterprise deployments after your trial.
+This will allow your team's session data and shared conversations to be protected
+by your enterprise's authentication system.
 
-This can be switched to a centralized authentication system that your organization uses.
+---
+
+### Private NPM
+
+opencode supports private npm registries through Bun's native `.npmrc` file support. If your organization uses a private registry, such as JFrog Artifactory, Nexus, or similar, ensure developers are authenticated before running opencode.
+
+To set up authentication with your private registry:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+This creates `~/.npmrc` with authentication details. opencode will automatically
+pick this up.
+
+:::caution
+You must be logged into the private registry before running opencode.
+:::
+
+Alternatively, you can manually configure a `.npmrc` file:
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Developers must be logged into the private registry before running opencode to ensure packages can be installed from your enterprise registry.
 
 ---
 

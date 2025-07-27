@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode/internal/api"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/tui"
@@ -50,11 +52,37 @@ func main() {
 		os.Exit(1)
 	}
 
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		slog.Error("Failed to stat stdin", "error", err)
+		os.Exit(1)
+	}
+
+	// Check if there's data piped to stdin
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		stdin, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			slog.Error("Failed to read stdin", "error", err)
+			os.Exit(1)
+		}
+		stdinContent := strings.TrimSpace(string(stdin))
+		if stdinContent != "" {
+			if prompt == nil || *prompt == "" {
+				prompt = &stdinContent
+			} else {
+				combined := *prompt + "\n" + stdinContent
+				prompt = &combined
+			}
+		}
+	}
+
 	httpClient := opencode.NewClient(
 		option.WithBaseURL(url),
 	)
 
-	apiHandler := util.NewAPILogHandler(httpClient, "tui", slog.LevelDebug)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	apiHandler := util.NewAPILogHandler(ctx, httpClient, "tui", slog.LevelDebug)
 	logger := slog.New(apiHandler)
 	slog.SetDefault(logger)
 
@@ -68,9 +96,6 @@ func main() {
 	}()
 
 	// Create main context for the application
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
 	if err != nil {
 		panic(err)
@@ -79,7 +104,6 @@ func main() {
 	program := tea.NewProgram(
 		tui.NewModel(app_),
 		tea.WithAltScreen(),
-		// tea.WithKeyboardEnhancements(),
 		tea.WithMouseCellMotion(),
 	)
 
@@ -91,6 +115,9 @@ func main() {
 		stream := httpClient.Event.ListStreaming(ctx)
 		for stream.Next() {
 			evt := stream.Current().AsUnion()
+			if _, ok := evt.(opencode.EventListResponseEventStorageWrite); ok {
+				continue
+			}
 			program.Send(evt)
 		}
 		if err := stream.Err(); err != nil {
@@ -98,6 +125,8 @@ func main() {
 			program.Send(err)
 		}
 	}()
+
+	go api.Start(ctx, program, httpClient)
 
 	// Handle signals in a separate goroutine
 	go func() {

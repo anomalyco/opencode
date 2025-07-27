@@ -23,13 +23,13 @@ When you share a conversation, opencode:
 
 ## Sharing
 
-You can manually share a conversation or enable automatic sharing for all new conversations.
+opencode supports three sharing modes that control how conversations are shared:
 
 ---
 
-### Manual
+### Manual (default)
 
-Use the `/share` command in any conversation to create a shareable link:
+By default, opencode uses manual sharing mode. Sessions are not shared automatically, but you can manually share them using the `/share` command:
 
 ```
 /share
@@ -37,24 +37,48 @@ Use the `/share` command in any conversation to create a shareable link:
 
 This will generate a unique URL that'll be copied to your clipboard.
 
----
-
-### Autoshare
-
-You can enable automatic sharing for all new conversations through the `autoshare` option in your [config file](/docs/config).
+To explicitly set manual mode in your [config file](/docs/config):
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "autoshare": true
+  "share": "manual"
 }
 ```
 
-By default, `autoshare` is disabled.
+---
+
+### Auto-share
+
+You can enable automatic sharing for all new conversations by setting the `share` option to `"auto"` in your [config file](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+With auto-share enabled, every new conversation will automatically be shared and a link will be generated.
 
 ---
 
-## Unsharing
+### Disabled
+
+You can disable sharing entirely by setting the `share` option to `"disabled"` in your [config file](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+To enforce this across your team for a given project, add it to the `opencode.json` in your project and check into Git.
+
+---
+
+## Un-sharing
 
 To stop sharing a conversation and remove it from public access:
 
@@ -85,10 +109,11 @@ includes:
 
 ### Recommendations
 
-- Only share conversations that don't contain sensitive information
-- Review conversation content before sharing
-- Unshare conversations when collaboration is complete
-- Avoid sharing conversations with proprietary code or confidential data
+- Only share conversations that don't contain sensitive information.
+- Review conversation content before sharing.
+- Unshare conversations when collaboration is complete.
+- Avoid sharing conversations with proprietary code or confidential data.
+- For sensitive projects, disable sharing entirely.
 
 ---
 
@@ -96,8 +121,8 @@ includes:
 
 For enterprise deployments, the share feature can be:
 
-- **Self-hosted** on your own infrastructure
-- **Restricted** to authenticated users only
 - **Disabled** entirely for security compliance
+- **Restricted** to users authenticated through SSO only
+- **Self-hosted** on your own infrastructure
 
 [Learn more](/docs/enterprise) about using opencode in your organization.

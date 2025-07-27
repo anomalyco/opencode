@@ -40,8 +40,8 @@ func IsWsl() bool {
 
 func Measure(tag string) func(...any) {
 	startTime := time.Now()
-	return func(tags ...any) {
-		args := append([]any{"timeTakenMs", time.Since(startTime).Milliseconds()}, tags...)
+	return func(args ...any) {
+		args = append(args, []any{"timeTakenMs", time.Since(startTime).Milliseconds()}...)
 		slog.Debug(tag, args...)
 	}
 }

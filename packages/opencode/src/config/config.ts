@@ -9,6 +9,7 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
+import matter from "gray-matter"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -22,9 +23,37 @@ export namespace Config {
       }
     }
 
+    result.agent = result.agent || {}
+    const markdownAgents = [
+      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownAgents) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result.agent = mergeDeep(result.agent, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
+    }
+    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
+      result.keybinds.messages_undo = result.keybinds.messages_revert
     }
 
     if (!result.username) {
@@ -57,6 +86,7 @@ export namespace Config {
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
     })
     .strict()
     .openapi({
@@ -69,25 +99,34 @@ export namespace Config {
   export const Mode = z
     .object({
       model: z.string().optional(),
+      temperature: z.number().optional(),
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      disable: z.boolean().optional(),
     })
     .openapi({
       ref: "ModeConfig",
     })
   export type Mode = z.infer<typeof Mode>
 
+  export const Agent = Mode.extend({
+    description: z.string(),
+  }).openapi({
+    ref: "AgentConfig",
+  })
+
   export const Keybinds = z
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      switch_mode: z.string().optional().default("tab").describe("Switch mode"),
+      switch_mode: z.string().optional().default("tab").describe("Next mode"),
+      switch_mode_reverse: z.string().optional().default("shift+tab").describe("Previous Mode"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_share: z.string().optional().default("<leader>s").describe("Share current session"),
-      session_unshare: z.string().optional().default("<leader>u").describe("Unshare current session"),
+      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
       tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
@@ -116,7 +155,9 @@ export namespace Config {
       messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
       messages_layout_toggle: z.string().optional().default("<leader>p").describe("Toggle layout"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
-      messages_revert: z.string().optional().default("<leader>r").describe("Revert message"),
+      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
+      messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
+      messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
       app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
     })
     .strict()
@@ -124,15 +165,22 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
+  export const Layout = z.enum(["auto", "stretch"]).openapi({
+    ref: "LayoutConfig",
+  })
+  export type Layout = z.infer<typeof Layout>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       share: z
-        .enum(["auto", "disabled"])
+        .enum(["manual", "auto", "disabled"])
         .optional()
-        .describe("Control sharing behavior: 'auto' enables automatic sharing, 'disabled' disables all sharing"),
+        .describe(
+          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
+        ),
       autoshare: z
         .boolean()
         .optional()
@@ -140,6 +188,12 @@ export namespace Config {
       autoupdate: z.boolean().optional().describe("Automatically update to the latest version"),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      small_model: z
+        .string()
+        .describe(
+          "Small model to use for tasks like summarization and title generation in the format of provider/model",
+        )
+        .optional(),
       username: z
         .string()
         .optional()
@@ -150,19 +204,35 @@ export namespace Config {
           plan: Mode.optional(),
         })
         .catchall(Mode)
-        .optional(),
-      log_level: Log.Level.optional().describe("Minimum log level to write to log files"),
+        .optional()
+        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
+      agent: z
+        .object({
+          general: Agent.optional(),
+        })
+        .catchall(Agent)
+        .optional()
+        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
       provider: z
         .record(
-          ModelsDev.Provider.partial().extend({
-            models: z.record(ModelsDev.Model.partial()),
-            options: z.record(z.any()).optional(),
-          }),
+          ModelsDev.Provider.partial()
+            .extend({
+              models: z.record(ModelsDev.Model.partial()),
+              options: z
+                .object({
+                  apiKey: z.string().optional(),
+                  baseURL: z.string().optional(),
+                })
+                .catchall(z.any())
+                .optional(),
+            })
+            .strict(),
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       experimental: z
         .object({
           hook: z

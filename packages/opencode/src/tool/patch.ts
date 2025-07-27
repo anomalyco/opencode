@@ -210,8 +210,7 @@ async function applyCommit(
   }
 }
 
-export const PatchTool = Tool.define({
-  id: "patch",
+export const PatchTool = Tool.define("patch", {
   description: DESCRIPTION,
   parameters: PatchParams,
   execute: async (params, ctx) => {

@@ -5,8 +5,7 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 
-export const GrepTool = Tool.define({
-  id: "grep",
+export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
   parameters: z.object({
     pattern: z.string().describe("The regex pattern to search for in file contents"),
@@ -55,12 +54,11 @@ export const GrepTool = Tool.define({
     for (const line of lines) {
       if (!line) continue
 
-      const parts = line.split(":", 3)
-      if (parts.length < 3) continue
+      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
+      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
-      const filePath = parts[0]
-      const lineNum = parseInt(parts[1], 10)
-      const lineText = parts[2]
+      const lineNum = parseInt(lineNumStr, 10)
+      const lineText = lineTextParts.join(":")
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => null)

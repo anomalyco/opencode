@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/v2/viewport"
 	tea "github.com/charmbracelet/bubbletea/v2"
 
 	"github.com/sst/opencode/internal/app"
@@ -15,6 +14,7 @@ import (
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
+	"github.com/sst/opencode/internal/viewport"
 )
 
 type DiffStyle int

@@ -463,28 +463,41 @@ func (p *Parser) parseWin32InputKeyEvent(state *win32InputState, vkc uint16, _ u
 		baseCode = KeyMediaStop
 	case vkc == xwindows.VK_MEDIA_PLAY_PAUSE:
 		baseCode = KeyMediaPlayPause
-	case vkc == xwindows.VK_OEM_1:
-		baseCode = ';'
-	case vkc == xwindows.VK_OEM_PLUS:
-		baseCode = '+'
-	case vkc == xwindows.VK_OEM_COMMA:
-		baseCode = ','
-	case vkc == xwindows.VK_OEM_MINUS:
-		baseCode = '-'
-	case vkc == xwindows.VK_OEM_PERIOD:
-		baseCode = '.'
-	case vkc == xwindows.VK_OEM_2:
-		baseCode = '/'
-	case vkc == xwindows.VK_OEM_3:
-		baseCode = '`'
-	case vkc == xwindows.VK_OEM_4:
-		baseCode = '['
-	case vkc == xwindows.VK_OEM_5:
-		baseCode = '\\'
-	case vkc == xwindows.VK_OEM_6:
-		baseCode = ']'
-	case vkc == xwindows.VK_OEM_7:
-		baseCode = '\''
+	case vkc == xwindows.VK_OEM_1, vkc == xwindows.VK_OEM_PLUS, vkc == xwindows.VK_OEM_COMMA,
+		 vkc == xwindows.VK_OEM_MINUS, vkc == xwindows.VK_OEM_PERIOD, vkc == xwindows.VK_OEM_2,
+		 vkc == xwindows.VK_OEM_3, vkc == xwindows.VK_OEM_4, vkc == xwindows.VK_OEM_5,
+		 vkc == xwindows.VK_OEM_6, vkc == xwindows.VK_OEM_7:
+		// Use the actual character provided by Windows for current keyboard layout
+		// instead of hardcoded US layout mappings
+		if !unicode.IsControl(r) && unicode.IsPrint(r) {
+			baseCode = r
+		} else {
+			// Fallback to original hardcoded mappings for non-printable cases
+			switch vkc {
+			case xwindows.VK_OEM_1:
+				baseCode = ';'
+			case xwindows.VK_OEM_PLUS:
+				baseCode = '+'
+			case xwindows.VK_OEM_COMMA:
+				baseCode = ','
+			case xwindows.VK_OEM_MINUS:
+				baseCode = '-'
+			case xwindows.VK_OEM_PERIOD:
+				baseCode = '.'
+			case xwindows.VK_OEM_2:
+				baseCode = '/'
+			case xwindows.VK_OEM_3:
+				baseCode = '`'
+			case xwindows.VK_OEM_4:
+				baseCode = '['
+			case xwindows.VK_OEM_5:
+				baseCode = '\\'
+			case xwindows.VK_OEM_6:
+				baseCode = ']'
+			case xwindows.VK_OEM_7:
+				baseCode = '\''
+			}
+		}
 	}
 
 	if utf16.IsSurrogate(r) {
@@ -500,19 +513,28 @@ func (p *Parser) parseWin32InputKeyEvent(state *win32InputState, vkc uint16, _ u
 	// XXX: Should this be a KeyMod?
 	altGr := cks&(xwindows.LEFT_CTRL_PRESSED|xwindows.RIGHT_ALT_PRESSED) == xwindows.LEFT_CTRL_PRESSED|xwindows.RIGHT_ALT_PRESSED
 
+	// FIXED: Remove numlock and scroll lock states when checking for printable text
+	// These lock states shouldn't affect normal typing
+	cksForTextCheck := cks &^ (xwindows.NUMLOCK_ON | xwindows.SCROLLLOCK_ON)
+
 	var text string
 	keyCode := baseCode
 	if !unicode.IsControl(r) {
 		rw := utf8.EncodeRune(utf8Buf[:], r)
 		keyCode, _ = utf8.DecodeRune(utf8Buf[:rw])
-		if unicode.IsPrint(keyCode) && (cks == 0 ||
-			cks == xwindows.SHIFT_PRESSED ||
-			cks == xwindows.CAPSLOCK_ON ||
+		if unicode.IsPrint(keyCode) && (cksForTextCheck == 0 ||
+			cksForTextCheck == xwindows.SHIFT_PRESSED ||
+			cksForTextCheck == xwindows.CAPSLOCK_ON ||
 			altGr) {
 			// If the control key state is 0, shift is pressed, or caps lock
 			// then the key event is a printable event i.e. [text] is not empty.
 			text = string(keyCode)
 		}
+	}
+	
+	// Special case: numeric keypad divide should produce "/" text on all layouts (fix french keyboard layout)
+	if baseCode == KeyKpDivide {
+		text = "/"
 	}
 
 	key.Code = keyCode

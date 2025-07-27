@@ -1,4 +1,4 @@
-name: Notify Discord on Release
+name: discord
 
 on:
   release:
@@ -11,4 +11,4 @@ jobs:
       - name: Send nicely-formatted embed to Discord
         uses: SethCohen/github-releases-to-discord@v1
         with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
