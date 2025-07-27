@@ -98,21 +98,34 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.MouseClickMsg:
-		headerHeight := lipgloss.Height(m.renderHeader())
-		// Account for header and the newline separator
-		offset := headerHeight + 1
-		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset, "offset", offset)
-		y := (msg.Y - offset) + m.viewport.YOffset
-		if y > 0 {
-			m.selection = &selection{
-				startY: y,
-				startX: msg.X,
-				endY:   -1,
-				endX:   -1,
-			}
+		if msg.Button == tea.MouseLeft {
+			headerHeight := lipgloss.Height(m.renderHeader())
+			// Account for header and the newline separator
+			offset := headerHeight + 1
+			slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset, "offset", offset)
+			y := (msg.Y - offset) + m.viewport.YOffset
+			if y > 0 {
+				m.selection = &selection{
+					startY: y,
+					startX: msg.X,
+					endY:   -1,
+					endX:   -1,
+				}
 
-			slog.Info("mouse selection", "start", fmt.Sprintf("%d,%d", m.selection.startX, m.selection.startY), "end", fmt.Sprintf("%d,%d", m.selection.endX, m.selection.endY))
-			return m, m.renderView()
+				slog.Info("mouse selection", "start", fmt.Sprintf("%d,%d", m.selection.startX, m.selection.startY), "end", fmt.Sprintf("%d,%d", m.selection.endX, m.selection.endY))
+				return m, m.renderView()
+			}
+		} else if msg.Button == tea.MouseRight {
+			if m.selection != nil && len(m.clipboard) > 0 {
+				content := strings.Join(m.clipboard, "\n")
+				m.selection = nil
+				m.clipboard = []string{}
+				return m, tea.Sequence(
+					m.renderView(),
+					app.SetClipboard(content),
+					toast.NewSuccessToast("Copied to clipboard"),
+				)
+			}
 		}
 
 	case tea.MouseMotionMsg:
