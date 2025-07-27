@@ -128,8 +128,22 @@ export namespace MCP {
         }
       }
 
+      const clientsTools = await Promise.all(
+        Object.entries(clients).map(async ([clientName, client]) => [clientName, await client.tools()] as const),
+      )
+
+      const tools: Record<string, Tool> = {}
+      for (const [clientName, clientTools] of clientsTools) {
+        const sanitizedClientName = clientName.replace(/\s+/g, "_")
+        for (const [toolName, tool] of Object.entries(clientTools)) {
+          const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
+          tools[sanitizedClientName + "_" + sanitizedToolName] = tool
+        }
+      }
+
       return {
         clients,
+        tools,
       }
     },
     async (state) => {
@@ -144,14 +158,6 @@ export namespace MCP {
   }
 
   export async function tools() {
-    const result: Record<string, Tool> = {}
-    for (const [clientName, client] of Object.entries(await clients())) {
-      for (const [toolName, tool] of Object.entries(await client.tools())) {
-        const sanitizedClientName = clientName.replace(/\s+/g, "_")
-        const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = tool
-      }
-    }
-    return result
+    return (await state()).tools
   }
 }
