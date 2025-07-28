@@ -278,29 +278,6 @@ func (a *App) InitializeProvider() tea.Cmd {
 		return nil
 	}
 	providers := providersResponse.Providers
-	var defaultProvider *opencode.Provider
-	var defaultModel *opencode.Model
-
-	var anthropic *opencode.Provider
-	for _, provider := range providers {
-		if provider.ID == "anthropic" {
-			anthropic = &provider
-		}
-	}
-
-	// default to anthropic if available
-	if anthropic != nil {
-		defaultProvider = anthropic
-		defaultModel = getDefaultModel(providersResponse, *anthropic)
-	}
-
-	for _, provider := range providers {
-		if defaultProvider == nil || defaultModel == nil {
-			defaultProvider = &provider
-			defaultModel = getDefaultModel(providersResponse, provider)
-		}
-		providers = append(providers, provider)
-	}
 	if len(providers) == 0 {
 		slog.Error("No providers configured")
 		return nil
@@ -314,50 +291,129 @@ func (a *App) InitializeProvider() tea.Cmd {
 		a.State.Model = model.ModelID
 	}
 
-	var currentProvider *opencode.Provider
-	var currentModel *opencode.Model
-	for _, provider := range providers {
-		if provider.ID == a.State.Provider {
-			currentProvider = &provider
+	var selectedProvider *opencode.Provider
+	var selectedModel *opencode.Model
 
-			for _, model := range provider.Models {
-				if model.ID == a.State.Model {
-					currentModel = &model
-				}
-			}
-		}
-	}
-	if currentProvider == nil || currentModel == nil {
-		currentProvider = defaultProvider
-		currentModel = defaultModel
-	}
-
-	var initialProvider *opencode.Provider
-	var initialModel *opencode.Model
+	// Priority 1: Command line --model flag (InitialModel)
 	if a.InitialModel != nil && *a.InitialModel != "" {
 		splits := strings.Split(*a.InitialModel, "/")
 		for _, provider := range providers {
 			if provider.ID == splits[0] {
-				initialProvider = &provider
 				for _, model := range provider.Models {
 					modelID := strings.Join(splits[1:], "/")
 					if model.ID == modelID {
-						initialModel = &model
+						selectedProvider = &provider
+						selectedModel = &model
+						slog.Debug("Selected model from command line", "provider", provider.ID, "model", model.ID)
+						break
+					}
+				}
+				if selectedProvider != nil {
+					break
+				}
+			}
+		}
+	}
+
+	// Priority 2: Config file model setting
+	if selectedProvider == nil && a.Config.Model != "" {
+		splits := strings.Split(a.Config.Model, "/")
+		if len(splits) >= 2 {
+			for _, provider := range providers {
+				if provider.ID == splits[0] {
+					for _, model := range provider.Models {
+						modelID := strings.Join(splits[1:], "/")
+						if model.ID == modelID {
+							selectedProvider = &provider
+							selectedModel = &model
+							slog.Debug("Selected model from config", "provider", provider.ID, "model", model.ID)
+							break
+						}
+					}
+					if selectedProvider != nil {
+						break
 					}
 				}
 			}
 		}
 	}
 
-	if initialProvider != nil && initialModel != nil {
-		currentProvider = initialProvider
-		currentModel = initialModel
+	// Priority 3: Recent model usage (most recently used model)
+	if selectedProvider == nil && len(a.State.RecentlyUsedModels) > 0 {
+		recentUsage := a.State.RecentlyUsedModels[0] // Most recent is first
+		for _, provider := range providers {
+			if provider.ID == recentUsage.ProviderID {
+				for _, model := range provider.Models {
+					if model.ID == recentUsage.ModelID {
+						selectedProvider = &provider
+						selectedModel = &model
+						slog.Debug("Selected model from recent usage", "provider", provider.ID, "model", model.ID)
+						break
+					}
+				}
+				if selectedProvider != nil {
+					break
+				}
+			}
+		}
+	}
+
+	// Priority 4: State-based model (backwards compatibility)
+	if selectedProvider == nil {
+		for _, provider := range providers {
+			if provider.ID == a.State.Provider {
+				for _, model := range provider.Models {
+					if model.ID == a.State.Model {
+						selectedProvider = &provider
+						selectedModel = &model
+						slog.Debug("Selected model from state", "provider", provider.ID, "model", model.ID)
+						break
+					}
+				}
+				if selectedProvider != nil {
+					break
+				}
+			}
+		}
+	}
+
+	// Priority 5: Internal priority fallback (Anthropic preferred, then first available)
+	if selectedProvider == nil {
+		// Try Anthropic first as internal priority
+		for _, provider := range providers {
+			if provider.ID == "anthropic" {
+				selectedProvider = &provider
+				selectedModel = getDefaultModel(providersResponse, provider)
+				if selectedModel != nil {
+					slog.Debug("Selected model from internal priority (Anthropic)", "provider", provider.ID, "model", selectedModel.ID)
+					break
+				}
+			}
+		}
+
+		// If Anthropic not available, use first available provider
+		if selectedProvider == nil {
+			for _, provider := range providers {
+				selectedProvider = &provider
+				selectedModel = getDefaultModel(providersResponse, provider)
+				if selectedModel != nil {
+					slog.Debug("Selected model from fallback (first available)", "provider", provider.ID, "model", selectedModel.ID)
+					break
+				}
+			}
+		}
+	}
+
+	// Final safety check
+	if selectedProvider == nil || selectedModel == nil {
+		slog.Error("Failed to select any model")
+		return nil
 	}
 
 	var cmds []tea.Cmd
 	cmds = append(cmds, util.CmdHandler(ModelSelectedMsg{
-		Provider: *currentProvider,
-		Model:    *currentModel,
+		Provider: *selectedProvider,
+		Model:    *selectedModel,
 	}))
 	if a.InitialPrompt != nil && *a.InitialPrompt != "" {
 		cmds = append(cmds, util.CmdHandler(SendPrompt{Text: *a.InitialPrompt}))
