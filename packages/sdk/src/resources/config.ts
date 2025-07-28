@@ -80,7 +80,7 @@ export interface Config {
   share?: 'manual' | 'auto' | 'disabled';
 
   /**
-   * Small model to use for tasks like summarization and title generation in the
+   * Small model to use for tasks like title generation in the
    * format of provider/model
    */
   small_model?: string;
