@@ -318,6 +318,10 @@ export namespace Config {
         .optional(),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
+      include_co_authored_by: z
+        .boolean()
+        .optional()
+        .describe("Whether to include the co-authored-by opencode byline in git commits and pull requests"),
       permission: z
         .object({
           edit: Permission.optional(),
