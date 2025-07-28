@@ -48,6 +48,32 @@ export namespace Config {
       throw new InvalidError({ path: item }, { cause: parsed.error })
     }
 
+    // Load mode markdown files
+    result.mode = result.mode || {}
+    const markdownModes = [
+      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownModes) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Mode.safeParse(config)
+      if (parsed.success) {
+        result.mode = mergeDeep(result.mode, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
