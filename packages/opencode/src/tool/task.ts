@@ -70,7 +70,7 @@ export const TaskTool = Tool.define("task", async () => {
         metadata: {
           summary: result.parts.filter((x) => x.type === "tool"),
         },
-        output: result.parts.findLast((x) => x.type === "text")!.text,
+        output: result.parts.findLast((x) => x.type === "text")?.text ?? "",
       }
     },
   }
