@@ -34,6 +34,17 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ---
 
+### Custom config file
+
+You can specify a custom config file using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).

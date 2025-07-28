@@ -10,6 +10,7 @@ import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
 import matter from "gray-matter"
+import { Flag } from "../flag/flag"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -21,6 +22,12 @@ export namespace Config {
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await load(resolved))
       }
+    }
+
+    // Override with custom config if provided
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeDeep(result, await load(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     result.agent = result.agent || {}
