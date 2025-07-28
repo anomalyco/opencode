@@ -22,7 +22,7 @@ describe("BunProc registry configuration", () => {
     // Verify that it uses Bun's default resolution
     expect(content).toContain("Bun's default registry resolution")
     expect(content).toContain("Bun will use them automatically")
-    expect(content).toContain("No need to pass --registry flag")
+    expect(content).toContain("Let Bun handle registry resolution:")
   })
 
   test("should have correct command structure without registry", async () => {

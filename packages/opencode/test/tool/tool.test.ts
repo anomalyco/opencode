@@ -26,10 +26,10 @@ describe("tool.glob", () => {
           path: "../../node_modules",
         },
         ctx,
-      )
-      expect(result.metadata.truncated).toBe(true)
-    })
-  })
+      );
+      expect(result.metadata.truncated).toBe(true);
+    });
+  });
   test("basic", async () => {
     await App.provide({ cwd: projectRoot }, async () => {
       let result = await glob.execute(
@@ -38,7 +38,7 @@ describe("tool.glob", () => {
           path: undefined,
         },
         ctx,
-      )
+      );
       expect(result.metadata).toMatchObject({
         truncated: false,
         count: 2,

@@ -88,7 +88,7 @@ export namespace ToolRegistry {
     return {}
   }
 
-  function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {
+  export function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {
     if (!schema || visited.has(schema)) {
       return schema
     }

@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai"
 import { unique } from "remeda"
+import { ToolRegistry } from "../tool/registry"
 
 export namespace ProviderTransform {
   function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
@@ -80,5 +81,22 @@ export namespace ProviderTransform {
   export function topP(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 1
     return undefined
+  }
+
+  export function tools(tools: any, providerID: string, modelID: string) {
+    if (providerID === "google" || modelID.includes("gemini")) {
+      // Apply Gemini-specific tool transformations
+      return Object.fromEntries(
+        Object.entries(tools).map(([key, tool]: [string, any]) => [
+          key,
+          {
+            ...tool,
+            // Apply sanitizeGeminiParameters to the tool's input schema
+            inputSchema: tool.inputSchema ? ToolRegistry.sanitizeGeminiParameters(tool.inputSchema) : tool.inputSchema
+          }
+        ])
+      )
+    }
+    return tools
   }
 }
