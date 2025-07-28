@@ -1,5 +1,5 @@
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
 
 import * as vscode from "vscode"
 
@@ -36,7 +36,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(
+    openTerminalDisposable,
+    addFilepathDisposable,
+    openNewTerminalDisposable
+  )
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -71,7 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
         await fetch(`http://localhost:${port}/app`)
         connected = true
         break
-      } catch (e) {}
+      } catch (e) { }
 
       tries--
     } while (tries > 0)
