@@ -233,6 +233,10 @@ export namespace Config {
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
+      include_co_authored_by: z
+        .boolean()
+        .optional()
+        .describe("Whether to include the co-authored-by opencode byline in git commits and pull requests"),
       experimental: z
         .object({
           hook: z
