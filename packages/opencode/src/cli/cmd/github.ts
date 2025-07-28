@@ -189,7 +189,7 @@ export const GithubInstallCommand = cmd({
         // match https or git pattern
         // ie. https://github.com/sst/opencode.git
         // ie. git@github.com:sst/opencode.git
-        const parsed = info.match(/git@github\.com:(.*)\.git/) ?? info.match(/github\.com\/(.*)\.git/)
+        const parsed = info.match(/git@github\.com:(.*)\.git/) ?? info.match(/https:\/\/github\.com\/(.*)\.git/)
         if (!parsed) {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
