@@ -1,9 +1,10 @@
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
 
 import * as vscode from "vscode"
 
 const TERMINAL_NAME = "opencode"
+let registeredExternalPort: number | null = null
 
 export function activate(context: vscode.ExtensionContext) {
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -25,18 +26,86 @@ export function activate(context: vscode.ExtensionContext) {
     const fileRef = getActiveFile()
     if (!fileRef) return
 
-    const terminal = vscode.window.activeTerminal
-    if (!terminal) return
+    await sendTextToTerminal(fileRef)
+  })
 
-    if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef)
-      terminal.show()
+  // Register command to connect to external terminal
+  let registerTerminalDisposable = vscode.commands.registerCommand("opencode.registerTerminal", async () => {
+    const port = await vscode.window.showInputBox({
+      prompt: "Enter port number for external terminal",
+      placeHolder: "e.g. 3000",
+      validateInput: (value) => {
+        const num = parseInt(value)
+        if (isNaN(num) || num < 1 || num > 65535) {
+          return "Please enter a valid port number (1-65535)"
+        }
+        return null
+      }
+    })
+
+    if (!port) return
+
+    const portNum = parseInt(port)
+
+    try {
+      const response = await fetch(`http://localhost:${portNum}/app`)
+      if (response.ok) {
+        registeredExternalPort = portNum
+        vscode.window.showInformationMessage(`Successfully connected to external terminal on port ${portNum}`)
+
+        const fileRef = getActiveFile()
+        if (fileRef) {
+          await sendTextToTerminal(`In ${fileRef}`)
+        }
+      } else {
+        vscode.window.showErrorMessage(`Failed to connect to terminal on port ${portNum}`)
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Unable to connect to terminal on port ${portNum}. Make sure the terminal is running.`)
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  let addProblemsDisposable = vscode.commands.registerCommand("opencode.addProblemsToTerminal", async () => {
+    let problems = vscode.languages.getDiagnostics()
+    if (!problems.length) {
+      vscode.window.showInformationMessage("No problems found in the workspace.")
+      return
+    }
+
+    let errors = []
+
+    for (const [uri, diagnostics] of problems) {
+      for (const diagnostic of diagnostics) {
+        if (diagnostic.severity === vscode.DiagnosticSeverity.Error) {
+          errors.push(diagnostic)
+        }
+      }
+    }
+
+    await sendTextToTerminal(JSON.stringify(errors));
+  });
+
+  context.subscriptions.push(
+    openTerminalDisposable,
+    addFilepathDisposable,
+    registerTerminalDisposable,
+    addProblemsDisposable
+  )
+
+  async function sendTextToTerminal(text: string) {
+    const terminal = vscode.window.activeTerminal
+
+    if (terminal && terminal.name === TERMINAL_NAME) {
+      // @ts-ignore
+      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
+      port ? await appendPrompt(parseInt(port), text) : terminal.sendText(text)
+      terminal.show()
+    } else if (registeredExternalPort) {
+      await appendPrompt(registeredExternalPort, text)
+    } else {
+      vscode.window.showWarningMessage("No opencode terminal or registered external terminal found")
+    }
+  }
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -71,7 +140,7 @@ export function activate(context: vscode.ExtensionContext) {
         await fetch(`http://localhost:${port}/app`)
         connected = true
         break
-      } catch (e) {}
+      } catch (e) { }
 
       tries--
     } while (tries > 0)
