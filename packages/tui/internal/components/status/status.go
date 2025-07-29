@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -24,6 +25,10 @@ func getCurrentGitBranch(cwd string) string {
 	return strings.TrimSpace(string(output))
 }
 
+type GitBranchUpdatedMsg struct {
+	Branch string
+}
+
 type StatusComponent interface {
 	tea.Model
 	tea.ViewModel
@@ -37,7 +42,7 @@ type statusComponent struct {
 }
 
 func (m statusComponent) Init() tea.Cmd {
-	return nil
+	return m.watchGitHead()
 }
 
 func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -45,6 +50,12 @@ func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		return m, nil
+	case GitBranchUpdatedMsg:
+		if m.branch != msg.Branch {
+			m.branch = msg.Branch
+		}
+		// Continue periodic checking
+		return m, m.watchGitHead()
 	}
 	return m, nil
 }
@@ -150,6 +161,12 @@ func (m statusComponent) View() string {
 	return blank + "\n" + status
 }
 
+func (m statusComponent) watchGitHead() tea.Cmd {
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		newBranch := getCurrentGitBranch(m.app.Info.Path.Cwd)
+		return GitBranchUpdatedMsg{Branch: newBranch}
+	})
+}
 func NewStatusCmp(app *app.App) StatusComponent {
 	statusComponent := &statusComponent{
 		app: app,
