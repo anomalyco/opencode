@@ -101,8 +101,9 @@ func main() {
 		panic(err)
 	}
 
+	tuiModel := tui.NewModel(app_).(*tui.Model)
 	program := tea.NewProgram(
-		tui.NewModel(app_),
+		tuiModel,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
@@ -132,6 +133,7 @@ func main() {
 	go func() {
 		sig := <-sigChan
 		slog.Info("Received signal, shutting down gracefully", "signal", sig)
+		tuiModel.Cleanup()
 		program.Quit()
 	}()
 
@@ -141,5 +143,6 @@ func main() {
 		slog.Error("TUI error", "error", err)
 	}
 
+	tuiModel.Cleanup()
 	slog.Info("TUI exited", "result", result)
 }

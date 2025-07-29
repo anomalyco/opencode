@@ -71,12 +71,11 @@ type Model struct {
 	symbolsProvider      completions.CompletionProvider
 	showCompletionDialog bool
 	leaderBinding        *key.Binding
-	// isLeaderSequence     bool
-	toastManager      *toast.ToastManager
-	interruptKeyState InterruptKeyState
-	exitKeyState      ExitKeyState
-	messagesRight     bool
-	fileViewer        fileviewer.Model
+	toastManager         *toast.ToastManager
+	interruptKeyState    InterruptKeyState
+	exitKeyState         ExitKeyState
+	messagesRight        bool
+	fileViewer           fileviewer.Model
 }
 
 func (a Model) Init() tea.Cmd {
@@ -596,6 +595,10 @@ func (a Model) View() string {
 		mainLayout = util.ConvertRGBToAnsi16Colors(mainLayout)
 	}
 	return mainLayout + "\n" + a.status.View()
+}
+
+func (a Model) Cleanup() {
+	a.status.Cleanup()
 }
 
 func (a Model) openFile(filepath string) (tea.Model, tea.Cmd) {
