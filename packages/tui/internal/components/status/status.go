@@ -3,12 +3,13 @@ package status
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
 	"github.com/charmbracelet/lipgloss/v2/compat"
+	"github.com/fsnotify/fsnotify"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/styles"
@@ -23,6 +24,24 @@ func getCurrentGitBranch(cwd string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(output))
+}
+
+func getGitRefFile(cwd string) string {
+	headFile := filepath.Join(cwd, ".git", "HEAD")
+	content, err := os.ReadFile(headFile)
+	if err != nil {
+		return ""
+	}
+
+	headContent := strings.TrimSpace(string(content))
+	if strings.HasPrefix(headContent, "ref: ") {
+		// HEAD points to a ref file
+		refPath := strings.TrimPrefix(headContent, "ref: ")
+		return filepath.Join(cwd, ".git", refPath)
+	}
+
+	// HEAD contains a direct commit hash
+	return headFile
 }
 
 type GitBranchUpdatedMsg struct {
@@ -54,7 +73,7 @@ func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.branch != msg.Branch {
 			m.branch = msg.Branch
 		}
-		// Continue periodic checking
+		// Restart watching for next change
 		return m, m.watchGitHead()
 	}
 	return m, nil
@@ -162,11 +181,70 @@ func (m statusComponent) View() string {
 }
 
 func (m statusComponent) watchGitHead() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
-		newBranch := getCurrentGitBranch(m.app.Info.Path.Cwd)
-		return GitBranchUpdatedMsg{Branch: newBranch}
-	})
+	return func() tea.Msg {
+		gitDir := filepath.Join(m.app.Info.Path.Cwd, ".git")
+		headFile := filepath.Join(gitDir, "HEAD")
+
+		// Check if .git exists and is a directory
+		if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
+			return GitBranchUpdatedMsg{Branch: ""}
+		}
+
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
+		}
+
+		// Watch .git/HEAD
+		err = watcher.Add(headFile)
+		if err != nil {
+			watcher.Close()
+			return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
+		}
+
+		// Also watch the ref file if HEAD points to a ref
+		refFile := getGitRefFile(m.app.Info.Path.Cwd)
+		if refFile != headFile && refFile != "" {
+			// Only add if it's different from HEAD and exists
+			if _, err := os.Stat(refFile); err == nil {
+				watcher.Add(refFile) // Ignore error, HEAD watching is sufficient
+			}
+		}
+
+		// Start watching and return initial branch
+		go func() {
+			// This will be handled by waitForGitChange
+		}()
+
+		return tea.Batch(
+			func() tea.Msg { return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)} },
+			m.waitForGitChange(watcher),
+		)
+	}
 }
+func (m statusComponent) waitForGitChange(watcher *fsnotify.Watcher) tea.Cmd {
+	return func() tea.Msg {
+		defer watcher.Close()
+
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
+				}
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
+				}
+			case _, ok := <-watcher.Errors:
+				if !ok {
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
+				}
+				// Continue watching even on errors
+			}
+		}
+	}
+}
+
 func NewStatusCmp(app *app.App) StatusComponent {
 	statusComponent := &statusComponent{
 		app: app,
