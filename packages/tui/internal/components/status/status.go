@@ -13,6 +13,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
+	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -67,29 +68,56 @@ func (m *statusComponent) logo() string {
 		Render
 
 	open := base("open")
-	code := emphasis("code ")
-	version := base(m.app.Version)
+	code := emphasis("code")
+	version := base(" " + m.app.Version)
+
+	content := open + code
+	if m.width > 40 {
+		content += version
+	}
 	return styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Padding(0, 1).
-		Render(open + code + version)
+		Render(content)
+}
+
+func (m *statusComponent) collapsePath(path string, maxWidth int) string {
+	if lipgloss.Width(path) <= maxWidth {
+		return path
+	}
+
+	const ellipsis = ".."
+	ellipsisLen := len(ellipsis)
+
+	if maxWidth <= ellipsisLen {
+		if maxWidth > 0 {
+			return "..."[:maxWidth]
+		}
+		return ""
+	}
+
+	separator := string(filepath.Separator)
+	parts := strings.Split(path, separator)
+
+	if len(parts) == 1 {
+		return path[:maxWidth-ellipsisLen] + ellipsis
+	}
+
+	truncatedPath := parts[len(parts)-1]
+	for i := len(parts) - 2; i >= 0; i-- {
+		part := parts[i]
+		if len(truncatedPath)+len(separator)+len(part)+ellipsisLen > maxWidth {
+			return ellipsis + separator + truncatedPath
+		}
+		truncatedPath = part + separator + truncatedPath
+	}
+	return truncatedPath
 }
 
 func (m *statusComponent) View() string {
 	t := theme.CurrentTheme()
 	logo := m.logo()
-
-	// Build cwd display with git branch if available
-	cwdDisplay := m.cwd
-	if m.branch != "" {
-		cwdDisplay += " 🌿 " + m.branch
-	}
-
-	cwd := styles.NewStyle().
-		Foreground(t.TextMuted()).
-		Background(t.BackgroundPanel()).
-		Padding(0, 1).
-		Render(cwdDisplay)
+	logoWidth := lipgloss.Width(logo)
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
@@ -139,20 +167,48 @@ func (m *statusComponent) View() string {
 		BorderBackground(t.BackgroundPanel()).
 		Render(mode)
 
-	mode = styles.NewStyle().
+	faintStyle := styles.NewStyle().
 		Faint(true).
 		Background(t.BackgroundPanel()).
+		Foreground(t.TextMuted())
+	mode = faintStyle.Render(key+" ") + mode
+	modeWidth := lipgloss.Width(mode)
+
+	availableWidth := m.width - logoWidth - modeWidth
+	branchSuffix := ""
+	if m.branch != "" {
+		branchSuffix = ":" + m.branch
+	}
+
+	maxCwdWidth := availableWidth - lipgloss.Width(branchSuffix)
+	cwdDisplay := m.collapsePath(m.cwd, maxCwdWidth)
+
+	if m.branch != "" && availableWidth > lipgloss.Width(cwdDisplay)+lipgloss.Width(branchSuffix) {
+		cwdDisplay += faintStyle.Render(branchSuffix)
+	}
+
+	cwd := styles.NewStyle().
 		Foreground(t.TextMuted()).
-		Render(key+" ") +
-		mode
+		Background(t.BackgroundPanel()).
+		Padding(0, 1).
+		Render(cwdDisplay)
 
-	space := max(
-		0,
-		m.width-lipgloss.Width(logo)-lipgloss.Width(cwd)-lipgloss.Width(mode),
+	background := t.BackgroundPanel()
+	status := layout.Render(
+		layout.FlexOptions{
+			Background: &background,
+			Direction:  layout.Row,
+			Justify:    layout.JustifySpaceBetween,
+			Align:      layout.AlignStretch,
+			Width:      m.width,
+		},
+		layout.FlexItem{
+			View: logo + cwd,
+		},
+		layout.FlexItem{
+			View: mode,
+		},
 	)
-	spacer := styles.NewStyle().Background(t.BackgroundPanel()).Width(space).Render("")
-
-	status := logo + cwd + spacer + mode
 
 	blank := styles.NewStyle().Background(t.Background()).Width(m.width).Render("")
 	return blank + "\n" + status
