@@ -61,7 +61,7 @@ type statusComponent struct {
 }
 
 func (m statusComponent) Init() tea.Cmd {
-	return m.watchGitHead()
+	return m.startGitWatcher()
 }
 
 func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -73,8 +73,8 @@ func (m statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.branch != msg.Branch {
 			m.branch = msg.Branch
 		}
-		// Restart watching for next change
-		return m, m.watchGitHead()
+		// Restart watcher to continue watching for changes
+		return m, m.watchForGitChanges()
 	}
 	return m, nil
 }
@@ -180,7 +180,14 @@ func (m statusComponent) View() string {
 	return blank + "\n" + status
 }
 
-func (m statusComponent) watchGitHead() tea.Cmd {
+func (m statusComponent) startGitWatcher() tea.Cmd {
+	return tea.Batch(
+		func() tea.Msg { return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)} },
+		m.watchForGitChanges(),
+	)
+}
+
+func (m statusComponent) watchForGitChanges() tea.Cmd {
 	return func() tea.Msg {
 		gitDir := filepath.Join(m.app.Info.Path.Cwd, ".git")
 		headFile := filepath.Join(gitDir, "HEAD")
@@ -194,11 +201,11 @@ func (m statusComponent) watchGitHead() tea.Cmd {
 		if err != nil {
 			return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
 		}
+		defer watcher.Close()
 
 		// Watch .git/HEAD
 		err = watcher.Add(headFile)
 		if err != nil {
-			watcher.Close()
 			return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)}
 		}
 
@@ -211,21 +218,7 @@ func (m statusComponent) watchGitHead() tea.Cmd {
 			}
 		}
 
-		// Start watching and return initial branch
-		go func() {
-			// This will be handled by waitForGitChange
-		}()
-
-		return tea.Batch(
-			func() tea.Msg { return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Cwd)} },
-			m.waitForGitChange(watcher),
-		)
-	}
-}
-func (m statusComponent) waitForGitChange(watcher *fsnotify.Watcher) tea.Cmd {
-	return func() tea.Msg {
-		defer watcher.Close()
-
+		// Wait for a single change, then return
 		for {
 			select {
 			case event, ok := <-watcher.Events:
