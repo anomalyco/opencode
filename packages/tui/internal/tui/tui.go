@@ -276,6 +276,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
+		if keyString == "ctrl+alt+c" {
+			updatedMessages, cmd := a.messages.CopySelection()
+			a.messages = updatedMessages.(chat.MessagesComponent)
+			cmds = append(cmds, cmd)
+			return a, tea.Batch(cmds...)
+		}
+
 		// Fallback: suspend if ctrl+z is pressed and no user keybind matched
 		if keyString == "ctrl+z" {
 			return a, tea.Suspend

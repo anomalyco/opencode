@@ -31,6 +31,7 @@ type MessagesComponent interface {
 	GotoTop() (tea.Model, tea.Cmd)
 	GotoBottom() (tea.Model, tea.Cmd)
 	CopyLastMessage() (tea.Model, tea.Cmd)
+	CopySelection() (tea.Model, tea.Cmd)
 }
 
 type messagesComponent struct {
@@ -801,6 +802,20 @@ func (m *messagesComponent) CopyLastMessage() (tea.Model, tea.Cmd) {
 	cmds = append(cmds, app.SetClipboard(lastTextPart.Text))
 	cmds = append(cmds, toast.NewSuccessToast("Message copied to clipboard"))
 	return m, tea.Batch(cmds...)
+}
+
+func (m *messagesComponent) CopySelection() (tea.Model, tea.Cmd) {
+	if m.selection != nil && len(m.clipboard) > 0 {
+		content := strings.Join(m.clipboard, "\n")
+		m.selection = nil
+		m.clipboard = []string{}
+		return m, tea.Sequence(
+			m.renderView(),
+			app.SetClipboard(content),
+			toast.NewSuccessToast("Copied to clipboard"),
+		)
+	}
+	return m, nil
 }
 
 func NewMessagesComponent(app *app.App) MessagesComponent {
