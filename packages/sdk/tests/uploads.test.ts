@@ -51,7 +51,7 @@ describe('toFile', () => {
   });
 
   it('extracts a file name from a ReadStream', async () => {
-    const input = fs.createReadStream('tests/uploads.test.ts');
+    const input = fs.createReadStream(__filename);
     const file = await toFile(input);
     expect(file.name).toEqual('uploads.test.ts');
   });

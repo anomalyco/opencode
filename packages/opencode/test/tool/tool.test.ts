@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { App } from "../../src/app/app"
 import { GlobTool } from "../../src/tool/glob"
 import { ListTool } from "../../src/tool/ls"
+import path from "path"
 
 const ctx = {
   sessionID: "test",
@@ -12,9 +13,12 @@ const ctx = {
 const glob = await GlobTool.init()
 const list = await ListTool.init()
 
+const projectRoot = path.join(__dirname, "../..")
+const fixturePath = path.join(__dirname, "../fixtures/example")
+
 describe("tool.glob", () => {
   test("truncate", async () => {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await App.provide({ cwd: projectRoot }, async () => {
       let result = await glob.execute(
         {
           pattern: "../../node_modules/**/*",
@@ -26,7 +30,7 @@ describe("tool.glob", () => {
     })
   })
   test("basic", async () => {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await App.provide({ cwd: projectRoot }, async () => {
       let result = await glob.execute(
         {
           pattern: "*.json",
@@ -44,9 +48,12 @@ describe("tool.glob", () => {
 
 describe("tool.ls", () => {
   test("basic", async () => {
-    const result = await App.provide({ cwd: process.cwd() }, async () => {
-      return await list.execute({ path: "./example", ignore: [".git"] }, ctx)
+    const result = await App.provide({ cwd: projectRoot }, async () => {
+      return await list.execute({ path: fixturePath, ignore: [".git"] }, ctx)
     })
-    expect(result.output).toMatchSnapshot()
+
+    // Normalize absolute path to relative for consistent snapshots
+    const normalizedOutput = result.output.replace(fixturePath, "packages/opencode/test/fixtures/example")
+    expect(normalizedOutput).toMatchSnapshot()
   })
 })
