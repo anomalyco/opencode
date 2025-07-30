@@ -48,24 +48,24 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const isImage = isImageFile(filePath)
-    
+
     if (isImage) {
       // Handle image files by processing and returning them as base64 data URL
       const buffer = await file.arrayBuffer()
-      
+
       // Process image to resize/compress if needed
       const processedBuffer = await ImageProcessor.process(buffer)
       const base64 = processedBuffer.toString("base64")
       const mimeType = ImageProcessor.getMimeType(processedBuffer)
       const dataUrl = `data:${mimeType};base64,${base64}`
-      
+
       const output = `<image>\n${dataUrl}\n</image>`
       const preview = `Image file: ${path.basename(filePath)} (${isImage})`
-      
+
       // just warms the lsp client
       await LSP.touchFile(filePath, true)
       FileTime.read(ctx.sessionID, filePath)
-      
+
       return {
         title: path.relative(App.info().path.root, filePath),
         output,
@@ -125,5 +125,3 @@ function isImageFile(filePath: string): string | false {
       return false
   }
 }
-
-
