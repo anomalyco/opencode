@@ -182,6 +182,7 @@ func renderText(
 	showToolDetails bool,
 	width int,
 	extra string,
+	fileParts []opencode.FilePart,
 	toolCalls ...opencode.ToolPart,
 ) string {
 	t := theme.CurrentTheme()
@@ -197,19 +198,15 @@ func renderText(
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
 		text = ansi.WordwrapWc(text, width-6, " -")
-		lines := strings.Split(text, "\n")
-		for i, line := range lines {
-			words := strings.Fields(line)
-			for i, word := range words {
-				if strings.HasPrefix(word, "@") {
-					words[i] = base.Foreground(t.Secondary()).Render(word + " ")
-				} else {
-					words[i] = base.Render(word + " ")
-				}
-			}
-			lines[i] = strings.Join(words, "")
+
+		// Build list of attachment filenames for highlighting
+		for _, filePart := range fileParts {
+			atFilename := "@" + filePart.Filename
+			// Find and highlight complete @filename references
+			highlightStyle := base.Foreground(t.Secondary())
+			text = strings.ReplaceAll(text, atFilename, highlightStyle.Render(atFilename))
 		}
-		text = strings.Join(lines, "\n")
+
 		content = base.Width(width - 6).Render(text)
 	}
 

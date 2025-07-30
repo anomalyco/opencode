@@ -347,6 +347,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								files,
+								fileParts,
 							)
 							content = lipgloss.PlaceHorizontal(
 								m.width,
@@ -424,6 +425,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 									m.showToolDetails,
 									width,
 									"",
+									[]opencode.FilePart{},
 									toolCallParts...,
 								)
 								content = lipgloss.PlaceHorizontal(
@@ -443,6 +445,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								"",
+								[]opencode.FilePart{},
 								toolCallParts...,
 							)
 							content = lipgloss.PlaceHorizontal(
