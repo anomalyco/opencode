@@ -45,6 +45,72 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+## Troubleshooting
+
+### Credential Loop Issue
+
+If you're stuck in a credential loop when adding a custom provider (like Cerebras), this usually happens when the provider configuration is incomplete. Here's how to fix it:
+
+1. **Complete the auth setup**: Make sure you've successfully added the credential using `opencode auth login` and selected **Other**.
+
+2. **Configure the provider**: The credential alone isn't enough. You must also configure the provider in your `opencode.json` file with the correct `npm` package, `baseURL`, and models.
+
+3. **Use the correct npm package**: 
+   - For Cerebras: Use `@ai-sdk/cerebras` (not `@ai-sdk/openai-compatible`)
+   - For most other OpenAI-compatible providers: Use `@ai-sdk/openai-compatible`
+
+4. **Example working configuration**:
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "cerebras/qwen-3-235b-a22b",
+     "provider": {
+       "cerebras": {
+         "npm": "@ai-sdk/cerebras",
+         "name": "Cerebras",
+         "options": {
+           "baseURL": "https://api.cerebras.ai/v1"
+         },
+         "models": {
+           "qwen-3-235b-a22b": {
+             "name": "Qwen-3-235b-a22b"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+### Global vs Local Configuration
+
+opencode looks for configuration in this order:
+
+1. **Local config**: `./opencode.json` in your current project directory
+2. **Global config**: `~/.local/share/opencode/auth.json` (credentials only)
+
+:::tip
+If you want to use a provider globally, add the provider configuration to a local `opencode.json` file in each project where you want to use it. The credentials from the global auth file will be automatically used.
+:::
+
+**Best practice**: 
+- Store credentials globally using `opencode auth login`
+- Store provider configurations locally in each project's `opencode.json`
+
+### Common Configuration Mistakes
+
+1. **Wrong npm package**: Using `@ai-sdk/openai-compatible` when a specific package exists (like `@ai-sdk/cerebras`)
+
+2. **Missing baseURL**: Always include the correct API endpoint in the `options.baseURL` field
+
+3. **Incomplete model configuration**: Make sure to define at least one model in the `models` object
+
+4. **API key format**: Different providers use different API key prefixes:
+   - OpenAI: `sk-...`
+   - Cerebras: `csk-...`
+   - Anthropic: Uses OAuth (no manual key needed)
+
+---
+
 ## Directory
 
 Let's look at some of the providers in detail. If you'd like to add a provider to the
@@ -374,15 +440,13 @@ https://platform.openai.com/api-keys
 
 ---
 
-### Custom
+### Cerebras
 
-To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:
+Cerebras offers fast inference with generous free tiers and competitive pricing.
 
-:::tip
-You can use any OpenAI-compatible provider with opencode.
-:::
+1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
 
-1. Scroll down to **Other**.
+2. Run `opencode auth login` and select **Other**.
 
    ```bash
    $ opencode auth login
@@ -395,68 +459,376 @@ You can use any OpenAI-compatible provider with opencode.
    └
    ```
 
-2. Enter the ID for the provider.
+3. Enter `cerebras` as the provider ID.
 
    ```bash
    $ opencode auth login
    
-   ┌  Add credential
-   │
-   ◆  Select provider
-   │  ...
-   │  ● Other
-   │
-   ◇  Enter provider id
-   │  _
-   └
-   ```
-
-   You can use any ID you want, we'll use this later in the opencode config.
-
-3. Add the API keys for the provider.
-
-   ```bash
-   $ opencode auth login
- 
    ┌  Add credential
    │
    ◇  Select provider
    │  Other
    │
    ◇  Enter provider id
-   │  coolnewprovider
-   │
-   ▲  This only stores a credential for coolnewprovider - you will need configure it in opencode.json, check the docs for examples.
-   │
-   ◆  Enter your API key
-   │  _
+   │  cerebras
    └
    ```
 
-4. Configure the provider in your [opencode config](/docs/config).
+4. Enter your Cerebras API key.
 
-   ```json title="opencode.json" "coolnewprovider" {7,9-11}
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Enter your API key
+   │  csk-...
+   └
+   ```
+
+5. Configure Cerebras in your opencode config.
+
+   ```json title="opencode.json" "cerebras" {5-19}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
-       "coolnewprovider": {
-         "npm": "@ai-sdk/openai-compatible",
+       "cerebras": {
+         "npm": "@ai-sdk/cerebras",
+         "name": "Cerebras",
          "options": {
-           "baseURL": "https://api.newaicompany.com/v1"
+           "baseURL": "https://api.cerebras.ai/v1"
          },
          "models": {
-           "newmodel-m1-0711-preview": {}
+           "qwen-3-235b-a22b": {
+             "name": "Qwen-3-235b-a22b"
+           },
+           "llama-3.3-70b": {
+             "name": "Llama-3.3-70b"
+           }
          }
        }
      }
    }
    ```
 
-   A couple of things to note here:
+6. Run the `/models` command to select a Cerebras model.
 
-   - We are using the provider ID we entered earlier, `coolnewprovider` in
-   this example.
-   - The `baseURL` is the OpenAI-compatible endpoint for the provider.
-   - And we are listing the models we want to use. This will show up when we run
-     the `/models` command.
+---
+
+### DeepSeek
+
+DeepSeek offers powerful reasoning models at competitive prices.
+
+1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Other**.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+3. Enter `deepseek` as the provider ID.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Other
+   │
+   ◇  Enter provider id
+   │  deepseek
+   └
+   ```
+
+4. Enter your DeepSeek API key.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+5. Configure DeepSeek in your opencode config.
+
+   ```json title="opencode.json" "deepseek" {5-17}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "deepseek": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "DeepSeek",
+         "options": {
+           "baseURL": "https://api.deepseek.com/v1"
+         },
+         "models": {
+           "deepseek-reasoner": {
+             "name": "DeepSeek Reasoner"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+6. Run the `/models` command to select a DeepSeek model.
+
+---
+
+### Moonshot AI (Kimi)
+
+Moonshot AI offers the Kimi models with long context capabilities.
+
+1. Head over to the [Moonshot AI console](https://platform.moonshot.cn/), create an account, and generate an API key.
+
+2. Run `opencode auth login` and select **Other**.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+3. Enter `moonshot` as the provider ID.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Other
+   │
+   ◇  Enter provider id
+   │  moonshot
+   └
+   ```
+
+4. Enter your Moonshot API key.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+5. Configure Moonshot in your opencode config.
+
+   ```json title="opencode.json" "moonshot" {5-17}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "moonshot": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Moonshot AI",
+         "options": {
+           "baseURL": "https://api.moonshot.cn/v1"
+         },
+         "models": {
+           "kimi-k2-0711-preview": {
+             "name": "Kimi K2"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+6. Run the `/models` command to select a Kimi model.
+
+---
+
+### Custom
+
+To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:
+
+:::tip
+You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+:::
+
+#### Step 1: Add Credentials
+
+1. Run `opencode auth login` and scroll down to **Other**.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. Enter a unique ID for the provider (use lowercase, no spaces).
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   Choose a memorable ID - you'll use this in your config file.
+   :::
+
+3. Enter your API key for the provider.
+
+   ```bash
+   $ opencode auth login
+   
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+#### Step 2: Configure Provider
+
+Create or update your `opencode.json` file in your project directory:
+
+```json title="opencode.json" "myprovider" {5-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI Provider",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1"
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Configuration Options
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `npm` | AI SDK package to use | ✅ |
+| `name` | Display name in UI | ✅ |
+| `options.baseURL` | API endpoint URL | ✅ |
+| `models` | Available models | ✅ |
+| `options.apiKey` | API key (if not using auth) | ❌ |
+
+#### Common Examples
+
+**Together AI:**
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "together": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Together AI",
+      "options": {
+        "baseURL": "https://api.together.xyz/v1"
+      },
+      "models": {
+        "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo": {
+          "name": "Llama 3.2 11B Vision"
+        }
+      }
+    }
+  }
+}
+```
+
+**Fireworks AI:**
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "fireworks": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Fireworks AI",
+      "options": {
+        "baseURL": "https://api.fireworks.ai/inference/v1"
+      },
+      "models": {
+        "accounts/fireworks/models/llama-v3p1-70b-instruct": {
+          "name": "Llama 3.1 70B"
+        }
+      }
+    }
+  }
+}
+```
+
+**Local API (with custom headers):**
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Local API",
+      "options": {
+        "baseURL": "http://localhost:8000/v1",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "local-model": {
+          "name": "Local Model"
+        }
+      }
+    }
+  }
+}
+```
+
+#### Step 3: Select Model
+
+Run the `/models` command to select your custom provider's model:
+
+```bash
+$ opencode
+> /models
+```
+
+Your custom provider and models will appear in the selection list.
+
+#### Tips
+
+- **Provider ID**: Use lowercase letters and hyphens only (e.g., `my-provider`)
+- **Model names**: Use the exact model ID from the provider's API documentation
+- **Base URL**: Always include the full path (usually ending in `/v1`)
+- **Testing**: Start with one model to test the configuration before adding more
 
