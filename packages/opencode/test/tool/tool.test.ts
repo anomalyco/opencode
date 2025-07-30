@@ -21,8 +21,8 @@ describe("tool.glob", () => {
     await App.provide({ cwd: projectRoot }, async () => {
       let result = await glob.execute(
         {
-          pattern: "../../node_modules/**/*",
-          path: undefined,
+          pattern: "**/*",
+          path: "../../node_modules",
         },
         ctx,
       )
