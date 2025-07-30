@@ -46,7 +46,7 @@ export namespace Session {
   const log = Log.create({ service: "session" })
 
   const OUTPUT_TOKEN_MAX = 32_000
-  const AUTO_COMPACT_TOKEN_THRESHOLD = 80_000
+  const AUTO_COMPACT_TOKEN_THRESHOLD_PERCENTAGE = 0.8
 
   function estimateTokensFromMessages(messages: { info: MessageV2.Info; parts: MessageV2.Part[] }[]): number {
     let totalChars = 0
@@ -66,12 +66,19 @@ export namespace Session {
         } else if (part.type === "tool" && part.state.status === "completed") {
           totalChars += JSON.stringify(part.state.input).length
           totalChars += part.state.output.length
+        } else if (part.type === "file") {
+          // File content can be substantial, count it
+          totalChars += part.filename ? part.filename.length : 0
+          // Base64 data URL content is counted too (though compressed)
+          if (part.url && part.url.startsWith("data:")) {
+            totalChars += part.url.length * 0.75 // Account for base64 overhead
+          }
         }
       }
     }
     
-    // Estimate tokens as chars/4
-    return Math.ceil(totalChars / 4)
+    // Use more conservative estimate: chars/3 instead of chars/4 to be safer
+    return Math.ceil(totalChars / 3)
   }
 
   export const Info = z
@@ -631,10 +638,16 @@ export namespace Session {
       }
     }
 
-    // auto compact if estimated tokens exceed 80k threshold
+    // auto compact if estimated tokens exceed percentage threshold of model context limit
     const estimatedTokens = estimateTokensFromMessages(msgs)
-    if (estimatedTokens > AUTO_COMPACT_TOKEN_THRESHOLD) {
-      log.info("auto-compact triggered", { estimatedTokens, threshold: AUTO_COMPACT_TOKEN_THRESHOLD })
+    const compactThreshold = model.info.limit.context * AUTO_COMPACT_TOKEN_THRESHOLD_PERCENTAGE
+    if (estimatedTokens > compactThreshold) {
+      log.info("auto-compact triggered", {
+        estimatedTokens,
+        threshold: compactThreshold,
+        modelContextLimit: model.info.limit.context,
+        percentage: AUTO_COMPACT_TOKEN_THRESHOLD_PERCENTAGE,
+      })
       await summarize({
         sessionID: input.sessionID,
         providerID: input.providerID,
@@ -1104,6 +1117,34 @@ export namespace Session {
           log.error("", {
             error: e,
           })
+          
+          // Check if this is a token limit error and attempt auto-compaction
+          const errorMessage = e instanceof Error ? e.message : String(e)
+          const isTokenLimitError = (
+            (errorMessage.includes("prompt token count") && errorMessage.includes("exceeds") && errorMessage.includes("limit")) ||
+            (errorMessage.includes("token") && errorMessage.includes("limit") && errorMessage.includes("exceed")) ||
+            (errorMessage.includes("context length") && errorMessage.includes("exceed"))
+          )
+          if (isTokenLimitError) {
+            log.info("Token limit exceeded, attempting auto-compaction", { 
+              error: errorMessage,
+              sessionID: assistantMsg.sessionID 
+            })
+            try {
+              await summarizePrefix({
+                sessionID: assistantMsg.sessionID,
+                providerID: assistantMsg.providerID,
+                modelID: assistantMsg.modelID,
+              }, Math.floor(model.limit.context * 0.6)) // Safe token limit: 60% of model context
+              // Note: We can't retry automatically here since we don't have access to the original input
+              // The user will need to retry their request, but now with compacted history
+              log.info("Auto-compaction completed, user can retry their request")
+            } catch (compactError) {
+              log.error("Auto-compaction failed", { error: compactError })
+              // Fall through to normal error handling
+            }
+          }
+          
           switch (true) {
             case e instanceof DOMException && e.name === "AbortError":
               assistantMsg.error = new MessageV2.AbortedError(
@@ -1286,6 +1327,121 @@ export namespace Session {
       ],
     })
 
+    const result = await processor.process(stream)
+    return result
+  }
+  
+  // New function for prefix-limited summarization to avoid token limit errors during compaction
+  export async function summarizePrefix(input: { sessionID: string; providerID: string; modelID: string }, maxTokens: number = 120_000) {
+    using abort = lock(input.sessionID)
+    const msgs = await messages(input.sessionID)
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
+    const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
+    
+    // Calculate safe prefix based on token estimate
+    const maxChars = maxTokens * 3 // Conservative estimate: 3 chars per token
+    let totalChars = 0
+    const prefixMessages: { info: MessageV2.Info; parts: MessageV2.Part[] }[] = []
+    
+    // Take messages from the END (most recent) up to our limit
+    for (let i = filtered.length - 1; i >= 0; i--) {
+      const msg = filtered[i]
+      let msgChars = 0
+      
+      // Count characters in system prompts
+      if (msg.info.role === "assistant" && msg.info.system) {
+        for (const systemMsg of msg.info.system) {
+          msgChars += systemMsg.length
+        }
+      }
+      
+      // Count characters in message parts
+      for (const part of msg.parts) {
+        if (part.type === "text") {
+          msgChars += part.text.length
+        } else if (part.type === "tool" && part.state.status === "completed") {
+          msgChars += JSON.stringify(part.state.input).length
+          msgChars += part.state.output.length
+        } else if (part.type === "file") {
+          msgChars += part.filename ? part.filename.length : 0
+          if (part.url && part.url.startsWith("data:")) {
+            msgChars += part.url.length * 0.75
+          }
+        }
+      }
+      
+      // If adding this message would exceed our limit, stop
+      if (totalChars + msgChars > maxChars && prefixMessages.length > 0) {
+        break
+      }
+      
+      prefixMessages.unshift(msg) // Add to beginning since we're going backwards
+      totalChars += msgChars
+    }
+    
+    log.info("Prefix compaction", { 
+      totalMessages: filtered.length, 
+      prefixMessages: prefixMessages.length,
+      estimatedChars: totalChars,
+      estimatedTokens: Math.ceil(totalChars / 3)
+    })
+    
+    const model = await Provider.getModel(input.providerID, input.modelID)
+    const app = App.info()
+    const system = [
+      ...SystemPrompt.summarize(input.providerID),
+      ...(await SystemPrompt.environment()),
+      ...(await SystemPrompt.custom()),
+    ]
+    const next: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      role: "assistant",
+      sessionID: input.sessionID,
+      system,
+      mode: "build",
+      path: {
+        cwd: app.path.cwd,
+        root: app.path.root,
+      },
+      summary: true,
+      cost: 0,
+      modelID: input.modelID,
+      providerID: input.providerID,
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      time: {
+        created: Date.now(),
+      },
+    }
+    await updateMessage(next)
+    const processor = createProcessor(next, model.info)
+    const stream = streamText({
+      maxRetries: 10,
+      abortSignal: abort.signal,
+      model: model.language,
+      messages: [
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
+        ...MessageV2.toModelMessage(prefixMessages), // Use prefix instead of full filtered
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Provide a detailed but concise summary of our recent conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
+            },
+          ],
+        },
+      ],
+    })
     const result = await processor.process(stream)
     return result
   }
