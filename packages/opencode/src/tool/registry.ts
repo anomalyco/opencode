@@ -74,7 +74,8 @@ export namespace ToolRegistry {
       modelID.toLowerCase().includes("qwen") ||
       modelID.includes("gpt-") ||
       modelID.includes("o1") ||
-      modelID.includes("o3")
+      modelID.includes("o3") ||
+      modelID.includes("codex")
     ) {
       return {
         patch: false,
