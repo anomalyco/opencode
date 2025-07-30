@@ -6,6 +6,7 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { App } from "../app/app"
+import { ImageProcessor } from "../util/image"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -49,10 +50,13 @@ export const ReadTool = Tool.define("read", {
     const isImage = isImageFile(filePath)
     
     if (isImage) {
-      // Handle image files by returning them as base64 data URL
+      // Handle image files by processing and returning them as base64 data URL
       const buffer = await file.arrayBuffer()
-      const base64 = Buffer.from(buffer).toString("base64")
-      const mimeType = getMimeType(isImage)
+      
+      // Process image to resize/compress if needed
+      const processedBuffer = await ImageProcessor.process(buffer)
+      const base64 = processedBuffer.toString("base64")
+      const mimeType = ImageProcessor.getMimeType(processedBuffer)
       const dataUrl = `data:${mimeType};base64,${base64}`
       
       const output = `<image>\n${dataUrl}\n</image>`
@@ -63,10 +67,10 @@ export const ReadTool = Tool.define("read", {
       FileTime.read(ctx.sessionID, filePath)
       
       return {
+        title: path.relative(App.info().path.root, filePath),
         output,
         metadata: {
           preview,
-          title: path.relative(App.info().path.root, filePath),
         },
       }
     }
@@ -122,21 +126,4 @@ function isImageFile(filePath: string): string | false {
   }
 }
 
-function getMimeType(imageType: string): string {
-  switch (imageType) {
-    case "JPEG":
-      return "image/jpeg"
-    case "PNG":
-      return "image/png"
-    case "GIF":
-      return "image/gif"
-    case "BMP":
-      return "image/bmp"
-    case "SVG":
-      return "image/svg+xml"
-    case "WebP":
-      return "image/webp"
-    default:
-      return "application/octet-stream"
-  }
-}
+
