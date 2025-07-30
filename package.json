@@ -8,7 +8,8 @@
     "dev": "bun run packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
     "stainless": "./scripts/stainless",
-    "postinstall": "./scripts/hooks"
+    "postinstall": "./scripts/hooks",
+    "build:install": "./scripts/build.sh"
   },
   "workspaces": {
     "packages": [

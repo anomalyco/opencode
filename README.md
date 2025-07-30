@@ -86,6 +86,29 @@ $ bun install
 $ bun run packages/opencode/src/index.ts
 ```
 
+#### Building and Installing Locally
+
+For development and testing, you can build and install opencode locally:
+
+```bash
+# Build and install for your platform
+bun run build:install <platform>
+
+# Examples:
+bun run build:install darwin-arm64     # macOS Apple Silicon
+bun run build:install darwin-x64      # macOS Intel
+bun run build:install linux-arm64     # Linux ARM64
+bun run build:install linux-x64       # Linux x64
+```
+
+Available platforms:
+
+- `linux-arm64`, `linux-x64`, `linux-x64-baseline`
+- `darwin-arm64`, `darwin-x64`
+- `windows-x64`
+
+This will build the project and install the binary to `~/.opencode/bin/opencode`, allowing you to test your changes locally.
+
 #### Development Notes
 
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.
