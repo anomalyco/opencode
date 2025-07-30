@@ -6,9 +6,14 @@ import pkg from "../package.json"
 
 const dry = process.argv.includes("--dry")
 const snapshot = process.argv.includes("--snapshot")
+const rc = process.argv.includes("--rc")
+
+const shortcode = async () => await $`git rev-parse HEAD`.text().then(x => x.trim().slice(0, 7))
 
 const version = snapshot
   ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  : rc
+  ? `${pkg.version}-rc${await shortcode()}`
   : await $`git describe --tags --abbrev=0`
       .text()
       .then((x) => x.substring(1).trim())
@@ -37,7 +42,7 @@ const targets = [
 await $`rm -rf dist`
 
 const optionalDependencies: Record<string, string> = {}
-const npmTag = snapshot ? "snapshot" : "latest"
+const npmTag = snapshot ? "snapshot" : rc ? "rc" : "latest"
 for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
   const name = `${pkg.name}-${os}-${arch}`
@@ -85,7 +90,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 if (!dry) await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${npmTag}`
 
-if (!snapshot) {
+if (!snapshot && !rc) {
   // Github Release
   for (const key of Object.keys(optionalDependencies)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`

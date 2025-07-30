@@ -34,6 +34,7 @@ The build process creates artifacts for the following platforms:
 
 - `--dry` - Perform a dry run without actually publishing packages or creating releases
 - `--snapshot` - Create a snapshot release with timestamp-based version (format: `0.0.0-YYYYMMDDHHMM`)
+- `--rc` - Create a release candidate with current version + git commit hash (format: `0.0.5-rcabcd123`)
 
 #### Snapshot Versions
 
@@ -45,11 +46,25 @@ Snapshot versions are temporary builds used for testing and development. They:
 - Are useful for testing builds before creating official releases
 - Can be installed with `npm install opencode-ai@snapshot`
 
+#### Release Candidate Versions
+
+Release candidate versions are pre-release builds that use the current package version with an RC suffix:
+
+- Use current version + RC + 7-character git commit hash (e.g., `0.0.5-rcabcd123`)
+- Are published to npm with the `rc` tag instead of `latest`
+- Don't create GitHub releases, AUR packages, or Homebrew formula updates
+- Are useful for testing specific versions before full releases
+- Can be installed with `npm install opencode-ai@rc`
+- The git hash ensures the version corresponds to the exact code being built
+
 ### Usage
 
 ```bash
-# Build and test locally (equivalent to: bun run publish --snapshot --dry)
+# Build and test locally (equivalent to: bun run publish --rc --dry)
 bun run build
+
+# Publish a release candidate
+bun run publish --rc
 
 # Publish a snapshot release
 bun run publish --snapshot
@@ -62,8 +77,8 @@ bun run publish
 
 The build process uses two main commands:
 
-- **`bun run build`** - This is a shorthand for `bun run publish --snapshot --dry`
-  - `--snapshot`: Creates a timestamp-based version for testing
+- **`bun run build`** - This is a shorthand for `bun run publish --rc --dry`
+  - `--rc`: Creates a release candidate with current version + git commit hash
   - `--dry`: Performs a dry run without actually publishing anything
 - **`bun run publish`** - Actually publishes packages and creates releases.
   Short hand for `./script/publish.ts`.
@@ -74,11 +89,11 @@ This separation allows you to safely test the build process before publishing.
 
 The script performs the following steps:
 
-1. **Version determination**: Uses git tags for releases or timestamp for snapshots
+1. **Version determination**: Uses git tags for releases, timestamp for snapshots, or current version + git hash for RC
 2. **Cross-platform builds**: Builds for Linux, macOS, and Windows (x64/arm64)
 3. **Package creation**: Creates platform-specific npm packages with optional dependencies
-4. **Publishing**: Publishes to npm with appropriate tags (`latest` or `snapshot`)
-5. **Release artifacts** (non-snapshot only):
+4. **Publishing**: Publishes to npm with appropriate tags (`latest`, `snapshot`, or `rc`)
+5. **Release artifacts** (non-snapshot and non-RC only):
    - Creates GitHub release with changelog
    - Updates AUR packages (`opencode` and `opencode-bin`)
    - Updates Homebrew formula in `sst/homebrew-tap`

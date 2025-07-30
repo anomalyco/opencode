@@ -7,7 +7,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bun run ./src/index.ts",
-    "build": "bun run ./script/publish.ts --snapshot --dry",
+    "build": "bun run ./script/publish.ts --rc --dry",
     "publish": "bun run ./script/publish.ts"
   },
   "bin": {
