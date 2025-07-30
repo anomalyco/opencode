@@ -34,6 +34,7 @@
         "@clack/prompts": "0.11.0",
         "@hono/zod-validator": "0.4.2",
         "@modelcontextprotocol/sdk": "1.15.1",
+        "@octokit/graphql": "9.0.1",
         "@octokit/rest": "22.0.0",
         "@openauthjs/openauth": "0.4.3",
         "@standard-schema/spec": "1.0.0",
