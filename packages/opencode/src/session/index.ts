@@ -46,6 +46,33 @@ export namespace Session {
   const log = Log.create({ service: "session" })
 
   const OUTPUT_TOKEN_MAX = 32_000
+  const AUTO_COMPACT_TOKEN_THRESHOLD = 80_000
+
+  function estimateTokensFromMessages(messages: { info: MessageV2.Info; parts: MessageV2.Part[] }[]): number {
+    let totalChars = 0
+    
+    for (const msg of messages) {
+      // Count characters in system prompts
+      if (msg.info.role === "assistant" && msg.info.system) {
+        for (const systemMsg of msg.info.system) {
+          totalChars += systemMsg.length
+        }
+      }
+      
+      // Count characters in message parts
+      for (const part of msg.parts) {
+        if (part.type === "text") {
+          totalChars += part.text.length
+        } else if (part.type === "tool" && part.state.status === "completed") {
+          totalChars += JSON.stringify(part.state.input).length
+          totalChars += part.state.output.length
+        }
+      }
+    }
+    
+    // Estimate tokens as chars/4
+    return Math.ceil(totalChars / 4)
+  }
 
   export const Info = z
     .object({
@@ -602,6 +629,18 @@ export namespace Session {
         })
         return chat(input)
       }
+    }
+
+    // auto compact if estimated tokens exceed 80k threshold
+    const estimatedTokens = estimateTokensFromMessages(msgs)
+    if (estimatedTokens > AUTO_COMPACT_TOKEN_THRESHOLD) {
+      log.info("auto-compact triggered", { estimatedTokens, threshold: AUTO_COMPACT_TOKEN_THRESHOLD })
+      await summarize({
+        sessionID: input.sessionID,
+        providerID: input.providerID,
+        modelID: input.modelID,
+      })
+      return chat(input)
     }
 
     using abort = lock(input.sessionID)
