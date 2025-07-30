@@ -35,21 +35,40 @@ The build process creates artifacts for the following platforms:
 - `--dry` - Perform a dry run without actually publishing packages or creating releases
 - `--snapshot` - Create a snapshot release with timestamp-based version (format: `0.0.0-YYYYMMDDHHMM`)
 
+#### Snapshot Versions
+
+Snapshot versions are temporary builds used for testing and development. They:
+
+- Use timestamp-based versioning (e.g., `0.0.0-202412151430` for Dec 15, 2024 at 14:30)
+- Are published to npm with the `snapshot` tag instead of `latest`
+- Don't create GitHub releases, AUR packages, or Homebrew formula updates
+- Are useful for testing builds before creating official releases
+- Can be installed with `npm install opencode-ai@snapshot`
+
 ### Usage
 
 ```bash
-# Dry run to test the build process
-./script/publish.ts --dry
+# Build and test locally (equivalent to: bun run publish --snapshot --dry)
+bun run build
 
-# Create a snapshot release (dry run)
-./script/publish.ts --snapshot --dry
+# Publish a snapshot release
+bun run publish --snapshot
 
-# Create a snapshot release
-./script/publish.ts --snapshot
-
-# Create a full release (requires git tag)
-./script/publish.ts
+# Publish a full release (requires git tag)
+bun run publish
 ```
+
+### Publishing
+
+The build process uses two main commands:
+
+- **`bun run build`** - This is a shorthand for `bun run publish --snapshot --dry`
+  - `--snapshot`: Creates a timestamp-based version for testing
+  - `--dry`: Performs a dry run without actually publishing anything
+- **`bun run publish`** - Actually publishes packages and creates releases.
+  Short hand for `./script/publish.ts`.
+
+This separation allows you to safely test the build process before publishing.
 
 ### Build Process
 
