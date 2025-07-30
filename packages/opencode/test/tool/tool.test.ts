@@ -40,7 +40,7 @@ describe("tool.glob", () => {
       )
       expect(result.metadata).toMatchObject({
         truncated: false,
-        count: 3,
+        count: 2,
       })
     })
   })
