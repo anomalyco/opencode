@@ -134,15 +134,18 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseReleaseMsg:
-		if m.selection != nil && len(m.clipboard) > 0 {
-			content := strings.Join(m.clipboard, "\n")
+		if m.selection != nil {
 			m.selection = nil
-			m.clipboard = []string{}
-			return m, tea.Sequence(
-				m.renderView(),
-				app.SetClipboard(content),
-				toast.NewSuccessToast("Copied to clipboard"),
-			)
+			if len(m.clipboard) > 0 {
+				content := strings.Join(m.clipboard, "\n")
+				m.clipboard = []string{}
+				return m, tea.Sequence(
+					m.renderView(),
+					app.SetClipboard(content),
+					toast.NewSuccessToast("Copied to clipboard"),
+				)
+			}
+			return m, m.renderView()
 		}
 	case tea.WindowSizeMsg:
 		effectiveWidth := msg.Width - 4
