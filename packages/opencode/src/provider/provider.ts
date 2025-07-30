@@ -1,15 +1,15 @@
+import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { mergeDeep, sortBy } from "remeda"
 import z from "zod"
 import { App } from "../app/app"
-import { Config } from "../config/config"
-import { mergeDeep, sortBy } from "remeda"
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
-import { Log } from "../util/log"
-import { BunProc } from "../bun"
+import { Auth } from "../auth"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
-import { ModelsDev } from "./models"
+import { BunProc } from "../bun"
+import { Config } from "../config/config"
 import { NamedError } from "../util/error"
-import { Auth } from "../auth"
+import { Log } from "../util/log"
+import { ModelsDev } from "./models"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -118,6 +118,15 @@ export namespace Provider {
       }
     },
     openai: async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string) {
+          return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
+    azure: async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string) {
