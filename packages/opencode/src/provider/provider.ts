@@ -1,15 +1,15 @@
-import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
-import { mergeDeep, sortBy } from "remeda"
 import z from "zod"
 import { App } from "../app/app"
-import { Auth } from "../auth"
+import { Config } from "../config/config"
+import { mergeDeep, sortBy } from "remeda"
+import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
+import { Log } from "../util/log"
+import { BunProc } from "../bun"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
-import { BunProc } from "../bun"
-import { Config } from "../config/config"
-import { NamedError } from "../util/error"
-import { Log } from "../util/log"
 import { ModelsDev } from "./models"
+import { NamedError } from "../util/error"
+import { Auth } from "../auth"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
