@@ -12,6 +12,7 @@ import { NamedError } from "../util/error"
 import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
+import os from "node:os"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 
 export namespace Config {
@@ -366,7 +367,9 @@ export namespace Config {
       const configDir = path.dirname(configPath)
       for (const match of fileMatches) {
         const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        const homeDir = os.homedir()
+        const expFilePath = homeDir ? filePath.replace(/^~(?=$|\/|\\)/, homeDir) : filePath;
+        const resolvedPath = path.isAbsolute(expFilePath) ? expFilePath : path.resolve(configDir, expFilePath)
         const fileContent = await Bun.file(resolvedPath).text()
         text = text.replace(match, JSON.stringify(fileContent))
       }
