@@ -93,7 +93,7 @@ export const BashTool = Tool.define("bash", {
 
     if (needsAsk) {
       await Permission.ask({
-        id: "basj",
+        id: "bash",
         sessionID: ctx.sessionID,
         title: params.command,
         metadata: {
