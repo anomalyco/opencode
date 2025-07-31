@@ -577,6 +577,10 @@ export namespace Session {
       await updatePart(part)
     }
 
+    // mark session as updated
+    // used for session list sorting (indicates when session was most recently interacted with)
+    await update(input.sessionID, (_draft) => {})
+
     if (isLocked(input.sessionID)) {
       return new Promise((resolve) => {
         const queue = state().queued.get(input.sessionID) ?? []
