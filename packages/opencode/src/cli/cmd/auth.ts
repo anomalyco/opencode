@@ -61,17 +61,45 @@ export const AuthListCommand = cmd({
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${activeEnvVars.length} environment variables`)
+      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
     }
   },
 })
 
 export const AuthLoginCommand = cmd({
-  command: "login",
+  command: "login [url]",
   describe: "log in to a provider",
-  async handler() {
-    UI.empty()
+  builder: (yargs) =>
+    yargs.positional("url", {
+      describe: "opencode auth provider",
+      type: "string",
+    }),
+  async handler(args) {
     prompts.intro("Add credential")
+    if (args.url) {
+      const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
+      prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+      const proc = Bun.spawn({
+        cmd: wellknown.auth.command,
+        stdout: "pipe",
+      })
+      const exit = await proc.exited
+      if (exit !== 0) {
+        prompts.log.error("Failed")
+        prompts.outro("Done")
+        return
+      }
+      const token = await new Response(proc.stdout).text()
+      await Auth.set(args.url, {
+        type: "wellknown",
+        key: wellknown.auth.env,
+        token: token.trim(),
+      })
+      prompts.log.success("Logged into " + args.url)
+      prompts.outro("Done")
+      return
+    }
+    UI.empty()
     const providers = await ModelsDev.get()
     const priority: Record<string, number> = {
       anthropic: 0,

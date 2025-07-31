@@ -9,7 +9,7 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return relative(parent, child).startsWith("..")
+    return !relative(parent, child).startsWith("..")
   }
 
   export async function findUp(target: string, start: string, stop?: string) {

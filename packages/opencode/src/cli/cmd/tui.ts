@@ -113,7 +113,7 @@ export const TuiCommand = cmd({
         })
 
         ;(async () => {
-          if (Installation.VERSION === "dev") return
+          if (Installation.isDev()) return
           if (Installation.isSnapshot()) return
           const config = await Config.global()
           if (config.autoupdate === false) return

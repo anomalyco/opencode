@@ -1,17 +1,9 @@
-// Bun Snapshot v1, https://goo.gl/fbAQLP
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`tool.ls basic 1`] = `
-"- /home/thdxr/dev/projects/sst/opencode/js/example/
-  - home/
-    - thdxr/
-      - dev/
-        - projects/
-          - sst/
-            - opencode/
-              - js/
-                - example/
-                  - ink.tsx
-                  - broken.ts
-                  - cli.ts
+"packages/opencode/test/fixtures/example/
+  broken.ts
+  cli.ts
+  ink.tsx
 "
 `;

@@ -9,157 +9,47 @@ opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.
 
 ## Providers
 
-You can configure providers in your opencode config under the `provider` section.
-
----
-
-### Defaults
-
 Most popular providers are preloaded by default. If you've added the credentials for a provider through `opencode auth login`, they'll be available when you start opencode.
 
+Learn more about [providers](/docs/providers).
+
 ---
 
-### Custom
+## Select a model
 
-You can add custom providers by specifying the npm package for the provider and the models you want to use.
+Once you've configured your provider you can select the model you want by typing in:
 
-```json title="opencode.json" {5,9-11}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "moonshot": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "https://api.moonshot.ai/v1"
-      },
-      "models": {
-        "kimi-k2-0711-preview": {}
-      }
-    }
-  }
-}
+```bash frame="none"
+/models
 ```
 
 ---
 
-### Base URL
+## Recommended models
 
-You can customize the base URL for any provider by setting the `baseURL` option. This is useful when using proxy services or custom endpoints.
+There are a lot of models out there, with new models coming out every week.
 
-```json title="opencode.json" {6}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "anthropic": {
-      "options": {
-        "baseURL": "https://api.anthropic.com/v1"
-      }
-    }
-  }
-}
-```
+:::tip
+Consider using one of the models we recommend.
+:::
 
----
+However, there are a only a few of them that are good at both generating code and tool calling.
 
-### OpenRouter
+Here are the ones we recommend with opencode:
 
-Many OpenRouter models are preloaded by default - you can customize these or add your own.
-
-Here's an example of specifying a provider
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "moonshotai/kimi-k2": {
-          "options": {
-            "provider": {
-              "order": ["baseten"],
-              "allow_fallbacks": false
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-You can also add additional models
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "somecoolnewmodel": {},
-      }
-    }
-  }
-}
-```
+- Claude Sonnet 4
+- Claude Opus 4
+- Kimi K2
+- Qwen3 Coder
+- GPT 4.1
+- Gemini 2.5 Pro
 
 ---
 
-### Local
+## Set a default
 
-You can configure local model like ones served through LM Studio or Ollama. To
-do so, you'll need to specify a couple of things.
-
-Here's an example of configuring a local model from LM Studio:
-
-```json title="opencode.json" {4-15}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "lmstudio": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "LM Studio (local)",
-      "options": {
-        "baseURL": "http://127.0.0.1:1234/v1"
-      },
-      "models": {
-        "google/gemma-3n-e4b": {
-          "name": "Gemma 3n-e4b (local)"
-        }
-      }
-    }
-  }
-}
-```
-
-In this example:
-
-- `lmstudio` is the custom provider ID. We'll use this later.
-- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
-- `name` is the display name for the provider in the UI.
-- `options.baseURL` is the endpoint for the local server.
-- `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
-
-Similarly, to configure a local model from Ollama:
-
-```json title="opencode.json" {5,7}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "ollama": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "http://localhost:11434/v1"
-      },
-      "models": {
-        "llama2": {}
-      }
-    }
-  }
-}
-```
-
-To set one of these as the default model, you can set the `model` key at the
-root.
+To set one of these as the default model, you can set the `model` key in your
+opencode config.
 
 ```json title="opencode.json" {3}
 {
@@ -168,17 +58,9 @@ root.
 }
 ```
 
-Here the full ID is `provider_id/model_id`, where `provider_id` is the key in the `provider` list we set above and `model_id` is the key from the `provider.models` list.
+Here the full ID is `provider_id/model_id`.
 
----
-
-## Select a model
-
-If you have multiple models, you can select the model you want by typing in:
-
-```bash frame="none"
-/models
-```
+If you've configured a [custom provider](/docs/providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
 
 ---
 

@@ -50,7 +50,11 @@ You can switch between modes during a session using the _Tab_ key. Or your confi
 
 ## Configure
 
-You can customize the built-in modes or create your own in the opencode [config](/docs/config).
+You can customize the built-in modes or create your own through configuration. Modes can be configured in two ways:
+
+### JSON Configuration
+
+Configure modes in your `opencode.json` config file:
 
 ```json title="opencode.json"
 {
@@ -77,7 +81,35 @@ You can customize the built-in modes or create your own in the opencode [config]
 }
 ```
 
-Let's look at these options in detail.
+### Markdown Configuration
+
+You can also define modes using markdown files. Place them in:
+
+- Global: `~/.config/opencode/mode/`
+- Project: `.opencode/mode/`
+
+```markdown title="~/.config/opencode/mode/review.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+You are in code review mode. Focus on:
+- Code quality and best practices
+- Potential bugs and edge cases
+- Performance implications
+- Security considerations
+
+Provide constructive feedback without making direct changes.
+```
+
+The markdown file name becomes the mode name (e.g., `review.md` creates a `review` mode).
+
+Let's look at these configuration options in detail.
 
 ---
 
@@ -208,7 +240,9 @@ Here are all the tools can be controlled through the mode config.
 
 ## Custom modes
 
-You can create your own custom modes by adding them to the `mode` configuration. For example, a documentation mode that focuses on reading and analysis.
+You can create your own custom modes by adding them to the configuration. Here are examples using both approaches:
+
+### Using JSON configuration
 
 ```json title="opencode.json" {4-14}
 {
@@ -227,6 +261,54 @@ You can create your own custom modes by adding them to the `mode` configuration.
     }
   }
 }
+```
+
+### Using markdown files
+
+Create mode files in `.opencode/mode/` for project-specific modes or `~/.config/opencode/mode/` for global modes:
+
+```markdown title=".opencode/mode/debug.md"
+---
+temperature: 0.1
+tools:
+  bash: true
+  read: true
+  grep: true
+  write: false
+  edit: false
+---
+
+You are in debug mode. Your primary goal is to help investigate and diagnose issues.
+
+Focus on:
+- Understanding the problem through careful analysis
+- Using bash commands to inspect system state
+- Reading relevant files and logs
+- Searching for patterns and anomalies
+- Providing clear explanations of findings
+
+Do not make any changes to files. Only investigate and report.
+```
+
+```markdown title="~/.config/opencode/mode/refactor.md"
+---
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.2
+tools:
+  edit: true
+  read: true
+  grep: true
+  glob: true
+---
+
+You are in refactoring mode. Focus on improving code quality without changing functionality.
+
+Priorities:
+- Improve code readability and maintainability
+- Apply consistent naming conventions
+- Reduce code duplication
+- Optimize performance where appropriate
+- Ensure all tests continue to pass
 ```
 
 ---

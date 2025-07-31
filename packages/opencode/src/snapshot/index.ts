@@ -94,6 +94,13 @@ export namespace Snapshot {
     }
   }
 
+  export async function diff(hash: string) {
+    const app = App.info()
+    const git = gitdir()
+    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(app.path.root).text()
+    return result.trim()
+  }
+
   function gitdir() {
     const app = App.info()
     return path.join(app.path.data, "snapshots")

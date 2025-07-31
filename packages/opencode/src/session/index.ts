@@ -67,6 +67,7 @@ export namespace Session {
           messageID: z.string(),
           partID: z.string().optional(),
           snapshot: z.string().optional(),
+          diff: z.string().optional(),
         })
         .optional(),
     })
@@ -255,7 +256,10 @@ export namespace Session {
   }
 
   export async function getMessage(sessionID: string, messageID: string) {
-    return Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID)
+    return {
+      info: await Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID),
+      parts: await getParts(sessionID, messageID),
+    }
   }
 
   export async function getParts(sessionID: string, messageID: string) {
@@ -289,6 +293,9 @@ export namespace Session {
   export function abort(sessionID: string) {
     const controller = state().pending.get(sessionID)
     if (!controller) return false
+    log.info("aborting", {
+      sessionID,
+    })
     controller.abort()
     state().pending.delete(sessionID)
     return true
@@ -373,6 +380,36 @@ export namespace Session {
     l.info("chatting")
 
     const inputMode = input.mode ?? "build"
+
+    // Process revert cleanup first, before creating new messages
+    const session = await get(input.sessionID)
+    if (session.revert) {
+      let msgs = await messages(input.sessionID)
+      const messageID = session.revert.messageID
+      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+      msgs = preserve
+      for (const msg of remove) {
+        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
+      }
+      const last = preserve.at(-1)
+      if (session.revert.partID && last) {
+        const partID = session.revert.partID
+        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+        last.parts = preserveParts
+        for (const part of removeParts) {
+          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }
+      }
+      await update(input.sessionID, (draft) => {
+        draft.revert = undefined
+      })
+    }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -539,7 +576,9 @@ export namespace Session {
     for (const part of userParts) {
       await updatePart(part)
     }
-    // mark session as updated since a message has been added to it
+
+    // mark session as updated
+    // used for session list sorting (indicates when session was most recently interacted with)
     await update(input.sessionID, (_draft) => {})
 
     if (isLocked(input.sessionID)) {
@@ -558,30 +597,6 @@ export namespace Session {
 
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
-    const session = await get(input.sessionID)
-
-    if (session.revert) {
-      const messageID = session.revert.messageID
-      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-      msgs = preserve
-      for (const msg of remove) {
-        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
-        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
-      }
-      const last = preserve.at(-1)
-      if (session.revert.partID && last) {
-        const partID = session.revert.partID
-        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
-        last.parts = preserveParts
-        for (const part of removeParts) {
-          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
-          await Bus.publish(MessageV2.Event.PartRemoved, {
-            messageID: last.info.id,
-            partID: part.id,
-          })
-        }
-      }
-    }
 
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
@@ -640,7 +655,7 @@ export namespace Session {
             return Session.update(input.sessionID, (draft) => {
               const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
               const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-              draft.title = title
+              draft.title = title.trim()
             })
         })
         .catch(() => {})
@@ -706,6 +721,7 @@ export namespace Session {
             sessionID: input.sessionID,
             abort: abort.signal,
             messageID: assistantMsg.id,
+            toolCallID: options.toolCallId,
             metadata: async (val) => {
               const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
@@ -761,7 +777,11 @@ export namespace Session {
     }
 
     const stream = streamText({
-      onError() {},
+      onError(e) {
+        log.error("streamText error", {
+          error: e,
+        })
+      },
       async prepareStep({ messages }) {
         const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
         if (queue.length) {
@@ -808,7 +828,7 @@ export namespace Session {
           messages,
         }
       },
-      maxRetries: 10,
+      maxRetries: 3,
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
@@ -882,7 +902,7 @@ export namespace Session {
 
               case "tool-input-start":
                 const part = await updatePart({
-                  id: Identifier.ascending("part"),
+                  id: toolCalls[value.id]?.id ?? Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
                   type: "tool",
@@ -1026,20 +1046,20 @@ export namespace Session {
                 }
                 break
 
-              case "text":
+              case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
-                  await updatePart(currentText)
+                  if (currentText.text) await updatePart(currentText)
                 }
                 break
 
               case "text-end":
-                if (currentText && currentText.text) {
+                if (currentText) {
+                  currentText.text = currentText.text.trimEnd()
                   currentText.time = {
                     start: Date.now(),
                     end: Date.now(),
                   }
-                  currentText.text = currentText.text.trimEnd()
                   await updatePart(currentText)
                 }
                 currentText = undefined
@@ -1160,6 +1180,7 @@ export namespace Session {
       const session = await get(input.sessionID)
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
+      if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
       return update(input.sessionID, (draft) => {
         draft.revert = revert
       })

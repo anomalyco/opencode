@@ -1,21 +1,13 @@
 #!/usr/bin/env bun
-
+const dir = new URL("..", import.meta.url).pathname
+process.chdir(dir)
 import { $ } from "bun"
 
 import pkg from "../package.json"
 
-const dry = process.argv.includes("--dry")
-const snapshot = process.argv.includes("--snapshot")
-
-const version = snapshot
-  ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  : await $`git describe --tags --abbrev=0`
-      .text()
-      .then((x) => x.substring(1).trim())
-      .catch(() => {
-        console.error("tag not found")
-        process.exit(1)
-      })
+const dry = process.env["OPENCODE_DRY"] === "true"
+const version = process.env["OPENCODE_VERSION"]!
+const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 
 console.log(`publishing ${version}`)
 
@@ -26,12 +18,13 @@ const GOARCH: Record<string, string> = {
 }
 
 const targets = [
+  ["windows", "x64"],
   ["linux", "arm64"],
   ["linux", "x64"],
   ["linux", "x64-baseline"],
   ["darwin", "x64"],
+  ["darwin", "x64-baseline"],
   ["darwin", "arm64"],
-  ["windows", "x64"],
 ]
 
 await $`rm -rf dist`
@@ -59,7 +52,7 @@ for (const [os, arch] of targets) {
       2,
     ),
   )
-  if (!dry) await $`cd dist/${name} && bun publish --access public --tag ${npmTag}`
+  if (!dry) await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${npmTag}`
   optionalDependencies[name] = version
 }
 

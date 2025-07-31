@@ -28,5 +28,9 @@
       "type": "local",
       "command": ["opencode", "x", "@h1deya/mcp-server-weather"]
     }
+  },
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
   }
 }

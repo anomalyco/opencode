@@ -3,6 +3,7 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -22,16 +23,17 @@ import (
 )
 
 type blockRenderer struct {
-	textColor        compat.AdaptiveColor
-	border           bool
-	borderColor      *compat.AdaptiveColor
-	borderColorRight bool
-	paddingTop       int
-	paddingBottom    int
-	paddingLeft      int
-	paddingRight     int
-	marginTop        int
-	marginBottom     int
+	textColor     compat.AdaptiveColor
+	border        bool
+	borderColor   *compat.AdaptiveColor
+	borderLeft    bool
+	borderRight   bool
+	paddingTop    int
+	paddingBottom int
+	paddingLeft   int
+	paddingRight  int
+	marginTop     int
+	marginBottom  int
 }
 
 type renderingOption func(*blockRenderer)
@@ -54,10 +56,26 @@ func WithBorderColor(color compat.AdaptiveColor) renderingOption {
 	}
 }
 
-func WithBorderColorRight(color compat.AdaptiveColor) renderingOption {
+func WithBorderLeft() renderingOption {
 	return func(c *blockRenderer) {
-		c.borderColorRight = true
-		c.borderColor = &color
+		c.borderLeft = true
+		c.borderRight = false
+	}
+}
+
+func WithBorderRight() renderingOption {
+	return func(c *blockRenderer) {
+		c.borderLeft = false
+		c.borderRight = true
+	}
+}
+
+func WithBorderBoth(value bool) renderingOption {
+	return func(c *blockRenderer) {
+		if value {
+			c.borderLeft = true
+			c.borderRight = true
+		}
 	}
 }
 
@@ -116,6 +134,8 @@ func renderContentBlock(
 	renderer := &blockRenderer{
 		textColor:     t.TextMuted(),
 		border:        true,
+		borderLeft:    true,
+		borderRight:   false,
 		paddingTop:    1,
 		paddingBottom: 1,
 		paddingLeft:   2,
@@ -144,19 +164,17 @@ func renderContentBlock(
 			BorderStyle(lipgloss.ThickBorder()).
 			BorderLeft(true).
 			BorderRight(true).
-			BorderLeftForeground(borderColor).
+			BorderLeftForeground(t.BackgroundPanel()).
 			BorderLeftBackground(t.Background()).
 			BorderRightForeground(t.BackgroundPanel()).
 			BorderRightBackground(t.Background())
 
-		if renderer.borderColorRight {
-			style = style.
-				BorderLeftBackground(t.Background()).
-				BorderLeftForeground(t.BackgroundPanel()).
-				BorderRightForeground(borderColor).
-				BorderRightBackground(t.Background())
+		if renderer.borderLeft {
+			style = style.BorderLeftForeground(borderColor)
 		}
-
+		if renderer.borderRight {
+			style = style.BorderRightForeground(borderColor)
+		}
 	}
 
 	content = style.Render(content)
@@ -182,6 +200,7 @@ func renderText(
 	showToolDetails bool,
 	width int,
 	extra string,
+	fileParts []opencode.FilePart,
 	toolCalls ...opencode.ToolPart,
 ) string {
 	t := theme.CurrentTheme()
@@ -197,19 +216,15 @@ func renderText(
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
 		text = ansi.WordwrapWc(text, width-6, " -")
-		lines := strings.Split(text, "\n")
-		for i, line := range lines {
-			words := strings.Fields(line)
-			for i, word := range words {
-				if strings.HasPrefix(word, "@") {
-					words[i] = base.Foreground(t.Secondary()).Render(word + " ")
-				} else {
-					words[i] = base.Render(word + " ")
-				}
-			}
-			lines[i] = strings.Join(words, "")
+
+		// Build list of attachment filenames for highlighting
+		for _, filePart := range fileParts {
+			atFilename := "@" + filePart.Filename
+			// Find and highlight complete @filename references
+			highlightStyle := base.Foreground(t.Secondary())
+			text = strings.ReplaceAll(text, atFilename, highlightStyle.Render(atFilename))
 		}
-		text = strings.Join(lines, "\n")
+
 		content = base.Width(width - 6).Render(text)
 	}
 
@@ -226,7 +241,7 @@ func renderText(
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
 		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
-			title := renderToolTitle(toolCall, width)
+			title := renderToolTitle(toolCall, width-2)
 			style := styles.NewStyle()
 			if toolCall.State.Status == opencode.ToolPartStateStatusError {
 				style = style.Foreground(t.Error())
@@ -250,7 +265,8 @@ func renderText(
 			content,
 			width,
 			WithTextColor(t.Text()),
-			WithBorderColorRight(t.Secondary()),
+			WithBorderColor(t.Secondary()),
+			WithBorderRight(),
 		)
 	case opencode.AssistantMessage:
 		return renderContentBlock(
@@ -266,6 +282,7 @@ func renderText(
 func renderToolDetails(
 	app *app.App,
 	toolCall opencode.ToolPart,
+	permission opencode.Permission,
 	width int,
 ) string {
 	measure := util.Measure("chat.renderToolDetails")
@@ -303,6 +320,39 @@ func renderToolDetails(
 	backgroundColor := t.BackgroundPanel()
 	borderColor := t.BackgroundPanel()
 	defaultStyle := styles.NewStyle().Background(backgroundColor).Width(width - 6).Render
+
+	permissionContent := ""
+	if permission.ID != "" {
+		borderColor = t.Warning()
+
+		base := styles.NewStyle().Background(backgroundColor)
+		text := base.Foreground(t.Text()).Bold(true).Render
+		muted := base.Foreground(t.TextMuted()).Render
+		permissionContent = "Permission required to run this tool:\n\n"
+		permissionContent += text(
+			"enter ",
+		) + muted(
+			"accept   ",
+		) + text(
+			"a",
+		) + muted(
+			" accept always   ",
+		) + text(
+			"esc",
+		) + muted(
+			" reject",
+		)
+
+	}
+
+	if permission.Metadata != nil {
+		metadata := toolCall.State.Metadata.(map[string]any)
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
+		maps.Copy(metadata, permission.Metadata)
+		toolCall.State.Metadata = metadata
+	}
 
 	if toolCall.State.Metadata != nil {
 		metadata := toolCall.State.Metadata.(map[string]any)
@@ -354,12 +404,20 @@ func renderToolDetails(
 					title := renderToolTitle(toolCall, width)
 					title = style.Render(title)
 					content := title + "\n" + body
+					if permissionContent != "" {
+						permissionContent = styles.NewStyle().
+							Background(backgroundColor).
+							Padding(1, 2).
+							Render(permissionContent)
+						content += "\n" + permissionContent
+					}
 					content = renderContentBlock(
 						app,
 						content,
 						width,
 						WithPadding(0),
 						WithBorderColor(borderColor),
+						WithBorderBoth(permission.ID != ""),
 					)
 					return content
 				}
@@ -420,7 +478,7 @@ func renderToolDetails(
 					data, _ := json.Marshal(item)
 					var toolCall opencode.ToolPart
 					_ = json.Unmarshal(data, &toolCall)
-					step := renderToolTitle(toolCall, width)
+					step := renderToolTitle(toolCall, width-2)
 					step = "∟ " + step
 					steps = append(steps, step)
 				}
@@ -463,7 +521,18 @@ func renderToolDetails(
 
 	title := renderToolTitle(toolCall, width)
 	content := title + "\n\n" + body
-	return renderContentBlock(app, content, width, WithBorderColor(borderColor))
+
+	if permissionContent != "" {
+		content += "\n\n\n" + permissionContent
+	}
+
+	return renderContentBlock(
+		app,
+		content,
+		width,
+		WithBorderColor(borderColor),
+		WithBorderBoth(permission.ID != ""),
+	)
 }
 
 func renderToolName(name string) string {
@@ -578,6 +647,10 @@ func renderToolTitle(
 	}
 
 	title = truncate.StringWithTail(title, uint(width-6), "...")
+	if toolCall.State.Error != "" {
+		t := theme.CurrentTheme()
+		title = styles.NewStyle().Foreground(t.Error()).Render(title)
+	}
 	return title
 }
 

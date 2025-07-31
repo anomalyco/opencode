@@ -97,7 +97,7 @@ export namespace Provider {
                     Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                 )
               }
-            } catch {}
+            } catch { }
             const headers: Record<string, string> = {
               ...init.headers,
               ...copilot.HEADERS,
@@ -118,6 +118,15 @@ export namespace Provider {
       }
     },
     openai: async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string) {
+          return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
+    azure: async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string) {
@@ -194,6 +203,17 @@ export namespace Provider {
         },
       }
     },
+    vercel: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "http-referer": "https://opencode.ai/",
+            "x-title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   const state = App.state("provider", async () => {
@@ -263,26 +283,26 @@ export namespace Provider {
           cost:
             !model.cost && !existing?.cost
               ? {
-                  input: 0,
-                  output: 0,
-                  cache_read: 0,
-                  cache_write: 0,
-                }
+                input: 0,
+                output: 0,
+                cache_read: 0,
+                cache_write: 0,
+              }
               : {
-                  cache_read: 0,
-                  cache_write: 0,
-                  ...existing?.cost,
-                  ...model.cost,
-                },
+                cache_read: 0,
+                cache_write: 0,
+                ...existing?.cost,
+                ...model.cost,
+              },
           options: {
             ...existing?.options,
             ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {
-              context: 0,
-              output: 0,
-            },
+            context: 0,
+            output: 0,
+          },
         }
         parsed.models[modelID] = parsedModel
       }

@@ -274,7 +274,7 @@ export const GithubInstallCommand = cmd({
 
         // Wait for installation
         s.message("Waiting for GitHub app to be installed")
-        const MAX_RETRIES = 60
+        const MAX_RETRIES = 120
         let retries = 0
         do {
           const installation = await getInstallation()

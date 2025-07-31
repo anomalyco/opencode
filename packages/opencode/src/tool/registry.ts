@@ -69,7 +69,14 @@ export namespace ToolRegistry {
         patch: false,
       }
     }
-    if (modelID.toLowerCase().includes("qwen")) {
+
+    if (
+      modelID.toLowerCase().includes("qwen") ||
+      modelID.includes("gpt-") ||
+      modelID.includes("o1") ||
+      modelID.includes("o3") ||
+      modelID.includes("codex")
+    ) {
       return {
         patch: false,
         todowrite: false,

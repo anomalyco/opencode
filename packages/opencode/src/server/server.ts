@@ -18,6 +18,7 @@ import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
+import { Permission } from "../permission"
 
 const ERRORS = {
   400: {
@@ -42,6 +43,10 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   export type Routes = ReturnType<typeof app>
+
+  export const Event = {
+    Connected: Bus.event("server.connected", z.object({})),
+  }
 
   function app() {
     const app = new Hono()
@@ -90,6 +95,7 @@ export namespace Server {
         "/event",
         describeRoute({
           description: "Get events",
+          operationId: "event.subscribe",
           responses: {
             200: {
               description: "Event stream",
@@ -109,7 +115,10 @@ export namespace Server {
           log.info("event connected")
           return streamSSE(c, async (stream) => {
             stream.writeSSE({
-              data: JSON.stringify({}),
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
             })
             const unsub = Bus.subscribeAll(async (event) => {
               await stream.writeSSE({
@@ -130,6 +139,7 @@ export namespace Server {
         "/app",
         describeRoute({
           description: "Get app info",
+          operationId: "app.get",
           responses: {
             200: {
               description: "200",
@@ -149,6 +159,7 @@ export namespace Server {
         "/app/init",
         describeRoute({
           description: "Initialize the app",
+          operationId: "app.init",
           responses: {
             200: {
               description: "Initialize the app",
@@ -169,6 +180,7 @@ export namespace Server {
         "/config",
         describeRoute({
           description: "Get config info",
+          operationId: "config.get",
           responses: {
             200: {
               description: "Get config info",
@@ -188,6 +200,7 @@ export namespace Server {
         "/session",
         describeRoute({
           description: "List all sessions",
+          operationId: "session.list",
           responses: {
             200: {
               description: "List of sessions",
@@ -209,6 +222,7 @@ export namespace Server {
         "/session",
         describeRoute({
           description: "Create a new session",
+          operationId: "session.create",
           responses: {
             ...ERRORS,
             200: {
@@ -230,6 +244,7 @@ export namespace Server {
         "/session/:id",
         describeRoute({
           description: "Delete a session and all its data",
+          operationId: "session.delete",
           responses: {
             200: {
               description: "Successfully deleted session",
@@ -256,6 +271,7 @@ export namespace Server {
         "/session/:id/init",
         describeRoute({
           description: "Analyze the app and create an AGENTS.md file",
+          operationId: "session.init",
           responses: {
             200: {
               description: "200",
@@ -292,6 +308,7 @@ export namespace Server {
         "/session/:id/abort",
         describeRoute({
           description: "Abort a session",
+          operationId: "session.abort",
           responses: {
             200: {
               description: "Aborted session",
@@ -317,6 +334,7 @@ export namespace Server {
         "/session/:id/share",
         describeRoute({
           description: "Share a session",
+          operationId: "session.share",
           responses: {
             200: {
               description: "Successfully shared session",
@@ -345,6 +363,7 @@ export namespace Server {
         "/session/:id/share",
         describeRoute({
           description: "Unshare the session",
+          operationId: "session.unshare",
           responses: {
             200: {
               description: "Successfully unshared session",
@@ -373,6 +392,7 @@ export namespace Server {
         "/session/:id/summarize",
         describeRoute({
           description: "Summarize the session",
+          operationId: "session.summarize",
           responses: {
             200: {
               description: "Summarized session",
@@ -408,6 +428,7 @@ export namespace Server {
         "/session/:id/message",
         describeRoute({
           description: "List messages for a session",
+          operationId: "session.messages",
           responses: {
             200: {
               description: "List of messages",
@@ -437,10 +458,45 @@ export namespace Server {
           return c.json(messages)
         },
       )
+      .get(
+        "/session/:id/message/:messageID",
+        describeRoute({
+          description: "Get a message from a session",
+          operationId: "session.message",
+          responses: {
+            200: {
+              description: "Message",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      info: MessageV2.Info,
+                      parts: MessageV2.Part.array(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+            messageID: z.string().openapi({ description: "Message ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          const message = await Session.getMessage(params.id, params.messageID)
+          return c.json(message)
+        },
+      )
       .post(
         "/session/:id/message",
         describeRoute({
           description: "Create and send a new message to a session",
+          operationId: "session.chat",
           responses: {
             200: {
               description: "Created message",
@@ -470,6 +526,7 @@ export namespace Server {
         "/session/:id/revert",
         describeRoute({
           description: "Revert a message",
+          operationId: "session.revert",
           responses: {
             200: {
               description: "Updated session",
@@ -499,6 +556,7 @@ export namespace Server {
         "/session/:id/unrevert",
         describeRoute({
           description: "Restore all reverted messages",
+          operationId: "session.unrevert",
           responses: {
             200: {
               description: "Updated session",
@@ -522,10 +580,42 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .post(
+        "/session/:id/permissions/:permissionID",
+        describeRoute({
+          description: "Respond to a permission request",
+          responses: {
+            200: {
+              description: "Permission processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+            permissionID: z.string(),
+          }),
+        ),
+        zValidator("json", z.object({ response: Permission.Response })),
+        async (c) => {
+          const params = c.req.valid("param")
+          const id = params.id
+          const permissionID = params.permissionID
+          Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
+          return c.json(true)
+        },
+      )
       .get(
         "/config/providers",
         describeRoute({
           description: "List all providers",
+          operationId: "config.providers",
           responses: {
             200: {
               description: "List of providers",
@@ -554,6 +644,7 @@ export namespace Server {
         "/find",
         describeRoute({
           description: "Find text in files",
+          operationId: "find.text",
           responses: {
             200: {
               description: "Matches",
@@ -586,6 +677,7 @@ export namespace Server {
         "/find/file",
         describeRoute({
           description: "Find files",
+          operationId: "find.files",
           responses: {
             200: {
               description: "File paths",
@@ -618,6 +710,7 @@ export namespace Server {
         "/find/symbol",
         describeRoute({
           description: "Find workspace symbols",
+          operationId: "find.symbols",
           responses: {
             200: {
               description: "Symbols",
@@ -645,6 +738,7 @@ export namespace Server {
         "/file",
         describeRoute({
           description: "Read a file",
+          operationId: "file.read",
           responses: {
             200: {
               description: "File content",
@@ -681,6 +775,7 @@ export namespace Server {
         "/file/status",
         describeRoute({
           description: "Get file status",
+          operationId: "file.status",
           responses: {
             200: {
               description: "File status",
@@ -701,6 +796,7 @@ export namespace Server {
         "/log",
         describeRoute({
           description: "Write a log entry to the server logs",
+          operationId: "app.log",
           responses: {
             200: {
               description: "Log entry written successfully",
@@ -750,6 +846,7 @@ export namespace Server {
         "/mode",
         describeRoute({
           description: "List all modes",
+          operationId: "app.modes",
           responses: {
             200: {
               description: "List of modes",
@@ -770,6 +867,7 @@ export namespace Server {
         "/tui/append-prompt",
         describeRoute({
           description: "Append prompt to the TUI",
+          operationId: "tui.appendPrompt",
           responses: {
             200: {
               description: "Prompt processed successfully",
@@ -793,6 +891,7 @@ export namespace Server {
         "/tui/open-help",
         describeRoute({
           description: "Open the help dialog",
+          operationId: "tui.openHelp",
           responses: {
             200: {
               description: "Help dialog opened successfully",
@@ -804,6 +903,120 @@ export namespace Server {
             },
           },
         }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/open-sessions",
+        describeRoute({
+          description: "Open the session dialog",
+          operationId: "tui.openSessions",
+          responses: {
+            200: {
+              description: "Session dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/open-themes",
+        describeRoute({
+          description: "Open the theme dialog",
+          operationId: "tui.openThemes",
+          responses: {
+            200: {
+              description: "Theme dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/open-models",
+        describeRoute({
+          description: "Open the model dialog",
+          operationId: "tui.openModels",
+          responses: {
+            200: {
+              description: "Model dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/submit-prompt",
+        describeRoute({
+          description: "Submit the prompt",
+          operationId: "tui.submitPrompt",
+          responses: {
+            200: {
+              description: "Prompt submitted successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/clear-prompt",
+        describeRoute({
+          description: "Clear the prompt",
+          operationId: "tui.clearPrompt",
+          responses: {
+            200: {
+              description: "Prompt cleared successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
+        "/tui/execute-command",
+        describeRoute({
+          description: "Execute a TUI command (e.g. switch_mode)",
+          operationId: "tui.executeCommand",
+          responses: {
+            200: {
+              description: "Command executed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            command: z.string(),
+          }),
+        ),
         async (c) => c.json(await callTui(c)),
       )
       .route("/tui/control", TuiRoute)

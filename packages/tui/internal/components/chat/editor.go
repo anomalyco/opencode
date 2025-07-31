@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -344,9 +345,13 @@ func (m *editorComponent) Content() string {
 		hint = base(keyText+" again") + muted(" to exit")
 	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
-		if m.interruptKeyInDebounce {
+		status := "working"
+		if m.app.CurrentPermission.ID != "" {
+			status = "waiting for permission"
+		}
+		if m.interruptKeyInDebounce && m.app.CurrentPermission.ID == "" {
 			hint = muted(
-				"working",
+				status,
 			) + m.spinner.View() + muted(
 				"  ",
 			) + base(
@@ -355,7 +360,10 @@ func (m *editorComponent) Content() string {
 				" interrupt",
 			)
 		} else {
-			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText) + muted(" interrupt")
+			hint = muted(status) + m.spinner.View()
+			if m.app.CurrentPermission.ID == "" {
+				hint += muted("  ") + base(keyText) + muted(" interrupt")
+			}
 		}
 	}
 
@@ -517,14 +525,18 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 
 	i := 0
 	for i < len(value) {
+		r, size := utf8.DecodeRuneInString(value[i:])
 		// Check if filepath and add attachment
-		if value[i] == '@' {
-			start := i + 1
+		if r == '@' {
+			start := i + size
 			end := start
-			for end < len(value) && value[end] != ' ' && value[end] != '\t' && value[end] != '\n' && value[end] != '\r' {
-				end++
+			for end < len(value) {
+				nextR, nextSize := utf8.DecodeRuneInString(value[end:])
+				if nextR == ' ' || nextR == '\t' || nextR == '\n' || nextR == '\r' {
+					break
+				}
+				end += nextSize
 			}
-
 			if end > start {
 				filePath := value[start:end]
 				slog.Debug("test", "filePath", filePath)
@@ -541,8 +553,8 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 		}
 
 		// Not a valid file path, insert the character normally
-		m.textarea.InsertRune(rune(value[i]))
-		i++
+		m.textarea.InsertRune(r)
+		i += size
 	}
 }
 

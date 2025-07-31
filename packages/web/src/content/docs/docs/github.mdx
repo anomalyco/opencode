@@ -1,23 +1,23 @@
 ---
 title: GitHub
-description: Use opencode in GitHub Issues and Pull-Requests
+description: Use opencode in GitHub issues and pull-requests
 ---
 
-opencode integrates directly into your GitHub workflow. Mention `/opencode` or `/oc` in your comment, and opencode will execute tasks within your GitHub Actions runner.
+opencode integrates with your GitHub workflow. Mention `/opencode` or `/oc` in your comment, and opencode will execute tasks within your GitHub Actions runner.
 
 ---
 
 ## Features
 
-- **Triage Issues**: Ask opencode to look into an issue and explain it to you.
-- **Fix and Implement**: Ask opencode to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
+- **Triage issues**: Ask opencode to look into an issue and explain it to you.
+- **Fix and implement**: Ask opencode to fix an issue or implement a feature. And it will work in a new branch and submits a PR with all the changes.
 - **Secure**: opencode runs inside your GitHub's runners.
 
 ---
 
 ## Installation
 
-Run the following command in the terminal from your GitHub repo:
+Run the following command in a project that is in a GitHub repo:
 
 ```bash
 opencode github install
@@ -29,10 +29,17 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ### Manual Setup
 
-1. Install the GitHub app https://github.com/apps/opencode-agent. Make sure it is installed on the target repository.
-2. Add the following workflow file to `.github/workflows/opencode.yml` in your repo. Set the appropriate `model` and required API keys in `env`.
+Or you can set it up manually.
 
-   ```yml
+1. **Install the GitHub app**
+
+   Head over to [**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent). Make sure it's installed on the target repository.
+
+2. **Add the workflow**
+
+   Add the following workflow file to `.github/workflows/opencode.yml` in your repo. Make sure to set the appropriate `model` and required API keys in `env`.
+
+   ```yml title=".github/workflows/opencode.yml" {24,26}
    name: opencode
 
    on:
@@ -62,39 +69,49 @@ This will walk you through installing the GitHub app, creating the workflow, and
              # share: true
    ```
 
-3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
+3. **Store the API keys in secrets**
+
+   In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. And add the required API keys.
 
 ---
 
 ## Configuration
 
-- `model`: The model used by opencode. Takes the format of `provider/model` (**required**)
+- `model`: The model used by opencode. Takes the format of `provider/model`. This is **required**.
 - `share`: Share the session. Sessions are shared by default for public repos.
 
 ---
 
-## Usage Examples
+## Examples
 
-- Explain an issue
+Here are some examples of how you can use opencode in GitHub.
 
-  Leave the following comment on a GitHub issue. `opencode` will read the entire thread, including all comments, and reply with a clear explanation.
+- **Explain an issue**
+
+  Add this comment in a GitHub issue.
 
   ```
   /opencode explain this issue
   ```
 
-- Fix an issue
+  opencode will read the entire thread, including all comments, and reply with a clear explanation.
 
-  Leave the following comment on a GitHub issue. opencode will create a new branch, implement the changes, and open a PR with the changes.
+- **Fix an issue**
+
+  In a GitHub issue, say:
 
   ```
   /opencode fix this
   ```
 
+  And opencode will create a new branch, implement the changes, and open a PR with the changes.
+
 - Review PRs and make changes
 
-  Leave the following comment on a GitHub PR. opencode will implement the requested change and commit it to the same PR.
+  Leave the following comment on a GitHub PR.
 
   ```
   Delete the attachment from S3 when the note is removed /oc
   ```
+
+  opencode will implement the requested change and commit it to the same PR.

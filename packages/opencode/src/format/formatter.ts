@@ -1,7 +1,6 @@
 import { App } from "../app/app"
 import { BunProc } from "../bun"
 import { Filesystem } from "../util/filesystem"
-import path from "path"
 
 export interface Info {
   name: string
@@ -65,11 +64,54 @@ export const prettier: Info = {
   ],
   async enabled() {
     const app = App.info()
-    const nms = await Filesystem.findUp("node_modules", app.path.cwd, app.path.root)
-    for (const item of nms) {
-      if (await Bun.file(path.join(item, ".bin", "prettier")).exists()) return true
+    const items = await Filesystem.findUp("package.json", app.path.cwd, app.path.root)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.dependencies?.prettier) return true
+      if (json.devDependencies?.prettier) return true
     }
     return false
+  },
+}
+
+export const biome: Info = {
+  name: "biome",
+  command: [BunProc.which(), "x", "biome", "format", "--write", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    ".json",
+    ".jsonc",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".xml",
+    ".md",
+    ".mdx",
+    ".graphql",
+    ".gql",
+  ],
+  async enabled() {
+    const app = App.info()
+    const items = await Filesystem.findUp("biome.json", app.path.cwd, app.path.root)
+    return items.length > 0
   },
 }
 

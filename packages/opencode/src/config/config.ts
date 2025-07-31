@@ -10,16 +10,34 @@ import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
 import matter from "gray-matter"
+import { Flag } from "../flag/flag"
+import { Auth } from "../auth"
+import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
   export const state = App.state("config", async (app) => {
+    const auth = await Auth.all()
     let result = await global()
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await load(resolved))
+      }
+    }
+
+    // Override with custom config if provided
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeDeep(result, await load(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+        result = mergeDeep(result, await loadRaw(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -41,6 +59,32 @@ export namespace Config {
       const parsed = Agent.safeParse(config)
       if (parsed.success) {
         result.agent = mergeDeep(result.agent, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+
+    // Load mode markdown files
+    result.mode = result.mode || {}
+    const markdownModes = [
+      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownModes) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Mode.safeParse(config)
+      if (parsed.success) {
+        result.mode = mergeDeep(result.mode, {
           [config.name]: parsed.data,
         })
         continue
@@ -170,6 +214,9 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const Permission = z.union([z.literal("ask"), z.literal("allow")])
+  export type Permission = z.infer<typeof Permission>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -231,6 +278,12 @@ export namespace Config {
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
+      permission: z
+        .object({
+          edit: Permission.optional(),
+          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z
@@ -298,7 +351,10 @@ export namespace Config {
         throw new JsonError({ path: configPath }, { cause: err })
       })
     if (!text) return {}
+    return loadRaw(text, configPath)
+  }
 
+  async function loadRaw(text: string, configPath: string) {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -314,11 +370,20 @@ export namespace Config {
       }
     }
 
-    let data: any
-    try {
-      data = JSON.parse(text)
-    } catch (err) {
-      throw new JsonError({ path: configPath }, { cause: err as Error })
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    if (errors.length) {
+      throw new JsonError({
+        path: configPath,
+        message: errors
+          .map((e) => {
+            const lines = text.substring(0, e.offset).split("\n")
+            const line = lines.length
+            const column = lines[lines.length - 1].length + 1
+            return `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
+          })
+          .join("; "),
+      })
     }
 
     const parsed = Info.safeParse(data)
@@ -335,6 +400,7 @@ export namespace Config {
     "ConfigJsonError",
     z.object({
       path: z.string(),
+      message: z.string().optional(),
     }),
   )
 

@@ -4,7 +4,7 @@ import DESCRIPTION_WRITE from "./todowrite.txt"
 import { App } from "../app/app"
 
 const TodoInfo = z.object({
-  content: z.string().min(1).describe("Brief description of the task"),
+  content: z.string().describe("Brief description of the task"),
   status: z.enum(["pending", "in_progress", "completed", "cancelled"]).describe("Current status of the task"),
   priority: z.enum(["high", "medium", "low"]).describe("Priority level of the task"),
   id: z.string().describe("Unique identifier for the todo item"),

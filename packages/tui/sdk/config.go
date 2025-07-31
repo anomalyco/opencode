@@ -43,6 +43,8 @@ func (r *ConfigService) Get(ctx context.Context, opts ...option.RequestOption) (
 type Config struct {
 	// JSON schema reference for configuration validation
 	Schema string `json:"$schema"`
+	// Modes configuration, see https://opencode.ai/docs/modes
+	Agent ConfigAgent `json:"agent"`
 	// @deprecated Use 'share' field instead. Share newly created sessions
 	// automatically
 	Autoshare bool `json:"autoshare"`
@@ -81,6 +83,7 @@ type Config struct {
 // configJSON contains the JSON metadata for the struct [Config]
 type configJSON struct {
 	Schema            apijson.Field
+	Agent             apijson.Field
 	Autoshare         apijson.Field
 	Autoupdate        apijson.Field
 	DisabledProviders apijson.Field
@@ -105,6 +108,50 @@ func (r *Config) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r configJSON) RawJSON() string {
+	return r.raw
+}
+
+// Modes configuration, see https://opencode.ai/docs/modes
+type ConfigAgent struct {
+	General     ConfigAgentGeneral     `json:"general"`
+	ExtraFields map[string]ConfigAgent `json:"-,extras"`
+	JSON        configAgentJSON        `json:"-"`
+}
+
+// configAgentJSON contains the JSON metadata for the struct [ConfigAgent]
+type configAgentJSON struct {
+	General     apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigAgent) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configAgentJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigAgentGeneral struct {
+	Description string                 `json:"description,required"`
+	JSON        configAgentGeneralJSON `json:"-"`
+	ModeConfig
+}
+
+// configAgentGeneralJSON contains the JSON metadata for the struct
+// [ConfigAgentGeneral]
+type configAgentGeneralJSON struct {
+	Description apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigAgentGeneral) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configAgentGeneralJSON) RawJSON() string {
 	return r.raw
 }
 
@@ -716,16 +763,20 @@ func (r McpRemoteConfigType) IsKnown() bool {
 }
 
 type ModeConfig struct {
-	Model  string          `json:"model"`
-	Prompt string          `json:"prompt"`
-	Tools  map[string]bool `json:"tools"`
-	JSON   modeConfigJSON  `json:"-"`
+	Disable     bool            `json:"disable"`
+	Model       string          `json:"model"`
+	Prompt      string          `json:"prompt"`
+	Temperature float64         `json:"temperature"`
+	Tools       map[string]bool `json:"tools"`
+	JSON        modeConfigJSON  `json:"-"`
 }
 
 // modeConfigJSON contains the JSON metadata for the struct [ModeConfig]
 type modeConfigJSON struct {
+	Disable     apijson.Field
 	Model       apijson.Field
 	Prompt      apijson.Field
+	Temperature apijson.Field
 	Tools       apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
