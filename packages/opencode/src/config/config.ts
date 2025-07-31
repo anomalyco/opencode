@@ -325,6 +325,7 @@ export namespace Config {
       {},
       mergeDeep(await load(path.join(Global.Path.config, "config.json"))),
       mergeDeep(await load(path.join(Global.Path.config, "opencode.json"))),
+      mergeDeep(await load(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
     await import(path.join(Global.Path.config, "config"), {
