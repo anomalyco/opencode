@@ -374,6 +374,36 @@ export namespace Session {
     l.info("chatting")
 
     const inputMode = input.mode ?? "build"
+
+    // Process revert cleanup first, before creating new messages
+    const session = await get(input.sessionID)
+    if (session.revert) {
+      let msgs = await messages(input.sessionID)
+      const messageID = session.revert.messageID
+      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+      msgs = preserve
+      for (const msg of remove) {
+        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
+      }
+      const last = preserve.at(-1)
+      if (session.revert.partID && last) {
+        const partID = session.revert.partID
+        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+        last.parts = preserveParts
+        for (const part of removeParts) {
+          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }
+      }
+      await update(input.sessionID, (draft) => {
+        draft.revert = undefined
+      })
+    }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -557,35 +587,6 @@ export namespace Session {
 
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
-    const session = await get(input.sessionID)
-
-    if (session.revert) {
-      const messageID = session.revert.messageID
-      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-      msgs = preserve
-      for (const msg of remove) {
-        if (msg.info.id === userMsg.id) continue
-        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
-        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
-      }
-      const last = preserve.at(-1)
-      if (session.revert.partID && last) {
-        const partID = session.revert.partID
-        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
-        last.parts = preserveParts
-        for (const part of removeParts) {
-          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
-          await Bus.publish(MessageV2.Event.PartRemoved, {
-            sessionID: input.sessionID,
-            messageID: last.info.id,
-            partID: part.id,
-          })
-        }
-      }
-      await update(input.sessionID, (draft) => {
-        draft.revert = undefined
-      })
-    }
 
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
