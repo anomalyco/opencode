@@ -71,7 +71,7 @@ type Config struct {
 	// Control sharing behavior:'manual' allows manual sharing via commands, 'auto'
 	// enables automatic sharing, 'disabled' disables all sharing
 	Share ConfigShare `json:"share"`
-	// Small model to use for tasks like summarization and title generation in the
+	// Small model to use for tasks like title generation in the
 	// format of provider/model
 	SmallModel string `json:"small_model"`
 	// Theme name to use for the interface
