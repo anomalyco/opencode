@@ -1114,12 +1114,14 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case commands.AppExitCommand:
 		return a, tea.Quit
+	default:
+		// Custom commands are handled through autocomplete selection, not here
 	}
 	return a, tea.Batch(cmds...)
 }
 
 func NewModel(app *app.App) tea.Model {
-	commandProvider := completions.NewCommandCompletionProvider(app)
+	commandProvider := completions.NewCommandCompletionProvider(app, app.CustomHandler)
 	fileProvider := completions.NewFileContextGroup(app)
 	symbolsProvider := completions.NewSymbolsContextGroup(app)
 

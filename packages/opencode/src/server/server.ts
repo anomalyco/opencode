@@ -18,6 +18,7 @@ import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
+import { Command } from "../command"
 
 const ERRORS = {
   400: {
@@ -771,6 +772,135 @@ export namespace Server {
         async (c) => {
           const modes = await Mode.list()
           return c.json(modes)
+        },
+      )
+      .get(
+        "/command",
+        describeRoute({
+          description: "List all custom commands",
+          responses: {
+            200: {
+              description: "List of custom commands",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      commands: z.array(
+                        z.object({
+                          name: z.string(),
+                          description: z.string().optional(),
+                          argumentHint: z.string().optional(),
+                          scope: z.enum(["project", "user"]),
+                          namespace: z.string().optional(),
+                        }),
+                      ),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Command.list()
+          return c.json({
+            commands: commands.map((cmd) => ({
+              name: cmd.name,
+              description: cmd.metadata.description,
+              argumentHint: cmd.metadata["argument-hint"],
+              scope: cmd.scope,
+              namespace: cmd.namespace,
+            })),
+          })
+        },
+      )
+      .get(
+        "/command/:name",
+        describeRoute({
+          description: "Get a specific custom command",
+          responses: {
+            200: {
+              description: "Command details",
+              content: {
+                "application/json": {
+                  schema: resolver(Command.CustomCommandSchema),
+                },
+              },
+            },
+            404: {
+              description: "Command not found",
+            },
+          },
+        }),
+        async (c) => {
+          const command = await Command.get(c.req.param("name"))
+          if (!command) {
+            return c.json({ error: "Command not found" }, 404)
+          }
+          return c.json(command)
+        },
+      )
+      .post(
+        "/command/resolve",
+        describeRoute({
+          description: "Resolve a custom command's content",
+          responses: {
+            200: {
+              description: "Resolved command content",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                      content: z.string().optional(),
+                      error: z.string().optional(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            name: z.string(),
+            arguments: z.string().optional(),
+          }),
+        ),
+        async (c) => {
+          const { name, arguments: args } = c.req.valid("json")
+
+          // Get the command
+          const command = await Command.get(name)
+          if (!command) {
+            return c.json({ success: false, error: "Command not found" }, 404)
+          }
+
+          // Resolve the command content with arguments
+          const { CommandResolver } = await import("../command/resolver")
+          const appInfo = App.info()
+          const resolver = new CommandResolver(appInfo)
+          const context = {
+            command,
+            arguments: args || "",
+            sessionId: "", // Not needed for resolution
+            messageId: "", // Not needed for resolution
+            workingDirectory: appInfo.path.cwd,
+          }
+
+          try {
+            const resolvedContent = await resolver.resolve(command.rawContent, context)
+            return c.json({
+              success: true,
+              content: resolvedContent,
+            })
+          } catch (error) {
+            return c.json({
+              success: false,
+              error: error instanceof Error ? error.message : "Failed to resolve command",
+            })
+          }
         },
       )
       .post(

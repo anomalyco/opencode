@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	flag "github.com/spf13/pflag"
@@ -17,6 +18,7 @@ import (
 	"github.com/sst/opencode/internal/api"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
+	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/internal/util"
 )
@@ -95,8 +97,21 @@ func main() {
 		}
 	}()
 
+	// Create custom command handler
+	customHandler := commands.NewCustomCommandHandler(httpClient)
+
+	// Load custom commands asynchronously
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := customHandler.LoadCommands(ctx); err != nil {
+			slog.Error("Failed to load custom commands", "error", err)
+		}
+	}()
+
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
+	app_, err := app.New(ctx, version, appInfo, modes, httpClient, customHandler, model, prompt, mode)
 	if err != nil {
 		panic(err)
 	}
@@ -107,7 +122,6 @@ func main() {
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
-
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)

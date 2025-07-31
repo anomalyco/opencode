@@ -39,6 +39,7 @@
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
+    "chokidar": "^3.5.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
     "gray-matter": "4.0.3",

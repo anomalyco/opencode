@@ -41,6 +41,7 @@ type App struct {
 	Session          *opencode.Session
 	Messages         []Message
 	Commands         commands.CommandRegistry
+	CustomHandler    *commands.CustomCommandHandler
 	InitialModel     *string
 	InitialPrompt    *string
 	IntitialMode     *string
@@ -80,6 +81,7 @@ func New(
 	appInfo opencode.App,
 	modes []opencode.Mode,
 	httpClient *opencode.Client,
+	customHandler *commands.CustomCommandHandler,
 	initialModel *string,
 	initialPrompt *string,
 	initialMode *string,
@@ -173,6 +175,7 @@ func New(
 		Session:       &opencode.Session{},
 		Messages:      []Message{},
 		Commands:      commands.LoadFromConfig(configInfo),
+		CustomHandler: customHandler,
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
 		IntitialMode:  initialMode,

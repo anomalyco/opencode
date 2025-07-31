@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
@@ -58,6 +59,16 @@ type editorComponent struct {
 	currentText            string // Store current text when navigating history
 	pasteCounter           int
 	reverted               bool
+}
+
+// Message type for inserting command text into the editor
+type insertCommandMsg struct {
+	content string
+}
+
+// Helper function to check if content contains argument placeholders
+func containsArgumentPlaceholders(content string) bool {
+	return strings.Contains(content, "$ARGUMENTS") || strings.Contains(content, "{{args}}")
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -214,6 +225,11 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.textarea.InsertRunesFromUserInput([]rune(text))
 		}
+	case insertCommandMsg:
+		// Insert the command text into the editor
+		m.textarea.SetValue(msg.content)
+		m.textarea.MoveToEnd()
+		return m, nil
 	case dialog.ThemeSelectedMsg:
 		m.textarea = updateTextareaStyles(m.textarea)
 		m.spinner = createSpinner()
@@ -221,11 +237,26 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
-			commandName := strings.TrimPrefix(msg.Item.Value, "/")
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
-			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
+			commandName := msg.Item.Value
+
+			// Check if it's a custom command
+			if commands.IsCustomCommand(commands.CommandName(commandName)) {
+				// Extract the actual command name (e.g., "custom_user_hello" -> "user:hello")
+				actualName := strings.ReplaceAll(strings.TrimPrefix(commandName, "custom_"), "_", ":")
+
+				// For custom commands, always populate the input field first
+				// This gives users a chance to add arguments if needed
+				m.textarea.SetValue("/" + actualName + " ")
+				m.textarea.MoveToEnd()
+
+				// Don't submit automatically - let the user press enter
+				return m, nil
+			} else {
+				// Handle built-in command
+				if cmd, ok := m.app.Commands[commands.CommandName(commandName)]; ok {
+					cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(cmd)))
+				}
+			}
 			return m, tea.Batch(cmds...)
 		case "files":
 			atIndex := m.textarea.LastRuneIndex('@')
@@ -434,6 +465,75 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		m.textarea.ReplaceRange(backslashCol, backslashCol+1, "")
 		m.textarea.InsertString("\n")
 		return m, nil
+	}
+
+	// Check if this is a custom command that needs to be resolved
+	if strings.HasPrefix(value, "/") {
+		parts := strings.SplitN(value, " ", 2)
+		if len(parts) > 0 {
+			commandName := strings.TrimPrefix(parts[0], "/")
+			args := ""
+			if len(parts) > 1 {
+				args = parts[1]
+			}
+
+			// Check if it's a custom command (contains ":")
+			if strings.Contains(commandName, ":") {
+				// This is a custom command, we need to resolve it
+				var cmds []tea.Cmd
+
+				// Clear the editor first
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				cmds = append(cmds, cmd)
+
+				// Resolve and submit the command
+				cmds = append(cmds, func() tea.Msg {
+					// Import context here since we need it
+					ctx := context.Background()
+
+					// Call the server to resolve the command
+					var result struct {
+						Success bool   `json:"success"`
+						Content string `json:"content"`
+						Error   string `json:"error"`
+					}
+
+					payload := map[string]string{
+						"name":      commandName,
+						"arguments": args,
+					}
+
+					err := m.app.Client.Post(ctx, "/command/resolve", payload, &result)
+					if err != nil {
+						return toast.NewErrorToast(fmt.Sprintf("Failed to resolve command: %v", err))()
+					}
+
+					if !result.Success {
+						return toast.NewErrorToast(result.Error)()
+					}
+
+					// Check if the resolved content still has placeholders (user didn't provide args)
+					if containsArgumentPlaceholders(result.Content) {
+						return toast.NewErrorToast("Please provide arguments for the command")()
+					}
+
+					// Create and send the prompt with the resolved content
+					prompt := app.Prompt{Text: result.Content}
+					m.app.State.AddPromptToHistory(prompt)
+					m.app.SaveState()
+					return app.SendPrompt(prompt)
+				})
+
+				return m, tea.Batch(cmds...)
+			}
+		}
+	}
+
+	// Check if the value contains unresolved argument placeholders
+	if containsArgumentPlaceholders(value) {
+		// Show an error toast
+		return m, toast.NewErrorToast("Please provide arguments for the command (replace $ARGUMENTS or {{args}} with your input)")
 	}
 
 	var cmds []tea.Cmd

@@ -13,11 +13,15 @@ import (
 )
 
 type CommandCompletionProvider struct {
-	app *app.App
+	app           *app.App
+	customHandler *commands.CustomCommandHandler
 }
 
-func NewCommandCompletionProvider(app *app.App) CompletionProvider {
-	return &CommandCompletionProvider{app: app}
+func NewCommandCompletionProvider(app *app.App, customHandler *commands.CustomCommandHandler) CompletionProvider {
+	return &CommandCompletionProvider{
+		app:           app,
+		customHandler: customHandler,
+	}
 }
 
 func (c *CommandCompletionProvider) GetId() string {
@@ -53,26 +57,36 @@ func (c *CommandCompletionProvider) getCommandCompletionItem(
 func (c *CommandCompletionProvider) GetChildEntries(
 	query string,
 ) ([]CompletionSuggestion, error) {
-	commands := c.app.Commands
+	// Get built-in commands
+	builtinCommands := c.app.Commands
 
+	// Get custom commands if handler is available
+	var allCommands []commands.Command
+	allCommands = append(allCommands, builtinCommands.Sorted()...)
+
+	if c.customHandler != nil {
+		customCommands := c.customHandler.ToRegistryCommands()
+		allCommands = append(allCommands, customCommands...)
+	}
+
+	// Calculate max width for alignment
 	space := 1
-	for _, cmd := range c.app.Commands {
+	for _, cmd := range allCommands {
 		if cmd.HasTrigger() && lipgloss.Width(cmd.PrimaryTrigger()) > space {
 			space = lipgloss.Width(cmd.PrimaryTrigger())
 		}
 	}
 	space += 2
 
-	sorted := commands.Sorted()
 	if query == "" {
 		// If no query, return all commands
 		items := []CompletionSuggestion{}
-		for _, cmd := range sorted {
+		for _, cmd := range allCommands {
 			if !cmd.HasTrigger() {
 				continue
 			}
-			space := space - lipgloss.Width(cmd.PrimaryTrigger())
-			items = append(items, c.getCommandCompletionItem(cmd, space))
+			cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
+			items = append(items, c.getCommandCompletionItem(cmd, cmdSpace))
 		}
 		return items, nil
 	}
@@ -80,14 +94,14 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	var commandNames []string
 	commandMap := make(map[string]CompletionSuggestion)
 
-	for _, cmd := range sorted {
+	for _, cmd := range allCommands {
 		if !cmd.HasTrigger() {
 			continue
 		}
-		space := space - lipgloss.Width(cmd.PrimaryTrigger())
+		cmdSpace := space - lipgloss.Width(cmd.PrimaryTrigger())
 		for _, trigger := range cmd.Trigger {
 			commandNames = append(commandNames, trigger)
-			commandMap[trigger] = c.getCommandCompletionItem(cmd, space)
+			commandMap[trigger] = c.getCommandCompletionItem(cmd, cmdSpace)
 		}
 	}
 
