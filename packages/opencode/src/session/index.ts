@@ -41,6 +41,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
+import { SessionMemoryManager } from "./memory-manager"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -114,11 +115,32 @@ export namespace Session {
     ),
   }
 
+  // Initialize memory manager with configuration from config file
+  const memoryManager = (async () => {
+    const config = await Config.get()
+    const memoryConfig = config.memory || {}
+    
+    return new SessionMemoryManager.SessionCache({
+      maxSessions: memoryConfig.maxSessions,
+      maxMessagesPerSession: memoryConfig.maxMessagesPerSession,
+      sessionTtlMs: memoryConfig.sessionTtlMs,
+      inactiveTtlMs: memoryConfig.inactiveTtlMs,
+      cleanupIntervalMs: memoryConfig.cleanupIntervalMs,
+    })
+  })()
+
+  // Helper to get the initialized memory manager
+  async function getMemoryManager() {
+    return await memoryManager
+  }
+
   const state = App.state(
     "session",
-    () => {
-      const sessions = new Map<string, Info>()
-      const messages = new Map<string, MessageV2.Info[]>()
+    async () => {
+      // Initialize memory manager from config
+      const manager = await getMemoryManager()
+      
+      // Legacy maps for backward compatibility and non-cached data
       const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
@@ -132,18 +154,82 @@ export namespace Session {
       >()
 
       return {
-        sessions,
-        messages,
+        // Use memory manager for sessions and messages
+        get sessions() {
+          // Return a Map-like interface for backward compatibility
+          return {
+            get: (id: string) => manager.getSession(id),
+            set: (id: string, value: Info) => manager.setSession(id, value),
+            delete: (id: string) => manager.deleteSession(id),
+            has: (id: string) => manager.hasSession(id),
+            keys: () => manager.getSessionKeys(),
+            size: manager.size().sessions,
+          }
+        },
+        get messages() {
+          return {
+            get: (id: string) => manager.getMessages(id),
+            set: (id: string, value: MessageV2.Info[]) => manager.setMessages(id, value),
+            delete: (id: string) => manager.deleteMessages(id),
+            has: (id: string) => manager.getMessages(id) !== undefined,
+          }
+        },
         pending,
         queued,
+        // Add memory management utilities
+        memoryManager: manager,
       }
     },
     async (state) => {
+      // Cleanup on shutdown
       for (const [_, controller] of state.pending) {
         controller.abort()
       }
+      
+      // Log memory statistics before shutdown
+      const stats = state.memoryManager.getStats()
+      log.info("session cleanup on shutdown", {
+        sessionsInMemory: stats.sessions.size,
+        messagesInMemory: stats.messages.size,
+        sessionCacheHits: stats.sessions.hits,
+        sessionCacheMisses: stats.sessions.misses,
+        evictions: stats.sessions.evictions,
+      })
+      
+      // Destroy memory manager
+      state.memoryManager.destroy()
     },
   )
+
+  // Memory monitoring and management functions
+  export function getMemoryStats() {
+    return state().memoryManager.getStats()
+  }
+
+  export function isUnderMemoryPressure(): boolean {
+    return state().memoryManager.isUnderMemoryPressure()
+  }
+
+  export function forceMemoryCleanup(): void {
+    log.info("forcing memory cleanup due to memory pressure")
+    state().memoryManager.forceCleanup()
+  }
+
+  // Helper function to log memory usage periodically
+  function logMemoryUsage(context: string): void {
+    const stats = getMemoryStats()
+    if (stats.totalMemoryUsage > 0.7 || stats.sessions.size > 50) { // Log when getting full
+      log.info("memory usage", {
+        context,
+        sessions: stats.sessions.size,
+        messages: stats.messages.size,
+        memoryPressure: (stats.totalMemoryUsage * 100).toFixed(1) + "%",
+        cacheHitRate: stats.sessions.hits > 0 ? 
+          ((stats.sessions.hits / (stats.sessions.hits + stats.sessions.misses)) * 100).toFixed(1) + "%" : "0%",
+        evictions: stats.sessions.evictions,
+      })
+    }
+  }
 
   export async function create(parentID?: string) {
     const result: Info = {
@@ -157,8 +243,18 @@ export namespace Session {
       },
     }
     log.info("created", result)
+    
+    // Check memory pressure before adding new session
+    if (isUnderMemoryPressure()) {
+      log.warn("memory pressure detected during session creation, forcing cleanup")
+      forceMemoryCleanup()
+    }
+    
     state().sessions.set(result.id, result)
     await Storage.writeJSON("session/info/" + result.id, result)
+    
+    // Log memory usage after session creation
+    logMemoryUsage("session-created")
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -177,13 +273,36 @@ export namespace Session {
   }
 
   export async function get(id: string) {
-    const result = state().sessions.get(id)
-    if (result) {
-      return result
+    // Try to get from memory cache first
+    const cached = state().sessions.get(id)
+    if (cached) {
+      return cached
     }
-    const read = await Storage.readJSON<Info>("session/info/" + id)
-    state().sessions.set(id, read)
-    return read as Info
+    
+    // Load from storage if not in cache
+    try {
+      const read = await Storage.readJSON<Info>("session/info/" + id)
+      
+      // Check memory pressure before caching
+      if (isUnderMemoryPressure()) {
+        log.debug("memory pressure detected during session load, forcing cleanup")
+        forceMemoryCleanup()
+      }
+      
+      // Cache the loaded session
+      state().sessions.set(id, read)
+      
+      // Log memory usage occasionally
+      const stats = getMemoryStats()
+      if (stats.sessions.size % 10 === 0) { // Log every 10th session load
+        logMemoryUsage("session-loaded")
+      }
+      
+      return read as Info
+    } catch (error) {
+      log.error("failed to load session from storage", { sessionId: id, error })
+      throw error
+    }
   }
 
   export async function getShare(id: string) {
@@ -305,21 +424,36 @@ export namespace Session {
     try {
       abort(sessionID)
       const session = await get(sessionID)
+      
+      // Remove child sessions recursively
       for (const child of await children(sessionID)) {
         await remove(child.id, false)
       }
+      
+      // Clean up external resources
       await unshare(sessionID).catch(() => {})
       await Storage.remove(`session/info/${sessionID}`).catch(() => {})
       await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
-      state().sessions.delete(sessionID)
-      state().messages.delete(sessionID)
+      
+      // Remove from memory caches
+      const sessionDeleted = state().sessions.delete(sessionID)
+      const messagesDeleted = state().messages.delete(sessionID)
+      
+      log.info("session removed", { 
+        sessionID, 
+        fromMemory: { session: sessionDeleted, messages: messagesDeleted } 
+      })
+      
+      // Log memory usage after cleanup
+      logMemoryUsage("session-removed")
+      
       if (emitEvent) {
         Bus.publish(Event.Deleted, {
           info: session,
         })
       }
     } catch (e) {
-      log.error(e)
+      log.error("failed to remove session", { sessionID, error: e })
     }
   }
 
@@ -378,6 +512,18 @@ export namespace Session {
   ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
+    
+    // Check memory pressure before processing chat
+    if (isUnderMemoryPressure()) {
+      l.warn("memory pressure detected before chat processing, forcing cleanup")
+      forceMemoryCleanup()
+    }
+    
+    // Log memory stats for long conversations
+    const stats = getMemoryStats()
+    if (stats.sessions.size > 20) {
+      logMemoryUsage("chat-start")
+    }
 
     const inputMode = input.mode ?? "build"
 
@@ -874,6 +1020,17 @@ export namespace Session {
       item.callback(result)
     }
     state().queued.delete(input.sessionID)
+    
+    // Log memory usage after chat processing
+    logMemoryUsage("chat-completed")
+    
+    // Force cleanup if memory pressure is high after processing
+    if (isUnderMemoryPressure()) {
+      l.info("memory pressure high after chat processing, scheduling cleanup")
+      // Use setTimeout to avoid blocking the response
+      setTimeout(() => forceMemoryCleanup(), 100)
+    }
+    
     return result
   }
 

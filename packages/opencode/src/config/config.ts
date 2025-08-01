@@ -297,6 +297,45 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
         })
         .optional(),
+      memory: z
+        .object({
+          maxSessions: z
+            .number()
+            .min(1)
+            .max(1000)
+            .optional()
+            .describe("Maximum number of sessions to keep in memory cache (default: 100)"),
+          maxMessagesPerSession: z
+            .number()
+            .min(10)
+            .max(10000)
+            .optional()
+            .describe("Maximum number of messages to cache per session (default: 1000)"),
+          sessionTtlMs: z
+            .number()
+            .min(60000) // 1 minute minimum
+            .max(7 * 24 * 60 * 60 * 1000) // 1 week maximum
+            .optional()
+            .describe("Session time-to-live in milliseconds (default: 24 hours)"),
+          inactiveTtlMs: z
+            .number()
+            .min(60000) // 1 minute minimum
+            .max(24 * 60 * 60 * 1000) // 1 day maximum
+            .optional()
+            .describe("Inactive session time-to-live in milliseconds (default: 4 hours)"),
+          cleanupIntervalMs: z
+            .number()
+            .min(30000) // 30 seconds minimum
+            .max(30 * 60 * 1000) // 30 minutes maximum
+            .optional()
+            .describe("Memory cleanup interval in milliseconds (default: 5 minutes)"),
+          enableLogging: z
+            .boolean()
+            .optional()
+            .describe("Enable detailed memory usage logging (default: false)"),
+        })
+        .optional()
+        .describe("Memory management configuration for session caching"),
       experimental: z
         .object({
           hook: z
