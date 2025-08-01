@@ -74,7 +74,7 @@ export const BashTool = Tool.define("bash", {
       // not an exhaustive list, but covers most common cases
       if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
         for (const arg of command.slice(1)) {
-          if (arg.startsWith("-")) continue
+          if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
           const resolved = await $`realpath ${arg}`.text().then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
           if (!Filesystem.contains(app.path.cwd, resolved)) {
