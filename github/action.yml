@@ -9,7 +9,7 @@ inputs:
     description: "Model to use (overrides config file)"
     required: false
 
-  config:
+  opencode_config:
     description: "Path to opencode config file (defaults to .github/opencode.json)"
     required: false
 
