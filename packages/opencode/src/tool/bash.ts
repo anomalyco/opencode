@@ -25,9 +25,7 @@ const parser = lazy(async () => {
 })
 
 export const BashTool = Tool.define("bash", {
-  description:
-    DESCRIPTION +
-    "\n\nIMPORTANT: When creating git commits, check the user's config. If include_co_authored_by is false, do NOT include any opencode branding (🤖 Generated with opencode or Co-Authored-By lines). If include_co_authored_by is true or undefined, include the standard opencode branding.",
+  description: DESCRIPTION,
   parameters: z.object({
     command: z.string().describe("The command to execute"),
     timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -41,13 +39,19 @@ export const BashTool = Tool.define("bash", {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const app = App.info()
     const cfg = await Config.get()
-    const includeCoAuthoredBy = cfg.include_co_authored_by ?? true
 
-    // Add config info to context for git commits
-    ctx.metadata({
-      title: `Config: include_co_authored_by=${includeCoAuthoredBy}`,
-      metadata: { include_co_authored_by: includeCoAuthoredBy },
-    })
+    // Modify git commit commands based on include_co_authored_by setting
+    let finalCommand = params.command
+    if (params.command.includes("git commit") && params.command.includes("Generated with [opencode]")) {
+      const includeCoAuthoredBy = cfg.include_co_authored_by ?? true
+      if (!includeCoAuthoredBy) {
+        // Remove opencode branding from commit message
+        finalCommand = params.command.replace(
+          /🤖 Generated with \[opencode\]\(https:\/\/opencode\.ai\)\s*\n\s*Co-Authored-By: opencode <noreply@opencode\.ai>\s*/g,
+          "",
+        )
+      }
+    }
 
     const tree = await parser().then((p) => p.parse(params.command))
     const permissions = (() => {
@@ -123,7 +127,7 @@ export const BashTool = Tool.define("bash", {
     }
 
     const process = Bun.spawn({
-      cmd: ["bash", "-c", params.command],
+      cmd: ["bash", "-c", finalCommand],
       cwd: app.path.cwd,
       maxBuffer: MAX_OUTPUT_LENGTH,
       signal: ctx.abort,
