@@ -24,125 +24,126 @@ const parser = lazy(async () => {
   return p
 })
 
-export const BashTool = Tool.define("bash", async () => {
-  const cfg = await Config.get()
-  const includeCoAuthoredBy = cfg.include_co_authored_by ?? true
-  const description = DESCRIPTION.replace(
-    /If the user's config has include_co_authored_by set to true \(default\), end the message with:/g,
-    `The user's config has include_co_authored_by set to ${includeCoAuthoredBy}. ${includeCoAuthoredBy ? "End the message with:" : "Use only the commit message without any opencode branding."}`,
-  )
+export const BashTool = Tool.define("bash", {
+  description:
+    DESCRIPTION +
+    "\n\nIMPORTANT: When creating git commits, check the user's config. If include_co_authored_by is false, do NOT include any opencode branding (🤖 Generated with opencode or Co-Authored-By lines). If include_co_authored_by is true or undefined, include the standard opencode branding.",
+  parameters: z.object({
+    command: z.string().describe("The command to execute"),
+    timeout: z.number().describe("Optional timeout in milliseconds").optional(),
+    description: z
+      .string()
+      .describe(
+        "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
+      ),
+  }),
+  async execute(params, ctx) {
+    const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
+    const app = App.info()
+    const cfg = await Config.get()
+    const includeCoAuthoredBy = cfg.include_co_authored_by ?? true
 
-  return {
-    description,
-    parameters: z.object({
-      command: z.string().describe("The command to execute"),
-      timeout: z.number().describe("Optional timeout in milliseconds").optional(),
-      description: z
-        .string()
-        .describe(
-          "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-        ),
-    }),
-    async execute(params, ctx) {
-      const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
-      const app = App.info()
-      const cfg = await Config.get()
-      const tree = await parser().then((p) => p.parse(params.command))
-      const permissions = (() => {
-        const value = cfg.permission?.bash
-        if (!value)
-          return {
-            "*": "allow",
-          }
-        if (typeof value === "string")
-          return {
-            "*": value,
-          }
-        return value
-      })()
+    // Add config info to context for git commits
+    ctx.metadata({
+      title: `Config: include_co_authored_by=${includeCoAuthoredBy}`,
+      metadata: { include_co_authored_by: includeCoAuthoredBy },
+    })
 
-      let needsAsk = false
-      for (const node of tree.rootNode.descendantsOfType("command")) {
-        const command = []
-        for (let i = 0; i < node.childCount; i++) {
-          const child = node.child(i)
-          if (!child) continue
-          if (
-            child.type !== "command_name" &&
-            child.type !== "word" &&
-            child.type !== "string" &&
-            child.type !== "raw_string" &&
-            child.type !== "concatenation"
-          ) {
-            continue
-          }
-          command.push(child.text)
+    const tree = await parser().then((p) => p.parse(params.command))
+    const permissions = (() => {
+      const value = cfg.permission?.bash
+      if (!value)
+        return {
+          "*": "allow",
         }
-
-        // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
-          for (const arg of command.slice(1)) {
-            if (arg.startsWith("-")) continue
-            const resolved = await $`realpath ${arg}`.text().then((x) => x.trim())
-            log.info("resolved path", { arg, resolved })
-            if (!Filesystem.contains(app.path.cwd, resolved)) {
-              throw new Error(
-                `This command references paths outside of ${app.path.cwd} so it is not allowed to be executed.`,
-              )
-            }
-          }
+      if (typeof value === "string")
+        return {
+          "*": value,
         }
+      return value
+    })()
 
-        // always allow cd if it passes above check
-        if (!needsAsk && command[0] !== "cd") {
-          const ask = (() => {
-            for (const [pattern, value] of Object.entries(permissions)) {
-              const match = Wildcard.match(node.text, pattern)
-              log.info("checking", { text: node.text.trim(), pattern, match })
-              if (match) return value
-            }
-            return "ask"
-          })()
-          if (ask === "ask") needsAsk = true
+    let needsAsk = false
+    for (const node of tree.rootNode.descendantsOfType("command")) {
+      const command = []
+      for (let i = 0; i < node.childCount; i++) {
+        const child = node.child(i)
+        if (!child) continue
+        if (
+          child.type !== "command_name" &&
+          child.type !== "word" &&
+          child.type !== "string" &&
+          child.type !== "raw_string" &&
+          child.type !== "concatenation"
+        ) {
+          continue
+        }
+        command.push(child.text)
+      }
+
+      // not an exhaustive list, but covers most common cases
+      if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
+        for (const arg of command.slice(1)) {
+          if (arg.startsWith("-")) continue
+          const resolved = await $`realpath ${arg}`.text().then((x) => x.trim())
+          log.info("resolved path", { arg, resolved })
+          if (!Filesystem.contains(app.path.cwd, resolved)) {
+            throw new Error(
+              `This command references paths outside of ${app.path.cwd} so it is not allowed to be executed.`,
+            )
+          }
         }
       }
 
-      if (needsAsk) {
-        await Permission.ask({
-          type: "bash",
-          sessionID: ctx.sessionID,
-          messageID: ctx.messageID,
-          callID: ctx.callID,
-          title: params.command,
-          metadata: {
-            command: params.command,
-          },
-        })
+      // always allow cd if it passes above check
+      if (!needsAsk && command[0] !== "cd") {
+        const ask = (() => {
+          for (const [pattern, value] of Object.entries(permissions)) {
+            const match = Wildcard.match(node.text, pattern)
+            log.info("checking", { text: node.text.trim(), pattern, match })
+            if (match) return value
+          }
+          return "ask"
+        })()
+        if (ask === "ask") needsAsk = true
       }
+    }
 
-      const process = Bun.spawn({
-        cmd: ["bash", "-c", params.command],
-        cwd: app.path.cwd,
-        maxBuffer: MAX_OUTPUT_LENGTH,
-        signal: ctx.abort,
-        timeout: timeout,
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      await process.exited
-      const stdout = await new Response(process.stdout).text()
-      const stderr = await new Response(process.stderr).text()
-
-      return {
+    if (needsAsk) {
+      await Permission.ask({
+        type: "bash",
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
         title: params.command,
         metadata: {
-          stderr,
-          stdout,
-          exit: process.exitCode,
-          description: params.description,
+          command: params.command,
         },
-        output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),
-      }
-    },
-  }
+      })
+    }
+
+    const process = Bun.spawn({
+      cmd: ["bash", "-c", params.command],
+      cwd: app.path.cwd,
+      maxBuffer: MAX_OUTPUT_LENGTH,
+      signal: ctx.abort,
+      timeout: timeout,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    await process.exited
+    const stdout = await new Response(process.stdout).text()
+    const stderr = await new Response(process.stderr).text()
+
+    return {
+      title: params.command,
+      metadata: {
+        stderr,
+        stdout,
+        exit: process.exitCode,
+        description: params.description,
+      },
+      output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),
+    }
+  },
 })
