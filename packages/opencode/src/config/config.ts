@@ -245,6 +245,10 @@ export namespace Config {
         .string()
         .optional()
         .describe("Custom username to display in conversations instead of system username"),
+      include_co_authored_by: z
+        .boolean()
+        .optional()
+        .describe("Include opencode branding and co-authoring in commit messages"),
       mode: z
         .object({
           build: Mode.optional(),
