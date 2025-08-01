@@ -72,3 +72,19 @@ For example.
     }
   }
   ```
+
+- **Use wildcard patterns to restrict specific commands**
+
+  ```json title="opencode.json"
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {
+      "bash": {
+        "git push": "ask",
+        "*": "allow"
+      }
+    }
+  }
+  ```
+
+  This configuration allows all commands by default (`"*": "allow"`) but requires approval for `git push` commands.
