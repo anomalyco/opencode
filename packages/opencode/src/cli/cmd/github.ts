@@ -19,6 +19,7 @@ import { Identifier } from "../../id/id"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
+import { Config } from "../../config/config"
 
 type GitHubAuthor = {
   login: string
@@ -129,7 +130,7 @@ export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
   builder: (yargs) => yargs.command(GithubInstallCommand).command(GithubRunCommand).demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const GithubInstallCommand = cmd({
@@ -364,7 +365,8 @@ export const GithubRunCommand = cmd({
         process.exit(1)
       }
 
-      const { providerID, modelID } = normalizeModel()
+      await loadConfiguration()
+      const { providerID, modelID } = await normalizeModel()
       const runId = normalizeRunId()
       const share = normalizeShare()
       const { owner, repo } = context.repo
@@ -481,9 +483,91 @@ export const GithubRunCommand = cmd({
       }
       process.exit(exitCode)
 
-      function normalizeModel() {
+      function parseConfigEnvironment(): Record<string, string> {
+        const configEnv = process.env["CONFIG_ENV"]
+        if (!configEnv) return {}
+
+        try {
+          // Parse key=value format only
+          const result: Record<string, string> = {}
+          configEnv.split("\n").forEach((line) => {
+            const trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith("#")) {
+              const [key, ...valueParts] = trimmed.split("=")
+              if (key && valueParts.length > 0) {
+                result[key.trim()] = valueParts.join("=").trim()
+              }
+            }
+          })
+
+          return result
+        } catch (error) {
+          console.warn("Failed to parse CONFIG_ENV, ignoring:", error)
+          return {}
+        }
+      }
+
+      async function loadConfiguration() {
+        // Parse and set additional environment variables
+        const additionalEnv = parseConfigEnvironment()
+        for (const [key, value] of Object.entries(additionalEnv)) {
+          process.env[key] = value
+          console.log(`Set environment variable: ${key}`)
+        }
+
+        // Load config file if specified or discover default
+        const configPath = process.env["OPENCODE_CONFIG"]
+        if (configPath) {
+          console.log(`Using config from OPENCODE_CONFIG: ${configPath}`)
+          try {
+            // Check if config file exists
+            const fs = await import("fs")
+            const path = await import("path")
+            const fullPath = path.resolve(configPath)
+            if (!fs.existsSync(fullPath)) {
+              throw new Error(`Config file not found: ${fullPath}`)
+            }
+            console.log(`Config file found: ${fullPath}`)
+          } catch (error) {
+            console.warn(`Config file error: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        } else {
+          // Auto-discover config files and set OPENCODE_CONFIG
+          const fs = await import("fs")
+          const path = await import("path")
+          const defaultConfigs = [".github/opencode.json", "opencode.json", ".opencode/config.json"]
+
+          for (const defaultConfig of defaultConfigs) {
+            if (fs.existsSync(defaultConfig)) {
+              const fullPath = path.resolve(defaultConfig)
+              console.log(`Found default config: ${defaultConfig}`)
+              console.log(`Setting OPENCODE_CONFIG to: ${fullPath}`)
+              process.env["OPENCODE_CONFIG"] = fullPath
+              break
+            }
+          }
+        }
+      }
+
+      async function normalizeModel() {
         const value = process.env["MODEL"]
-        if (!value) throw new Error(`Environment variable "MODEL" is not set`)
+
+        // If MODEL is not set, try to get default from config
+        if (!value) {
+          try {
+            const cfg = await Config.get()
+            if (cfg.model) {
+              console.log(`Using default model from config: ${cfg.model}`)
+              const { providerID, modelID } = Provider.parseModel(cfg.model)
+              if (!providerID.length || !modelID.length)
+                throw new Error(`Invalid model ${cfg.model}. Model must be in the format "provider/model".`)
+              return { providerID, modelID }
+            }
+          } catch (error) {
+            console.warn(`Failed to load config: ${error instanceof Error ? error.message : String(error)}`)
+          }
+          throw new Error(`Environment variable "MODEL" is not set and no default model found in config`)
+        }
 
         const { providerID, modelID } = Provider.parseModel(value)
 
@@ -694,18 +778,18 @@ export const GithubRunCommand = cmd({
       async function exchangeForAppToken(token: string) {
         const response = token.startsWith("github_pat_")
           ? await fetch("https://api.opencode.ai/exchange_github_app_token_with_pat", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ owner, repo }),
-            })
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ owner, repo }),
+          })
           : await fetch("https://api.opencode.ai/exchange_github_app_token", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            })
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
 
         if (!response.ok) {
           const responseJson = (await response.json()) as { error?: string }

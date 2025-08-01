@@ -6,8 +6,16 @@ branding:
 
 inputs:
   model:
-    description: "Model to use"
-    required: true
+    description: "Model to use (overrides config file)"
+    required: false
+
+  config:
+    description: "Path to opencode config file (defaults to .github/opencode.json)"
+    required: false
+
+  config_env:
+    description: "Environment variables for config (multiline key=value format)"
+    required: false
 
   share:
     description: "Share the opencode session (defaults to true for public repos)"
@@ -26,4 +34,6 @@ runs:
       run: opencode github run
       env:
         MODEL: ${{ inputs.model }}
+        OPENCODE_CONFIG: ${{ inputs.config }}
+        CONFIG_ENV: ${{ inputs.config_env }}
         SHARE: ${{ inputs.share }}

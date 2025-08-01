@@ -42,7 +42,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ### Manual Setup
 
-1. Install the GitHub app https://github.com/apps/opencode-agent. Make sure it is installed on the target repository.
+1. Install the GitHub app <https://github.com/apps/opencode-agent>. Make sure it is installed on the target repository.
 2. Add the following workflow file to `.github/workflows/opencode.yml` in your repo. Set the appropriate `model` and required API keys in `env`.
 
    ```yml
@@ -76,9 +76,82 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
 
+## Custom Provider Configuration
+
+You can configure custom providers using an `opencode.json` config file in your repository root:
+
+### Basic Usage with Config File
+
+1. Create `.github/opencode.json` in your repository:
+
+   ```json
+   {
+     "model": "custom-provider/my-model",
+     "provider": {
+       "custom-provider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "models": {
+           "my-model": {
+             "name": "My Custom Model"
+           }
+         },
+         "options": {
+           "apiKey": "{env:CUSTOM_API_KEY}",
+           "baseURL": "{env:CUSTOM_BASE_URL}"
+         }
+       }
+     }
+   }
+   ```
+
+2. Update your workflow to use the config:
+
+   ```yml
+   - name: Run opencode
+     uses: sst/opencode/github@latest
+     env:
+       CUSTOM_API_KEY: ${{ secrets.CUSTOM_API_KEY }}
+       CUSTOM_BASE_URL: ${{ secrets.CUSTOM_BASE_URL }}
+     # No model parameter needed - will automatically use .github/opencode.json
+   ```
+
+### Advanced Configuration
+
+You can also specify a custom config file path and pass environment variables:
+
+```yml
+- name: Run opencode
+  uses: sst/opencode/github@latest
+  with:
+    config: opencode-ci.json
+    config_env: |
+      CUSTOM_API_KEY=${{ secrets.CUSTOM_API_KEY }}
+      CUSTOM_BASE_URL=https://api.example.com
+      DEBUG=true
+  # model parameter will override config if specified
+```
+
+### Action Inputs
+
+| Input        | Description                                                   | Required | Default                 |
+| ------------ | ------------------------------------------------------------- | -------- | ----------------------- |
+| `model`      | Model to use (overrides config file)                          | No       | -                       |
+| `config`     | Path to opencode config file                                  | No       | Auto-discovery          |
+| `config_env` | Environment variables for config (multiline key=value format) | No       | -                       |
+| `share`      | Share the opencode session                                    | No       | `true` for public repos |
+
+### Config File Discovery
+
+The action will automatically look for config files in this order:
+
+1. Path specified in `config` input
+2. `.github/opencode.json`
+3. `opencode.json` in repository root
+4. `.opencode/config.json` in repository root
+
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/sst/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at <https://github.com/sst/opencode/issues>.
 
 ## Development
 
@@ -122,7 +195,7 @@ Replace:
 - `"number":4` with the GitHub issue id
 - `"body":"hey opencode, summarize thread"` with comment body
 
-### Issue comment with image attachment.
+### Issue comment with image attachment
 
 ```
 --event '{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey opencode, what is in my image ![Image](https://github.com/user-attachments/assets/xxxxxxxx)"}}}'
