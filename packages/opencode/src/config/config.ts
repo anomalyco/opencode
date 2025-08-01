@@ -373,14 +373,21 @@ export namespace Config {
       return process.env[varName] || ""
     })
 
-    const fileMatches = text.match(/"?\{file:([^}]+)\}"?/g)
+    const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
       const configDir = path.dirname(configPath)
+      const lines = text.split("\n")
+
       for (const match of fileMatches) {
-        const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
+        const lineIndex = lines.findIndex((line) => line.includes(match))
+        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
+          continue // Skip if line is commented
+        }
+        const filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = await Bun.file(resolvedPath).text()
-        text = text.replace(match, JSON.stringify(fileContent))
+        const fileContent = (await Bun.file(resolvedPath).text()).trim()
+        // escape newlines/quotes, strip outer quotes
+        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
       }
     }
 
