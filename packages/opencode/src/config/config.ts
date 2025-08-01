@@ -312,6 +312,13 @@ export namespace Config {
                     .array(),
                 )
                 .optional(),
+              permission_requested: z
+                .object({
+                  command: z.string().array(),
+                  environment: z.record(z.string(), z.string()).optional(),
+                })
+                .array()
+                .optional(),
               session_completed: z
                 .object({
                   command: z.string().array(),

@@ -1,6 +1,7 @@
 import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
+import { Permission } from "../permission"
 import { Session } from "../session"
 import { Log } from "../util/log"
 import { Config } from "./config"
@@ -28,6 +29,24 @@ export namespace ConfigHooks {
           stdout: "ignore",
           stderr: "ignore",
         })
+      }
+    })
+
+    Bus.subscribe(Permission.Event.Updated, async () => {
+      const cfg = await Config.get()
+      if (cfg.experimental?.hook?.permission_requested) {
+        for (const item of cfg.experimental.hook.permission_requested) {
+          log.info("permission_requested", {
+            command: item.command,
+          })
+          Bun.spawn({
+            cmd: item.command,
+            cwd: App.info().path.cwd,
+            env: item.environment,
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+        }
       }
     })
 
