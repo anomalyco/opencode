@@ -9,15 +9,16 @@ opencode integrates with Language Server Protocol (LSP) to enhance how the LLM i
 
 opencode comes with several built-in LSP servers for popular languages:
 
-| LSP Server | Languages/Extensions                         | Requirements                        |
-| ---------- | -------------------------------------------- | ----------------------------------- |
-| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` dependency in project  |
-| gopls      | .go                                          | `go` command available              |
-| ruby-lsp   | .rb, .rake, .gemspec, .ru                    | `ruby` and `gem` commands available |
-| pyright    | .py, .pyi                                    | `pyright` dependency installed      |
-| elixir-ls  | .ex, .exs                                    | `elixir` command available          |
-| zls        | .zig, .zon                                   | `zig` command available             |
-| csharp     | .cs                                          | `.NET SDK` installed                |
+| LSP Server    | Languages/Extensions                         | Requirements                         |
+| ------------- | -------------------------------------------- | ------------------------------------ |
+| typescript    | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` dependency in project   |
+| gopls         | .go                                          | `go` command available               |
+| ruby-lsp      | .rb, .rake, .gemspec, .ru                    | `ruby` and `gem` commands available  |
+| pyright       | .py, .pyi                                    | `pyright` dependency installed       |
+| elixir-ls     | .ex, .exs                                    | `elixir` command available           |
+| zls           | .zig, .zon                                   | `zig` command available              |
+| csharp        | .cs                                          | `.NET SDK` installed                 |
+| sourcekit-lsp | .swift, .objc, .objcpp                       | `swift` installed (`xcode` on macOS) |
 
 LSP servers are automatically enabled when their requirements are met in your project environment.
 
