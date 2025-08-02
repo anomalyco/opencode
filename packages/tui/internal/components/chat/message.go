@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -216,34 +215,29 @@ func renderText(
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		highlight := base.Foreground(t.Secondary())
 		text = ansi.WordwrapWc(text, width-6, " -")
 
-		// Build list of regex patterns for attachment filenames
-		var patterns []string
-		for _, filePart := range fileParts {
-			patterns = append(patterns, regexp.QuoteMeta("@"+filePart.Filename))
-		}
+		var result strings.Builder
+		lastEnd := int64(0)
 
 		// Apply highlighting to filenames and base style to rest of text
-		if len(patterns) > 0 {
-			regex := regexp.MustCompile("(" + strings.Join(patterns, "|") + ")")
-			parts := regex.Split(text, -1)
-			matches := regex.FindAllString(text, -1)
+		for _, filePart := range fileParts {
+			highlight := base.Foreground(t.Secondary())
+			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
 
-			var result strings.Builder
-			for i, part := range parts {
-				if part != "" {
-					result.WriteString(base.Render(part))
-				}
-				if i < len(matches) {
-					result.WriteString(highlight.Render(matches[i]))
-				}
+			if start > lastEnd {
+				result.WriteString(base.Render(text[lastEnd:start]))
 			}
-			text = result.String()
+			result.WriteString(highlight.Render(text[start:end]))
+
+			lastEnd = end
 		}
 
-		content = base.Width(width - 6).Render(text)
+		if lastEnd < int64(len(text)) {
+			result.WriteString(base.Render(text[lastEnd:]))
+		}
+
+		content = base.Width(width - 6).Render(result.String())
 	}
 
 	timestamp := ts.
