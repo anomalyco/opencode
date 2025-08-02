@@ -9,6 +9,8 @@ const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
+let customAuthFile: string | undefined
+
 export namespace Global {
   export const Path = {
     data,
@@ -18,6 +20,14 @@ export namespace Global {
     config,
     state,
   } as const
+
+  export function setAuthFile(filePath: string) {
+    customAuthFile = filePath
+  }
+
+  export function getAuthFile(): string {
+    return customAuthFile || path.join(data, "auth.json")
+  }
 }
 
 await Promise.all([

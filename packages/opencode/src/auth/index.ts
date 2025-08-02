@@ -1,4 +1,3 @@
-import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { z } from "zod"
@@ -25,10 +24,12 @@ export namespace Auth {
   export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown])
   export type Info = z.infer<typeof Info>
 
-  const filepath = path.join(Global.Path.data, "auth.json")
+  function getFilepath() {
+    return Global.getAuthFile()
+  }
 
   export async function get(providerID: string) {
-    const file = Bun.file(filepath)
+    const file = Bun.file(getFilepath())
     return file
       .json()
       .catch(() => ({}))
@@ -36,19 +37,19 @@ export namespace Auth {
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    const file = Bun.file(filepath)
+    const file = Bun.file(getFilepath())
     return file.json().catch(() => ({}))
   }
 
   export async function set(key: string, info: Info) {
-    const file = Bun.file(filepath)
+    const file = Bun.file(getFilepath())
     const data = await all()
     await Bun.write(file, JSON.stringify({ ...data, [key]: info }, null, 2))
     await fs.chmod(file.name!, 0o600)
   }
 
   export async function remove(key: string) {
-    const file = Bun.file(filepath)
+    const file = Bun.file(getFilepath())
     const data = await all()
     delete data[key]
     await Bun.write(file, JSON.stringify(data, null, 2))

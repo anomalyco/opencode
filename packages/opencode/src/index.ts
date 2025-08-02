@@ -19,6 +19,7 @@ import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { Trace } from "./trace"
+import { Global } from "./global"
 
 Trace.init()
 
@@ -50,7 +51,15 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("auth-file", {
+    describe: "path to auth file (default: ~/.local/share/opencode/auth.json)",
+    type: "string",
+  })
   .middleware(async (opts) => {
+    if (opts.authFile) {
+      Global.setAuthFile(opts.authFile)
+    }
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isDev(),
