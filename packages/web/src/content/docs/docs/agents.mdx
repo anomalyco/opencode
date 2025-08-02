@@ -1,0 +1,181 @@
+---
+title: Agents
+description: Configure and use specialized agents in opencode.
+---
+
+Agents are specialized AI assistants that can be configured for specific tasks and workflows. They allow you to create focused tools with custom prompts, models, and tool access.
+
+## Creating Agents
+
+You can create new agents using the `opencode agent create` command. This interactive command will:
+
+1. Ask where to save the agent (global or project-specific)
+2. Prompt for a description of what the agent should do
+3. Generate an appropriate system prompt and identifier
+4. Let you select which tools the agent can access
+5. Create a markdown file with the agent configuration
+
+```bash
+opencode agent create
+```
+
+The command will guide you through the process and automatically generate a well-structured agent based on your requirements.
+
+## Built-in Agents
+
+opencode comes with a built-in `general` agent:
+
+- **general** - General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use this when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+
+## Configuration
+
+Agents can be configured in your `opencode.json` config file or as markdown files.
+
+### JSON Configuration
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    },
+    "test-writer": {
+      "description": "Specialized agent for writing comprehensive tests",
+      "prompt": "You are a test writing specialist. Write thorough, maintainable tests.",
+      "tools": {
+        "bash": true,
+        "read": true,
+        "write": true
+      }
+    }
+  }
+}
+```
+
+### Markdown Configuration
+
+You can also define agents using markdown files. Place them in:
+
+- Global: `~/.config/opencode/agent/`
+- Project: `.opencode/agent/`
+
+```markdown title="~/.config/opencode/agent/code-reviewer.md"
+---
+description: Reviews code for best practices and potential issues
+model: anthropic/claude-sonnet-4-20250514
+tools:
+  write: false
+  edit: false
+---
+
+You are a code reviewer with expertise in security, performance, and maintainability.
+
+Focus on:
+
+- Security vulnerabilities
+- Performance bottlenecks
+- Code maintainability
+- Best practices adherence
+```
+
+## Agent Properties
+
+### Required
+
+- **description** - Brief description of what the agent does and when to use it
+
+### Optional
+
+- **model** - Specific model to use (defaults to your configured model)
+- **prompt** - Custom system prompt for the agent
+- **tools** - Object specifying which tools the agent can access (true/false for each tool)
+- **disable** - Set to true to disable the agent
+
+## Tool Access
+
+By default, agents inherit the same tool access as the main assistant. You can restrict or enable specific tools:
+
+```json
+{
+  "agent": {
+    "readonly-agent": {
+      "description": "Read-only agent for analysis",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+Common tools you might want to control:
+
+- `write` - Create new files
+- `edit` - Modify existing files
+- `bash` - Execute shell commands
+- `read` - Read files
+- `glob` - Search for files
+- `grep` - Search file contents
+
+## Using Agents
+
+Agents are automatically available through the Task tool when configured. The main assistant will use them for specialized tasks based on their descriptions.
+
+## Best Practices
+
+1. **Clear descriptions** - Write specific descriptions that help the main assistant know when to use each agent
+2. **Focused prompts** - Keep agent prompts focused on their specific role
+3. **Appropriate tool access** - Only give agents the tools they need for their tasks
+4. **Consistent naming** - Use descriptive, consistent names for your agents
+5. **Project-specific agents** - Use `.opencode/agent/` for project-specific workflows
+
+## Examples
+
+### Documentation Agent
+
+```markdown title="~/.config/opencode/agent/docs-writer.md"
+---
+description: Writes and maintains project documentation
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Focus on:
+
+- Clear explanations
+- Proper structure
+- Code examples
+- User-friendly language
+```
+
+### Security Auditor
+
+```markdown title="~/.config/opencode/agent/security-auditor.md"
+---
+description: Performs security audits and identifies vulnerabilities
+tools:
+  write: false
+  edit: false
+---
+
+You are a security expert. Focus on identifying potential security issues.
+
+Look for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Dependency vulnerabilities
+- Configuration security issues
+```

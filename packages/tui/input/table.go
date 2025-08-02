@@ -206,7 +206,7 @@ func buildKeysTable(flags int, term string) map[string]Key {
 	table["\x1bOc"] = Key{Code: KeyRight, Mod: ModCtrl}
 	table["\x1bOd"] = Key{Code: KeyLeft, Mod: ModCtrl}
 	//nolint:godox
-	// TODO: invistigate if shift-ctrl arrow keys collide with DECCKM keys i.e.
+	// TODO: investigate if shift-ctrl arrow keys collide with DECCKM keys i.e.
 	// "\x1bOA", "\x1bOB", "\x1bOC", "\x1bOD"
 
 	// URxvt modifier CSI ~ keys

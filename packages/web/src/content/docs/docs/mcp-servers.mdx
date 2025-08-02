@@ -18,7 +18,7 @@ You can define MCP servers in your opencode config under `mcp`.
 
 ### Local
 
-Add local MCP servers under `mcp` with `"type": "local"`.
+Add local MCP servers using `"type": "local"` within the MCP object. Multiple MCP servers can be added. The key string for each server can be any arbitrary name.
 
 ```json title="opencode.json"
 {
@@ -31,7 +31,7 @@ Add local MCP servers under `mcp` with `"type": "local"`.
       "environment": {
         "MY_ENV_VAR": "my_env_var_value"
       }
-    }, {
+    },
     "my-different-local-mcp-server": {
       "type": "local",
       "command": ["bun", "x", "my-other-mcp-command"],
@@ -62,3 +62,28 @@ Add remote MCP servers under `mcp` with `"type": "remote"`.
   }
 }
 ```
+
+Local and remote servers can be used together within the same `mcp` config object.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value"
+      }
+    },
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}

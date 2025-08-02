@@ -270,7 +270,7 @@ func (m Model) GetContent() string {
 	return strings.Join(m.lines, "\n")
 }
 
-// calculateLine taking soft wraping into account, returns the total viewable
+// calculateLine taking soft wrapping into account, returns the total viewable
 // lines and the real-line index for the given yoffset.
 func (m Model) calculateLine(yoffset int) (total, idx int) {
 	if !m.SoftWrap {

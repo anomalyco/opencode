@@ -322,4 +322,43 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const CSharp: Info = {
+    id: "csharp",
+    root: NearestRoot([".sln", ".csproj", "global.json"]),
+    extensions: [".cs"],
+    async spawn(_, root) {
+      let bin = Bun.which("csharp-ls", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+      if (!bin) {
+        if (!Bun.which("dotnet")) {
+          log.error(".NET SDK is required to install csharp-ls")
+          return
+        }
+
+        log.info("installing csharp-ls via dotnet tool")
+        const proc = Bun.spawn({
+          cmd: ["dotnet", "tool", "install", "csharp-ls", "--tool-path", Global.Path.bin],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install csharp-ls")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "csharp-ls" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed csharp-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
 }

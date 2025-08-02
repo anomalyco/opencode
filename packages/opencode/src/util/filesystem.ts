@@ -9,7 +9,7 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return relative(parent, child).startsWith("..")
+    return !relative(parent, child).startsWith("..")
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
@@ -49,10 +49,12 @@ export namespace Filesystem {
         const glob = new Bun.Glob(pattern)
         for await (const match of glob.scan({
           cwd: current,
+          absolute: true,
           onlyFiles: true,
+          followSymlinks: true,
           dot: true,
         })) {
-          result.push(join(current, match))
+          result.push(match)
         }
       } catch {
         // Skip invalid glob patterns

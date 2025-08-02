@@ -5,6 +5,7 @@ import { z } from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
+import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 
 export namespace Fzf {
   const log = Log.create({ service: "fzf" })
@@ -45,7 +46,10 @@ export namespace Fzf {
       log.info("found", { filepath })
       return { filepath }
     }
-    filepath = path.join(Global.Path.bin, "fzf" + (process.platform === "win32" ? ".exe" : ""))
+    filepath = path.join(
+      Global.Path.bin,
+      "fzf" + (process.platform === "win32" ? ".exe" : ""),
+    )
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
@@ -53,15 +57,18 @@ export namespace Fzf {
       const arch = archMap[process.arch as keyof typeof archMap] ?? "amd64"
 
       const config = PLATFORM[process.platform as keyof typeof PLATFORM]
-      if (!config) throw new UnsupportedPlatformError({ platform: process.platform })
+      if (!config)
+        throw new UnsupportedPlatformError({ platform: process.platform })
 
       const version = VERSION
-      const platformName = process.platform === "win32" ? "windows" : process.platform
+      const platformName =
+        process.platform === "win32" ? "windows" : process.platform
       const filename = `fzf-${version}-${platformName}_${arch}.${config.extension}`
       const url = `https://github.com/junegunn/fzf/releases/download/v${version}/${filename}`
 
       const response = await fetch(url)
-      if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
+      if (!response.ok)
+        throw new DownloadFailedError({ url, status: response.status })
 
       const buffer = await response.arrayBuffer()
       const archivePath = path.join(Global.Path.bin, filename)
@@ -80,17 +87,32 @@ export namespace Fzf {
           })
       }
       if (config.extension === "zip") {
-        const proc = Bun.spawn(["unzip", "-j", archivePath, "fzf.exe", "-d", Global.Path.bin], {
-          cwd: Global.Path.bin,
-          stderr: "pipe",
-          stdout: "ignore",
-        })
-        await proc.exited
-        if (proc.exitCode !== 0)
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])));
+        const entries = await zipFileReader.getEntries();
+        let fzfEntry: any;
+        for (const entry of entries) {
+          if (entry.filename === "fzf.exe") {
+            fzfEntry = entry;
+            break;
+          }
+        }
+
+        if (!fzfEntry) {
           throw new ExtractionFailedError({
             filepath: archivePath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
-          })
+            stderr: "fzf.exe not found in zip archive",
+          });
+        }
+
+        const fzfBlob = await fzfEntry.getData(new BlobWriter());
+        if (!fzfBlob) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "Failed to extract fzf.exe from zip archive",
+          });
+        }
+        await Bun.write(filepath, await fzfBlob.arrayBuffer());
+        await zipFileReader.close();
       }
       await fs.unlink(archivePath)
       if (process.platform !== "win32") await fs.chmod(filepath, 0o755)

@@ -8,9 +8,10 @@ import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
+import { Config } from "../config/config"
+import { Filesystem } from "../util/filesystem"
 
-export const WriteTool = Tool.define({
-  id: "write",
+export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
@@ -19,21 +20,28 @@ export const WriteTool = Tool.define({
   async execute(params, ctx) {
     const app = App.info()
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
+    if (!Filesystem.contains(app.path.cwd, filepath)) {
+      throw new Error(`File ${filepath} is not in the current working directory`)
+    }
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    await Permission.ask({
-      id: "write",
-      sessionID: ctx.sessionID,
-      title: exists ? "Overwrite this file: " + filepath : "Create new file: " + filepath,
-      metadata: {
-        filePath: filepath,
-        content: params.content,
-        exists,
-      },
-    })
+    const cfg = await Config.get()
+    if (cfg.permission?.edit === "ask")
+      await Permission.ask({
+        type: "write",
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        title: exists ? "Overwrite this file: " + filepath : "Create new file: " + filepath,
+        metadata: {
+          filePath: filepath,
+          content: params.content,
+          exists,
+        },
+      })
 
     await Bun.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {

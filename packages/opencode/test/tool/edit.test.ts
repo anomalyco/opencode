@@ -326,6 +326,88 @@ const testCases: TestCase[] = [
     find: "const msg = `Hello\\tWorld`;",
     replace: "const msg = `Hi\\tWorld`;",
   },
+
+  // Test case that reproduces the greedy matching bug - now should fail due to low similarity
+  {
+    content: [
+      "func main() {",
+      "  if condition {",
+      "    doSomething()",
+      "  }",
+      "  processData()",
+      "  if anotherCondition {",
+      "    doOtherThing()",
+      "  }",
+      "  return mainLayout",
+      "}",
+      "",
+      "func helper() {",
+      "  }",
+      "  return mainLayout", // This should NOT be matched due to low similarity
+      "}",
+    ].join("\n"),
+    find: ["  }", "  return mainLayout"].join("\n"),
+    replace: ["  }", "  // Add some code here", "  return mainLayout"].join("\n"),
+    fail: true, // This should fail because the pattern has low similarity score
+  },
+
+  // Test case for the fix - more specific pattern should work
+  {
+    content: [
+      "function renderLayout() {",
+      "  const header = createHeader()",
+      "  const body = createBody()",
+      "  return mainLayout",
+      "}",
+    ].join("\n"),
+    find: ["function renderLayout() {", "  // different content", "  return mainLayout", "}"].join("\n"),
+    replace: [
+      "function renderLayout() {",
+      "  const header = createHeader()",
+      "  const body = createBody()",
+      "  // Add minimap overlay",
+      "  return mainLayout",
+      "}",
+    ].join("\n"),
+  },
+
+  // Test that large blocks without arbitrary size limits can work
+  {
+    content: Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n"),
+    find: Array.from({ length: 50 }, (_, i) => `line ${i + 25}`).join("\n"),
+    replace: Array.from({ length: 50 }, (_, i) => `updated line ${i + 25}`).join("\n"),
+  },
+
+  // Test case for the fix - more specific pattern should work
+  {
+    content: [
+      "function renderLayout() {",
+      "  const header = createHeader()",
+      "  const body = createBody()",
+      "  return mainLayout",
+      "}",
+    ].join("\n"),
+    find: ["function renderLayout() {", "  // different content", "  return mainLayout", "}"].join("\n"),
+    replace: [
+      "function renderLayout() {",
+      "  const header = createHeader()",
+      "  const body = createBody()",
+      "  // Add minimap overlay",
+      "  return mainLayout",
+      "}",
+    ].join("\n"),
+  },
+
+  // Test BlockAnchorReplacer with overly large blocks (should fail)
+  {
+    content:
+      Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n") +
+      "\nfunction test() {\n" +
+      Array.from({ length: 60 }, (_, i) => `  content ${i}`).join("\n") +
+      "\n  return result\n}",
+    find: ["function test() {", "  // different content", "  return result", "}"].join("\n"),
+    replace: ["function test() {", "  return 42", "}"].join("\n"),
+  },
 ]
 
 describe("EditTool Replacers", () => {

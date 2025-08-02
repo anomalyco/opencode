@@ -5,6 +5,7 @@ import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
 import { AuthCommand } from "./cli/cmd/auth"
+import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
@@ -16,7 +17,7 @@ import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
-import { InstallGithubCommand } from "./cli/cmd/install-github"
+import { GithubCommand } from "./cli/cmd/github"
 import { Trace } from "./trace"
 
 Trace.init()
@@ -72,11 +73,12 @@ const cli = yargs(hideBin(process.argv))
   .command(GenerateCommand)
   .command(DebugCommand)
   .command(AuthCommand)
+  .command(AgentCommand)
   .command(UpgradeCommand)
   .command(ServeCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
-  .command(InstallGithubCommand)
+  .command(GithubCommand)
   .fail((msg) => {
     if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
       cli.showHelp("log")

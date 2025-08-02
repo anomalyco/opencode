@@ -17,7 +17,6 @@ import {
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
-import PROMPT_ANTHROPIC_SPOOF from "../session/prompt/anthropic_spoof.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -40,7 +39,9 @@ import { MessageV2 } from "./message-v2"
 import { Mode } from "./mode"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
-import { splitWhen } from "remeda"
+import { mergeDeep, pipe, splitWhen } from "remeda"
+import { ToolRegistry } from "../tool/registry"
+import { Plugin } from "../plugin"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -67,6 +68,7 @@ export namespace Session {
           messageID: z.string(),
           partID: z.string().optional(),
           snapshot: z.string().optional(),
+          diff: z.string().optional(),
         })
         .optional(),
     })
@@ -255,7 +257,10 @@ export namespace Session {
   }
 
   export async function getMessage(sessionID: string, messageID: string) {
-    return Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID)
+    return {
+      info: await Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID),
+      parts: await getParts(sessionID, messageID),
+    }
   }
 
   export async function getParts(sessionID: string, messageID: string) {
@@ -289,6 +294,9 @@ export namespace Session {
   export function abort(sessionID: string) {
     const controller = state().pending.get(sessionID)
     if (!controller) return false
+    log.info("aborting", {
+      sessionID,
+    })
     controller.abort()
     state().pending.delete(sessionID)
     return true
@@ -337,6 +345,7 @@ export namespace Session {
     providerID: z.string(),
     modelID: z.string(),
     mode: z.string().optional(),
+    system: z.string().optional(),
     tools: z.record(z.boolean()).optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
@@ -372,6 +381,36 @@ export namespace Session {
     l.info("chatting")
 
     const inputMode = input.mode ?? "build"
+
+    // Process revert cleanup first, before creating new messages
+    const session = await get(input.sessionID)
+    if (session.revert) {
+      let msgs = await messages(input.sessionID)
+      const messageID = session.revert.messageID
+      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+      msgs = preserve
+      for (const msg of remove) {
+        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
+      }
+      const last = preserve.at(-1)
+      if (session.revert.partID && last) {
+        const partID = session.revert.partID
+        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+        last.parts = preserveParts
+        for (const part of removeParts) {
+          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            sessionID: input.sessionID,
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }
+      }
+      await update(input.sessionID, (draft) => {
+        draft.revert = undefined
+      })
+    }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -387,12 +426,38 @@ export namespace Session {
         if (part.type === "file") {
           const url = new URL(part.url)
           switch (url.protocol) {
+            case "data:":
+              if (part.mime === "text/plain") {
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: Buffer.from(part.url, "base64url").toString(),
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
+              break
             case "file:":
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const pathname = decodeURIComponent(url.pathname)
-              const relativePath = pathname.replace(app.path.cwd, ".")
-              const filePath = path.join(app.path.cwd, relativePath)
+              const filePath = decodeURIComponent(url.pathname)
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -430,12 +495,14 @@ export namespace Session {
                   }
                 }
                 const args = { filePath, offset, limit }
-                const result = await ReadTool.execute(args, {
-                  sessionID: input.sessionID,
-                  abort: new AbortController().signal,
-                  messageID: userMsg.id,
-                  metadata: async () => {},
-                })
+                const result = await ReadTool.init().then((t) =>
+                  t.execute(args, {
+                    sessionID: input.sessionID,
+                    abort: new AbortController().signal,
+                    messageID: userMsg.id,
+                    metadata: async () => {},
+                  }),
+                )
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -470,7 +537,7 @@ export namespace Session {
                   messageID: userMsg.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${pathname}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
                   synthetic: true,
                 },
                 {
@@ -505,12 +572,21 @@ export namespace Session {
         text: PROMPT_PLAN,
         synthetic: true,
       })
-
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: userMsg,
+        parts: userParts,
+      },
+    )
     await updateMessage(userMsg)
     for (const part of userParts) {
       await updatePart(part)
     }
-    // mark session as updated since a message has been added to it
+
+    // mark session as updated
+    // used for session list sorting (indicates when session was most recently interacted with)
     await update(input.sessionID, (_draft) => {})
 
     if (isLocked(input.sessionID)) {
@@ -529,30 +605,6 @@ export namespace Session {
 
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
-    const session = await get(input.sessionID)
-
-    if (session.revert) {
-      const messageID = session.revert.messageID
-      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-      msgs = preserve
-      for (const msg of remove) {
-        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
-        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
-      }
-      const last = preserve.at(-1)
-      if (session.revert.partID && last) {
-        const partID = session.revert.partID
-        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
-        last.parts = preserveParts
-        for (const part of removeParts) {
-          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
-          await Bus.publish(MessageV2.Event.PartRemoved, {
-            messageID: last.info.id,
-            partID: part.id,
-          })
-        }
-      }
-    }
 
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
@@ -609,15 +661,23 @@ export namespace Session {
         .then((result) => {
           if (result.text)
             return Session.update(input.sessionID, (draft) => {
-              draft.title = result.text
+              const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+              draft.title = title.trim()
             })
         })
         .catch(() => {})
     }
 
     const mode = await Mode.get(inputMode)
-    let system = input.providerID === "anthropic" ? [PROMPT_ANTHROPIC_SPOOF.trim()] : []
-    system.push(...(mode.prompt ? [mode.prompt] : SystemPrompt.provider(input.modelID)))
+    let system = SystemPrompt.header(input.providerID)
+    system.push(
+      ...(() => {
+        if (input.system) return [input.system]
+        if (mode.prompt) return [mode.prompt]
+        return SystemPrompt.provider(input.modelID)
+      })(),
+    )
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
@@ -652,19 +712,35 @@ export namespace Session {
 
     const processor = createProcessor(assistantMsg, model.info)
 
-    for (const item of await Provider.tools(input.providerID)) {
-      if (mode.tools[item.id] === false) continue
-      if (input.tools?.[item.id] === false) continue
-      if (session.parentID && item.id === "task") continue
+    const enabledTools = pipe(
+      mode.tools,
+      mergeDeep(ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(input.tools ?? {}),
+    )
+    for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
+      if (enabledTools[item.id] === false) continue
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args, options) {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            {
+              args,
+            },
+          )
+          await processor.track(options.toolCallId)
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: abort.signal,
             messageID: assistantMsg.id,
+            callID: options.toolCallId,
             metadata: async (val) => {
               const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
@@ -683,6 +759,15 @@ export namespace Session {
               }
             },
           })
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            result,
+          )
           return result
         },
         toModelOutput(result) {
@@ -699,6 +784,7 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        await processor.track(opts.toolCallId)
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
@@ -718,8 +804,27 @@ export namespace Session {
       tools[key] = item
     }
 
+    const params = {
+      temperature: model.info.temperature
+        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+        : undefined,
+      topP: mode.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
+    }
+    await Plugin.trigger(
+      "chat.params",
+      {
+        model: model.info,
+        provider: await Provider.getProvider(input.providerID),
+        message: userMsg,
+      },
+      params,
+    )
     const stream = streamText({
-      onError() {},
+      onError(e) {
+        log.error("streamText error", {
+          error: e,
+        })
+      },
       async prepareStep({ messages }) {
         const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
         if (queue.length) {
@@ -754,6 +859,7 @@ export namespace Session {
             },
             modelID: input.modelID,
             providerID: input.providerID,
+            mode: inputMode,
             time: {
               created: Date.now(),
             },
@@ -765,13 +871,15 @@ export namespace Session {
           messages,
         }
       },
-      maxRetries: 10,
+      maxRetries: 3,
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
       providerOptions: {
         [input.providerID]: model.info.options,
       },
+      temperature: params.temperature,
+      topP: params.topP,
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -781,7 +889,6 @@ export namespace Session {
         ),
         ...MessageV2.toModelMessage(msgs),
       ],
-      temperature: model.info.temperature ? 0 : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
         model: model.language,
@@ -814,7 +921,12 @@ export namespace Session {
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
     const toolCalls: Record<string, MessageV2.ToolPart> = {}
+    const snapshots: Record<string, string> = {}
     return {
+      async track(toolCallID: string) {
+        const hash = await Snapshot.track()
+        if (hash) snapshots[toolCallID] = hash
+      },
       partFromToolCall(toolCallID: string) {
         return toolCalls[toolCallID]
       },
@@ -828,20 +940,11 @@ export namespace Session {
             })
             switch (value.type) {
               case "start":
-                const snapshot = await Snapshot.create()
-                if (snapshot)
-                  await updatePart({
-                    id: Identifier.ascending("part"),
-                    messageID: assistantMsg.id,
-                    sessionID: assistantMsg.sessionID,
-                    type: "snapshot",
-                    snapshot,
-                  })
                 break
 
               case "tool-input-start":
                 const part = await updatePart({
-                  id: Identifier.ascending("part"),
+                  id: toolCalls[value.id]?.id ?? Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
                   type: "tool",
@@ -855,6 +958,9 @@ export namespace Session {
                 break
 
               case "tool-input-delta":
+                break
+
+              case "tool-input-end":
                 break
 
               case "tool-call": {
@@ -892,15 +998,20 @@ export namespace Session {
                     },
                   })
                   delete toolCalls[value.toolCallId]
-                  const snapshot = await Snapshot.create()
-                  if (snapshot)
-                    await updatePart({
-                      id: Identifier.ascending("part"),
-                      messageID: assistantMsg.id,
-                      sessionID: assistantMsg.sessionID,
-                      type: "snapshot",
-                      snapshot,
-                    })
+                  const snapshot = snapshots[value.toolCallId]
+                  if (snapshot) {
+                    const patch = await Snapshot.patch(snapshot)
+                    if (patch.files.length) {
+                      await updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: assistantMsg.id,
+                        sessionID: assistantMsg.sessionID,
+                        type: "patch",
+                        hash: patch.hash,
+                        files: patch.files,
+                      })
+                    }
+                  }
                 }
                 break
               }
@@ -921,15 +1032,18 @@ export namespace Session {
                     },
                   })
                   delete toolCalls[value.toolCallId]
-                  const snapshot = await Snapshot.create()
-                  if (snapshot)
+                  const snapshot = snapshots[value.toolCallId]
+                  if (snapshot) {
+                    const patch = await Snapshot.patch(snapshot)
                     await updatePart({
                       id: Identifier.ascending("part"),
                       messageID: assistantMsg.id,
                       sessionID: assistantMsg.sessionID,
-                      type: "snapshot",
-                      snapshot,
+                      type: "patch",
+                      hash: patch.hash,
+                      files: patch.files,
                     })
+                  }
                 }
                 break
               }
@@ -974,15 +1088,16 @@ export namespace Session {
                 }
                 break
 
-              case "text":
+              case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
-                  await updatePart(currentText)
+                  if (currentText.text) await updatePart(currentText)
                 }
                 break
 
               case "text-end":
-                if (currentText && currentText.text) {
+                if (currentText) {
+                  currentText.text = currentText.text.trimEnd()
                   currentText.time = {
                     start: Date.now(),
                     end: Date.now(),
@@ -1042,7 +1157,7 @@ export namespace Session {
         }
         const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
         for (const part of p) {
-          if (part.type === "tool" && part.state.status !== "completed") {
+          if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
             updatePart({
               ...part,
               state: {
@@ -1073,33 +1188,46 @@ export namespace Session {
 
   export async function revert(input: RevertInput) {
     const all = await messages(input.sessionID)
-    const session = await get(input.sessionID)
     let lastUser: MessageV2.User | undefined
-    let lastSnapshot: MessageV2.SnapshotPart | undefined
+    const session = await get(input.sessionID)
+
+    let revert: Info["revert"]
+    const patches: Snapshot.Patch[] = []
     for (const msg of all) {
       if (msg.info.role === "user") lastUser = msg.info
       const remaining = []
       for (const part of msg.parts) {
-        if (part.type === "snapshot") lastSnapshot = part
-        if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
-          // if no useful parts left in message, same as reverting whole message
-          const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
-          const snapshot = session.revert?.snapshot ?? (await Snapshot.create())
-          log.info("revert snapshot", { snapshot })
-          if (lastSnapshot) await Snapshot.restore(lastSnapshot.snapshot)
-          const next = await update(input.sessionID, (draft) => {
-            draft.revert = {
-              // if not part id jump to the last user message
+        if (revert) {
+          if (part.type === "patch") {
+            patches.push(part)
+          }
+          continue
+        }
+
+        if (!revert) {
+          if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
+            // if no useful parts left in message, same as reverting whole message
+            const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
+            revert = {
               messageID: !partID && lastUser ? lastUser.id : msg.info.id,
               partID,
-              snapshot,
             }
-          })
-          return next
+          }
+          remaining.push(part)
         }
-        remaining.push(part)
       }
     }
+
+    if (revert) {
+      const session = await get(input.sessionID)
+      revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
+      await Snapshot.revert(patches)
+      if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
+      return update(input.sessionID, (draft) => {
+        draft.revert = revert
+      })
+    }
+    return session
   }
 
   export async function unrevert(input: { sessionID: string }) {
@@ -1120,7 +1248,11 @@ export namespace Session {
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const app = App.info()
-    const system = SystemPrompt.summarize(input.providerID)
+    const system = [
+      ...SystemPrompt.summarize(input.providerID),
+      ...(await SystemPrompt.environment()),
+      ...(await SystemPrompt.custom()),
+    ]
 
     const next: MessageV2.Info = {
       id: Identifier.ascending("message"),

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+function prism_is_running() {
+  curl --silent "http://localhost:4010" >/dev/null 2>&1
+}
+
+kill_server_on_port() {
+  pids=$(lsof -t -i tcp:"$1" || echo "")
+  if [ "$pids" != "" ]; then
+    kill "$pids"
+    echo "Stopped $pids."
+  fi
+}
+
+function is_overriding_api_base_url() {
+  [ -n "$TEST_API_BASE_URL" ]
+}
+
+if ! is_overriding_api_base_url && ! prism_is_running ; then
+  # When we exit this script, make sure to kill the background mock server process
+  trap 'kill_server_on_port 4010' EXIT
+
+  # Start the dev server
+  ./scripts/mock --daemon
+fi
+
+if is_overriding_api_base_url ; then
+  echo -e "${GREEN}✔ Running tests against ${TEST_API_BASE_URL}${NC}"
+  echo
+elif ! prism_is_running ; then
+  echo -e "${RED}ERROR:${NC} The test suite will not run without a mock Prism server"
+  echo -e "running against your OpenAPI spec."
+  echo
+  echo -e "To run the server, pass in the path or url of your OpenAPI"
+  echo -e "spec to the prism command:"
+  echo
+  echo -e "  \$ ${YELLOW}npm exec --package=@stoplight/prism-cli@~5.3.2 -- prism mock path/to/your.openapi.yml${NC}"
+  echo
+
+  exit 1
+else
+  echo -e "${GREEN}✔ Mock prism server is running with your OpenAPI spec${NC}"
+  echo
+fi
+
+echo "==> Running tests"
+go test ./... "$@"

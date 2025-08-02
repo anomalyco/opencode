@@ -138,8 +138,6 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 		case "n":
-			s.app.Session = &opencode.Session{}
-			s.app.Messages = []app.Message{}
 			return s, tea.Sequence(
 				util.CmdHandler(modal.CloseModalMsg{}),
 				util.CmdHandler(app.SessionClearedMsg{}),

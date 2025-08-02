@@ -23,6 +23,7 @@ type ModeModel struct {
 
 type State struct {
 	Theme              string               `toml:"theme"`
+	ScrollSpeed        *int                 `toml:"scroll_speed"`
 	ModeModel          map[string]ModeModel `toml:"mode_model"`
 	Provider           string               `toml:"provider"`
 	Model              string               `toml:"model"`
@@ -119,5 +120,13 @@ func LoadState(filePath string) (*State, error) {
 		}
 		return nil, fmt.Errorf("failed to decode TOML from file %s: %w", filePath, err)
 	}
+
+	// Restore attachment sources types that were deserialized as map[string]any
+	for _, prompt := range state.MessageHistory {
+		for _, att := range prompt.Attachments {
+			att.RestoreSourceType()
+		}
+	}
+
 	return &state, nil
 }

@@ -61,17 +61,46 @@ export const AuthListCommand = cmd({
         prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${activeEnvVars.length} environment variables`)
+      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
     }
   },
 })
 
 export const AuthLoginCommand = cmd({
-  command: "login",
+  command: "login [url]",
   describe: "log in to a provider",
-  async handler() {
+  builder: (yargs) =>
+    yargs.positional("url", {
+      describe: "opencode auth provider",
+      type: "string",
+    }),
+  async handler(args) {
     UI.empty()
     prompts.intro("Add credential")
+    if (args.url) {
+      const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
+      prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+      const proc = Bun.spawn({
+        cmd: wellknown.auth.command,
+        stdout: "pipe",
+      })
+      const exit = await proc.exited
+      if (exit !== 0) {
+        prompts.log.error("Failed")
+        prompts.outro("Done")
+        return
+      }
+      const token = await new Response(proc.stdout).text()
+      await Auth.set(args.url, {
+        type: "wellknown",
+        key: wellknown.auth.env,
+        token: token.trim(),
+      })
+      prompts.log.success("Logged into " + args.url)
+      prompts.outro("Done")
+      return
+    }
+    await ModelsDev.refresh().catch(() => {})
     const providers = await ModelsDev.get()
     const priority: Record<string, number> = {
       anthropic: 0,
@@ -81,7 +110,7 @@ export const AuthLoginCommand = cmd({
       openrouter: 4,
       vercel: 5,
     }
-    let provider = await prompts.select({
+    let provider = await prompts.autocomplete({
       message: "Select provider",
       maxItems: 8,
       options: [
@@ -110,7 +139,7 @@ export const AuthLoginCommand = cmd({
     if (provider === "other") {
       provider = await prompts.text({
         message: "Enter provider id",
-        validate: (x) => (x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+        validate: (x) => x && (x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       })
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
       provider = provider.replace(/^@ai-sdk\//, "")
@@ -164,7 +193,7 @@ export const AuthLoginCommand = cmd({
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
-          validate: (x) => (x.length > 0 ? undefined : "Required"),
+          validate: (x) => x && (x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
@@ -200,7 +229,7 @@ export const AuthLoginCommand = cmd({
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
-          validate: (x) => (x.length > 0 ? undefined : "Required"),
+          validate: (x) => x && (x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
@@ -273,7 +302,7 @@ export const AuthLoginCommand = cmd({
 
     const key = await prompts.password({
       message: "Enter your API key",
-      validate: (x) => (x.length > 0 ? undefined : "Required"),
+      validate: (x) => x && (x.length > 0 ? undefined : "Required"),
     })
     if (prompts.isCancel(key)) throw new UI.CancelledError()
     await Auth.set(provider, {
