@@ -24,6 +24,7 @@ interface SessionStats {
 
 export const StatsCommand = cmd({
   command: "stats",
+  describe: "show usage statistics",
   handler: async () => {},
 })
 

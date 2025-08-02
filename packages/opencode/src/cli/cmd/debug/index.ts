@@ -9,6 +9,7 @@ import { SnapshotCommand } from "./snapshot"
 
 export const DebugCommand = cmd({
   command: "debug",
+  describe: "debug tools and utilities",
   builder: (yargs) =>
     yargs
       .command(LSPCommand)
@@ -19,6 +20,7 @@ export const DebugCommand = cmd({
       .command(PathsCommand)
       .command({
         command: "wait",
+        describe: "wait for 24 hours",
         async handler() {
           await bootstrap({ cwd: process.cwd() }, async () => {
             await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
@@ -31,6 +33,7 @@ export const DebugCommand = cmd({
 
 const PathsCommand = cmd({
   command: "paths",
+  describe: "show global paths",
   handler() {
     for (const [key, value] of Object.entries(Global.Path)) {
       console.log(key.padEnd(10), value)

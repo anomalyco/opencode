@@ -3,6 +3,7 @@ import type { CommandModule } from "yargs"
 
 export const GenerateCommand = {
   command: "generate",
+  describe: "generate OpenAPI specifications",
   handler: async () => {
     const specs = await Server.openapi()
     process.stdout.write(JSON.stringify(specs, null, 2))

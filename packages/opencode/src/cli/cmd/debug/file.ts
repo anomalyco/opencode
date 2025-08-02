@@ -4,6 +4,7 @@ import { cmd } from "../cmd"
 
 const FileReadCommand = cmd({
   command: "read <path>",
+  describe: "read file contents",
   builder: (yargs) =>
     yargs.positional("path", {
       type: "string",
@@ -20,6 +21,7 @@ const FileReadCommand = cmd({
 
 const FileStatusCommand = cmd({
   command: "status",
+  describe: "show file system status",
   builder: (yargs) => yargs,
   async handler() {
     await bootstrap({ cwd: process.cwd() }, async () => {
@@ -31,6 +33,7 @@ const FileStatusCommand = cmd({
 
 export const FileCommand = cmd({
   command: "file",
+  describe: "file system debugging tools",
   builder: (yargs) => yargs.command(FileReadCommand).command(FileStatusCommand).demandCommand(),
   async handler() {},
 })

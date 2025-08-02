@@ -5,6 +5,7 @@ import { Log } from "../../../util/log"
 
 export const LSPCommand = cmd({
   command: "lsp",
+  describe: "LSP server debugging tools",
   builder: (yargs) =>
     yargs.command(DiagnosticsCommand).command(SymbolsCommand).command(DocumentSymbolsCommand).demandCommand(),
   async handler() {},
@@ -12,6 +13,7 @@ export const LSPCommand = cmd({
 
 const DiagnosticsCommand = cmd({
   command: "diagnostics <file>",
+  describe: "get LSP diagnostics for a file",
   builder: (yargs) => yargs.positional("file", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
@@ -23,6 +25,7 @@ const DiagnosticsCommand = cmd({
 
 export const SymbolsCommand = cmd({
   command: "symbols <query>",
+  describe: "search workspace symbols",
   builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
@@ -35,6 +38,7 @@ export const SymbolsCommand = cmd({
 
 export const DocumentSymbolsCommand = cmd({
   command: "document-symbols <uri>",
+  describe: "get document symbols for a file",
   builder: (yargs) => yargs.positional("uri", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap({ cwd: process.cwd() }, async () => {
