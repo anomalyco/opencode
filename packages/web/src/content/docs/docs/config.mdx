@@ -230,6 +230,12 @@ You can also define agents using markdown files in `~/.config/opencode/agent/` o
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
 
+The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
+
+- It won't be loaded even if environment variables are set
+- It won't be loaded even if API keys are configured through `opencode auth login`
+- The provider's models won't appear in the model selection list
+
 ---
 
 ### Formatters
@@ -242,12 +248,6 @@ You can configure code formatters through the `formatter` option. See [Formatter
   "disabled_providers": ["openai", "gemini"]
 }
 ```
-
-The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
-
-- It won't be loaded even if environment variables are set
-- It won't be loaded even if API keys are configured through `opencode auth login`
-- The provider's models won't appear in the model selection list
 
 ---
 
