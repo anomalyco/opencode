@@ -327,6 +327,43 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 
 ---
 
+### Cerebras
+
+1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
+
+
+2. Run `opencode auth login` and select **Cerebras**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Cerebras
+   │  ...
+   └
+   ```
+
+3. Enter your Cerebras API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Cerebras
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Qwen 3 Coder 480B_.
+
+---
+
 ### DeepSeek
 
 1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and click **Create new API key**.
@@ -720,87 +757,6 @@ https://platform.openai.com/api-keys
      }
    }
    ```
-
-{ /*
----
-
-TODO: Test a model that actually works, currently getting errors form the API
-for Qwen non-thinking models.
-
-### Cerebras
-
-Cerebras offers fast inference with generous free tiers and competitive pricing.
-
-1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
-
-2. Run `opencode auth login` and select **Other**.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ◆  Select provider
-   │  ...
-   │  ● Other
-   └
-   ```
-
-3. Enter `cerebras` as the provider ID.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ◇  Select provider
-   │  Other
-   │
-   ◇  Enter provider id
-   │  cerebras
-   └
-   ```
-
-4. Enter your Cerebras API key.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ◇  Enter your API key
-   │  csk-...
-   └
-   ```
-
-5. Configure Cerebras in your opencode config.
-
-   ```json title="opencode.json" "cerebras" {5-19}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "cerebras": {
-         "npm": "@ai-sdk/cerebras",
-         "name": "Cerebras",
-         "options": {
-           "baseURL": "https://api.cerebras.ai/v1"
-         },
-         "models": {
-           "qwen-3-235b-a22b": {
-             "name": "Qwen-3-235b-a22b"
-           },
-           "llama-3.3-70b": {
-             "name": "Llama-3.3-70b"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-6. Run the `/models` command to select a Cerebras model.
-
-*/ }
 
 ---
 

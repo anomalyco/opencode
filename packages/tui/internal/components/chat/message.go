@@ -217,15 +217,27 @@ func renderText(
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
 		text = ansi.WordwrapWc(text, width-6, " -")
 
-		// Build list of attachment filenames for highlighting
+		var result strings.Builder
+		lastEnd := int64(0)
+
+		// Apply highlighting to filenames and base style to rest of text
 		for _, filePart := range fileParts {
-			atFilename := "@" + filePart.Filename
-			// Find and highlight complete @filename references
-			highlightStyle := base.Foreground(t.Secondary())
-			text = strings.ReplaceAll(text, atFilename, highlightStyle.Render(atFilename))
+			highlight := base.Foreground(t.Secondary())
+			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
+
+			if start > lastEnd {
+				result.WriteString(base.Render(text[lastEnd:start]))
+			}
+			result.WriteString(highlight.Render(text[start:end]))
+
+			lastEnd = end
 		}
 
-		content = base.Width(width - 6).Render(text)
+		if lastEnd < int64(len(text)) {
+			result.WriteString(base.Render(text[lastEnd:]))
+		}
+
+		content = base.Width(width - 6).Render(result.String())
 	}
 
 	timestamp := ts.
@@ -437,6 +449,10 @@ func renderToolDetails(
 			stdout := metadata["stdout"]
 			if stdout != nil {
 				body += ansi.Strip(fmt.Sprintf("%s", stdout))
+			}
+			stderr := metadata["stderr"]
+			if stderr != nil {
+				body += ansi.Strip(fmt.Sprintf("%s", stderr))
 			}
 			body += "```"
 			body = util.ToMarkdown(body, width, backgroundColor)
