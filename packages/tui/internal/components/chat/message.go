@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -215,14 +216,31 @@ func renderText(
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
+		highlight := base.Foreground(t.Secondary())
 		text = ansi.WordwrapWc(text, width-6, " -")
 
-		// Build list of attachment filenames for highlighting
+		// Build list of regex patterns for attachment filenames
+		var patterns []string
 		for _, filePart := range fileParts {
-			atFilename := "@" + filePart.Filename
-			// Find and highlight complete @filename references
-			highlightStyle := base.Foreground(t.Secondary())
-			text = strings.ReplaceAll(text, atFilename, highlightStyle.Render(atFilename))
+			patterns = append(patterns, regexp.QuoteMeta("@"+filePart.Filename))
+		}
+
+		// Apply highlighting to filenames and base style to rest of text
+		if len(patterns) > 0 {
+			regex := regexp.MustCompile("(" + strings.Join(patterns, "|") + ")")
+			parts := regex.Split(text, -1)
+			matches := regex.FindAllString(text, -1)
+
+			var result strings.Builder
+			for i, part := range parts {
+				if part != "" {
+					result.WriteString(base.Render(part))
+				}
+				if i < len(matches) {
+					result.WriteString(highlight.Render(matches[i]))
+				}
+			}
+			text = result.String()
 		}
 
 		content = base.Width(width - 6).Render(text)
