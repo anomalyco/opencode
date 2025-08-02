@@ -272,13 +272,13 @@ func (a *App) SwitchModeReverse() (*App, tea.Cmd) {
 
 // findModelByFullID finds a model by its full ID in the format "provider/model"
 func findModelByFullID(providers []opencode.Provider, fullModelID string) (*opencode.Provider, *opencode.Model) {
-	modelParts := strings.Split(fullModelID, "/")
+	modelParts := strings.SplitN(fullModelID, "/", 2)
 	if len(modelParts) < 2 {
 		return nil, nil
 	}
 
 	providerID := modelParts[0]
-	modelID := strings.Join(modelParts[1:], "/")
+	modelID := modelParts[1]
 
 	return findModelByProviderAndModelID(providers, providerID, modelID)
 }
