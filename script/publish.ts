@@ -14,12 +14,43 @@ const env = await prompts({
 })
 
 const snapshot = env.value === "snapshot"
-const version = snapshot
-  ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  : process.env["OPENCODE_VERSION"]
-if (!version) {
-  throw new Error("OPENCODE_VERSION is required")
+
+let version: string
+if (snapshot) {
+  const packageJson = await Bun.file("./packages/opencode/package.json").json()
+  const currentVersion = packageJson.version
+  version = `${currentVersion}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+} else {
+  const packageJson = await Bun.file("./packages/opencode/package.json").json()
+  const currentVersion = packageJson.version
+  const [major, minor, patch] = currentVersion.split(".").map(Number)
+
+  const versionChoice = await prompts({
+    type: "select",
+    name: "value",
+    message: `Current version: ${currentVersion}. Select version bump:`,
+    choices: [
+      { title: `Patch (${major}.${minor}.${patch + 1})`, value: "patch" },
+      { title: `Minor (${major}.${minor + 1}.0)`, value: "minor" },
+      { title: `Major (${major + 1}.0.0)`, value: "major" },
+    ],
+  })
+
+  switch (versionChoice.value) {
+    case "patch":
+      version = `${major}.${minor}.${patch + 1}`
+      break
+    case "minor":
+      version = `${major}.${minor + 1}.0`
+      break
+    case "major":
+      version = `${major + 1}.0.0`
+      break
+    default:
+      throw new Error("Invalid version choice")
+  }
 }
+
 process.env["OPENCODE_VERSION"] = version
 
 const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
