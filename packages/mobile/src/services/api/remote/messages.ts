@@ -30,11 +30,16 @@ interface MessagePartResponse {
 }
 
 interface SendMessageRequest {
-  content: string
-  attachments?: Array<{
-    type: string
-    content: string
+  providerID: string
+  modelID: string
+  parts: Array<{
+    type: "text"
+    text: string
   }>
+  messageID?: string
+  mode?: string
+  system?: string
+  tools?: Record<string, boolean>
 }
 
 // Query hooks

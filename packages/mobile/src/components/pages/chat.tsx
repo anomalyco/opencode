@@ -6,6 +6,8 @@ import { Box, Text, Button, Input } from "@/components/ui/primitives"
 import { useLocalMessagesQuery, useUpsertLocalMessageMutation } from "@/services/api/local/messages"
 import { useSendRemoteMessageMutation, useRemoteMessagesQuery } from "@/services/api/remote/messages"
 import { useLocalSessionQuery } from "@/services/api/local/sessions"
+import { useLocalUserSettingsQuery } from "@/services/api/local/config"
+import { useStreaming } from "@/services/api/remote/streaming"
 
 interface ChatPageProps {
   sessionId: string
@@ -18,15 +20,16 @@ interface MessageItemProps {
     createdAt: Date
   }
   remoteMessages?: any[]
+  localContent?: string
 }
 
-const MessageItem = ({ message, remoteMessages }: MessageItemProps) => {
+const MessageItem = ({ message, remoteMessages, localContent }: MessageItemProps) => {
   const isUser = message.role === "user"
 
   // Find the corresponding remote message to get the text content
   const remoteMessage = remoteMessages?.find((rm) => rm.info.id === message.id)
   const textParts = remoteMessage?.parts?.filter((part: any) => part.type === "text" && !part.synthetic) || []
-  const content = textParts.map((part: any) => part.text).join("\n") || "No content"
+  const content = localContent || textParts.map((part: any) => part.text).join("\n") || "No content"
 
   return (
     <Box p="md">
@@ -102,27 +105,22 @@ const MessageInput = ({ onSend, isLoading }: { onSend: (content: string) => void
 
 export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const [refreshing, setRefreshing] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
   const flatListRef = useRef<FlatList>(null)
+  const streamingTimeoutRef = useRef<number | null>(null)
+  const [pendingUserMessages, setPendingUserMessages] = useState<Map<string, string>>(new Map())
 
   const { data: session } = useLocalSessionQuery(sessionId)
   const { data: messages, isLoading, refetch: refetchMessages } = useLocalMessagesQuery(sessionId)
   const { data: remoteMessages } = useRemoteMessagesQuery(sessionId)
+  const { data: userSettings } = useLocalUserSettingsQuery()
   const sendMessage = useSendRemoteMessageMutation()
   const upsertLocalMessage = useUpsertLocalMessageMutation()
-
-  console.log("💬 Chat: sessionId", sessionId)
-  console.log("💬 Chat: session", session?.title)
-  console.log("💬 Chat: messages", { count: messages?.length, isLoading })
-  console.log("💬 Chat: remoteMessages", { count: remoteMessages?.length })
-  if (remoteMessages?.length) {
-    console.log("💬 Chat: First remote message", JSON.stringify(remoteMessages[0], null, 2))
-  }
+  const streaming = useStreaming()
 
   // Sync remote messages to local database
   useEffect(() => {
     if (remoteMessages && remoteMessages.length > 0) {
-      console.log("💬 Chat: Syncing", remoteMessages.length, "remote messages")
-
       remoteMessages.forEach(async (remoteMessage) => {
         // Get text content from parts
 
@@ -154,13 +152,70 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
         try {
           await upsertLocalMessage.mutateAsync(localMessage)
-          console.log("✅ Chat: Synced message", remoteMessage.info.id)
+          // Clear pending content since it's now synced
+          setPendingUserMessages((prev) => {
+            const newMap = new Map(prev)
+            newMap.delete(remoteMessage.info.id)
+            return newMap
+          })
         } catch (error) {
           console.error("❌ Chat: Failed to sync message", error)
         }
       })
     }
   }, [remoteMessages])
+
+  // Connect to streaming and listen for message updates
+  useEffect(() => {
+    if (!streaming.isConnected()) {
+      streaming.connect()
+    }
+
+    const unsubscribe = streaming.subscribe("*", (event) => {
+      console.log("📡 Chat: Received streaming event", event.type, event)
+
+      // Check if this event is for our session
+      let eventSessionId: string | undefined
+      if (event.type === "storage.write") {
+        eventSessionId = (event as any).properties?.content?.sessionID
+      } else if (event.type === "message.updated") {
+        eventSessionId = (event as any).properties?.info?.sessionID
+      } else if (event.type === "message.part.updated") {
+        eventSessionId = (event as any).properties?.part?.sessionID
+      } else if (event.type === "session.idle") {
+        eventSessionId = (event as any).properties?.sessionID
+      }
+
+      if (eventSessionId !== sessionId) return
+
+      console.log("📡 Chat: Event is for our session")
+
+      if (event.type === "session.idle") {
+        console.log("📡 Chat: Session idle - stopping streaming")
+        setIsStreaming(false)
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current)
+          streamingTimeoutRef.current = null
+        }
+        refetchMessages()
+      } else if (event.type === "message.part.updated") {
+        console.log("📡 Chat: Message part updated - refreshing")
+        refetchMessages()
+      } else if (event.type === "message.updated") {
+        console.log("📡 Chat: Message updated - refreshing")
+        refetchMessages()
+      } else if (event.type === "storage.write") {
+        const key = (event as any).properties?.key
+        if (key?.includes("step-start")) {
+          console.log("📡 Chat: Step started - ensuring streaming is on")
+          setIsStreaming(true)
+        }
+      }
+    })
+    return () => {
+      unsubscribe()
+    }
+  }, [sessionId])
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -173,16 +228,81 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   const handleSendMessage = async (content: string) => {
     try {
-      await sendMessage.mutateAsync({
+      console.log("💬 Sending message:", content)
+      setIsStreaming(true)
+
+      // Set a timeout to clear streaming state as fallback
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current)
+      }
+      streamingTimeoutRef.current = setTimeout(() => {
+        console.log("💬 Streaming timeout - clearing loading state")
+        setIsStreaming(false)
+      }, 30000) // 30 second timeout
+
+      // Create user message locally first for instant display
+      const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+      const userMessage = {
+        id: userMessageId,
+        sessionId: sessionId,
+        role: "user" as const,
+        timeCreated: new Date(),
+        timeCompleted: null,
+        providerId: null,
+        modelId: null,
+        mode: null,
+        pathCwd: null,
+        pathRoot: null,
+        isSummary: false,
+        cost: 0,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensReasoning: 0,
+        tokensCacheRead: 0,
+        tokensCacheWrite: 0,
+        errorName: null,
+        errorMessage: null,
+        errorData: null,
+        systemPrompts: null,
+        isSynced: false,
+        lastSyncTimestamp: new Date(),
+      }
+
+      // Add user message to local database immediately
+      await upsertLocalMessage.mutateAsync(userMessage)
+      console.log("💬 Created local user message:", userMessageId)
+
+      // Store the content temporarily for display
+      setPendingUserMessages((prev) => new Map(prev).set(userMessageId, content))
+      // Get default provider and model from user settings
+      const providerID = userSettings?.defaultProviderId || "anthropic"
+      const modelID = userSettings?.defaultModelId || "claude-sonnet-4-20250514"
+
+      console.log("💬 Using provider:", providerID, "model:", modelID)
+
+      const result = await sendMessage.mutateAsync({
         sessionId,
-        data: { content },
+        data: {
+          providerID,
+          modelID,
+          parts: [
+            {
+              type: "text",
+              text: content,
+            },
+          ],
+        },
       })
+
+      console.log("💬 Send message result:", result)
+
       // Scroll to bottom after sending
       setTimeout(() => {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
       }, 100)
     } catch (error) {
-      console.error("Failed to send message:", error)
+      console.error("💬 Failed to send message:", error)
+      setIsStreaming(false)
     }
   }
 
@@ -200,6 +320,30 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       </Box>
     </Box>
   )
+
+  const renderTypingIndicator = () => {
+    if (!isStreaming) return null
+
+    return (
+      <Box p="md" style={{ transform: [{ scaleY: -1 }] }}>
+        <Box direction="row" justifyContent="flex-start">
+          <Box background="subtle" rounded="lg" p="md" style={{ maxWidth: "80%" }}>
+            <Box direction="row" alignItems="center" gap="xs">
+              <Box animation="pulse" animationConfig={{ repeat: -1 }}>
+                <Text size="md">●</Text>
+              </Box>
+              <Box animation="pulse" animationConfig={{ repeat: -1, delay: 200 }}>
+                <Text size="md">●</Text>
+              </Box>
+              <Box animation="pulse" animationConfig={{ repeat: -1, delay: 400 }}>
+                <Text size="md">●</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -228,9 +372,16 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             ref={flatListRef}
             data={reversedMessages}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <MessageItem message={item} remoteMessages={remoteMessages} />}
+            renderItem={({ item }) => (
+              <MessageItem
+                message={item}
+                remoteMessages={remoteMessages}
+                localContent={pendingUserMessages.get(item.id)}
+              />
+            )}
             inverted
             ListEmptyComponent={renderEmptyState}
+            ListHeaderComponent={renderTypingIndicator}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} style={{ transform: [{ scaleY: -1 }] }} />
             }

@@ -8,13 +8,11 @@ import type { Message, MessagePart } from "../../../db/types"
 // Raw database operations (internal use)
 class MessageRepository {
   async getMessages(sessionId: string) {
-    console.log("📨 MessageRepo: Getting messages for session", sessionId)
     const result = await db
       .select()
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
       .orderBy(asc(messages.createdAt))
-    console.log("📨 MessageRepo: Found", result.length, "messages")
     return result
   }
 

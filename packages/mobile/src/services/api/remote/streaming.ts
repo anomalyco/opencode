@@ -1,33 +1,77 @@
 import EventSource from "react-native-sse"
 import { localConfigService } from "../local/config"
 
-// Types for SSE events based on the API
+// Types for SSE events based on actual API structure
 interface SSEEvent {
   type: string
-  data: any
-  timestamp: string
+  properties?: any
+  timestamp?: string
 }
 
-interface MessageStreamEvent extends SSEEvent {
-  type: "message.part" | "message.complete" | "message.error"
-  data: {
-    sessionId: string
-    messageId: string
-    partId?: string
-    content?: string
-    error?: string
+interface StorageWriteEvent extends SSEEvent {
+  type: "storage.write"
+  properties: {
+    key: string
+    content: any
   }
 }
 
-interface SessionStreamEvent extends SSEEvent {
-  type: "session.updated" | "session.deleted"
-  data: {
-    sessionId: string
-    [key: string]: any
+interface MessageUpdatedEvent extends SSEEvent {
+  type: "message.updated"
+  properties: {
+    info: {
+      id: string
+      role: string
+      sessionID: string
+      [key: string]: any
+    }
   }
 }
 
-type StreamEvent = MessageStreamEvent | SessionStreamEvent
+interface MessagePartUpdatedEvent extends SSEEvent {
+  type: "message.part.updated"
+  properties: {
+    part: {
+      id: string
+      messageID: string
+      sessionID: string
+      type: string
+      text?: string
+      [key: string]: any
+    }
+  }
+}
+
+interface SessionUpdatedEvent extends SSEEvent {
+  type: "session.updated"
+  properties: {
+    info: {
+      id: string
+      sessionID: string
+      [key: string]: any
+    }
+  }
+}
+
+interface ServerConnectedEvent extends SSEEvent {
+  type: "server.connected"
+  properties: {}
+}
+
+interface SessionIdleEvent extends SSEEvent {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+type StreamEvent =
+  | StorageWriteEvent
+  | MessageUpdatedEvent
+  | MessagePartUpdatedEvent
+  | SessionUpdatedEvent
+  | ServerConnectedEvent
+  | SessionIdleEvent
 
 export class StreamingService {
   private static instance: StreamingService
@@ -69,10 +113,14 @@ export class StreamingService {
 
     this.eventSource.addEventListener("message", (event: any) => {
       try {
+        console.log("🔥 Raw SSE event:", event)
+        console.log("🔥 Raw SSE event.data:", event.data)
         const data = JSON.parse(event.data || "{}")
+        console.log("🔥 Parsed SSE data:", data)
         this.handleEvent(data)
       } catch (error) {
         console.error("Failed to parse SSE event:", error)
+        console.error("Raw event data:", event.data)
       }
     })
 
@@ -105,15 +153,19 @@ export class StreamingService {
   }
 
   private handleEvent(event: StreamEvent) {
+    console.log("🔥 Handling SSE event:", event.type, event.properties)
+
     // Notify all listeners for this event type
     const typeListeners = this.listeners.get(event.type)
     if (typeListeners) {
+      console.log(`🔥 Notifying ${typeListeners.size} listeners for type: ${event.type}`)
       typeListeners.forEach((listener) => listener(event))
     }
 
     // Notify all listeners for "all" events
     const allListeners = this.listeners.get("*")
     if (allListeners) {
+      console.log(`🔥 Notifying ${allListeners.size} listeners for all events`)
       allListeners.forEach((listener) => listener(event))
     }
   }
@@ -140,16 +192,28 @@ export class StreamingService {
   // Convenience methods for common subscriptions
   subscribeToSession(sessionId: string, listener: (event: StreamEvent) => void) {
     return this.subscribe("*", (event) => {
-      if ("sessionId" in event.data && event.data.sessionId === sessionId) {
+      let eventSessionId: string | undefined
+      if (event.type === "storage.write") {
+        eventSessionId = (event as StorageWriteEvent).properties?.content?.sessionID
+      } else if (event.type === "message.updated") {
+        eventSessionId = (event as MessageUpdatedEvent).properties?.info?.sessionID
+      } else if (event.type === "message.part.updated") {
+        eventSessionId = (event as MessagePartUpdatedEvent).properties?.part?.sessionID
+      }
+
+      if (eventSessionId === sessionId) {
         listener(event)
       }
     })
   }
 
-  subscribeToMessage(messageId: string, listener: (event: MessageStreamEvent) => void) {
+  subscribeToMessage(messageId: string, listener: (event: MessagePartUpdatedEvent) => void) {
     return this.subscribe("*", (event) => {
-      if (event.type.startsWith("message.") && "messageId" in event.data && event.data.messageId === messageId) {
-        listener(event as MessageStreamEvent)
+      if (
+        event.type === "message.part.updated" &&
+        (event as MessagePartUpdatedEvent).properties?.part?.messageID === messageId
+      ) {
+        listener(event as MessagePartUpdatedEvent)
       }
     })
   }
@@ -174,7 +238,7 @@ export function useStreaming() {
       streamingService.subscribe(eventType, listener),
     subscribeToSession: (sessionId: string, listener: (event: StreamEvent) => void) =>
       streamingService.subscribeToSession(sessionId, listener),
-    subscribeToMessage: (messageId: string, listener: (event: MessageStreamEvent) => void) =>
+    subscribeToMessage: (messageId: string, listener: (event: MessagePartUpdatedEvent) => void) =>
       streamingService.subscribeToMessage(messageId, listener),
     isConnected: () => streamingService.isConnected(),
     getConnectionState: () => streamingService.getConnectionState(),
