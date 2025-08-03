@@ -37,6 +37,10 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const upsertLocalMessagePart = useUpsertLocalMessagePartMutation()
   const streaming = useStreaming()
 
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+  }, [])
+
   // Keyboard-aware scrolling
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
@@ -59,7 +63,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       keyboardWillShow.remove()
       keyboardWillHide.remove()
     }
-  }, [])
+  }, [scrollToBottom])
 
   // Sync remote messages to local database
   useEffect(() => {
@@ -104,6 +108,18 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       })
     }
   }, [remoteMessages])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Clear any pending timeouts
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current)
+      }
+      // Reset streaming state
+      setIsStreaming(false)
+    }
+  }, [])
 
   // Connect to streaming and listen for message updates
   useEffect(() => {
@@ -217,12 +233,13 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     })
     return () => {
       unsubscribe()
+      // Clean up streaming timeout on unmount
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current)
+        streamingTimeoutRef.current = null
+      }
     }
-  }, [sessionId])
-
-  const scrollToBottom = useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
-  }, [])
+  }, [sessionId, scrollToBottom])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -297,6 +314,15 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     [remoteMessages, pendingUserMessages],
   )
 
+  const getItemLayout = useCallback(
+    (_data: any, index: number) => ({
+      length: 80, // Estimated item height
+      offset: 80 * index,
+      index,
+    }),
+    [],
+  )
+
   // Using TypingIndicator molecule now
 
   if (isLoading) {
@@ -353,6 +379,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             maxToRenderPerBatch={10}
             windowSize={10}
             initialNumToRender={10}
+            getItemLayout={getItemLayout}
           />
         </Box>
 
