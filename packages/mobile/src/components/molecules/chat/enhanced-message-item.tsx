@@ -193,13 +193,18 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     return null
   }
 
+  // Calculate if this is a short message (1-2 lines of text only)
+  const textContent = textParts.map((part) => part.textContent || part.text).join("\n") || localContent || ""
+  const hasOnlyText = toolParts.length === 0 && fileParts.length === 0
+  const isShortMessage = hasOnlyText && textContent.length < 100 && textContent.split("\n").length <= 2
+
   return (
-    <Box p="md">
+    <Box p={isShortMessage ? "sm" : "md"}>
       <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
         <Box
           background={isUser ? "emphasis" : "lightest"}
           rounded="xl"
-          p="md"
+          p={isShortMessage ? "sm" : "md"}
           style={{
             maxWidth: "85%",
             minWidth: "20%",

@@ -27,13 +27,16 @@ class SessionRepository {
       .returning()
   }
 
-  async upsertSession(session: Omit<Session, "createdAt" | "updatedAt">) {
+  async upsertSession(session: Omit<Session, "createdAt" | "updatedAt">, preserveRemoteTimestamp = false) {
+    const now = new Date()
+    const updatedAt = preserveRemoteTimestamp && session.timeUpdated ? session.timeUpdated : now
+
     return await db
       .insert(sessions)
       .values({
         ...session,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt,
       })
       .onConflictDoUpdate({
         target: sessions.id,
@@ -49,7 +52,7 @@ class SessionRepository {
           revertDiff: session.revertDiff,
           isSynced: session.isSynced,
           lastSyncTimestamp: session.lastSyncTimestamp,
-          updatedAt: new Date(),
+          updatedAt,
         },
       })
       .returning()
@@ -171,8 +174,14 @@ export function useUpsertLocalSessionMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (session: Omit<Session, "createdAt" | "updatedAt">) => sessionRepo.upsertSession(session),
-    onSuccess: (_, session) => {
+    mutationFn: ({
+      session,
+      preserveRemoteTimestamp = false,
+    }: {
+      session: Omit<Session, "createdAt" | "updatedAt">
+      preserveRemoteTimestamp?: boolean
+    }) => sessionRepo.upsertSession(session, preserveRemoteTimestamp),
+    onSuccess: (_, { session }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(session.id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.unsynced() })

@@ -32,14 +32,11 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
   const isConnected = appConfig?.connectionStatus === "connected"
 
   const syncSessions = async () => {
-    console.log("🔄 DataSync: syncSessions called", { isConnected, remoteSessions: remoteSessions?.length })
     if (!isConnected || !remoteSessions) return
 
     setIsLoading(true)
-    console.log("📥 DataSync: Starting sync of", remoteSessions.length, "sessions")
     try {
       for (const remoteSession of remoteSessions) {
-        console.log("📋 DataSync: Remote session data", JSON.stringify(remoteSession, null, 2))
         const localSession: Omit<Session, "createdAt" | "updatedAt"> = {
           id: remoteSession.id,
           parentId: remoteSession.parentId || null,
@@ -58,17 +55,17 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
           localNotes: null,
         }
 
-        console.log("💾 DataSync: Upserting session", remoteSession.id)
-        const result = await upsertLocalSession.mutateAsync(localSession)
-        console.log("✅ DataSync: Upserted session", remoteSession.id, remoteSession.title, result)
+        await upsertLocalSession.mutateAsync({
+          session: localSession,
+          preserveRemoteTimestamp: true,
+        })
       }
 
       // Invalidate local queries to refresh the UI
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
       setLastSyncTime(new Date())
-      console.log("✅ DataSync: Sync completed successfully, invalidated queries")
     } catch (error) {
-      console.error("❌ DataSync: Session sync failed:", error)
+      // Session sync failed
     } finally {
       setIsLoading(false)
     }
@@ -76,21 +73,16 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
 
   // Auto-sync when connected and remote sessions are available
   useEffect(() => {
-    console.log("🔍 DataSync: useEffect triggered", {
-      isConnected,
-      remoteSessions: remoteSessions?.length,
-      remoteError: !!remoteError,
-    })
     if (isConnected && remoteSessions && !remoteError && !isLoading) {
-      console.log("🚀 DataSync: Triggering auto-sync")
       syncSessions()
     }
   }, [isConnected, remoteSessions, remoteError])
 
-  const syncMessages = async (sessionId: string) => {
+  const syncMessages = async (_sessionId: string) => {
     if (!isConnected) return
-    console.log("📨 DataSync: Message sync placeholder for session", sessionId)
+    // Message sync placeholder
   }
+
   const value: DataSyncContextValue = {
     isLoading,
     lastSyncTime,
