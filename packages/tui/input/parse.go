@@ -3,6 +3,7 @@ package input
 import (
 	"bytes"
 	"encoding/base64"
+	"os"
 	"slices"
 	"strings"
 	"unicode"
@@ -12,6 +13,11 @@ import (
 	"github.com/charmbracelet/x/ansi/parser"
 	"github.com/rivo/uniseg"
 )
+
+// isGhostty returns true if running in Ghostty terminal
+func isGhostty() bool {
+	return os.Getenv("TERM_PROGRAM") == "ghostty"
+}
 
 // Flags to control the behavior of the parser.
 const (
@@ -305,6 +311,9 @@ func (p *Parser) parseCsi(b []byte) (int, Event) {
 		// Handle SGR mouse
 		if paramsLen >= 3 {
 			pa = pa[:3]
+			if isGhostty() {
+				return i, UnknownEvent(b[:i])
+			}
 			return i, parseSGRMouseEvent(cmd, pa)
 		}
 	case 'm' | '>'<<parser.PrefixShift:
@@ -388,6 +397,9 @@ func (p *Parser) parseCsi(b []byte) (int, Event) {
 		// PERFORMANCE: Do not use append here, as it will allocate a new slice
 		// for every mouse event. Instead, pass a sub-slice of the original
 		// buffer.
+		if isGhostty() {
+			return i + 3, UnknownEvent(b[:i+3])
+		}
 		return i + 3, parseX10MouseEvent(b[i-1 : i+3])
 	case 'y' | '$'<<parser.IntermedShift:
 		// Report Mode (DECRPM)

@@ -145,6 +145,9 @@ func (d *Reader) readEvents() ([]Event, error) {
 		case nil:
 			i++
 			continue
+		case UnknownEvent:
+			i += consumed
+			continue
 		}
 
 		if mevs, ok := ev.(MultiEvent); ok {
