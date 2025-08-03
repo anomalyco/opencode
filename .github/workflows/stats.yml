@@ -21,7 +21,7 @@ jobs:
           bun-version: latest
 
       - name: Run stats script
-        run: bun scripts/stats.ts
+        run: bun script/stats.ts
 
       - name: Commit stats
         run: |

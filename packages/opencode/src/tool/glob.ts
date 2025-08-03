@@ -5,8 +5,7 @@ import { App } from "../app/app"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 
-export const GlobTool = Tool.define({
-  id: "glob",
+export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
   parameters: z.object({
     pattern: z.string().describe("The glob pattern to match files against"),

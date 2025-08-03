@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -155,6 +156,9 @@ func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
 func parseBindings(bindings ...string) []Keybinding {
 	var parsedBindings []Keybinding
 	for _, binding := range bindings {
+		if binding == "none" {
+			continue
+		}
 		for p := range strings.SplitSeq(binding, ",") {
 			requireLeader := strings.HasPrefix(p, "<leader>")
 			keybinding := strings.ReplaceAll(p, "<leader>", "")
@@ -219,7 +223,6 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		{
 			Name:        SessionUnshareCommand,
 			Description: "unshare session",
-			Keybindings: parseBindings("<leader>u"),
 			Trigger:     []string{"unshare"},
 		},
 		{
@@ -375,15 +378,14 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		// Remove share/unshare commands if sharing is disabled
 		if config.Share == opencode.ConfigShareDisabled &&
 			(command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
+			slog.Info("Removing share/unshare commands")
 			continue
 		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {
-			if keybind == "none" {
-				continue
-			}
 			command.Keybindings = parseBindings(keybind)
 		}
 		registry[command.Name] = command
 	}
+	slog.Info("Loaded commands", "commands", registry)
 	return registry
 }

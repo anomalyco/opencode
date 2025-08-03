@@ -9,17 +9,87 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
+import matter from "gray-matter"
+import { Flag } from "../flag/flag"
+import { Auth } from "../auth"
+import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
   export const state = App.state("config", async (app) => {
+    const auth = await Auth.all()
     let result = await global()
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
       for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await load(resolved))
+        result = mergeDeep(result, await loadFile(resolved))
       }
+    }
+
+    // Override with custom config if provided
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+      }
+    }
+
+    result.agent = result.agent || {}
+    const markdownAgents = [
+      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownAgents) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result.agent = mergeDeep(result.agent, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+
+    // Load mode markdown files
+    result.mode = result.mode || {}
+    const markdownModes = [
+      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/mode/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownModes) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Mode.safeParse(config)
+      if (parsed.success) {
+        result.mode = mergeDeep(result.mode, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
     }
 
     // Handle migration from autoshare to share field
@@ -73,13 +143,22 @@ export namespace Config {
   export const Mode = z
     .object({
       model: z.string().optional(),
+      temperature: z.number().optional(),
+      top_p: z.number().optional(),
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      disable: z.boolean().optional(),
     })
     .openapi({
       ref: "ModeConfig",
     })
   export type Mode = z.infer<typeof Mode>
+
+  export const Agent = Mode.extend({
+    description: z.string(),
+  }).openapi({
+    ref: "AgentConfig",
+  })
 
   export const Keybinds = z
     .object({
@@ -136,11 +215,15 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const Permission = z.union([z.literal("ask"), z.literal("allow")])
+  export type Permission = z.infer<typeof Permission>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      plugin: z.string().array().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -172,6 +255,13 @@ export namespace Config {
         .catchall(Mode)
         .optional()
         .describe("Modes configuration, see https://opencode.ai/docs/modes"),
+      agent: z
+        .object({
+          general: Agent.optional(),
+        })
+        .catchall(Agent)
+        .optional()
+        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
       provider: z
         .record(
           ModelsDev.Provider.partial()
@@ -190,8 +280,42 @@ export namespace Config {
         .optional()
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      formatter: z
+        .record(
+          z.string(),
+          z.object({
+            disabled: z.boolean().optional(),
+            command: z.array(z.string()).optional(),
+            environment: z.record(z.string(), z.string()).optional(),
+            extensions: z.array(z.string()).optional(),
+          }),
+        )
+        .optional(),
+      lsp: z
+        .record(
+          z.string(),
+          z.union([
+            z.object({
+              disabled: z.literal(true),
+            }),
+            z.object({
+              command: z.array(z.string()),
+              extensions: z.array(z.string()).optional(),
+              disabled: z.boolean().optional(),
+              env: z.record(z.string(), z.string()).optional(),
+              initialization: z.record(z.string(), z.any()).optional(),
+            }),
+          ]),
+        )
+        .optional(),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
+      permission: z
+        .object({
+          edit: Permission.optional(),
+          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z
@@ -227,10 +351,11 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
-    let result = pipe(
+    let result: Info = pipe(
       {},
-      mergeDeep(await load(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await load(path.join(Global.Path.config, "opencode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
     await import(path.join(Global.Path.config, "config"), {
@@ -251,51 +376,90 @@ export namespace Config {
     return result
   })
 
-  async function load(configPath: string) {
-    let text = await Bun.file(configPath)
+  async function loadFile(filepath: string): Promise<Info> {
+    log.info("loading", { path: filepath })
+    let text = await Bun.file(filepath)
       .text()
       .catch((err) => {
         if (err.code === "ENOENT") return
-        throw new JsonError({ path: configPath }, { cause: err })
+        throw new JsonError({ path: filepath }, { cause: err })
       })
     if (!text) return {}
+    return load(text, filepath)
+  }
 
+  async function load(text: string, filepath: string) {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
 
-    const fileMatches = text.match(/"?\{file:([^}]+)\}"?/g)
+    const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configPath)
+      const configDir = path.dirname(filepath)
+      const lines = text.split("\n")
+
       for (const match of fileMatches) {
-        const filePath = match.replace(/^"?\{file:/, "").replace(/\}"?$/, "")
+        const lineIndex = lines.findIndex((line) => line.includes(match))
+        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
+          continue // Skip if line is commented
+        }
+        const filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = await Bun.file(resolvedPath).text()
-        text = text.replace(match, JSON.stringify(fileContent))
+        const fileContent = (await Bun.file(resolvedPath).text()).trim()
+        // escape newlines/quotes, strip outer quotes
+        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
       }
     }
 
-    let data: any
-    try {
-      data = JSON.parse(text)
-    } catch (err) {
-      throw new JsonError({ path: configPath }, { cause: err as Error })
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+    if (errors.length) {
+      const lines = text.split("\n")
+      const errorDetails = errors
+        .map((e) => {
+          const beforeOffset = text.substring(0, e.offset).split("\n")
+          const line = beforeOffset.length
+          const column = beforeOffset[beforeOffset.length - 1].length + 1
+          const problemLine = lines[line - 1]
+
+          const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
+          if (!problemLine) return error
+
+          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
+        })
+        .join("\n")
+
+      throw new JsonError({
+        path: filepath,
+        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
+      })
     }
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configPath, JSON.stringify(parsed.data, null, 2))
+        await Bun.write(filepath, JSON.stringify(parsed.data, null, 2))
       }
-      return parsed.data
+      const data = parsed.data
+      if (data.plugin) {
+        for (let i = 0; i < data.plugin?.length; i++) {
+          const plugin = data.plugin[i]
+          if (typeof plugin === "string") {
+            data.plugin[i] = path.resolve(path.dirname(filepath), plugin)
+          }
+        }
+      }
+      return data
     }
-    throw new InvalidError({ path: configPath, issues: parsed.error.issues })
+
+    throw new InvalidError({ path: filepath, issues: parsed.error.issues })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
       path: z.string(),
+      message: z.string().optional(),
     }),
   )
 

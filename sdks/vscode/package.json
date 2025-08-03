@@ -2,7 +2,7 @@
   "name": "opencode",
   "displayName": "opencode",
   "description": "opencode for VS Code",
-  "version": "0.0.0",
+  "version": "0.3.113",
   "publisher": "sst-dev",
   "repository": {
     "type": "git",
@@ -26,7 +26,15 @@
     "commands": [
       {
         "command": "opencode.openTerminal",
-        "title": "Open Terminal with Opencode",
+        "title": "Open opencode",
+        "icon": {
+          "light": "images/button-dark.svg",
+          "dark": "images/button-light.svg"
+        }
+      },
+      {
+        "command": "opencode.openNewTerminal",
+        "title": "Open opencode in new tab",
         "icon": {
           "light": "images/button-dark.svg",
           "dark": "images/button-light.svg"
@@ -40,8 +48,7 @@
     "menus": {
       "editor/title": [
         {
-          "command": "opencode.openTerminal",
-          "when": "editorTextFocus",
+          "command": "opencode.openNewTerminal",
           "group": "navigation"
         }
       ]
@@ -54,6 +61,14 @@
         "mac": "cmd+escape",
         "win": "ctrl+escape",
         "linux": "ctrl+escape"
+      },
+      {
+        "command": "opencode.openNewTerminal",
+        "title": "Run opencode",
+        "key": "cmd+shift+escape",
+        "mac": "cmd+shift+escape",
+        "win": "ctrl+shift+escape",
+        "linux": "ctrl+shift+escape"
       },
       {
         "command": "opencode.addFilepathToTerminal",

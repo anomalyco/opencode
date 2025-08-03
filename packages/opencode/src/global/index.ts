@@ -13,6 +13,7 @@ export namespace Global {
   export const Path = {
     data,
     bin: path.join(data, "bin"),
+    log: path.join(data, "log"),
     cache,
     config,
     state,
@@ -23,9 +24,10 @@ await Promise.all([
   fs.mkdir(Global.Path.data, { recursive: true }),
   fs.mkdir(Global.Path.config, { recursive: true }),
   fs.mkdir(Global.Path.state, { recursive: true }),
+  fs.mkdir(Global.Path.log, { recursive: true }),
 ])
 
-const CACHE_VERSION = "3"
+const CACHE_VERSION = "4"
 
 const version = await Bun.file(path.join(Global.Path.cache, "version"))
   .text()

@@ -1,14 +1,17 @@
 name: publish
+run-name: "${{ format('v{0}', inputs.version) }}"
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - dev
-    tags:
-      - "*"
-      - "!vscode-v*"
-      - "!github-v*"
+    inputs:
+      version:
+        description: "Version to publish"
+        required: true
+        type: string
+      title:
+        description: "Custom title for this run"
+        required: false
+        type: string
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -34,7 +37,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.17
+          bun-version: 1.2.19
 
       - name: Install makepkg
         run: |
@@ -53,12 +56,7 @@ jobs:
       - name: Publish
         run: |
           bun install
-          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
-            ./script/publish.ts
-          else
-            ./script/publish.ts --snapshot
-          fi
-        working-directory: ./packages/opencode
+          OPENCODE_VERSION=${{ inputs.version }} ./script/publish.ts
         env:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}

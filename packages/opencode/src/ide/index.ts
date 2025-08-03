@@ -1,10 +1,15 @@
-import { $ } from "bun"
+import { spawn } from "bun"
 import { z } from "zod"
 import { NamedError } from "../util/error"
 import { Log } from "../util/log"
 import { Bus } from "../bus"
 
-const SUPPORTED_IDES = ["Windsurf", "Visual Studio Code", "Cursor", "VSCodium"] as const
+const SUPPORTED_IDES = [
+  { name: "Windsurf" as const, cmd: "windsurf" },
+  { name: "Visual Studio Code" as const, cmd: "code" },
+  { name: "Cursor" as const, cmd: "cursor" },
+  { name: "VSCodium" as const, cmd: "codium" },
+]
 
 export namespace Ide {
   const log = Log.create({ service: "ide" })
@@ -18,8 +23,6 @@ export namespace Ide {
     ),
   }
 
-  export type Ide = Awaited<ReturnType<typeof ide>>
-
   export const AlreadyInstalledError = NamedError.create("AlreadyInstalledError", z.object({}))
 
   export const InstallFailedError = NamedError.create(
@@ -29,11 +32,11 @@ export namespace Ide {
     }),
   )
 
-  export async function ide() {
+  export function ide() {
     if (process.env["TERM_PROGRAM"] === "vscode") {
       const v = process.env["GIT_ASKPASS"]
       for (const ide of SUPPORTED_IDES) {
-        if (v?.includes(ide)) return ide
+        if (v?.includes(ide.name)) return ide.name
       }
     }
     return "unknown"
@@ -43,32 +46,29 @@ export namespace Ide {
     return process.env["OPENCODE_CALLER"] === "vscode"
   }
 
-  export async function install(ide: Ide) {
-    const cmd = (() => {
-      switch (ide) {
-        case "Windsurf":
-          return $`windsurf --install-extension sst-dev.opencode`
-        case "Visual Studio Code":
-          return $`code --install-extension sst-dev.opencode`
-        case "Cursor":
-          return $`cursor --install-extension sst-dev.opencode`
-        case "VSCodium":
-          return $`codium --install-extension sst-dev.opencode`
-        default:
-          throw new Error(`Unknown IDE: ${ide}`)
-      }
-    })()
-    // TODO: check OPENCODE_CALLER
-    const result = await cmd.quiet().throws(false)
+  export async function install(ide: (typeof SUPPORTED_IDES)[number]["name"]) {
+    const cmd = SUPPORTED_IDES.find((i) => i.name === ide)?.cmd
+    if (!cmd) throw new Error(`Unknown IDE: ${ide}`)
+
+    const p = spawn([cmd, "--install-extension", "sst-dev.opencode"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    await p.exited
+    const stdout = await new Response(p.stdout).text()
+    const stderr = await new Response(p.stderr).text()
+
     log.info("installed", {
       ide,
-      stdout: result.stdout.toString(),
-      stderr: result.stderr.toString(),
+      stdout,
+      stderr,
     })
-    if (result.exitCode !== 0)
-      throw new InstallFailedError({
-        stderr: result.stderr.toString("utf8"),
-      })
-    if (result.stdout.toString().includes("already installed")) throw new AlreadyInstalledError({})
+
+    if (p.exitCode !== 0) {
+      throw new InstallFailedError({ stderr })
+    }
+    if (stdout.includes("already installed")) {
+      throw new AlreadyInstalledError({})
+    }
   }
 }

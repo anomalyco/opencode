@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/plugin",
+  "version": "0.3.113",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@hey-api/openapi-ts": "0.80.1",
+    "@tsconfig/node22": "catalog:",
+    "@opencode-ai/sdk": "workspace:*"
+  }
+}

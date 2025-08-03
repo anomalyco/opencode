@@ -53,12 +53,10 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    const dir = path.join(Global.Path.data, "log")
-    await fs.mkdir(dir, { recursive: true })
-    cleanup(dir)
+    cleanup(Global.Path.log)
     if (options.print) return
     logpath = path.join(
-      dir,
+      Global.Path.log,
       options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     const logfile = Bun.file(logpath)
