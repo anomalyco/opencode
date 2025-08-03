@@ -73,6 +73,8 @@ type Config struct {
 	Provider map[string]ConfigProvider `json:"provider"`
 	// Theme name to use for the interface
 	Theme string     `json:"theme"`
+	// Vim mode configuration
+	Vim   *ConfigVim `json:"vim,omitempty"`
 	JSON  configJSON `json:"-"`
 }
 
@@ -91,6 +93,7 @@ type configJSON struct {
 	Model             apijson.Field
 	Provider          apijson.Field
 	Theme             apijson.Field
+	Vim               apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }
@@ -100,6 +103,27 @@ func (r *Config) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r configJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigVim struct {
+	// Enable Vim mode
+	Enabled bool `json:"enabled"`
+	JSON    configVimJSON `json:"-"`
+}
+
+// configVimJSON contains the JSON metadata for the struct [ConfigVim]
+type configVimJSON struct {
+	Enabled     apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigVim) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configVimJSON) RawJSON() string {
 	return r.raw
 }
 

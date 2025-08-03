@@ -3,11 +3,6 @@ package chat
 import (
 	"encoding/base64"
 	"fmt"
-	"log/slog"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/v2/spinner"
@@ -18,8 +13,8 @@ import (
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/commands"
-	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
+	"github.com/sst/opencode/internal/components/vim"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -42,190 +37,22 @@ type EditorComponent interface {
 	SetValue(value string)
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
+	ToggleVimMode()
 }
 
 type editorComponent struct {
 	app                    *app.App
-	textarea               textarea.Model
+	textAreaFactory        *vim.TextAreaFactory
 	spinner                spinner.Model
 	interruptKeyInDebounce bool
 	exitKeyInDebounce      bool
 }
 
 func (m *editorComponent) Init() tea.Cmd {
-	return tea.Batch(m.textarea.Focus(), m.spinner.Tick, tea.EnableReportFocus)
+	return tea.Batch(m.textAreaFactory.Current().Focus(), m.spinner.Tick, tea.EnableReportFocus)
 }
 
-func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case spinner.TickMsg:
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	case tea.KeyPressMsg:
-		// Maximize editor responsiveness for printable characters
-		if msg.Text != "" {
-			m.textarea, cmd = m.textarea.Update(msg)
-			cmds = append(cmds, cmd)
-			return m, tea.Batch(cmds...)
-		}
-	case tea.PasteMsg:
-		text := string(msg)
-		text = strings.ReplaceAll(text, "\\", "")
-		text, err := strconv.Unquote(`"` + text + `"`)
-		if err != nil {
-			slog.Error("Failed to unquote text", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
-			return m, nil
-		}
-		if _, err := os.Stat(text); err != nil {
-			slog.Error("Failed to paste file", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
-			return m, nil
-		}
-
-		filePath := text
-		ext := strings.ToLower(filepath.Ext(filePath))
-
-		mediaType := ""
-		switch ext {
-		case ".jpg":
-			mediaType = "image/jpeg"
-		case ".png", ".jpeg", ".gif", ".webp":
-			mediaType = "image/" + ext[1:]
-		case ".pdf":
-			mediaType = "application/pdf"
-		default:
-			attachment := &textarea.Attachment{
-				ID:        uuid.NewString(),
-				Display:   "@" + filePath,
-				URL:       fmt.Sprintf("file://./%s", filePath),
-				Filename:  filePath,
-				MediaType: "text/plain",
-			}
-			m.textarea.InsertAttachment(attachment)
-			m.textarea.InsertString(" ")
-			return m, nil
-		}
-
-		fileBytes, err := os.ReadFile(filePath)
-		if err != nil {
-			slog.Error("Failed to read file", "error", err)
-			m.textarea.InsertRunesFromUserInput([]rune(msg))
-			return m, nil
-		}
-		base64EncodedFile := base64.StdEncoding.EncodeToString(fileBytes)
-		url := fmt.Sprintf("data:%s;base64,%s", mediaType, base64EncodedFile)
-		attachmentCount := len(m.textarea.GetAttachments())
-		attachmentIndex := attachmentCount + 1
-		label := "File"
-		if strings.HasPrefix(mediaType, "image/") {
-			label = "Image"
-		}
-
-		attachment := &textarea.Attachment{
-			ID:        uuid.NewString(),
-			MediaType: mediaType,
-			Display:   fmt.Sprintf("[%s #%d]", label, attachmentIndex),
-			URL:       url,
-			Filename:  filePath,
-		}
-		m.textarea.InsertAttachment(attachment)
-		m.textarea.InsertString(" ")
-	case tea.ClipboardMsg:
-		text := string(msg)
-		m.textarea.InsertRunesFromUserInput([]rune(text))
-	case dialog.ThemeSelectedMsg:
-		m.textarea = updateTextareaStyles(m.textarea)
-		m.spinner = createSpinner()
-		return m, tea.Batch(m.spinner.Tick, m.textarea.Focus())
-	case dialog.CompletionSelectedMsg:
-		switch msg.Item.GetProviderID() {
-		case "commands":
-			commandName := strings.TrimPrefix(msg.Item.GetValue(), "/")
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
-			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
-			return m, tea.Batch(cmds...)
-		case "files":
-			atIndex := m.textarea.LastRuneIndex('@')
-			if atIndex == -1 {
-				// Should not happen, but as a fallback, just insert.
-				m.textarea.InsertString(msg.Item.GetValue() + " ")
-				return m, nil
-			}
-
-			// The range to replace is from the '@' up to the current cursor position.
-			// Replace the search term (e.g., "@search") with an empty string first.
-			cursorCol := m.textarea.CursorColumn()
-			m.textarea.ReplaceRange(atIndex, cursorCol, "")
-
-			// Now, insert the attachment at the position where the '@' was.
-			// The cursor is now at `atIndex` after the replacement.
-			filePath := msg.Item.GetValue()
-			extension := filepath.Ext(filePath)
-			mediaType := ""
-			switch extension {
-			case ".jpg":
-				mediaType = "image/jpeg"
-			case ".png", ".jpeg", ".gif", ".webp":
-				mediaType = "image/" + extension[1:]
-			case ".pdf":
-				mediaType = "application/pdf"
-			default:
-				mediaType = "text/plain"
-			}
-			attachment := &textarea.Attachment{
-				ID:        uuid.NewString(),
-				Display:   "@" + filePath,
-				URL:       fmt.Sprintf("file://./%s", url.PathEscape(filePath)),
-				Filename:  filePath,
-				MediaType: mediaType,
-			}
-			m.textarea.InsertAttachment(attachment)
-			m.textarea.InsertString(" ")
-			return m, nil
-		case "symbols":
-			atIndex := m.textarea.LastRuneIndex('@')
-			if atIndex == -1 {
-				// Should not happen, but as a fallback, just insert.
-				m.textarea.InsertString(msg.Item.GetValue() + " ")
-				return m, nil
-			}
-
-			cursorCol := m.textarea.CursorColumn()
-			m.textarea.ReplaceRange(atIndex, cursorCol, "")
-
-			symbol := msg.Item.GetRaw().(opencode.Symbol)
-			parts := strings.Split(symbol.Name, ".")
-			lastPart := parts[len(parts)-1]
-			attachment := &textarea.Attachment{
-				ID:        uuid.NewString(),
-				Display:   "@" + lastPart,
-				URL:       msg.Item.GetValue(),
-				Filename:  lastPart,
-				MediaType: "text/plain",
-			}
-			m.textarea.InsertAttachment(attachment)
-			m.textarea.InsertString(" ")
-			return m, nil
-		default:
-			slog.Debug("Unknown provider", "provider", msg.Item.GetProviderID())
-			return m, nil
-		}
-	}
-
-	m.spinner, cmd = m.spinner.Update(msg)
-	cmds = append(cmds, cmd)
-
-	m.textarea, cmd = m.textarea.Update(msg)
-	cmds = append(cmds, cmd)
-
-	return m, tea.Batch(cmds...)
-}
+// Update method is now in editor_update.go
 
 func (m *editorComponent) Content(width int) string {
 	t := theme.CurrentTheme()
@@ -236,11 +63,14 @@ func (m *editorComponent) Content(width int) string {
 		Bold(true)
 	prompt := promptStyle.Render(">")
 
-	m.textarea.SetWidth(width - 6)
+	// Get current text area and set width
+	currentTextArea := m.textAreaFactory.Current()
+	currentTextArea.SetWidth(width - 6)
+	
 	textarea := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		prompt,
-		m.textarea.View(),
+		currentTextArea.View(),
 	)
 	borderForeground := t.Border()
 	if m.app.IsLeaderSequence {
@@ -258,10 +88,47 @@ func (m *editorComponent) Content(width int) string {
 		BorderRight(true).
 		Render(textarea)
 
-	hint := base(m.getSubmitKeyText()) + muted(" send   ")
+	// Build hint text
+	hint := base(m.getSubmitKeyText()) + muted(" send")
+	
+	// Add Vim mode indicator after "enter send" if enabled
+	if m.textAreaFactory.IsVimMode() {
+		// Always show current vim mode
+		modeStr := m.textAreaFactory.GetVimModeString()
+		if modeStr == "" {
+			modeStr = "VIM"
+		}
+		
+		// Build mode indicator
+		modeIndicator := base("[" + modeStr + "]")
+		
+		// Add status info in parentheses after mode
+		vimStatusLine := m.textAreaFactory.GetVimStatusLine()
+		if vimStatusLine != "" {
+			// For visual modes, GetVimStatusLine includes selection info
+			// For normal mode, it shows pending operators/counts
+			if modeStr == "VISUAL" || modeStr == "V-LINE" {
+				// Visual mode shows selection size
+				modeIndicator += base(" (" + vimStatusLine + ")")
+			} else if modeStr == "NORMAL" {
+				// Normal mode shows pending operators/counts
+				modeIndicator += base(" (" + vimStatusLine + ")")
+			}
+		}
+		
+		hint += muted("  ") + modeIndicator
+	}
 	if m.exitKeyInDebounce {
 		keyText := m.getExitKeyText()
 		hint = base(keyText+" again") + muted(" to exit")
+		// Add vim mode indicator if in vim mode
+		if m.textAreaFactory.IsVimMode() {
+			modeStr := m.textAreaFactory.GetVimModeString()
+			if modeStr == "" {
+				modeStr = "VIM"
+			}
+			hint += muted("  ") + base("[" + modeStr + "]")
+		}
 	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		if m.interruptKeyInDebounce {
@@ -277,6 +144,14 @@ func (m *editorComponent) Content(width int) string {
 		} else {
 			hint = muted("working") + m.spinner.View() + muted("  ") + base(keyText) + muted(" interrupt")
 		}
+		// Add vim mode indicator if in vim mode
+		if m.textAreaFactory.IsVimMode() {
+			modeStr := m.textAreaFactory.GetVimModeString()
+			if modeStr == "" {
+				modeStr = "VIM"
+			}
+			hint += muted("  ") + base("[" + modeStr + "]")
+		}
 	}
 
 	model := ""
@@ -285,6 +160,9 @@ func (m *editorComponent) Content(width int) string {
 	}
 
 	space := width - 2 - lipgloss.Width(model) - lipgloss.Width(hint)
+	if space < 0 {
+		space = 0
+	}
 	spacer := styles.NewStyle().Background(t.Background()).Width(space).Render("")
 
 	info := hint + spacer + model
@@ -309,27 +187,27 @@ func (m *editorComponent) View(width int) string {
 }
 
 func (m *editorComponent) Focused() bool {
-	return m.textarea.Focused()
+	return m.textAreaFactory.Current().Focused()
 }
 
 func (m *editorComponent) Focus() (tea.Model, tea.Cmd) {
-	return m, m.textarea.Focus()
+	return m, m.textAreaFactory.Current().Focus()
 }
 
 func (m *editorComponent) Blur() {
-	m.textarea.Blur()
+	m.textAreaFactory.Current().Blur()
 }
 
 func (m *editorComponent) Lines() int {
-	return m.textarea.LineCount()
+	return m.textAreaFactory.Current().LineCount()
 }
 
 func (m *editorComponent) Value() string {
-	return m.textarea.Value()
+	return m.textAreaFactory.Current().Value()
 }
 
 func (m *editorComponent) Length() int {
-	return m.textarea.Length()
+	return m.textAreaFactory.Current().Length()
 }
 
 func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
@@ -339,14 +217,15 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	}
 	if len(value) > 0 && value[len(value)-1] == '\\' {
 		// If the last character is a backslash, remove it and add a newline
-		m.textarea.ReplaceRange(len(value)-1, len(value), "")
-		m.textarea.InsertString("\n")
+		currentTextArea := m.textAreaFactory.Current()
+		currentTextArea.ReplaceRange(len(value)-1, len(value), "")
+		currentTextArea.InsertString("\n")
 		return m, nil
 	}
 
 	var cmds []tea.Cmd
 
-	attachments := m.textarea.GetAttachments()
+	attachments := m.textAreaFactory.Current().GetAttachments()
 	fileParts := make([]opencode.FilePartParam, 0)
 	for _, attachment := range attachments {
 		fileParts = append(fileParts, opencode.FilePartParam{
@@ -366,14 +245,15 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
-	m.textarea.Reset()
+	m.textAreaFactory.Current().Reset()
 	return m, nil
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 	imageBytes := clipboard.Read(clipboard.FmtImage)
 	if imageBytes != nil {
-		attachmentCount := len(m.textarea.GetAttachments())
+		currentTextArea := m.textAreaFactory.Current()
+		attachmentCount := len(currentTextArea.GetAttachments())
 		attachmentIndex := attachmentCount + 1
 		base64EncodedFile := base64.StdEncoding.EncodeToString(imageBytes)
 		attachment := &textarea.Attachment{
@@ -383,14 +263,14 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 			Filename:  fmt.Sprintf("image-%d.png", attachmentIndex),
 			URL:       fmt.Sprintf("data:image/png;base64,%s", base64EncodedFile),
 		}
-		m.textarea.InsertAttachment(attachment)
-		m.textarea.InsertString(" ")
+		currentTextArea.InsertAttachment(attachment)
+		currentTextArea.InsertString(" ")
 		return m, nil
 	}
 
 	textBytes := clipboard.Read(clipboard.FmtText)
 	if textBytes != nil {
-		m.textarea.InsertRunesFromUserInput([]rune(string(textBytes)))
+		m.textAreaFactory.Current().InsertRunesFromUserInput([]rune(string(textBytes)))
 		return m, nil
 	}
 
@@ -399,7 +279,7 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
-	m.textarea.Newline()
+	m.textAreaFactory.Current().Newline()
 	return m, nil
 }
 
@@ -408,7 +288,7 @@ func (m *editorComponent) SetInterruptKeyInDebounce(inDebounce bool) {
 }
 
 func (m *editorComponent) SetValue(value string) {
-	m.textarea.SetValue(value)
+	m.textAreaFactory.Current().SetValue(value)
 }
 
 func (m *editorComponent) SetExitKeyInDebounce(inDebounce bool) {
@@ -425,6 +305,10 @@ func (m *editorComponent) getSubmitKeyText() string {
 
 func (m *editorComponent) getExitKeyText() string {
 	return m.app.Commands[commands.AppExitCommand].Keys()[0]
+}
+
+func (m *editorComponent) ToggleVimMode() {
+	m.textAreaFactory.ToggleVimMode()
 }
 
 func updateTextareaStyles(ta textarea.Model) textarea.Model {
@@ -475,16 +359,16 @@ func createSpinner() spinner.Model {
 
 func NewEditorComponent(app *app.App) EditorComponent {
 	s := createSpinner()
-
-	ta := textarea.New()
-	ta.Prompt = " "
-	ta.ShowLineNumbers = false
-	ta.CharLimit = -1
-	ta = updateTextareaStyles(ta)
+	
+	// Create text area factory
+	factory := vim.NewTextAreaFactory(app)
+	
+	// Apply styles
+	factory.UpdateStyles(updateTextareaStyles)
 
 	m := &editorComponent{
 		app:                    app,
-		textarea:               ta,
+		textAreaFactory:        factory,
 		spinner:                s,
 		interruptKeyInDebounce: false,
 	}

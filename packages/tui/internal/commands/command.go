@@ -118,6 +118,7 @@ const (
 	MessagesCopyCommand         CommandName = "messages_copy"
 	MessagesRevertCommand       CommandName = "messages_revert"
 	AppExitCommand              CommandName = "app_exit"
+	VimModeToggleCommand        CommandName = "vim_mode_toggle"
 )
 
 func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
@@ -324,6 +325,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "exit the app",
 			Keybindings: parseBindings("ctrl+c", "<leader>q"),
 			Trigger:     []string{"exit", "quit"},
+		},
+		{
+			Name:        VimModeToggleCommand,
+			Description: "toggle vim mode",
+			Keybindings: parseBindings("ctrl+alt+v"),
+			Trigger:     []string{"vim"},
 		},
 	}
 	registry := make(CommandRegistry)

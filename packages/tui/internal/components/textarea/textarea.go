@@ -871,6 +871,11 @@ func (m Model) CursorColumn() int {
 	return m.col
 }
 
+// CursorRow returns the cursor's row position.
+func (m Model) CursorRow() int {
+	return m.row
+}
+
 // LastRuneIndex returns the index of the last occurrence of a rune on the current line,
 // searching backwards from the current cursor position.
 // Returns -1 if the rune is not found before the cursor.

@@ -114,7 +114,20 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
-		// 1. Handle active modal
+		// 1. Special handling for escape in vim mode
+		// Check if vim mode is enabled and if escape should be passed to vim first
+		if keyString == "esc" && !a.showCompletionDialog && a.modal == nil {
+			// Always pass escape to editor first when no dialog/modal is active
+			// This allows vim mode to handle escape for mode switching
+			updated, cmd := a.editor.Update(msg)
+			a.editor = updated.(chat.EditorComponent)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return a, tea.Batch(cmds...)
+		}
+
+		// 2. Handle active modal
 		if a.modal != nil {
 			switch keyString {
 			// Escape always closes current modal
@@ -992,6 +1005,10 @@ func (a appModel) executeCommand(command commands.Command) (tea.Model, tea.Cmd) 
 			cmds = append(cmds, cmd)
 		}
 	case commands.MessagesRevertCommand:
+	case commands.VimModeToggleCommand:
+		// Toggle vim mode in the editor
+		a.editor.ToggleVimMode()
+		return a, nil
 	case commands.AppExitCommand:
 		return a, tea.Quit
 	}
