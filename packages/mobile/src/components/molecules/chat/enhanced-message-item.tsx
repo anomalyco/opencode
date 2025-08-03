@@ -47,34 +47,38 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     return acc
   }, [])
 
-  // Sort parts by creation time or order
+  // Sort parts by creation time for chronological rendering
   uniqueParts.sort((a, b) => {
     const aTime = a.timeStart || a.createdAt || 0
     const bTime = b.timeStart || b.createdAt || 0
     return new Date(aTime).getTime() - new Date(bTime).getTime()
   })
 
-  // Group parts by type for rendering
-  const textParts = uniqueParts.filter(
-    (part) => (part.type === "text" && !part.isSynthetic) || (part.textContent && !part.isSynthetic),
-  )
-  const toolParts = uniqueParts.filter((part) => part.type === "tool" || part.toolName)
-  const fileParts = uniqueParts.filter((part) => part.type === "file" || part.fileFilename)
-
   // Don't render if no content
-  if (textParts.length === 0 && toolParts.length === 0 && fileParts.length === 0 && !localContent) {
+  if (uniqueParts.length === 0 && !localContent) {
     return null
   }
 
-  const renderTextContent = () => {
-    const textContent = textParts.map((part) => part.textContent || part.text).join("\n") || localContent
-    if (!textContent) return null
+  const renderPart = (part: any, index: number) => {
+    const partType = part.type || (part.toolName ? "tool" : part.fileFilename ? "file" : "text")
 
-    return (
-      <Box mb="sm">
-        <ThemedMarked value={textContent} />
-      </Box>
-    )
+    switch (partType) {
+      case "text":
+        if (part.isSynthetic || !part.textContent) return null
+        return (
+          <Box key={part.id || index} mb="sm">
+            <ThemedMarked value={part.textContent} />
+          </Box>
+        )
+
+      case "tool":
+        return renderToolPart(part)
+
+      case "file":
+        return renderFilePart(part)
+      default:
+        return null
+    }
   }
 
   const renderToolPart = (part: any) => {
@@ -193,10 +197,20 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     return null
   }
 
-  // Calculate if this is a short message (1-2 lines of text only)
-  const textContent = textParts.map((part) => part.textContent || part.text).join("\n") || localContent || ""
-  const hasOnlyText = toolParts.length === 0 && fileParts.length === 0
-  const isShortMessage = hasOnlyText && textContent.length < 100 && textContent.split("\n").length <= 2
+  // Handle local content for user messages
+  const hasLocalContent = localContent && localContent.trim().length > 0
+
+  // Calculate if this is a short message (text only, 1-2 lines)
+  const allTextContent =
+    uniqueParts
+      .filter((part) => part.type === "text" && !part.isSynthetic)
+      .map((part) => part.textContent || part.text)
+      .join("\n") ||
+    localContent ||
+    ""
+
+  const hasOnlyText = uniqueParts.every((part) => part.type === "text" || part.textContent) && !hasLocalContent
+  const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
 
   return (
     <Box p={isShortMessage ? "sm" : "md"}>
@@ -215,14 +229,15 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
             elevation: 1,
           }}
         >
-          {/* Render text content */}
-          {renderTextContent()}
+          {/* Render local content first for user messages */}
+          {hasLocalContent && (
+            <Box mb="sm">
+              <ThemedMarked value={localContent} />
+            </Box>
+          )}
 
-          {/* Render tool parts */}
-          {toolParts.map(renderToolPart)}
-
-          {/* Render file parts */}
-          {fileParts.map(renderFilePart)}
+          {/* Render all parts in chronological order */}
+          {uniqueParts.map((part, index) => renderPart(part, index))}
         </Box>
       </Box>
     </Box>
