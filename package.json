@@ -43,5 +43,7 @@
     "protobufjs",
     "sharp"
   ],
-  "patchedDependencies": {}
+  "patchedDependencies": {
+    "marked-shiki@1.2.0": "patches/marked-shiki@1.2.0.patch"
+  }
 }
