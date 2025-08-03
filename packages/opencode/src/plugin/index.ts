@@ -63,10 +63,8 @@ export namespace Plugin {
     if (!fn) return output
     const path = fn.split(".")
     for (const hook of await state().then((x) => x.hooks)) {
-      // @ts-expect-error
       const fn = pathOr(hook, path, undefined)
       if (!fn) continue
-      // @ts-expect-error
       await fn(input, output)
     }
     return output
