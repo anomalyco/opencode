@@ -9,13 +9,7 @@ export default function AppLayout() {
           animation: "slide_from_bottom",
         }}
       />
-      <Stack.Screen
-        name="chat/[sessionId]/index"
-        options={{
-          animation: "slide_from_bottom",
-          presentation: "containedModal",
-        }}
-      />
+      <Stack.Screen name="chat/[sessionId]/index" options={{}} />
     </Stack>
   )
 }

@@ -77,6 +77,62 @@ class MessageRepository {
     return await db.delete(messageParts).where(eq(messageParts.id, id))
   }
 
+  async upsertMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
+    return await db
+      .insert(messageParts)
+      .values({
+        ...part,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: messageParts.id,
+        set: {
+          sessionId: part.sessionId,
+          messageId: part.messageId,
+          type: part.type,
+          textContent: part.textContent,
+          isSynthetic: part.isSynthetic,
+          timeStart: part.timeStart,
+          timeEnd: part.timeEnd,
+          isSynced: part.isSynced,
+          lastSyncTimestamp: part.lastSyncTimestamp,
+          fileMime: part.fileMime,
+          fileFilename: part.fileFilename,
+          fileUrl: part.fileUrl,
+          fileSourceType: part.fileSourceType,
+          fileSourcePath: part.fileSourcePath,
+          fileSourceTextValue: part.fileSourceTextValue,
+          fileSourceTextStart: part.fileSourceTextStart,
+          fileSourceTextEnd: part.fileSourceTextEnd,
+          fileSourceName: part.fileSourceName,
+          fileSourceKind: part.fileSourceKind,
+          fileSourceRange: part.fileSourceRange,
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          toolStatus: part.toolStatus,
+          toolInput: part.toolInput,
+          toolOutput: part.toolOutput,
+          toolTitle: part.toolTitle,
+          toolMetadata: part.toolMetadata,
+          toolError: part.toolError,
+          toolTimeStart: part.toolTimeStart,
+          toolTimeEnd: part.toolTimeEnd,
+          stepCost: part.stepCost,
+          stepTokensInput: part.stepTokensInput,
+          stepTokensOutput: part.stepTokensOutput,
+          stepTokensReasoning: part.stepTokensReasoning,
+          stepTokensCacheRead: part.stepTokensCacheRead,
+          stepTokensCacheWrite: part.stepTokensCacheWrite,
+          snapshotId: part.snapshotId,
+          patchHash: part.patchHash,
+          patchFiles: part.patchFiles,
+          updatedAt: new Date(),
+        },
+      })
+      .returning()
+  }
+
   async upsertMessage(message: Omit<Message, "createdAt" | "updatedAt">) {
     return await db
       .insert(messages)
@@ -203,6 +259,25 @@ export function useUpdateLocalMessagePartMutation() {
   })
 }
 
+export function useUpsertLocalMessagePartMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (part: Omit<MessagePart, "createdAt" | "updatedAt">) => messageRepo.upsertMessagePart(part),
+    onSuccess: (data) => {
+      const part = data[0]
+      if (part) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(part.sessionId) })
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.parts(part.messageId) })
+      } else {
+        console.log("⚠️ No part returned from upsert mutation")
+      }
+    },
+    onError: (error, variables) => {
+      console.log("❌ Failed to upsert message part:", (error as any)?.message || error, "for part:", variables.id)
+    },
+  })
+}
 export function useUpsertLocalMessageMutation() {
   const queryClient = useQueryClient()
 

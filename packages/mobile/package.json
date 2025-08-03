@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
+    "@gorhom/bottom-sheet": "^5",
     "@react-native-community/netinfo": "11.4.1",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
@@ -55,6 +56,7 @@
     "react-native-edge-to-edge": "1.6.0",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-keyboard-controller": "^1.18.2",
+    "react-native-marked": "7.0.2",
     "react-native-nitro-modules": "^0.27.2",
     "react-native-pager-view": "6.7.1",
     "react-native-qrcode-styled": "^0.3.3",

@@ -7,6 +7,7 @@
     "sim": {
       "developmentClient": true,
       "distribution": "internal",
+      "node": "22.12.0",
       "ios": {
         "simulator": true,
         "image": "macos-sonoma-14.6-xcode-16.1"

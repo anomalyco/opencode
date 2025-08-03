@@ -3,7 +3,12 @@ import { FlatList, RefreshControl } from "react-native"
 import { KeyboardAvoidingView } from "react-native-keyboard-controller"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import { Box, Text, Button, Input } from "@/components/ui/primitives"
-import { useLocalMessagesQuery, useUpsertLocalMessageMutation } from "@/services/api/local/messages"
+import {
+  useLocalMessagesQuery,
+  useUpsertLocalMessageMutation,
+  useUpsertLocalMessagePartMutation,
+  useLocalMessagePartsQuery,
+} from "@/services/api/local/messages"
 import { useSendRemoteMessageMutation, useRemoteMessagesQuery } from "@/services/api/remote/messages"
 import { useLocalSessionQuery } from "@/services/api/local/sessions"
 import { useLocalUserSettingsQuery } from "@/services/api/local/config"
@@ -26,10 +31,23 @@ interface MessageItemProps {
 const MessageItem = ({ message, remoteMessages, localContent }: MessageItemProps) => {
   const isUser = message.role === "user"
 
-  // Find the corresponding remote message to get the text content
+  // Get message parts from local SQLite for real-time updates
+  const { data: localMessageParts } = useLocalMessagePartsQuery(message.id)
+  const localTextParts = localMessageParts?.filter((part) => part.type === "text" && !part.isSynthetic) || []
+  const localTextContent = localTextParts.map((part) => part.textContent).join("\n")
+
+  // Fallback to remote message if no local content
   const remoteMessage = remoteMessages?.find((rm) => rm.info.id === message.id)
-  const textParts = remoteMessage?.parts?.filter((part: any) => part.type === "text" && !part.synthetic) || []
-  const content = localContent || textParts.map((part: any) => part.text).join("\n") || "No content"
+  const remoteTextParts = remoteMessage?.parts?.filter((part: any) => part.type === "text" && !part.synthetic) || []
+  const remoteTextContent = remoteTextParts.map((part: any) => part.text).join("\n")
+
+  // Use local content first (for streaming), then provided localContent, then remote, then fallback
+  const content = localTextContent || localContent || remoteTextContent
+
+  // Don't render if no content
+  if (!content) {
+    return null
+  }
 
   return (
     <Box p="md">
@@ -116,6 +134,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const { data: userSettings } = useLocalUserSettingsQuery()
   const sendMessage = useSendRemoteMessageMutation()
   const upsertLocalMessage = useUpsertLocalMessageMutation()
+  const upsertLocalMessagePart = useUpsertLocalMessagePartMutation()
   const streaming = useStreaming()
 
   // Sync remote messages to local database
@@ -172,8 +191,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
 
     const unsubscribe = streaming.subscribe("*", (event) => {
-      console.log("📡 Chat: Received streaming event", event.type, event)
-
       // Check if this event is for our session
       let eventSessionId: string | undefined
       if (event.type === "storage.write") {
@@ -188,27 +205,142 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
       if (eventSessionId !== sessionId) return
 
-      console.log("📡 Chat: Event is for our session")
-
       if (event.type === "session.idle") {
-        console.log("📡 Chat: Session idle - stopping streaming")
         setIsStreaming(false)
         if (streamingTimeoutRef.current) {
           clearTimeout(streamingTimeoutRef.current)
           streamingTimeoutRef.current = null
         }
         refetchMessages()
-      } else if (event.type === "message.part.updated") {
-        console.log("📡 Chat: Message part updated - refreshing")
-        refetchMessages()
-      } else if (event.type === "message.updated") {
-        console.log("📡 Chat: Message updated - refreshing")
-        refetchMessages()
       } else if (event.type === "storage.write") {
         const key = (event as any).properties?.key
+        const content = (event as any).properties?.content
+
         if (key?.includes("step-start")) {
-          console.log("📡 Chat: Step started - ensuring streaming is on")
           setIsStreaming(true)
+        } else if (key?.includes("/message/") && content?.role) {
+          // Create message with role from backend
+          const existingMessage = messages?.find((m) => m.id === content.id)
+          if (!existingMessage) {
+            upsertLocalMessage.mutate({
+              id: content.id,
+              sessionId: content.sessionID,
+              role: content.role, // Use role from backend
+              timeCreated: new Date(),
+              timeCompleted: null,
+              providerId: null,
+              modelId: null,
+              mode: null,
+              pathCwd: null,
+              pathRoot: null,
+              isSummary: false,
+              cost: 0,
+              tokensInput: 0,
+              tokensOutput: 0,
+              tokensReasoning: 0,
+              tokensCacheRead: 0,
+              tokensCacheWrite: 0,
+              errorName: null,
+              errorMessage: null,
+              errorData: null,
+              systemPrompts: null,
+              isSynced: false,
+              lastSyncTimestamp: new Date(),
+            })
+          }
+        } else if (key?.includes("/part/") && content?.type === "text") {
+          // Write text part to SQLite
+          upsertLocalMessagePart.mutate({
+            id: content.id,
+            sessionId: content.sessionID,
+            messageId: content.messageID,
+            type: "text",
+            textContent: content.text || "",
+            isSynthetic: false,
+            timeStart: content.time?.start ? new Date(content.time.start) : new Date(),
+            timeEnd: content.time?.end ? new Date(content.time.end) : null,
+            isSynced: true,
+            lastSyncTimestamp: new Date(),
+            // Set all other fields to null for text parts
+            fileMime: null,
+            fileFilename: null,
+            fileUrl: null,
+            fileSourceType: null,
+            fileSourcePath: null,
+            fileSourceTextValue: null,
+            fileSourceTextStart: null,
+            fileSourceTextEnd: null,
+            fileSourceName: null,
+            fileSourceKind: null,
+            fileSourceRange: null,
+            toolCallId: null,
+            toolName: null,
+            toolStatus: null,
+            toolInput: null,
+            toolOutput: null,
+            toolTitle: null,
+            toolMetadata: null,
+            toolError: null,
+            toolTimeStart: null,
+            toolTimeEnd: null,
+            stepCost: null,
+            stepTokensInput: null,
+            stepTokensOutput: null,
+            stepTokensReasoning: null,
+            stepTokensCacheRead: null,
+            stepTokensCacheWrite: null,
+            snapshotId: null,
+            patchHash: null,
+            patchFiles: null,
+          })
+        }
+      } else if (event.type === "message.part.updated") {
+        const part = (event as any).properties?.part
+        if (part?.type === "text") {
+          // Write text part to SQLite
+          upsertLocalMessagePart.mutate({
+            id: part.id,
+            sessionId: part.sessionID,
+            messageId: part.messageID,
+            type: "text",
+            textContent: part.text || "",
+            isSynthetic: false,
+            timeStart: part.time?.start ? new Date(part.time.start) : new Date(),
+            timeEnd: part.time?.end ? new Date(part.time.end) : null,
+            isSynced: true,
+            lastSyncTimestamp: new Date(),
+            // Set all other fields to null for text parts
+            fileMime: null,
+            fileFilename: null,
+            fileUrl: null,
+            fileSourceType: null,
+            fileSourcePath: null,
+            fileSourceTextValue: null,
+            fileSourceTextStart: null,
+            fileSourceTextEnd: null,
+            fileSourceName: null,
+            fileSourceKind: null,
+            fileSourceRange: null,
+            toolCallId: null,
+            toolName: null,
+            toolStatus: null,
+            toolInput: null,
+            toolOutput: null,
+            toolTitle: null,
+            toolMetadata: null,
+            toolError: null,
+            toolTimeStart: null,
+            toolTimeEnd: null,
+            stepCost: null,
+            stepTokensInput: null,
+            stepTokensOutput: null,
+            stepTokensReasoning: null,
+            stepTokensCacheRead: null,
+            stepTokensCacheWrite: null,
+            snapshotId: null,
+            patchHash: null,
+            patchFiles: null,
+          })
         }
       }
     })
@@ -240,40 +372,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
         setIsStreaming(false)
       }, 30000) // 30 second timeout
 
-      // Create user message locally first for instant display
-      const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-      const userMessage = {
-        id: userMessageId,
-        sessionId: sessionId,
-        role: "user" as const,
-        timeCreated: new Date(),
-        timeCompleted: null,
-        providerId: null,
-        modelId: null,
-        mode: null,
-        pathCwd: null,
-        pathRoot: null,
-        isSummary: false,
-        cost: 0,
-        tokensInput: 0,
-        tokensOutput: 0,
-        tokensReasoning: 0,
-        tokensCacheRead: 0,
-        tokensCacheWrite: 0,
-        errorName: null,
-        errorMessage: null,
-        errorData: null,
-        systemPrompts: null,
-        isSynced: false,
-        lastSyncTimestamp: new Date(),
-      }
-
-      // Add user message to local database immediately
-      await upsertLocalMessage.mutateAsync(userMessage)
-      console.log("💬 Created local user message:", userMessageId)
-
-      // Store the content temporarily for display
-      setPendingUserMessages((prev) => new Map(prev).set(userMessageId, content))
+      // Don't create user message locally - let streaming handle it with correct role
       // Get default provider and model from user settings
       const providerID = userSettings?.defaultProviderId || "anthropic"
       const modelID = userSettings?.defaultModelId || "claude-sonnet-4-20250514"
