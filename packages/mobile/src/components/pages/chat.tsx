@@ -122,7 +122,7 @@ const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
   const { theme } = useUnistyles()
 
   return (
-    <Box p="md" background="base" safeAreaBottom>
+    <Box p="sm" background="base">
       <Box direction="row" alignItems="flex-end" gap="sm">
         <Box flex background="lightest" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
           <TextInput
@@ -140,16 +140,25 @@ const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
           />
         </Box>
         <Button
-          mode={text.trim() ? "brand" : "ghost"}
+          size="auto"
+          mode="brand"
+          disabled={!text.trim()}
           onPress={() => {
             if (text.trim()) {
               onSend(text.trim())
               setText("")
             }
           }}
-          style={{ width: 44, height: 44, borderRadius: 22 }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            padding: 0,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
-          <Icon icon={Feather} name="send" size={16} />
+          <Icon icon={Feather} name="arrow-up" size={18} />
         </Button>
       </Box>
     </Box>
