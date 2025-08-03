@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react"
 import { FlatList, RefreshControl, Platform, KeyboardAvoidingView, Keyboard } from "react-native"
 import { Box, Text, Icon } from "@/components/ui/primitives"
 import { ChatHeader, MessageInput, TypingIndicator, EnhancedMessageItem } from "@/components/molecules/chat"
+import { useSessionManager } from "@/services/session-manager"
 import { Feather } from "@expo/vector-icons"
 import {
   useLocalMessagesQuery,
@@ -27,6 +28,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const flatListRef = useRef<FlatList>(null)
   const streamingTimeoutRef = useRef<number | null>(null)
   const [pendingUserMessages, setPendingUserMessages] = useState<Map<string, string>>(new Map())
+  const sessionManager = useSessionManager()
 
   const { data: session } = useLocalSessionQuery(sessionId)
   const { data: messages, isLoading, refetch: refetchMessages } = useLocalMessagesQuery(sessionId)
@@ -377,6 +379,14 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     [sessionId, userSettings, sendMessage],
   )
 
+  const handleNewSession = useCallback(async () => {
+    try {
+      await sessionManager.navigateToNewSession()
+    } catch (error) {
+      console.error("Failed to create new session:", error)
+    }
+  }, [sessionManager])
+
   const renderEmptyState = useCallback(
     () => (
       <Box center p="lg" m="md">
@@ -476,7 +486,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           />
         </Box>
 
-        <ChatHeader sessionTitle={session?.title} />
+        <ChatHeader sessionTitle={session?.title} onNewSessionPress={handleNewSession} />
         <MessageInput onSend={handleSendMessage} />
       </Box>
     </KeyboardAvoidingView>

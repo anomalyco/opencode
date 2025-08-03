@@ -5,6 +5,7 @@ import { Box, Text, Icon } from "@/components/ui/primitives"
 import { Feather } from "@expo/vector-icons"
 import { useLocalSessionsQuery } from "@/services/api/local/sessions"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { useSessionManager } from "@/services/session-manager"
 import {
   ConnectionStatus,
   QuickActions,
@@ -12,12 +13,15 @@ import {
   SessionItem,
   ConnectionSheet,
 } from "@/components/molecules/home"
+import { SessionDialog, type SessionDialogRef } from "@/components/molecules/session/session-dialog"
 import type { ConnectionSheetRef } from "@/components/molecules/home/connection-sheet"
 
 export const HomePage = () => {
   const [refreshing, setRefreshing] = useState(false)
   const connectionSheetRef = useRef<ConnectionSheetRef>(null)
+  const sessionDialogRef = useRef<SessionDialogRef>(null)
   const { data: sessions, isLoading, refetch: refetchSessions } = useLocalSessionsQuery()
+  const sessionManager = useSessionManager()
 
   const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
 
@@ -30,8 +34,12 @@ export const HomePage = () => {
     }
   }
 
-  const handleNewSession = () => {
-    // Create new session
+  const handleNewSession = async () => {
+    try {
+      await sessionManager.navigateToNewSession()
+    } catch (error) {
+      console.error("Failed to create new session:", error)
+    }
   }
 
   const handleSearch = (_query: string) => {
@@ -43,7 +51,11 @@ export const HomePage = () => {
   }
 
   const handleViewAllSessions = () => {
-    // View all sessions
+    sessionDialogRef.current?.present()
+  }
+
+  const handleCloseSessionDialog = () => {
+    // Session dialog closed
   }
 
   const handleOpenConnectionSheet = () => {
@@ -127,6 +139,7 @@ export const HomePage = () => {
       />
 
       <ConnectionSheet ref={connectionSheetRef} onClose={handleCloseConnectionSheet} />
+      <SessionDialog ref={sessionDialogRef} onClose={handleCloseSessionDialog} />
     </Box>
   )
 }

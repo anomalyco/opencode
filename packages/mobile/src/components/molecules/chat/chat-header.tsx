@@ -6,9 +6,10 @@ import { Feather } from "@expo/vector-icons"
 interface ChatHeaderProps {
   sessionTitle?: string
   onMenuPress?: () => void
+  onNewSessionPress?: () => void
 }
 
-export const ChatHeader = memo(({ sessionTitle, onMenuPress }: ChatHeaderProps) => {
+export const ChatHeader = memo(({ sessionTitle, onMenuPress, onNewSessionPress }: ChatHeaderProps) => {
   return (
     <BlurView
       intensity={80}
@@ -53,9 +54,16 @@ export const ChatHeader = memo(({ sessionTitle, onMenuPress }: ChatHeaderProps) 
             </Text>
           </Box>
         </Box>
-        <Button variant="ghost" onPress={onMenuPress}>
-          <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
-        </Button>
+        <Box direction="row" alignItems="center" gap="xs">
+          {onNewSessionPress && (
+            <Button variant="ghost" onPress={onNewSessionPress}>
+              <Icon icon={Feather} name="plus" size={18} color="brand" />
+            </Button>
+          )}
+          <Button variant="ghost" onPress={onMenuPress}>
+            <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
+          </Button>
+        </Box>
       </Box>
     </BlurView>
   )
