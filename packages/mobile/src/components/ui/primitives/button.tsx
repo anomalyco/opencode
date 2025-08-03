@@ -1,73 +1,55 @@
-import {
-  triggerHaptic,
-  type HapticConfig,
-  type HapticFeedbackType,
-} from "@/components/utils/haptics";
-import { getContrastColor, getIconSize } from "@/utils/theme";
-import { createContext, useContext, useMemo, useRef } from "react";
-import type { PressableProps, StyleProp, ViewStyle } from "react-native";
-import { ActivityIndicator, Animated, Pressable, View } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { ButtonText, type ButtonTextProps } from "./button-text";
+import { triggerHaptic, type HapticConfig, type HapticFeedbackType } from "@/utils/haptics"
+import { getContrastColor, getIconSize } from "@/config/theme"
+import { createContext, useContext, useMemo, useRef } from "react"
+import type { PressableProps, StyleProp, ViewStyle } from "react-native"
+import { ActivityIndicator, Animated, Pressable, View } from "react-native"
+import { StyleSheet, useUnistyles } from "react-native-unistyles"
+import { ButtonText, type ButtonTextProps } from "./button-text"
 
 type ButtonContextType = {
-  size: "sm" | "md" | "lg" | "auto";
-  variant?: "outline" | "ghost";
-  mode?:
-    | "subtle"
-    | "brand"
-    | "secondary"
-    | "warning"
-    | "error"
-    | "success"
-    | "disabled";
-  margin?: "sm" | "md" | "lg";
-  disabled?: boolean;
-};
+  size: "sm" | "md" | "lg" | "auto"
+  variant?: "outline" | "ghost"
+  mode?: "subtle" | "brand" | "secondary" | "warning" | "error" | "success" | "disabled"
+  margin?: "sm" | "md" | "lg"
+  disabled?: boolean
+}
 
 const ButtonContext = createContext<ButtonContextType>({
   size: "md",
   variant: undefined,
-});
+})
 
 export type ButtonProps = PressableProps & {
-  children: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
-  contentStyle?: StyleProp<ViewStyle>;
-  size?: "sm" | "md" | "lg" | "auto";
-  variant?: "outline" | "ghost";
-  mode?:
-    | "subtle"
-    | "brand"
-    | "secondary"
-    | "warning"
-    | "error"
-    | "success"
-    | "disabled";
-  m?: "sm" | "md" | "lg";
-  mt?: "sm" | "md" | "lg";
-  mb?: "sm" | "md" | "lg";
-  gap?: "none" | "sm" | "md" | "lg";
-  rounded?: "none" | "sm" | "md" | "lg" | "full";
-  loading?: boolean;
-  haptics?: HapticFeedbackType | HapticConfig;
-};
+  children: React.ReactNode
+  style?: StyleProp<ViewStyle>
+  contentStyle?: StyleProp<ViewStyle>
+  size?: "sm" | "md" | "lg" | "auto"
+  variant?: "outline" | "ghost"
+  mode?: "subtle" | "brand" | "secondary" | "warning" | "error" | "success" | "disabled"
+  m?: "sm" | "md" | "lg"
+  mt?: "sm" | "md" | "lg"
+  mb?: "sm" | "md" | "lg"
+  gap?: "none" | "sm" | "md" | "lg"
+  rounded?: "none" | "sm" | "md" | "lg" | "full"
+  loading?: boolean
+  haptics?: HapticFeedbackType | HapticConfig
+}
 
 // ButtonTextProps is now imported from "./button-text"
 
 type IconRenderProps = {
-  color?: string;
-  size?: number;
-};
+  color?: string
+  size?: number
+}
 
 type ButtonIconProps = {
-  children: React.ReactNode | ((props: IconRenderProps) => React.ReactNode);
-  style?: StyleProp<ViewStyle>;
-};
+  children: React.ReactNode | ((props: IconRenderProps) => React.ReactNode)
+  style?: StyleProp<ViewStyle>
+}
 
 const Button: React.FC<ButtonProps> & {
-  Text: typeof InternalButtonText;
-  Icon: typeof ButtonIcon;
+  Text: typeof InternalButtonText
+  Icon: typeof ButtonIcon
 } = ({
   children,
   style,
@@ -85,36 +67,36 @@ const Button: React.FC<ButtonProps> & {
   haptics = "selection",
   ...props
 }) => {
-  const { theme } = useUnistyles();
-  const scale = useRef(new Animated.Value(1)).current;
+  const { theme } = useUnistyles()
+  const scale = useRef(new Animated.Value(1)).current
 
-  const isDisabled = disabled || mode === "disabled";
+  const isDisabled = disabled || mode === "disabled"
 
   const onPressIn = () => {
     // Handle both string and object configurations
     if (typeof haptics === "string") {
-      triggerHaptic(haptics, isDisabled);
+      triggerHaptic(haptics, isDisabled)
     } else if (haptics.in) {
-      triggerHaptic(haptics.in, isDisabled);
+      triggerHaptic(haptics.in, isDisabled)
     }
 
     Animated.spring(scale, {
       toValue: 0.97,
       useNativeDriver: true,
-    }).start();
-  };
+    }).start()
+  }
 
   const onPressOut = () => {
     // Only trigger out haptic if it's configured
     if (typeof haptics !== "string" && haptics.out) {
-      triggerHaptic(haptics.out, isDisabled);
+      triggerHaptic(haptics.out, isDisabled)
     }
 
     Animated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
-    }).start();
-  };
+    }).start()
+  }
 
   const contextValue = useMemo(
     () => ({
@@ -124,8 +106,8 @@ const Button: React.FC<ButtonProps> & {
       margin: m,
       disabled: isDisabled,
     }),
-    [size, variant, mode, m, isDisabled]
-  );
+    [size, variant, mode, m, isDisabled],
+  )
 
   // Use variants to get styled container
   stylesheet.useVariants({
@@ -138,7 +120,7 @@ const Button: React.FC<ButtonProps> & {
     gap,
     disabled: disabled || mode === "disabled",
     rounded,
-  });
+  })
 
   return (
     <ButtonContext.Provider value={contextValue}>
@@ -151,106 +133,76 @@ const Button: React.FC<ButtonProps> & {
           {...props}
         >
           <View style={[stylesheet.content, contentStyle]}>
-            {loading ? (
-              <ActivityIndicator
-                size="small"
-                color={theme.colors.background.default}
-              />
-            ) : (
-              children
-            )}
+            {loading ? <ActivityIndicator size="small" color={theme.colors.background.default} /> : children}
           </View>
         </Pressable>
       </Animated.View>
     </ButtonContext.Provider>
-  );
-};
+  )
+}
 
-const InternalButtonText = ({
-  style,
-  color,
-  weight,
-  ...props
-}: ButtonTextProps) => {
-  const { size, variant, mode } = useContext(ButtonContext);
-  const { theme } = useUnistyles();
+const InternalButtonText = ({ style, color, weight, ...props }: ButtonTextProps) => {
+  const { size, variant, mode } = useContext(ButtonContext)
+  const { theme } = useUnistyles()
 
   const textColor = useMemo(() => {
-    if (color) return color;
+    if (color) return color
 
     // Handle outline and ghost variants
     if (variant === "outline" || variant === "ghost") {
       if (mode === "subtle") {
-        return theme.colors.text.default;
+        return theme.colors.text.default
       }
-      return theme.colors[mode || "primary"][500];
+      return theme.colors[mode || "primary"][500]
     }
 
     // Handle filled variant (default behavior)
     if (mode === "subtle") {
-      return theme.colors.text.default;
+      return theme.colors.text.default
     }
 
-    const buttonColor =
-      mode !== "disabled"
-        ? theme.colors[mode || "primary"][500]
-        : theme.colors.primary[500];
+    const buttonColor = mode !== "disabled" ? theme.colors[mode || "primary"][500] : theme.colors.primary[500]
 
-    return getContrastColor(buttonColor);
-  }, [color, variant, mode, theme]);
+    return getContrastColor(buttonColor)
+  }, [color, variant, mode, theme])
 
-  return (
-    <ButtonText
-      size={size}
-      weight={weight}
-      color={textColor}
-      style={style}
-      {...props}
-    />
-  );
-};
+  return <ButtonText size={size} weight={weight} color={textColor} style={style} {...props} />
+}
 
 const ButtonIcon = ({ children, style }: ButtonIconProps) => {
-  const { size, variant, mode } = useContext(ButtonContext);
-  const { theme } = useUnistyles();
+  const { size, variant, mode } = useContext(ButtonContext)
+  const { theme } = useUnistyles()
 
   const iconProps = useMemo(() => {
     const iconColor =
       variant === "outline" || variant === "ghost"
         ? (() => {
             if (mode === "subtle") {
-              return theme.colors.text.default;
+              return theme.colors.text.default
             }
-            return theme.colors[mode || "primary"][500];
+            return theme.colors[mode || "primary"][500]
           })()
         : (() => {
             if (mode === "subtle") {
-              return theme.colors.text.default;
+              return theme.colors.text.default
             }
-            const buttonColor =
-              mode !== "disabled"
-                ? theme.colors[mode || "primary"][500]
-                : theme.colors.primary[500];
-            return getContrastColor(buttonColor);
-          })();
+            const buttonColor = mode !== "disabled" ? theme.colors[mode || "primary"][500] : theme.colors.primary[500]
+            return getContrastColor(buttonColor)
+          })()
 
     return {
       size: getIconSize(size),
       color: iconColor,
-    };
-  }, [size, variant, mode, theme]);
+    }
+  }, [size, variant, mode, theme])
 
-  return (
-    <View style={[stylesheet.icon, style]}>
-      {typeof children === "function" ? children(iconProps) : children}
-    </View>
-  );
-};
+  return <View style={[stylesheet.icon, style]}>{typeof children === "function" ? children(iconProps) : children}</View>
+}
 
-Button.Text = InternalButtonText;
-Button.Icon = ButtonIcon;
+Button.Text = InternalButtonText
+Button.Icon = ButtonIcon
 
-export { Button };
+export { Button }
 
 const stylesheet = StyleSheet.create((theme) => ({
   container: {
@@ -376,4 +328,4 @@ const stylesheet = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-}));
+}))

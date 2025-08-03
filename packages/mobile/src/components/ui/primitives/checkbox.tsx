@@ -1,19 +1,19 @@
-import { Pressable, useColorScheme } from "react-native";
-import type { StyleProp, ViewStyle } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
-import { Feather } from "@expo/vector-icons";
-import { Icon } from "./icon";
-import { useMemo, useState } from "react";
-import { getContrastColor, getIconSize } from "@/utils/theme";
+import { Pressable, useColorScheme } from "react-native"
+import type { StyleProp, ViewStyle } from "react-native"
+import { StyleSheet, UnistylesRuntime } from "react-native-unistyles"
+import { Feather } from "@expo/vector-icons"
+import { Icon } from "./icon"
+import { useMemo, useState } from "react"
+import { getContrastColor, getIconSize } from "@/config/theme"
 
 export type CheckboxProps = {
-  style?: StyleProp<ViewStyle>;
-  size?: "sm" | "md" | "lg";
-  mode?: "primary" | "secondary" | "warning" | "error" | "success" | "disabled";
-  checked?: boolean;
-  defaultChecked?: boolean;
-  onChange?: (checked: boolean) => void;
-};
+  style?: StyleProp<ViewStyle>
+  size?: "sm" | "md" | "lg"
+  mode?: "primary" | "secondary" | "warning" | "error" | "success" | "disabled"
+  checked?: boolean
+  defaultChecked?: boolean
+  onChange?: (checked: boolean) => void
+}
 
 const Checkbox = ({
   style,
@@ -23,55 +23,40 @@ const Checkbox = ({
   defaultChecked,
   onChange,
 }: CheckboxProps) => {
-  const [internalChecked, setInternalChecked] = useState(
-    defaultChecked || false
-  );
-  const theme = UnistylesRuntime.getTheme();
-  const colorScheme = useColorScheme();
-  const isChecked =
-    controlledChecked !== undefined ? controlledChecked : internalChecked;
-  const isDisabled = mode === "disabled";
+  const [internalChecked, setInternalChecked] = useState(defaultChecked || false)
+  const colorScheme = useColorScheme()
+  const isChecked = controlledChecked !== undefined ? controlledChecked : internalChecked
+  const isDisabled = mode === "disabled"
 
   const handlePress = () => {
-    if (isDisabled) return;
+    if (isDisabled) return
     if (controlledChecked === undefined) {
-      setInternalChecked(!internalChecked);
+      setInternalChecked(!internalChecked)
     }
-    onChange?.(!isChecked);
-  };
+    onChange?.(!isChecked)
+  }
 
   styles.useVariants({
     size,
     mode,
     isChecked,
-  });
+  })
 
   const iconColor = useMemo(() => {
-    const theme = UnistylesRuntime.getTheme();
+    const theme = UnistylesRuntime.getTheme()
 
-    const backgroundColor = theme.colors[mode || "primary"][500];
-    return getContrastColor(backgroundColor);
-  }, [mode, colorScheme]);
+    const backgroundColor = theme.colors[mode || "primary"][500]
+    return getContrastColor(backgroundColor)
+  }, [mode, colorScheme])
 
   return (
-    <Pressable
-      style={[styles.container, style]}
-      onPress={handlePress}
-      disabled={isDisabled}
-    >
-      {isChecked && (
-        <Icon
-          icon={Feather}
-          name="check"
-          size={getIconSize(size)}
-          color={iconColor}
-        />
-      )}
+    <Pressable style={[styles.container, style]} onPress={handlePress} disabled={isDisabled}>
+      {isChecked && <Icon icon={Feather} name="check" size={getIconSize(size)} color={iconColor} />}
     </Pressable>
-  );
-};
+  )
+}
 
-export default Checkbox;
+export default Checkbox
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -168,4 +153,4 @@ const styles = StyleSheet.create((theme) => ({
       },
     ],
   },
-}));
+}))

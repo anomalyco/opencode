@@ -1,94 +1,83 @@
-import {
-  TextInput,
-  View,
-  Pressable,
-  useColorScheme,
-  Animated,
-} from "react-native";
-import type {
-  StyleProp,
-  TextInputProps,
-  TextStyle,
-  ViewStyle,
-} from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
-import { createContext, useContext, useMemo } from "react";
-import { getIconSize } from "@/utils/theme";
+import { TextInput, View, Pressable, useColorScheme, Animated } from "react-native"
+import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from "react-native"
+import { StyleSheet, UnistylesRuntime } from "react-native-unistyles"
+import { createContext, useContext, useMemo } from "react"
+import { getIconSize } from "@/config/theme"
 
 type InputContextType = {
-  size: "sm" | "md" | "lg";
-  variant?: "filled" | "outline";
-  mode?: "secondary" | "warning" | "error" | "success" | "disabled";
-};
+  size: "sm" | "md" | "lg"
+  variant?: "filled" | "outline"
+  mode?: "secondary" | "warning" | "error" | "success" | "disabled"
+}
 
 const InputContext = createContext<InputContextType>({
   size: "md",
   variant: undefined,
   mode: undefined,
-});
+})
 
 export type InputProps = TextInputProps & {
-  style?: StyleProp<TextStyle>;
-  size?: "sm" | "md" | "lg";
-  variant?: "filled" | "outline";
-  mode?: "secondary" | "warning" | "error" | "success" | "disabled";
-  m?: "sm" | "md" | "lg";
-  mt?: "sm" | "md" | "lg";
-  mb?: "sm" | "md" | "lg";
-  gap?: "sm" | "md" | "lg";
-  leftAccessory?: React.ReactNode;
-  rightAccessory?: React.ReactNode;
-};
+  style?: StyleProp<TextStyle>
+  size?: "sm" | "md" | "lg"
+  variant?: "filled" | "outline"
+  mode?: "secondary" | "warning" | "error" | "success" | "disabled"
+  m?: "sm" | "md" | "lg"
+  mt?: "sm" | "md" | "lg"
+  mb?: "sm" | "md" | "lg"
+  gap?: "sm" | "md" | "lg"
+  leftAccessory?: React.ReactNode
+  rightAccessory?: React.ReactNode
+}
 
 type IconRenderProps = {
-  color?: string;
-  size?: number;
-};
+  color?: string
+  size?: number
+}
 
 type AccessoryProps = {
-  children: React.ReactNode | ((props: IconRenderProps) => React.ReactNode);
-  onPress?: () => void;
-  disabled?: boolean;
-  style?: StyleProp<ViewStyle>;
-};
+  children: React.ReactNode | ((props: IconRenderProps) => React.ReactNode)
+  onPress?: () => void
+  disabled?: boolean
+  style?: StyleProp<ViewStyle>
+}
 
 const getIconColor = (mode?: InputContextType["mode"]) => {
-  const theme = UnistylesRuntime.getTheme();
+  const theme = UnistylesRuntime.getTheme()
 
-  if (mode) return theme.colors[mode][500];
-  return theme.colors.primary[500];
-};
+  if (mode) return theme.colors[mode][500]
+  return theme.colors.primary[500]
+}
 
 const Accessory = ({ children, onPress, disabled, style }: AccessoryProps) => {
-  const { size, mode } = useContext(InputContext);
-  const scale = new Animated.Value(1);
+  const { size, mode } = useContext(InputContext)
+  const scale = new Animated.Value(1)
 
   const onPressIn = () => {
     Animated.spring(scale, {
       toValue: 0.97,
       useNativeDriver: true,
-    }).start();
-  };
+    }).start()
+  }
 
   const onPressOut = () => {
     Animated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
-    }).start();
-  };
+    }).start()
+  }
 
   const iconProps = useMemo(() => {
     return {
       size: getIconSize(size),
       color: getIconColor(mode),
-    };
-  }, [size, mode]);
+    }
+  }, [size, mode])
 
   const content = (
     <View style={[accessoryStyles.container, style]}>
       {typeof children === "function" ? children(iconProps) : children}
     </View>
-  );
+  )
 
   if (onPress) {
     return (
@@ -98,19 +87,16 @@ const Accessory = ({ children, onPress, disabled, style }: AccessoryProps) => {
           onPressIn={onPressIn}
           onPressOut={onPressOut}
           disabled={disabled || mode === "disabled"}
-          style={({ pressed }) => [
-            accessoryStyles.pressable,
-            pressed && accessoryStyles.pressed,
-          ]}
+          style={({ pressed }) => [accessoryStyles.pressable, pressed && accessoryStyles.pressed]}
         >
           {content}
         </Pressable>
       </Animated.View>
-    );
+    )
   }
 
-  return content;
-};
+  return content
+}
 
 const accessoryStyles = StyleSheet.create((theme) => ({
   container: {
@@ -124,37 +110,23 @@ const accessoryStyles = StyleSheet.create((theme) => ({
   pressed: {
     opacity: 0.7,
   },
-}));
+}))
 
 const Input: React.FC<InputProps> & {
-  Accessory: typeof Accessory;
-} = ({
-  style,
-  size = "md",
-  variant,
-  mode,
-  m,
-  mt,
-  mb,
-  gap,
-  leftAccessory,
-  rightAccessory,
-  ...props
-}) => {
-  const colorScheme = useColorScheme();
+  Accessory: typeof Accessory
+} = ({ style, size = "md", variant, mode, m, mt, mb, gap, leftAccessory, rightAccessory, ...props }) => {
+  const colorScheme = useColorScheme()
 
   const placeholderTextColor = useMemo(() => {
-    const theme = UnistylesRuntime.getTheme();
-    return colorScheme === "dark"
-      ? theme.colors.text.subtle
-      : theme.colors.text.subtle;
-  }, [colorScheme]);
+    const theme = UnistylesRuntime.getTheme()
+    return colorScheme === "dark" ? theme.colors.text.subtle : theme.colors.text.subtle
+  }, [colorScheme])
 
   const contextValue = {
     size,
     variant,
     mode,
-  };
+  }
 
   styles.useVariants({
     size,
@@ -166,7 +138,7 @@ const Input: React.FC<InputProps> & {
     mode,
     hasLeftAccessory: !!leftAccessory,
     hasRightAccessory: !!rightAccessory,
-  });
+  })
 
   return (
     <InputContext.Provider value={contextValue}>
@@ -178,17 +150,15 @@ const Input: React.FC<InputProps> & {
           editable={mode !== "disabled"}
           {...props}
         />
-        {rightAccessory && (
-          <View style={styles.accessory}>{rightAccessory}</View>
-        )}
+        {rightAccessory && <View style={styles.accessory}>{rightAccessory}</View>}
       </View>
     </InputContext.Provider>
-  );
-};
+  )
+}
 
-Input.Accessory = Accessory;
+Input.Accessory = Accessory
 
-export {Input}
+export { Input }
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -336,4 +306,4 @@ const styles = StyleSheet.create((theme) => ({
       },
     },
   },
-}));
+}))

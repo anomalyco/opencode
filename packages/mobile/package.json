@@ -61,6 +61,7 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
+    "react-native-sse": "1.2.1",
     "react-native-svg": "15.11.2",
     "react-native-unistyles": "^3.0.7",
     "react-native-vision-camera": "^4.7.1",
