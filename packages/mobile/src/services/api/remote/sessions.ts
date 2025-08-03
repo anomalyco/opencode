@@ -9,8 +9,10 @@ interface SessionResponse {
   title: string
   version: string
   shareUrl?: string
-  timeCreated: string
-  timeUpdated: string
+  time: {
+    created: number
+    updated: number
+  }
   revertMessageId?: string
   revertPartId?: string
   revertSnapshot?: string

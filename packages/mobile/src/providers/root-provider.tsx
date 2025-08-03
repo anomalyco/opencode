@@ -1,8 +1,10 @@
 import { UpdateNotificationManager } from "@/managers/update-notification-manager"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { KeyboardProvider } from "react-native-keyboard-controller"
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet"
 
 import { QueryProvider } from "./query-provider"
+import { DataSyncProvider } from "./data-sync-provider"
 
 import { ThemeContextProvider } from "./theme-context"
 import { ThemeProvider } from "./theme-provider"
@@ -16,12 +18,16 @@ export const RootProvider = ({ children }: { children: React.ReactNode }) => {
         <ThemeProvider>
           <SonnerProvider>
             <KeyboardProvider>
-              <QueryProvider>
-                {children}
-                <UpdateNotificationManager />
-                <SonnerOverlay />
-                {/* {__DEV__ && <DevToolbar />} */}
-              </QueryProvider>
+              <BottomSheetModalProvider>
+                <QueryProvider>
+                  <DataSyncProvider>
+                    {children}
+                    <UpdateNotificationManager />
+                    <SonnerOverlay />
+                    {/* {__DEV__ && <DevToolbar />} */}
+                  </DataSyncProvider>
+                </QueryProvider>
+              </BottomSheetModalProvider>
             </KeyboardProvider>
           </SonnerProvider>
         </ThemeProvider>

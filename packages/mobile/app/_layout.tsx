@@ -5,8 +5,8 @@ import { useEffect } from "react"
 function RootLayout() {
   useEffect(() => {
     setTimeout(() => {
-      // router.navigate("")
-    }, 1000)
+      router.navigate("/tabs/home")
+    }, 0)
   }, [])
   return (
     <RootProvider>

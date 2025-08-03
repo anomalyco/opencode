@@ -1,7 +1,5 @@
-import { Text } from "@/primitives"
+import { HomePage } from "@/components/pages/home"
 
-const Page = () => {
-  return <Text>Home Page</Text>
+export default function Page() {
+  return <HomePage />
 }
-
-export default Page

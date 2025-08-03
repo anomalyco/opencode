@@ -8,7 +8,9 @@ import type { Session } from "../../../db/types"
 // Raw database operations (internal use)
 class SessionRepository {
   async getSessions() {
-    return await db.select().from(sessions).orderBy(desc(sessions.updatedAt))
+    const result = await db.select().from(sessions).orderBy(desc(sessions.updatedAt))
+    console.log("🗄️ SessionRepo: getSessions returned", result.length, "sessions")
+    return result
   }
 
   async getSession(id: string) {
@@ -17,22 +19,65 @@ class SessionRepository {
   }
 
   async createSession(session: Omit<Session, "createdAt" | "updatedAt">) {
-    return await db
+    console.log("💾 SessionRepo: Creating session", session.id, session.title)
+    console.log("💾 SessionRepo: Session data", JSON.stringify(session, null, 2))
+    try {
+      const result = await db
+        .insert(sessions)
+        .values({
+          ...session,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning()
+      console.log("✅ SessionRepo: Created session result", result)
+      return result
+    } catch (error) {
+      console.error("❌ SessionRepo: Create session failed", error)
+      throw error
+    }
+  }
+
+  async upsertSession(session: Omit<Session, "createdAt" | "updatedAt">) {
+    console.log("🔄 SessionRepo: Upserting session", session.id, session.title)
+    const result = await db
       .insert(sessions)
       .values({
         ...session,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
+      .onConflictDoUpdate({
+        target: sessions.id,
+        set: {
+          title: session.title,
+          version: session.version,
+          shareUrl: session.shareUrl,
+          timeCreated: session.timeCreated,
+          timeUpdated: session.timeUpdated,
+          revertMessageId: session.revertMessageId,
+          revertPartId: session.revertPartId,
+          revertSnapshot: session.revertSnapshot,
+          revertDiff: session.revertDiff,
+          isSynced: session.isSynced,
+          lastSyncTimestamp: session.lastSyncTimestamp,
+          updatedAt: new Date(),
+        },
+      })
       .returning()
+    console.log("✅ SessionRepo: Upserted session result", result)
+    return result
   }
 
   async updateSession(id: string, updates: Partial<Session>) {
-    return await db
+    console.log("🔄 SessionRepo: Updating session", id, updates.title)
+    const result = await db
       .update(sessions)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(sessions.id, id))
       .returning()
+    console.log("✅ SessionRepo: Updated session result", result)
+    return result
   }
 
   async deleteSession(id: string) {
@@ -134,6 +179,19 @@ export function useMarkSessionSyncedMutation() {
     mutationFn: ({ id, timestamp }: { id: string; timestamp?: Date }) => sessionRepo.markSessionSynced(id, timestamp),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.unsynced() })
+    },
+  })
+}
+
+export function useUpsertLocalSessionMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (session: Omit<Session, "createdAt" | "updatedAt">) => sessionRepo.upsertSession(session),
+    onSuccess: (_, session) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(session.id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.unsynced() })
     },
   })
