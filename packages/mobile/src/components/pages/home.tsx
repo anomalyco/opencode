@@ -13,13 +13,13 @@ import {
   SessionItem,
   ConnectionSheet,
 } from "@/components/molecules/home"
-import { SessionDialog, type SessionDialogRef } from "@/components/molecules/session/session-dialog"
+
 import type { ConnectionSheetRef } from "@/components/molecules/home/connection-sheet"
 
 export const HomePage = () => {
   const [refreshing, setRefreshing] = useState(false)
   const connectionSheetRef = useRef<ConnectionSheetRef>(null)
-  const sessionDialogRef = useRef<SessionDialogRef>(null)
+
   const { data: sessions, isLoading, refetch: refetchSessions } = useLocalSessionsQuery()
   const sessionManager = useSessionManager()
 
@@ -44,14 +44,6 @@ export const HomePage = () => {
 
   const handleSessionPress = (sessionId: string) => {
     router.push(`/chat/${sessionId}`)
-  }
-
-  const handleViewAllSessions = () => {
-    sessionDialogRef.current?.present()
-  }
-
-  const handleCloseSessionDialog = () => {
-    // Session dialog closed
   }
 
   // Show all sessions (no search filtering)
@@ -84,7 +76,7 @@ export const HomePage = () => {
       <QuickActions onNewSession={handleNewSession} />
 
       {/* Sessions Header */}
-      <RecentSessionsHeader onViewAll={handleViewAllSessions} />
+      <RecentSessionsHeader />
     </Box>
   )
 
@@ -138,7 +130,6 @@ export const HomePage = () => {
       />
 
       <ConnectionSheet ref={connectionSheetRef} onClose={handleCloseConnectionSheet} />
-      <SessionDialog ref={sessionDialogRef} onClose={handleCloseSessionDialog} />
     </Box>
   )
 }
