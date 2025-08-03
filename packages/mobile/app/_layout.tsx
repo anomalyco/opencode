@@ -1,5 +1,18 @@
-import { Stack } from "expo-router";
+import { RootProvider } from "@/providers/root-provider"
+import { router, Slot } from "expo-router"
+import { useEffect } from "react"
 
-export default function RootLayout() {
-  return <Stack />;
+function RootLayout() {
+  useEffect(() => {
+    setTimeout(() => {
+      // router.navigate("")
+    }, 1000)
+  }, [])
+  return (
+    <RootProvider>
+      <Slot />
+    </RootProvider>
+  )
 }
+
+export default RootLayout

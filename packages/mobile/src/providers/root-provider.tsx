@@ -10,7 +10,6 @@ import { SonnerProvider } from "./sonner-provider"
 import { SonnerOverlay } from "@/ui/overlays/sonner-overlay"
 
 export const RootProvider = ({ children }: { children: React.ReactNode }) => {
-  console.log("help")
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeContextProvider>
