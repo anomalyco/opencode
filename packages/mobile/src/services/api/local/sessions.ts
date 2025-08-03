@@ -8,9 +8,7 @@ import type { Session } from "../../../db/types"
 // Raw database operations (internal use)
 class SessionRepository {
   async getSessions() {
-    const result = await db.select().from(sessions).orderBy(desc(sessions.updatedAt))
-    console.log("🗄️ SessionRepo: getSessions returned", result.length, "sessions")
-    return result
+    return await db.select().from(sessions).orderBy(desc(sessions.updatedAt))
   }
 
   async getSession(id: string) {
@@ -19,28 +17,18 @@ class SessionRepository {
   }
 
   async createSession(session: Omit<Session, "createdAt" | "updatedAt">) {
-    console.log("💾 SessionRepo: Creating session", session.id, session.title)
-    console.log("💾 SessionRepo: Session data", JSON.stringify(session, null, 2))
-    try {
-      const result = await db
-        .insert(sessions)
-        .values({
-          ...session,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning()
-      console.log("✅ SessionRepo: Created session result", result)
-      return result
-    } catch (error) {
-      console.error("❌ SessionRepo: Create session failed", error)
-      throw error
-    }
+    return await db
+      .insert(sessions)
+      .values({
+        ...session,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning()
   }
 
   async upsertSession(session: Omit<Session, "createdAt" | "updatedAt">) {
-    console.log("🔄 SessionRepo: Upserting session", session.id, session.title)
-    const result = await db
+    return await db
       .insert(sessions)
       .values({
         ...session,
@@ -65,19 +53,14 @@ class SessionRepository {
         },
       })
       .returning()
-    console.log("✅ SessionRepo: Upserted session result", result)
-    return result
   }
 
   async updateSession(id: string, updates: Partial<Session>) {
-    console.log("🔄 SessionRepo: Updating session", id, updates.title)
-    const result = await db
+    return await db
       .update(sessions)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(sessions.id, id))
       .returning()
-    console.log("✅ SessionRepo: Updated session result", result)
-    return result
   }
 
   async deleteSession(id: string) {

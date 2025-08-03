@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { eq, asc } from "drizzle-orm"
 import db from "../../../db"
-import { messages, messageParts } from "../../../db/schema"
+import { messages, messageParts, sessions } from "../../../db/schema"
 import { queryKeys } from "../keys"
 import type { Message, MessagePart } from "../../../db/types"
 
@@ -78,7 +78,7 @@ class MessageRepository {
   }
 
   async upsertMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
-    return await db
+    const result = await db
       .insert(messageParts)
       .values({
         ...part,
@@ -131,10 +131,15 @@ class MessageRepository {
         },
       })
       .returning()
+
+    // Update session's updatedAt timestamp to reflect recent activity
+    await db.update(sessions).set({ updatedAt: new Date() }).where(eq(sessions.id, part.sessionId))
+
+    return result
   }
 
   async upsertMessage(message: Omit<Message, "createdAt" | "updatedAt">) {
-    return await db
+    const result = await db
       .insert(messages)
       .values({
         ...message,
@@ -156,6 +161,11 @@ class MessageRepository {
         },
       })
       .returning()
+
+    // Update session's updatedAt timestamp to reflect recent activity
+    await db.update(sessions).set({ updatedAt: new Date() }).where(eq(sessions.id, message.sessionId))
+
+    return result
   }
 }
 
@@ -269,12 +279,9 @@ export function useUpsertLocalMessagePartMutation() {
       if (part) {
         queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(part.sessionId) })
         queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.parts(part.messageId) })
-      } else {
-        console.log("⚠️ No part returned from upsert mutation")
+        // Invalidate sessions list to update ordering
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
       }
-    },
-    onError: (error, variables) => {
-      console.log("❌ Failed to upsert message part:", (error as any)?.message || error, "for part:", variables.id)
     },
   })
 }
@@ -285,6 +292,8 @@ export function useUpsertLocalMessageMutation() {
     mutationFn: (message: Omit<Message, "createdAt" | "updatedAt">) => messageRepo.upsertMessage(message),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(variables.sessionId) })
+      // Invalidate sessions list to update ordering
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
     },
   })
 }

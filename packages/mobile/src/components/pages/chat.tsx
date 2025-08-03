@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react"
 import { FlatList, RefreshControl, Platform, KeyboardAvoidingView, Keyboard } from "react-native"
 import { Box, Text, Icon } from "@/components/ui/primitives"
-import { ChatHeader, MessageInput, MessageItem, TypingIndicator } from "@/components/molecules/chat"
+import { ChatHeader, MessageInput, TypingIndicator, EnhancedMessageItem } from "@/components/molecules/chat"
 import { Feather } from "@expo/vector-icons"
 import {
   useLocalMessagesQuery,
@@ -185,49 +185,138 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
               lastSyncTimestamp: new Date(),
             })
           }
-        } else if (key?.includes("/part/") && content?.type === "text") {
-          upsertLocalMessagePart.mutate({
-            id: content.id,
-            sessionId: content.sessionID,
-            messageId: content.messageID,
-            type: "text",
-            textContent: content.text || "",
-            isSynthetic: false,
-            timeStart: content.time?.start ? new Date(content.time.start) : new Date(),
-            timeEnd: content.time?.end ? new Date(content.time.end) : null,
-            isSynced: true,
-            lastSyncTimestamp: new Date(),
-            fileMime: null,
-            fileFilename: null,
-            fileUrl: null,
-            fileSourceType: null,
-            fileSourcePath: null,
-            fileSourceTextValue: null,
-            fileSourceTextStart: null,
-            fileSourceTextEnd: null,
-            fileSourceName: null,
-            fileSourceKind: null,
-            fileSourceRange: null,
-            toolCallId: null,
-            toolName: null,
-            toolStatus: null,
-            toolInput: null,
-            toolOutput: null,
-            toolTitle: null,
-            toolMetadata: null,
-            toolError: null,
-            toolTimeStart: null,
-            toolTimeEnd: null,
-            stepCost: null,
-            stepTokensInput: null,
-            stepTokensOutput: null,
-            stepTokensReasoning: null,
-            stepTokensCacheRead: null,
-            stepTokensCacheWrite: null,
-            snapshotId: null,
-            patchHash: null,
-            patchFiles: null,
-          })
+        } else if (key?.includes("/part/")) {
+          // Handle different part types
+          if (content?.type === "text") {
+            upsertLocalMessagePart.mutate({
+              id: content.id,
+              sessionId: content.sessionID,
+              messageId: content.messageID,
+              type: "text",
+              textContent: content.text || "",
+              isSynthetic: content.synthetic || false,
+              timeStart: content.time?.start ? new Date(content.time.start) : new Date(),
+              timeEnd: content.time?.end ? new Date(content.time.end) : null,
+              isSynced: true,
+              lastSyncTimestamp: new Date(),
+              fileMime: null,
+              fileFilename: null,
+              fileUrl: null,
+              fileSourceType: null,
+              fileSourcePath: null,
+              fileSourceTextValue: null,
+              fileSourceTextStart: null,
+              fileSourceTextEnd: null,
+              fileSourceName: null,
+              fileSourceKind: null,
+              fileSourceRange: null,
+              toolCallId: null,
+              toolName: null,
+              toolStatus: null,
+              toolInput: null,
+              toolOutput: null,
+              toolTitle: null,
+              toolMetadata: null,
+              toolError: null,
+              toolTimeStart: null,
+              toolTimeEnd: null,
+              stepCost: null,
+              stepTokensInput: null,
+              stepTokensOutput: null,
+              stepTokensReasoning: null,
+              stepTokensCacheRead: null,
+              stepTokensCacheWrite: null,
+              snapshotId: null,
+              patchHash: null,
+              patchFiles: null,
+            })
+          } else if (content?.type === "tool") {
+            upsertLocalMessagePart.mutate({
+              id: content.id,
+              sessionId: content.sessionID,
+              messageId: content.messageID,
+              type: "tool",
+              textContent: null,
+              isSynthetic: false,
+              timeStart: content.state?.time?.start ? new Date(content.state.time.start) : new Date(),
+              timeEnd: content.state?.time?.end ? new Date(content.state.time.end) : null,
+              isSynced: true,
+              lastSyncTimestamp: new Date(),
+              fileMime: null,
+              fileFilename: null,
+              fileUrl: null,
+              fileSourceType: null,
+              fileSourcePath: null,
+              fileSourceTextValue: null,
+              fileSourceTextStart: null,
+              fileSourceTextEnd: null,
+              fileSourceName: null,
+              fileSourceKind: null,
+              fileSourceRange: null,
+              toolCallId: content.callID,
+              toolName: content.tool,
+              toolStatus: content.state?.status || "pending",
+              toolInput: content.state?.input ? JSON.stringify(content.state.input) : null,
+              toolOutput: content.state?.output || null,
+              toolTitle: content.state?.title || null,
+              toolMetadata: content.state?.metadata ? JSON.stringify(content.state.metadata) : null,
+              toolError: content.state?.error || null,
+              toolTimeStart: content.state?.time?.start ? new Date(content.state.time.start) : null,
+              toolTimeEnd: content.state?.time?.end ? new Date(content.state.time.end) : null,
+              stepCost: null,
+              stepTokensInput: null,
+              stepTokensOutput: null,
+              stepTokensReasoning: null,
+              stepTokensCacheRead: null,
+              stepTokensCacheWrite: null,
+              snapshotId: null,
+              patchHash: null,
+              patchFiles: null,
+            })
+          } else if (content?.type === "file") {
+            upsertLocalMessagePart.mutate({
+              id: content.id,
+              sessionId: content.sessionID,
+              messageId: content.messageID,
+              type: "file",
+              textContent: null,
+              isSynthetic: false,
+              timeStart: new Date(),
+              timeEnd: null,
+              isSynced: true,
+              lastSyncTimestamp: new Date(),
+              fileMime: content.mime,
+              fileFilename: content.filename,
+              fileUrl: content.url,
+              fileSourceType: content.source?.type,
+              fileSourcePath: content.source?.path,
+              fileSourceTextValue: content.source?.text?.value,
+              fileSourceTextStart: content.source?.text?.start,
+              fileSourceTextEnd: content.source?.text?.end,
+              fileSourceName: content.source?.name,
+              fileSourceKind: content.source?.kind,
+              fileSourceRange: content.source?.range ? JSON.stringify(content.source.range) : null,
+              toolCallId: null,
+              toolName: null,
+              toolStatus: null,
+              toolInput: null,
+              toolOutput: null,
+              toolTitle: null,
+              toolMetadata: null,
+              toolError: null,
+              toolTimeStart: null,
+              toolTimeEnd: null,
+              stepCost: null,
+              stepTokensInput: null,
+              stepTokensOutput: null,
+              stepTokensReasoning: null,
+              stepTokensCacheRead: null,
+              stepTokensCacheWrite: null,
+              snapshotId: null,
+              patchHash: null,
+              patchFiles: null,
+            })
+          }
         }
       }
     })
@@ -309,7 +398,11 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   const renderItem = useCallback(
     ({ item }: { item: any }) => (
-      <MessageItem message={item} remoteMessages={remoteMessages} localContent={pendingUserMessages.get(item.id)} />
+      <EnhancedMessageItem
+        message={item}
+        remoteMessages={remoteMessages}
+        localContent={pendingUserMessages.get(item.id)}
+      />
     ),
     [remoteMessages, pendingUserMessages],
   )
