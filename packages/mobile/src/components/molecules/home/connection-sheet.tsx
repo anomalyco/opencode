@@ -53,7 +53,6 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
       updateConnectionStatus.mutate("connected")
       onClose()
     } catch (error) {
-      console.error("Connection failed:", error)
       updateConnectionStatus.mutate("disconnected")
     } finally {
       setIsConnecting(false)

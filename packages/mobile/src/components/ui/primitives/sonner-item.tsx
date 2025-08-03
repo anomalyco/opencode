@@ -77,12 +77,11 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
     // Trigger haptic feedback for initial mount (only loading gets haptic on mount)
     const triggerInitialHaptic = async () => {
       try {
-        console.log("Initial mount haptic for type:", sonner.type)
         if (sonner.type === "loading") {
           await haptics.selection()
         }
       } catch (error) {
-        console.error("Initial haptic error:", error)
+        // Initial haptic error
       }
     }
 
@@ -110,7 +109,6 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
   useEffect(() => {
     const triggerHapticOnChange = async () => {
       try {
-        console.log("Sonner type changed, triggering haptic for:", sonner.type)
         switch (sonner.type) {
           case "success":
             await haptics.successNotification()
@@ -129,7 +127,7 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
             break
         }
       } catch (error) {
-        console.error("Haptic error on type change:", error)
+        // Haptic error on type change
       }
     }
 
@@ -142,7 +140,6 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
   // Auto dismiss when sonner updates (for state changes)
   useEffect(() => {
     if (sonner.type !== "loading" && !sonner.persistent && sonner.duration) {
-      console.log(`Setting auto-dismiss timer for ${sonner.duration}ms`)
       const timer = setTimeout(() => {
         handleRemove()
       }, sonner.duration)
@@ -173,10 +170,6 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
 
   const positionStyle = useAnimatedStyle(() => ({
     top: animatedTop.value,
-  }))
-
-  const iconAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
   }))
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
@@ -221,7 +214,7 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
   )
 }
 
-const styles = StyleSheet.create((theme, rt) => ({
+const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
     left: 0,

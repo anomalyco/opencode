@@ -32,7 +32,7 @@ const UpdateNotificationManagerComponent = () => {
         })
       }
     } catch (error) {
-      console.error("Error checking for updates:", error)
+      // Error checking for updates
     }
   }, [sonner])
 
@@ -55,7 +55,7 @@ const UpdateNotificationManagerComponent = () => {
       await Updates.fetchUpdateAsync()
       await Updates.reloadAsync()
     } catch (error) {
-      console.error("Error updating app:", error)
+      // Error updating app
 
       if (updateNotificationId.current) {
         sonner.update(updateNotificationId.current, {

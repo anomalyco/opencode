@@ -19,7 +19,6 @@ export const HomePage = () => {
   const connectionSheetRef = useRef<ConnectionSheetRef>(null)
   const { data: sessions, isLoading, refetch: refetchSessions } = useLocalSessionsQuery()
 
-  console.log("🏠 Home: sessions data", { sessions: sessions?.length, isLoading })
   const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
 
   const onRefresh = async () => {
@@ -32,11 +31,11 @@ export const HomePage = () => {
   }
 
   const handleNewSession = () => {
-    console.log("Create new session")
+    // Create new session
   }
 
-  const handleSearch = (query: string) => {
-    console.log("Search:", query)
+  const handleSearch = (_query: string) => {
+    // Handle search
   }
 
   const handleSessionPress = (sessionId: string) => {
@@ -44,7 +43,7 @@ export const HomePage = () => {
   }
 
   const handleViewAllSessions = () => {
-    console.log("View all sessions")
+    // View all sessions
   }
 
   const handleOpenConnectionSheet = () => {

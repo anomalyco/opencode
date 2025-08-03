@@ -1,15 +1,12 @@
-import { useState, useRef, useEffect } from "react"
-import { FlatList, RefreshControl, TextInput, Platform, KeyboardAvoidingView, Keyboard } from "react-native"
-import { useUnistyles } from "react-native-unistyles"
-import { ThemedMarked } from "@/components/ui/primitives/marked"
-import { Box, Text, Button, Icon } from "@/components/ui/primitives"
-import BlurView from "@/components/ui/primitives/blur-view"
+import { useState, useRef, useEffect, useCallback, memo } from "react"
+import { FlatList, RefreshControl, Platform, KeyboardAvoidingView } from "react-native"
+import { Box, Text, Icon } from "@/components/ui/primitives"
+import { ChatHeader, MessageInput, MessageItem, TypingIndicator } from "@/components/molecules/chat"
 import { Feather } from "@expo/vector-icons"
 import {
   useLocalMessagesQuery,
   useUpsertLocalMessageMutation,
   useUpsertLocalMessagePartMutation,
-  useLocalMessagePartsQuery,
 } from "@/services/api/local/messages"
 import { useSendRemoteMessageMutation, useRemoteMessagesQuery } from "@/services/api/remote/messages"
 import { useLocalSessionQuery } from "@/services/api/local/sessions"
@@ -20,187 +17,9 @@ interface ChatPageProps {
   sessionId: string
 }
 
-interface MessageItemProps {
-  message: {
-    id: string
-    role: "user" | "assistant"
-    createdAt: Date
-  }
-  remoteMessages?: any[]
-  localContent?: string
-}
+// Memoized FlatList for performance
+const MemoizedFlatList = memo(FlatList<any>)
 
-const MessageItem = ({ message, remoteMessages, localContent }: MessageItemProps) => {
-  const isUser = message.role === "user"
-
-  // Get message parts from local SQLite for real-time updates
-  const { data: localMessageParts } = useLocalMessagePartsQuery(message.id)
-  const localTextParts = localMessageParts?.filter((part) => part.type === "text" && !part.isSynthetic) || []
-  const localTextContent = localTextParts.map((part) => part.textContent).join("\n")
-
-  // Fallback to remote message if no local content
-  const remoteMessage = remoteMessages?.find((rm) => rm.info.id === message.id)
-  const remoteTextParts = remoteMessage?.parts?.filter((part: any) => part.type === "text" && !part.synthetic) || []
-  const remoteTextContent = remoteTextParts.map((part: any) => part.text).join("\n")
-
-  // Use local content first (for streaming), then provided localContent, then remote, then fallback
-  const content = localTextContent || localContent || remoteTextContent
-
-  // Don't render if no content
-  if (!content) {
-    return null
-  }
-
-  return (
-    <Box p="md">
-      <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
-        <Box
-          background={isUser ? "emphasis" : "lightest"}
-          rounded="xl"
-          p="md"
-          style={{
-            maxWidth: "85%",
-            minWidth: "20%",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 1,
-          }}
-        >
-          <ThemedMarked value={content} />
-        </Box>
-      </Box>
-    </Box>
-  )
-}
-
-const ChatHeader = ({ sessionTitle }: { sessionTitle?: string }) => {
-  return (
-    <BlurView
-      intensity={80}
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-      }}
-    >
-      <Box
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        p="md"
-        safeAreaTop
-        style={{
-          borderBottomWidth: 1,
-          borderBottomColor: "rgba(0,0,0,0.1)",
-        }}
-      >
-        <Box flex direction="row" alignItems="center" gap="sm">
-          <Box
-            background="lightest"
-            rounded="full"
-            style={{
-              width: 36,
-              height: 36,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon icon={Feather} name="cpu" size={18} color="brand" />
-          </Box>
-          <Box flex>
-            <Text size="lg" weight="semibold" numberOfLines={1}>
-              {sessionTitle || "OpenCode Assistant"}
-            </Text>
-            <Text size="xs" mode="subtle">
-              AI-powered development help
-            </Text>
-          </Box>
-        </Box>
-        <Button variant="ghost">
-          <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
-        </Button>
-      </Box>
-    </BlurView>
-  )
-}
-
-const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
-  const [text, setText] = useState("")
-  const [keyboardVisible, setKeyboardVisible] = useState(false)
-  const { theme } = useUnistyles()
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener("keyboardDidShow", () => {
-      setKeyboardVisible(true)
-    })
-    const keyboardDidHideListener = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardVisible(false)
-    })
-
-    return () => {
-      keyboardDidHideListener?.remove()
-      keyboardDidShowListener?.remove()
-    }
-  }, [])
-
-  return (
-    <BlurView
-      intensity={80}
-      style={{
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-      }}
-    >
-      <Box p="sm" safeAreaBottom={!keyboardVisible}>
-        <Box direction="row" alignItems="flex-end" gap="sm">
-          <Box flex background="dark" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Type a message..."
-              placeholderTextColor={theme.colors.text.subtle}
-              multiline
-              style={{
-                color: theme.colors.text.default,
-                fontSize: 16,
-                maxHeight: 100,
-                paddingVertical: 0,
-              }}
-            />
-          </Box>
-          <Button
-            size="auto"
-            mode="brand"
-            disabled={!text.trim()}
-            onPress={() => {
-              if (text.trim()) {
-                onSend(text.trim())
-                setText("")
-              }
-            }}
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 21,
-              padding: 0,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon icon={Feather} name="arrow-up" size={18} />
-          </Button>
-        </Box>
-      </Box>
-    </BlurView>
-  )
-}
 export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const [refreshing, setRefreshing] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -221,8 +40,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   useEffect(() => {
     if (remoteMessages && remoteMessages.length > 0) {
       remoteMessages.forEach(async (remoteMessage) => {
-        // Get text content from parts
-
         const localMessage = {
           id: remoteMessage.info.id,
           sessionId: remoteMessage.info.sessionID,
@@ -251,14 +68,13 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
         try {
           await upsertLocalMessage.mutateAsync(localMessage)
-          // Clear pending content since it's now synced
           setPendingUserMessages((prev) => {
             const newMap = new Map(prev)
             newMap.delete(remoteMessage.info.id)
             return newMap
           })
         } catch (error) {
-          console.error("❌ Chat: Failed to sync message", error)
+          // Failed to sync message
         }
       })
     }
@@ -271,7 +87,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
 
     const unsubscribe = streaming.subscribe("*", (event) => {
-      // Check if this event is for our session
       let eventSessionId: string | undefined
       if (event.type === "storage.write") {
         eventSessionId = (event as any).properties?.content?.sessionID
@@ -299,13 +114,12 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
         if (key?.includes("step-start")) {
           setIsStreaming(true)
         } else if (key?.includes("/message/") && content?.role) {
-          // Create message with role from backend
           const existingMessage = messages?.find((m) => m.id === content.id)
           if (!existingMessage) {
             upsertLocalMessage.mutate({
               id: content.id,
               sessionId: content.sessionID,
-              role: content.role, // Use role from backend
+              role: content.role,
               timeCreated: new Date(),
               timeCompleted: null,
               providerId: null,
@@ -329,7 +143,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             })
           }
         } else if (key?.includes("/part/") && content?.type === "text") {
-          // Write text part to SQLite
           upsertLocalMessagePart.mutate({
             id: content.id,
             sessionId: content.sessionID,
@@ -341,55 +154,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             timeEnd: content.time?.end ? new Date(content.time.end) : null,
             isSynced: true,
             lastSyncTimestamp: new Date(),
-            // Set all other fields to null for text parts
-            fileMime: null,
-            fileFilename: null,
-            fileUrl: null,
-            fileSourceType: null,
-            fileSourcePath: null,
-            fileSourceTextValue: null,
-            fileSourceTextStart: null,
-            fileSourceTextEnd: null,
-            fileSourceName: null,
-            fileSourceKind: null,
-            fileSourceRange: null,
-            toolCallId: null,
-            toolName: null,
-            toolStatus: null,
-            toolInput: null,
-            toolOutput: null,
-            toolTitle: null,
-            toolMetadata: null,
-            toolError: null,
-            toolTimeStart: null,
-            toolTimeEnd: null,
-            stepCost: null,
-            stepTokensInput: null,
-            stepTokensOutput: null,
-            stepTokensReasoning: null,
-            stepTokensCacheRead: null,
-            stepTokensCacheWrite: null,
-            snapshotId: null,
-            patchHash: null,
-            patchFiles: null,
-          })
-        }
-      } else if (event.type === "message.part.updated") {
-        const part = (event as any).properties?.part
-        if (part?.type === "text") {
-          // Write text part to SQLite
-          upsertLocalMessagePart.mutate({
-            id: part.id,
-            sessionId: part.sessionID,
-            messageId: part.messageID,
-            type: "text",
-            textContent: part.text || "",
-            isSynthetic: false,
-            timeStart: part.time?.start ? new Date(part.time.start) : new Date(),
-            timeEnd: part.time?.end ? new Date(part.time.end) : null,
-            isSynced: true,
-            lastSyncTimestamp: new Date(),
-            // Set all other fields to null for text parts
             fileMime: null,
             fileFilename: null,
             fileUrl: null,
@@ -429,112 +193,81 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
   }, [sessionId])
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
       await refetchMessages()
     } finally {
       setRefreshing(false)
     }
-  }
+  }, [refetchMessages])
 
-  const handleSendMessage = async (content: string) => {
-    try {
-      console.log("💬 Sending message:", content)
-      setIsStreaming(true)
+  const handleSendMessage = useCallback(
+    async (content: string) => {
+      try {
+        setIsStreaming(true)
 
-      // Set a timeout to clear streaming state as fallback
-      if (streamingTimeoutRef.current) {
-        clearTimeout(streamingTimeoutRef.current)
-      }
-      streamingTimeoutRef.current = setTimeout(() => {
-        console.log("💬 Streaming timeout - clearing loading state")
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current)
+        }
+        streamingTimeoutRef.current = setTimeout(() => {
+          setIsStreaming(false)
+        }, 30000)
+
+        const providerID = userSettings?.defaultProviderId || "anthropic"
+        const modelID = userSettings?.defaultModelId || "claude-sonnet-4-20250514"
+
+        await sendMessage.mutateAsync({
+          sessionId,
+          data: {
+            providerID,
+            modelID,
+            parts: [
+              {
+                type: "text",
+                text: content,
+              },
+            ],
+          },
+        })
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+        }, 100)
+      } catch (error) {
         setIsStreaming(false)
-      }, 30000) // 30 second timeout
-
-      // Don't create user message locally - let streaming handle it with correct role
-      // Get default provider and model from user settings
-      const providerID = userSettings?.defaultProviderId || "anthropic"
-      const modelID = userSettings?.defaultModelId || "claude-sonnet-4-20250514"
-
-      console.log("💬 Using provider:", providerID, "model:", modelID)
-
-      const result = await sendMessage.mutateAsync({
-        sessionId,
-        data: {
-          providerID,
-          modelID,
-          parts: [
-            {
-              type: "text",
-              text: content,
-            },
-          ],
-        },
-      })
-
-      console.log("💬 Send message result:", result)
-
-      // Scroll to bottom after sending
-      setTimeout(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
-      }, 100)
-    } catch (error) {
-      console.error("💬 Failed to send message:", error)
-      setIsStreaming(false)
-    }
-  }
-
-  const renderEmptyState = () => (
-    <Box center p="lg" style={{ transform: [{ scaleY: -1 }] }}>
-      <Box center p="lg" background="subtle" rounded="lg" border="subtle">
-        <Text mode="subtle" size="sm">
-          Start the conversation
-        </Text>
-        <Box mt="xs">
-          <Text mode="subtle" size="xs">
-            Send your first message to begin
-          </Text>
-        </Box>
-      </Box>
-    </Box>
+      }
+    },
+    [sessionId, userSettings, sendMessage],
   )
 
-  const renderTypingIndicator = () => {
-    if (!isStreaming) return null
-
-    return (
-      <Box p="md" style={{ transform: [{ scaleY: -1 }] }}>
-        <Box direction="row" justifyContent="flex-start">
-          <Box
-            background="lightest"
-            rounded="xl"
-            p="md"
-            style={{
-              maxWidth: "80%",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.05,
-              shadowRadius: 2,
-              elevation: 1,
-            }}
-          >
-            <Box direction="row" alignItems="center" gap="xs">
-              <Box animation="pulse" animationConfig={{ repeat: -1 }}>
-                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
-              </Box>
-              <Box animation="pulse" animationConfig={{ repeat: -1, delay: 200 }}>
-                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
-              </Box>
-              <Box animation="pulse" animationConfig={{ repeat: -1, delay: 400 }}>
-                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
-              </Box>
-            </Box>
+  const renderEmptyState = useCallback(
+    () => (
+      <Box center p="lg" m="md">
+        <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
+          <Icon icon={Feather} name="message-square" size={48} color="muted" />
+          <Box center gap="xs">
+            <Text mode="subtle" size="md" weight="medium">
+              No messages yet
+            </Text>
+            <Text mode="subtle" size="sm" style={{ textAlign: "center", lineHeight: 18 }}>
+              Start the conversation with OpenCode
+            </Text>
           </Box>
         </Box>
       </Box>
-    )
-  }
+    ),
+    [],
+  )
+
+  const renderItem = useCallback(
+    ({ item }: { item: any }) => (
+      <MessageItem message={item} remoteMessages={remoteMessages} localContent={pendingUserMessages.get(item.id)} />
+    ),
+    [remoteMessages, pendingUserMessages],
+  )
+
+  // Using TypingIndicator molecule now
 
   if (isLoading) {
     return (
@@ -550,41 +283,38 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     )
   }
 
-  // Reverse messages for inverted FlatList (newest at bottom)
   const reversedMessages = [...(messages || [])].reverse()
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      keyboardVerticalOffset={0}
     >
       <Box flex background="base">
         <Box flex>
-          <FlatList
+          <MemoizedFlatList
             ref={flatListRef}
             data={reversedMessages}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <MessageItem
-                message={item}
-                remoteMessages={remoteMessages}
-                localContent={pendingUserMessages.get(item.id)}
-              />
-            )}
+            renderItem={renderItem}
             inverted
             ListEmptyComponent={renderEmptyState}
-            ListHeaderComponent={renderTypingIndicator}
+            ListHeaderComponent={<TypingIndicator isVisible={isStreaming} />}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} style={{ transform: [{ scaleY: -1 }] }} />
             }
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               flexGrow: 1,
-              paddingTop: 100, // Space for floating header
-              paddingBottom: 100, // Space for floating input
+              paddingTop: 100,
+              paddingBottom: 100,
             }}
             keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            initialNumToRender={10}
           />
         </Box>
 
