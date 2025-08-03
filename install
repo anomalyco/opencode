@@ -44,7 +44,18 @@ esac
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
-if [ -z "$requested_version" ]; then
+if [[ "$requested_version" == "local" ]]; then
+    # Use local binary from dist directory
+    # Remove .zip extension from filename for local path
+    local_dirname="${filename%.zip}"
+    local_binary_path="./packages/opencode/dist/$local_dirname/bin/opencode"
+    if [[ ! -f "$local_binary_path" ]]; then
+        echo "${RED}Local binary not found at $local_binary_path${NC}"
+        echo "${YELLOW}Run 'bun run build:install' to build local binaries first${NC}"
+        exit 1
+    fi
+    specific_version="local"
+elif [ -z "$requested_version" ]; then
     url="https://github.com/sst/opencode/releases/latest/download/$filename"
     specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | awk -F'"' '/"tag_name": "/ {gsub(/^v/, "", $4); print $4}')
 
@@ -91,12 +102,21 @@ check_version() {
 }
 
 download_and_install() {
-    print_message info "Downloading ${ORANGE}opencode ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
-    mkdir -p opencodetmp && cd opencodetmp
-    curl -# -L -o "$filename" "$url"
-    unzip -q "$filename"
-    mv opencode "$INSTALL_DIR"
-    cd .. && rm -rf opencodetmp 
+    if [[ "$specific_version" == "local" ]]; then
+        print_message info "Installing local ${ORANGE}opencode ${GREEN}binary..."
+        local_dirname="${filename%.zip}"
+        local_binary_path="./packages/opencode/dist/$local_dirname/bin/opencode"
+        # Use ditto to preserve all macOS binary attributes
+        ditto "$local_binary_path" "$INSTALL_DIR/opencode"
+        chmod +x "$INSTALL_DIR/opencode"
+    else
+        print_message info "Downloading ${ORANGE}opencode ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
+        mkdir -p opencodetmp && cd opencodetmp
+        curl -# -L -o "$filename" "$url"
+        unzip -q "$filename"
+        mv opencode "$INSTALL_DIR"
+        cd .. && rm -rf opencodetmp 
+    fi
 }
 
 check_version
