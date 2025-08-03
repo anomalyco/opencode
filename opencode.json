@@ -1,16 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "cerebras": {
-      "options": {
-        "apiKey": "csk-m33xrvt43whkypn8r4ph9xc8fenhx2f68c3pj22ext45v5k9"
-      },
-      "npm": "@ai-sdk/cerebras",
-      "models": {
-        "qwen-3-coder-480b": {}
-      }
-    }
-  },
+  "plugin": ["./packages/plugin/src/example.ts"],
   "mcp": {
     "context7": {
       "type": "remote",

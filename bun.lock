@@ -38,6 +38,7 @@
         "@octokit/graphql": "9.0.1",
         "@octokit/rest": "22.0.0",
         "@openauthjs/openauth": "0.4.3",
+        "@opencode-ai/plugin": "workspace:*",
         "@standard-schema/spec": "1.0.0",
         "@zip.js/zip.js": "2.7.62",
         "ai": "catalog:",
@@ -72,6 +73,16 @@
         "typescript": "catalog:",
         "vscode-languageserver-types": "3.17.5",
         "zod-to-json-schema": "3.24.5",
+      },
+    },
+    "packages/plugin": {
+      "name": "@opencode-ai/plugin",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@hey-api/openapi-ts": "0.80.1",
+        "@opencode-ai/sdk": "workspace:*",
+        "@tsconfig/node22": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/sdk/js": {
@@ -415,6 +426,8 @@
     "@octokit/webhooks-types": ["@octokit/webhooks-types@7.6.1", "", {}, "sha512-S8u2cJzklBC0FgTwWVLaM8tMrDuDMVE4xiTK4EYXM9GntyvrdbSoxqDQa+Fh57CCNApyIpyeqPhhFEmHPfrXgw=="],
 
     "@openauthjs/openauth": ["@openauthjs/openauth@0.4.3", "", { "dependencies": { "@standard-schema/spec": "1.0.0-beta.3", "aws4fetch": "1.0.20", "jose": "5.9.6" }, "peerDependencies": { "arctic": "^2.2.2", "hono": "^4.0.0" } }, "sha512-RlnjqvHzqcbFVymEwhlUEuac4utA5h4nhSK/i2szZuQmxTIqbGUxZ+nM+avM+VV4Ing+/ZaNLKILoXS3yrkOOw=="],
+
+    "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
 
     "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
 

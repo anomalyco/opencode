@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
+import { Plugin } from "../plugin"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -67,7 +68,7 @@ export namespace Permission {
     },
   )
 
-  export function ask(input: {
+  export async function ask(input: {
     type: Info["type"]
     title: Info["title"]
     pattern?: Info["pattern"]
@@ -95,6 +96,18 @@ export namespace Permission {
         created: Date.now(),
       },
     }
+
+    switch (
+      await Plugin.trigger("permission.ask", info, {
+        status: "ask",
+      }).then((x) => x.status)
+    ) {
+      case "deny":
+        throw new RejectedError(info.sessionID, info.id, info.callID)
+      case "allow":
+        return
+    }
+
     pending[input.sessionID] = pending[input.sessionID] || {}
     return new Promise<void>((resolve, reject) => {
       pending[input.sessionID][info.id] = {

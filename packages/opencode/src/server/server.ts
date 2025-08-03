@@ -19,6 +19,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Mode } from "../session/mode"
 import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
+import { lazy } from "../util/lazy"
 
 const ERRORS = {
   400: {
@@ -48,7 +49,7 @@ export namespace Server {
     Connected: Bus.event("server.connected", z.object({})),
   }
 
-  function app() {
+  export const app = lazy(() => {
     const app = new Hono()
 
     const result = app
@@ -1022,7 +1023,7 @@ export namespace Server {
       .route("/tui/control", TuiRoute)
 
     return result
-  }
+  })
 
   export async function openapi() {
     const a = app()

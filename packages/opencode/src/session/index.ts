@@ -41,6 +41,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
+import { Plugin } from "../plugin"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -571,7 +572,14 @@ export namespace Session {
         text: PROMPT_PLAN,
         synthetic: true,
       })
-
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: userMsg,
+        parts: userParts,
+      },
+    )
     await updateMessage(userMsg)
     for (const part of userParts) {
       await updatePart(part)
@@ -716,6 +724,17 @@ export namespace Session {
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args, options) {
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            {
+              args,
+            },
+          )
           await processor.track(options.toolCallId)
           const result = await item.execute(args, {
             sessionID: input.sessionID,
@@ -740,6 +759,15 @@ export namespace Session {
               }
             },
           })
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            result,
+          )
           return result
         },
         toModelOutput(result) {
@@ -776,6 +804,21 @@ export namespace Session {
       tools[key] = item
     }
 
+    const params = {
+      temperature: model.info.temperature
+        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+        : undefined,
+      topP: mode.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
+    }
+    await Plugin.trigger(
+      "chat.params",
+      {
+        model: model.info,
+        provider: await Provider.getProvider(input.providerID),
+        message: userMsg,
+      },
+      params,
+    )
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
@@ -835,6 +878,8 @@ export namespace Session {
       providerOptions: {
         [input.providerID]: model.info.options,
       },
+      temperature: params.temperature,
+      topP: params.topP,
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -844,10 +889,6 @@ export namespace Session {
         ),
         ...MessageV2.toModelMessage(msgs),
       ],
-      temperature: model.info.temperature
-        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
-        : undefined,
-      topP: mode.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
         model: model.language,

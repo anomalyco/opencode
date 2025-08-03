@@ -23,13 +23,13 @@ export namespace Config {
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
       for (const resolved of found.toReversed()) {
-        result = mergeDeep(result, await load(resolved))
+        result = mergeDeep(result, await loadFile(resolved))
       }
     }
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeDeep(result, await load(Flag.OPENCODE_CONFIG))
+      result = mergeDeep(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
@@ -37,7 +37,7 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
-        result = mergeDeep(result, await loadRaw(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        result = mergeDeep(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -223,6 +223,7 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      plugin: z.string().array().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -352,9 +353,9 @@ export namespace Config {
   export const global = lazy(async () => {
     let result: Info = pipe(
       {},
-      mergeDeep(await load(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await load(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await load(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
     await import(path.join(Global.Path.config, "config"), {
@@ -375,25 +376,26 @@ export namespace Config {
     return result
   })
 
-  async function load(configPath: string): Promise<Info> {
-    let text = await Bun.file(configPath)
+  async function loadFile(filepath: string): Promise<Info> {
+    log.info("loading", { path: filepath })
+    let text = await Bun.file(filepath)
       .text()
       .catch((err) => {
         if (err.code === "ENOENT") return
-        throw new JsonError({ path: configPath }, { cause: err })
+        throw new JsonError({ path: filepath }, { cause: err })
       })
     if (!text) return {}
-    return loadRaw(text, configPath)
+    return load(text, filepath)
   }
 
-  async function loadRaw(text: string, configPath: string) {
+  async function load(text: string, filepath: string) {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
 
     const fileMatches = text.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configPath)
+      const configDir = path.dirname(filepath)
       const lines = text.split("\n")
 
       for (const match of fileMatches) {
@@ -428,7 +430,7 @@ export namespace Config {
         .join("\n")
 
       throw new JsonError({
-        path: configPath,
+        path: filepath,
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
@@ -437,11 +439,21 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configPath, JSON.stringify(parsed.data, null, 2))
+        await Bun.write(filepath, JSON.stringify(parsed.data, null, 2))
       }
-      return parsed.data
+      const data = parsed.data
+      if (data.plugin) {
+        for (let i = 0; i < data.plugin?.length; i++) {
+          const plugin = data.plugin[i]
+          if (typeof plugin === "string") {
+            data.plugin[i] = path.resolve(path.dirname(filepath), plugin)
+          }
+        }
+      }
+      return data
     }
-    throw new InvalidError({ path: configPath, issues: parsed.error.issues })
+
+    throw new InvalidError({ path: filepath, issues: parsed.error.issues })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",

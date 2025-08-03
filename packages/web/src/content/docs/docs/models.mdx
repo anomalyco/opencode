@@ -66,9 +66,11 @@ If you've configured a [custom provider](/docs/providers#custom), the `provider_
 
 ## Loading models
 
-When opencode starts up, it checks for the following:
+When opencode starts up, it checks for models in the following priority order:
 
-1. The model list in the opencode config.
+1. The `--model` or `-m` command line flag. The format is the same as in the config file: `provider_id/model_id`.
+
+2. The model list in the opencode config.
 
    ```json title="opencode.json"
    {
@@ -79,6 +81,6 @@ When opencode starts up, it checks for the following:
 
    The format here is `provider/model`.
 
-2. The last used model.
+3. The last used model.
 
-3. The first model using an internal priority.
+4. The first model using an internal priority.

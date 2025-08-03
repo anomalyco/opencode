@@ -5,13 +5,14 @@ process.chdir(dir)
 
 import { $ } from "bun"
 
-await import("./generate")
-
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 
+await $`bun tsc`
+
 if (snapshot) {
-  await $`bun publish --tag snapshot`
+  await $`bun publish --tag snapshot --access public`
+  await $`git checkout package.json`
 }
 if (!snapshot) {
-  await $`bun publish`
+  await $`bun publish --access public`
 }
