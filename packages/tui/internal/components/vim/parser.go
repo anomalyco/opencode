@@ -198,15 +198,19 @@ func (p *CommandParser) parseNormalCommand(key string, pendingOperator string, p
 	// Handle single character operations
 	switch remainingKey {
 	case "x":
+		// Delete character under cursor
+		// For 'x', we want to delete from current position to current position + count
+		// So we adjust the motion to be exclusive and the endpoint needs special handling
 		return &VimCommand{
 			Type:     CommandOperator,
-			Count:    1, // Command count is 1
+			Count:    1,
 			Operator: "d",
 			Motion: &Motion{
 				Type:      MotionChar,
-				Count:     count, // Motion uses the actual count
+				Count:     count,
 				Direction: 1,
 			},
+			Text: "x", // Mark this as 'x' command for special handling
 		}, true
 	case "X":
 		return &VimCommand{
@@ -223,16 +227,17 @@ func (p *CommandParser) parseNormalCommand(key string, pendingOperator string, p
 		// Replace mode needs another character
 		return nil, false
 	case "s":
-		// Substitute character - delete char and enter insert mode
+		// Substitute character - delete char under cursor and enter insert mode
 		return &VimCommand{
 			Type:     CommandOperator,
-			Count:    1, // Command count is 1
+			Count:    1,
 			Operator: "c",
 			Motion: &Motion{
 				Type:      MotionChar,
-				Count:     count, // Motion uses the actual count
+				Count:     count,
 				Direction: 1,
 			},
+			Text: "s", // Mark this as 's' command for special handling
 		}, true
 	case "S":
 		// Substitute line - delete line and enter insert mode
@@ -243,6 +248,16 @@ func (p *CommandParser) parseNormalCommand(key string, pendingOperator string, p
 			Motion: &Motion{
 				Type:  MotionLine,
 				Count: count, // Motion uses the actual count
+			},
+		}, true
+	case "D":
+		// Delete to end of line
+		return &VimCommand{
+			Type:     CommandOperator,
+			Count:    1,
+			Operator: "d",
+			Motion: &Motion{
+				Type: MotionLineEnd,
 			},
 		}, true
 	}

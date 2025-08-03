@@ -20,6 +20,7 @@ type VimTextarea struct {
 	replaceChar       rune
 	lastInsertStart   Position
 	lastInsertCommand string // For dot repeat (i, a, o, etc.)
+	pendingKeys       string // For multi-character commands like 'gg'
 }
 
 // min returns the minimum of two integers
@@ -137,6 +138,33 @@ func (v *VimTextarea) handleVimKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleNormalMode processes keys in normal mode
 func (v *VimTextarea) handleNormalMode(keyStr string, msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Check for escape first
+	if keyStr == "esc" || keyStr == "ctrl+[" {
+		v.vimMode.ClearPendingOperator()
+		v.vimMode.ClearCount()
+		v.pendingKeys = ""
+		return v, nil
+	}
+
+	// Check for 'g' prefix (for commands like gg, ge, etc.)
+	if v.pendingKeys == "g" && keyStr == "g" {
+		// Complete the 'gg' command
+		keyStr = "gg"
+		v.pendingKeys = ""
+	} else if keyStr == "g" && !v.vimMode.IsOperatorPending() {
+		// Start accumulating 'g' prefix
+		v.pendingKeys = "g"
+		return v, nil
+	} else if v.pendingKeys != "" {
+		// Not a valid multi-char sequence, process the pending key first
+		oldPending := v.pendingKeys
+		v.pendingKeys = ""
+		// Process the pending key
+		v.handleNormalMode(oldPending, msg)
+		// Then process the current key
+		return v.handleNormalMode(keyStr, msg)
+	}
+
 	// Handle search initiation
 	if keyStr == "/" || keyStr == "?" {
 		v.searchActive = true
@@ -374,6 +402,24 @@ func (v *VimTextarea) executeOperator(cmd *VimCommand) {
 	// The motion engine correctly positions us at the start of the nth word,
 	// which is exactly where we want to delete up to for 'dw'.
 
+	// Special handling for 'x' and 's' commands
+	// These commands delete the character under the cursor, not up to the next position
+	if cmd.Text == "x" || cmd.Text == "s" {
+		// For 'x' and 's', we want to delete from cursor position for count characters
+		// The motion engine moved us forward by count, but we want to include the character under cursor
+		// So we extend the range by 1 to make it inclusive
+		lines := strings.Split(v.Value(), "\n")
+		if endPos.Row < len(lines) {
+			if endPos.Col < len(lines[endPos.Row]) {
+				endPos.Col++
+			} else if endPos.Row < len(lines)-1 {
+				// At end of line, include the newline
+				endPos.Row++
+				endPos.Col = 0
+			}
+		}
+	}
+
 	// Ensure start is before end
 	startPos := cursor
 	if endPos.Row < startPos.Row || (endPos.Row == startPos.Row && endPos.Col < startPos.Col) {
@@ -418,10 +464,10 @@ func (v *VimTextarea) executeOperator(cmd *VimCommand) {
 	// Execute the operator
 	switch cmd.Operator {
 	case "d": // Delete
-		text := v.extractText(startPos, endPos)
+		text := v.extractTextExclusive(startPos, endPos)
 		linewise := cmd.Motion.Type == MotionLine
 		v.vimMode.SetRegisterWithMetadata(cmd.Register, text, linewise)
-		v.deleteRange(startPos, endPos)
+		v.deleteRangeExclusive(startPos, endPos)
 		v.vimMode.SetLastChange(&Change{
 			Type:     ChangeDelete,
 			Text:     text,
@@ -432,16 +478,16 @@ func (v *VimTextarea) executeOperator(cmd *VimCommand) {
 		})
 
 	case "c": // Change
-		text := v.extractText(startPos, endPos)
+		text := v.extractTextExclusive(startPos, endPos)
 		linewise := cmd.Motion.Type == MotionLine
 		v.vimMode.SetRegisterWithMetadata(cmd.Register, text, linewise)
-		v.deleteRange(startPos, endPos)
+		v.deleteRangeExclusive(startPos, endPos)
 		v.vimMode.SetMode(ModeInsert)
 		v.lastInsertStart = v.getCursorPosition()
 		v.lastInsertCommand = "c" // Store for dot repeat
 
 	case "y": // Yank
-		text := v.extractText(startPos, endPos)
+		text := v.extractTextExclusive(startPos, endPos)
 		linewise := cmd.Motion.Type == MotionLine
 		v.vimMode.SetRegisterWithMetadata(cmd.Register, text, linewise)
 		// Cursor returns to start of yanked text
@@ -511,6 +557,51 @@ func (v *VimTextarea) setCursorPosition(pos Position) {
 	v.SetCursorColumn(pos.Col)
 }
 
+// extractTextExclusive extracts text between two positions (exclusive end for normal mode)
+func (v *VimTextarea) extractTextExclusive(start, end Position) string {
+	value := v.Value()
+	lines := strings.Split(value, "\n")
+
+	// Ensure positions are within bounds
+	if start.Row >= len(lines) || end.Row >= len(lines) {
+		return ""
+	}
+
+	if start.Row == end.Row {
+		// Single line extraction
+		line := lines[start.Row]
+		startCol := min(start.Col, len(line))
+		endCol := min(end.Col, len(line))
+		if startCol <= endCol {
+			// Exclusive end position
+			return line[startCol:endCol]
+		}
+		return ""
+	}
+
+	// Multi-line extraction
+	var result []string
+	for row := start.Row; row <= end.Row && row < len(lines); row++ {
+		line := lines[row]
+		if row == start.Row {
+			startCol := min(start.Col, len(line))
+			result = append(result, line[startCol:])
+		} else if row == end.Row {
+			// If end.Col is 0, don't include any part of this line (line deletion case)
+			if end.Col > 0 {
+				endCol := min(end.Col, len(line))
+				// Exclusive end position
+				result = append(result, line[:endCol])
+			}
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	// Include newlines between lines
+	return strings.Join(result, "\n")
+}
+
 func (v *VimTextarea) extractText(start, end Position) string {
 	value := v.Value()
 	lines := strings.Split(value, "\n")
@@ -562,6 +653,104 @@ func (v *VimTextarea) extractText(start, end Position) string {
 	}
 
 	return extracted
+}
+
+// deleteRangeExclusive deletes text between two positions (exclusive end for normal mode)
+func (v *VimTextarea) deleteRangeExclusive(start, end Position) {
+	// Save current value
+	originalValue := v.Value()
+	lines := strings.Split(originalValue, "\n")
+
+	if len(lines) == 0 || start.Row >= len(lines) || end.Row >= len(lines) {
+		return
+	}
+
+	// Build the new text with the range deleted
+	var newText string
+
+	if start.Row == end.Row {
+		// Single line deletion
+		line := lines[start.Row]
+		// Exclusive end position
+		if start.Col < len(line) && end.Col <= len(line) {
+			newLine := line[:start.Col] + line[end.Col:]
+			lines[start.Row] = newLine
+			newText = strings.Join(lines, "\n")
+		} else if start.Col < len(line) {
+			// End is at or beyond line end, delete to end of line
+			newLine := line[:start.Col]
+			lines[start.Row] = newLine
+			newText = strings.Join(lines, "\n")
+		} else {
+			return
+		}
+	} else {
+		// Multi-line deletion
+		var result []string
+
+		// Lines before start
+		for i := 0; i < start.Row; i++ {
+			result = append(result, lines[i])
+		}
+
+		// Handle partial first line
+		if start.Col < len(lines[start.Row]) {
+			result = append(result, lines[start.Row][:start.Col])
+		}
+
+		// Handle partial last line
+		if end.Row < len(lines) {
+			// If end.Col is 0, we don't want to include any part of this line
+			// This happens with line deletions (e.g., dd, 2dd)
+			if end.Col > 0 && end.Col < len(lines[end.Row]) {
+				// Exclusive end position - append from end.Col onwards
+				if len(result) > 0 {
+					result[len(result)-1] += lines[end.Row][end.Col:]
+				} else {
+					result = append(result, lines[end.Row][end.Col:])
+				}
+			} else if end.Col == 0 {
+				// Line deletion case - we already have everything we need
+				// Don't append anything from this line
+			}
+		}
+
+		// Lines after end
+		for i := end.Row + 1; i < len(lines); i++ {
+			result = append(result, lines[i])
+		}
+
+		newText = strings.Join(result, "\n")
+	}
+
+	// Set new value
+	v.SetValue(newText)
+
+	// Adjust cursor position
+	cursorPos := v.getCursorPosition()
+	if cursorPos.Row >= start.Row && cursorPos.Col >= start.Col {
+		if start.Row == end.Row {
+			// Same line - adjust column
+			if cursorPos.Row == start.Row && cursorPos.Col > start.Col {
+				deletedCols := end.Col - start.Col
+				cursorPos.Col = max(start.Col, cursorPos.Col-deletedCols)
+			}
+		} else {
+			// Multi-line deletion - position at start
+			cursorPos = start
+		}
+	}
+
+	// Ensure cursor stays within bounds
+	lines = strings.Split(v.Value(), "\n")
+	if cursorPos.Row >= len(lines) {
+		cursorPos.Row = max(0, len(lines)-1)
+	}
+	if cursorPos.Row < len(lines) && cursorPos.Col > len(lines[cursorPos.Row]) {
+		cursorPos.Col = len(lines[cursorPos.Row])
+	}
+
+	v.setCursorPosition(cursorPos)
 }
 
 func (v *VimTextarea) deleteRange(start, end Position) {
