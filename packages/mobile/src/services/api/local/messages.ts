@@ -8,7 +8,14 @@ import type { Message, MessagePart } from "../../../db/types"
 // Raw database operations (internal use)
 class MessageRepository {
   async getMessages(sessionId: string) {
-    return await db.select().from(messages).where(eq(messages.sessionId, sessionId)).orderBy(asc(messages.createdAt))
+    console.log("📨 MessageRepo: Getting messages for session", sessionId)
+    const result = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(asc(messages.createdAt))
+    console.log("📨 MessageRepo: Found", result.length, "messages")
+    return result
   }
 
   async getMessage(id: string) {
@@ -70,6 +77,31 @@ class MessageRepository {
 
   async deleteMessagePart(id: string) {
     return await db.delete(messageParts).where(eq(messageParts.id, id))
+  }
+
+  async upsertMessage(message: Omit<Message, "createdAt" | "updatedAt">) {
+    return await db
+      .insert(messages)
+      .values({
+        ...message,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: messages.id,
+        set: {
+          role: message.role,
+          timeCreated: message.timeCreated,
+          timeCompleted: message.timeCompleted,
+          providerId: message.providerId,
+          modelId: message.modelId,
+          mode: message.mode,
+          isSynced: message.isSynced,
+          lastSyncTimestamp: message.lastSyncTimestamp,
+          updatedAt: new Date(),
+        },
+      })
+      .returning()
   }
 }
 
@@ -169,6 +201,17 @@ export function useUpdateLocalMessagePartMutation() {
       if (part) {
         queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.parts(part.messageId) })
       }
+    },
+  })
+}
+
+export function useUpsertLocalMessageMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (message: Omit<Message, "createdAt" | "updatedAt">) => messageRepo.upsertMessage(message),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(variables.sessionId) })
     },
   })
 }

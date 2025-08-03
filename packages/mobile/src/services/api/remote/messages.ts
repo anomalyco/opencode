@@ -4,22 +4,29 @@ import { queryKeys } from "../keys"
 
 // Types based on the API endpoints
 interface MessageResponse {
-  id: string
-  sessionId: string
-  role: "user" | "assistant"
-  content: string
-  timeCreated: string
-  timeUpdated: string
+  info: {
+    id: string
+    role: "user" | "assistant"
+    sessionID: string
+    time: {
+      created: number
+      completed?: number
+    }
+  }
   parts: MessagePartResponse[]
 }
 
 interface MessagePartResponse {
   id: string
-  messageId: string
   type: string
-  content: string
-  timeCreated: string
-  timeUpdated: string
+  text?: string
+  synthetic?: boolean
+  messageID: string
+  sessionID: string
+  time?: {
+    start: number
+    end: number
+  }
 }
 
 interface SendMessageRequest {

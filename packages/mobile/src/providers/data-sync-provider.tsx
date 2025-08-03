@@ -11,6 +11,7 @@ interface DataSyncContextValue {
   isLoading: boolean
   lastSyncTime: Date | null
   syncSessions: () => Promise<void>
+  syncMessages: (sessionId: string) => Promise<void>
 }
 
 const DataSyncContext = createContext<DataSyncContextValue | null>(null)
@@ -86,10 +87,15 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
     }
   }, [isConnected, remoteSessions, remoteError])
 
+  const syncMessages = async (sessionId: string) => {
+    if (!isConnected) return
+    console.log("📨 DataSync: Message sync placeholder for session", sessionId)
+  }
   const value: DataSyncContextValue = {
     isLoading,
     lastSyncTime,
     syncSessions,
+    syncMessages,
   }
 
   return <DataSyncContext.Provider value={value}>{children}</DataSyncContext.Provider>

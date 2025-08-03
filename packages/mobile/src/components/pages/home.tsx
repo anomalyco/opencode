@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { FlatList, RefreshControl } from "react-native"
+import { router } from "expo-router"
 import { Box, Text } from "@/components/ui/primitives"
 import { useLocalSessionsQuery } from "@/services/api/local/sessions"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
@@ -38,7 +39,7 @@ export const HomePage = () => {
   }
 
   const handleSessionPress = (sessionId: string) => {
-    console.log("Open session:", sessionId)
+    router.push(`/chat/${sessionId}`)
   }
 
   const handleViewAllSessions = () => {

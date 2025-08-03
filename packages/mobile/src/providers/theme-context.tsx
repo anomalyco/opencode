@@ -46,7 +46,7 @@ export const ThemeContextProvider = ({ children }: { children: React.ReactNode }
 
       if (!hasManualPreference) {
         // User hasn't manually set a theme, so follow system changes
-        const systemTheme = systemColorScheme || "dark"
+        const systemTheme = "dark"
         setCurrentTheme(systemTheme)
         UnistylesRuntime.setTheme(systemTheme as keyof UnistylesThemes)
       }
