@@ -63,8 +63,14 @@ export namespace Plugin {
     if (!fn) return output
     const path = fn.split(".")
     for (const hook of await state().then((x) => x.hooks)) {
+      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+      // give up.
+      // try-counter: 2
       const fn = pathOr(hook, path, undefined)
       if (!fn) continue
+      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+      // give up.
+      // try-counter: 2
       await fn(input, output)
     }
     return output
