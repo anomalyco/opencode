@@ -1,8 +1,19 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import prompts from "prompts"
 
-const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
+const env = await prompts({
+  type: "select",
+  name: "value",
+  message: "Select environment:",
+  choices: [
+    { title: "Production", value: "production" },
+    { title: "Snapshot", value: "snapshot" },
+  ],
+})
+
+const snapshot = env.value === "snapshot"
 const version = snapshot
   ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   : process.env["OPENCODE_VERSION"]
@@ -10,12 +21,6 @@ if (!version) {
   throw new Error("OPENCODE_VERSION is required")
 }
 process.env["OPENCODE_VERSION"] = version
-
-const pkgjsons = await Array.fromAsync(
-  new Bun.Glob("**/package.json").scan({
-    absolute: true,
-  }),
-)
 
 const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for await (const file of new Bun.Glob("**/package.json").scan({
