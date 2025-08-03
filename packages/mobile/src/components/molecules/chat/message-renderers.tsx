@@ -179,7 +179,7 @@ export const FileContentRenderer: React.FC<FileContentRendererProps> = ({ filena
     <Box background="lighter" rounded="lg" p="sm" gap="xs" mode="primary">
       <Box direction="row" alignItems="center" gap="xs" pb="xs">
         <Icon icon={Feather} name="file-text" size={14} color="accent" />
-        <Text size="sm" weight="medium">
+        <Text size="sm" weight="medium" style={{ flex: 1 }} numberOfLines={1} ellipsizeMode="head">
           {filename}
         </Text>
       </Box>
@@ -297,7 +297,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({ filename, diff }) =>
     <Box background="light" rounded="lg" p="sm" gap="xs" mode="success">
       <Box direction="row" alignItems="center" gap="xs" pb="xs">
         <Icon icon={Feather} name="edit-3" size={14} color="success" />
-        <Text size="sm" weight="medium">
+        <Text size="sm" weight="medium" style={{ flex: 1 }} numberOfLines={1} ellipsizeMode="head">
           Edit {filename}
         </Text>
       </Box>
@@ -320,7 +320,7 @@ export const WebFetchRenderer: React.FC<WebFetchRendererProps> = ({ url, content
     <Box background="dim" rounded="lg" p="sm" gap="xs" mode="secondary">
       <Box direction="row" alignItems="center" gap="xs" pb="xs">
         <Icon icon={Feather} name="globe" size={14} color="brand" />
-        <Text size="sm" weight="medium" numberOfLines={1}>
+        <Text size="sm" weight="medium" style={{ flex: 1 }} numberOfLines={1} ellipsizeMode="middle">
           {url}
         </Text>
       </Box>
