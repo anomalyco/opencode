@@ -9,7 +9,8 @@
     "typecheck": "bun run --filter='*' typecheck",
     "stainless": "./scripts/stainless",
     "postinstall": "./script/hooks",
-    "publish": "bun run script/publish.ts"
+    "publish": "bun run script/publish.ts",
+    "build:install": "bun run script/publish.ts --local && VERSION=local ./install"
   },
   "workspaces": {
     "packages": [
