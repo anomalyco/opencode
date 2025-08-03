@@ -1,5 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
+import os from "os"
 import { z } from "zod"
 import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
@@ -403,7 +404,10 @@ export namespace Config {
         if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
           continue // Skip if line is commented
         }
-        const filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
+        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
+        if (filePath.startsWith("~/")) {
+          filePath = path.join(os.homedir(), filePath.slice(2))
+        }
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
         const fileContent = (await Bun.file(resolvedPath).text()).trim()
         // escape newlines/quotes, strip outer quotes
