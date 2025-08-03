@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { Box, Text, Button, Input } from "@/components/ui/primitives"
+import { Box, Text, Button, Input, Icon } from "@/components/ui/primitives"
+import { Feather } from "@expo/vector-icons"
 
 interface QuickActionsProps {
   onNewSession: () => void
@@ -21,12 +22,13 @@ export const QuickActions = ({ onNewSession, onSearch }: QuickActionsProps) => {
         Quick Actions
       </Text>
 
-      <Button size="auto" onPress={onNewSession}>
-        <Box direction="row" alignItems="center" gap="xs" p="sm" rounded="full">
-          <Text size="md" weight="medium" inverse>
-            New Session
-          </Text>
-        </Box>
+      <Button mode="brand" onPress={onNewSession}>
+        <Button.Icon>
+          <Icon icon={Feather} name="plus" size={20} />
+        </Button.Icon>
+        <Button.Text size="md" weight="medium">
+          New Session
+        </Button.Text>
       </Button>
 
       <Input
@@ -36,13 +38,13 @@ export const QuickActions = ({ onNewSession, onSearch }: QuickActionsProps) => {
         onSubmitEditing={handleSearch}
         leftAccessory={
           <Input.Accessory>
-            <Text>🔍</Text>
+            <Icon icon={Feather} name="search" size={16} />
           </Input.Accessory>
         }
         rightAccessory={
           searchQuery ? (
             <Input.Accessory onPress={() => setSearchQuery("")}>
-              <Text>✕</Text>
+              <Icon icon={Feather} name="x" size={16} />
             </Input.Accessory>
           ) : undefined
         }

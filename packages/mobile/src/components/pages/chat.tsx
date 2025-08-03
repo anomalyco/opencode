@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react"
-import { FlatList, RefreshControl } from "react-native"
-import { KeyboardAvoidingView } from "react-native-keyboard-controller"
+import { FlatList, RefreshControl, KeyboardAvoidingView, Platform, TextInput } from "react-native"
+import { useUnistyles } from "react-native-unistyles"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
-import { Box, Text, Button, Input } from "@/components/ui/primitives"
+import { Box, Text, Button, Icon } from "@/components/ui/primitives"
+import { Feather } from "@expo/vector-icons"
 import {
   useLocalMessagesQuery,
   useUpsertLocalMessageMutation,
@@ -52,7 +53,20 @@ const MessageItem = ({ message, remoteMessages, localContent }: MessageItemProps
   return (
     <Box p="md">
       <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
-        <Box background={isUser ? "emphasis" : "subtle"} rounded="lg" p="md" style={{ maxWidth: "80%" }}>
+        <Box
+          background={isUser ? "emphasis" : "lightest"}
+          rounded="xl"
+          p="md"
+          style={{
+            maxWidth: "85%",
+            minWidth: "20%",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 2,
+            elevation: 1,
+          }}
+        >
           <ThemedMarked value={content} />
         </Box>
       </Box>
@@ -67,56 +81,77 @@ const ChatHeader = ({ sessionTitle }: { sessionTitle?: string }) => {
       justifyContent="space-between"
       alignItems="center"
       p="md"
-      border="subtle"
       background="base"
       safeAreaTop
+      style={{
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0,0,0,0.05)",
+      }}
     >
-      <Box flex>
-        <Text size="lg" weight="semibold" numberOfLines={1}>
-          {sessionTitle || "Chat"}
-        </Text>
-      </Box>
-      <Button size="sm" variant="ghost">
-        <Box p="xs">
-          <Text size="sm">⋯</Text>
+      <Box flex direction="row" alignItems="center" gap="sm">
+        <Box
+          background="lightest"
+          rounded="full"
+          style={{
+            width: 36,
+            height: 36,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon icon={Feather} name="cpu" size={18} color="brand" />
         </Box>
+        <Box flex>
+          <Text size="lg" weight="semibold" numberOfLines={1}>
+            {sessionTitle || "OpenCode Assistant"}
+          </Text>
+          <Text size="xs" mode="subtle">
+            AI-powered development help
+          </Text>
+        </Box>
+      </Box>
+      <Button variant="ghost">
+        <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
       </Button>
     </Box>
   )
 }
 
-const MessageInput = ({ onSend, isLoading }: { onSend: (content: string) => void; isLoading: boolean }) => {
-  const [messageText, setMessageText] = useState("")
-
-  const handleSend = () => {
-    if (messageText.trim()) {
-      onSend(messageText.trim())
-      setMessageText("")
-    }
-  }
+const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
+  const [text, setText] = useState("")
+  const { theme } = useUnistyles()
 
   return (
-    <Box direction="row" alignItems="flex-end" p="md" gap="sm" border="subtle" background="base" safeAreaBottom>
-      <Box flex>
-        <Input
-          value={messageText}
-          onChangeText={setMessageText}
-          placeholder="Type a message..."
-          multiline
-          style={{ maxHeight: 100 }}
-        />
+    <Box p="md" background="base" safeAreaBottom>
+      <Box direction="row" alignItems="flex-end" gap="sm">
+        <Box flex background="lightest" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Type a message..."
+            placeholderTextColor={theme.colors.text.subtle}
+            multiline
+            style={{
+              color: theme.colors.text.default,
+              fontSize: 16,
+              maxHeight: 100,
+              paddingVertical: 0,
+            }}
+          />
+        </Box>
+        <Button
+          mode={text.trim() ? "brand" : "ghost"}
+          onPress={() => {
+            if (text.trim()) {
+              onSend(text.trim())
+              setText("")
+            }
+          }}
+          style={{ width: 44, height: 44, borderRadius: 22 }}
+        >
+          <Icon icon={Feather} name="send" size={16} />
+        </Button>
       </Box>
-      <Button
-        size="auto"
-        mode="brand"
-        onPress={handleSend}
-        loading={isLoading}
-        style={{ paddingHorizontal: 16, paddingVertical: 12 }}
-      >
-        <Text size="sm" weight="medium" inverse>
-          Send
-        </Text>
-      </Button>
     </Box>
   )
 }
@@ -426,16 +461,28 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     return (
       <Box p="md" style={{ transform: [{ scaleY: -1 }] }}>
         <Box direction="row" justifyContent="flex-start">
-          <Box background="subtle" rounded="lg" p="md" style={{ maxWidth: "80%" }}>
+          <Box
+            background="lightest"
+            rounded="xl"
+            p="md"
+            style={{
+              maxWidth: "80%",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 2,
+              elevation: 1,
+            }}
+          >
             <Box direction="row" alignItems="center" gap="xs">
               <Box animation="pulse" animationConfig={{ repeat: -1 }}>
-                <Text size="md">●</Text>
+                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
               </Box>
               <Box animation="pulse" animationConfig={{ repeat: -1, delay: 200 }}>
-                <Text size="md">●</Text>
+                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
               </Box>
               <Box animation="pulse" animationConfig={{ repeat: -1, delay: 400 }}>
-                <Text size="md">●</Text>
+                <Box background="brand" rounded="full" style={{ width: 8, height: 8 }} />
               </Box>
             </Box>
           </Box>
@@ -453,7 +500,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             <Text mode="subtle">Loading messages...</Text>
           </Box>
         </Box>
-        <MessageInput onSend={handleSendMessage} isLoading={sendMessage.isPending} />
+        <MessageInput onSend={handleSendMessage} />
       </Box>
     )
   }
@@ -462,10 +509,14 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const reversedMessages = [...(messages || [])].reverse()
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }}>
-      <Box flex background="base">
-        <ChatHeader sessionTitle={session?.title} />
+    <Box flex background="base">
+      <ChatHeader sessionTitle={session?.title} />
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
         <Box flex>
           <FlatList
             ref={flatListRef}
@@ -486,11 +537,12 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             }
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ flexGrow: 1 }}
+            keyboardShouldPersistTaps="handled"
           />
         </Box>
 
-        <MessageInput onSend={handleSendMessage} isLoading={sendMessage.isPending} />
-      </Box>
-    </KeyboardAvoidingView>
+        <MessageInput onSend={handleSendMessage} />
+      </KeyboardAvoidingView>
+    </Box>
   )
 }
