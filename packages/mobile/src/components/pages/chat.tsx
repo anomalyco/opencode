@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect } from "react"
-import { FlatList, RefreshControl, KeyboardAvoidingView, Platform, TextInput } from "react-native"
+import { FlatList, RefreshControl, Platform, TextInput } from "react-native"
+import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller"
+import { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated"
 import { useUnistyles } from "react-native-unistyles"
+import Animated from "react-native-reanimated"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
+import BlurView from "@/components/ui/primitives/blur-view"
 import { Feather } from "@expo/vector-icons"
 import {
   useLocalMessagesQuery,
@@ -76,92 +80,128 @@ const MessageItem = ({ message, remoteMessages, localContent }: MessageItemProps
 
 const ChatHeader = ({ sessionTitle }: { sessionTitle?: string }) => {
   return (
-    <Box
-      direction="row"
-      justifyContent="space-between"
-      alignItems="center"
-      p="md"
-      background="base"
-      safeAreaTop
+    <BlurView
+      intensity={80}
       style={{
-        borderBottomWidth: 1,
-        borderBottomColor: "rgba(0,0,0,0.05)",
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
       }}
     >
-      <Box flex direction="row" alignItems="center" gap="sm">
-        <Box
-          background="lightest"
-          rounded="full"
-          style={{
-            width: 36,
-            height: 36,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon icon={Feather} name="cpu" size={18} color="brand" />
+      <Box
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        p="md"
+        safeAreaTop
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: "rgba(0,0,0,0.1)",
+        }}
+      >
+        <Box flex direction="row" alignItems="center" gap="sm">
+          <Box
+            background="lightest"
+            rounded="full"
+            style={{
+              width: 36,
+              height: 36,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon icon={Feather} name="cpu" size={18} color="brand" />
+          </Box>
+          <Box flex>
+            <Text size="lg" weight="semibold" numberOfLines={1}>
+              {sessionTitle || "OpenCode Assistant"}
+            </Text>
+            <Text size="xs" mode="subtle">
+              AI-powered development help
+            </Text>
+          </Box>
         </Box>
-        <Box flex>
-          <Text size="lg" weight="semibold" numberOfLines={1}>
-            {sessionTitle || "OpenCode Assistant"}
-          </Text>
-          <Text size="xs" mode="subtle">
-            AI-powered development help
-          </Text>
-        </Box>
+        <Button variant="ghost">
+          <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
+        </Button>
       </Box>
-      <Button variant="ghost">
-        <Icon icon={Feather} name="more-horizontal" size={20} color="muted" />
-      </Button>
-    </Box>
+    </BlurView>
   )
 }
 
 const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
   const [text, setText] = useState("")
+  const [keyboardVisible, setKeyboardVisible] = useState(false)
   const { theme } = useUnistyles()
 
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboardVisible(true)
+    })
+    const keyboardDidHideListener = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardVisible(false)
+    })
+
+    return () => {
+      keyboardDidHideListener?.remove()
+      keyboardDidShowListener?.remove()
+    }
+  }, [])
+
   return (
-    <Box p="sm" background="base">
-      <Box direction="row" alignItems="flex-end" gap="sm">
-        <Box flex background="lightest" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Type a message..."
-            placeholderTextColor={theme.colors.text.subtle}
-            multiline
-            style={{
-              color: theme.colors.text.default,
-              fontSize: 16,
-              maxHeight: 100,
-              paddingVertical: 0,
+    <BlurView
+      intensity={80}
+      style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+      }}
+    >
+      <Box p="sm" safeAreaBottom={!keyboardVisible}>
+        <Box direction="row" alignItems="flex-end" gap="sm">
+          <Box flex background="dark" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.colors.text.subtle}
+              multiline
+              style={{
+                color: theme.colors.text.default,
+                fontSize: 16,
+                maxHeight: 100,
+                paddingVertical: 0,
+              }}
+            />
+          </Box>
+          <Button
+            size="auto"
+            mode="brand"
+            disabled={!text.trim()}
+            onPress={() => {
+              if (text.trim()) {
+                onSend(text.trim())
+                setText("")
+              }
             }}
-          />
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 21,
+              padding: 0,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon icon={Feather} name="arrow-up" size={18} />
+          </Button>
         </Box>
-        <Button
-          size="auto"
-          mode="brand"
-          disabled={!text.trim()}
-          onPress={() => {
-            if (text.trim()) {
-              onSend(text.trim())
-              setText("")
-            }
-          }}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            padding: 0,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon icon={Feather} name="arrow-up" size={18} />
-        </Button>
       </Box>
-    </Box>
+    </BlurView>
   )
 }
 
@@ -518,14 +558,12 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const reversedMessages = [...(messages || [])].reverse()
 
   return (
-    <Box flex background="base">
-      <ChatHeader sessionTitle={session?.title} />
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-      >
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
+      <Box flex background="base">
         <Box flex>
           <FlatList
             ref={flatListRef}
@@ -545,13 +583,18 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} style={{ transform: [{ scaleY: -1 }] }} />
             }
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
+            contentContainerStyle={{
+              flexGrow: 1,
+              paddingTop: 100, // Space for floating header
+              paddingBottom: 100, // Space for floating input
+            }}
             keyboardShouldPersistTaps="handled"
           />
         </Box>
 
+        <ChatHeader sessionTitle={session?.title} />
         <MessageInput onSend={handleSendMessage} />
-      </KeyboardAvoidingView>
-    </Box>
+      </Box>
+    </KeyboardAvoidingView>
   )
 }
