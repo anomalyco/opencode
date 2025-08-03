@@ -8,6 +8,7 @@ import pkg from "../package.json"
 const dry = process.env["OPENCODE_DRY"] === "true"
 const version = process.env["OPENCODE_VERSION"]!
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
+const local = process.env["OPENCODE_LOCAL"] === "true"
 
 console.log(`publishing ${version}`)
 
@@ -78,7 +79,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 )
 if (!dry) await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${npmTag}`
 
-if (!snapshot) {
+if (!snapshot && !local) {
   // Github Release
   for (const key of Object.keys(optionalDependencies)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`

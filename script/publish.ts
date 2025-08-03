@@ -3,17 +3,21 @@
 import { $ } from "bun"
 import prompts from "prompts"
 
-const env = await prompts({
-  type: "select",
-  name: "value",
-  message: "Select environment:",
-  choices: [
-    { title: "Production", value: "production" },
-    { title: "Snapshot", value: "snapshot" },
-  ],
-})
+const isLocal = process.argv.includes("--local")
 
-const snapshot = env.value === "snapshot"
+const env = isLocal
+  ? { value: "local" }
+  : await prompts({
+      type: "select",
+      name: "value",
+      message: "Select environment:",
+      choices: [
+        { title: "Production", value: "production" },
+        { title: "Snapshot", value: "snapshot" },
+      ],
+    })
+
+const snapshot = env.value === "snapshot" || env.value === "local"
 
 let version: string
 if (snapshot) {
@@ -53,7 +57,24 @@ if (snapshot) {
 
 process.env["OPENCODE_VERSION"] = version
 
-const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
+if (isLocal) {
+  process.env["OPENCODE_DRY"] = "true"
+  process.env["OPENCODE_SNAPSHOT"] = "true"
+  process.env["OPENCODE_LOCAL"] = "true"
+}
+
+// Store original package.json contents for local builds
+const originalPackageContents = new Map()
+if (isLocal) {
+  for await (const file of new Bun.Glob("**/package.json").scan({
+    absolute: true,
+  })) {
+    const content = await Bun.file(file).text()
+    originalPackageContents.set(file, content)
+  }
+}
+
+const tree = isLocal ? "" : await $`git add . && git write-tree`.text().then((x) => x.trim())
 for await (const file of new Bun.Glob("**/package.json").scan({
   absolute: true,
 })) {
@@ -63,16 +84,18 @@ for await (const file of new Bun.Glob("**/package.json").scan({
 }
 
 await import(`../packages/opencode/script/publish.ts`)
-await import(`../packages/sdk/js/script/publish.ts`)
-await import(`../packages/plugin/script/publish.ts`)
-// await import(`../packages/sdk/stainless/generate.ts`)
+if (!isLocal) {
+  await import(`../packages/sdk/js/script/publish.ts`)
+  await import(`../packages/plugin/script/publish.ts`)
+  // await import(`../packages/sdk/stainless/generate.ts`)
+}
 
 if (!snapshot) {
   await $`git commit -am "release: v${version}"`
   await $`git tag v${version}`
   await $`git push origin HEAD --tags --no-verify`
 }
-if (snapshot) {
+if (snapshot && !isLocal) {
   await $`git checkout -b snapshot-${version}`
   await $`git commit --allow-empty -m "Snapshot release v${version}"`
   await $`git tag v${version}`
@@ -83,5 +106,13 @@ if (snapshot) {
     absolute: true,
   })) {
     $`await git checkout ${tree} ${file}`
+  }
+}
+if (isLocal) {
+  console.log(`Local build completed for version ${version}`)
+  console.log("Binaries available in ./packages/opencode/dist/")
+  // Restore original package.json contents for local builds
+  for (const [file, content] of originalPackageContents) {
+    await Bun.file(file).write(content)
   }
 }
