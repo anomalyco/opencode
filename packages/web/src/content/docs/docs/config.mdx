@@ -236,6 +236,14 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 - It won't be loaded even if API keys are configured through `opencode auth login`
 - The provider's models won't appear in the model selection list
 
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
 ---
 
 ### Formatters
@@ -245,7 +253,18 @@ You can configure code formatters through the `formatter` option. See [Formatter
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "disabled_providers": ["openai", "gemini"]
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
 }
 ```
 
