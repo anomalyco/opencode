@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react"
-import { FlatList, RefreshControl, Platform, KeyboardAvoidingView } from "react-native"
+import { FlatList, RefreshControl, Platform, KeyboardAvoidingView, Keyboard } from "react-native"
 import { Box, Text, Icon } from "@/components/ui/primitives"
 import { ChatHeader, MessageInput, MessageItem, TypingIndicator } from "@/components/molecules/chat"
 import { Feather } from "@expo/vector-icons"
@@ -23,6 +23,7 @@ const MemoizedFlatList = memo(FlatList<any>)
 export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const [refreshing, setRefreshing] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
   const flatListRef = useRef<FlatList>(null)
   const streamingTimeoutRef = useRef<number | null>(null)
   const [pendingUserMessages, setPendingUserMessages] = useState<Map<string, string>>(new Map())
@@ -35,6 +36,30 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const upsertLocalMessage = useUpsertLocalMessageMutation()
   const upsertLocalMessagePart = useUpsertLocalMessagePartMutation()
   const streaming = useStreaming()
+
+  // Keyboard-aware scrolling
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (event) => {
+        setKeyboardHeight(event.endCoordinates.height)
+        // Auto-scroll to bottom when keyboard appears
+        setTimeout(scrollToBottom, 100)
+      },
+    )
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0)
+      },
+    )
+
+    return () => {
+      keyboardWillShow.remove()
+      keyboardWillHide.remove()
+    }
+  }, [])
 
   // Sync remote messages to local database
   useEffect(() => {
@@ -107,6 +132,8 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           streamingTimeoutRef.current = null
         }
         refetchMessages()
+        // Scroll to bottom when streaming completes
+        setTimeout(scrollToBottom, 200)
       } else if (event.type === "storage.write") {
         const key = (event as any).properties?.key
         const content = (event as any).properties?.content
@@ -193,6 +220,10 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
   }, [sessionId])
 
+  const scrollToBottom = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+  }, [])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -231,9 +262,8 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           },
         })
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
-        }, 100)
+        // Scroll to bottom after sending message
+        setTimeout(scrollToBottom, 100)
       } catch (error) {
         setIsStreaming(false)
       }
@@ -308,9 +338,17 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
             contentContainerStyle={{
               flexGrow: 1,
               paddingTop: 100,
-              paddingBottom: 100,
+              paddingBottom: Math.max(100, keyboardHeight + 20),
             }}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            onScrollBeginDrag={() => {
+              Keyboard.dismiss()
+            }}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10,
+            }}
             removeClippedSubviews={true}
             maxToRenderPerBatch={10}
             windowSize={10}
