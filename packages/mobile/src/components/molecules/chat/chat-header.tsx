@@ -2,6 +2,7 @@ import { memo } from "react"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import BlurView from "@/components/ui/primitives/blur-view"
 import { Feather } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
 
 interface ChatHeaderProps {
   sessionTitle?: string
@@ -10,6 +11,12 @@ interface ChatHeaderProps {
 }
 
 export const ChatHeader = memo(({ sessionTitle, onMenuPress, onNewSessionPress }: ChatHeaderProps) => {
+  const router = useRouter()
+
+  const handleBackPress = () => {
+    router.back()
+  }
+
   return (
     <BlurView
       intensity={80}
@@ -23,7 +30,6 @@ export const ChatHeader = memo(({ sessionTitle, onMenuPress, onNewSessionPress }
     >
       <Box
         direction="row"
-        justifyContent="space-between"
         alignItems="center"
         p="md"
         safeAreaTop
@@ -32,27 +38,29 @@ export const ChatHeader = memo(({ sessionTitle, onMenuPress, onNewSessionPress }
           borderBottomColor: "rgba(0,0,0,0.1)",
         }}
       >
-        <Box flex direction="row" alignItems="center" gap="sm">
-          <Box
-            background="lightest"
-            rounded="full"
-            style={{
-              width: 36,
-              height: 36,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon icon={Feather} name="cpu" size={18} color="brand" />
-          </Box>
-          <Box flex>
-            <Text size="lg" weight="semibold" numberOfLines={1}>
-              {sessionTitle || "OpenCode Assistant"}
-            </Text>
-            <Text size="xs" mode="subtle">
-              AI-powered development help
-            </Text>
-          </Box>
+        <Button variant="ghost" onPress={handleBackPress} style={{ paddingHorizontal: 8 }}>
+          <Icon icon={Feather} name="chevron-left" size={24} color="muted" />
+        </Button>
+        <Box
+          background="lightest"
+          rounded="full"
+          style={{
+            width: 36,
+            height: 36,
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+          }}
+        >
+          <Icon icon={Feather} name="cpu" size={18} color="brand" />
+        </Box>
+        <Box style={{ flex: 1 }}>
+          <Text size="lg" weight="semibold" numberOfLines={1}>
+            {sessionTitle || "OpenCode Assistant"}
+          </Text>
+          <Text size="xs" mode="subtle">
+            AI-powered development help
+          </Text>
         </Box>
         <Box direction="row" alignItems="center" gap="xs">
           {onNewSessionPress && (
