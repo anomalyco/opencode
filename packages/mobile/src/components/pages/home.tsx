@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { FlatList, RefreshControl } from "react-native"
 import { router } from "expo-router"
 import { Box, Text, Icon } from "@/components/ui/primitives"
@@ -34,17 +34,13 @@ export const HomePage = () => {
     }
   }
 
-  const handleNewSession = async () => {
+  const handleNewSession = useCallback(async () => {
     try {
       await sessionManager.navigateToNewSession()
     } catch (error) {
       console.error("Failed to create new session:", error)
     }
-  }
-
-  const handleSearch = (_query: string) => {
-    // Handle search
-  }
+  }, [sessionManager])
 
   const handleSessionPress = (sessionId: string) => {
     router.push(`/chat/${sessionId}`)
@@ -57,6 +53,9 @@ export const HomePage = () => {
   const handleCloseSessionDialog = () => {
     // Session dialog closed
   }
+
+  // Show all sessions (no search filtering)
+  const filteredSessions = sessions || []
 
   const handleOpenConnectionSheet = () => {
     connectionSheetRef.current?.present()
@@ -82,7 +81,7 @@ export const HomePage = () => {
       <ConnectionStatus onOpenConnectionSheet={handleOpenConnectionSheet} />
 
       {/* Quick Actions */}
-      <QuickActions onNewSession={handleNewSession} onSearch={handleSearch} />
+      <QuickActions onNewSession={handleNewSession} />
 
       {/* Sessions Header */}
       <RecentSessionsHeader onViewAll={handleViewAllSessions} />
@@ -121,7 +120,7 @@ export const HomePage = () => {
   return (
     <Box flex safeAreaTop background="base">
       <FlatList
-        data={sessions || []}
+        data={filteredSessions}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
           <Box pl="md" pr="md">

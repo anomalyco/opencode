@@ -389,7 +389,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   const renderEmptyState = useCallback(
     () => (
-      <Box center p="lg" m="md">
+      <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }] }}>
         <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
           <Icon icon={Feather} name="message-square" size={48} color="muted" />
           <Box center gap="xs">

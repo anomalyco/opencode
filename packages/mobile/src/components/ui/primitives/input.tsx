@@ -1,7 +1,7 @@
 import { TextInput, View, Pressable, useColorScheme, Animated } from "react-native"
 import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from "react-native"
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles"
-import { createContext, useContext, useMemo } from "react"
+import { createContext, useContext, useMemo, forwardRef } from "react"
 import { getIconSize } from "@/config/theme"
 
 type InputContextType = {
@@ -112,9 +112,10 @@ const accessoryStyles = StyleSheet.create((theme) => ({
   },
 }))
 
-const Input: React.FC<InputProps> & {
-  Accessory: typeof Accessory
-} = ({ style, size = "md", variant, mode, m, mt, mb, gap, leftAccessory, rightAccessory, ...props }) => {
+const Input = forwardRef<TextInput, InputProps>(function Input(
+  { style, size = "md", variant, mode, m, mt, mb, gap, leftAccessory, rightAccessory, ...props },
+  ref,
+) {
   const colorScheme = useColorScheme()
 
   const placeholderTextColor = useMemo(() => {
@@ -145,6 +146,7 @@ const Input: React.FC<InputProps> & {
       <View style={styles.container}>
         {leftAccessory && <View style={styles.accessory}>{leftAccessory}</View>}
         <TextInput
+          ref={ref}
           style={[styles.base, style]}
           placeholderTextColor={placeholderTextColor}
           editable={mode !== "disabled"}
@@ -154,6 +156,8 @@ const Input: React.FC<InputProps> & {
       </View>
     </InputContext.Provider>
   )
+}) as React.ForwardRefExoticComponent<InputProps & React.RefAttributes<TextInput>> & {
+  Accessory: typeof Accessory
 }
 
 Input.Accessory = Accessory
