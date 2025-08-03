@@ -1,37 +1,56 @@
 import z from "zod"
-import { BashTool } from "./bash"
-import { EditTool } from "./edit"
-import { GlobTool } from "./glob"
-import { GrepTool } from "./grep"
-import { ListTool } from "./ls"
-import { PatchTool } from "./patch"
-import { ReadTool } from "./read"
-import { TaskTool } from "./task"
-import { TodoWriteTool, TodoReadTool } from "./todo"
-import { WebFetchTool } from "./webfetch"
-import { WriteTool } from "./write"
 
 export namespace ToolRegistry {
-  const ALL = [
-    BashTool,
-    EditTool,
-    WebFetchTool,
-    GlobTool,
-    GrepTool,
-    ListTool,
-    PatchTool,
-    ReadTool,
-    WriteTool,
-    TodoWriteTool,
-    TodoReadTool,
-    TaskTool,
-  ]
+  async function getAllTools() {
+    const [
+      { BashTool },
+      { EditTool },
+      { GlobTool },
+      { GrepTool },
+      { ListTool },
+      { PatchTool },
+      { ReadTool },
+      { TaskTool },
+      { TodoWriteTool, TodoReadTool },
+      { WebFetchTool },
+      { WriteTool },
+    ] = await Promise.all([
+      import("./bash"),
+      import("./edit"),
+      import("./glob"),
+      import("./grep"),
+      import("./ls"),
+      import("./patch"),
+      import("./read"),
+      import("./task"),
+      import("./todo"),
+      import("./webfetch"),
+      import("./write"),
+    ])
 
-  export function ids() {
+    return [
+      BashTool,
+      EditTool,
+      WebFetchTool,
+      GlobTool,
+      GrepTool,
+      ListTool,
+      PatchTool,
+      ReadTool,
+      WriteTool,
+      TodoWriteTool,
+      TodoReadTool,
+      TaskTool,
+    ]
+  }
+
+  export async function ids() {
+    const ALL = await getAllTools()
     return ALL.map((t) => t.id)
   }
 
   export async function tools(providerID: string, _modelID: string) {
+    const ALL = await getAllTools()
     const result = await Promise.all(
       ALL.map(async (t) => ({
         id: t.id,
