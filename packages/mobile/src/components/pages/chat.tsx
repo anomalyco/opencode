@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect } from "react"
-import { FlatList, RefreshControl, Platform, TextInput } from "react-native"
-import { KeyboardAvoidingView, useKeyboardHandler } from "react-native-keyboard-controller"
-import { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated"
+import { FlatList, RefreshControl, TextInput, Platform, KeyboardAvoidingView, Keyboard } from "react-native"
 import { useUnistyles } from "react-native-unistyles"
-import Animated from "react-native-reanimated"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import BlurView from "@/components/ui/primitives/blur-view"
@@ -204,7 +201,6 @@ const MessageInput = ({ onSend }: { onSend: (content: string) => void }) => {
     </BlurView>
   )
 }
-
 export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const [refreshing, setRefreshing] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
