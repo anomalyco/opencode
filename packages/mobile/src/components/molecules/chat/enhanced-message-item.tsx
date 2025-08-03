@@ -97,7 +97,7 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     // Show error state
     if (toolStatus === "error" && toolError) {
       return (
-        <Box key={part.id} mb="sm" background="darker" rounded="md" p="sm">
+        <Box key={part.id} mb="sm" background="lighter" rounded="md" p="sm" mode="error">
           <ThemedMarked value={`**Error in ${toolName}:** ${toolError}`} />
         </Box>
       )

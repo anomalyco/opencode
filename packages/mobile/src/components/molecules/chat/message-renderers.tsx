@@ -89,8 +89,46 @@ export const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({ status
     return renderToolName(toolName)
   }
 
+  const getBackgroundMode = () => {
+    switch (status) {
+      case "pending":
+        return "dim"
+      case "running":
+        return "lighter"
+      case "completed":
+        return "subtle"
+      case "error":
+        return "darker"
+      default:
+        return "subtle"
+    }
+  }
+
+  const getMode = () => {
+    switch (status) {
+      case "pending":
+        return "disabled"
+      case "running":
+        return "primary"
+      case "completed":
+        return "success"
+      case "error":
+        return "error"
+      default:
+        return undefined
+    }
+  }
+
   return (
-    <Box direction="row" alignItems="center" gap="xs" p="sm" background="subtle" rounded="md">
+    <Box
+      direction="row"
+      alignItems="center"
+      gap="xs"
+      p="sm"
+      background={getBackgroundMode()}
+      rounded="md"
+      mode={getMode()}
+    >
       <Icon
         icon={Feather}
         name={getStatusIcon() as any}
@@ -138,16 +176,10 @@ export const FileContentRenderer: React.FC<FileContentRendererProps> = ({ filena
   const markdownContent = `\`\`\`${extension}\n${processedContent}\n\`\`\``
 
   return (
-    <Box background="subtle" rounded="md" p="sm" gap="xs">
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        pb="xs"
-        style={{ borderBottomWidth: 1, borderBottomColor: "#e5e5e5" }}
-      >
-        <Icon icon={Feather} name="file-text" size={14} color="muted" />
-        <Text size="sm" weight="medium" mode="subtle">
+    <Box background="lighter" rounded="lg" p="sm" gap="xs" mode="primary">
+      <Box direction="row" alignItems="center" gap="xs" pb="xs">
+        <Icon icon={Feather} name="file-text" size={14} color="accent" />
+        <Text size="sm" weight="medium">
           {filename}
         </Text>
       </Box>
@@ -168,15 +200,9 @@ export const BashRenderer: React.FC<BashRendererProps> = ({ command, stdout, std
   const markdownContent = `\`\`\`console\n$ ${command}\n${output}\n\`\`\``
 
   return (
-    <Box background="subtle" rounded="md" p="sm" gap="xs">
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        pb="xs"
-        style={{ borderBottomWidth: 1, borderBottomColor: "#e5e5e5" }}
-      >
-        <Icon icon={Feather} name="terminal" size={14} color="muted" />
+    <Box background="darker" rounded="lg" p="sm" gap="xs" mode="secondary">
+      <Box direction="row" alignItems="center" gap="xs" pb="xs">
+        <Icon icon={Feather} name="terminal" size={14} color="success" />
         <Text size="sm" weight="medium" mode="subtle">
           Command
         </Text>
@@ -225,16 +251,10 @@ export const TodoListRenderer: React.FC<TodoListRendererProps> = ({ todos }) => 
   }
 
   return (
-    <Box background="subtle" rounded="md" p="sm" gap="xs">
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        pb="xs"
-        style={{ borderBottomWidth: 1, borderBottomColor: "#e5e5e5" }}
-      >
-        <Icon icon={Feather} name="list" size={14} color="muted" />
-        <Text size="sm" weight="medium" mode="subtle">
+    <Box background="lightest" rounded="lg" p="sm" gap="xs" mode="warning">
+      <Box direction="row" alignItems="center" gap="xs" pb="xs">
+        <Icon icon={Feather} name="list" size={14} color="warning" />
+        <Text size="sm" weight="medium">
           Plan
         </Text>
       </Box>
@@ -274,16 +294,10 @@ interface DiffRendererProps {
 
 export const DiffRenderer: React.FC<DiffRendererProps> = ({ filename, diff }) => {
   return (
-    <Box background="subtle" rounded="md" p="sm" gap="xs">
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        pb="xs"
-        style={{ borderBottomWidth: 1, borderBottomColor: "#e5e5e5" }}
-      >
-        <Icon icon={Feather} name="edit-3" size={14} color="muted" />
-        <Text size="sm" weight="medium" mode="subtle">
+    <Box background="light" rounded="lg" p="sm" gap="xs" mode="success">
+      <Box direction="row" alignItems="center" gap="xs" pb="xs">
+        <Icon icon={Feather} name="edit-3" size={14} color="success" />
+        <Text size="sm" weight="medium">
           Edit {filename}
         </Text>
       </Box>
@@ -303,16 +317,10 @@ export const WebFetchRenderer: React.FC<WebFetchRendererProps> = ({ url, content
   const truncatedContent = content.length > 1000 ? content.slice(0, 1000) + "..." : content
 
   return (
-    <Box background="subtle" rounded="md" p="sm" gap="xs">
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        pb="xs"
-        style={{ borderBottomWidth: 1, borderBottomColor: "#e5e5e5" }}
-      >
-        <Icon icon={Feather} name="globe" size={14} color="muted" />
-        <Text size="sm" weight="medium" mode="subtle" numberOfLines={1}>
+    <Box background="dim" rounded="lg" p="sm" gap="xs" mode="secondary">
+      <Box direction="row" alignItems="center" gap="xs" pb="xs">
+        <Icon icon={Feather} name="globe" size={14} color="brand" />
+        <Text size="sm" weight="medium" numberOfLines={1}>
           {url}
         </Text>
       </Box>
