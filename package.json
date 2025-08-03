@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "bun@1.2.14",
   "scripts": {
-    "dev": "bun run packages/opencode/src/index.ts",
+    "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
     "stainless": "./scripts/stainless",
     "postinstall": "./script/hooks"

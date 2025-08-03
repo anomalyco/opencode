@@ -60,33 +60,28 @@ export namespace SystemPrompt {
   export async function custom() {
     const { cwd, root } = App.info().path
     const config = await Config.get()
-    const found = []
+    const paths = new Set<string>()
+
     for (const item of CUSTOM_FILES) {
       const matches = await Filesystem.findUp(item, cwd, root)
-      found.push(...matches.map((x) => Bun.file(x).text()))
+      matches.forEach((path) => paths.add(path))
     }
-    found.push(
-      Bun.file(path.join(Global.Path.config, "AGENTS.md"))
-        .text()
-        .catch(() => ""),
-    )
-    found.push(
-      Bun.file(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-        .text()
-        .catch(() => ""),
-    )
+
+    paths.add(path.join(Global.Path.config, "AGENTS.md"))
+    paths.add(path.join(os.homedir(), ".claude", "CLAUDE.md"))
 
     if (config.instructions) {
       for (const instruction of config.instructions) {
-        try {
-          const matches = await Filesystem.globUp(instruction, cwd, root)
-          found.push(...matches.map((x) => Bun.file(x).text()))
-        } catch {
-          continue // Skip invalid glob patterns
-        }
+        const matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+        matches.forEach((path) => paths.add(path))
       }
     }
 
+    const found = Array.from(paths).map((p) =>
+      Bun.file(p)
+        .text()
+        .catch(() => ""),
+    )
     return Promise.all(found).then((result) => result.filter(Boolean))
   }
 
