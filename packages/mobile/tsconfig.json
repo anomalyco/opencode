@@ -1,0 +1,29 @@
+{
+  "extends": ["../../tsconfig.json", "expo/tsconfig.base"],
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"],
+      "@/providers/*": ["./src/providers/*"],
+      "@/services/*": ["./src/services/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/atoms/*": ["./src/components/atoms/*"],
+      "@/molecules/*": ["./src/components/molecules/*"],
+      "@/pages/*": ["./src/components/pages/*"],
+      "@/managers/*": ["./src/components/managers/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/config/*": ["./src/config/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/context/*": ["./src/context/*"],
+      "@/ui/*": ["./src/components/ui/*"],
+      "@/buttons/*": ["./src/components/ui/buttons/*"],
+      "@/primitives": ["./src/components/ui/primitives"],
+      "@/primitives/*": ["./src/components/ui/primitives/*"],
+      "@/typography/*": ["./src/components/ui/typography/*"],
+      "@/db/*": ["./src/db/*"],
+      "@/drizzle/*": ["./drizzle/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+}

@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 16.17.4",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "sim": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "image": "macos-sonoma-14.6-xcode-16.1"
+      },
+      "env": {
+        "EXPO_PUBLIC_ENV": "dev"
+      }
+    },
+    "dev": {
+      "developmentClient": true,
+      "distribution": "internal",
+
+      "env": {
+        "EXPO_PUBLIC_ENV": "dev"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+
+      "env": {
+        "EXPO_PUBLIC_ENV": "preview"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
