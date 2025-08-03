@@ -32,32 +32,50 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
     present: () => bottomSheetRef.current?.present(),
     dismiss: () => bottomSheetRef.current?.dismiss(),
   }))
+
   const handleConnect = async () => {
     setIsConnecting(true)
     updateConnectionStatus.mutate("connecting")
 
     try {
-      // Update the API client with new connection
-      await apiClient.updateBaseUrl(hostname, parseInt(port))
+      const portNum = parseInt(port)
 
-      // Test the connection
-      await apiClient.ping()
-
-      // Save connection settings
-      setServerConnection.mutate({
-        hostname,
-        port: parseInt(port),
+      // Save connection settings first to ensure they're available
+      await new Promise<void>((resolve) => {
+        setServerConnection.mutate({ hostname, port: portNum }, { onSuccess: () => resolve() })
       })
 
-      updateConnectionStatus.mutate("connected")
-      onClose()
+      // Small delay to ensure settings are persisted
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      // Update the API client with new connection
+      await apiClient.updateBaseUrl(hostname, portNum)
+
+      // Test the connection with retry logic
+      let lastError
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await apiClient.ping()
+          updateConnectionStatus.mutate("connected")
+          onClose()
+          return
+        } catch (error) {
+          lastError = error
+          if (attempt < 3) {
+            // Wait before retry (exponential backoff)
+            await new Promise((resolve) => setTimeout(resolve, attempt * 500))
+          }
+        }
+      }
+
+      // If all retries failed
+      throw lastError
     } catch (error) {
       updateConnectionStatus.mutate("disconnected")
     } finally {
       setIsConnecting(false)
     }
   }
-
   const handleDisconnect = () => {
     updateConnectionStatus.mutate("disconnected")
     onClose()

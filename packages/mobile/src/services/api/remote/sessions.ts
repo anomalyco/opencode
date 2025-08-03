@@ -36,9 +36,11 @@ export function useRemoteSessionsQuery() {
       const response = await apiClient.axios.get("/session")
       return response.data
     },
+    retry: 1, // Only retry once
+    retryDelay: 1000, // Wait 1 second before retry
+    staleTime: 30 * 1000, // 30 seconds
   })
 }
-
 export function useRemoteSessionQuery(id: string) {
   return useQuery({
     queryKey: queryKeys.remote.sessions.detail(id),

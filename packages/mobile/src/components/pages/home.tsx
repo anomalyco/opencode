@@ -5,6 +5,7 @@ import { Box, Text, Icon } from "@/components/ui/primitives"
 import { Feather } from "@expo/vector-icons"
 import { useLocalSessionsQuery } from "@/services/api/local/sessions"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { useFullSyncMutation } from "@/services/api/sync"
 import { useSessionManager } from "@/services/session-manager"
 import {
   ConnectionStatus,
@@ -24,11 +25,14 @@ export const HomePage = () => {
   const sessionManager = useSessionManager()
 
   const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
+  const fullSyncMutation = useFullSyncMutation()
 
   const onRefresh = async () => {
     setRefreshing(true)
     try {
-      await Promise.all([refetchSessions(), refetchAppInfo()])
+      await Promise.all([refetchSessions(), refetchAppInfo(), fullSyncMutation.mutateAsync()])
+    } catch (error) {
+      console.error("Failed to refresh data:", error)
     } finally {
       setRefreshing(false)
     }

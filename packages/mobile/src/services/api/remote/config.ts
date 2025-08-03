@@ -44,9 +44,10 @@ export function useRemoteAppInfoQuery() {
       return response.data
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
+    retry: 1, // Only retry once
+    retryDelay: 1000, // Wait 1 second before retry
   })
 }
-
 export function useRemoteConfigQuery() {
   return useQuery({
     queryKey: queryKeys.remote.config.config(),

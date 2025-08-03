@@ -26,9 +26,22 @@ export class ApiClient {
   private setupInterceptors() {
     // Request interceptor to add base URL
     this.client.interceptors.request.use(async (config) => {
-      const serverUrl = await localConfigService.getServerUrl()
-      if (serverUrl) {
-        config.baseURL = serverUrl
+      // If baseURL is already set (from updateBaseUrl), use it
+      if (config.baseURL) {
+        return config
+      }
+
+      try {
+        const serverUrl = await Promise.race([
+          localConfigService.getServerUrl(),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000)),
+        ])
+        if (serverUrl) {
+          config.baseURL = serverUrl
+        }
+      } catch (error) {
+        // If we can't get server URL quickly, skip it
+        console.warn("Failed to get server URL:", error)
       }
       return config
     })
@@ -47,7 +60,9 @@ export class ApiClient {
 
   async updateBaseUrl(hostname: string, port: number) {
     const serverUrl = `http://${hostname}:${port}`
+    // Set the baseURL immediately for subsequent requests
     this.client.defaults.baseURL = serverUrl
+    // Also ensure the connection settings are saved
     await localConfigService.setServerConnection(hostname, port)
   }
 
@@ -58,7 +73,9 @@ export class ApiClient {
   // Health check
   async ping() {
     try {
-      const response = await this.client.get("/app")
+      const response = await this.client.get("/app", {
+        timeout: 5000, // 5 second timeout for ping
+      })
       await localConfigService.updateConnectionStatus("connected")
       return response.data
     } catch (error) {

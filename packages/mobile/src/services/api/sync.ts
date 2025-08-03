@@ -59,10 +59,13 @@ export class SyncService {
   // Sync local sessions to remote
   async syncSessionsToRemote() {
     try {
-      // Get unsynced local sessions
-      const unsyncedSessions = await this.queryClient?.fetchQuery({
-        queryKey: queryKeys.local.sessions.unsynced(),
-      })
+      // Import the session repository to get unsynced sessions
+      const { eq } = await import("drizzle-orm")
+      const db = (await import("../../db")).default
+      const { sessions } = await import("../../db/schema")
+
+      // Get unsynced local sessions directly from database
+      const unsyncedSessions = await db.select().from(sessions).where(eq(sessions.isSynced, false))
 
       for (const session of unsyncedSessions || []) {
         try {
@@ -73,9 +76,14 @@ export class SyncService {
           })
 
           // Mark as synced locally
-          await localConfigService.setAppConfig({
-            lastSyncTimestamp: new Date(),
-          })
+          await db
+            .update(sessions)
+            .set({
+              isSynced: true,
+              lastSyncTimestamp: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(sessions.id, session.id))
         } catch (error) {
           console.error(`Failed to sync session ${session.id}:`, error)
         }
@@ -93,15 +101,56 @@ export class SyncService {
   // Sync remote sessions to local
   async syncSessionsFromRemote() {
     try {
-      const remoteSessions = await this.queryClient?.fetchQuery({
-        queryKey: queryKeys.remote.sessions.lists(),
-      })
+      // Fetch remote sessions directly
+      const response = await apiClient.axios.get("/session")
+      const remoteSessions = response.data
+
+      // Import database utilities
+      const db = (await import("../../db")).default
+      const { sessions } = await import("../../db/schema")
 
       // Store sessions locally
       for (const remoteSession of remoteSessions || []) {
-        // This would need the actual local session creation logic
-        // Implementation depends on your local session structure
-        console.log("Syncing session from remote:", remoteSession.id)
+        try {
+          await db
+            .insert(sessions)
+            .values({
+              id: remoteSession.id,
+              parentId: remoteSession.parentId,
+              title: remoteSession.title,
+              version: remoteSession.version,
+              shareUrl: remoteSession.shareUrl,
+              timeCreated: new Date(remoteSession.time.created),
+              timeUpdated: new Date(remoteSession.time.updated),
+              revertMessageId: remoteSession.revertMessageId,
+              revertPartId: remoteSession.revertPartId,
+              revertSnapshot: remoteSession.revertSnapshot,
+              revertDiff: remoteSession.revertDiff,
+              isSynced: true,
+              lastSyncTimestamp: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: sessions.id,
+              set: {
+                title: remoteSession.title,
+                version: remoteSession.version,
+                shareUrl: remoteSession.shareUrl,
+                timeCreated: new Date(remoteSession.time.created),
+                timeUpdated: new Date(remoteSession.time.updated),
+                revertMessageId: remoteSession.revertMessageId,
+                revertPartId: remoteSession.revertPartId,
+                revertSnapshot: remoteSession.revertSnapshot,
+                revertDiff: remoteSession.revertDiff,
+                isSynced: true,
+                lastSyncTimestamp: new Date(),
+                updatedAt: new Date(),
+              },
+            })
+        } catch (error) {
+          console.error(`Failed to sync session ${remoteSession.id} from remote:`, error)
+        }
       }
 
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
