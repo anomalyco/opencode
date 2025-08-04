@@ -1,6 +1,8 @@
 import { useState, forwardRef, useImperativeHandle, useRef } from "react"
-import { Box, Text, Button, Input, BottomSheet } from "@/components/ui/primitives"
+import { Box, Text, Button, BottomSheet } from "@/components/ui/primitives"
 import type { BottomSheetRef } from "@/components/ui/primitives"
+import { BottomSheetView } from "@gorhom/bottom-sheet"
+import { BottomSheetInput } from "./bottom-sheet-input"
 import {
   useLocalAppConfigQuery,
   useSetServerConnectionMutation,
@@ -126,146 +128,115 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
   const isConnected = appConfig?.connectionStatus === "connected"
 
   return (
-    <BottomSheet ref={bottomSheetRef} snapPoints={["60%"]} onDismiss={onClose} enablePanDownToClose>
-      <Box p="md" gap="lg">
-        <Box>
-          <Text size="lg" weight="semibold">
-            Server Connection
-          </Text>
-          <Text size="sm" mode="subtle">
-            Configure your OpenCode server connection
-          </Text>
-        </Box>
-
-        <Box gap="md">
-          <Box gap="xs">
-            <Text size="sm" weight="medium">
-              Connection Mode
+    <BottomSheet
+      ref={bottomSheetRef}
+      snapPoints={["60%"]}
+      onDismiss={onClose}
+      enablePanDownToClose
+      keyboardBehavior="fillParent"
+      keyboardBlurBehavior="restore"
+    >
+      <BottomSheetView style={{ flex: 1 }}>
+        <Box p="md" gap="lg">
+          <Box>
+            <Text size="lg" weight="semibold">
+              Server Connection
             </Text>
-            <Box direction="row" gap="sm">
-              <Button
-                size="auto"
-                variant={!useConnectionString ? "outline" : "ghost"}
-                onPress={() => setUseConnectionString(false)}
-              >
-                <Box p="xs" center>
-                  <Text size="sm" weight="medium">
-                    Host + Port
-                  </Text>
-                </Box>
-              </Button>
-              <Button
-                size="auto"
-                variant={useConnectionString ? "outline" : "ghost"}
-                onPress={() => setUseConnectionString(true)}
-              >
-                <Box p="xs" center>
-                  <Text size="sm" weight="medium">
-                    URL String
-                  </Text>
-                </Box>
-              </Button>
-            </Box>
+            <Text size="sm" mode="subtle">
+              Configure your OpenCode server connection
+            </Text>
           </Box>
-
-          {useConnectionString ? (
+          <Box gap="md">
             <Box gap="xs">
               <Text size="sm" weight="medium">
-                Connection URL
+                Connection Mode
               </Text>
-              <Input
+              <Box direction="row" gap="sm">
+                <Button
+                  variant={!useConnectionString ? "outline" : "ghost"}
+                  onPress={() => setUseConnectionString(false)}
+                >
+                  <Button.Text size="sm" weight="medium">
+                    Host + Port
+                  </Button.Text>
+                </Button>
+                <Button
+                  variant={useConnectionString ? "outline" : "ghost"}
+                  onPress={() => setUseConnectionString(true)}
+                >
+                  <Button.Text size="sm" weight="medium">
+                    URL String
+                  </Button.Text>
+                </Button>
+              </Box>
+            </Box>
+            {useConnectionString ? (
+              <BottomSheetInput
+                label="Connection URL"
                 value={connectionString}
                 onChangeText={setConnectionString}
                 placeholder="http://127.0.0.1:4096 or myserver.tailscale.net"
-                leftAccessory={
-                  <Input.Accessory>
-                    <Text>🔗</Text>
-                  </Input.Accessory>
-                }
+                leftAccessory={<Text>🔗</Text>}
               />
-            </Box>
-          ) : (
-            <>
-              <Box gap="xs">
-                <Text size="sm" weight="medium">
-                  Hostname
-                </Text>
-                <Input
+            ) : (
+              <>
+                <BottomSheetInput
+                  label="Hostname"
                   value={hostname}
                   onChangeText={setHostname}
                   placeholder="127.0.0.1"
-                  leftAccessory={
-                    <Input.Accessory>
-                      <Text>🖥️</Text>
-                    </Input.Accessory>
-                  }
+                  leftAccessory={<Text>🖥️</Text>}
                 />
-              </Box>
 
-              <Box gap="xs">
-                <Text size="sm" weight="medium">
-                  Port
-                </Text>
-                <Input
+                <BottomSheetInput
+                  label="Port"
                   value={port}
                   onChangeText={setPort}
                   placeholder="4096"
                   keyboardType="numeric"
-                  leftAccessory={
-                    <Input.Accessory>
-                      <Text>🔌</Text>
-                    </Input.Accessory>
-                  }
+                  leftAccessory={<Text>🔌</Text>}
                 />
-              </Box>
-            </>
-          )}
-        </Box>
-
-        <Box gap="sm">
-          {isConnected ? (
-            <Button size="auto" mode="error" onPress={handleDisconnect}>
-              <Box p="sm" center>
-                <Text size="md" weight="medium" inverse>
+              </>
+            )}
+          </Box>
+          <Box gap="sm">
+            {isConnected ? (
+              <Button mode="error" onPress={handleDisconnect}>
+                <Button.Text size="md" weight="medium">
                   Disconnect
-                </Text>
-              </Box>
-            </Button>
-          ) : (
-            <Button size="auto" mode="brand" onPress={handleConnect} loading={isConnecting}>
-              <Box p="sm" center>
-                <Text size="md" weight="medium" inverse>
+                </Button.Text>
+              </Button>
+            ) : (
+              <Button mode="brand" onPress={handleConnect} loading={isConnecting}>
+                <Button.Text size="md" weight="medium">
                   {isConnecting ? "Connecting..." : "Connect"}
-                </Text>
-              </Box>
-            </Button>
-          )}
+                </Button.Text>
+              </Button>
+            )}
 
-          <Button size="auto" variant="ghost" onPress={onClose}>
-            <Box p="sm" center>
-              <Text size="md" weight="medium">
+            <Button variant="ghost" onPress={onClose}>
+              <Button.Text size="md" weight="medium">
                 Cancel
+              </Button.Text>
+            </Button>
+          </Box>
+          <Box background="subtle" rounded="lg" p="md">
+            <Text size="xs" mode="subtle">
+              💡 Make sure your OpenCode server is running with:
+            </Text>
+            <Box mt="xs" background="dim" rounded="md" p="sm">
+              <Text size="xs" weight="medium" mode="brand">
+                opencode serve --hostname 0.0.0.0 --port 4096
               </Text>
             </Box>
-          </Button>
-        </Box>
-
-        <Box background="subtle" rounded="lg" p="md">
-          <Text size="xs" mode="subtle">
-            💡 Make sure your OpenCode server is running with:
-          </Text>
-          <Box mt="xs" background="dim" rounded="md" p="sm">
-            <Text size="xs" weight="medium" mode="brand">
-              opencode serve --hostname 0.0.0.0 --port 4096
-            </Text>
-          </Box>
-          <Box mt="xs">
-            <Text size="xs" mode="subtle">
-              Use "URL String" mode for Tailscale or custom URLs without ports.
-            </Text>
+            <Box mt="xs">
+              <Text size="xs" mode="subtle">
+                Use "URL String" mode for Tailscale or custom URLs without ports.
+              </Text>
+            </Box>
           </Box>
         </Box>
-      </Box>
+      </BottomSheetView>
     </BottomSheet>
   )
 })

@@ -19,6 +19,7 @@ import type { ConnectionSheetRef } from "@/components/molecules/home/connection-
 
 export const HomePage = () => {
   const [refreshing, setRefreshing] = useState(false)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
   const connectionSheetRef = useRef<ConnectionSheetRef>(null)
 
   const { data: sessions, isLoading, refetch: refetchSessions } = useLocalSessionsQuery()
@@ -38,9 +39,13 @@ export const HomePage = () => {
   }
 
   const handleNewSession = useCallback(async () => {
+    setIsCreatingSession(true)
     try {
       await sessionManager.navigateToNewSession()
-    } catch (error) {}
+    } catch (error) {
+    } finally {
+      setIsCreatingSession(false)
+    }
   }, [sessionManager])
 
   const handleSessionPress = (sessionId: string) => {
@@ -75,7 +80,7 @@ export const HomePage = () => {
         <ConnectionStatus onOpenConnectionSheet={handleOpenConnectionSheet} />
 
         {/* Quick Actions */}
-        <QuickActions onNewSession={handleNewSession} />
+        <QuickActions onNewSession={handleNewSession} isCreatingSession={isCreatingSession} />
 
         {/* Sessions Header */}
         <RecentSessionsHeader />

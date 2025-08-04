@@ -11,6 +11,8 @@ interface BottomSheetProps {
   enablePanDownToClose?: boolean
   backdropOpacity?: number
   index?: number
+  keyboardBehavior?: "extend" | "fillParent" | "interactive"
+  keyboardBlurBehavior?: "none" | "restore"
 }
 
 export interface BottomSheetRef {
@@ -29,6 +31,8 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       enablePanDownToClose = true,
       backdropOpacity = 0.75,
       index = 0,
+      keyboardBehavior = "interactive",
+      keyboardBlurBehavior = "none",
       ...props
     },
     ref,
@@ -64,6 +68,8 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         index={index}
         backgroundStyle={styles.background}
         handleIndicatorStyle={styles.handleIndicator}
+        keyboardBehavior={keyboardBehavior}
+        keyboardBlurBehavior={keyboardBlurBehavior}
         {...props}
       >
         <BottomSheetView style={styles.container}>{children}</BottomSheetView>
