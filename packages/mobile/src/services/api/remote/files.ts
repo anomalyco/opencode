@@ -12,11 +12,11 @@ interface FileResponse {
 }
 
 interface FileStatusResponse {
-  files: Array<{
+  files: {
     path: string
     status: string
     staged: boolean
-  }>
+  }[]
 }
 
 interface SearchResult {

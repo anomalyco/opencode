@@ -136,7 +136,7 @@ export const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({ status
         color={getStatusColor() as any}
         style={status === "running" ? { opacity: 0.7 } : undefined}
       />
-      <Text size="sm" mode="subtle" weight="medium">
+      <Text size="xs" mode="subtle" weight="medium">
         {getStatusText()}
       </Text>
     </Box>

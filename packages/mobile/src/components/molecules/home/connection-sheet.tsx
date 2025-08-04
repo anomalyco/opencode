@@ -172,3 +172,5 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
     </BottomSheet>
   )
 })
+
+ConnectionSheet.displayName = "ConnectionSheet"

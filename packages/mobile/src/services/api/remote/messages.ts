@@ -32,10 +32,10 @@ interface MessagePartResponse {
 interface SendMessageRequest {
   providerID: string
   modelID: string
-  parts: Array<{
+  parts: {
     type: "text"
     text: string
-  }>
+  }[]
   messageID?: string
   mode?: string
   system?: string
@@ -47,7 +47,24 @@ export function useRemoteMessagesQuery(sessionId: string) {
   return useQuery({
     queryKey: queryKeys.remote.messages.list(sessionId),
     queryFn: async (): Promise<MessageResponse[]> => {
+      console.log(`[RemoteMessages] Fetching messages for session ${sessionId}`)
       const response = await apiClient.axios.get(`/session/${sessionId}/message`)
+      console.log(`[RemoteMessages] Raw response:`, {
+        status: response.status,
+        dataLength: response.data?.length || 0,
+        firstItem: response.data?.[0]
+          ? {
+              hasInfo: !!response.data[0].info,
+              hasParts: !!response.data[0].parts,
+              partsCount: response.data[0].parts?.length || 0,
+              structure: Object.keys(response.data[0]),
+              infoId: response.data[0].info?.id,
+              firstPartId: response.data[0].parts?.[0]?.id,
+              firstPartType: response.data[0].parts?.[0]?.type,
+              firstPartText: response.data[0].parts?.[0]?.text?.substring(0, 50),
+            }
+          : null,
+      })
       return response.data
     },
     enabled: !!sessionId,

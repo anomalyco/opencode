@@ -12,7 +12,7 @@ class MessageRepository {
       .select()
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
-      .orderBy(asc(messages.createdAt))
+      .orderBy(asc(messages.timeCreated))
     return result
   }
 
@@ -51,7 +51,7 @@ class MessageRepository {
       .select()
       .from(messageParts)
       .where(eq(messageParts.messageId, messageId))
-      .orderBy(asc(messageParts.createdAt))
+      .orderBy(asc(messageParts.timeStart))
   }
 
   async createMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
@@ -82,7 +82,7 @@ class MessageRepository {
       .insert(messageParts)
       .values({
         ...part,
-        createdAt: new Date(),
+        createdAt: part.timeStart || new Date(), // Use remote timestamp for ordering
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -143,7 +143,7 @@ class MessageRepository {
       .insert(messages)
       .values({
         ...message,
-        createdAt: new Date(),
+        createdAt: message.timeCreated || new Date(), // Use remote timestamp for ordering
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -158,6 +158,7 @@ class MessageRepository {
           isSynced: message.isSynced,
           lastSyncTimestamp: message.lastSyncTimestamp,
           updatedAt: new Date(),
+          // Don't update createdAt on conflict to preserve original order
         },
       })
       .returning()

@@ -1,5 +1,5 @@
 import { memo } from "react"
-import { Box } from "@/components/ui/primitives"
+import { Box, Text } from "@/components/ui/primitives"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import { useLocalMessagePartsQuery } from "@/services/api/local/messages"
 import {
@@ -17,35 +17,25 @@ interface EnhancedMessageItemProps {
     role: "user" | "assistant"
     createdAt: Date
   }
-  remoteMessages?: any[]
-  localContent?: string
+  remoteMessages?: any[] // Deprecated - keeping for compatibility
+  localContent?: string // Deprecated - keeping for compatibility
 }
 
-export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent }: EnhancedMessageItemProps) => {
+export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) => {
   const isUser = message.role === "user"
 
-  // Get message parts from local SQLite for real-time updates
+  // Get message parts from local SQLite - with new architecture, everything is synced locally
   const { data: localMessageParts } = useLocalMessagePartsQuery(message.id)
 
-  // Fallback to remote message if no local content
-  const remoteMessage = remoteMessages?.find((rm) => rm.info.id === message.id)
+  // Use only local parts since we sync everything through the chat service
+  const uniqueParts = localMessageParts || []
 
-  // Combine local and remote parts
-  const allParts = [...(localMessageParts || []), ...(remoteMessage?.parts || [])]
-
-  // Remove duplicates based on part ID
-  const uniqueParts = allParts.reduce((acc: any[], part: any) => {
-    const existingIndex = acc.findIndex((p: any) => p.id === part.id)
-    if (existingIndex >= 0) {
-      // Keep the local version if it exists
-      if (part.isSynced !== undefined) {
-        acc[existingIndex] = part
-      }
-    } else {
-      acc.push(part)
-    }
-    return acc
-  }, [])
+  // Debug logging
+  console.log(`[EnhancedMessageItem] Message ${message.id}:`, {
+    role: message.role,
+    partsCount: uniqueParts.length,
+    parts: uniqueParts.map((p) => ({ id: p.id, type: p.type, textContent: p.textContent?.substring(0, 50) })),
+  })
 
   // Sort parts by creation time for chronological rendering
   uniqueParts.sort((a, b) => {
@@ -55,7 +45,7 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
   })
 
   // Don't render if no content
-  if (uniqueParts.length === 0 && !localContent) {
+  if (uniqueParts.length === 0) {
     return null
   }
 
@@ -76,7 +66,15 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
 
       case "file":
         return renderFilePart(part)
+
+      case "step-start":
+      case "step-finish":
+        // These are internal workflow steps, don't render them
+        return null
+
       default:
+        // Log unknown part types for debugging
+        console.log(`[EnhancedMessageItem] Unknown part type: ${partType}`, part)
         return null
     }
   }
@@ -89,11 +87,32 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     const toolMetadata = part.toolMetadata ? JSON.parse(part.toolMetadata) : part.state?.metadata
     const toolError = part.toolError || part.state?.error
 
+    // Debug log for tool parts
+    console.log(`[EnhancedMessageItem] Tool part ${part.id}:`, {
+      toolName,
+      toolStatus,
+      hasInput: !!toolInput,
+      hasOutput: !!toolOutput,
+      hasMetadata: !!toolMetadata,
+      rawPart: part,
+    })
+
     // Show status indicator for pending/running tools
     if (toolStatus === "pending" || toolStatus === "running") {
       return (
         <Box key={part.id} mb="sm">
-          <ToolStatusIndicator status={toolStatus} toolName={toolName} />
+          <ToolStatusIndicator status={toolStatus} toolName={toolName || "Working..."} />
+        </Box>
+      )
+    }
+
+    // Show basic tool info even if incomplete
+    if (!toolName && !toolOutput && !toolError) {
+      return (
+        <Box key={part.id} mb="sm" background="subtle" rounded="md" p="sm">
+          <Text size="xs" weight="medium" mode="subtle">
+            Tool call in progress...
+          </Text>
         </Box>
       )
     }
@@ -174,7 +193,25 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
         if (toolOutput) {
           return (
             <Box key={part.id} mb="sm" background="subtle" rounded="md" p="sm">
-              <ThemedMarked value={`**${toolName}:**\n\`\`\`\n${toolOutput}\n\`\`\``} />
+              <Box mb="xs">
+                <Text size="xs" weight="medium" mode="subtle">
+                  {toolName || "Tool"}
+                </Text>
+              </Box>
+              <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 16 }}>
+                {toolOutput}
+              </Text>
+            </Box>
+          )
+        }
+
+        // Show tool name even without output for completed tools
+        if (toolName && toolStatus === "completed") {
+          return (
+            <Box key={part.id} mb="sm" background="subtle" rounded="md" p="sm">
+              <Text size="xs" weight="medium" mode="subtle">
+                ✓ {toolName}
+              </Text>
             </Box>
           )
         }
@@ -197,19 +234,14 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
     return null
   }
 
-  // Handle local content for user messages
-  const hasLocalContent = localContent && localContent.trim().length > 0
-
   // Calculate if this is a short message (text only, 1-2 lines)
   const allTextContent =
     uniqueParts
       .filter((part) => part.type === "text" && !part.isSynthetic)
-      .map((part) => part.textContent || part.text)
-      .join("\n") ||
-    localContent ||
-    ""
+      .map((part) => part.textContent)
+      .join("\n") || ""
 
-  const hasOnlyText = uniqueParts.every((part) => part.type === "text" || part.textContent) && !hasLocalContent
+  const hasOnlyText = uniqueParts.every((part) => part.type === "text" || part.textContent)
   const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
 
   return (
@@ -229,12 +261,7 @@ export const EnhancedMessageItem = memo(({ message, remoteMessages, localContent
             elevation: 1,
           }}
         >
-          {/* Render local content first for user messages */}
-          {hasLocalContent && (
-            <Box mb="sm">
-              <ThemedMarked value={localContent} />
-            </Box>
-          )}
+          {/* All content is now in parts from local database */}
 
           {/* Render all parts in chronological order */}
           {uniqueParts.map((part, index) => renderPart(part, index))}

@@ -19,13 +19,13 @@ interface ConfigResponse {
 interface ProviderResponse {
   id: string
   name: string
-  models: Array<{
+  models: {
     id: string
     name: string
     contextLength?: number
     inputPrice?: number
     outputPrice?: number
-  }>
+  }[]
 }
 
 interface ModeResponse {

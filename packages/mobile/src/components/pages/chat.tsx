@@ -123,7 +123,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
   }, [])
 
-  // Connect to streaming and listen for message updates
+  // Connect to streaming and listen for message updates (minimal during streaming)
   useEffect(() => {
     if (!streaming.isConnected()) {
       streaming.connect()
@@ -131,13 +131,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
     const unsubscribe = streaming.subscribe("*", (event) => {
       let eventSessionId: string | undefined
-      if (event.type === "storage.write") {
-        eventSessionId = (event as any).properties?.content?.sessionID
-      } else if (event.type === "message.updated") {
-        eventSessionId = (event as any).properties?.info?.sessionID
-      } else if (event.type === "message.part.updated") {
-        eventSessionId = (event as any).properties?.part?.sessionID
-      } else if (event.type === "session.idle") {
+      if (event.type === "session.idle") {
         eventSessionId = (event as any).properties?.sessionID
       }
 
@@ -149,179 +143,13 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           clearTimeout(streamingTimeoutRef.current)
           streamingTimeoutRef.current = null
         }
+        // Only refetch when streaming is done to avoid UI lag
         refetchMessages()
         // Scroll to bottom when streaming completes
         setTimeout(scrollToBottom, 200)
-      } else if (event.type === "storage.write") {
-        const key = (event as any).properties?.key
-        const content = (event as any).properties?.content
-
-        if (key?.includes("step-start")) {
-          setIsStreaming(true)
-        } else if (key?.includes("/message/") && content?.role) {
-          const existingMessage = messages?.find((m) => m.id === content.id)
-          if (!existingMessage) {
-            upsertLocalMessage.mutate({
-              id: content.id,
-              sessionId: content.sessionID,
-              role: content.role,
-              timeCreated: new Date(),
-              timeCompleted: null,
-              providerId: null,
-              modelId: null,
-              mode: null,
-              pathCwd: null,
-              pathRoot: null,
-              isSummary: false,
-              cost: 0,
-              tokensInput: 0,
-              tokensOutput: 0,
-              tokensReasoning: 0,
-              tokensCacheRead: 0,
-              tokensCacheWrite: 0,
-              errorName: null,
-              errorMessage: null,
-              errorData: null,
-              systemPrompts: null,
-              isSynced: false,
-              lastSyncTimestamp: new Date(),
-            })
-          }
-        } else if (key?.includes("/part/")) {
-          // Handle different part types
-          if (content?.type === "text") {
-            upsertLocalMessagePart.mutate({
-              id: content.id,
-              sessionId: content.sessionID,
-              messageId: content.messageID,
-              type: "text",
-              textContent: content.text || "",
-              isSynthetic: content.synthetic || false,
-              timeStart: content.time?.start ? new Date(content.time.start) : new Date(),
-              timeEnd: content.time?.end ? new Date(content.time.end) : null,
-              isSynced: true,
-              lastSyncTimestamp: new Date(),
-              fileMime: null,
-              fileFilename: null,
-              fileUrl: null,
-              fileSourceType: null,
-              fileSourcePath: null,
-              fileSourceTextValue: null,
-              fileSourceTextStart: null,
-              fileSourceTextEnd: null,
-              fileSourceName: null,
-              fileSourceKind: null,
-              fileSourceRange: null,
-              toolCallId: null,
-              toolName: null,
-              toolStatus: null,
-              toolInput: null,
-              toolOutput: null,
-              toolTitle: null,
-              toolMetadata: null,
-              toolError: null,
-              toolTimeStart: null,
-              toolTimeEnd: null,
-              stepCost: null,
-              stepTokensInput: null,
-              stepTokensOutput: null,
-              stepTokensReasoning: null,
-              stepTokensCacheRead: null,
-              stepTokensCacheWrite: null,
-              snapshotId: null,
-              patchHash: null,
-              patchFiles: null,
-            })
-          } else if (content?.type === "tool") {
-            upsertLocalMessagePart.mutate({
-              id: content.id,
-              sessionId: content.sessionID,
-              messageId: content.messageID,
-              type: "tool",
-              textContent: null,
-              isSynthetic: false,
-              timeStart: content.state?.time?.start ? new Date(content.state.time.start) : new Date(),
-              timeEnd: content.state?.time?.end ? new Date(content.state.time.end) : null,
-              isSynced: true,
-              lastSyncTimestamp: new Date(),
-              fileMime: null,
-              fileFilename: null,
-              fileUrl: null,
-              fileSourceType: null,
-              fileSourcePath: null,
-              fileSourceTextValue: null,
-              fileSourceTextStart: null,
-              fileSourceTextEnd: null,
-              fileSourceName: null,
-              fileSourceKind: null,
-              fileSourceRange: null,
-              toolCallId: content.callID,
-              toolName: content.tool,
-              toolStatus: content.state?.status || "pending",
-              toolInput: content.state?.input ? JSON.stringify(content.state.input) : null,
-              toolOutput: content.state?.output || null,
-              toolTitle: content.state?.title || null,
-              toolMetadata: content.state?.metadata ? JSON.stringify(content.state.metadata) : null,
-              toolError: content.state?.error || null,
-              toolTimeStart: content.state?.time?.start ? new Date(content.state.time.start) : null,
-              toolTimeEnd: content.state?.time?.end ? new Date(content.state.time.end) : null,
-              stepCost: null,
-              stepTokensInput: null,
-              stepTokensOutput: null,
-              stepTokensReasoning: null,
-              stepTokensCacheRead: null,
-              stepTokensCacheWrite: null,
-              snapshotId: null,
-              patchHash: null,
-              patchFiles: null,
-            })
-          } else if (content?.type === "file") {
-            upsertLocalMessagePart.mutate({
-              id: content.id,
-              sessionId: content.sessionID,
-              messageId: content.messageID,
-              type: "file",
-              textContent: null,
-              isSynthetic: false,
-              timeStart: new Date(),
-              timeEnd: null,
-              isSynced: true,
-              lastSyncTimestamp: new Date(),
-              fileMime: content.mime,
-              fileFilename: content.filename,
-              fileUrl: content.url,
-              fileSourceType: content.source?.type,
-              fileSourcePath: content.source?.path,
-              fileSourceTextValue: content.source?.text?.value,
-              fileSourceTextStart: content.source?.text?.start,
-              fileSourceTextEnd: content.source?.text?.end,
-              fileSourceName: content.source?.name,
-              fileSourceKind: content.source?.kind,
-              fileSourceRange: content.source?.range ? JSON.stringify(content.source.range) : null,
-              toolCallId: null,
-              toolName: null,
-              toolStatus: null,
-              toolInput: null,
-              toolOutput: null,
-              toolTitle: null,
-              toolMetadata: null,
-              toolError: null,
-              toolTimeStart: null,
-              toolTimeEnd: null,
-              stepCost: null,
-              stepTokensInput: null,
-              stepTokensOutput: null,
-              stepTokensReasoning: null,
-              stepTokensCacheRead: null,
-              stepTokensCacheWrite: null,
-              snapshotId: null,
-              patchHash: null,
-              patchFiles: null,
-            })
-          }
-        }
       }
     })
+
     return () => {
       unsubscribe()
       // Clean up streaming timeout on unmount
@@ -330,7 +158,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
         streamingTimeoutRef.current = null
       }
     }
-  }, [sessionId, scrollToBottom])
+  }, [sessionId, scrollToBottom, refetchMessages])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
