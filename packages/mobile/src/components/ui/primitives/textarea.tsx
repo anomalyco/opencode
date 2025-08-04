@@ -1,22 +1,24 @@
-import { TextInput, useColorScheme } from "react-native";
-import type { StyleProp, TextStyle, TextInputProps } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
-import { Box, type BoxProps } from "./box";
-import { Text } from "./text";
-import { useMemo } from "react";
+import { TextInput, useColorScheme, Pressable } from "react-native"
+import type { StyleProp, TextStyle, TextInputProps, Insets } from "react-native"
+import { StyleSheet, UnistylesRuntime } from "react-native-unistyles"
+import { Box, type BoxProps } from "./box"
+import { Text } from "./text"
+import { useMemo, useRef } from "react"
 
 export type TextAreaProps = TextInputProps &
   Omit<BoxProps, "children"> & {
-    style?: StyleProp<TextStyle>;
-    maxLength?: number;
-    mode?: "secondary" | "warning" | "error" | "success" | "disabled";
-  };
+    style?: StyleProp<TextStyle>
+    maxLength?: number
+    mode?: "secondary" | "warning" | "error" | "success" | "disabled"
+    hitSlop?: Insets | number
+  }
 
 const TextArea = ({
   style,
   maxLength,
   mode,
   value,
+  hitSlop,
   // Box props
   background,
   p = "md",
@@ -31,14 +33,13 @@ const TextArea = ({
   // Rest of TextInput props
   ...props
 }: TextAreaProps) => {
-  const colorScheme = useColorScheme();
+  const inputRef = useRef<TextInput>(null)
+  const colorScheme = useColorScheme()
 
   const placeholderTextColor = useMemo(() => {
-    const theme = UnistylesRuntime.getTheme();
-    return colorScheme === "dark"
-      ? theme.colors.text.subtle
-      : theme.colors.text.subtle;
-  }, [colorScheme]);
+    const theme = UnistylesRuntime.getTheme()
+    return colorScheme === "dark" ? theme.colors.text.subtle : theme.colors.text.subtle
+  }, [colorScheme])
 
   const boxProps = {
     background,
@@ -52,25 +53,20 @@ const TextArea = ({
     mt,
     mb,
     gap,
-  };
+  }
 
   const { remainingChars, counterState } = useMemo(() => {
-    const remaining = maxLength ? maxLength - (value?.length || 0) : null;
+    const remaining = maxLength ? maxLength - (value?.length || 0) : null
     const mode: "error" | "warning" | undefined =
-      remaining !== null
-        ? remaining === 0
-          ? "error"
-          : remaining <= 10
-          ? "warning"
-          : undefined
-        : undefined;
+      remaining !== null ? (remaining === 0 ? "error" : remaining <= 10 ? "warning" : undefined) : undefined
 
-    return { remainingChars: remaining, counterState: mode };
-  }, [maxLength, value]);
+    return { remainingChars: remaining, counterState: mode }
+  }, [maxLength, value])
 
-  return (
+  const textAreaContent = (
     <Box {...boxProps} style={{ minHeight: 120 }}>
       <TextInput
+        ref={inputRef}
         style={[styles.input, style]}
         multiline
         textAlignVertical="top"
@@ -86,10 +82,18 @@ const TextArea = ({
         </Text>
       )}
     </Box>
-  );
-};
+  )
 
-export default TextArea;
+  return hitSlop ? (
+    <Pressable onPress={() => inputRef.current?.focus()} hitSlop={hitSlop}>
+      {textAreaContent}
+    </Pressable>
+  ) : (
+    textAreaContent
+  )
+}
+
+export default TextArea
 
 const styles = StyleSheet.create((theme) => ({
   input: {
@@ -121,4 +125,4 @@ const styles = StyleSheet.create((theme) => ({
       },
     },
   },
-}));
+}))

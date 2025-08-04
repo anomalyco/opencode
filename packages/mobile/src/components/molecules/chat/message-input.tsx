@@ -1,5 +1,5 @@
-import { memo, useState, useEffect, useCallback } from "react"
-import { TextInput, Keyboard } from "react-native"
+import { memo, useState, useEffect, useCallback, useRef } from "react"
+import { TextInput, Keyboard, Pressable } from "react-native"
 import { Box, Button, Icon } from "@/components/ui/primitives"
 import BlurView from "@/components/ui/primitives/blur-view"
 import { useUnistyles } from "react-native-unistyles"
@@ -14,6 +14,7 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
   const [text, setText] = useState("")
   const [keyboardVisible, setKeyboardVisible] = useState(false)
   const { theme } = useUnistyles()
+  const inputRef = useRef<TextInput>(null)
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener("keyboardDidShow", () => {
@@ -41,7 +42,6 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
       }
     }
   }, [text, onSend, disabled])
-  console.log("rerender")
 
   return (
     <BlurView
@@ -56,32 +56,39 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
     >
       <Box p="sm" safeAreaBottom={!keyboardVisible}>
         <Box direction="row" alignItems="flex-end" gap="sm">
-          <Box
-            flex
-            background="dark"
-            rounded="xl"
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderWidth: 0.1,
-              borderColor: "transparent",
-            }}
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={() => inputRef.current?.focus()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Type a message..."
-              placeholderTextColor={theme.colors.text.subtle}
-              multiline
-              editable={!disabled}
+            <Box
+              flex
+              background="dark"
+              rounded="xl"
               style={{
-                color: theme.colors.text.default,
-                fontSize: 16,
-                maxHeight: 100,
-                paddingVertical: 0,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderWidth: 0.1,
+                borderColor: "transparent",
               }}
-            />
-          </Box>
+            >
+              <TextInput
+                ref={inputRef}
+                value={text}
+                onChangeText={setText}
+                placeholder="Type a message..."
+                placeholderTextColor={theme.colors.text.subtle}
+                multiline
+                editable={!disabled}
+                style={{
+                  color: theme.colors.text.default,
+                  fontSize: 16,
+                  maxHeight: 100,
+                  paddingVertical: 0,
+                }}
+              />
+            </Box>
+          </Pressable>
           <Button
             size="auto"
             mode="brand"

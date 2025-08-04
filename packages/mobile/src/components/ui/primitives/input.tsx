@@ -1,5 +1,5 @@
 import { TextInput, View, Pressable, useColorScheme, Animated } from "react-native"
-import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from "react-native"
+import type { StyleProp, TextInputProps, TextStyle, ViewStyle, Insets } from "react-native"
 import { StyleSheet, UnistylesRuntime } from "react-native-unistyles"
 import { createContext, useContext, useMemo, forwardRef } from "react"
 import { getIconSize } from "@/config/theme"
@@ -27,6 +27,7 @@ export type InputProps = TextInputProps & {
   gap?: "sm" | "md" | "lg"
   leftAccessory?: React.ReactNode
   rightAccessory?: React.ReactNode
+  hitSlop?: Insets | number
 }
 
 type IconRenderProps = {
@@ -113,7 +114,7 @@ const accessoryStyles = StyleSheet.create((theme) => ({
 }))
 
 const Input = forwardRef<TextInput, InputProps>(function Input(
-  { style, size = "md", variant, mode, m, mt, mb, gap, leftAccessory, rightAccessory, ...props },
+  { style, size = "md", variant, mode, m, mt, mb, gap, leftAccessory, rightAccessory, hitSlop, ...props },
   ref,
 ) {
   const colorScheme = useColorScheme()
@@ -141,19 +142,29 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
     hasRightAccessory: !!rightAccessory,
   })
 
+  const inputContent = (
+    <View style={styles.container}>
+      {leftAccessory && <View style={styles.accessory}>{leftAccessory}</View>}
+      <TextInput
+        ref={ref}
+        style={[styles.base, style]}
+        placeholderTextColor={placeholderTextColor}
+        editable={mode !== "disabled"}
+        {...props}
+      />
+      {rightAccessory && <View style={styles.accessory}>{rightAccessory}</View>}
+    </View>
+  )
+
   return (
     <InputContext.Provider value={contextValue}>
-      <View style={styles.container}>
-        {leftAccessory && <View style={styles.accessory}>{leftAccessory}</View>}
-        <TextInput
-          ref={ref}
-          style={[styles.base, style]}
-          placeholderTextColor={placeholderTextColor}
-          editable={mode !== "disabled"}
-          {...props}
-        />
-        {rightAccessory && <View style={styles.accessory}>{rightAccessory}</View>}
-      </View>
+      {hitSlop ? (
+        <Pressable onPress={() => ref && typeof ref !== "function" && ref.current?.focus()} hitSlop={hitSlop}>
+          {inputContent}
+        </Pressable>
+      ) : (
+        inputContent
+      )}
     </InputContext.Provider>
   )
 }) as React.ForwardRefExoticComponent<InputProps & React.RefAttributes<TextInput>> & {

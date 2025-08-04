@@ -77,12 +77,20 @@ export function useSendRemoteMessageMutation() {
       sessionId: string
       data: SendMessageRequest
     }): Promise<MessageResponse> => {
-      const response = await apiClient.axios.post(`/session/${sessionId}/message`, data)
+      // Use shorter timeout for message sending since it's fire-and-forget
+      // The actual response comes through SSE, not HTTP response
+      // 5 seconds should be enough for the server to accept the message
+      const response = await apiClient.axios.post(`/session/${sessionId}/message`, data, {
+        timeout: 5000, // 5 second timeout instead of default 30s
+      })
       return response.data
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remote.messages.list(sessionId) })
     },
+    // Disable retries for message sending to prevent duplicate messages
+    // If the request fails, the user can manually retry by sending again
+    retry: false,
   })
 }
 
