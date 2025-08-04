@@ -770,6 +770,22 @@ export namespace Session {
           return result
         },
         toModelOutput(result) {
+          if (result.metadata.type === "image") {
+            return {
+              type: 'content',
+              value: [
+                {
+                  type: 'text',
+                  text: `Image: ${result.title}`,
+                },
+                {
+                  type: 'media',
+                  data: result.output,
+                  mediaType: result.metadata.mediaType,
+                },
+              ],
+            }
+          }
           return {
             type: "text",
             value: result.output,
@@ -791,9 +807,37 @@ export namespace Session {
 
         return {
           output,
+          content: result.content,
         }
       }
       item.toModelOutput = (result) => {
+        // Check if there are any images in the content
+        const hasImages = result.content.some((item: any) => item.type === "image")
+        if (hasImages) {
+          // Preserve original order by processing sequentially
+          const contentItems = result.content.map((item: any) => {
+            if (item.type === "text") {
+              return {
+                type: "text" as const,
+                text: item.text,
+              }
+            }
+            if (item.type === "image") {
+              return {
+                type: "media" as const,
+                data: item.data,
+                mediaType: item.mimeType,
+              }
+            }
+            // Add support for other types if needed
+            return null;
+          }).filter(Boolean);
+          return {
+            type: "content",
+            value: contentItems,
+          }
+        }
+
         return {
           type: "text",
           value: result.output,

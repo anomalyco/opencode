@@ -52,7 +52,26 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const isImage = isImageFile(filepath)
-    if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
+    if (isImage) {
+      const buffer = await file.arrayBuffer()
+      const mimeType = getImageMimeType(isImage)
+      const uint8Array = new Uint8Array(buffer)
+      let binaryString = ''
+      for (let i = 0; i < uint8Array.length; i++) {
+        binaryString += String.fromCharCode(uint8Array[i])
+      }
+      const base64Data = btoa(binaryString)
+
+      return {
+        title: path.relative(App.info().path.root, filepath),
+        output: base64Data,
+        metadata: {
+          type: "image",
+          mediaType: mimeType,
+          preview: "[IMAGE]"
+        },
+      }
+    }
     const isBinary = await isBinaryFile(file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
     const lines = await file.text().then((text) => text.split("\n"))
@@ -104,6 +123,25 @@ function isImageFile(filePath: string): string | false {
       return "WebP"
     default:
       return false
+  }
+}
+
+function getImageMimeType(imageType: string): string {
+  switch (imageType) {
+    case "JPEG":
+      return "image/jpeg"
+    case "PNG":
+      return "image/png"
+    case "GIF":
+      return "image/gif"
+    case "BMP":
+      return "image/bmp"
+    case "SVG":
+      return "image/svg+xml"
+    case "WebP":
+      return "image/webp"
+    default:
+      return "application/octet-stream"
   }
 }
 
