@@ -42,6 +42,7 @@ import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
+import { RateLimiter } from "../util/rate-limiter"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -603,9 +604,17 @@ export namespace Session {
       })
     }
 
-    const model = await Provider.getModel(input.providerID, input.modelID)
-    let msgs = await messages(input.sessionID)
-
+    
+        const model = await Provider.getModel(input.providerID, input.modelID)
+        
+        // Apply rate limiting if configured
+        const config = await Config.get()
+        if (config.rate_limit) {
+          const rateLimiter = new RateLimiter(config.rate_limit)
+          await rateLimiter.wait()
+        }
+    
+        let msgs = await messages(input.sessionID)
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
@@ -630,6 +639,12 @@ export namespace Session {
 
     if (msgs.length === 1 && !session.parentID) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
+      // Apply rate limiting if configured for title generation
+      const config = await Config.get()
+      if (config.rate_limit) {
+        const rateLimiter = new RateLimiter(config.rate_limit)
+        await rateLimiter.wait()
+      }
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
         providerOptions: {
@@ -1230,6 +1245,14 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
+    
+    // Apply rate limiting if configured
+    const config = await Config.get()
+    if (config.rate_limit) {
+      const rateLimiter = new RateLimiter(config.rate_limit)
+      await rateLimiter.wait()
+    }
+
     const app = App.info()
     const system = [
       ...SystemPrompt.summarize(input.providerID),
