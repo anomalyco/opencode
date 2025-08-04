@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai"
 import { unique } from "remeda"
-import { ToolRegistry } from "../tool/registry"
+import { sanitizeGeminiJsonSchema } from "./utils"
 
 export namespace ProviderTransform {
   function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
@@ -91,10 +91,10 @@ export namespace ProviderTransform {
           key,
           {
             ...tool,
-            // Apply sanitizeGeminiParameters to the tool's input schema
-            inputSchema: tool.inputSchema ? ToolRegistry.sanitizeGeminiParameters(tool.inputSchema) : tool.inputSchema
-          }
-        ])
+            // Apply sanitizeGeminiJsonSchema to the tool's input schema
+            inputSchema: tool.inputSchema ? sanitizeGeminiJsonSchema(tool.inputSchema) : tool.inputSchema,
+          },
+        ]),
       )
     }
     return tools
