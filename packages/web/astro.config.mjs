@@ -85,6 +85,7 @@ export default defineConfig({
             "docs/mcp-servers",
             "docs/formatters",
             "docs/lsp",
+            "docs/plugins",
           ],
         },
       ],
