@@ -10,68 +10,66 @@ import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
-
-import { sanitizeGeminiJsonSchema } from "./utils";
-import { zodToJsonSchema } from "zod-to-json-schema";
-
+import { sanitizeGeminiJsonSchema } from "./utils"
+import { zodToJsonSchema } from "zod-to-json-schema"
 
 export namespace Provider {
-  export type FlexibleSchema<T> = z.ZodType<T> | Record<string, any>;
-  const log = Log.create({ service: "provider" });
+  export type FlexibleSchema<T> = z.ZodType<T> | Record<string, any>
+  const log = Log.create({ service: "provider" })
 
   type CustomLoader = (
     provider: ModelsDev.Provider,
     api?: string,
   ) => Promise<{
-    autoload: boolean;
-    getModel?: (sdk: any, modelID: string) => Promise<any>;
-    options?: Record<string, any>;
-  }>;
+    autoload: boolean
+    getModel?: (sdk: any, modelID: string) => Promise<any>
+    options?: Record<string, any>
+  }>
 
-  type Source = "env" | "config" | "custom" | "api";
+  type Source = "env" | "config" | "custom" | "api"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic(provider) {
-      const access = await AuthAnthropic.access();
-      if (!access) return { autoload: false };
+      const access = await AuthAnthropic.access()
+      if (!access) return { autoload: false }
       for (const model of Object.values(provider.models)) {
         model.cost = {
           input: 0,
           output: 0,
-        };
+        }
       }
       return {
         autoload: true,
         options: {
           apiKey: "",
           async fetch(input: any, init: any) {
-            const access = await AuthAnthropic.access();
+            const access = await AuthAnthropic.access()
             const headers = {
               ...init.headers,
               authorization: `Bearer ${access}`,
               "anthropic-beta": "oauth-2025-04-20",
-            };
-            delete headers["x-api-key"];
+            }
+            delete headers["x-api-key"]
             return fetch(input, {
               ...init,
               headers,
-            });
+            })
           },
         },
-      };
+      }
     },
     "github-copilot": async (provider) => {
-      const copilot = await AuthCopilot();
-      if (!copilot) return { autoload: false };
-      let info = await Auth.get("github-copilot");
-      if (!info || info.type !== "oauth") return { autoload: false };
+      const copilot = await AuthCopilot()
+      if (!copilot) return { autoload: false }
+      let info = await Auth.get("github-copilot")
+      if (!info || info.type !== "oauth") return { autoload: false }
 
       if (provider && provider.models) {
         for (const model of Object.values(provider.models)) {
           model.cost = {
             input: 0,
             output: 0,
-          };
+          }
         }
       }
 
@@ -80,34 +78,29 @@ export namespace Provider {
         options: {
           apiKey: "",
           async fetch(input: any, init: any) {
-            const info = await Auth.get("github-copilot");
-            if (!info || info.type !== "oauth") return;
+            const info = await Auth.get("github-copilot")
+            if (!info || info.type !== "oauth") return
             if (!info.access || info.expires < Date.now()) {
-              const tokens = await copilot.access(info.refresh);
+              const tokens = await copilot.access(info.refresh)
               if (!tokens) {
-                throw new Error("GitHub Copilot authentication expired");
+                throw new Error("GitHub Copilot authentication expired")
               }
               await Auth.set("github-copilot", {
                 type: "oauth",
                 ...tokens,
-              });
-              info.access = tokens.access;
+              })
+              info.access = tokens.access
             }
-            let isAgentCall = false;
-            let isVisionRequest = false;
+            let isAgentCall = false
+            let isVisionRequest = false
             try {
-              const body = typeof init.body === "string"
-                ? JSON.parse(init.body)
-                : init.body;
+              const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body
               if (body?.messages) {
-                isAgentCall = body.messages.some((msg: any) =>
-                  msg.role && ["tool", "assistant"].includes(msg.role)
-                );
+                isAgentCall = body.messages.some((msg: any) => msg.role && ["tool", "assistant"].includes(msg.role))
                 isVisionRequest = body.messages.some(
                   (msg: any) =>
-                    Array.isArray(msg.content) &&
-                    msg.content.some((part: any) => part.type === "image_url"),
-                );
+                    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
+                )
               }
             } catch {}
             const headers: Record<string, string> = {
@@ -116,27 +109,27 @@ export namespace Provider {
               Authorization: `Bearer ${info.access}`,
               "Openai-Intent": "conversation-edits",
               "X-Initiator": isAgentCall ? "agent" : "user",
-            };
-            if (isVisionRequest) {
-              headers["Copilot-Vision-Request"] = "true";
             }
-            delete headers["x-api-key"];
+            if (isVisionRequest) {
+              headers["Copilot-Vision-Request"] = "true"
+            }
+            delete headers["x-api-key"]
             return fetch(input, {
               ...init,
               headers,
-            });
+            })
           },
         },
-      };
+      }
     },
     openai: async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID);
+          return sdk.responses(modelID)
         },
         options: {},
-      };
+      }
     },
     azure: async () => {
       return {
@@ -153,14 +146,12 @@ export namespace Provider {
         !process.env["AWS_ACCESS_KEY_ID"] &&
         !process.env["AWS_BEARER_TOKEN_BEDROCK"]
       ) {
-        return { autoload: false };
+        return { autoload: false }
       }
 
-      const region = process.env["AWS_REGION"] ?? "us-east-1";
+      const region = process.env["AWS_REGION"] ?? "us-east-1"
 
-      const { fromNodeProviderChain } = await import(
-        await BunProc.install("@aws-sdk/credential-providers")
-      );
+      const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
@@ -168,17 +159,15 @@ export namespace Provider {
           credentialProvider: fromNodeProviderChain(),
         },
         async getModel(sdk: any, modelID: string) {
-          let regionPrefix = region.split("-")[0];
+          let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = ["claude", "deepseek"].some((m) =>
-                modelID.includes(m)
-              );
+              const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
               if (modelRequiresPrefix) {
-                modelID = `${regionPrefix}.${modelID}`;
+                modelID = `${regionPrefix}.${modelID}`
               }
-              break;
+              break
             }
             case "eu": {
               const regionRequiresPrefix = [
@@ -188,37 +177,30 @@ export namespace Provider {
                 "eu-central-1",
                 "eu-south-1",
                 "eu-south-2",
-              ].some((r) => region.includes(r));
-              const modelRequiresPrefix = [
-                "claude",
-                "nova-lite",
-                "nova-micro",
-                "llama3",
-                "pixtral",
-              ].some((m) => modelID.includes(m));
+              ].some((r) => region.includes(r))
+              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
+                modelID.includes(m),
+              )
               if (regionRequiresPrefix && modelRequiresPrefix) {
-                modelID = `${regionPrefix}.${modelID}`;
+                modelID = `${regionPrefix}.${modelID}`
               }
-              break;
+              break
             }
             case "ap": {
-              const modelRequiresPrefix = [
-                "claude",
-                "nova-lite",
-                "nova-micro",
-                "nova-pro",
-              ].some((m) => modelID.includes(m));
+              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                modelID.includes(m),
+              )
               if (modelRequiresPrefix) {
-                regionPrefix = "apac";
-                modelID = `${regionPrefix}.${modelID}`;
+                regionPrefix = "apac"
+                modelID = `${regionPrefix}.${modelID}`
               }
-              break;
+              break
             }
           }
 
-          return sdk.languageModel(modelID);
+          return sdk.languageModel(modelID)
         },
-      };
+      }
     },
     openrouter: async () => {
       return {
@@ -229,7 +211,7 @@ export namespace Provider {
             "X-Title": "opencode",
           },
         },
-      };
+      }
     },
     vercel: async () => {
       return {
@@ -245,24 +227,21 @@ export namespace Provider {
   }
 
   const state = App.state("provider", async () => {
-    const config = await Config.get();
-    const database = await ModelsDev.get();
+    const config = await Config.get()
+    const database = await ModelsDev.get()
 
     const providers: {
       [providerID: string]: {
-        source: Source;
-        info: ModelsDev.Provider;
-        getModel?: (sdk: any, modelID: string) => Promise<any>;
-        options: Record<string, any>;
-      };
-    } = {};
-    const models = new Map<
-      string,
-      { info: ModelsDev.Model; language: LanguageModel }
-    >();
-    const sdk = new Map<string, SDK>();
+        source: Source
+        info: ModelsDev.Provider
+        getModel?: (sdk: any, modelID: string) => Promise<any>
+        options: Record<string, any>
+      }
+    } = {}
+    const models = new Map<string, { info: ModelsDev.Model; language: LanguageModel }>()
+    const sdk = new Map<string, SDK>()
 
-    log.info("init");
+    log.info("init")
 
     function mergeProvider(
       id: string,
@@ -270,28 +249,28 @@ export namespace Provider {
       source: Source,
       getModel?: (sdk: any, modelID: string) => Promise<any>,
     ) {
-      const provider = providers[id];
+      const provider = providers[id]
       if (!provider) {
-        const info = database[id];
-        if (!info) return;
-        if (info.api && !options["baseURL"]) options["baseURL"] = info.api;
+        const info = database[id]
+        if (!info) return
+        if (info.api && !options["baseURL"]) options["baseURL"] = info.api
         providers[id] = {
           source,
           info,
           options,
           getModel,
-        };
-        return;
+        }
+        return
       }
-      provider.options = mergeDeep(provider.options, options);
-      provider.source = source;
-      provider.getModel = getModel ?? provider.getModel;
+      provider.options = mergeDeep(provider.options, options)
+      provider.source = source
+      provider.getModel = getModel ?? provider.getModel
     }
 
-    const configProviders = Object.entries(config.provider ?? {});
+    const configProviders = Object.entries(config.provider ?? {})
 
     for (const [providerID, provider] of configProviders) {
-      const existing = database[providerID];
+      const existing = database[providerID]
       const parsed: ModelsDev.Provider = {
         id: providerID,
         npm: provider.npm ?? existing?.npm,
@@ -299,10 +278,10 @@ export namespace Provider {
         env: provider.env ?? existing?.env ?? [],
         api: provider.api ?? existing?.api,
         models: existing?.models ?? {},
-      };
+      }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[modelID];
+        const existing = parsed.models[modelID]
         const parsedModel: ModelsDev.Model = {
           id: modelID,
           name: model.name ?? existing?.name ?? modelID,
@@ -337,91 +316,84 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
-      database[providerID] = parsed;
+      database[providerID] = parsed
     }
 
-    const disabled = await Config.get().then((cfg) =>
-      new Set(cfg.disabled_providers ?? [])
-    );
+    const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue;
-      const apiKey = provider.env.map((item) => process.env[item]).at(0);
-      if (!apiKey) continue;
+      if (disabled.has(providerID)) continue
+      const apiKey = provider.env.map((item) => process.env[item]).at(0)
+      if (!apiKey) continue
       mergeProvider(
         providerID,
         // only include apiKey if there's only one potential option
         provider.env.length === 1 ? { apiKey } : {},
         "env",
-      );
+      )
     }
 
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue;
+      if (disabled.has(providerID)) continue
       if (provider.type === "api") {
-        mergeProvider(providerID, { apiKey: provider.key }, "api");
+        mergeProvider(providerID, { apiKey: provider.key }, "api")
       }
     }
 
     // load custom
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue;
-      const result = await fn(database[providerID]);
+      if (disabled.has(providerID)) continue
+      const result = await fn(database[providerID])
       if (result && (result.autoload || providers[providerID])) {
-        mergeProvider(
-          providerID,
-          result.options ?? {},
-          "custom",
-          result.getModel,
-        );
+        mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
       }
     }
 
     // load config
     for (const [providerID, provider] of configProviders) {
-      mergeProvider(providerID, provider.options ?? {}, "config");
+      mergeProvider(providerID, provider.options ?? {}, "config")
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
       if (Object.keys(provider.info.models).length === 0) {
-        delete providers[providerID];
-        continue;
+        delete providers[providerID]
+        continue
       }
-      log.info("found", { providerID });
+      log.info("found", { providerID })
     }
 
     return {
       models,
       providers,
       sdk,
-    };
-  });
+    }
+  })
 
   export async function list() {
-    return state().then((state) => state.providers);
+    return state().then((state) => state.providers)
   }
 
   async function getSDK(provider: ModelsDev.Provider) {
     return (async () => {
       using _ = log.time("getSDK", {
         providerID: provider.id,
-      });
-      const s = await state();
-      const existing = s.sdk.get(provider.id);
-      if (existing) return existing;
-      const pkg = provider.npm ?? provider.id;
-      const mod = await import(await BunProc.install(pkg, "beta"));
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!];
+      })
+      const s = await state()
+      const existing = s.sdk.get(provider.id)
+      if (existing) return existing
+      const pkg = provider.npm ?? provider.id
+      const mod = await import(await BunProc.install(pkg, "beta"))
+      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
         ...s.providers[provider.id]?.options,
-      });
-      s.sdk.set(provider.id, loaded);
-      return loaded as SDK;
+      })
+      s.sdk.set(provider.id, loaded)
+      return loaded as SDK
     })().catch((e) => {
-      throw new InitError({ providerID: provider.id }, { cause: e });
-    });
+      throw new InitError({ providerID: provider.id }, { cause: e })
+    })
   }
 
   export async function getProvider(providerID: string) {
@@ -429,34 +401,32 @@ export namespace Provider {
   }
 
   export async function getModel(providerID: string, modelID: string) {
-    const key = `${providerID}/${modelID}`;
-    const s = await state();
-    if (s.models.has(key)) return s.models.get(key)!;
+    const key = `${providerID}/${modelID}`
+    const s = await state()
+    if (s.models.has(key)) return s.models.get(key)!
 
     log.info("getModel", {
       providerID,
       modelID,
-    });
+    })
 
-    const provider = s.providers[providerID];
-    if (!provider) throw new ModelNotFoundError({ providerID, modelID });
-    const info = provider.info.models[modelID];
-    if (!info) throw new ModelNotFoundError({ providerID, modelID });
-    const sdk = await getSDK(provider.info);
+    const provider = s.providers[providerID]
+    if (!provider) throw new ModelNotFoundError({ providerID, modelID })
+    const info = provider.info.models[modelID]
+    if (!info) throw new ModelNotFoundError({ providerID, modelID })
+    const sdk = await getSDK(provider.info)
 
     try {
-      const language = provider.getModel
-        ? await provider.getModel(sdk, modelID)
-        : sdk.languageModel(modelID);
-      log.info("found", { providerID, modelID });
+      const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
+      log.info("found", { providerID, modelID })
       s.models.set(key, {
         info,
         language,
-      });
+      })
       return {
         info,
         language,
-      };
+      }
     } catch (e) {
       if (e instanceof NoSuchModelError) {
         throw new ModelNotFoundError(
@@ -465,68 +435,61 @@ export namespace Provider {
             providerID,
           },
           { cause: e },
-        );
+        )
       }
-      throw e;
+      throw e
     }
   }
 
   export async function getSmallModel(providerID: string) {
-    const cfg = await Config.get();
+    const cfg = await Config.get()
 
     if (cfg.small_model) {
-      const parsed = parseModel(cfg.small_model);
-      return getModel(parsed.providerID, parsed.modelID);
+      const parsed = parseModel(cfg.small_model)
+      return getModel(parsed.providerID, parsed.modelID)
     }
 
-    const provider = await state().then((state) => state.providers[providerID]);
-    if (!provider) return;
-    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"];
+    const provider = await state().then((state) => state.providers[providerID])
+    if (!provider) return
+    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"]
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
-        if (model.includes(item)) return getModel(providerID, model);
+        if (model.includes(item)) return getModel(providerID, model)
       }
     }
   }
 
-  const priority = ["gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"];
+  const priority = ["gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
-      [
-        (model) => priority.findIndex((filter) => model.id.includes(filter)),
-        "desc",
-      ],
+      [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],
-    );
+    )
   }
 
   export async function defaultModel() {
-    const cfg = await Config.get();
-    if (cfg.model) return parseModel(cfg.model);
+    const cfg = await Config.get()
+    if (cfg.model) return parseModel(cfg.model)
     const provider = await list()
       .then((val) => Object.values(val))
-      .then((x) =>
-        x.find((p) =>
-          !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)
-        )
-      );
-    if (!provider) throw new Error("no providers found");
-    const [model] = sort(Object.values(provider.info.models));
-    if (!model) throw new Error("no models found");
+      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))
+    if (!provider) throw new Error("no providers found")
+    const [model] = sort(Object.values(provider.info.models))
+    if (!model) throw new Error("no models found")
     return {
       providerID: provider.info.id,
       modelID: model.id,
-    };
+    }
   }
 
   export function parseModel(model: string) {
-    const [providerID, ...rest] = model.split("/");
+    const [providerID, ...rest] = model.split("/")
     return {
       providerID: providerID,
       modelID: rest.join("/"),
-    };
+    }
   }
 
   export const ModelNotFoundError = NamedError.create(
@@ -535,12 +498,38 @@ export namespace Provider {
       providerID: z.string(),
       modelID: z.string(),
     }),
-  );
+  )
 
   export const InitError = NamedError.create(
     "ProviderInitError",
     z.object({
       providerID: z.string(),
     }),
-  );
+  )
+
+  export function transformToolSchema(schema: FlexibleSchema<any>, providerID: string): Record<string, any> | null {
+    try {
+      let jsonSchema: Record<string, any>
+
+      // If it's already a JSON schema object, use it directly
+      if (typeof schema === "object" && !("_def" in schema)) {
+        jsonSchema = schema as Record<string, any>
+      } else {
+        // Convert Zod schema to JSON schema
+        jsonSchema = zodToJsonSchema(schema as z.ZodType<any>, {
+          target: "jsonSchema7",
+        })
+      }
+
+      // Apply provider-specific transformations
+      if (providerID === "google") {
+        return sanitizeGeminiJsonSchema(jsonSchema)
+      }
+
+      return jsonSchema
+    } catch (error) {
+      log.warn("Failed to transform tool schema", { error, providerID })
+      return null
+    }
+  }
 }
