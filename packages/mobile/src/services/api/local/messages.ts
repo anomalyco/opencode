@@ -41,9 +41,18 @@ class MessageRepository {
   }
 
   async deleteMessage(id: string) {
+    // Get the session ID before deleting
+    const message = await this.getMessage(id)
+    if (!message) return
+
     // Delete related parts first
     await db.delete(messageParts).where(eq(messageParts.messageId, id))
-    return await db.delete(messages).where(eq(messages.id, id))
+    const result = await db.delete(messages).where(eq(messages.id, id))
+
+    // Update session aggregates
+    await this.updateSessionAggregates(message.sessionId)
+
+    return result
   }
 
   async getMessageParts(messageId: string) {
@@ -75,6 +84,42 @@ class MessageRepository {
 
   async deleteMessagePart(id: string) {
     return await db.delete(messageParts).where(eq(messageParts.id, id))
+  }
+
+  async updateSessionAggregates(sessionId: string) {
+    // Get all messages for this session
+    const sessionMessages = await db.select().from(messages).where(eq(messages.sessionId, sessionId))
+
+    // Calculate aggregates
+    const aggregates = sessionMessages.reduce(
+      (acc, message) => ({
+        totalCost: acc.totalCost + (message.cost || 0),
+        totalTokensInput: acc.totalTokensInput + (message.tokensInput || 0),
+        totalTokensOutput: acc.totalTokensOutput + (message.tokensOutput || 0),
+        totalTokensReasoning: acc.totalTokensReasoning + (message.tokensReasoning || 0),
+        totalTokensCacheRead: acc.totalTokensCacheRead + (message.tokensCacheRead || 0),
+        totalTokensCacheWrite: acc.totalTokensCacheWrite + (message.tokensCacheWrite || 0),
+        messageCount: acc.messageCount + 1,
+      }),
+      {
+        totalCost: 0,
+        totalTokensInput: 0,
+        totalTokensOutput: 0,
+        totalTokensReasoning: 0,
+        totalTokensCacheRead: 0,
+        totalTokensCacheWrite: 0,
+        messageCount: 0,
+      },
+    )
+
+    // Update session with aggregated values
+    return await db
+      .update(sessions)
+      .set({
+        ...aggregates,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, sessionId))
   }
 
   async upsertMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
@@ -155,6 +200,12 @@ class MessageRepository {
           providerId: message.providerId,
           modelId: message.modelId,
           mode: message.mode,
+          cost: message.cost,
+          tokensInput: message.tokensInput,
+          tokensOutput: message.tokensOutput,
+          tokensReasoning: message.tokensReasoning,
+          tokensCacheRead: message.tokensCacheRead,
+          tokensCacheWrite: message.tokensCacheWrite,
           isSynced: message.isSynced,
           lastSyncTimestamp: message.lastSyncTimestamp,
           updatedAt: new Date(),
@@ -163,8 +214,8 @@ class MessageRepository {
       })
       .returning()
 
-    // Update session's updatedAt timestamp to reflect recent activity
-    await db.update(sessions).set({ updatedAt: new Date() }).where(eq(sessions.id, message.sessionId))
+    // Update session aggregates
+    await this.updateSessionAggregates(message.sessionId)
 
     return result
   }

@@ -50,6 +50,13 @@ class SessionRepository {
           revertPartId: session.revertPartId,
           revertSnapshot: session.revertSnapshot,
           revertDiff: session.revertDiff,
+          totalCost: session.totalCost,
+          totalTokensInput: session.totalTokensInput,
+          totalTokensOutput: session.totalTokensOutput,
+          totalTokensReasoning: session.totalTokensReasoning,
+          totalTokensCacheRead: session.totalTokensCacheRead,
+          totalTokensCacheWrite: session.totalTokensCacheWrite,
+          messageCount: session.messageCount,
           isSynced: session.isSynced,
           lastSyncTimestamp: session.lastSyncTimestamp,
           updatedAt,
@@ -91,6 +98,46 @@ class SessionRepository {
 
   async getUnsyncedSessions() {
     return await db.select().from(sessions).where(eq(sessions.isSynced, false))
+  }
+
+  async recalculateAllSessionAggregates() {
+    const allSessions = await db.select().from(sessions)
+
+    for (const session of allSessions) {
+      // Get all messages for this session
+      const sessionMessages = await db.select().from(messages).where(eq(messages.sessionId, session.id))
+
+      // Calculate aggregates
+      const aggregates = sessionMessages.reduce(
+        (acc, message) => ({
+          totalCost: acc.totalCost + (message.cost || 0),
+          totalTokensInput: acc.totalTokensInput + (message.tokensInput || 0),
+          totalTokensOutput: acc.totalTokensOutput + (message.tokensOutput || 0),
+          totalTokensReasoning: acc.totalTokensReasoning + (message.tokensReasoning || 0),
+          totalTokensCacheRead: acc.totalTokensCacheRead + (message.tokensCacheRead || 0),
+          totalTokensCacheWrite: acc.totalTokensCacheWrite + (message.tokensCacheWrite || 0),
+          messageCount: acc.messageCount + 1,
+        }),
+        {
+          totalCost: 0,
+          totalTokensInput: 0,
+          totalTokensOutput: 0,
+          totalTokensReasoning: 0,
+          totalTokensCacheRead: 0,
+          totalTokensCacheWrite: 0,
+          messageCount: 0,
+        },
+      )
+
+      // Update session with aggregated values
+      await db
+        .update(sessions)
+        .set({
+          ...aggregates,
+          updatedAt: new Date(),
+        })
+        .where(eq(sessions.id, session.id))
+    }
   }
 }
 
@@ -185,6 +232,17 @@ export function useUpsertLocalSessionMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(session.id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.unsynced() })
+    },
+  })
+}
+
+export function useRecalculateSessionAggregatesMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => sessionRepo.recalculateAllSessionAggregates(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
     },
   })
 }

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core"
 
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(), // session ID from server
@@ -14,6 +14,15 @@ export const sessions = sqliteTable("sessions", {
   revertPartId: text("revert_part_id"),
   revertSnapshot: text("revert_snapshot"),
   revertDiff: text("revert_diff"),
+
+  // Aggregated cost and token usage
+  totalCost: real("total_cost").default(0),
+  totalTokensInput: integer("total_tokens_input").default(0),
+  totalTokensOutput: integer("total_tokens_output").default(0),
+  totalTokensReasoning: integer("total_tokens_reasoning").default(0),
+  totalTokensCacheRead: integer("total_tokens_cache_read").default(0),
+  totalTokensCacheWrite: integer("total_tokens_cache_write").default(0),
+  messageCount: integer("message_count").default(0),
 
   // Local metadata
   isSynced: integer("is_synced", { mode: "boolean" }).default(false),

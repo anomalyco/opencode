@@ -95,7 +95,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           onRefresh={onRefresh}
           refreshing={refreshing}
         />
-        <ChatHeader sessionTitle={session?.title} onNewSessionPress={handleNewSession} />
+        <ChatHeader sessionTitle={session?.title} session={session} onNewSessionPress={handleNewSession} />
         <MessageInput onSend={handleSendMessage} />
       </Box>
     </KeyboardAvoidingView>

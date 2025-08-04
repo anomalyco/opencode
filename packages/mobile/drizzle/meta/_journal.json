@@ -8,6 +8,13 @@
       "when": 1754195261397,
       "tag": "0000_green_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1754295610863,
+      "tag": "0001_brown_guardian",
+      "breakpoints": true
     }
   ]
 }
