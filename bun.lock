@@ -10,7 +10,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "0.3.126",
+      "version": "0.3.127",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "22.0.0",
@@ -25,7 +25,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "0.3.126",
+      "version": "0.3.127",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -78,7 +78,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "0.3.126",
+      "version": "0.3.127",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.80.1",
         "@opencode-ai/sdk": "workspace:*",
@@ -88,7 +88,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "0.3.126",
+      "version": "0.3.127",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.80.1",
         "@tsconfig/node22": "catalog:",
@@ -97,7 +97,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "0.3.126",
+      "version": "0.3.127",
       "dependencies": {
         "@astrojs/cloudflare": "^12.5.4",
         "@astrojs/markdown-remark": "6.3.1",
