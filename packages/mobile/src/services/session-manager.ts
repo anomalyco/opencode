@@ -72,7 +72,6 @@ export class SessionManager {
 
       return remoteSession.id
     } catch (error) {
-      console.error("Failed to create session:", error)
       throw error
     }
   }
@@ -84,7 +83,6 @@ export class SessionManager {
       const sessionId = await this.createNewSession(title)
       router.push(`/chat/${sessionId}`)
     } catch (error) {
-      console.error("Failed to navigate to new session:", error)
       throw error
     }
   }

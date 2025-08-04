@@ -119,7 +119,6 @@ export const SessionDialog = forwardRef<SessionDialogRef, SessionDialogProps>(({
       bottomSheetRef.current?.dismiss()
       onClose()
     } catch (error) {
-      console.error("Failed to create new session:", error)
       Alert.alert("Error", "Failed to create new session")
     } finally {
       setIsCreating(false)
@@ -158,7 +157,6 @@ export const SessionDialog = forwardRef<SessionDialogRef, SessionDialogProps>(({
         // Refresh the list
         refetch()
       } catch (error) {
-        console.error("Failed to delete session:", error)
         Alert.alert("Error", "Failed to delete session")
       }
     },

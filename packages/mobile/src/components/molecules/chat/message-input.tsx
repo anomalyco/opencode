@@ -6,7 +6,7 @@ import { useUnistyles } from "react-native-unistyles"
 import { Feather } from "@expo/vector-icons"
 
 interface MessageInputProps {
-  onSend: (content: string) => void
+  onSend: (content: string) => Promise<void>
   disabled?: boolean
 }
 
@@ -29,12 +29,19 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
     }
   }, [])
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     if (text.trim() && !disabled) {
-      onSend(text.trim())
-      setText("")
+      const messageText = text.trim()
+      setText("") // Clear immediately
+      try {
+        await onSend(messageText)
+      } catch (error) {
+        // Restore text on error
+        setText(messageText)
+      }
     }
   }, [text, onSend, disabled])
+  console.log("rerender")
 
   return (
     <BlurView
@@ -49,7 +56,17 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
     >
       <Box p="sm" safeAreaBottom={!keyboardVisible}>
         <Box direction="row" alignItems="flex-end" gap="sm">
-          <Box flex background="dark" rounded="xl" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <Box
+            flex
+            background="dark"
+            rounded="xl"
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderWidth: 0.1,
+              borderColor: "transparent",
+            }}
+          >
             <TextInput
               value={text}
               onChangeText={setText}

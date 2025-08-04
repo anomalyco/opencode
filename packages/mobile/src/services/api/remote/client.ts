@@ -41,7 +41,6 @@ export class ApiClient {
         }
       } catch (error) {
         // If we can't get server URL quickly, skip it
-        console.warn("Failed to get server URL:", error)
       }
       return config
     })

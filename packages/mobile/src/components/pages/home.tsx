@@ -32,7 +32,6 @@ export const HomePage = () => {
     try {
       await Promise.all([refetchSessions(), refetchAppInfo(), fullSyncMutation.mutateAsync()])
     } catch (error) {
-      console.error("Failed to refresh data:", error)
     } finally {
       setRefreshing(false)
     }
@@ -41,9 +40,7 @@ export const HomePage = () => {
   const handleNewSession = useCallback(async () => {
     try {
       await sessionManager.navigateToNewSession()
-    } catch (error) {
-      console.error("Failed to create new session:", error)
-    }
+    } catch (error) {}
   }, [sessionManager])
 
   const handleSessionPress = (sessionId: string) => {

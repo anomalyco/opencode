@@ -45,22 +45,14 @@ export class ChatService {
     }
 
     this.syncInProgress.add(sessionId)
-    console.log(`[ChatService] Syncing ${remoteMessages.length} messages for session ${sessionId}`)
 
     try {
       for (const remoteMessage of remoteMessages) {
-        console.log(
-          `[ChatService] Syncing message ${remoteMessage.info.id} with ${remoteMessage.parts?.length || 0} parts`,
-        )
         await this.syncSingleMessage(remoteMessage, upsertLocalMessage, upsertLocalMessagePart)
       }
-      console.log(`[ChatService] Successfully synced all messages for session ${sessionId}`)
     } catch (error) {
-      console.error(`Failed to sync messages for session ${sessionId}:`, error)
-
       // Handle specific error types gracefully
       if (this.isRecoverableError(error)) {
-        console.log(`[ChatService] Recoverable error, continuing...`)
         return
       }
 
@@ -78,29 +70,14 @@ export class ChatService {
     upsertLocalMessage: any,
     upsertLocalMessagePart: any,
   ): Promise<void> {
-    console.log(`[ChatService] Processing message:`, {
-      messageId: remoteMessage.info?.id,
-      role: remoteMessage.info?.role,
-      partsCount: remoteMessage.parts?.length || 0,
-      firstPartType: remoteMessage.parts?.[0]?.type,
-      firstPartText: remoteMessage.parts?.[0]?.text?.substring(0, 50),
-    })
-
     const localMessage = this.transformRemoteToLocalMessage(remoteMessage)
-    console.log(`[ChatService] Transformed message:`, {
-      id: localMessage.id,
-      role: localMessage.role,
-      timeCreated: localMessage.timeCreated,
-    })
 
     try {
       await upsertLocalMessage.mutateAsync(localMessage)
-      console.log(`[ChatService] Message upserted successfully`)
 
       // Sync message parts if they exist - use batching for large messages
       if (remoteMessage.parts && Array.isArray(remoteMessage.parts)) {
         const partsCount = remoteMessage.parts.length
-        console.log(`[ChatService] Processing ${partsCount} parts`)
 
         if (partsCount > 50) {
           // Batch process large messages to prevent UI blocking
@@ -109,15 +86,10 @@ export class ChatService {
           // Process smaller messages normally
           await this.syncMessagePartsSequential(remoteMessage.parts, upsertLocalMessagePart)
         }
-      } else {
-        console.log(`[ChatService] No parts to sync for message ${remoteMessage.info.id}`)
       }
     } catch (error) {
-      console.error(`Failed to sync message ${remoteMessage.info.id}:`, error)
-
       // Handle specific error types
       if (this.isRecoverableError(error)) {
-        console.log(`[ChatService] Recoverable error for message ${remoteMessage.info.id}, skipping...`)
         return
       }
 
@@ -242,7 +214,6 @@ export class ChatService {
         data: request,
       })
     } catch (error) {
-      console.error(`Failed to send message to session ${sessionId}:`, error)
       throw error
     }
   }
@@ -299,16 +270,7 @@ export class ChatService {
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
       const localPart = this.transformRemoteToLocalPart(part, i)
-      console.log(`[ChatService] Transformed part ${i}:`, {
-        id: localPart.id,
-        type: localPart.type,
-        textContent: localPart.textContent?.substring(0, 50),
-        messageId: localPart.messageId,
-        timeStart: localPart.timeStart,
-        originalTime: part.time?.start,
-      })
       await upsertLocalMessagePart.mutateAsync(localPart)
-      console.log(`[ChatService] Part ${i} upserted successfully`)
     }
   }
 
@@ -319,13 +281,8 @@ export class ChatService {
     const BATCH_SIZE = 10
     const BATCH_DELAY = 50 // ms delay between batches
 
-    console.log(`[ChatService] Processing ${parts.length} parts in batches of ${BATCH_SIZE}`)
-
     for (let i = 0; i < parts.length; i += BATCH_SIZE) {
       const batch = parts.slice(i, i + BATCH_SIZE)
-      console.log(
-        `[ChatService] Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(parts.length / BATCH_SIZE)}`,
-      )
 
       // Process batch in parallel
       const batchPromises = batch.map(async (part, batchIndex) => {
@@ -334,10 +291,8 @@ export class ChatService {
 
         try {
           await upsertLocalMessagePart.mutateAsync(localPart)
-          console.log(`[ChatService] Part ${globalIndex} upserted successfully`)
         } catch (error) {
           if (this.isRecoverableError(error)) {
-            console.log(`[ChatService] Recoverable error for part ${globalIndex}, skipping...`)
             return
           }
           throw error

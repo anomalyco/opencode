@@ -10,10 +10,7 @@ const db = drizzle(expo)
 // Run migrations on app start
 try {
   migrate(db, migrations)
-  console.log("✅ Local database migrations completed")
-} catch (error) {
-  console.error("❌ Local database migration failed:", error)
-}
+} catch (error) {}
 
 // Export the single instance
 export default db

@@ -84,16 +84,13 @@ export class SyncService {
               updatedAt: new Date(),
             })
             .where(eq(sessions.id, session.id))
-        } catch (error) {
-          console.error(`Failed to sync session ${session.id}:`, error)
-        }
+        } catch (error) {}
       }
 
       // Refresh all session queries
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.remote.sessions.all })
     } catch (error) {
-      console.error("Failed to sync sessions:", error)
       throw error
     }
   }
@@ -148,14 +145,11 @@ export class SyncService {
                 updatedAt: new Date(),
               },
             })
-        } catch (error) {
-          console.error(`Failed to sync session ${remoteSession.id} from remote:`, error)
-        }
+        } catch (error) {}
       }
 
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
     } catch (error) {
-      console.error("Failed to sync sessions from remote:", error)
       throw error
     }
   }

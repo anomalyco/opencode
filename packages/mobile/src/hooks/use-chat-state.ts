@@ -43,8 +43,6 @@ export interface ChatState {
 }
 
 export const useChatState = (sessionId: string): ChatState => {
-  console.log(`[useChatState] Hook called for session: ${sessionId}`)
-
   const queryClient = useQueryClient()
 
   // Local state
@@ -52,33 +50,20 @@ export const useChatState = (sessionId: string): ChatState => {
   const [error, setError] = useState<string | null>(null)
   const [hasSyncedRemote, setHasSyncedRemote] = useState(false)
 
-  // Refs for cleanup
+  // Refs for cleanup and throttling
   const streamingTimeoutRef = useRef<number | null>(null)
   const sseUnsubscribeRef = useRef<(() => void) | null>(null)
+  const lastUpdateRef = useRef<number>(0)
+  const updateThrottleRef = useRef<number | null>(null)
 
   // Data queries
   const { data: messages, isLoading, refetch: refetchMessages } = useLocalMessagesQuery(sessionId)
   const { data: session } = useLocalSessionQuery(sessionId)
-  const { data: remoteMessages, error: remoteError } = useRemoteMessagesQuery(sessionId)
+  const { data: remoteMessages } = useRemoteMessagesQuery(sessionId)
 
   // Mutations for direct database updates
   const upsertMessageMutation = useUpsertLocalMessageMutation()
   const upsertPartMutation = useUpsertLocalMessagePartMutation()
-
-  // Debug remote messages
-  console.log(`[useChatState] Remote query result:`, {
-    remoteMessages: remoteMessages?.length || 0,
-    remoteError,
-    firstMessage: remoteMessages?.[0]
-      ? {
-          hasInfo: !!remoteMessages[0].info,
-          hasParts: !!remoteMessages[0].parts,
-          partsCount: remoteMessages[0].parts?.length || 0,
-          infoId: remoteMessages[0].info?.id,
-          firstPartType: remoteMessages[0].parts?.[0]?.type,
-        }
-      : null,
-  })
 
   // Services
   const chatService = useChatService()
@@ -91,8 +76,6 @@ export const useChatState = (sessionId: string): ChatState => {
     async (properties: any) => {
       const messageInfo = properties?.info
       if (!messageInfo || messageInfo.sessionID !== sessionId) return
-
-      console.log("[useChatState] Handling message.updated directly:", messageInfo.id)
 
       try {
         // Transform message info to local format
@@ -123,11 +106,18 @@ export const useChatState = (sessionId: string): ChatState => {
         }
         // Upsert message directly to database
         await upsertMessageMutation.mutateAsync(localMessage)
-        // Invalidate local messages query to trigger re-render
-        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
-      } catch (error) {
-        console.error("[useChatState] Error handling message.updated:", error)
-      }
+        // Use setQueryData instead of invalidateQueries for better performance
+        queryClient.setQueryData(queryKeys.local.messages.list(sessionId), (oldData: any) => {
+          if (!oldData) return oldData
+          const existingIndex = oldData.findIndex((msg: any) => msg.id === localMessage.id)
+          if (existingIndex >= 0) {
+            const newData = [...oldData]
+            newData[existingIndex] = localMessage
+            return newData
+          }
+          return [...oldData, localMessage]
+        })
+      } catch (error) {}
     },
     [sessionId, chatService, queryClient],
   )
@@ -137,8 +127,6 @@ export const useChatState = (sessionId: string): ChatState => {
     async (properties: any) => {
       const partInfo = properties?.part
       if (!partInfo || partInfo.sessionID !== sessionId) return
-
-      console.log("[useChatState] Handling message.part.updated directly:", partInfo.id)
 
       try {
         // Transform part info to local format
@@ -192,11 +180,23 @@ export const useChatState = (sessionId: string): ChatState => {
         }
         // Upsert part directly to database
         await upsertPartMutation.mutateAsync(localPart)
-        // Invalidate local messages query to trigger re-render
-        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
-      } catch (error) {
-        console.error("[useChatState] Error handling message.part.updated:", error)
-      }
+
+        // Throttle UI updates during streaming to prevent performance issues
+        const now = Date.now()
+        if (now - lastUpdateRef.current > 200) {
+          // Max 5 updates per second
+          lastUpdateRef.current = now
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
+        } else {
+          // Schedule a delayed update if we're throttling
+          if (updateThrottleRef.current) {
+            clearTimeout(updateThrottleRef.current)
+          }
+          updateThrottleRef.current = window.setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
+          }, 200)
+        }
+      } catch (error) {}
     },
     [sessionId, chatService, queryClient],
   )
@@ -206,31 +206,16 @@ export const useChatState = (sessionId: string): ChatState => {
     const currentCount = remoteMessages?.length || 0
     const lastSyncedCount = lastSyncedCountRef.current
 
-    console.log(
-      `[useChatState] Remote messages:`,
-      currentCount,
-      "lastSynced:",
-      lastSyncedCount,
-      "hasSyncedRemote:",
-      hasSyncedRemote,
-    )
-
     // Sync if we have new messages (count increased) or haven't synced yet
     if (remoteMessages && currentCount > 0 && (currentCount > lastSyncedCount || !hasSyncedRemote)) {
-      console.log(
-        `[useChatState] Starting sync for ${currentCount} remote messages (${currentCount - lastSyncedCount} new)`,
-      )
-
       chatService
         .syncRemoteMessages(sessionId, remoteMessages)
         .then(() => {
-          console.log(`[useChatState] Sync completed, refetching local messages`)
           lastSyncedCountRef.current = currentCount
           setHasSyncedRemote(true)
           refetchMessages()
         })
-        .catch((err) => {
-          console.error("Failed to sync remote messages:", err)
+        .catch(() => {
           setError("Failed to sync messages")
         })
     }
@@ -239,13 +224,6 @@ export const useChatState = (sessionId: string): ChatState => {
   // Handle SSE events for real-time updates
   useEffect(() => {
     const handleSSEEvent = (event: SSEEvent) => {
-      // Filter system prompts from logs
-      const logProps = { ...event.properties }
-      if ((logProps as any)?.info?.system) {
-        ;(logProps as any).info.system = "[SYSTEM_PROMPT_HIDDEN]"
-      }
-      console.log("[useChatState] SSE Event received:", event.type, logProps)
-
       switch (event.type) {
         case "session.idle":
           setIsStreaming(false)
@@ -258,7 +236,6 @@ export const useChatState = (sessionId: string): ChatState => {
           break
 
         case "message.updated":
-          console.log("[useChatState] Processing message.updated event")
           setIsStreaming(true)
           // Reset streaming timeout
           if (streamingTimeoutRef.current) {
@@ -273,7 +250,6 @@ export const useChatState = (sessionId: string): ChatState => {
           break
 
         case "message.part.updated":
-          console.log("[useChatState] Processing message.part.updated event")
           setIsStreaming(true)
           // Reset streaming timeout
           if (streamingTimeoutRef.current) {
@@ -285,63 +261,6 @@ export const useChatState = (sessionId: string): ChatState => {
 
           // Handle part update directly from SSE data
           handlePartUpdated(event.properties)
-          break
-
-        case "message.part.updated":
-          setIsStreaming(true)
-          // Reset streaming timeout
-          if (streamingTimeoutRef.current) {
-            window.clearTimeout(streamingTimeoutRef.current)
-          }
-          streamingTimeoutRef.current = window.setTimeout(() => {
-            setIsStreaming(false)
-          }, 30000) // 30 second timeout
-
-          // Directly sync streaming part using ChatService transformation
-          const streamingPartInfo = (event.properties as any)?.part
-          if (streamingPartInfo) {
-            console.log("[useChatState] Upserting streaming part:", streamingPartInfo.id, streamingPartInfo.type)
-            const fakeRemoteMessage = {
-              info: {
-                id: streamingPartInfo.messageID,
-                sessionID: streamingPartInfo.sessionID,
-                role: "assistant",
-                time: { created: Date.now() / 1000 },
-              },
-              parts: [streamingPartInfo],
-            }
-            chatService.syncRemoteMessages(sessionId, [fakeRemoteMessage]).catch(console.error)
-          }
-          break
-        case "message.part.updated":
-          setIsStreaming(true)
-          // Reset streaming timeout
-          if (streamingTimeoutRef.current) {
-            window.clearTimeout(streamingTimeoutRef.current)
-          }
-          streamingTimeoutRef.current = window.setTimeout(() => {
-            setIsStreaming(false)
-          }, 30000) // 30 second timeout
-
-          // Sync the streaming part data immediately
-          const partInfo = (event.properties as any)?.part
-          if (partInfo) {
-            console.log("[useChatState] Syncing streaming part:", partInfo.id, partInfo.type)
-            // Create a fake remote message structure with just this part
-            const fakeRemoteMessage = {
-              info: {
-                id: partInfo.messageID,
-                sessionID: partInfo.sessionID,
-                role: "assistant", // Parts are typically from assistant
-                time: { created: Date.now() / 1000 },
-              },
-              parts: [partInfo],
-            }
-            chatService
-              .syncRemoteMessages(sessionId, [fakeRemoteMessage])
-              .then(() => refetchMessages())
-              .catch(console.error)
-          }
           break
         case "session.error":
           setIsStreaming(false)
@@ -359,6 +278,9 @@ export const useChatState = (sessionId: string): ChatState => {
       }
       if (streamingTimeoutRef.current) {
         window.clearTimeout(streamingTimeoutRef.current)
+      }
+      if (updateThrottleRef.current) {
+        window.clearTimeout(updateThrottleRef.current)
       }
     }
   }, [sessionId, sseService, refetchMessages])

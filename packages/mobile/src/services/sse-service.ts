@@ -58,13 +58,11 @@ export class SSEService {
       // Get the configured server URL
       const serverUrl = await localConfigService.getServerUrl()
       if (!serverUrl) {
-        console.error("[SSE] No server URL configured")
         this.scheduleReconnect()
         return
       }
 
       const sseUrl = `${serverUrl}/event`
-      console.log("[SSE] Attempting to connect to:", sseUrl)
 
       this.eventSource = new EventSource(sseUrl, {
         pollingInterval: 0, // Disable automatic reconnections, we handle them manually
@@ -72,7 +70,6 @@ export class SSEService {
 
       this.eventSource.addEventListener("open", (event) => {
         if (event.type === "open") {
-          console.log("SSE connected")
           this.connected = true
           this.reconnectAttempts = 0
           this.startHeartbeat()
@@ -84,44 +81,25 @@ export class SSEService {
           try {
             const sseEvent: SSEEvent = JSON.parse(event.data || "{}")
 
-            // Filter out system prompts from logs to reduce noise
-            let logProperties = sseEvent.properties
-            if (sseEvent.type === "storage.write" && (sseEvent.properties as any)?.content?.system) {
-              // Skip logging storage.write events with system prompts entirely
-              console.log("[SSE] Received event:", sseEvent.type, "[SYSTEM_PROMPT_HIDDEN]")
-            } else if ((sseEvent.properties as any)?.info?.system) {
-              // Hide system prompt in message events
-              const filteredProps = { ...sseEvent.properties }
-              ;(filteredProps as any).info = { ...(filteredProps as any).info, system: "[SYSTEM_PROMPT_HIDDEN]" }
-              console.log("[SSE] Received event:", sseEvent.type, filteredProps)
-            } else {
-              console.log("[SSE] Received event:", sseEvent.type, logProperties)
-            }
             this.handleEvent(sseEvent)
-          } catch (error) {
-            console.error("Failed to parse SSE event:", error, "Raw data:", event.data)
-          }
+          } catch (error) {}
         }
       })
 
       this.eventSource.addEventListener("error", (event) => {
         if (event.type === "error") {
-          console.error("SSE connection error:", event.message)
           this.handleConnectionError()
         } else if (event.type === "exception") {
-          console.error("SSE exception:", event.message, event.error)
           this.handleConnectionError()
         }
       })
 
       this.eventSource.addEventListener("close", (event) => {
         if (event.type === "close") {
-          console.log("SSE connection closed")
           this.handleConnectionError()
         }
       })
     } catch (error) {
-      console.error("Failed to create SSE connection:", error)
       this.scheduleReconnect()
     }
   }
@@ -153,7 +131,7 @@ export class SSEService {
 
     // Auto-connect if not already connected
     if (!this.connected) {
-      this.connect().catch(console.error)
+      this.connect().catch(() => {})
     }
 
     return () => {
@@ -189,7 +167,7 @@ export class SSEService {
 
     // Auto-connect if not already connected
     if (!this.connected) {
-      this.connect().catch(console.error)
+      this.connect().catch(() => {})
     }
 
     return () => {
@@ -316,14 +294,6 @@ export class SSEService {
       properties?.part?.sessionID ||
       null
 
-    // Only log for message events to reduce noise
-    if (sseEvent.type.includes("message") || sseEvent.type.includes("session")) {
-      console.log(`[SSE] Extracting session ID from ${sseEvent.type}:`, sessionId)
-      if (!sessionId) {
-        console.log(`[SSE] No session ID found in properties:`, Object.keys(properties || {}))
-      }
-    }
-
     return sessionId
   }
 
@@ -336,9 +306,7 @@ export class SSEService {
       callbacks.forEach((callback) => {
         try {
           callback(sseEvent)
-        } catch (error) {
-          console.error(`Event callback error for ${eventType}:`, error)
-        }
+        } catch (error) {}
       })
     }
   }
@@ -352,9 +320,7 @@ export class SSEService {
       callbacks.forEach((callback) => {
         try {
           callback(sseEvent)
-        } catch (error) {
-          console.error(`Session callback error for ${sessionId}:`, error)
-        }
+        } catch (error) {}
       })
     }
   }
@@ -380,17 +346,14 @@ export class SSEService {
    */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= (this.config.maxReconnectAttempts || 10)) {
-      console.error("Max reconnection attempts reached")
       return
     }
 
     this.reconnectAttempts++
     const delay = this.config.reconnectInterval! * Math.pow(2, this.reconnectAttempts - 1)
 
-    console.log(`Scheduling SSE reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
-
     this.reconnectTimer = window.setTimeout(() => {
-      this.connect().catch(console.error)
+      this.connect().catch(() => {})
     }, delay)
   }
 
@@ -426,8 +389,6 @@ export class SSEService {
    * Handle session timeout
    */
   private handleSessionTimeout(sessionId: string): void {
-    console.log(`Session ${sessionId} timed out`)
-
     const state = this.sessionStates.get(sessionId)
     if (state) {
       const newState = {

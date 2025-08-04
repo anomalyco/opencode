@@ -13,7 +13,6 @@ export default function TabsLayout() {
         },
       }}
       tabBar={(props) => {
-        // console.log("tabBar props", props);
         return <BottomTabs {...props} />
       }}
     >

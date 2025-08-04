@@ -59,7 +59,7 @@ export const ChatHeader = memo(({ sessionTitle, onMenuPress, onNewSessionPress }
             {sessionTitle || "OpenCode Assistant"}
           </Text>
           <Text size="xs" mode="subtle">
-            AI-powered development help
+            AI Development Assistant
           </Text>
         </Box>
         <Box direction="row" alignItems="center" gap="xs">

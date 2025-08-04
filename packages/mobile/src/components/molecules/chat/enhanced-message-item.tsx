@@ -1,4 +1,4 @@
-import { memo } from "react"
+import { memo, useMemo } from "react"
 import { Box, Text } from "@/components/ui/primitives"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import { useLocalMessagePartsQuery } from "@/services/api/local/messages"
@@ -30,24 +30,16 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
   // Use only local parts since we sync everything through the chat service
   const uniqueParts = localMessageParts || []
 
-  // Debug logging
-  console.log(`[EnhancedMessageItem] Message ${message.id}:`, {
-    role: message.role,
-    partsCount: uniqueParts.length,
-    parts: uniqueParts.map((p) => ({ id: p.id, type: p.type, textContent: p.textContent?.substring(0, 50) })),
-  })
-
-  // Sort parts by creation time for chronological rendering
-  uniqueParts.sort((a, b) => {
-    const aTime = a.timeStart || a.createdAt || 0
-    const bTime = b.timeStart || b.createdAt || 0
-    return new Date(aTime).getTime() - new Date(bTime).getTime()
-  })
-
-  // Don't render if no content
-  if (uniqueParts.length === 0) {
-    return null
-  }
+  // Sort parts by creation time for chronological rendering - memoized for performance
+  const sortedParts = useMemo(() => {
+    const parts = [...uniqueParts]
+    parts.sort((a, b) => {
+      const aTime = a.timeStart || a.createdAt || 0
+      const bTime = b.timeStart || b.createdAt || 0
+      return new Date(aTime).getTime() - new Date(bTime).getTime()
+    })
+    return parts
+  }, [uniqueParts])
 
   const renderPart = (part: any, index: number) => {
     const partType = part.type || (part.toolName ? "tool" : part.fileFilename ? "file" : "text")
@@ -73,8 +65,6 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
         return null
 
       default:
-        // Log unknown part types for debugging
-        console.log(`[EnhancedMessageItem] Unknown part type: ${partType}`, part)
         return null
     }
   }
@@ -86,16 +76,6 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
     const toolOutput = part.toolOutput || part.state?.output
     const toolMetadata = part.toolMetadata ? JSON.parse(part.toolMetadata) : part.state?.metadata
     const toolError = part.toolError || part.state?.error
-
-    // Debug log for tool parts
-    console.log(`[EnhancedMessageItem] Tool part ${part.id}:`, {
-      toolName,
-      toolStatus,
-      hasInput: !!toolInput,
-      hasOutput: !!toolOutput,
-      hasMetadata: !!toolMetadata,
-      rawPart: part,
-    })
 
     // Show status indicator for pending/running tools
     if (toolStatus === "pending" || toolStatus === "running") {
@@ -234,23 +214,32 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
     return null
   }
 
-  // Calculate if this is a short message (text only, 1-2 lines)
-  const allTextContent =
-    uniqueParts
-      .filter((part) => part.type === "text" && !part.isSynthetic)
-      .map((part) => part.textContent)
-      .join("\n") || ""
+  // Calculate if this is a short message (text only, 1-2 lines) - memoized for performance
+  const messageMetrics = useMemo(() => {
+    const allTextContent =
+      sortedParts
+        .filter((part) => part.type === "text" && !part.isSynthetic)
+        .map((part) => part.textContent)
+        .join("\n") || ""
 
-  const hasOnlyText = uniqueParts.every((part) => part.type === "text" || part.textContent)
-  const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
+    const hasOnlyText = sortedParts.every((part) => part.type === "text" || part.textContent)
+    const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
+
+    return { allTextContent, hasOnlyText, isShortMessage }
+  }, [sortedParts])
+
+  // Don't render if no content
+  if (sortedParts.length === 0) {
+    return null
+  }
 
   return (
-    <Box p={isShortMessage ? "sm" : "md"}>
+    <Box p={messageMetrics.isShortMessage ? "sm" : "md"}>
       <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
         <Box
           background={isUser ? "emphasis" : "lightest"}
           rounded="xl"
-          p={isShortMessage ? "sm" : "md"}
+          p={messageMetrics.isShortMessage ? "sm" : "md"}
           style={{
             maxWidth: "85%",
             minWidth: "20%",
@@ -264,7 +253,7 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
           {/* All content is now in parts from local database */}
 
           {/* Render all parts in chronological order */}
-          {uniqueParts.map((part, index) => renderPart(part, index))}
+          {sortedParts.map((part, index) => renderPart(part, index))}
         </Box>
       </Box>
     </Box>

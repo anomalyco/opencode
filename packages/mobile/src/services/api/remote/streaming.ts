@@ -106,7 +106,6 @@ export class StreamingService {
     })
 
     this.eventSource.addEventListener("open", () => {
-      console.log("SSE connection opened")
       this.connected = true
       localConfigService.updateConnectionStatus("connected")
     })
@@ -115,14 +114,10 @@ export class StreamingService {
       try {
         const data = JSON.parse(event.data || "{}")
         this.handleEvent(data)
-      } catch (error) {
-        console.error("Failed to parse SSE event:", error)
-        console.error("Raw event data:", event.data)
-      }
+      } catch (error) {}
     })
 
-    this.eventSource.addEventListener("error", (error: any) => {
-      console.error("SSE connection error:", error)
+    this.eventSource.addEventListener("error", () => {
       this.connected = false
       localConfigService.updateConnectionStatus("disconnected")
 
@@ -135,7 +130,6 @@ export class StreamingService {
     })
 
     this.eventSource.addEventListener("close", () => {
-      console.log("SSE connection closed")
       this.connected = false
       localConfigService.updateConnectionStatus("disconnected")
     })
@@ -150,30 +144,6 @@ export class StreamingService {
   }
 
   private handleEvent(event: StreamEvent) {
-    // Clean logging - only show event type and key properties
-    if (event.type === "storage.write") {
-      const key = (event as any).properties?.key
-      const content = (event as any).properties?.content
-      console.log("📡 STORAGE:", {
-        type: event.type,
-        key: key?.split("/").pop(), // Just the last part of key
-        contentType: content?.type,
-        contentRole: content?.role,
-        contentId: content?.id,
-      })
-    } else if (event.type === "message.part.updated") {
-      const part = (event as any).properties?.part
-      console.log("📡 PART:", {
-        type: event.type,
-        partType: part?.type,
-        partRole: part?.role,
-        partId: part?.id,
-        messageId: part?.messageID,
-      })
-    } else {
-      console.log("📡 EVENT:", { type: event.type })
-    }
-
     // Notify all listeners for this event type
     const typeListeners = this.listeners.get(event.type)
     if (typeListeners) {
