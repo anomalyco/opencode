@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import { Feather } from "@expo/vector-icons"
 
@@ -12,20 +13,9 @@ interface SessionItemProps {
   onPress: (sessionId: string) => void
 }
 
-export const SessionItem = ({ session, onPress }: SessionItemProps) => {
+export const SessionItem = memo(({ session, onPress }: SessionItemProps) => {
   return (
-    <Box
-      background="base"
-      rounded="lg"
-      border="subtle"
-      style={{
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
-      }}
-    >
+    <Box background="base" rounded="lg" border="subtle">
       <Button
         variant="ghost"
         size="auto"
@@ -111,4 +101,4 @@ export const SessionItem = ({ session, onPress }: SessionItemProps) => {
       </Button>
     </Box>
   )
-}
+})

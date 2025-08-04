@@ -60,7 +60,7 @@ class MessageRepository {
       .select()
       .from(messageParts)
       .where(eq(messageParts.messageId, messageId))
-      .orderBy(asc(messageParts.timeStart))
+      .orderBy(asc(messageParts.createdAt))
   }
 
   async createMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {

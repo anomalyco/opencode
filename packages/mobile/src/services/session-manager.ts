@@ -1,6 +1,7 @@
 import { router } from "expo-router"
 import { useCreateRemoteSessionMutation } from "./api/remote/sessions"
 import { useCreateLocalSessionMutation } from "./api/local/sessions"
+import { useQueryClient } from "@tanstack/react-query"
 
 /**
  * Session Manager - Handles session creation and navigation
@@ -9,13 +10,16 @@ import { useCreateLocalSessionMutation } from "./api/local/sessions"
 export class SessionManager {
   private createRemoteSession: ReturnType<typeof useCreateRemoteSessionMutation>["mutateAsync"]
   private createLocalSession: ReturnType<typeof useCreateLocalSessionMutation>["mutateAsync"]
+  private queryClient: any
 
   constructor(
     createRemoteSession: ReturnType<typeof useCreateRemoteSessionMutation>["mutateAsync"],
     createLocalSession: ReturnType<typeof useCreateLocalSessionMutation>["mutateAsync"],
+    queryClient: any,
   ) {
     this.createRemoteSession = createRemoteSession
     this.createLocalSession = createLocalSession
+    this.queryClient = queryClient
   }
 
   /**
@@ -77,6 +81,9 @@ export class SessionManager {
         localNotes: null,
       })
 
+      // Ensure the session query is refreshed
+      this.queryClient.invalidateQueries({ queryKey: ["local", "sessions", "detail", remoteSession.id] })
+
       return remoteSession.id
     } catch (error) {
       throw error
@@ -116,6 +123,7 @@ export class SessionManager {
 export function useSessionManager() {
   const createRemoteSession = useCreateRemoteSessionMutation()
   const createLocalSession = useCreateLocalSessionMutation()
+  const queryClient = useQueryClient()
 
-  return new SessionManager(createRemoteSession.mutateAsync, createLocalSession.mutateAsync)
+  return new SessionManager(createRemoteSession.mutateAsync, createLocalSession.mutateAsync, queryClient)
 }

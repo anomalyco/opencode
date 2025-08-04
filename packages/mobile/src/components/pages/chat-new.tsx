@@ -10,6 +10,8 @@ import { ChatHeader, MessageInput } from "@/components/molecules/chat"
 import { StreamingMessageList, type StreamingMessageListRef } from "@/components/molecules/chat/streaming-message-list"
 import { useSessionManager } from "@/services/session-manager"
 import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/services/api/keys"
 
 interface ChatPageProps {
   sessionId: string
@@ -23,9 +25,15 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   // Session manager
   const sessionManager = useSessionManager()
+  const queryClient = useQueryClient()
 
   // Simplified chat state - no streaming state here
   const { session, sendMessage, refreshMessages } = useSimpleChatState(sessionId)
+
+  // Refresh session data when sessionId changes
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(sessionId) })
+  }, [sessionId, queryClient])
 
   // Keyboard handling
   useEffect(() => {

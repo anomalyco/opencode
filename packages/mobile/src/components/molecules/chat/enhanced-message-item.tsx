@@ -30,28 +30,11 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
   // Use only local parts since we sync everything through the chat service
   const uniqueParts = localMessageParts || []
 
-  // Sort parts by multiple criteria for proper chronological rendering
+  // Database returns parts ordered by createdAt (insertion order) - matches TUI behavior
   const sortedParts = useMemo(() => {
-    const parts = [...uniqueParts]
-    parts.sort((a, b) => {
-      // First try timeStart (most reliable for streaming)
-      if (a.timeStart && b.timeStart) {
-        return new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime()
-      }
-
-      // Fallback to createdAt, but preserve original order if times are very close
-      const aTime = new Date(a.createdAt || 0).getTime()
-      const bTime = new Date(b.createdAt || 0).getTime()
-      const timeDiff = aTime - bTime
-
-      // If created within 1 second of each other, use ID comparison for consistent ordering
-      if (Math.abs(timeDiff) < 1000) {
-        return a.id.localeCompare(b.id)
-      }
-
-      return timeDiff
-    })
-    return parts
+    // Use parts in insertion order (createdAt) to match TUI behavior
+    // Text parts should appear first, followed by tool calls and other parts
+    return [...uniqueParts]
   }, [uniqueParts])
 
   const renderPart = (part: any, index: number) => {

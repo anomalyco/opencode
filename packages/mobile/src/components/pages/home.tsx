@@ -58,43 +58,49 @@ export const HomePage = () => {
     connectionSheetRef.current?.dismiss()
   }
 
-  const renderHeader = () => (
-    <Box p="md" gap="lg">
-      {/* Header */}
-      <Box gap="xs">
-        <Text size="xxl" weight="bold" style={{ letterSpacing: -0.5 }}>
-          OpenCode
-        </Text>
-        <Text size="md" mode="subtle" style={{ lineHeight: 20 }}>
-          AI-powered development assistant
-        </Text>
-      </Box>
-
-      {/* Connection Status */}
-      <ConnectionStatus onOpenConnectionSheet={handleOpenConnectionSheet} />
-
-      {/* Quick Actions */}
-      <QuickActions onNewSession={handleNewSession} />
-
-      {/* Sessions Header */}
-      <RecentSessionsHeader />
-    </Box>
-  )
-
-  const renderEmptyState = () => (
-    <Box center p="lg" m="md">
-      <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
-        <Icon icon={Feather} name="message-square" size={48} color="muted" />
-        <Box center gap="xs">
-          <Text mode="subtle" size="md" weight="medium">
-            No sessions yet
+  const renderHeader = useCallback(
+    () => (
+      <Box p="md" gap="lg">
+        {/* Header */}
+        <Box gap="xs">
+          <Text size="xxl" weight="bold" style={{ letterSpacing: -0.5 }}>
+            OpenCode
           </Text>
-          <Text mode="subtle" size="sm" style={{ textAlign: "center", lineHeight: 18 }}>
-            Create your first session to start chatting with AI
+          <Text size="md" mode="subtle" style={{ lineHeight: 20 }}>
+            AI-powered development assistant
           </Text>
         </Box>
+
+        {/* Connection Status */}
+        <ConnectionStatus onOpenConnectionSheet={handleOpenConnectionSheet} />
+
+        {/* Quick Actions */}
+        <QuickActions onNewSession={handleNewSession} />
+
+        {/* Sessions Header */}
+        <RecentSessionsHeader />
       </Box>
-    </Box>
+    ),
+    [handleNewSession, handleOpenConnectionSheet],
+  )
+
+  const renderEmptyState = useCallback(
+    () => (
+      <Box center p="lg" m="md">
+        <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
+          <Icon icon={Feather} name="message-square" size={48} color="muted" />
+          <Box center gap="xs">
+            <Text mode="subtle" size="md" weight="medium">
+              No sessions yet
+            </Text>
+            <Text mode="subtle" size="sm" style={{ textAlign: "center", lineHeight: 18 }}>
+              Create your first session to start chatting with AI
+            </Text>
+          </Box>
+        </Box>
+      </Box>
+    ),
+    [],
   )
 
   if (isLoading) {
@@ -115,11 +121,9 @@ export const HomePage = () => {
       <FlatList
         data={filteredSessions}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <Box pl="md" pr="md">
-            <Box animation="slide-up" animationConfig={{ duration: 400, delay: index * 100 }}>
-              <SessionItem session={item} onPress={handleSessionPress} />
-            </Box>
+            <SessionItem session={item} onPress={handleSessionPress} />
           </Box>
         )}
         ItemSeparatorComponent={() => <Box style={{ height: 8 }} />}
@@ -128,6 +132,10 @@ export const HomePage = () => {
         ListFooterComponent={() => <Box style={{ height: 150 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={8}
       />
 
       <ConnectionSheet ref={connectionSheetRef} onClose={handleCloseConnectionSheet} />

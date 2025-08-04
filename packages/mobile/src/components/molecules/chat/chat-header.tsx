@@ -1,10 +1,14 @@
-import { memo, useState, useEffect } from "react"
+import { memo, useState, useEffect, useRef } from "react"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import BlurView from "@/components/ui/primitives/blur-view"
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { calculateSessionContext, formatSessionContext } from "@/utils/calculate-session-context"
+import { useSSEService } from "@/services/sse-service"
+import { useRemoteMessagesQuery } from "@/services/api/remote/messages"
+import { useChatService } from "@/services/chat-service"
 import type { Session } from "@/db/types"
+import type { SSEEvent } from "@/types/opencode-types"
 
 interface ChatHeaderProps {
   sessionTitle?: string
@@ -16,31 +20,105 @@ interface ChatHeaderProps {
 export const ChatHeader = memo(({ sessionTitle, session, onMenuPress, onNewSessionPress }: ChatHeaderProps) => {
   const router = useRouter()
   const [sessionInfoText, setSessionInfoText] = useState("AI Development Assistant")
+  const sseService = useSSEService()
+  const chatService = useChatService()
+  const updateTimeoutRef = useRef<number | null>(null)
+  const [hasSyncedMessages, setHasSyncedMessages] = useState(false)
+
+  // Fetch remote messages to trigger sync
+  const { data: remoteMessages } = useRemoteMessagesQuery(session?.id || "")
 
   const handleBackPress = () => {
     router.back()
   }
 
-  // Calculate session context (matching TUI logic)
-  useEffect(() => {
+  // Update session context
+  const updateSessionInfo = async () => {
     if (!session?.id) {
       setSessionInfoText("AI Development Assistant")
       return
     }
 
-    const updateSessionInfo = async () => {
-      try {
-        const context = await calculateSessionContext(session.id)
-        const formatted = formatSessionContext(context, false)
-        setSessionInfoText(formatted)
-      } catch (error) {
-        console.error("Failed to calculate session context:", error)
-        setSessionInfoText("AI Development Assistant")
+    try {
+      const context = await calculateSessionContext(session.id)
+      const formatted = formatSessionContext(context, false)
+      setSessionInfoText(formatted)
+    } catch (error) {
+      console.error("Failed to calculate session context:", error)
+      setSessionInfoText("AI Development Assistant")
+    }
+  }
+
+  // Sync remote messages when they're available (only if not already synced)
+  useEffect(() => {
+    if (!session?.id || !remoteMessages || hasSyncedMessages) return
+
+    if (remoteMessages.length > 0) {
+      // Small delay to let the message list component handle sync first
+      const syncTimeout = setTimeout(() => {
+        chatService
+          .syncRemoteMessages(session.id, remoteMessages)
+          .then(() => {
+            setHasSyncedMessages(true)
+            // Update session info after sync
+            setTimeout(updateSessionInfo, 300)
+          })
+          .catch((error) => {
+            console.error("Failed to sync messages in header:", error)
+            // Even if sync fails, mark as attempted to avoid retries
+            setHasSyncedMessages(true)
+          })
+      }, 100)
+
+      return () => clearTimeout(syncTimeout)
+    }
+  }, [session?.id, remoteMessages, hasSyncedMessages, chatService])
+
+  // Calculate session context (matching TUI logic)
+  useEffect(() => {
+    updateSessionInfo()
+  }, [session?.id, session?.messageCount])
+
+  // Reset sync state when session changes
+  useEffect(() => {
+    setHasSyncedMessages(false)
+  }, [session?.id])
+
+  // Listen for streaming updates to refresh usage in real-time
+  useEffect(() => {
+    if (!session?.id) return
+
+    const handleSSEEvent = (event: SSEEvent) => {
+      switch (event.type) {
+        case "message.updated":
+        case "message.part.updated":
+          // Throttle updates during streaming to avoid too many recalculations
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current)
+          }
+          updateTimeoutRef.current = window.setTimeout(() => {
+            updateSessionInfo()
+          }, 1000) // Update every second during streaming
+          break
+        case "session.idle":
+          // Immediate update when streaming completes
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current)
+          }
+          updateSessionInfo()
+          break
       }
     }
 
-    updateSessionInfo()
-  }, [session?.id, session?.messageCount])
+    const unsubscribe = sseService.subscribeToSession(session.id, handleSSEEvent)
+
+    return () => {
+      unsubscribe()
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+    }
+  }, [session?.id, sseService])
 
   return (
     <BlurView

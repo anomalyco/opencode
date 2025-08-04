@@ -6,6 +6,7 @@ import {
   useSetServerConnectionMutation,
   useUpdateConnectionStatusMutation,
 } from "@/services/api/local/config"
+import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
 import { apiClient } from "@/services/api/remote/client"
 
 interface ConnectionSheetProps {
@@ -21,6 +22,7 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
   const { data: appConfig } = useLocalAppConfigQuery()
   const setServerConnection = useSetServerConnectionMutation()
   const updateConnectionStatus = useUpdateConnectionStatusMutation()
+  const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
 
   const bottomSheetRef = useRef<BottomSheetRef>(null)
 
@@ -57,6 +59,9 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
         try {
           await apiClient.ping()
           updateConnectionStatus.mutate("connected")
+          // Small delay to ensure mutation completes, then refetch
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          await refetchAppInfo()
           onClose()
           return
         } catch (error) {
@@ -76,8 +81,11 @@ export const ConnectionSheet = forwardRef<ConnectionSheetRef, ConnectionSheetPro
       setIsConnecting(false)
     }
   }
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     updateConnectionStatus.mutate("disconnected")
+    // Small delay to ensure mutation completes, then refetch
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await refetchAppInfo()
     onClose()
   }
 

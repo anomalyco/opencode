@@ -149,6 +149,8 @@ export function useUpdateConnectionStatusMutation() {
     mutationFn: (status: "connected" | "disconnected" | "connecting") => configRepo.updateConnectionStatus(status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.config.appConfig() })
+      // Also invalidate remote app info query to refresh connection status display
+      queryClient.invalidateQueries({ queryKey: queryKeys.remote.config.app() })
     },
   })
 }
