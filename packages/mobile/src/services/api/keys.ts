@@ -31,6 +31,7 @@ export const queryKeys = {
       appConfig: () => [...queryKeys.local.config.all, "app"] as const,
       userSettings: () => [...queryKeys.local.config.all, "user"] as const,
       serverUrl: () => [...queryKeys.local.config.all, "serverUrl"] as const,
+      currentMode: () => [...queryKeys.local.config.all, "currentMode"] as const,
     },
   },
 

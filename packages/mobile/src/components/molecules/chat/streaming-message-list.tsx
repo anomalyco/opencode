@@ -4,9 +4,10 @@
  */
 
 import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react"
-import { FlatList, RefreshControl, Keyboard } from "react-native"
+import { FlatList, Keyboard, RefreshControl } from "react-native"
 import { Box, Text, Icon } from "@/components/ui/primitives"
 import { TypingIndicator, EnhancedMessageItem } from "@/components/molecules/chat"
+
 import { Feather } from "@expo/vector-icons"
 import { useChatState } from "@/hooks/use-chat-state"
 
@@ -15,6 +16,7 @@ interface StreamingMessageListProps {
   keyboardHeight: number
   onRefresh: () => Promise<void>
   refreshing: boolean
+  currentMode?: string
 }
 
 export interface StreamingMessageListRef {
@@ -26,7 +28,7 @@ const MemoizedFlatList = memo(FlatList<any>)
 
 export const StreamingMessageList = memo(
   forwardRef<StreamingMessageListRef, StreamingMessageListProps>(
-    ({ sessionId, keyboardHeight, onRefresh, refreshing }, ref) => {
+    ({ sessionId, keyboardHeight, onRefresh, refreshing, currentMode }, ref) => {
       const flatListRef = useRef<FlatList>(null)
 
       // All streaming state is contained here - won't affect parent
@@ -131,7 +133,7 @@ export const StreamingMessageList = memo(
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                style={{ transform: [{ scaleY: -1 }] }}
+                title={`Pull to switch to ${currentMode === "plan" ? "build" : "plan"} mode`}
               />
             }
             showsVerticalScrollIndicator={false}

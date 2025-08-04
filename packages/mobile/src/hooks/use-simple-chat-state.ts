@@ -12,7 +12,7 @@ export interface SimpleChatState {
   session: any
 
   // Actions
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, mode?: string) => Promise<void>
   refreshMessages: () => Promise<void>
 }
 
@@ -25,9 +25,9 @@ export const useSimpleChatState = (sessionId: string): SimpleChatState => {
 
   // Send message handler - no state updates here
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, mode?: string) => {
       try {
-        await chatService.sendMessage(sessionId, content)
+        await chatService.sendMessage(sessionId, content, mode)
       } catch (err) {
         throw err
       }

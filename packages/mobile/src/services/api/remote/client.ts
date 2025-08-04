@@ -65,6 +65,20 @@ export class ApiClient {
     await localConfigService.setServerConnection(hostname, port)
   }
 
+  async updateBaseUrlFromString(connectionString: string) {
+    let serverUrl = connectionString
+
+    // Ensure the URL has a protocol
+    if (!connectionString.startsWith("http://") && !connectionString.startsWith("https://")) {
+      serverUrl = `http://${connectionString}`
+    }
+
+    // Set the baseURL immediately for subsequent requests
+    this.client.defaults.baseURL = serverUrl
+    // Also ensure the connection settings are saved
+    await localConfigService.setServerConnectionString(connectionString)
+  }
+
   get axios() {
     return this.client
   }

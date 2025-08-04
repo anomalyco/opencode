@@ -37,12 +37,26 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
     return [...uniqueParts]
   }, [uniqueParts])
 
+  // Check if this message only contains system reminders
+  const hasOnlySystemReminders = uniqueParts.every(
+    (part) => part.type === "text" && part.textContent?.includes("<system-reminder>"),
+  )
+
+  // Hide messages that only contain system reminders
+  if (hasOnlySystemReminders && uniqueParts.length > 0) {
+    return null
+  }
+
   const renderPart = (part: any, index: number) => {
     const partType = part.type || (part.toolName ? "tool" : part.fileFilename ? "file" : "text")
 
     switch (partType) {
       case "text":
         if (part.isSynthetic || !part.textContent) return null
+
+        // Hide system reminder messages from UI
+        if (part.textContent.includes("<system-reminder>")) return null
+
         return (
           <Box key={part.id || index} mb="sm">
             <ThemedMarked value={part.textContent} />

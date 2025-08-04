@@ -31,7 +31,7 @@ export interface ChatState {
   error: string | null
 
   // Actions
-  sendMessage: (content: string) => Promise<void>
+  sendMessage: (content: string, mode?: string) => Promise<void>
   refreshMessages: () => Promise<void>
 
   // Metrics
@@ -287,7 +287,7 @@ export const useChatState = (sessionId: string): ChatState => {
 
   // Send message handler
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, mode?: string) => {
       try {
         setError(null)
         setIsStreaming(true)
@@ -300,7 +300,7 @@ export const useChatState = (sessionId: string): ChatState => {
           setIsStreaming(false)
         }, 30000)
 
-        await chatService.sendMessage(sessionId, content)
+        await chatService.sendMessage(sessionId, content, mode)
       } catch (err) {
         setIsStreaming(false)
         setError(err instanceof Error ? err.message : "Failed to send message")

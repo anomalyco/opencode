@@ -12,6 +12,7 @@ import { useSessionManager } from "@/services/session-manager"
 import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
+import { useLocalCurrentModeQuery, useSwitchModeMutation } from "@/services/api/local/config"
 
 interface ChatPageProps {
   sessionId: string
@@ -26,6 +27,10 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   // Session manager
   const sessionManager = useSessionManager()
   const queryClient = useQueryClient()
+
+  // Mode management
+  const { data: currentMode } = useLocalCurrentModeQuery()
+  const switchModeMutation = useSwitchModeMutation()
 
   // Simplified chat state - no streaming state here
   const { session, sendMessage, refreshMessages } = useSimpleChatState(sessionId)
@@ -60,26 +65,28 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   // Auto-scroll is now handled by StreamingMessageList
 
-  // Handle pull-to-refresh
+  // Handle pull-to-refresh with mode toggle
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
+      // Toggle mode on refresh
+      await switchModeMutation.mutateAsync(currentMode)
       await refreshMessages()
     } catch (err) {
     } finally {
       setRefreshing(false)
     }
-  }, [refreshMessages])
+  }, [refreshMessages, switchModeMutation, currentMode])
 
   // Handle send message
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
-        await sendMessage(content)
+        await sendMessage(content, currentMode)
         setTimeout(() => messageListRef.current?.scrollToBottom(), 100)
       } catch (err) {}
     },
-    [sendMessage],
+    [sendMessage, currentMode],
   )
 
   // Handle new session
@@ -102,9 +109,15 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           keyboardHeight={keyboardHeight}
           onRefresh={onRefresh}
           refreshing={refreshing}
+          currentMode={currentMode}
         />
-        <ChatHeader sessionTitle={session?.title} session={session} onNewSessionPress={handleNewSession} />
-        <MessageInput onSend={handleSendMessage} />
+        <ChatHeader
+          sessionTitle={session?.title}
+          session={session}
+          onNewSessionPress={handleNewSession}
+          currentMode={currentMode}
+        />
+        <MessageInput onSend={handleSendMessage} currentMode={currentMode} />
       </Box>
     </KeyboardAvoidingView>
   )

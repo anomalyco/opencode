@@ -15,6 +15,20 @@
       "when": 1754295610863,
       "tag": "0001_brown_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1754303335289,
+      "tag": "0002_mysterious_lorna_dane",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1754304209492,
+      "tag": "0003_great_sunspot",
+      "breakpoints": true
     }
   ]
 }

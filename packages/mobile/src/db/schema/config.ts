@@ -5,6 +5,7 @@ export const appConfig = sqliteTable("app_config", {
   serverUrl: text("server_url").notNull(),
   serverHostname: text("server_hostname").default("127.0.0.1"),
   serverPort: integer("server_port").default(4096),
+  connectionString: text("connection_string"),
   connectionStatus: text("connection_status", { enum: ["connected", "disconnected", "connecting"] }).default(
     "disconnected",
   ),
@@ -20,6 +21,7 @@ export const userSettings = sqliteTable("user_settings", {
   theme: text("theme", { enum: ["light", "dark", "system"] }).default("system"),
   defaultProviderId: text("default_provider_id"),
   defaultModelId: text("default_model_id"),
+  currentMode: text("current_mode").default("build"),
   notificationsEnabled: integer("notifications_enabled", { mode: "boolean" }).default(true),
   hapticsEnabled: integer("haptics_enabled", { mode: "boolean" }).default(true),
   autoSync: integer("auto_sync", { mode: "boolean" }).default(true),

@@ -62,6 +62,13 @@ class ConfigRepository {
   async getServerUrl() {
     const config = await this.getAppConfig()
     if (!config) return null
+
+    // Prefer connection string if available
+    if (config.connectionString) {
+      return config.connectionString
+    }
+
+    // Fallback to hostname:port format
     return `http://${config.serverHostname}:${config.serverPort}`
   }
 
@@ -70,6 +77,41 @@ class ConfigRepository {
       serverHostname: hostname,
       serverPort: port,
       serverUrl: `http://${hostname}:${port}`,
+      connectionString: null, // Clear connection string when using hostname/port
+    })
+  }
+
+  async setServerConnectionString(connectionString: string) {
+    // Parse the connection string to extract hostname and port for backward compatibility
+    let hostname = "127.0.0.1"
+    let port = 4096
+    let serverUrl = connectionString
+
+    try {
+      const url = new URL(connectionString.startsWith("http") ? connectionString : `http://${connectionString}`)
+      hostname = url.hostname
+      port = url.port ? parseInt(url.port) : url.protocol === "https:" ? 443 : 80
+      serverUrl = url.toString()
+    } catch (error) {
+      // If parsing fails, treat as hostname:port format
+      const parts = connectionString.split(":")
+      if (parts.length === 2) {
+        hostname = parts[0]
+        const parsedPort = parseInt(parts[1])
+        if (!isNaN(parsedPort)) {
+          port = parsedPort
+        }
+      } else if (parts.length === 1) {
+        hostname = parts[0]
+      }
+      serverUrl = `http://${hostname}:${port}`
+    }
+
+    return await this.setAppConfig({
+      serverHostname: hostname,
+      serverPort: port,
+      serverUrl,
+      connectionString,
     })
   }
 
@@ -77,6 +119,17 @@ class ConfigRepository {
     return await this.setAppConfig({
       connectionStatus: status,
       lastSyncTimestamp: new Date(),
+    })
+  }
+
+  async getCurrentMode() {
+    const settings = await this.getUserSettings()
+    return settings?.currentMode || "build"
+  }
+
+  async setCurrentMode(mode: string) {
+    return await this.setUserSettings({
+      currentMode: mode,
     })
   }
 }
@@ -102,6 +155,13 @@ export function useLocalServerUrlQuery() {
   return useQuery({
     queryKey: queryKeys.local.config.serverUrl(),
     queryFn: () => configRepo.getServerUrl(),
+  })
+}
+
+export function useLocalCurrentModeQuery() {
+  return useQuery({
+    queryKey: queryKeys.local.config.currentMode(),
+    queryFn: () => configRepo.getCurrentMode(),
   })
 }
 
@@ -142,6 +202,18 @@ export function useSetServerConnectionMutation() {
   })
 }
 
+export function useSetServerConnectionStringMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (connectionString: string) => configRepo.setServerConnectionString(connectionString),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.appConfig() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.serverUrl() })
+    },
+  })
+}
+
 export function useUpdateConnectionStatusMutation() {
   const queryClient = useQueryClient()
 
@@ -151,6 +223,39 @@ export function useUpdateConnectionStatusMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.config.appConfig() })
       // Also invalidate remote app info query to refresh connection status display
       queryClient.invalidateQueries({ queryKey: queryKeys.remote.config.app() })
+    },
+  })
+}
+
+export function useSetCurrentModeMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (mode: string) => configRepo.setCurrentMode(mode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
+    },
+  })
+}
+
+export function useSwitchModeMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (currentMode?: string) => {
+      // Toggle between build and plan modes locally
+      const newMode = currentMode === "build" ? "plan" : "build"
+
+      // Update local mode state
+      await configRepo.setCurrentMode(newMode)
+
+      return { newMode }
+    },
+    onSuccess: () => {
+      // Invalidate local queries to update UI
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
     },
   })
 }

@@ -8,9 +8,10 @@ import { Feather } from "@expo/vector-icons"
 interface MessageInputProps {
   onSend: (content: string) => Promise<void>
   disabled?: boolean
+  currentMode?: string
 }
 
-export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProps) => {
+export const MessageInput = memo(({ onSend, disabled = false, currentMode }: MessageInputProps) => {
   const [text, setText] = useState("")
   const [keyboardVisible, setKeyboardVisible] = useState(false)
   const { theme } = useUnistyles()
@@ -54,7 +55,7 @@ export const MessageInput = memo(({ onSend, disabled = false }: MessageInputProp
         zIndex: 10,
       }}
     >
-      <Box p="sm" safeAreaBottom={!keyboardVisible}>
+      <Box p="sm" safeAreaBottom={!keyboardVisible} mode={currentMode === "plan" ? "secondary" : undefined}>
         <Box direction="row" alignItems="flex-end" gap="sm">
           <Pressable
             style={{ flex: 1 }}

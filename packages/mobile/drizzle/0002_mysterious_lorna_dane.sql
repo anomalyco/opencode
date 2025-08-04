@@ -1,0 +1,1 @@
+ALTER TABLE `app_config` ADD `connection_string` text;

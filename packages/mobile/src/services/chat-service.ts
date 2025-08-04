@@ -193,7 +193,13 @@ export class ChatService {
   /**
    * Send a message to the remote server
    */
-  async sendMessage(sessionId: string, content: string, sendMessageMutation: any, userSettings?: any): Promise<void> {
+  async sendMessage(
+    sessionId: string,
+    content: string,
+    sendMessageMutation: any,
+    userSettings?: any,
+    mode?: string,
+  ): Promise<void> {
     const providerID = userSettings?.defaultProviderId || this.config.defaultProviderId
     const modelID = userSettings?.defaultModelId || this.config.defaultModelId
 
@@ -206,6 +212,7 @@ export class ChatService {
           text: content,
         },
       ],
+      ...(mode && { mode }), // Include mode if provided
     }
 
     try {
@@ -351,8 +358,8 @@ export const useChatService = () => {
     syncRemoteMessages: (sessionId: string, remoteMessages: any[]) =>
       chatService.syncRemoteMessages(sessionId, remoteMessages, upsertLocalMessage, upsertLocalMessagePart),
 
-    sendMessage: (sessionId: string, content: string) =>
-      chatService.sendMessage(sessionId, content, sendMessage, userSettings),
+    sendMessage: (sessionId: string, content: string, mode?: string) =>
+      chatService.sendMessage(sessionId, content, sendMessage, userSettings, mode),
 
     calculateMetrics: (messages: any[]) => chatService.calculateMetrics(messages),
 
