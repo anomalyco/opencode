@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
-import db from "../../../db"
-import { fileCache } from "../../../db/schema"
+import db from "@/db"
+import { fileCache } from "@/db/schema"
 import { queryKeys } from "../keys"
-import type { FileCache } from "../../../db/types"
+import type { FileCache } from "@/db/types"
 
 // Raw database operations (internal use)
 class FileRepository {

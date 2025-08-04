@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
-import db from "../../../db"
-import { appConfig, userSettings } from "../../../db/schema"
+import db from "@/db"
+import { appConfig, userSettings } from "@/db/schema"
 import { queryKeys } from "../keys"
-import type { AppConfig, UserSettings } from "../../../db/types"
+import type { AppConfig, UserSettings } from "@/db/types"
 
 // Raw database operations (internal use)
 class ConfigRepository {

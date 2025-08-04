@@ -3,8 +3,8 @@
  * This shows current conversation context, not cumulative usage
  */
 
-import db from "../db"
-import { messages } from "../db/schema"
+import db from "@/db"
+import { messages } from "@/db/schema"
 import { eq, desc } from "drizzle-orm"
 
 export interface SessionContext {

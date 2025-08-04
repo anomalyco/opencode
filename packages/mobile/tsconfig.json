@@ -21,6 +21,7 @@
       "@/primitives": ["./src/components/ui/primitives"],
       "@/primitives/*": ["./src/components/ui/primitives/*"],
       "@/typography/*": ["./src/components/ui/typography/*"],
+      "@/db": ["./src/db"],
       "@/db/*": ["./src/db/*"],
       "@/drizzle/*": ["./drizzle/*"]
     }

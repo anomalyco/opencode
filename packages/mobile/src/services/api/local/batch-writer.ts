@@ -4,9 +4,9 @@
  */
 
 import { eq } from "drizzle-orm"
-import db from "../../../db"
-import { messages, messageParts, sessions } from "../../../db/schema"
-import type { Message, MessagePart } from "../../../db/types"
+import db from "@/db"
+import { messages, messageParts, sessions } from "@/db/schema"
+import type { Message, MessagePart } from "@/db/types"
 
 interface BatchUpdate {
   type: "message" | "messagePart" | "session"

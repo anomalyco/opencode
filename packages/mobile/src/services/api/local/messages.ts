@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { eq, asc } from "drizzle-orm"
-import db from "../../../db"
-import { messages, messageParts, sessions } from "../../../db/schema"
+import db from "@/db"
+import { messages, messageParts, sessions } from "@/db/schema"
 import { queryKeys } from "../keys"
-import type { Message, MessagePart } from "../../../db/types"
+import type { Message, MessagePart } from "@/db/types"
 
 // Raw database operations (internal use)
 class MessageRepository {
