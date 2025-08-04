@@ -23,6 +23,7 @@ export const ServeCommand = cmd({
         alias: ["c"],
         type: "array",
         describe: "CORS allowed origins",
+        default: [] as string[],
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
@@ -35,7 +36,7 @@ export const ServeCommand = cmd({
 
       const hostname = args.hostname
       const port = args.port
-      const corsOrigins = (args["cors-origins"] ?? []).map(String)
+      const corsOrigins = args["cors-origins"].map(String)
 
       const server = Server.listen({
         port,
