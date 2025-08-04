@@ -150,11 +150,17 @@ export const StreamingMessageList = memo(
               autoscrollToTopThreshold: 10,
             }}
             removeClippedSubviews={true}
-            maxToRenderPerBatch={5}
-            windowSize={5}
-            initialNumToRender={5}
-            updateCellsBatchingPeriod={100}
+            maxToRenderPerBatch={3}
+            windowSize={3}
+            initialNumToRender={3}
+            updateCellsBatchingPeriod={200}
             disableVirtualization={false}
+            getItemLayout={(_, index) => ({
+              length: 100, // Estimated item height
+              offset: 100 * index,
+              index,
+            })}
+            legacyImplementation={false}
           />
         </Box>
       )

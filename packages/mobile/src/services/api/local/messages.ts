@@ -278,10 +278,10 @@ export function useUpsertLocalMessagePartMutation() {
     onSuccess: (data) => {
       const part = data[0]
       if (part) {
+        // Only invalidate queries needed for chat page during streaming
         queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(part.sessionId) })
         queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.parts(part.messageId) })
-        // Invalidate sessions list to update ordering
-        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
+        // Skip session list invalidation during streaming - home page can refresh when navigated to
       }
     },
   })
@@ -293,8 +293,7 @@ export function useUpsertLocalMessageMutation() {
     mutationFn: (message: Omit<Message, "createdAt" | "updatedAt">) => messageRepo.upsertMessage(message),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(variables.sessionId) })
-      // Invalidate sessions list to update ordering
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
+      // Skip session list invalidation during streaming - home page can refresh when navigated to
     },
   })
 }

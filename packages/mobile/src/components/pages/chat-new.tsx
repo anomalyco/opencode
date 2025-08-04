@@ -6,8 +6,8 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Platform, KeyboardAvoidingView, Keyboard } from "react-native"
 import { Box } from "@/components/ui/primitives"
-import { ChatHeader, MessageInput, type MessageListRef } from "@/components/molecules/chat"
-import { StreamingMessageList } from "@/components/molecules/chat/streaming-message-list"
+import { ChatHeader, MessageInput } from "@/components/molecules/chat"
+import { StreamingMessageList, type StreamingMessageListRef } from "@/components/molecules/chat/streaming-message-list"
 import { useSessionManager } from "@/services/session-manager"
 import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
 
@@ -19,7 +19,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   // UI-only state
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
-  const messageListRef = useRef<MessageListRef>(null)
+  const messageListRef = useRef<StreamingMessageListRef>(null)
 
   // Session manager
   const sessionManager = useSessionManager()

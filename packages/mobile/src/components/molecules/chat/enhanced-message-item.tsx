@@ -30,13 +30,26 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
   // Use only local parts since we sync everything through the chat service
   const uniqueParts = localMessageParts || []
 
-  // Sort parts by creation time for chronological rendering - memoized for performance
+  // Sort parts by multiple criteria for proper chronological rendering
   const sortedParts = useMemo(() => {
     const parts = [...uniqueParts]
     parts.sort((a, b) => {
-      const aTime = a.timeStart || a.createdAt || 0
-      const bTime = b.timeStart || b.createdAt || 0
-      return new Date(aTime).getTime() - new Date(bTime).getTime()
+      // First try timeStart (most reliable for streaming)
+      if (a.timeStart && b.timeStart) {
+        return new Date(a.timeStart).getTime() - new Date(b.timeStart).getTime()
+      }
+
+      // Fallback to createdAt, but preserve original order if times are very close
+      const aTime = new Date(a.createdAt || 0).getTime()
+      const bTime = new Date(b.createdAt || 0).getTime()
+      const timeDiff = aTime - bTime
+
+      // If created within 1 second of each other, use ID comparison for consistent ordering
+      if (Math.abs(timeDiff) < 1000) {
+        return a.id.localeCompare(b.id)
+      }
+
+      return timeDiff
     })
     return parts
   }, [uniqueParts])
