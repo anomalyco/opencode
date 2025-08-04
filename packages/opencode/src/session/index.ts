@@ -45,9 +45,9 @@ import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
 
 export namespace Session {
-  const log = Log.create({ service: "session" });
+  const log = Log.create({ service: "session" })
 
-  const OUTPUT_TOKEN_MAX = 32_000;
+  const OUTPUT_TOKEN_MAX = 32_000
 
   export const Info = z
     .object({
@@ -75,8 +75,8 @@ export namespace Session {
     })
     .openapi({
       ref: "Session",
-    });
-  export type Info = z.output<typeof Info>;
+    })
+  export type Info = z.output<typeof Info>
 
   export const ShareInfo = z
     .object({
@@ -85,8 +85,8 @@ export namespace Session {
     })
     .openapi({
       ref: "SessionShare",
-    });
-  export type ShareInfo = z.output<typeof ShareInfo>;
+    })
+  export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
     Updated: Bus.event(
@@ -114,156 +114,148 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
-  };
+  }
 
   const state = App.state(
     "session",
     () => {
-      const sessions = new Map<string, Info>();
-      const messages = new Map<string, MessageV2.Info[]>();
-      const pending = new Map<string, AbortController>();
+      const sessions = new Map<string, Info>()
+      const messages = new Map<string, MessageV2.Info[]>()
+      const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
         {
-          input: ChatInput;
-          message: MessageV2.User;
-          parts: MessageV2.Part[];
-          processed: boolean;
-          callback: (
-            input: { info: MessageV2.Assistant; parts: MessageV2.Part[] },
-          ) => void;
+          input: ChatInput
+          message: MessageV2.User
+          parts: MessageV2.Part[]
+          processed: boolean
+          callback: (input: { info: MessageV2.Assistant; parts: MessageV2.Part[] }) => void
         }[]
-      >();
+      >()
 
       return {
         sessions,
         messages,
         pending,
         queued,
-      };
+      }
     },
     async (state) => {
       for (const [_, controller] of state.pending) {
-        controller.abort();
+        controller.abort()
       }
     },
-  );
+  )
 
   export async function create(parentID?: string) {
     const result: Info = {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: (parentID ? "Child session - " : "New Session - ") +
-        new Date().toISOString(),
+      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
       time: {
         created: Date.now(),
         updated: Date.now(),
       },
-    };
-    log.info("created", result);
-    state().sessions.set(result.id, result);
-    await Storage.writeJSON("session/info/" + result.id, result);
-    const cfg = await Config.get();
-    if (
-      !result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")
-    ) {
+    }
+    log.info("created", result)
+    state().sessions.set(result.id, result)
+    await Storage.writeJSON("session/info/" + result.id, result)
+    const cfg = await Config.get()
+    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
       share(result.id)
         .then((share) => {
           update(result.id, (draft) => {
-            draft.share = share;
-          });
+            draft.share = share
+          })
         })
         .catch(() => {
           // Silently ignore sharing errors during session creation
-        });
+        })
     }
     Bus.publish(Event.Updated, {
       info: result,
-    });
-    return result;
+    })
+    return result
   }
 
   export async function get(id: string) {
-    const result = state().sessions.get(id);
+    const result = state().sessions.get(id)
     if (result) {
-      return result;
+      return result
     }
-    const read = await Storage.readJSON<Info>("session/info/" + id);
-    state().sessions.set(id, read);
-    return read as Info;
+    const read = await Storage.readJSON<Info>("session/info/" + id)
+    state().sessions.set(id, read)
+    return read as Info
   }
 
   export async function getShare(id: string) {
-    return Storage.readJSON<ShareInfo>("session/share/" + id);
+    return Storage.readJSON<ShareInfo>("session/share/" + id)
   }
 
   export async function share(id: string) {
-    const cfg = await Config.get();
+    const cfg = await Config.get()
     if (cfg.share === "disabled") {
-      throw new Error("Sharing is disabled in configuration");
+      throw new Error("Sharing is disabled in configuration")
     }
 
-    const session = await get(id);
-    if (session.share) return session.share;
-    const share = await Share.create(id);
+    const session = await get(id)
+    if (session.share) return session.share
+    const share = await Share.create(id)
     await update(id, (draft) => {
       draft.share = {
         url: share.url,
-      };
-    });
-    await Storage.writeJSON<ShareInfo>("session/share/" + id, share);
-    await Share.sync("session/info/" + id, session);
+      }
+    })
+    await Storage.writeJSON<ShareInfo>("session/share/" + id, share)
+    await Share.sync("session/info/" + id, session)
     for (const msg of await messages(id)) {
-      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info);
+      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
       for (const part of msg.parts) {
-        await Share.sync(
-          "session/part/" + id + "/" + msg.info.id + "/" + part.id,
-          part,
-        );
+        await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
       }
     }
-    return share;
+    return share
   }
 
   export async function unshare(id: string) {
-    const share = await getShare(id);
-    if (!share) return;
-    await Storage.remove("session/share/" + id);
+    const share = await getShare(id)
+    if (!share) return
+    await Storage.remove("session/share/" + id)
     await update(id, (draft) => {
-      draft.share = undefined;
-    });
-    await Share.remove(id, share.secret);
+      draft.share = undefined
+    })
+    await Share.remove(id, share.secret)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const { sessions } = state();
-    const session = await get(id);
-    if (!session) return;
-    editor(session);
-    session.time.updated = Date.now();
-    sessions.set(id, session);
-    await Storage.writeJSON("session/info/" + id, session);
+    const { sessions } = state()
+    const session = await get(id)
+    if (!session) return
+    editor(session)
+    session.time.updated = Date.now()
+    sessions.set(id, session)
+    await Storage.writeJSON("session/info/" + id, session)
     Bus.publish(Event.Updated, {
       info: session,
-    });
-    return session;
+    })
+    return session
   }
 
   export async function messages(sessionID: string) {
     const result = [] as {
-      info: MessageV2.Info;
-      parts: MessageV2.Part[];
-    }[];
+      info: MessageV2.Info
+      parts: MessageV2.Part[]
+    }[]
     for (const p of await Storage.list("session/message/" + sessionID)) {
-      const read = await Storage.readJSON<MessageV2.Info>(p);
+      const read = await Storage.readJSON<MessageV2.Info>(p)
       result.push({
         info: read,
         parts: await getParts(sessionID, read.id),
       })
     }
-    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1));
-    return result;
+    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+    return result
   }
 
   export async function getMessage(sessionID: string, messageID: string) {
@@ -279,26 +271,26 @@ export namespace Session {
       const read = await Storage.readJSON<MessageV2.Part>(item)
       result.push(read)
     }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1));
-    return result;
+    result.sort((a, b) => (a.id > b.id ? 1 : -1))
+    return result
   }
 
   export async function* list() {
     for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json");
-      yield get(sessionID);
+      const sessionID = path.basename(item, ".json")
+      yield get(sessionID)
     }
   }
 
   export async function children(parentID: string) {
-    const result = [] as Session.Info[];
+    const result = [] as Session.Info[]
     for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json");
-      const session = await get(sessionID);
-      if (session.parentID !== parentID) continue;
-      result.push(session);
+      const sessionID = path.basename(item, ".json")
+      const session = await get(sessionID)
+      if (session.parentID !== parentID) continue
+      result.push(session)
     }
-    return result;
+    return result
   }
 
   export function abort(sessionID: string) {
@@ -314,45 +306,39 @@ export namespace Session {
 
   export async function remove(sessionID: string, emitEvent = true) {
     try {
-      abort(sessionID);
-      const session = await get(sessionID);
+      abort(sessionID)
+      const session = await get(sessionID)
       for (const child of await children(sessionID)) {
-        await remove(child.id, false);
+        await remove(child.id, false)
       }
-      await unshare(sessionID).catch(() => {});
-      await Storage.remove(`session/info/${sessionID}`).catch(() => {});
-      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {});
-      state().sessions.delete(sessionID);
-      state().messages.delete(sessionID);
+      await unshare(sessionID).catch(() => {})
+      await Storage.remove(`session/info/${sessionID}`).catch(() => {})
+      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
+      state().sessions.delete(sessionID)
+      state().messages.delete(sessionID)
       if (emitEvent) {
         Bus.publish(Event.Deleted, {
           info: session,
-        });
+        })
       }
     } catch (e) {
-      log.error(e);
+      log.error(e)
     }
   }
 
   async function updateMessage(msg: MessageV2.Info) {
-    await Storage.writeJSON(
-      "session/message/" + msg.sessionID + "/" + msg.id,
-      msg,
-    );
+    await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
-    });
+    })
   }
 
   async function updatePart(part: MessageV2.Part) {
-    await Storage.writeJSON(
-      ["session", "part", part.sessionID, part.messageID, part.id].join("/"),
-      part,
-    );
+    await Storage.writeJSON(["session", "part", part.sessionID, part.messageID, part.id].join("/"), part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
-    });
-    return part;
+    })
+    return part
   }
 
   export const ChatInput = z.object({
@@ -387,14 +373,14 @@ export namespace Session {
           }),
       ]),
     ),
-  });
-  export type ChatInput = z.infer<typeof ChatInput>;
+  })
+  export type ChatInput = z.infer<typeof ChatInput>
 
   export async function chat(
     input: z.infer<typeof ChatInput>,
   ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
-    const l = log.clone().tag("session", input.sessionID);
-    l.info("chatting");
+    const l = log.clone().tag("session", input.sessionID)
+    l.info("chatting")
 
     const inputMode = input.mode ?? "build"
 
@@ -434,13 +420,13 @@ export namespace Session {
       time: {
         created: Date.now(),
       },
-    };
+    }
 
-    const app = App.info();
+    const app = App.info()
     const userParts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
-          const url = new URL(part.url);
+          const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
               if (part.mime === "text/plain") {
@@ -475,37 +461,37 @@ export namespace Session {
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filePath = decodeURIComponent(url.pathname)
               if (part.mime === "text/plain") {
-                let offset: number | undefined = undefined;
-                let limit: number | undefined = undefined;
+                let offset: number | undefined = undefined
+                let limit: number | undefined = undefined
                 const range = {
                   start: url.searchParams.get("start"),
                   end: url.searchParams.get("end"),
-                };
+                }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0];
-                  let start = parseInt(range.start);
-                  let end = range.end ? parseInt(range.end) : undefined;
+                  const filePath = part.url.split("?")[0]
+                  let start = parseInt(range.start)
+                  let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath);
+                    const symbols = await LSP.documentSymbol(filePath)
                     for (const symbol of symbols) {
-                      let range: LSP.Range | undefined;
+                      let range: LSP.Range | undefined
                       if ("range" in symbol) {
-                        range = symbol.range;
+                        range = symbol.range
                       } else if ("location" in symbol) {
-                        range = symbol.location.range;
+                        range = symbol.location.range
                       }
                       if (range?.start?.line && range?.start?.line === start) {
-                        start = range.start.line;
-                        end = range?.end?.line ?? start;
-                        break;
+                        start = range.start.line
+                        end = range?.end?.line ?? start
+                        break
                       }
                     }
-                    offset = Math.max(start - 2, 0);
+                    offset = Math.max(start - 2, 0)
                     if (end) {
-                      limit = end - offset + 2;
+                      limit = end - offset + 2
                     }
                   }
                 }
@@ -525,9 +511,7 @@ export namespace Session {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: `Called the Read tool with the following input: ${
-                      JSON.stringify(args)
-                    }`,
+                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                   },
                   {
                     id: Identifier.ascending("part"),
@@ -543,11 +527,11 @@ export namespace Session {
                     messageID: userMsg.id,
                     sessionID: input.sessionID,
                   },
-                ];
+                ]
               }
 
-              let file = Bun.file(filePath);
-              FileTime.read(input.sessionID, filePath);
+              let file = Bun.file(filePath)
+              FileTime.read(input.sessionID, filePath)
               return [
                 {
                   id: Identifier.ascending("part"),
@@ -562,13 +546,12 @@ export namespace Session {
                   messageID: userMsg.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` +
-                    Buffer.from(await file.bytes()).toString("base64"),
+                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
                 },
-              ];
+              ]
           }
         }
         return [
@@ -578,7 +561,7 @@ export namespace Session {
             messageID: userMsg.id,
             sessionID: input.sessionID,
           },
-        ];
+        ]
       }),
     ).then((x) => x.flat())
     if (inputMode === "plan")
@@ -600,7 +583,7 @@ export namespace Session {
     )
     await updateMessage(userMsg)
     for (const part of userParts) {
-      await updatePart(part);
+      await updatePart(part)
     }
 
     // mark session as updated
@@ -609,54 +592,47 @@ export namespace Session {
 
     if (isLocked(input.sessionID)) {
       return new Promise((resolve) => {
-        const queue = state().queued.get(input.sessionID) ?? [];
+        const queue = state().queued.get(input.sessionID) ?? []
         queue.push({
           input: input,
           message: userMsg,
           parts: userParts,
           processed: false,
           callback: resolve,
-        });
-        state().queued.set(input.sessionID, queue);
-      });
+        })
+        state().queued.set(input.sessionID, queue)
+      })
     }
 
     const model = await Provider.getModel(input.providerID, input.modelID)
     let msgs = await messages(input.sessionID)
 
-    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)
-      ?.info as MessageV2.Assistant;
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) ||
-      OUTPUT_TOKEN_MAX;
+    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
     // auto summarize if too long
     if (previous && previous.tokens) {
-      const tokens = previous.tokens.input + previous.tokens.cache.read +
-        previous.tokens.cache.write + previous.tokens.output;
-      if (
-        model.info.limit.context &&
-        tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)
-      ) {
+      const tokens =
+        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
+      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
         await summarize({
           sessionID: input.sessionID,
           providerID: input.providerID,
           modelID: input.modelID,
-        });
-        return chat(input);
+        })
+        return chat(input)
       }
     }
 
-    using abort = lock(input.sessionID);
+    using abort = lock(input.sessionID)
 
-    const lastSummary = msgs.findLast((msg) =>
-      msg.info.role === "assistant" && msg.info.summary === true
-    );
+    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) {
-      msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id);
+      msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
     }
 
     if (msgs.length === 1 && !session.parentID) {
-      const small = (await Provider.getSmallModel(input.providerID)) ?? model;
+      const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
         providerOptions: {
@@ -692,8 +668,9 @@ export namespace Session {
               const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
               draft.title = title.trim()
             })
+          }
         })
-        .catch(() => {});
+        .catch(() => {})
     }
 
     const mode = await Mode.get(inputMode)
@@ -708,8 +685,8 @@ export namespace Session {
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
-    const [first, ...rest] = system;
-    system = [first, rest.join("\n")];
+    const [first, ...rest] = system
+    system = [first, rest.join("\n")]
 
     const assistantMsg: MessageV2.Info = {
       id: Identifier.ascending("message"),
@@ -733,11 +710,11 @@ export namespace Session {
         created: Date.now(),
       },
       sessionID: input.sessionID,
-    };
-    await updateMessage(assistantMsg);
-    const tools: Record<string, AITool> = {};
+    }
+    await updateMessage(assistantMsg)
+    const tools: Record<string, AITool> = {}
 
-    const processor = createProcessor(assistantMsg, model.info);
+    const processor = createProcessor(assistantMsg, model.info)
 
     const enabledTools = pipe(
       mode.tools,
@@ -768,7 +745,7 @@ export namespace Session {
             messageID: assistantMsg.id,
             callID: options.toolCallId,
             metadata: async (val) => {
-              const match = processor.partFromToolCall(options.toolCallId);
+              const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
                 await updatePart({
                   ...match,
@@ -781,7 +758,7 @@ export namespace Session {
                       start: Date.now(),
                     },
                   },
-                });
+                })
               }
             },
           })
@@ -800,9 +777,9 @@ export namespace Session {
           return {
             type: "text",
             value: result.output,
-          };
+          }
         },
-      });
+      })
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
@@ -814,29 +791,26 @@ export namespace Session {
         const output = result.content
           .filter((x: any) => x.type === "text")
           .map((x: any) => x.text)
-          .join("\n\n");
+          .join("\n\n")
 
         return {
           output,
-        };
-      };
+        }
+      }
       item.toModelOutput = (result) => {
         return {
           type: "text",
           value: result.output,
-        };
-      };
-      const schema = (item as any).inputSchema ?? (item as any).parameters;
-      if (schema) {
-        const transformedSchema = Provider.transformToolSchema(
-          schema as Provider.FlexibleSchema<any>,
-          input.providerID,
-        );
-        if (transformedSchema) {
-          (item as any).inputSchema = transformedSchema;
         }
       }
-      tools[key] = item;
+      const schema = (item as any).inputSchema ?? (item as any).parameters
+      if (schema) {
+        const transformedSchema = Provider.transformToolSchema(schema as Provider.FlexibleSchema<any>, input.providerID)
+        if (transformedSchema) {
+          ;(item as any).inputSchema = transformedSchema
+        }
+      }
+      tools[key] = item
     }
 
     const params = {
@@ -861,12 +835,10 @@ export namespace Session {
         })
       },
       async prepareStep({ messages }) {
-        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) =>
-          !x.processed
-        );
+        const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
         if (queue.length) {
           for (const item of queue) {
-            if (item.processed) continue;
+            if (item.processed) continue
             messages.push(
               ...MessageV2.toModelMessage([
                 {
@@ -874,11 +846,11 @@ export namespace Session {
                   parts: item.parts,
                 },
               ]),
-            );
-            item.processed = true;
+            )
+            item.processed = true
           }
-          assistantMsg.time.completed = Date.now();
-          await updateMessage(assistantMsg);
+          assistantMsg.time.completed = Date.now()
+          await updateMessage(assistantMsg)
           Object.assign(assistantMsg, {
             id: Identifier.ascending("message"),
             role: "assistant",
@@ -901,12 +873,12 @@ export namespace Session {
               created: Date.now(),
             },
             sessionID: input.sessionID,
-          });
-          await updateMessage(assistantMsg);
+          })
+          await updateMessage(assistantMsg)
         }
         return {
           messages,
-        };
+        }
       },
       async experimental_repairToolCall(input) {
         if (InvalidToolInputError.isInstance(input.error)) {
@@ -940,7 +912,8 @@ export namespace Session {
         ),
         ...MessageV2.toModelMessage(msgs),
       ],
-      tools: model.info.tool_call === false ? undefined : ProviderTransform.tools(tools, input.providerID, input.modelID),
+      tools:
+        model.info.tool_call === false ? undefined : ProviderTransform.tools(tools, input.providerID, input.modelID),
       model: wrapLanguageModel({
         model: model.language,
         middleware: [
@@ -948,30 +921,26 @@ export namespace Session {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(
-                  args.params.prompt,
-                  input.providerID,
-                  input.modelID,
-                );
+                args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
               }
-              return args.params;
+              return args.params
             },
           },
         ],
       }),
-    });
-    const result = await processor.process(stream);
-    const queued = state().queued.get(input.sessionID) ?? [];
-    const unprocessed = queued.find((x) => !x.processed);
+    })
+    const result = await processor.process(stream)
+    const queued = state().queued.get(input.sessionID) ?? []
+    const unprocessed = queued.find((x) => !x.processed)
     if (unprocessed) {
-      unprocessed.processed = true;
-      return chat(unprocessed.input);
+      unprocessed.processed = true
+      return chat(unprocessed.input)
     }
     for (const item of queued) {
-      item.callback(result);
+      item.callback(result)
     }
-    state().queued.delete(input.sessionID);
-    return result;
+    state().queued.delete(input.sessionID)
+    return result
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
@@ -983,12 +952,12 @@ export namespace Session {
       },
       async process(stream: StreamTextResult<Record<string, AITool>, never>) {
         try {
-          let currentText: MessageV2.TextPart | undefined;
+          let currentText: MessageV2.TextPart | undefined
 
           for await (const value of stream.fullStream) {
             log.info("part", {
               type: value.type,
-            });
+            })
             switch (value.type) {
               case "start":
                 break
@@ -1009,7 +978,7 @@ export namespace Session {
                 break
 
               case "tool-input-delta":
-                break;
+                break
 
               case "tool-input-end":
                 break
@@ -1030,7 +999,7 @@ export namespace Session {
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
-                break;
+                break
               }
               case "tool-result": {
                 const match = toolcalls[value.toolCallId]
@@ -1051,7 +1020,7 @@ export namespace Session {
                   })
                   delete toolcalls[value.toolCallId]
                 }
-                break;
+                break
               }
 
               case "tool-error": {
@@ -1071,11 +1040,11 @@ export namespace Session {
                   })
                   delete toolcalls[value.toolCallId]
                 }
-                break;
+                break
               }
 
               case "error":
-                throw value.error;
+                throw value.error
 
               case "start-step":
                 await updatePart({
@@ -1088,13 +1057,9 @@ export namespace Session {
                 break
 
               case "finish-step":
-                const usage = getUsage(
-                  model,
-                  value.usage,
-                  value.providerMetadata,
-                );
-                assistantMsg.cost += usage.cost;
-                assistantMsg.tokens = usage.tokens;
+                const usage = getUsage(model, value.usage, value.providerMetadata)
+                assistantMsg.cost += usage.cost
+                assistantMsg.tokens = usage.tokens
                 await updatePart({
                   id: Identifier.ascending("part"),
                   messageID: assistantMsg.id,
@@ -1130,15 +1095,15 @@ export namespace Session {
                   time: {
                     start: Date.now(),
                   },
-                };
-                break;
+                }
+                break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
                   if (currentText.text) await updatePart(currentText)
                 }
-                break;
+                break
 
               case "text-end":
                 if (currentText) {
@@ -1149,25 +1114,25 @@ export namespace Session {
                   }
                   await updatePart(currentText)
                 }
-                currentText = undefined;
-                break;
+                currentText = undefined
+                break
 
               case "finish":
-                assistantMsg.time.completed = Date.now();
-                await updateMessage(assistantMsg);
-                break;
+                assistantMsg.time.completed = Date.now()
+                await updateMessage(assistantMsg)
+                break
 
               default:
                 log.info("unhandled", {
                   ...value,
-                });
-                continue;
+                })
+                continue
             }
           }
         } catch (e) {
           log.error("", {
             error: e,
-          });
+          })
           switch (true) {
             case e instanceof DOMException && e.name === "AbortError":
               assistantMsg.error = new MessageV2.AbortedError(
@@ -1175,11 +1140,11 @@ export namespace Session {
                 {
                   cause: e,
                 },
-              ).toObject();
-              break;
+              ).toObject()
+              break
             case MessageV2.OutputLengthError.isInstance(e):
-              assistantMsg.error = e;
-              break;
+              assistantMsg.error = e
+              break
             case LoadAPIKeyError.isInstance(e):
               assistantMsg.error = new MessageV2.AuthError(
                 {
@@ -1187,22 +1152,28 @@ export namespace Session {
                   message: e.message,
                 },
                 { cause: e },
-              ).toObject();
-              break;
+              ).toObject()
+              break
             case e instanceof Error:
-              assistantMsg.error = new NamedError.Unknown({
-                message: e.toString(),
-              }, { cause: e }).toObject();
-              break;
+              assistantMsg.error = new NamedError.Unknown(
+                {
+                  message: e.toString(),
+                },
+                { cause: e },
+              ).toObject()
+              break
             default:
-              assistantMsg.error = new NamedError.Unknown({
-                message: JSON.stringify(e),
-              }, { cause: e });
+              assistantMsg.error = new NamedError.Unknown(
+                {
+                  message: JSON.stringify(e),
+                },
+                { cause: e },
+              )
           }
           Bus.publish(Event.Error, {
             sessionID: assistantMsg.sessionID,
             error: assistantMsg.error,
-          });
+          })
         }
         const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
         for (const part of p) {
@@ -1218,14 +1189,14 @@ export namespace Session {
                 },
                 input: {},
               },
-            });
+            })
           }
         }
-        assistantMsg.time.completed = Date.now();
-        await updateMessage(assistantMsg);
-        return { info: assistantMsg, parts: p };
+        assistantMsg.time.completed = Date.now()
+        await updateMessage(assistantMsg)
+        return { info: assistantMsg, parts: p }
       },
-    };
+    }
   }
 
   export const RevertInput = z.object({
@@ -1326,10 +1297,10 @@ export namespace Session {
       time: {
         created: Date.now(),
       },
-    };
-    await updateMessage(next);
+    }
+    await updateMessage(next)
 
-    const processor = createProcessor(next, model.info);
+    const processor = createProcessor(next, model.info)
     const stream = streamText({
       maxRetries: 10,
       abortSignal: abort.signal,
@@ -1347,44 +1318,39 @@ export namespace Session {
           content: [
             {
               type: "text",
-              text:
-                "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
+              text: "Provide a detailed but concise summary of our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.",
             },
           ],
         },
       ],
-    });
+    })
 
-    const result = await processor.process(stream);
-    return result;
+    const result = await processor.process(stream)
+    return result
   }
 
   function isLocked(sessionID: string) {
-    return state().pending.has(sessionID);
+    return state().pending.has(sessionID)
   }
 
   function lock(sessionID: string) {
-    log.info("locking", { sessionID });
-    if (state().pending.has(sessionID)) throw new BusyError(sessionID);
-    const controller = new AbortController();
-    state().pending.set(sessionID, controller);
+    log.info("locking", { sessionID })
+    if (state().pending.has(sessionID)) throw new BusyError(sessionID)
+    const controller = new AbortController()
+    state().pending.set(sessionID, controller)
     return {
       signal: controller.signal,
       [Symbol.dispose]() {
-        log.info("unlocking", { sessionID });
-        state().pending.delete(sessionID);
+        log.info("unlocking", { sessionID })
+        state().pending.delete(sessionID)
         Bus.publish(Event.Idle, {
           sessionID,
-        });
+        })
       },
-    };
+    }
   }
 
-  function getUsage(
-    model: ModelsDev.Model,
-    usage: LanguageModelUsage,
-    metadata?: ProviderMetadata,
-  ) {
+  function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {
     const tokens = {
       input: usage.inputTokens ?? 0,
       output: usage.outputTokens ?? 0,
@@ -1396,39 +1362,31 @@ export namespace Session {
           0) as number,
         read: usage.cachedInputTokens ?? 0,
       },
-    };
+    }
     return {
       cost: new Decimal(0)
         .add(new Decimal(tokens.input).mul(model.cost.input).div(1_000_000))
         .add(new Decimal(tokens.output).mul(model.cost.output).div(1_000_000))
-        .add(
-          new Decimal(tokens.cache.read).mul(model.cost.cache_read ?? 0).div(
-            1_000_000,
-          ),
-        )
-        .add(
-          new Decimal(tokens.cache.write).mul(model.cost.cache_write ?? 0).div(
-            1_000_000,
-          ),
-        )
+        .add(new Decimal(tokens.cache.read).mul(model.cost.cache_read ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.write).mul(model.cost.cache_write ?? 0).div(1_000_000))
         .toNumber(),
       tokens,
-    };
+    }
   }
 
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {
-      super(`Session ${sessionID} is busy`);
+      super(`Session ${sessionID} is busy`)
     }
   }
 
   export async function initialize(input: {
-    sessionID: string;
-    modelID: string;
-    providerID: string;
-    messageID: string;
+    sessionID: string
+    modelID: string
+    providerID: string
+    messageID: string
   }) {
-    const app = App.info();
+    const app = App.info()
     await Session.chat({
       sessionID: input.sessionID,
       messageID: input.messageID,
@@ -1441,7 +1399,7 @@ export namespace Session {
           text: PROMPT_INITIALIZE.replace("${path}", app.path.root),
         },
       ],
-    });
-    await App.initialize();
+    })
+    await App.initialize()
   }
 }
