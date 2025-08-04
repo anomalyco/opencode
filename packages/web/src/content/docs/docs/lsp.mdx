@@ -1,0 +1,79 @@
+---
+title: LSP Servers
+description: Language Server Protocol integration with opencode
+---
+
+opencode integrates with Language Server Protocol (LSP) to enhance how the LLM interacts with your codebase. LSP servers provide intelligent code analysis and editing capabilities for different programming languages.
+
+## Built-in LSP Servers
+
+opencode comes with several built-in LSP servers for popular languages:
+
+| LSP Server | Languages/Extensions                         | Requirements                        |
+| ---------- | -------------------------------------------- | ----------------------------------- |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` dependency in project  |
+| gopls      | .go                                          | `go` command available              |
+| ruby-lsp   | .rb, .rake, .gemspec, .ru                    | `ruby` and `gem` commands available |
+| pyright    | .py, .pyi                                    | `pyright` dependency installed      |
+| elixir-ls  | .ex, .exs                                    | `elixir` command available          |
+| zls        | .zig, .zon                                   | `zig` command available             |
+| csharp     | .cs                                          | `.NET SDK` installed                |
+
+LSP servers are automatically enabled when their requirements are met in your project environment.
+
+## Configuration
+
+You can customize LSP servers through the `lsp` section in your `opencode.json` configuration file.
+
+### Disabling LSP Servers
+
+To disable a specific LSP server, set its configuration to `{ "disabled": true }`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+### Custom LSP Servers
+
+You can add custom LSP servers by specifying the command and file extensions:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+### Configuration Options
+
+Each LSP server configuration supports these properties:
+
+| Property         | Type     | Description                                       |
+| ---------------- | -------- | ------------------------------------------------- |
+| `disabled`       | boolean  | Set to `true` to disable the LSP server           |
+| `command`        | string[] | The command to start the LSP server               |
+| `extensions`     | string[] | File extensions this LSP server should handle     |
+| `env`            | object   | Environment variables to set when starting server |
+| `initialization` | object   | Initialization options to send to the LSP server  |
+
+## How It Works
+
+When opencode opens a file, it:
+
+1. Checks the file extension against all enabled LSP servers
+2. Starts the appropriate LSP server if not already running
+3. Provides intelligent code analysis and editing capabilities
+
+This integration allows the LLM to better understand your codebase through features like diagnostics, go-to-definition, and find-references.

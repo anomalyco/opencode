@@ -7,6 +7,7 @@ import path from "path"
 import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
+import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
@@ -21,7 +22,8 @@ export namespace SystemPrompt {
   export function provider(modelID: string) {
     if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
     if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
-    return [PROMPT_ANTHROPIC]
+    if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
+    return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
   export async function environment() {
@@ -58,33 +60,28 @@ export namespace SystemPrompt {
   export async function custom() {
     const { cwd, root } = App.info().path
     const config = await Config.get()
-    const found = []
+    const paths = new Set<string>()
+
     for (const item of CUSTOM_FILES) {
       const matches = await Filesystem.findUp(item, cwd, root)
-      found.push(...matches.map((x) => Bun.file(x).text()))
+      matches.forEach((path) => paths.add(path))
     }
-    found.push(
-      Bun.file(path.join(Global.Path.config, "AGENTS.md"))
-        .text()
-        .catch(() => ""),
-    )
-    found.push(
-      Bun.file(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-        .text()
-        .catch(() => ""),
-    )
+
+    paths.add(path.join(Global.Path.config, "AGENTS.md"))
+    paths.add(path.join(os.homedir(), ".claude", "CLAUDE.md"))
 
     if (config.instructions) {
       for (const instruction of config.instructions) {
-        try {
-          const matches = await Filesystem.globUp(instruction, cwd, root)
-          found.push(...matches.map((x) => Bun.file(x).text()))
-        } catch {
-          continue // Skip invalid glob patterns
-        }
+        const matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+        matches.forEach((path) => paths.add(path))
       }
     }
 
+    const found = Array.from(paths).map((p) =>
+      Bun.file(p)
+        .text()
+        .catch(() => ""),
+    )
     return Promise.all(found).then((result) => result.filter(Boolean))
   }
 

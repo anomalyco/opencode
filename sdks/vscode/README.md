@@ -1,16 +1,17 @@
 # opencode VS Code Extension
 
-A VS Code extension that integrates [opencode](https://opencode.ai) directly into your development environment.
+A Visual Studio Code extension that integrates [opencode](https://opencode.ai) directly into your development workflow.
 
 ## Prerequisites
 
-This extension requires [opencode](https://opencode.ai) to be installed on your system. Visit [opencode.ai](https://opencode.ai) for installation instructions.
+This extension requires the [opencode CLI](https://opencode.ai) to be installed on your system. Visit [opencode.ai](https://opencode.ai) for installation instructions.
 
 ## Features
 
-- **Cmd+Escape**: Launch opencode in a split terminal view
-- **Alt+Cmd+K**: Send selected code to opencode's prompt
-- **Tab awareness**: opencode automatically detects which files you have open
+- **Quick Launch**: Use `Cmd+Esc` (Mac) or `Ctrl+Esc` (Windows/Linux) to open opencode in a split terminal view, or focus an existing terminal session if one is already running.
+- **New Session**: Use `Cmd+Shift+Esc` (Mac) or `Ctrl+Shift+Esc` (Windows/Linux) to start a new opencode terminal session, even if one is already open. You can also click the opencode button in the UI.
+- **Context Awareness**: Automatically share your current selection or tab with opencode.
+- **File Reference Shortcuts**: Use `Cmd+Option+K` (Mac) or `Alt+Ctrl+K` (Linux/Windows) to insert file references. For example, `@File#L37-42`.
 
 ## Support
 

@@ -20,7 +20,7 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const session = await Session.create(ctx.sessionID)
       const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
-      if (msg.role !== "assistant") throw new Error("Not an assistant message")
+      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const agent = await Agent.get(params.subagent_type)
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
@@ -38,8 +38,8 @@ export const TaskTool = Tool.define("task", async () => {
       })
 
       const model = agent.model ?? {
-        modelID: msg.modelID,
-        providerID: msg.providerID,
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
       }
 
       ctx.abort.addEventListener("abort", () => {
@@ -50,7 +50,7 @@ export const TaskTool = Tool.define("task", async () => {
         sessionID: session.id,
         modelID: model.modelID,
         providerID: model.providerID,
-        mode: msg.mode,
+        mode: msg.info.mode,
         system: agent.prompt,
         tools: {
           ...agent.tools,
@@ -70,7 +70,7 @@ export const TaskTool = Tool.define("task", async () => {
         metadata: {
           summary: result.parts.filter((x) => x.type === "tool"),
         },
-        output: result.parts.findLast((x) => x.type === "text")!.text,
+        output: result.parts.findLast((x) => x.type === "text")?.text ?? "",
       }
     },
   }

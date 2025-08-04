@@ -39,7 +39,7 @@ const AgentCreateCommand = cmd({
       const query = await prompts.text({
         message: "Description",
         placeholder: "What should this agent do?",
-        validate: (x) => (x.length > 0 ? undefined : "Required"),
+        validate: (x) => x && (x.length > 0 ? undefined : "Required"),
       })
       if (prompts.isCancel(query)) throw new UI.CancelledError()
 

@@ -1,3 +1,4 @@
+import { Hono } from "hono"
 import { DurableObject } from "cloudflare:workers"
 import { randomUUID } from "node:crypto"
 import { jwtVerify, createRemoteJWKSet } from "jose"
@@ -111,165 +112,156 @@ export class SyncServer extends DurableObject<Env> {
   }
 }
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url)
-    const splits = url.pathname.split("/")
-    const method = splits[1]
-
-    if (request.method === "GET" && method === "") {
-      return new Response("Hello, world!", {
-        headers: { "Content-Type": "text/plain" },
-      })
+export default new Hono<{ Bindings: Env }>()
+  .get("/", (c) => c.text("Hello, world!"))
+  .post("/share_create", async (c) => {
+    const body = await c.req.json<{ sessionID: string }>()
+    const sessionID = body.sessionID
+    const short = SyncServer.shortName(sessionID)
+    const id = c.env.SYNC_SERVER.idFromName(short)
+    const stub = c.env.SYNC_SERVER.get(id)
+    const secret = await stub.share(sessionID)
+    return c.json({
+      secret,
+      url: `https://${c.env.WEB_DOMAIN}/s/${short}`,
+    })
+  })
+  .post("/share_delete", async (c) => {
+    const body = await c.req.json<{ sessionID: string; secret: string }>()
+    const sessionID = body.sessionID
+    const secret = body.secret
+    const id = c.env.SYNC_SERVER.idFromName(SyncServer.shortName(sessionID))
+    const stub = c.env.SYNC_SERVER.get(id)
+    await stub.assertSecret(secret)
+    await stub.clear()
+    return c.json({})
+  })
+  .post("/share_delete_admin", async (c) => {
+    const id = c.env.SYNC_SERVER.idFromName("oVF8Rsiv")
+    const stub = c.env.SYNC_SERVER.get(id)
+    await stub.clear()
+    return c.json({})
+  })
+  .post("/share_sync", async (c) => {
+    const body = await c.req.json<{
+      sessionID: string
+      secret: string
+      key: string
+      content: any
+    }>()
+    const name = SyncServer.shortName(body.sessionID)
+    const id = c.env.SYNC_SERVER.idFromName(name)
+    const stub = c.env.SYNC_SERVER.get(id)
+    await stub.assertSecret(body.secret)
+    await stub.publish(body.key, body.content)
+    return c.json({})
+  })
+  .get("/share_poll", async (c) => {
+    const upgradeHeader = c.req.header("Upgrade")
+    if (!upgradeHeader || upgradeHeader !== "websocket") {
+      return c.text("Error: Upgrade header is required", { status: 426 })
     }
+    const id = c.req.query("id")
+    console.log("share_poll", id)
+    if (!id) return c.text("Error: Share ID is required", { status: 400 })
+    const stub = c.env.SYNC_SERVER.get(c.env.SYNC_SERVER.idFromName(id))
+    return stub.fetch(c.req.raw)
+  })
+  .get("/share_data", async (c) => {
+    const id = c.req.query("id")
+    console.log("share_data", id)
+    if (!id) return c.text("Error: Share ID is required", { status: 400 })
+    const stub = c.env.SYNC_SERVER.get(c.env.SYNC_SERVER.idFromName(id))
+    const data = await stub.getData()
 
-    if (request.method === "POST" && method === "share_create") {
-      const body = await request.json<any>()
-      const sessionID = body.sessionID
-      const short = SyncServer.shortName(sessionID)
-      const id = env.SYNC_SERVER.idFromName(short)
-      const stub = env.SYNC_SERVER.get(id)
-      const secret = await stub.share(sessionID)
-      return new Response(
-        JSON.stringify({
-          secret,
-          url: `https://${env.WEB_DOMAIN}/s/${short}`,
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        },
-      )
-    }
-
-    if (request.method === "POST" && method === "share_delete") {
-      const body = await request.json<any>()
-      const sessionID = body.sessionID
-      const secret = body.secret
-      const id = env.SYNC_SERVER.idFromName(SyncServer.shortName(sessionID))
-      const stub = env.SYNC_SERVER.get(id)
-      await stub.assertSecret(secret)
-      await stub.clear()
-      return new Response(JSON.stringify({}), {
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    if (request.method === "POST" && method === "share_delete_admin") {
-      const id = env.SYNC_SERVER.idFromName("oVF8Rsiv")
-      const stub = env.SYNC_SERVER.get(id)
-      await stub.clear()
-      return new Response(JSON.stringify({}), {
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    if (request.method === "POST" && method === "share_sync") {
-      const body = await request.json<{
-        sessionID: string
-        secret: string
-        key: string
-        content: any
-      }>()
-      const name = SyncServer.shortName(body.sessionID)
-      const id = env.SYNC_SERVER.idFromName(name)
-      const stub = env.SYNC_SERVER.get(id)
-      await stub.assertSecret(body.secret)
-      await stub.publish(body.key, body.content)
-      return new Response(JSON.stringify({}), {
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    if (request.method === "GET" && method === "share_poll") {
-      const upgradeHeader = request.headers.get("Upgrade")
-      if (!upgradeHeader || upgradeHeader !== "websocket") {
-        return new Response("Error: Upgrade header is required", {
-          status: 426,
-        })
+    let info
+    const messages: Record<string, any> = {}
+    data.forEach((d) => {
+      const [root, type, ...splits] = d.key.split("/")
+      if (root !== "session") return
+      if (type === "info") {
+        info = d.content
+        return
       }
-      const id = url.searchParams.get("id")
-      console.log("share_poll", id)
-      if (!id) return new Response("Error: Share ID is required", { status: 400 })
-      const stub = env.SYNC_SERVER.get(env.SYNC_SERVER.idFromName(id))
-      return stub.fetch(request)
-    }
+      if (type === "message") {
+        messages[d.content.id] = {
+          parts: [],
+          ...d.content,
+        }
+      }
+      if (type === "part") {
+        messages[d.content.messageID].parts.push(d.content)
+      }
+    })
 
-    if (request.method === "GET" && method === "share_data") {
-      const id = url.searchParams.get("id")
-      console.log("share_data", id)
-      if (!id) return new Response("Error: Share ID is required", { status: 400 })
-      const stub = env.SYNC_SERVER.get(env.SYNC_SERVER.idFromName(id))
-      const data = await stub.getData()
+    return c.json({ info, messages })
+  })
+  /**
+   * Used by the GitHub action to get GitHub installation access token given the OIDC token
+   */
+  .post("/exchange_github_app_token", async (c) => {
+    const EXPECTED_AUDIENCE = "opencode-github-action"
+    const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
+    const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
 
-      let info
-      const messages: Record<string, any> = {}
-      data.forEach((d) => {
-        const [root, type, ...splits] = d.key.split("/")
-        if (root !== "session") return
-        if (type === "info") {
-          info = d.content
-          return
-        }
-        if (type === "message") {
-          messages[d.content.id] = {
-            parts: [],
-            ...d.content,
-          }
-        }
-        if (type === "part") {
-          messages[d.content.messageID].parts.push(d.content)
-        }
+    // get Authorization header
+    const token = c.req.header("Authorization")?.replace(/^Bearer /, "")
+    if (!token) return c.json({ error: "Authorization header is required" }, { status: 401 })
+
+    // verify token
+    const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
+    let owner, repo
+    try {
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: GITHUB_ISSUER,
+        audience: EXPECTED_AUDIENCE,
       })
-
-      return new Response(
-        JSON.stringify({
-          info,
-          messages,
-        }),
-        {
-          headers: { "Content-Type": "application/json" },
-        },
-      )
+      const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
+      const parts = sub.split(":")[1].split("/")
+      owner = parts[0]
+      repo = parts[1]
+    } catch (err) {
+      console.error("Token verification failed:", err)
+      return c.json({ error: "Invalid or expired token" }, { status: 403 })
     }
 
-    /**
-     * Used by the GitHub action to get GitHub installation access token given the OIDC token
-     */
-    if (request.method === "POST" && method === "exchange_github_app_token") {
-      const EXPECTED_AUDIENCE = "opencode-github-action"
-      const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
-      const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
+    // Create app JWT token
+    const auth = createAppAuth({
+      appId: Resource.GITHUB_APP_ID.value,
+      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+    })
+    const appAuth = await auth({ type: "app" })
 
+    // Lookup installation
+    const octokit = new Octokit({ auth: appAuth.token })
+    const { data: installation } = await octokit.apps.getRepoInstallation({ owner, repo })
+
+    // Get installation token
+    const installationAuth = await auth({ type: "installation", installationId: installation.id })
+
+    return c.json({ token: installationAuth.token })
+  })
+  /**
+   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
+   */
+  .post("/exchange_github_app_token_with_pat", async (c) => {
+    const body = await c.req.json<{ owner: string; repo: string }>()
+    const owner = body.owner
+    const repo = body.repo
+
+    try {
       // get Authorization header
-      const authHeader = request.headers.get("Authorization")
+      const authHeader = c.req.header("Authorization")
       const token = authHeader?.replace(/^Bearer /, "")
-      if (!token)
-        return new Response(JSON.stringify({ error: "Authorization header is required" }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        })
+      if (!token) throw new Error("Authorization header is required")
 
-      // verify token
-      const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
-      let owner, repo
-      try {
-        const { payload } = await jwtVerify(token, JWKS, {
-          issuer: GITHUB_ISSUER,
-          audience: EXPECTED_AUDIENCE,
-        })
-        const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
-        const parts = sub.split(":")[1].split("/")
-        owner = parts[0]
-        repo = parts[1]
-      } catch (err) {
-        console.error("Token verification failed:", err)
-        return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
+      // Verify permissions
+      const userClient = new Octokit({ auth: token })
+      const { data: repoData } = await userClient.repos.get({ owner, repo })
+      if (!repoData.permissions.admin && !repoData.permissions.push && !repoData.permissions.maintain)
+        throw new Error("User does not have write permissions")
 
-      // Create app JWT token
+      // Get installation token
       const auth = createAppAuth({
         appId: Resource.GITHUB_APP_ID.value,
         privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
@@ -277,99 +269,49 @@ export default {
       const appAuth = await auth({ type: "app" })
 
       // Lookup installation
-      const octokit = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await octokit.apps.getRepoInstallation({ owner, repo })
+      const appClient = new Octokit({ auth: appAuth.token })
+      const { data: installation } = await appClient.apps.getRepoInstallation({ owner, repo })
 
       // Get installation token
       const installationAuth = await auth({ type: "installation", installationId: installation.id })
 
-      return new Response(JSON.stringify({ token: installationAuth.token }), {
-        headers: { "Content-Type": "application/json" },
-      })
+      return c.json({ token: installationAuth.token })
+    } catch (e: any) {
+      let error = e
+      if (e instanceof Error) {
+        error = e.message
+      }
+
+      return c.json({ error }, { status: 401 })
     }
+  })
+  /**
+   * Used by the opencode CLI to check if the GitHub app is installed
+   */
+  .get("/get_github_app_installation", async (c) => {
+    const owner = c.req.query("owner")
+    const repo = c.req.query("repo")
 
-    /**
-     * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
-     */
-    if (request.method === "POST" && method === "exchange_github_app_token_with_pat") {
-      const body = await request.json<any>()
-      const owner = body.owner
-      const repo = body.repo
+    const auth = createAppAuth({
+      appId: Resource.GITHUB_APP_ID.value,
+      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+    })
+    const appAuth = await auth({ type: "app" })
 
-      try {
-        // get Authorization header
-        const authHeader = request.headers.get("Authorization")
-        const token = authHeader?.replace(/^Bearer /, "")
-        if (!token) throw new Error("Authorization header is required")
-
-        // Verify permissions
-        const userClient = new Octokit({ auth: token })
-        const { data: repoData } = await userClient.repos.get({ owner, repo })
-        if (!repoData.permissions.admin && !repoData.permissions.push && !repoData.permissions.maintain)
-          throw new Error("User does not have write permissions")
-
-        // Get installation token
-        const auth = createAppAuth({
-          appId: Resource.GITHUB_APP_ID.value,
-          privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-        })
-        const appAuth = await auth({ type: "app" })
-
-        // Lookup installation
-        const appClient = new Octokit({ auth: appAuth.token })
-        const { data: installation } = await appClient.apps.getRepoInstallation({ owner, repo })
-
-        // Get installation token
-        const installationAuth = await auth({ type: "installation", installationId: installation.id })
-
-        return new Response(JSON.stringify({ token: installationAuth.token }), {
-          headers: { "Content-Type": "application/json" },
-        })
-      } catch (e: any) {
-        let error = e
-        if (e instanceof Error) {
-          error = e.message
-        }
-
-        return new Response(JSON.stringify({ error }), {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        })
+    // Lookup installation
+    const octokit = new Octokit({ auth: appAuth.token })
+    let installation
+    try {
+      const ret = await octokit.apps.getRepoInstallation({ owner, repo })
+      installation = ret.data
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("Not Found")) {
+        // not installed
+      } else {
+        throw err
       }
     }
 
-    /**
-     * Used by the opencode CLI to check if the GitHub app is installed
-     */
-    if (request.method === "GET" && method === "get_github_app_installation") {
-      const owner = url.searchParams.get("owner")
-      const repo = url.searchParams.get("repo")
-
-      const auth = createAppAuth({
-        appId: Resource.GITHUB_APP_ID.value,
-        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-      })
-      const appAuth = await auth({ type: "app" })
-
-      // Lookup installation
-      const octokit = new Octokit({ auth: appAuth.token })
-      let installation
-      try {
-        const ret = await octokit.apps.getRepoInstallation({ owner, repo })
-        installation = ret.data
-      } catch (err) {
-        if (err instanceof Error && err.message.includes("Not Found")) {
-          // not installed
-        } else {
-          throw err
-        }
-      }
-
-      return new Response(JSON.stringify({ installation }), {
-        headers: { "Content-Type": "application/json" },
-      })
-    }
-
-    return new Response("Not Found", { status: 404 })
-  },
-}
+    return c.json({ installation })
+  })
+  .all("*", (c) => c.text("Not Found"))

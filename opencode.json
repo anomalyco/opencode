@@ -1,24 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "moonshotai/kimi-k2": {
-          "options": {
-            "provider": {
-              "order": ["baseten"],
-              "allow_fallbacks": false
-            }
-          }
-        }
-      }
-    },
-    "huggingface": {
-      "models": {
-        "Qwen/Qwen3-235B-A22B-Instruct-2507:fireworks-ai": {}
-      }
-    }
-  },
   "mcp": {
     "context7": {
       "type": "remote",

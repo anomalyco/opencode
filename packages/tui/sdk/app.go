@@ -146,11 +146,12 @@ func (r appTimeJSON) RawJSON() string {
 }
 
 type Mode struct {
-	Name   string          `json:"name,required"`
-	Tools  map[string]bool `json:"tools,required"`
-	Model  ModeModel       `json:"model"`
-	Prompt string          `json:"prompt"`
-	JSON   modeJSON        `json:"-"`
+	Name        string          `json:"name,required"`
+	Tools       map[string]bool `json:"tools,required"`
+	Model       ModeModel       `json:"model"`
+	Prompt      string          `json:"prompt"`
+	Temperature float64         `json:"temperature"`
+	JSON        modeJSON        `json:"-"`
 }
 
 // modeJSON contains the JSON metadata for the struct [Mode]
@@ -159,6 +160,7 @@ type modeJSON struct {
 	Tools       apijson.Field
 	Model       apijson.Field
 	Prompt      apijson.Field
+	Temperature apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

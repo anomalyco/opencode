@@ -1,0 +1,24 @@
+name: Typecheck
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.2.19
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run typecheck
+        run: bun typecheck

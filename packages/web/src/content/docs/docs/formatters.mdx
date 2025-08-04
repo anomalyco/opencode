@@ -1,0 +1,87 @@
+---
+title: Formatters
+description: Code formatting with opencode
+---
+
+opencode automatically formats code files after they are written or edited using language-specific formatters. This ensures consistent code style across your project without manual intervention.
+
+## Built-in Formatters
+
+opencode comes with several built-in formatters for popular languages and frameworks:
+
+| Formatter      | Languages/Extensions                                                                                     | Requirements                          |
+| -------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| gofmt          | .go                                                                                                      | `gofmt` command available             |
+| mix            | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                             | `mix` command available               |
+| prettier       | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://prettier.io/docs/en/index.html) | `prettier` dependency in package.json |
+| biome          | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, and [more](https://biomejs.dev/)                   | `biome.json` config file              |
+| zig            | .zig, .zon                                                                                               | `zig` command available               |
+| clang-format   | .c, .cpp, .h, .hpp, .ino, and [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` config file           |
+| ktlint         | .kt, .kts                                                                                                | `ktlint` command available            |
+| ruff           | .py, .pyi                                                                                                | `ruff` command available with config  |
+| rubocop        | .rb, .rake, .gemspec, .ru                                                                                | `rubocop` command available           |
+| standardrb     | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available        |
+| htmlbeautifier | .erb, .html.erb                                                                                          | `htmlbeautifier` command available    |
+
+Formatters are automatically enabled when their requirements are met in your project environment.
+
+## Configuration
+
+You can customize formatters through the `formatter` section in your `opencode.json` configuration file.
+
+### Disabling Formatters
+
+To disable a specific formatter, set its `disabled` property to `true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+### Custom Formatters
+
+You can override the default formatters or add new ones by specifying the command, environment variables, and file extensions:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+The `$FILE` placeholder in the command will be replaced with the path to the file being formatted.
+
+### Configuration Options
+
+Each formatter configuration supports these properties:
+
+| Property      | Type     | Description                                             |
+| ------------- | -------- | ------------------------------------------------------- |
+| `disabled`    | boolean  | Set to `true` to disable the formatter                  |
+| `command`     | string[] | The command to run for formatting                       |
+| `environment` | object   | Environment variables to set when running the formatter |
+| `extensions`  | string[] | File extensions this formatter should handle            |
+
+## How It Works
+
+When opencode writes or edits a file, it:
+
+1. Checks the file extension against all enabled formatters
+2. Runs the appropriate formatter command on the file
+3. Applies the formatting changes automatically
+
+This process happens seamlessly in the background, ensuring your code maintains consistent formatting without requiring manual steps.

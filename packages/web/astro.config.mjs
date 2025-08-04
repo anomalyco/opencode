@@ -62,20 +62,31 @@ export default defineConfig({
       },
       sidebar: [
         "docs",
-        "docs/cli",
-        "docs/ide",
-        "docs/share",
-        "docs/modes",
-        "docs/agents",
-        "docs/rules",
-        "docs/github",
         "docs/config",
-        "docs/models",
-        "docs/themes",
-        "docs/keybinds",
+        "docs/providers",
         "docs/enterprise",
-        "docs/mcp-servers",
         "docs/troubleshooting",
+
+        {
+          label: "Usage",
+          items: ["docs/cli", "docs/ide", "docs/share", "docs/github"],
+        },
+
+        {
+          label: "Configure",
+          items: [
+            "docs/modes",
+            "docs/rules",
+            "docs/agents",
+            "docs/models",
+            "docs/themes",
+            "docs/keybinds",
+            "docs/permissions",
+            "docs/mcp-servers",
+            "docs/formatters",
+            "docs/lsp",
+          ],
+        },
       ],
       components: {
         Hero: "./src/components/Hero.astro",

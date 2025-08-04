@@ -18,6 +18,7 @@ Let's get started.
 To use opencode, you'll need:
 
 1. A modern terminal emulator like:
+
    - [WezTerm](https://wezterm.org), cross-platform
    - [Alacritty](https://alacritty.org), cross-platform
    - [Ghostty](https://ghostty.org), Linux and macOS
@@ -86,7 +87,7 @@ With opencode you can use any LLM provider by configuring their API keys.
 
 We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max), it's the most cost-effective way to use opencode.
 
-Once you've singed up, run `opencode auth login` and select Anthropic.
+Once you've signed up, run `opencode auth login` and select Anthropic.
 
 ```bash
 $ opencode auth login
@@ -105,7 +106,7 @@ $ opencode auth login
 └
 ```
 
-Alternatively, you can select one of the other providers and adding their API keys.
+Alternatively, you can select one of the other providers. [Learn more](/docs/providers#directory).
 
 ---
 
@@ -138,7 +139,7 @@ You should commit your project's `AGENTS.md` file to Git.
 :::
 
 This helps opencode understand the project structure and the coding patterns
-used. 
+used.
 
 ---
 
@@ -178,22 +179,22 @@ You can ask opencode to add new features to your project. Though we first recomm
    instead suggest _how_ it'll implement the feature.
 
    Switch to it using the **Tab** key. You'll see an indicator for this in the lower right corner.
-   
+
    ```bash frame="none" title="Switch to Plan mode"
    <TAB>
    ```
 
    Now let's describe what we want it to do.
-   
+
    ```txt frame="none"
    When a user deletes a note, we'd like to flag it as deleted in the database.
    Then create a screen that shows all the recently deleted notes.
    From this screen, the user can undelete a note or permanently delete it.
    ```
-   
+
    You want to give opencode enough details to understand what you want. It helps
    to talk to it like you are talking to a junior developer on your team.
-   
+
    :::tip
    Give opencode plenty of context and examples to help it understand what you
    want.
@@ -202,7 +203,7 @@ You can ask opencode to add new features to your project. Though we first recomm
 2. **Iterate on the plan**
 
    Once it gives you a plan, you can give it feedback or add more details.
-   
+
    ```txt frame="none"
    We'd like to design this new screen using a design I've used before.
    [Image #1] Take a look at this image and use it as a reference.
@@ -216,16 +217,16 @@ You can ask opencode to add new features to your project. Though we first recomm
    do this by dragging and dropping an image into the terminal.
 
 3. **Build the feature**
-   
+
    Once you feel comfortable with the plan, switch back to _Build mode_ by
    hitting the **Tab** key again.
-   
+
    ```bash frame="none"
    <TAB>
    ```
-   
+
    And asking it to make the changes.
-   
+
    ```bash frame="none"
    Sounds good! Go ahead and make the changes.
    ```
@@ -257,7 +258,7 @@ team](/docs/share).
 /share
 ```
 
-This'll create a link to the current conversation and copy it to your clipboard.
+This will create a link to the current conversation and copy it to your clipboard.
 
 :::note
 Conversations are not shared by default.
@@ -271,4 +272,4 @@ Here's an [example conversation](https://opencode.ai/s/4XP1fce5) with opencode.
 
 And that's it! You are now a pro at using opencode.
 
-To make it your own, we recommend [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), or playing around with the [opencode config](/docs/config).
+To make it your own, we recommend [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), or playing around with the [opencode config](/docs/config).

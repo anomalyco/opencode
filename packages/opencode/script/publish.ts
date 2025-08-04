@@ -1,21 +1,13 @@
 #!/usr/bin/env bun
-
+const dir = new URL("..", import.meta.url).pathname
+process.chdir(dir)
 import { $ } from "bun"
 
 import pkg from "../package.json"
 
-const dry = process.argv.includes("--dry")
-const snapshot = process.argv.includes("--snapshot")
-
-const version = snapshot
-  ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  : await $`git describe --tags --abbrev=0`
-      .text()
-      .then((x) => x.substring(1).trim())
-      .catch(() => {
-        console.error("tag not found")
-        process.exit(1)
-      })
+const dry = process.env["OPENCODE_DRY"] === "true"
+const version = process.env["OPENCODE_VERSION"]!
+const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 
 console.log(`publishing ${version}`)
 
@@ -26,12 +18,13 @@ const GOARCH: Record<string, string> = {
 }
 
 const targets = [
+  ["windows", "x64"],
   ["linux", "arm64"],
   ["linux", "x64"],
   ["linux", "x64-baseline"],
   ["darwin", "x64"],
+  ["darwin", "x64-baseline"],
   ["darwin", "arm64"],
-  ["windows", "x64"],
 ]
 
 await $`rm -rf dist`
@@ -45,7 +38,7 @@ for (const [os, arch] of targets) {
   await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`.cwd(
     "../tui",
   )
-  await $`bun build --define OPENCODE_VERSION="'${version}'" --compile --minify --target=bun-${os}-${arch} --outfile=dist/${name}/bin/opencode ./src/index.ts ./dist/${name}/bin/tui`
+  await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/opencode ./src/index.ts`
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
@@ -59,7 +52,7 @@ for (const [os, arch] of targets) {
       2,
     ),
   )
-  if (!dry) await $`cd dist/${name} && bun publish --access public --tag ${npmTag}`
+  if (!dry) await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${npmTag}`
   optionalDependencies[name] = version
 }
 
@@ -111,6 +104,7 @@ if (!snapshot) {
       .filter((x: string) => {
         const lower = x.toLowerCase()
         return (
+          !lower.includes("release:") &&
           !lower.includes("ignore:") &&
           !lower.includes("chore:") &&
           !lower.includes("ci:") &&

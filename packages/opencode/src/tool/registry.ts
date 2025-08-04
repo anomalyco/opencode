@@ -10,9 +10,11 @@ import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
+import { InvalidTool } from "./invalid"
 
 export namespace ToolRegistry {
   const ALL = [
+    InvalidTool,
     BashTool,
     EditTool,
     WebFetchTool,
@@ -69,7 +71,14 @@ export namespace ToolRegistry {
         patch: false,
       }
     }
-    if (modelID.toLowerCase().includes("qwen")) {
+
+    if (
+      modelID.toLowerCase().includes("qwen") ||
+      modelID.includes("gpt-") ||
+      modelID.includes("o1") ||
+      modelID.includes("o3") ||
+      modelID.includes("codex")
+    ) {
       return {
         patch: false,
         todowrite: false,

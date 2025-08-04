@@ -5,20 +5,24 @@
   "type": "module",
   "packageManager": "bun@1.2.14",
   "scripts": {
-    "dev": "bun run packages/opencode/src/index.ts",
+    "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
     "stainless": "./scripts/stainless",
-    "postinstall": "./scripts/hooks"
+    "postinstall": "./script/hooks"
   },
   "workspaces": {
     "packages": [
-      "packages/*"
+      "packages/*",
+      "packages/sdk/js"
     ],
     "catalog": {
-      "typescript": "5.8.2",
       "@types/node": "22.13.9",
+      "@tsconfig/node22": "22.0.2",
+      "ai": "5.0.0-beta.34",
+      "hono": "4.7.10",
+      "typescript": "5.8.2",
       "zod": "3.25.49",
-      "ai": "5.0.0-beta.21"
+      "remeda": "2.26.0"
     }
   },
   "devDependencies": {
@@ -39,5 +43,7 @@
     "protobufjs",
     "sharp"
   ],
-  "patchedDependencies": {}
+  "patchedDependencies": {
+    "marked-shiki@1.2.0": "patches/marked-shiki@1.2.0.patch"
+  }
 }

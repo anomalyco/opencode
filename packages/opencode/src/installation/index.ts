@@ -136,6 +136,7 @@ export namespace Installation {
   }
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "dev"
+  export const USER_AGENT = `opencode/${VERSION}`
 
   export async function latest() {
     return fetch("https://api.github.com/repos/sst/opencode/releases/latest")

@@ -1,0 +1,88 @@
+---
+title: Plugins
+description: Extend opencode with custom plugins.
+---
+
+Plugins allow you to extend opencode's functionality by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify opencode's default behavior.
+
+---
+
+## Creating a Plugin
+
+A plugin is a JavaScript/TypeScript module that exports one or more plugin
+functions. Each function receives a context object and returns a hooks object.
+They are loaded from the `.opencode/plugin` directory either in your proejct or
+globally in `~/.config/opencode/plugin`.
+
+### Basic Structure
+
+```typescript title=".opencode/plugin/example.js"
+export const MyPlugin = async ({ app, client, $ }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+The plugin function receives:
+
+- `app` - The opencode application instance
+- `client` - An opencode SDK client for interacting with the AI
+- `$` - Bun's shell API for executing commands
+
+### TypeScript Support
+
+For TypeScript plugins, you can import types from the plugin package:
+
+```typescript title="my-plugin.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ app, client, $ }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+## Examples
+
+### Notification Plugin
+
+Send notifications when certain events occur:
+
+```javascript title=".opencode/plugin/notification.js"
+export const NotificationPlugin = async ({ client, $ }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+### .env Protection
+
+Integrate with external services:
+
+```javascript title=".opencode/plugin/slack.js"
+export const EnvProtection = async ({ client, $ }) => {
+  return {
+    tool: {
+      execute: {
+        before: async (input, output) => {
+          if (input.tool === "read" && output.args.filePath.includes(".env")) {
+            throw new Error("Do not read .env files")
+          }
+        }
+      }
+    }
+  }
+}
+```

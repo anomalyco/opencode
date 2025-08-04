@@ -83,6 +83,7 @@ const cli = yargs(hideBin(process.argv))
     if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
       cli.showHelp("log")
     }
+    process.exit(1)
   })
   .strict()
 

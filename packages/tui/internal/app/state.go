@@ -120,5 +120,13 @@ func LoadState(filePath string) (*State, error) {
 		}
 		return nil, fmt.Errorf("failed to decode TOML from file %s: %w", filePath, err)
 	}
+
+	// Restore attachment sources types that were deserialized as map[string]any
+	for _, prompt := range state.MessageHistory {
+		for _, att := range prompt.Attachments {
+			att.RestoreSourceType()
+		}
+	}
+
 	return &state, nil
 }

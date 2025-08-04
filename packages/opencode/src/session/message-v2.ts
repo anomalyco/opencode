@@ -284,6 +284,7 @@ export namespace MessageV2 {
     PartRemoved: Bus.event(
       "message.part.removed",
       z.object({
+        sessionID: z.string(),
         messageID: z.string(),
         partID: z.string(),
       }),

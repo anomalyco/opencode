@@ -14,12 +14,7 @@ export const WebFetchTool = Tool.define("webfetch", {
     format: z
       .enum(["text", "markdown", "html"])
       .describe("The format to return the content in (text, markdown, or html)"),
-    timeout: z
-      .number()
-      .min(0)
-      .max(MAX_TIMEOUT / 1000)
-      .describe("Optional timeout in seconds (max 120)")
-      .optional(),
+    timeout: z.number().describe("Optional timeout in seconds (max 120)").optional(),
   }),
   async execute(params, ctx) {
     // Validate URL

@@ -34,17 +34,34 @@
       margin-bottom: 1rem;
     }
 
+    ul,
+    ol {
+      margin-bottom: 0.5rem;
+    }
+
+    /* Add spacing between top-level list items */
+    ol > li {
+      margin-bottom: 0.5rem;
+    }
+
     strong {
       font-weight: 600;
     }
 
     ol {
-      list-style-position: inside;
-      padding-left: 0.75rem;
+      list-style-position: outside;
+      padding-left: 1.5rem;
     }
 
     ul {
       padding-left: 1.5rem;
+    }
+
+    /* Nested list spacing */
+    li ul,
+    li ol {
+      margin-top: 0.25rem;
+      margin-bottom: 0;
     }
 
     h1,
