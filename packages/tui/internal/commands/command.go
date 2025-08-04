@@ -138,7 +138,8 @@ const (
 	MessagesLastCommand         CommandName = "messages_last"
 	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
 	MessagesCopyCommand         CommandName = "messages_copy"
-	MessagesRevertCommand       CommandName = "messages_revert"
+	MessagesUndoCommand         CommandName = "messages_undo"
+	MessagesRedoCommand         CommandName = "messages_redo"
 	AppExitCommand              CommandName = "app_exit"
 )
 
@@ -348,9 +349,16 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Keybindings: parseBindings("<leader>y"),
 		},
 		{
-			Name:        MessagesRevertCommand,
-			Description: "revert message",
+			Name:        MessagesUndoCommand,
+			Description: "undo last message",
+			Keybindings: parseBindings("<leader>u"),
+			Trigger:     []string{"undo"},
+		},
+		{
+			Name:        MessagesRedoCommand,
+			Description: "redo message",
 			Keybindings: parseBindings("<leader>r"),
+			Trigger:     []string{"redo"},
 		},
 		{
 			Name:        AppExitCommand,
@@ -365,7 +373,8 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 	json.Unmarshal(marshalled, &keybinds)
 	for _, command := range defaults {
 		// Remove share/unshare commands if sharing is disabled
-		if config.Share == opencode.ConfigShareDisabled && (command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
+		if config.Share == opencode.ConfigShareDisabled &&
+			(command.Name == SessionShareCommand || command.Name == SessionUnshareCommand) {
 			continue
 		}
 		if keybind, ok := keybinds[string(command.Name)]; ok && keybind != "" {

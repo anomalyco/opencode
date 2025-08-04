@@ -1,5 +1,7 @@
 import { experimental_createMCPClient, type Tool } from "ai"
-import { Experimental_StdioMCPTransport } from "ai/mcp-stdio"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { App } from "../app/app"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
@@ -32,15 +34,28 @@ export namespace MCP {
         }
         log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: {
-              type: "sse",
-              url: mcp.url,
-              headers: mcp.headers,
-            },
-          }).catch(() => {})
-          if (!client) {
+          const transports = [
+            new StreamableHTTPClientTransport(new URL(mcp.url), {
+              requestInit: {
+                headers: mcp.headers,
+              },
+            }),
+            new SSEClientTransport(new URL(mcp.url), {
+              requestInit: {
+                headers: mcp.headers,
+              },
+            }),
+          ]
+          for (const transport of transports) {
+            const client = await experimental_createMCPClient({
+              name: key,
+              transport,
+            }).catch(() => {})
+            if (!client) continue
+            clients[key] = client
+            break
+          }
+          if (!clients[key])
             Bus.publish(Session.Event.Error, {
               error: {
                 name: "UnknownError",
@@ -49,16 +64,13 @@ export namespace MCP {
                 },
               },
             })
-            continue
-          }
-          clients[key] = client
         }
 
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command
           const client = await experimental_createMCPClient({
             name: key,
-            transport: new Experimental_StdioMCPTransport({
+            transport: new StdioClientTransport({
               stderr: "ignore",
               command: cmd,
               args,

@@ -1,7 +1,7 @@
 // the approaches in this edit tool are sourced from
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-23-25.ts
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
-
+// https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 import { z } from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
@@ -14,8 +14,7 @@ import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 
-export const EditTool = Tool.define({
-  id: "edit",
+export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
@@ -105,6 +104,31 @@ export const EditTool = Tool.define({
 
 export type Replacer = (content: string, find: string) => Generator<string, void, unknown>
 
+// Similarity thresholds for block anchor fallback matching
+const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0
+const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3
+
+/**
+ * Levenshtein distance algorithm implementation
+ */
+function levenshtein(a: string, b: string): number {
+  // Handle empty strings
+  if (a === "" || b === "") {
+    return Math.max(a.length, b.length)
+  }
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  )
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+    }
+  }
+  return matrix[a.length][b.length]
+}
+
 export const SimpleReplacer: Replacer = function* (_content, find) {
   yield find
 }
@@ -160,8 +184,10 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
 
   const firstLineSearch = searchLines[0].trim()
   const lastLineSearch = searchLines[searchLines.length - 1].trim()
+  const searchBlockSize = searchLines.length
 
-  // Find blocks where first line matches the search first line
+  // Collect all candidate positions where both anchors match
+  const candidates: Array<{ startLine: number; endLine: number }> = []
   for (let i = 0; i < originalLines.length; i++) {
     if (originalLines[i].trim() !== firstLineSearch) {
       continue
@@ -170,24 +196,112 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     // Look for the matching last line after this first line
     for (let j = i + 2; j < originalLines.length; j++) {
       if (originalLines[j].trim() === lastLineSearch) {
-        // Found a potential block from i to j
-        let matchStartIndex = 0
-        for (let k = 0; k < i; k++) {
-          matchStartIndex += originalLines[k].length + 1
-        }
-
-        let matchEndIndex = matchStartIndex
-        for (let k = 0; k <= j - i; k++) {
-          matchEndIndex += originalLines[i + k].length
-          if (k < j - i) {
-            matchEndIndex += 1 // Add newline character except for the last line
-          }
-        }
-
-        yield content.substring(matchStartIndex, matchEndIndex)
+        candidates.push({ startLine: i, endLine: j })
         break // Only match the first occurrence of the last line
       }
     }
+  }
+
+  // Return immediately if no candidates
+  if (candidates.length === 0) {
+    return
+  }
+
+  // Handle single candidate scenario (using relaxed threshold)
+  if (candidates.length === 1) {
+    const { startLine, endLine } = candidates[0]
+    const actualBlockSize = endLine - startLine + 1
+
+    let similarity = 0
+    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+
+    if (linesToCheck > 0) {
+      for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
+        const originalLine = originalLines[startLine + j].trim()
+        const searchLine = searchLines[j].trim()
+        const maxLen = Math.max(originalLine.length, searchLine.length)
+        if (maxLen === 0) {
+          continue
+        }
+        const distance = levenshtein(originalLine, searchLine)
+        similarity += (1 - distance / maxLen) / linesToCheck
+
+        // Exit early when threshold is reached
+        if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+          break
+        }
+      }
+    } else {
+      // No middle lines to compare, just accept based on anchors
+      similarity = 1.0
+    }
+
+    if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+      let matchStartIndex = 0
+      for (let k = 0; k < startLine; k++) {
+        matchStartIndex += originalLines[k].length + 1
+      }
+      let matchEndIndex = matchStartIndex
+      for (let k = startLine; k <= endLine; k++) {
+        matchEndIndex += originalLines[k].length
+        if (k < endLine) {
+          matchEndIndex += 1 // Add newline character except for the last line
+        }
+      }
+      yield content.substring(matchStartIndex, matchEndIndex)
+    }
+    return
+  }
+
+  // Calculate similarity for multiple candidates
+  let bestMatch: { startLine: number; endLine: number } | null = null
+  let maxSimilarity = -1
+
+  for (const candidate of candidates) {
+    const { startLine, endLine } = candidate
+    const actualBlockSize = endLine - startLine + 1
+
+    let similarity = 0
+    let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
+
+    if (linesToCheck > 0) {
+      for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
+        const originalLine = originalLines[startLine + j].trim()
+        const searchLine = searchLines[j].trim()
+        const maxLen = Math.max(originalLine.length, searchLine.length)
+        if (maxLen === 0) {
+          continue
+        }
+        const distance = levenshtein(originalLine, searchLine)
+        similarity += 1 - distance / maxLen
+      }
+      similarity /= linesToCheck // Average similarity
+    } else {
+      // No middle lines to compare, just accept based on anchors
+      similarity = 1.0
+    }
+
+    if (similarity > maxSimilarity) {
+      maxSimilarity = similarity
+      bestMatch = candidate
+    }
+  }
+
+  // Threshold judgment
+  if (maxSimilarity >= MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD && bestMatch) {
+    const { startLine, endLine } = bestMatch
+    let matchStartIndex = 0
+    for (let k = 0; k < startLine; k++) {
+      matchStartIndex += originalLines[k].length + 1
+    }
+    let matchEndIndex = matchStartIndex
+    for (let k = startLine; k <= endLine; k++) {
+      matchEndIndex += originalLines[k].length
+      if (k < endLine) {
+        matchEndIndex += 1
+      }
+    }
+    yield content.substring(matchStartIndex, matchEndIndex)
   }
 }
 
@@ -201,23 +315,23 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (content, find) 
     const line = lines[i]
     if (normalizeWhitespace(line) === normalizedFind) {
       yield line
-    }
-
-    // Also check for substring matches within lines
-    const normalizedLine = normalizeWhitespace(line)
-    if (normalizedLine.includes(normalizedFind)) {
-      // Find the actual substring in the original line that matches
-      const words = find.trim().split(/\s+/)
-      if (words.length > 0) {
-        const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
-        try {
-          const regex = new RegExp(pattern)
-          const match = line.match(regex)
-          if (match) {
-            yield match[0]
+    } else {
+      // Only check for substring matches if the full line doesn't match
+      const normalizedLine = normalizeWhitespace(line)
+      if (normalizedLine.includes(normalizedFind)) {
+        // Find the actual substring in the original line that matches
+        const words = find.trim().split(/\s+/)
+        if (words.length > 0) {
+          const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")
+          try {
+            const regex = new RegExp(pattern)
+            const match = line.match(regex)
+            if (match) {
+              yield match[0]
+            }
+          } catch (e) {
+            // Invalid regex pattern, skip
           }
-        } catch (e) {
-          // Invalid regex pattern, skip
         }
       }
     }
@@ -457,7 +571,7 @@ export function replace(content: string, oldString: string, newString: string, r
     BlockAnchorReplacer,
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
-    // EscapeNormalizedReplacer,
+    EscapeNormalizedReplacer,
     // TrimmedBoundaryReplacer,
     // ContextAwareReplacer,
     // MultiOccurrenceReplacer,

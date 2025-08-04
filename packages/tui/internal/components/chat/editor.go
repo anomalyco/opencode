@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
+	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -57,6 +57,7 @@ type editorComponent struct {
 	historyIndex           int    // -1 means current (not in history)
 	currentText            string // Store current text when navigating history
 	pasteCounter           int
+	reverted               bool
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -122,12 +123,52 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Maximize editor responsiveness for printable characters
 		if msg.Text != "" {
+			m.reverted = false
 			m.textarea, cmd = m.textarea.Update(msg)
 			cmds = append(cmds, cmd)
 			return m, tea.Batch(cmds...)
 		}
+	case app.MessageRevertedMsg:
+		if msg.Session.ID == m.app.Session.ID {
+			switch msg.Message.Info.(type) {
+			case opencode.UserMessage:
+				prompt, err := msg.Message.ToPrompt()
+				if err != nil {
+					return m, toast.NewErrorToast("Failed to revert message")
+				}
+				m.RestoreFromPrompt(*prompt)
+				m.textarea.MoveToEnd()
+				m.reverted = true
+				return m, nil
+			}
+		}
+	case app.SessionUnrevertedMsg:
+		if msg.Session.ID == m.app.Session.ID {
+			if m.reverted {
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				return m, cmd
+			}
+			return m, nil
+		}
 	case tea.PasteMsg:
 		text := string(msg)
+
+		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
+			statPath := filePath
+			if !filepath.IsAbs(filePath) {
+				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+			}
+			if _, err := os.Stat(statPath); err == nil {
+				attachment := m.createAttachmentFromPath(filePath)
+				if attachment != nil {
+					m.textarea.InsertAttachment(attachment)
+					m.textarea.InsertString(" ")
+					return m, nil
+				}
+			}
+		}
+
 		text = strings.ReplaceAll(text, "\\", "")
 		text, err := strconv.Unquote(`"` + text + `"`)
 		if err != nil {
@@ -176,7 +217,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.ThemeSelectedMsg:
 		m.textarea = updateTextareaStyles(m.textarea)
 		m.spinner = createSpinner()
-		return m, m.textarea.Focus()
+		return m, tea.Batch(m.textarea.Focus(), m.spinner.Tick)
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
@@ -486,7 +527,9 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 
 			if end > start {
 				filePath := value[start:end]
-				if _, err := os.Stat(filePath); err == nil {
+				slog.Debug("test", "filePath", filePath)
+				if _, err := os.Stat(filepath.Join(m.app.Info.Path.Cwd, filePath)); err == nil {
+					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
 						m.textarea.InsertAttachment(attachment)
@@ -628,21 +671,14 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	return m
 }
 
-// RestoreFromHistory restores a message from history at the given index
-func (m *editorComponent) RestoreFromHistory(index int) {
-	if index < 0 || index >= len(m.app.State.MessageHistory) {
-		return
-	}
-
-	entry := m.app.State.MessageHistory[index]
-
+func (m *editorComponent) RestoreFromPrompt(prompt app.Prompt) {
 	m.textarea.Reset()
-	m.textarea.SetValue(entry.Text)
+	m.textarea.SetValue(prompt.Text)
 
 	// Sort attachments by start index in reverse order (process from end to beginning)
 	// This prevents index shifting issues
-	attachmentsCopy := make([]*attachment.Attachment, len(entry.Attachments))
-	copy(attachmentsCopy, entry.Attachments)
+	attachmentsCopy := make([]*attachment.Attachment, len(prompt.Attachments))
+	copy(attachmentsCopy, prompt.Attachments)
 
 	for i := 0; i < len(attachmentsCopy)-1; i++ {
 		for j := i + 1; j < len(attachmentsCopy); j++ {
@@ -657,6 +693,15 @@ func (m *editorComponent) RestoreFromHistory(index int) {
 		m.textarea.ReplaceRange(att.StartIndex, att.EndIndex, "")
 		m.textarea.InsertAttachment(att)
 	}
+}
+
+// RestoreFromHistory restores a message from history at the given index
+func (m *editorComponent) RestoreFromHistory(index int) {
+	if index < 0 || index >= len(m.app.State.MessageHistory) {
+		return
+	}
+	entry := m.app.State.MessageHistory[index]
+	m.RestoreFromPrompt(entry)
 }
 
 func getMediaTypeFromExtension(ext string) string {
@@ -686,7 +731,7 @@ func (m *editorComponent) createAttachmentFromFile(filePath string) *attachment.
 			ID:        uuid.NewString(),
 			Type:      "file",
 			Display:   "@" + filePath,
-			URL:       fmt.Sprintf("file://./%s", filePath),
+			URL:       fmt.Sprintf("file://%s", absolutePath),
 			Filename:  filePath,
 			MediaType: mediaType,
 			Source: &attachment.FileSource{
@@ -737,7 +782,7 @@ func (m *editorComponent) createAttachmentFromPath(filePath string) *attachment.
 		ID:        uuid.NewString(),
 		Type:      "file",
 		Display:   "@" + filePath,
-		URL:       fmt.Sprintf("file://./%s", url.PathEscape(filePath)),
+		URL:       fmt.Sprintf("file://%s", absolutePath),
 		Filename:  filePath,
 		MediaType: mediaType,
 		Source: &attachment.FileSource{

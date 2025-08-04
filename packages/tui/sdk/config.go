@@ -333,7 +333,7 @@ type ConfigProvider struct {
 	Env     []string                       `json:"env"`
 	Name    string                         `json:"name"`
 	Npm     string                         `json:"npm"`
-	Options map[string]interface{}         `json:"options"`
+	Options ConfigProviderOptions          `json:"options"`
 	JSON    configProviderJSON             `json:"-"`
 }
 
@@ -447,6 +447,30 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigProviderOptions struct {
+	APIKey      string                    `json:"apiKey"`
+	BaseURL     string                    `json:"baseURL"`
+	ExtraFields map[string]interface{}    `json:"-,extras"`
+	JSON        configProviderOptionsJSON `json:"-"`
+}
+
+// configProviderOptionsJSON contains the JSON metadata for the struct
+// [ConfigProviderOptions]
+type configProviderOptionsJSON struct {
+	APIKey      apijson.Field
+	BaseURL     apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigProviderOptions) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configProviderOptionsJSON) RawJSON() string {
+	return r.raw
+}
+
 // Control sharing behavior:'manual' allows manual sharing via commands, 'auto'
 // enables automatic sharing, 'disabled' disables all sharing
 type ConfigShare string
@@ -510,8 +534,12 @@ type KeybindsConfig struct {
 	MessagesPageUp string `json:"messages_page_up,required"`
 	// Navigate to previous message
 	MessagesPrevious string `json:"messages_previous,required"`
-	// Revert message
+	// Redo message
+	MessagesRedo string `json:"messages_redo,required"`
+	// @deprecated use messages_undo. Revert message
 	MessagesRevert string `json:"messages_revert,required"`
+	// Undo message
+	MessagesUndo string `json:"messages_undo,required"`
 	// List available models
 	ModelList string `json:"model_list,required"`
 	// Create/update AGENTS.md
@@ -565,7 +593,9 @@ type keybindsConfigJSON struct {
 	MessagesPageDown     apijson.Field
 	MessagesPageUp       apijson.Field
 	MessagesPrevious     apijson.Field
+	MessagesRedo         apijson.Field
 	MessagesRevert       apijson.Field
+	MessagesUndo         apijson.Field
 	ModelList            apijson.Field
 	ProjectInit          apijson.Field
 	SessionCompact       apijson.Field

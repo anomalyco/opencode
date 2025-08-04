@@ -31,6 +31,14 @@ func NewTuiService(opts ...option.RequestOption) (r *TuiService) {
 	return
 }
 
+// Append prompt to the TUI
+func (r *TuiService) AppendPrompt(ctx context.Context, body TuiAppendPromptParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/append-prompt"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
 // Open the help dialog
 func (r *TuiService) OpenHelp(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
@@ -39,19 +47,10 @@ func (r *TuiService) OpenHelp(ctx context.Context, opts ...option.RequestOption)
 	return
 }
 
-// Send a prompt to the TUI
-func (r *TuiService) Prompt(ctx context.Context, body TuiPromptParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
-	path := "tui/prompt"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
-	return
+type TuiAppendPromptParams struct {
+	Text param.Field[string] `json:"text,required"`
 }
 
-type TuiPromptParams struct {
-	Parts param.Field[[]PartUnionParam] `json:"parts,required"`
-	Text  param.Field[string]           `json:"text,required"`
-}
-
-func (r TuiPromptParams) MarshalJSON() (data []byte, err error) {
+func (r TuiAppendPromptParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
 }

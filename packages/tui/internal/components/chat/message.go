@@ -401,7 +401,7 @@ func renderToolDetails(
 						body += fmt.Sprintf("- [x] %s\n", content)
 					case "cancelled":
 						// strike through cancelled todo
-						body += fmt.Sprintf("- [~] ~~%s~~\n", content)
+						body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
 					case "in_progress":
 						// highlight in progress todo
 						body += fmt.Sprintf("- [ ] `%s`\n", content)
@@ -553,8 +553,16 @@ func renderToolTitle(
 		if filename, ok := toolArgsMap["filePath"].(string); ok {
 			title = fmt.Sprintf("%s %s", title, util.Relative(filename))
 		}
-	case "bash", "task":
+	case "bash":
 		if description, ok := toolArgsMap["description"].(string); ok {
+			title = fmt.Sprintf("%s %s", title, description)
+		}
+	case "task":
+		description := toolArgsMap["description"]
+		subagent := toolArgsMap["subagent_type"]
+		if description != nil && subagent != nil {
+			title = fmt.Sprintf("%s[%s] %s", title, subagent, description)
+		} else if description != nil {
 			title = fmt.Sprintf("%s %s", title, description)
 		}
 	case "webfetch":
@@ -576,7 +584,7 @@ func renderToolTitle(
 func renderToolAction(name string) string {
 	switch name {
 	case "task":
-		return "Planning..."
+		return "Delegating..."
 	case "bash":
 		return "Writing command..."
 	case "edit":

@@ -94,6 +94,15 @@ export namespace MessageV2 {
   })
   export type SnapshotPart = z.infer<typeof SnapshotPart>
 
+  export const PatchPart = PartBase.extend({
+    type: z.literal("patch"),
+    hash: z.string(),
+    files: z.string().array(),
+  }).openapi({
+    ref: "PatchPart",
+  })
+  export type PatchPart = z.infer<typeof PatchPart>
+
   export const TextPart = PartBase.extend({
     type: z.literal("text"),
     text: z.string(),
@@ -203,7 +212,7 @@ export namespace MessageV2 {
   export type User = z.infer<typeof User>
 
   export const Part = z
-    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart])
+    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart, PatchPart])
     .openapi({
       ref: "Part",
     })
@@ -226,6 +235,7 @@ export namespace MessageV2 {
     system: z.string().array(),
     modelID: z.string(),
     providerID: z.string(),
+    mode: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
@@ -271,6 +281,13 @@ export namespace MessageV2 {
         part: Part,
       }),
     ),
+    PartRemoved: Bus.event(
+      "message.part.removed",
+      z.object({
+        messageID: z.string(),
+        partID: z.string(),
+      }),
+    ),
   }
 
   export function fromV1(v1: Message.Info) {
@@ -290,6 +307,7 @@ export namespace MessageV2 {
         modelID: v1.metadata.assistant!.modelID,
         providerID: v1.metadata.assistant!.providerID,
         system: v1.metadata.assistant!.system,
+        mode: "build",
         error: v1.metadata.error,
       }
       const parts = v1.parts.flatMap((part): Part[] => {

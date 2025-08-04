@@ -470,6 +470,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.SessionCreatedMsg:
 		a.app.Session = msg.Session
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
+	case app.MessageRevertedMsg:
+		if msg.Session.ID == a.app.Session.ID {
+			a.app.Session = &msg.Session
+		}
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
@@ -509,13 +513,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/tui/open-help":
 			helpDialog := dialog.NewHelpDialog(a.app)
 			a.modal = helpDialog
-		case "/tui/prompt":
+		case "/tui/append-prompt":
 			var body struct {
-				Text  string          `json:"text"`
-				Parts []opencode.Part `json:"parts"`
+				Text string `json:"text"`
 			}
 			json.Unmarshal((msg.Body), &body)
-			a.editor.SetValue(body.Text)
+			existing := a.editor.Value()
+			text := body.Text
+			if existing != "" && !strings.HasSuffix(existing, " ") {
+				text = " " + text
+			}
+			a.editor.SetValueWithAttachments(existing + text + " ")
 		default:
 			break
 		}
@@ -1041,7 +1049,14 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		updated, cmd := a.messages.CopyLastMessage()
 		a.messages = updated.(chat.MessagesComponent)
 		cmds = append(cmds, cmd)
-	case commands.MessagesRevertCommand:
+	case commands.MessagesUndoCommand:
+		updated, cmd := a.messages.UndoLastMessage()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
+	case commands.MessagesRedoCommand:
+		updated, cmd := a.messages.RedoLastMessage()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
 	case commands.AppExitCommand:
 		return a, tea.Quit
 	}

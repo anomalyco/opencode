@@ -14,6 +14,10 @@ import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 
 export namespace SystemPrompt {
+  export function header(providerID: string) {
+    if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
+    return []
+  }
   export function provider(modelID: string) {
     if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
     if (modelID.includes("gemini-")) return [PROMPT_GEMINI]

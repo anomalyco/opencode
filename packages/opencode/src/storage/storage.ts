@@ -72,6 +72,22 @@ export namespace Storage {
         } catch (e) {}
       }
     },
+    async (dir: string) => {
+      const files = new Bun.Glob("session/message/*/*.json").scanSync({
+        cwd: dir,
+        absolute: true,
+      })
+      for (const file of files) {
+        try {
+          const content = await Bun.file(file).json()
+          if (content.role === "assistant" && !content.mode) {
+            log.info("adding mode field to message", { file })
+            content.mode = "build"
+            await Bun.write(file, JSON.stringify(content, null, 2))
+          }
+        } catch (e) {}
+      }
+    },
   ]
 
   const state = App.state("storage", async () => {

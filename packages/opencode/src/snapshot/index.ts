@@ -2,28 +2,31 @@ import { App } from "../app/app"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
-import { Ripgrep } from "../file/ripgrep"
 import { Log } from "../util/log"
+import { Global } from "../global"
+import { z } from "zod"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
-  export async function create(sessionID: string) {
-    log.info("creating snapshot")
+  export function init() {
+    Array.fromAsync(
+      new Bun.Glob("**/snapshot").scan({
+        absolute: true,
+        onlyFiles: false,
+        cwd: Global.Path.data,
+      }),
+    ).then((files) => {
+      for (const file of files) {
+        fs.rmdir(file, { recursive: true })
+      }
+    })
+  }
+
+  export async function track() {
     const app = App.info()
-
-    // not a git repo, check if too big to snapshot
-    if (!app.git) {
-      return
-      const files = await Ripgrep.files({
-        cwd: app.path.cwd,
-        limit: 1000,
-      })
-      log.info("found files", { count: files.length })
-      if (files.length >= 1000) return
-    }
-
-    const git = gitdir(sessionID)
+    if (!app.git) return
+    const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`
         .env({
@@ -35,36 +38,64 @@ export namespace Snapshot {
         .nothrow()
       log.info("initialized")
     }
-
     await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
-    log.info("added files")
-
-    const result =
-      await $`git --git-dir ${git} commit -m "snapshot" --no-gpg-sign --author="opencode <mail@opencode.ai>"`
-        .quiet()
-        .cwd(app.path.cwd)
-        .nothrow()
-
-    const match = result.stdout.toString().match(/\[.+ ([a-f0-9]+)\]/)
-    if (!match) return
-    return match![1]
+    const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(app.path.cwd).text()
+    return hash.trim()
   }
 
-  export async function restore(sessionID: string, snapshot: string) {
+  export const Patch = z.object({
+    hash: z.string(),
+    files: z.string().array(),
+  })
+  export type Patch = z.infer<typeof Patch>
+
+  export async function patch(hash: string): Promise<Patch> {
+    const app = App.info()
+    const git = gitdir()
+    await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
+    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(app.path.cwd).text()
+    return {
+      hash,
+      files: files
+        .trim()
+        .split("\n")
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .map((x) => path.join(app.path.cwd, x)),
+    }
+  }
+
+  export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const app = App.info()
-    const git = gitdir(sessionID)
-    await $`git --git-dir=${git} checkout ${snapshot} --force`.quiet().cwd(app.path.root)
+    const git = gitdir()
+    await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
+      .quiet()
+      .cwd(app.path.root)
   }
 
-  export async function diff(sessionID: string, commit: string) {
-    const git = gitdir(sessionID)
-    const result = await $`git --git-dir=${git} diff -R ${commit}`.quiet().cwd(App.info().path.root)
-    return result.stdout.toString("utf8")
+  export async function revert(patches: Patch[]) {
+    const files = new Set<string>()
+    const git = gitdir()
+    for (const item of patches) {
+      for (const file of item.files) {
+        if (files.has(file)) continue
+        log.info("reverting", { file, hash: item.hash })
+        const result = await $`git --git-dir=${git} checkout ${item.hash} -- ${file}`
+          .quiet()
+          .cwd(App.info().path.root)
+          .nothrow()
+        if (result.exitCode !== 0) {
+          log.info("file not found in history, deleting", { file })
+          await fs.unlink(file).catch(() => {})
+        }
+        files.add(file)
+      }
+    }
   }
 
-  function gitdir(sessionID: string) {
+  function gitdir() {
     const app = App.info()
-    return path.join(app.path.data, "snapshot", sessionID)
+    return path.join(app.path.data, "snapshots")
   }
 }

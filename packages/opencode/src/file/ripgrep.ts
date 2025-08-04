@@ -7,6 +7,7 @@ import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 import { Fzf } from "./fzf"
+import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 
 export namespace Ripgrep {
   const Stats = z.object({
@@ -34,27 +35,25 @@ export namespace Ripgrep {
 
   export const Match = z.object({
     type: z.literal("match"),
-    data: z
-      .object({
-        path: z.object({
-          text: z.string(),
-        }),
-        lines: z.object({
-          text: z.string(),
-        }),
-        line_number: z.number(),
-        absolute_offset: z.number(),
-        submatches: z.array(
-          z.object({
-            match: z.object({
-              text: z.string(),
-            }),
-            start: z.number(),
-            end: z.number(),
+    data: z.object({
+      path: z.object({
+        text: z.string(),
+      }),
+      lines: z.object({
+        text: z.string(),
+      }),
+      line_number: z.number(),
+      absolute_offset: z.number(),
+      submatches: z.array(
+        z.object({
+          match: z.object({
+            text: z.string(),
           }),
-        ),
-      })
-      .openapi({ ref: "Match" }),
+          start: z.number(),
+          end: z.number(),
+        }),
+      ),
+    }),
   })
 
   const End = z.object({
@@ -161,17 +160,34 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        const proc = Bun.spawn(["unzip", "-j", archivePath, "*/rg.exe", "-d", Global.Path.bin], {
-          cwd: Global.Path.bin,
-          stderr: "pipe",
-          stdout: "ignore",
-        })
-        await proc.exited
-        if (proc.exitCode !== 0)
-          throw new ExtractionFailedError({
-            filepath: archivePath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
-          })
+        if (config.extension === "zip") {
+          const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+          const entries = await zipFileReader.getEntries()
+          let rgEntry: any
+          for (const entry of entries) {
+            if (entry.filename.endsWith("rg.exe")) {
+              rgEntry = entry
+              break
+            }
+          }
+
+          if (!rgEntry) {
+            throw new ExtractionFailedError({
+              filepath: archivePath,
+              stderr: "rg.exe not found in zip archive",
+            })
+          }
+
+          const rgBlob = await rgEntry.getData(new BlobWriter())
+          if (!rgBlob) {
+            throw new ExtractionFailedError({
+              filepath: archivePath,
+              stderr: "Failed to extract rg.exe from zip archive",
+            })
+          }
+          await Bun.write(filepath, await rgBlob.arrayBuffer())
+          await zipFileReader.close()
+        }
       }
       await fs.unlink(archivePath)
       if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)
@@ -233,6 +249,7 @@ export namespace Ripgrep {
       children: [],
     }
     for (const file of files) {
+      if (file.includes(".opencode")) continue
       const parts = file.split(path.sep)
       getPath(root, parts, true)
     }

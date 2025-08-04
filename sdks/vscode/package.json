@@ -51,13 +51,17 @@
         "command": "opencode.openTerminal",
         "title": "Run opencode",
         "key": "cmd+escape",
-        "mac": "cmd+escape"
+        "mac": "cmd+escape",
+        "win": "ctrl+escape",
+        "linux": "ctrl+escape"
       },
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "opencode: Insert At-Mentioned",
         "key": "cmd+alt+k",
-        "mac": "cmd+alt+k"
+        "mac": "cmd+alt+k",
+        "win": "ctrl+alt+K",
+        "linux": "ctrl+alt+K"
       }
     ]
   },

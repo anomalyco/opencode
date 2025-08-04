@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -49,6 +50,30 @@ func main() {
 	if err != nil {
 		slog.Error("Failed to unmarshal modes", "error", err)
 		os.Exit(1)
+	}
+
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		slog.Error("Failed to stat stdin", "error", err)
+		os.Exit(1)
+	}
+
+	// Check if there's data piped to stdin
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		stdin, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			slog.Error("Failed to read stdin", "error", err)
+			os.Exit(1)
+		}
+		stdinContent := strings.TrimSpace(string(stdin))
+		if stdinContent != "" {
+			if prompt == nil || *prompt == "" {
+				prompt = &stdinContent
+			} else {
+				combined := *prompt + "\n" + stdinContent
+				prompt = &combined
+			}
+		}
 	}
 
 	httpClient := opencode.NewClient(

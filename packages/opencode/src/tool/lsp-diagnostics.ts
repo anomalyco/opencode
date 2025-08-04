@@ -5,8 +5,7 @@ import { LSP } from "../lsp"
 import { App } from "../app/app"
 import DESCRIPTION from "./lsp-diagnostics.txt"
 
-export const LspDiagnosticTool = Tool.define({
-  id: "lsp_diagnostics",
+export const LspDiagnosticTool = Tool.define("lsp_diagnostics", {
   description: DESCRIPTION,
   parameters: z.object({
     path: z.string().describe("The path to the file to get diagnostics."),

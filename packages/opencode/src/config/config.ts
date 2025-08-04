@@ -9,6 +9,7 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
+import matter from "gray-matter"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -22,9 +23,37 @@ export namespace Config {
       }
     }
 
+    result.agent = result.agent || {}
+    const markdownAgents = [
+      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+    ]
+    for (const item of markdownAgents) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result.agent = mergeDeep(result.agent, {
+          [config.name]: parsed.data,
+        })
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
+    }
+    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
+      result.keybinds.messages_undo = result.keybinds.messages_revert
     }
 
     if (!result.username) {
@@ -70,13 +99,21 @@ export namespace Config {
   export const Mode = z
     .object({
       model: z.string().optional(),
+      temperature: z.number().optional(),
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      disable: z.boolean().optional(),
     })
     .openapi({
       ref: "ModeConfig",
     })
   export type Mode = z.infer<typeof Mode>
+
+  export const Agent = Mode.extend({
+    description: z.string(),
+  }).openapi({
+    ref: "AgentConfig",
+  })
 
   export const Keybinds = z
     .object({
@@ -89,7 +126,7 @@ export namespace Config {
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_share: z.string().optional().default("<leader>s").describe("Share current session"),
-      session_unshare: z.string().optional().default("<leader>u").describe("Unshare current session"),
+      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
       tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
@@ -118,7 +155,9 @@ export namespace Config {
       messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
       messages_layout_toggle: z.string().optional().default("<leader>p").describe("Toggle layout"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
-      messages_revert: z.string().optional().default("<leader>r").describe("Revert message"),
+      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
+      messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
+      messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
       app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
     })
     .strict()
@@ -167,12 +206,27 @@ export namespace Config {
         .catchall(Mode)
         .optional()
         .describe("Modes configuration, see https://opencode.ai/docs/modes"),
+      agent: z
+        .object({
+          general: Agent.optional(),
+        })
+        .catchall(Agent)
+        .optional()
+        .describe("Modes configuration, see https://opencode.ai/docs/modes"),
       provider: z
         .record(
-          ModelsDev.Provider.partial().extend({
-            models: z.record(ModelsDev.Model.partial()),
-            options: z.record(z.any()).optional(),
-          }),
+          ModelsDev.Provider.partial()
+            .extend({
+              models: z.record(ModelsDev.Model.partial()),
+              options: z
+                .object({
+                  apiKey: z.string().optional(),
+                  baseURL: z.string().optional(),
+                })
+                .catchall(z.any())
+                .optional(),
+            })
+            .strict(),
         )
         .optional()
         .describe("Custom provider configurations and model overrides"),

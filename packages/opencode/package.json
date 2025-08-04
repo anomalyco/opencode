@@ -17,6 +17,7 @@
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
     "@ai-sdk/anthropic": "1.2.12",
+    "@octokit/webhooks-types": "7.6.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
     "@types/bun": "latest",
@@ -27,13 +28,18 @@
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
     "@clack/prompts": "0.11.0",
     "@hono/zod-validator": "0.4.2",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
+    "@standard-schema/spec": "1.0.0",
+    "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
+    "gray-matter": "4.0.3",
     "hono": "4.7.10",
     "hono-openapi": "0.4.8",
     "isomorphic-git": "1.32.1",

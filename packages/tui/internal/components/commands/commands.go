@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -76,6 +77,10 @@ func (c *commandsComponent) View() string {
 	}
 
 	if c.showVscode {
+		ctrlKey := "ctrl"
+		if runtime.GOOS == "darwin" {
+			ctrlKey = "cmd"
+		}
 		commandsToShow = append(commandsToShow,
 			// empty line
 			commands.Command{
@@ -86,14 +91,14 @@ func (c *commandsComponent) View() string {
 				Name:        commands.CommandName(util.Ide()),
 				Description: "open opencode",
 				Keybindings: []commands.Keybinding{
-					{Key: "cmd+esc", RequiresLeader: false},
+					{Key: ctrlKey + "+esc", RequiresLeader: false},
 				},
 			},
 			commands.Command{
 				Name:        commands.CommandName(util.Ide()),
 				Description: "reference file",
 				Keybindings: []commands.Keybinding{
-					{Key: "cmd+opt+k", RequiresLeader: false},
+					{Key: ctrlKey + "+opt+k", RequiresLeader: false},
 				},
 			},
 		)

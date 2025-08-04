@@ -123,19 +123,15 @@ export const TuiCommand = cmd({
           const method = await Installation.method()
           if (method === "unknown") return
           await Installation.upgrade(method, latest)
-            .then(() => {
-              Bus.publish(Installation.Event.Updated, { version: latest })
-            })
+            .then(() => Bus.publish(Installation.Event.Updated, { version: latest }))
             .catch(() => {})
         })()
         ;(async () => {
           if (Ide.alreadyInstalled()) return
-          const ide = await Ide.ide()
+          const ide = Ide.ide()
           if (ide === "unknown") return
           await Ide.install(ide)
-            .then(() => {
-              Bus.publish(Ide.Event.Installed, { ide })
-            })
+            .then(() => Bus.publish(Ide.Event.Installed, { ide }))
             .catch(() => {})
         })()
 

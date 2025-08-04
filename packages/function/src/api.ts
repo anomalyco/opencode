@@ -289,6 +289,56 @@ export default {
     }
 
     /**
+     * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
+     */
+    if (request.method === "POST" && method === "exchange_github_app_token_with_pat") {
+      const body = await request.json<any>()
+      const owner = body.owner
+      const repo = body.repo
+
+      try {
+        // get Authorization header
+        const authHeader = request.headers.get("Authorization")
+        const token = authHeader?.replace(/^Bearer /, "")
+        if (!token) throw new Error("Authorization header is required")
+
+        // Verify permissions
+        const userClient = new Octokit({ auth: token })
+        const { data: repoData } = await userClient.repos.get({ owner, repo })
+        if (!repoData.permissions.admin && !repoData.permissions.push && !repoData.permissions.maintain)
+          throw new Error("User does not have write permissions")
+
+        // Get installation token
+        const auth = createAppAuth({
+          appId: Resource.GITHUB_APP_ID.value,
+          privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+        })
+        const appAuth = await auth({ type: "app" })
+
+        // Lookup installation
+        const appClient = new Octokit({ auth: appAuth.token })
+        const { data: installation } = await appClient.apps.getRepoInstallation({ owner, repo })
+
+        // Get installation token
+        const installationAuth = await auth({ type: "installation", installationId: installation.id })
+
+        return new Response(JSON.stringify({ token: installationAuth.token }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      } catch (e: any) {
+        let error = e
+        if (e instanceof Error) {
+          error = e.message
+        }
+
+        return new Response(JSON.stringify({ error }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+    }
+
+    /**
      * Used by the opencode CLI to check if the GitHub app is installed
      */
     if (request.method === "GET" && method === "get_github_app_installation") {
