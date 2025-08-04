@@ -16,6 +16,39 @@ class MessageRepository {
     return result
   }
 
+  async getMessagesWithParts(sessionId: string) {
+    // Get messages with their parts in a single query to avoid N+1 problem
+    const messagesResult = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(asc(messages.timeCreated))
+
+    const partsResult = await db
+      .select()
+      .from(messageParts)
+      .where(eq(messageParts.sessionId, sessionId))
+      .orderBy(asc(messageParts.createdAt))
+
+    // Group parts by messageId
+    const partsByMessageId = partsResult.reduce(
+      (acc, part) => {
+        if (!acc[part.messageId]) {
+          acc[part.messageId] = []
+        }
+        acc[part.messageId].push(part)
+        return acc
+      },
+      {} as Record<string, typeof partsResult>,
+    )
+
+    // Attach parts to messages
+    return messagesResult.map((message) => ({
+      ...message,
+      parts: partsByMessageId[message.id] || [],
+    }))
+  }
+
   async getMessage(id: string) {
     const result = await db.select().from(messages).where(eq(messages.id, id)).limit(1)
     return result[0] || null
@@ -232,6 +265,14 @@ export function useLocalMessagesQuery(sessionId: string) {
   })
 }
 
+export function useLocalMessagesWithPartsQuery(sessionId: string) {
+  return useQuery({
+    queryKey: queryKeys.local.messages.listWithParts(sessionId),
+    queryFn: () => messageRepo.getMessagesWithParts(sessionId),
+    enabled: !!sessionId,
+  })
+}
+
 export function useLocalMessageQuery(id: string) {
   return useQuery({
     queryKey: queryKeys.local.messages.detail(id),
@@ -240,11 +281,12 @@ export function useLocalMessageQuery(id: string) {
   })
 }
 
-export function useLocalMessagePartsQuery(messageId: string) {
+export function useLocalMessagePartsQuery(messageId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.local.messages.parts(messageId),
     queryFn: () => messageRepo.getMessageParts(messageId),
-    enabled: !!messageId,
+    enabled: !!messageId && options?.enabled !== false,
+    staleTime: 1000, // Cache for 1 second during streaming to reduce database queries
   })
 }
 

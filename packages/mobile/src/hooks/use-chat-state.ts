@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  useLocalMessagesQuery,
+  useLocalMessagesWithPartsQuery,
   useUpsertLocalMessageMutation,
   useUpsertLocalMessagePartMutation,
 } from "@/services/api/local/messages"
@@ -57,7 +57,7 @@ export const useChatState = (sessionId: string): ChatState => {
   const updateThrottleRef = useRef<number | null>(null)
 
   // Data queries
-  const { data: messages, isLoading, refetch: refetchMessages } = useLocalMessagesQuery(sessionId)
+  const { data: messages, isLoading, refetch: refetchMessages } = useLocalMessagesWithPartsQuery(sessionId)
   const { data: session } = useLocalSessionQuery(sessionId)
   const { data: remoteMessages } = useRemoteMessagesQuery(sessionId)
 
@@ -107,7 +107,7 @@ export const useChatState = (sessionId: string): ChatState => {
         // Upsert message directly to database
         await upsertMessageMutation.mutateAsync(localMessage)
         // Use setQueryData instead of invalidateQueries for better performance
-        queryClient.setQueryData(queryKeys.local.messages.list(sessionId), (oldData: any) => {
+        queryClient.setQueryData(queryKeys.local.messages.listWithParts(sessionId), (oldData: any) => {
           if (!oldData) return oldData
           const existingIndex = oldData.findIndex((msg: any) => msg.id === localMessage.id)
           if (existingIndex >= 0) {
@@ -183,18 +183,18 @@ export const useChatState = (sessionId: string): ChatState => {
 
         // Throttle UI updates during streaming to prevent performance issues
         const now = Date.now()
-        if (now - lastUpdateRef.current > 200) {
-          // Max 5 updates per second
+        if (now - lastUpdateRef.current > 300) {
+          // Max 3 updates per second during streaming
           lastUpdateRef.current = now
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
         } else {
           // Schedule a delayed update if we're throttling
           if (updateThrottleRef.current) {
             clearTimeout(updateThrottleRef.current)
           }
           updateThrottleRef.current = window.setTimeout(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.list(sessionId) })
-          }, 200)
+            queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
+          }, 300)
         }
       } catch (error) {}
     },

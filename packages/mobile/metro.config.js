@@ -30,6 +30,7 @@ const resolveRequestWithPackageExports = (context, moduleName, platform) => {
 config.resolver = {
   ...config.resolver,
   sourceExts: [...config.resolver.sourceExts, "mjs", "cjs", "sql"],
+  assetExts: [...config.resolver.assetExts, "wasm"],
   resolveRequest: resolveRequestWithPackageExports,
 }
 

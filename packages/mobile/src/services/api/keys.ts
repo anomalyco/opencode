@@ -15,6 +15,7 @@ export const queryKeys = {
       all: ["local", "messages"] as const,
       lists: () => [...queryKeys.local.messages.all, "list"] as const,
       list: (sessionId: string) => [...queryKeys.local.messages.lists(), { sessionId }] as const,
+      listWithParts: (sessionId: string) => [...queryKeys.local.messages.lists(), "withParts", { sessionId }] as const,
       details: () => [...queryKeys.local.messages.all, "detail"] as const,
       detail: (id: string) => [...queryKeys.local.messages.details(), id] as const,
       parts: (messageId: string) => [...queryKeys.local.messages.all, "parts", messageId] as const,

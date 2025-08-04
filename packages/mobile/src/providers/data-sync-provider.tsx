@@ -23,6 +23,7 @@ interface DataSyncProviderProps {
 export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
   const [isLoading, setIsLoading] = useState(false)
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
+  const [hasInitialSync, setHasInitialSync] = useState(false)
 
   const queryClient = useQueryClient()
   const { data: appConfig } = useLocalAppConfigQuery()
@@ -31,59 +32,79 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
 
   const isConnected = appConfig?.connectionStatus === "connected"
 
+  const transformRemoteSession = (remoteSession: any): Omit<Session, "createdAt" | "updatedAt"> => ({
+    id: remoteSession.id,
+    parentId: remoteSession.parentId || null,
+    title: remoteSession.title,
+    version: remoteSession.version,
+    shareUrl: remoteSession.shareUrl || null,
+    timeCreated: new Date(remoteSession.time.created),
+    timeUpdated: new Date(remoteSession.time.updated),
+    revertMessageId: remoteSession.revertMessageId || null,
+    revertPartId: remoteSession.revertPartId || null,
+    revertSnapshot: remoteSession.revertSnapshot || null,
+    revertDiff: remoteSession.revertDiff || null,
+    totalCost: 0,
+    totalTokensInput: 0,
+    totalTokensOutput: 0,
+    totalTokensReasoning: 0,
+    totalTokensCacheRead: 0,
+    totalTokensCacheWrite: 0,
+    messageCount: 0,
+    isSynced: true,
+    lastSyncTimestamp: new Date(),
+    isFavorite: false,
+    localNotes: null,
+  })
+
   const syncSessions = async () => {
     if (!isConnected || !remoteSessions) return
 
     setIsLoading(true)
     try {
-      for (const remoteSession of remoteSessions) {
-        const localSession: Omit<Session, "createdAt" | "updatedAt"> = {
-          id: remoteSession.id,
-          parentId: remoteSession.parentId || null,
-          title: remoteSession.title,
-          version: remoteSession.version,
-          shareUrl: remoteSession.shareUrl || null,
-          timeCreated: new Date(remoteSession.time.created),
-          timeUpdated: new Date(remoteSession.time.updated),
-          revertMessageId: remoteSession.revertMessageId || null,
-          revertPartId: remoteSession.revertPartId || null,
-          revertSnapshot: remoteSession.revertSnapshot || null,
-          revertDiff: remoteSession.revertDiff || null,
-          totalCost: 0,
-          totalTokensInput: 0,
-          totalTokensOutput: 0,
-          totalTokensReasoning: 0,
-          totalTokensCacheRead: 0,
-          totalTokensCacheWrite: 0,
-          messageCount: 0,
-          isSynced: true,
-          lastSyncTimestamp: new Date(),
-          isFavorite: false,
-          localNotes: null,
+      // Process all sessions in parallel instead of sequentially
+      const upsertPromises = remoteSessions.map(async (remoteSession) => {
+        try {
+          const localSession = transformRemoteSession(remoteSession)
+          return await upsertLocalSession.mutateAsync({
+            session: localSession,
+            preserveRemoteTimestamp: true,
+          })
+        } catch (error) {
+          // Log individual session sync failure but don't break the batch
+          console.warn(`Failed to sync session ${remoteSession.id}:`, error)
+          return null
         }
+      })
 
-        await upsertLocalSession.mutateAsync({
-          session: localSession,
-          preserveRemoteTimestamp: true,
-        })
+      const results = await Promise.all(upsertPromises)
+      const successCount = results.filter(Boolean).length
+
+      // Only invalidate if we actually synced sessions
+      if (successCount > 0) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
+        setLastSyncTime(new Date())
       }
-
-      // Invalidate local queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
-      setLastSyncTime(new Date())
     } catch (error) {
-      // Session sync failed
+      console.error("Session sync failed:", error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Auto-sync when connected and remote sessions are available
+  // Only sync once when first connecting
   useEffect(() => {
-    if (isConnected && remoteSessions && !remoteError && !isLoading) {
-      syncSessions()
+    if (isConnected && !hasInitialSync && remoteSessions && !remoteError) {
+      syncSessions().then(() => setHasInitialSync(true))
     }
-  }, [isConnected, remoteSessions, remoteError])
+  }, [isConnected, hasInitialSync, remoteSessions, remoteError])
+
+  // Reset initial sync flag when disconnected
+  useEffect(() => {
+    if (!isConnected) {
+      setHasInitialSync(false)
+    }
+  }, [isConnected])
 
   const syncMessages = async (_sessionId: string) => {
     if (!isConnected) return

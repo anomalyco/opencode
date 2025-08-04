@@ -16,6 +16,7 @@ interface EnhancedMessageItemProps {
     id: string
     role: "user" | "assistant"
     createdAt: Date
+    parts?: any[] // Parts are now included in the message from joined query
   }
   remoteMessages?: any[] // Deprecated - keeping for compatibility
   localContent?: string // Deprecated - keeping for compatibility
@@ -24,11 +25,11 @@ interface EnhancedMessageItemProps {
 export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) => {
   const isUser = message.role === "user"
 
-  // Get message parts from local SQLite - with new architecture, everything is synced locally
-  const { data: localMessageParts } = useLocalMessagePartsQuery(message.id)
-
-  // Use only local parts since we sync everything through the chat service
-  const uniqueParts = localMessageParts || []
+  // Use parts from the joined query if available, otherwise fallback to separate query
+  const { data: localMessageParts } = useLocalMessagePartsQuery(message.id, {
+    enabled: !message.parts, // Only query if parts not already provided
+  })
+  const uniqueParts = message.parts || localMessageParts || []
 
   // Database returns parts ordered by createdAt (insertion order) - matches TUI behavior
   const sortedParts = useMemo(() => {
@@ -38,9 +39,24 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
   }, [uniqueParts])
 
   // Check if this message only contains system reminders
-  const hasOnlySystemReminders = uniqueParts.every(
-    (part) => part.type === "text" && part.textContent?.includes("<system-reminder>"),
-  )
+  const hasOnlySystemReminders = useMemo(() => {
+    return uniqueParts.every((part) => part.type === "text" && part.textContent?.includes("<system-reminder>"))
+  }, [uniqueParts])
+
+  // Calculate if this is a short message (text only, 1-2 lines) - memoized for performance
+  const messageMetrics = useMemo(() => {
+    const allTextContent =
+      sortedParts
+        .filter((part) => part.type === "text" && !part.isSynthetic)
+        .map((part) => part.textContent)
+        .join("\n") || ""
+
+    const hasOnlyText = sortedParts.every((part) => part.type === "text" || part.textContent)
+    const hasOnlyToolCalls = sortedParts.length > 0 && sortedParts.every((part) => part.type === "tool")
+    const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
+
+    return { allTextContent, hasOnlyText, hasOnlyToolCalls, isShortMessage }
+  }, [sortedParts])
 
   // Hide messages that only contain system reminders
   if (hasOnlySystemReminders && uniqueParts.length > 0) {
@@ -224,20 +240,6 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
     return null
   }
 
-  // Calculate if this is a short message (text only, 1-2 lines) - memoized for performance
-  const messageMetrics = useMemo(() => {
-    const allTextContent =
-      sortedParts
-        .filter((part) => part.type === "text" && !part.isSynthetic)
-        .map((part) => part.textContent)
-        .join("\n") || ""
-
-    const hasOnlyText = sortedParts.every((part) => part.type === "text" || part.textContent)
-    const isShortMessage = hasOnlyText && allTextContent.length < 100 && allTextContent.split("\n").length <= 2
-
-    return { allTextContent, hasOnlyText, isShortMessage }
-  }, [sortedParts])
-
   // Don't render if no content
   if (sortedParts.length === 0) {
     return null
@@ -251,8 +253,8 @@ export const EnhancedMessageItem = memo(({ message }: EnhancedMessageItemProps) 
           rounded="xl"
           p={messageMetrics.isShortMessage ? "sm" : "md"}
           style={{
-            maxWidth: "85%",
-            minWidth: "20%",
+            maxWidth: messageMetrics.hasOnlyToolCalls ? "95%" : "85%",
+            minWidth: messageMetrics.hasOnlyToolCalls ? "80%" : "20%",
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.05,
