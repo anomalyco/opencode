@@ -1,1 +1,0 @@
-**CRITICAL**: All Shell commands used in this project **MUST** use Powershell syntax!
