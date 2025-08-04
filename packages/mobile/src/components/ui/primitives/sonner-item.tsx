@@ -24,6 +24,8 @@ const getDefaultIconForType = (type: SonnerConfig["type"]) => {
       return { component: Ionicons, name: "warning", size: 18 }
     case "info":
       return { component: Ionicons, name: "information-circle", size: 20 }
+    case "secondary":
+      return { component: Ionicons, name: "swap-horizontal", size: 20 }
     case "loading":
       return { component: Ionicons, name: "refresh", size: 20 }
     default:
@@ -41,6 +43,8 @@ const getColorForType = (type: SonnerConfig["type"], theme: any) => {
       return theme.colors.warning.base
     case "info":
       return theme.colors.brand.base
+    case "secondary":
+      return theme.colors.secondary.base
     case "loading":
       return theme.colors.neutral.base
     default:
@@ -176,7 +180,7 @@ export const SonnerItem: React.FC<SonnerItemProps> = ({ sonner, onRemove, index 
     transform: [{ scale: contentScale.value }],
   }))
 
-  const iconColor = getColorForType(sonner.type, theme)
+  const iconColor = sonner.color || getColorForType(sonner.type, theme)
   const iconData = sonner.icon || getDefaultIconForType(sonner.type)
   const IconComponent = iconData.component
 

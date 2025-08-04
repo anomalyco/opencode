@@ -45,6 +45,14 @@ export const useSonner = () => {
     })
   }
 
+  const secondary = (title: string, options?: Partial<Omit<SonnerConfig, "id" | "type" | "title">>) => {
+    return showSonner({
+      type: "secondary",
+      title,
+      ...options,
+    })
+  }
+
   // Helper for transaction flows
   const transaction = {
     start: (title: string = "Processing transaction") => {
@@ -82,6 +90,7 @@ export const useSonner = () => {
     info,
     warning,
     loading,
+    secondary,
 
     // Transaction helper
     transaction,

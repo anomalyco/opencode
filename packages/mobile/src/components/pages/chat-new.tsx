@@ -13,6 +13,8 @@ import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
 import { useLocalCurrentModeQuery, useSwitchModeMutation } from "@/services/api/local/config"
+import { useSonner } from "@/hooks/use-sonner"
+import { Ionicons } from "@expo/vector-icons"
 
 interface ChatPageProps {
   sessionId: string
@@ -31,6 +33,7 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   // Mode management
   const { data: currentMode } = useLocalCurrentModeQuery()
   const switchModeMutation = useSwitchModeMutation()
+  const sonner = useSonner()
 
   // Simplified chat state - no streaming state here
   const { session, sendMessage, refreshMessages } = useSimpleChatState(sessionId)
@@ -72,11 +75,37 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       // Toggle mode on refresh
       await switchModeMutation.mutateAsync(currentMode)
       await refreshMessages()
+
+      // Show mode switch toast with appropriate color
+      if (currentMode) {
+        const newMode = currentMode === "plan" ? "build" : "plan"
+        if (newMode === "build") {
+          // Primary color for build mode with hammer icon
+          sonner.info(`Switched to ${newMode} mode`, {
+            duration: 2000,
+            icon: {
+              component: Ionicons,
+              name: "hammer",
+              size: 20,
+            },
+          })
+        } else {
+          // Secondary color for plan mode with document icon
+          sonner.secondary(`Switched to ${newMode} mode`, {
+            duration: 2000,
+            icon: {
+              component: Ionicons,
+              name: "document-text",
+              size: 20,
+            },
+          })
+        }
+      }
     } catch (err) {
     } finally {
       setRefreshing(false)
     }
-  }, [refreshMessages, switchModeMutation, currentMode])
+  }, [refreshMessages, switchModeMutation, currentMode, sonner])
 
   // Handle send message
   const handleSendMessage = useCallback(
@@ -109,7 +138,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           keyboardHeight={keyboardHeight}
           onRefresh={onRefresh}
           refreshing={refreshing}
-          currentMode={currentMode}
         />
         <ChatHeader
           sessionTitle={session?.title}

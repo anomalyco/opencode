@@ -5,6 +5,7 @@
 
 import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react"
 import { FlatList, Keyboard, RefreshControl } from "react-native"
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native"
 import { Box, Text, Icon } from "@/components/ui/primitives"
 import { TypingIndicator, EnhancedMessageItem } from "@/components/molecules/chat"
 
@@ -16,7 +17,6 @@ interface StreamingMessageListProps {
   keyboardHeight: number
   onRefresh: () => Promise<void>
   refreshing: boolean
-  currentMode?: string
 }
 
 export interface StreamingMessageListRef {
@@ -28,8 +28,10 @@ const MemoizedFlatList = memo(FlatList<any>)
 
 export const StreamingMessageList = memo(
   forwardRef<StreamingMessageListRef, StreamingMessageListProps>(
-    ({ sessionId, keyboardHeight, onRefresh, refreshing, currentMode }, ref) => {
+    ({ sessionId, keyboardHeight, onRefresh, refreshing }, ref) => {
       const flatListRef = useRef<FlatList>(null)
+      const lastScrollY = useRef(0)
+      const isUserScrolling = useRef(false)
 
       // All streaming state is contained here - won't affect parent
       const { messages, isLoading, isStreaming, error, refreshMessages } = useChatState(sessionId)
@@ -60,8 +62,31 @@ export const StreamingMessageList = memo(
           // Handle error silently
         }
       }, [refreshMessages, onRefresh])
+      // Simplified scroll handler for keyboard dismissal
+      const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const currentY = event.nativeEvent.contentOffset.y
+        const deltaY = currentY - lastScrollY.current
 
-      // Render empty state
+        // Only dismiss keyboard when:
+        // 1. Scrolling up (positive deltaY in inverted list)
+        // 2. Not in pull-to-refresh zone (currentY > -30)
+        // 3. User is actively dragging (not auto-scroll)
+        if (deltaY > 8 && currentY > -30 && isUserScrolling.current) {
+          Keyboard.dismiss()
+        }
+
+        lastScrollY.current = currentY
+      }, [])
+
+      // Track when user starts scrolling
+      const handleScrollBeginDrag = useCallback(() => {
+        isUserScrolling.current = true
+      }, [])
+
+      // Track when scrolling ends
+      const handleScrollEndDrag = useCallback(() => {
+        isUserScrolling.current = false
+      }, []) // Render empty state
       const renderEmptyState = useCallback(
         () => (
           <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }] }}>
@@ -129,13 +154,7 @@ export const StreamingMessageList = memo(
             inverted
             ListEmptyComponent={renderEmptyState}
             ListHeaderComponent={<TypingIndicator isVisible={isStreaming} />}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                title={`Pull to switch to ${currentMode === "plan" ? "build" : "plan"} mode`}
-              />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               flexGrow: 1,
@@ -143,10 +162,10 @@ export const StreamingMessageList = memo(
               paddingBottom: Math.max(100, keyboardHeight + 20),
             }}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            onScrollBeginDrag={() => {
-              Keyboard.dismiss()
-            }}
+            onScroll={handleScroll}
+            onScrollBeginDrag={handleScrollBeginDrag}
+            onScrollEndDrag={handleScrollEndDrag}
+            scrollEventThrottle={16}
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
               autoscrollToTopThreshold: 10,
