@@ -52,8 +52,8 @@ export namespace Session {
   const parentSessionTitlePrefix = "New session - "
   const childSessionTitlePrefix = "Child session - "
 
-  function createDefaultTitle(parentID?: string) {
-    return (parentID ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+  function createDefaultTitle(isChild = false) {
+    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
   }
 
   function isDefaultTitle(title: string) {
@@ -165,7 +165,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: createDefaultTitle(parentID),
+      title: createDefaultTitle(!!parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
