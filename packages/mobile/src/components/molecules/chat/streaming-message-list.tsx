@@ -3,7 +3,7 @@
  * Prevents parent component re-renders during streaming
  */
 
-import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo, useState } from "react"
+import { memo, useRef, useCallback, forwardRef, useImperativeHandle, useMemo, useState } from "react"
 import { FlatList, Keyboard, RefreshControl, TouchableOpacity } from "react-native"
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native"
 import { Box, Text, Icon, Button } from "@/components/ui/primitives"
@@ -475,13 +475,6 @@ export const StreamingMessageList = memo(
       useImperativeHandle(ref, () => ({
         scrollToBottom,
       }))
-
-      // Auto-scroll when streaming completes
-      useEffect(() => {
-        if (!isStreaming && messagesWithParts && messagesWithParts.length > 0) {
-          setTimeout(scrollToBottom, 200)
-        }
-      }, [isStreaming, messagesWithParts, scrollToBottom])
 
       // Handle refresh with internal state
       const handleRefresh = useCallback(async () => {
