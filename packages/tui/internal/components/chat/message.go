@@ -221,22 +221,31 @@ func renderText(
 		lastEnd := int64(0)
 
 		// Apply highlighting to filenames and base style to rest of text
+		textLen := int64(len(text))
 		for _, filePart := range fileParts {
 			highlight := base.Foreground(t.Secondary())
 			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
 
+			if end > textLen {
+				end = textLen
+			}
+			if start > textLen {
+				start = textLen
+			}
+
 			if start > lastEnd {
 				result.WriteString(base.Render(text[lastEnd:start]))
 			}
-			result.WriteString(highlight.Render(text[start:end]))
+			if start < end {
+				result.WriteString(highlight.Render(text[start:end]))
+			}
 
 			lastEnd = end
 		}
 
-		if lastEnd < int64(len(text)) {
+		if lastEnd < textLen {
 			result.WriteString(base.Render(text[lastEnd:]))
 		}
-
 		content = base.Width(width - 6).Render(result.String())
 	}
 
@@ -244,7 +253,6 @@ func renderText(
 		Local().
 		Format("02 Jan 2006 03:04 PM")
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
-		// don't show the date if it's today
 		timestamp = timestamp[12:]
 	}
 	info := fmt.Sprintf("%s (%s)", author, timestamp)

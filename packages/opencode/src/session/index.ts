@@ -122,6 +122,7 @@ export namespace Session {
       const sessions = new Map<string, Info>()
       const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
+      const autoCompacting = new Map<string, boolean>()
       const queued = new Map<
         string,
         {
@@ -137,6 +138,7 @@ export namespace Session {
         sessions,
         messages,
         pending,
+        autoCompacting,
         queued,
       }
     },
@@ -615,6 +617,8 @@ export namespace Session {
       const tokens =
         previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
       if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
+        state().autoCompacting.set(input.sessionID, true)
+
         await summarize({
           sessionID: input.sessionID,
           providerID: input.providerID,
@@ -623,7 +627,6 @@ export namespace Session {
         return chat(input)
       }
     }
-
     using abort = lock(input.sessionID)
 
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
@@ -1319,9 +1322,19 @@ export namespace Session {
     state().pending.set(sessionID, controller)
     return {
       signal: controller.signal,
-      [Symbol.dispose]() {
+      async [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
+
+        const isAutoCompacting = state().autoCompacting.get(sessionID) ?? false
+        if (isAutoCompacting) {
+          state().autoCompacting.delete(sessionID)
+          return
+        }
+
+        const session = await get(sessionID)
+        if (session.parentID) return
+
         Bus.publish(Event.Idle, {
           sessionID,
         })
@@ -1344,8 +1357,8 @@ export namespace Session {
     }
     return {
       cost: new Decimal(0)
-        .add(new Decimal(tokens.input).mul(model.cost?.input?? 0).div(1_000_000))
-        .add(new Decimal(tokens.output).mul(model.cost?.output?? 0).div(1_000_000))
+        .add(new Decimal(tokens.input).mul(model.cost?.input ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.output).mul(model.cost?.output ?? 0).div(1_000_000))
         .add(new Decimal(tokens.cache.read).mul(model.cost?.cache_read ?? 0).div(1_000_000))
         .add(new Decimal(tokens.cache.write).mul(model.cost?.cache_write ?? 0).div(1_000_000))
         .toNumber(),

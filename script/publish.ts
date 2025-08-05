@@ -27,6 +27,7 @@ for (const file of pkgjsons) {
   console.log("updated:", file)
   await Bun.file(file).write(pkg)
 }
+await $`bun install`
 
 console.log("\n=== opencode ===\n")
 await import(`../packages/opencode/script/publish.ts`)

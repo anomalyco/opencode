@@ -1,10 +1,10 @@
 import type { Event, createOpencodeClient, App, Model, Provider, Permission, UserMessage, Part } from "@opencode-ai/sdk"
-import { $ } from "bun"
+import type { BunShell } from "./shell"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   app: App
-  $: $
+  $: BunShell
 }
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 

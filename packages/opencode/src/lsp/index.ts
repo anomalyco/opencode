@@ -67,6 +67,7 @@ export namespace LSP {
         }
         servers[name] = {
           ...existing,
+          root: existing?.root ?? (async (_file, app) => app.path.root),
           extensions: item.extensions ?? existing.extensions,
           spawn: async (_app, root) => {
             return {

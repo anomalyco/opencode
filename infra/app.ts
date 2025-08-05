@@ -46,3 +46,15 @@ new sst.cloudflare.x.Astro("Web", {
     VITE_API_URL: api.url,
   },
 })
+
+const OPENCODE_API_KEY = new sst.Secret("OPENCODE_API_KEY")
+const ANTHROPIC_API_KEY = new sst.Secret("ANTHROPIC_API_KEY")
+const OPENAI_API_KEY = new sst.Secret("OPENAI_API_KEY")
+const ZHIPU_API_KEY = new sst.Secret("ZHIPU_API_KEY")
+
+export const gateway = new sst.cloudflare.Worker("GatewayApi", {
+  domain: `api.gateway.${domain}`,
+  handler: "packages/function/src/gateway.ts",
+  url: true,
+  link: [OPENCODE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, ZHIPU_API_KEY],
+})
