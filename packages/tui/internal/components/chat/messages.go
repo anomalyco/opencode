@@ -303,7 +303,9 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						for _, part := range remainingParts {
 							switch part := part.(type) {
 							case opencode.FilePart:
-								fileParts = append(fileParts, part)
+								if part.Source.Text.Start >= 0 && part.Source.Text.End >= part.Source.Text.Start {
+									fileParts = append(fileParts, part)
+								}
 							}
 						}
 						flexItems := []layout.FlexItem{}
