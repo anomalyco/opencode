@@ -6,7 +6,7 @@ export type PluginInput = {
   app: App
   $: BunShell
 }
-export type Plugin = (input: PluginInput) => Promise<Hooks>
+export type Plugin = (input: PluginInput) => Promise<Hooks> | Hooks;
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
