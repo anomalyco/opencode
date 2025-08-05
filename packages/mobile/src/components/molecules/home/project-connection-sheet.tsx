@@ -14,6 +14,9 @@ import {
   useProjectsQuery,
 } from "@/services/api/local/projects"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/services/api/keys"
 import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
 import { parseServerUrl } from "@/utils/url"
@@ -40,6 +43,8 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
     const setActiveProject = useSetActiveProjectMutation()
     const deleteProject = useDeleteProjectMutation()
     const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
+    const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
+    const queryClient = useQueryClient()
     const sonner = useSonner()
 
     const bottomSheetRef = useRef<BottomSheetRef>(null)
@@ -174,9 +179,18 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
           status: "connected",
         })
 
-        // Small delay to ensure mutation completes, then refetch
+        // Small delay to ensure mutation completes, then fetch remote data and refresh local queries
         await new Promise((resolve) => setTimeout(resolve, 100))
+
+        // Fetch remote sessions to sync with server
+        await refetchRemoteSessions()
+
+        // Refresh app info
         await refetchAppInfo()
+
+        // Invalidate local session queries to refresh home screen
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
+
         onClose()
       } catch (error) {
         console.error("Connection failed:", error)

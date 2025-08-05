@@ -13,6 +13,10 @@ export interface ConnectionMutations {
   }) => Promise<any>
 }
 
+export interface ConnectionCallbacks {
+  onConnectionSuccess?: () => Promise<void>
+}
+
 /**
  * Shared connection service to eliminate duplication across components
  * Note: This service requires mutation functions to be passed in to maintain proper React Query invalidation
@@ -25,6 +29,7 @@ export class ConnectionService {
     projectId: string,
     serverUrl: string,
     mutations: Pick<ConnectionMutations, "updateConnectionStatus">,
+    callbacks?: ConnectionCallbacks,
   ): Promise<ConnectionResult> {
     try {
       // Set status to connecting
@@ -36,6 +41,11 @@ export class ConnectionService {
 
       // Set status to connected on success
       await mutations.updateConnectionStatus({ projectId, status: "connected" })
+
+      // Call success callback if provided (for fetching remote data)
+      if (callbacks?.onConnectionSuccess) {
+        await callbacks.onConnectionSuccess()
+      }
 
       return { success: true }
     } catch (error) {
@@ -66,13 +76,14 @@ export class ConnectionService {
     projectId: string,
     serverUrl: string,
     mutations: ConnectionMutations,
+    callbacks?: ConnectionCallbacks,
   ): Promise<ConnectionResult> {
     try {
       // Switch to the project first (this triggers all the important side effects)
       await mutations.setActiveProject(projectId)
 
       // Then connect to it
-      return await this.connectToProject(projectId, serverUrl, mutations)
+      return await this.connectToProject(projectId, serverUrl, mutations, callbacks)
     } catch (error) {
       return {
         success: false,

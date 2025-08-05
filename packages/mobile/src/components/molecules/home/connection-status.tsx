@@ -6,6 +6,9 @@ import {
   useUpdateProjectConnectionStatusMutation,
 } from "@/services/api/local/projects"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/services/api/keys"
 import { ConnectionService } from "@/services/connection-service"
 import { Feather } from "@expo/vector-icons"
 
@@ -17,8 +20,18 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
   const { data: activeProject } = useActiveProjectQuery()
   const { data: projects } = useProjectsQuery()
   const { data: appInfo } = useRemoteAppInfoQuery()
+  const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
+  const queryClient = useQueryClient()
   const [isConnecting, setIsConnecting] = useState(false)
   const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
+
+  const handleConnectionSuccess = useCallback(async () => {
+    // Fetch remote sessions to sync with server
+    await refetchRemoteSessions()
+
+    // Invalidate local session queries to refresh home screen
+    queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
+  }, [refetchRemoteSessions, queryClient])
 
   const handleConnectionToggle = useCallback(async () => {
     if (!activeProject) return
@@ -34,14 +47,21 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
       // Connect
       setIsConnecting(true)
       try {
-        await ConnectionService.connectToProject(activeProject.id, activeProject.serverUrl, {
-          updateConnectionStatus: updateConnectionStatus.mutateAsync,
-        })
+        await ConnectionService.connectToProject(
+          activeProject.id,
+          activeProject.serverUrl,
+          {
+            updateConnectionStatus: updateConnectionStatus.mutateAsync,
+          },
+          {
+            onConnectionSuccess: handleConnectionSuccess,
+          },
+        )
       } finally {
         setIsConnecting(false)
       }
     }
-  }, [activeProject, updateConnectionStatus])
+  }, [activeProject, updateConnectionStatus, handleConnectionSuccess])
 
   // CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
 

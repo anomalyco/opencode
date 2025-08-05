@@ -9,6 +9,9 @@ import {
   useSetActiveProjectMutation,
   useUpdateProjectConnectionStatusMutation,
 } from "@/services/api/local/projects"
+import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/services/api/keys"
 import { ConnectionService } from "@/services/connection-service"
 import type { Project } from "@/db/types"
 
@@ -29,6 +32,8 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
     const { data: activeProject } = useActiveProjectQuery()
     const setActiveProject = useSetActiveProjectMutation()
     const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
+    const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
+    const queryClient = useQueryClient()
 
     const bottomSheetRef = useRef<BottomSheetRef>(null)
 
@@ -37,6 +42,14 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
       dismiss: () => bottomSheetRef.current?.dismiss(),
     }))
     const [connectingProjects, setConnectingProjects] = useState<Set<string>>(new Set())
+
+    const handleConnectionSuccess = useCallback(async () => {
+      // Fetch remote sessions to sync with server
+      await refetchRemoteSessions()
+
+      // Invalidate local session queries to refresh home screen
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
+    }, [refetchRemoteSessions, queryClient])
 
     const handleProjectSelect = useCallback(
       async (project: Project) => {
@@ -57,6 +70,18 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
             updateConnectionStatus: updateConnectionStatus.mutateAsync,
           }
 
+          const callbacks = {
+            onConnectionSuccess: handleConnectionSuccess,
+          }
+
+          if (!isActive) {
+            // Switch to project and connect
+            await ConnectionService.switchAndConnect(project.id, project.serverUrl, mutations, callbacks)
+          } else {
+            // Just reconnect to active project
+            await ConnectionService.connectToProject(project.id, project.serverUrl, mutations, callbacks)
+          }
+
           if (!isActive) {
             // Switch to project and connect
             await ConnectionService.switchAndConnect(project.id, project.serverUrl, mutations)
@@ -74,7 +99,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
 
         onClose()
       },
-      [activeProject?.id, setActiveProject, updateConnectionStatus, onClose],
+      [activeProject?.id, setActiveProject, updateConnectionStatus, handleConnectionSuccess, onClose],
     )
 
     const getConnectionColor = (status: string): any => {
