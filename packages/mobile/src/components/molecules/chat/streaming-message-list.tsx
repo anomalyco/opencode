@@ -3,8 +3,8 @@
  * Prevents parent component re-renders during streaming
  */
 
-import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo } from "react"
-import { FlatList, Keyboard, RefreshControl } from "react-native"
+import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo, useState } from "react"
+import { FlatList, Keyboard, RefreshControl, TouchableOpacity } from "react-native"
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native"
 import { Box, Text, Icon, Button } from "@/components/ui/primitives"
 import { TypingIndicator } from "@/components/molecules/chat"
@@ -233,20 +233,9 @@ const ToolPartRenderer = memo(({ part }: { part: any }) => {
       break
 
     default:
-      // Generic tool output
+      // Generic tool output - with expandable for tools that produce small text output
       if (toolOutput) {
-        return (
-          <Box background="subtle" rounded="md" p="sm">
-            <Box mb="xs">
-              <Text size="xs" weight="medium" mode="subtle">
-                {toolName || "Tool"}
-              </Text>
-            </Box>
-            <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 16 }}>
-              {toolOutput}
-            </Text>
-          </Box>
-        )
+        return <GenericToolOutputRenderer toolName={toolName} toolOutput={toolOutput} />
       }
 
       // Show enhanced tool name for completed tools
@@ -274,6 +263,54 @@ const ToolPartRenderer = memo(({ part }: { part: any }) => {
 })
 
 ToolPartRenderer.displayName = "ToolPartRenderer"
+
+// Generic tool output renderer with expandable functionality for small text
+const GenericToolOutputRenderer = memo(({ toolName, toolOutput }: { toolName: string; toolOutput: string }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  // Tools that typically produce small, hard-to-read output
+  const needsExpansion = ["task", "glob", "grep", "list"].includes(toolName) && toolOutput.length > 200
+
+  if (!needsExpansion) {
+    return (
+      <Box background="subtle" rounded="md" p="sm">
+        <Box mb="xs">
+          <Text size="xs" weight="medium" mode="subtle">
+            {toolName || "Tool"}
+          </Text>
+        </Box>
+        <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 16 }}>
+          {toolOutput}
+        </Text>
+      </Box>
+    )
+  }
+
+  return (
+    <Box background="subtle" rounded="md" p="sm">
+      <Box mb="xs">
+        <Text size="xs" weight="medium" mode="subtle">
+          {toolName || "Tool"}
+        </Text>
+      </Box>
+      <Box style={{ maxHeight: isExpanded ? undefined : 100, overflow: "hidden" }}>
+        <Text size="sm" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 18 }}>
+          {toolOutput}
+        </Text>
+      </Box>
+      <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)} style={{ marginTop: 8 }}>
+        <Box direction="row" center gap="xs" p="xs">
+          <Text size="xs" mode="subtle" weight="medium">
+            {isExpanded ? "Show less" : "Show more"}
+          </Text>
+          <Icon icon={Feather} name={isExpanded ? "chevron-up" : "chevron-down"} size={12} color="muted" />
+        </Box>
+      </TouchableOpacity>
+    </Box>
+  )
+})
+
+GenericToolOutputRenderer.displayName = "GenericToolOutputRenderer"
 
 const FilePartRenderer = memo(({ part }: { part: any }) => {
   // Extract file metadata from the complete part data structure
