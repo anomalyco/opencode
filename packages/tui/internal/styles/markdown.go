@@ -285,6 +285,8 @@ func generateMarkdownStyleConfig(backgroundColor compat.AdaptiveColor) ansi.Styl
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
 					BlockSuffix: "\n",
+					// TODO: find better way to fix markdown table renders
+					BackgroundColor: stringPtr(""),
 				},
 			},
 			CenterSeparator: stringPtr("┼"),
