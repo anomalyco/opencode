@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import { sessions } from "./sessions"
 
 export const messages = sqliteTable("messages", {
@@ -8,9 +9,11 @@ export const messages = sqliteTable("messages", {
     .references(() => sessions.id, { onDelete: "cascade" }),
   role: text("role", { enum: ["user", "assistant"] }).notNull(),
 
-  // Timestamps
-  timeCreated: integer("time_created", { mode: "timestamp" }).notNull(),
-  timeCompleted: integer("time_completed", { mode: "timestamp" }),
+  // Timestamps with millisecond precision using SQLite's subsec modifier
+  timeCreated: integer("time_created")
+    .notNull()
+    .default(sql`(unixepoch('subsec') * 1000)`), // Milliseconds timestamp with SQLite subsec
+  timeCompleted: integer("time_completed"), // Milliseconds timestamp
 
   // Assistant-specific fields
   providerId: text("provider_id"),

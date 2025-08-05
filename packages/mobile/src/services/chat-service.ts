@@ -124,9 +124,9 @@ export class ChatService {
   /**
    * Transform remote message format to local database format
    */
-  private transformRemoteToLocalMessage(remoteMessage: any): any | null {
+  public transformRemoteToLocalMessage(remoteMessage: any): any | null {
     // Log the complete message data we're now receiving
-    console.log("Complete message data received:", JSON.stringify(remoteMessage, null, 2))
+    // console.log("Complete message data received:", JSON.stringify(remoteMessage, null, 2))
 
     // Log what enhanced data we're now capturing
     const enhancedFields = []
@@ -172,11 +172,18 @@ export class ChatService {
       }
     }
     // Use remote timestamp for proper ordering
-    const remoteCreatedTime = remoteMessage.info?.time?.created // Check if timestamp is already in milliseconds (> year 2000 in seconds)
+    const remoteCreatedTime = remoteMessage.info?.time?.created
     const isMilliseconds = remoteCreatedTime && remoteCreatedTime > 946684800000
-    const createdAt = remoteCreatedTime
-      ? new Date(isMilliseconds ? remoteCreatedTime : remoteCreatedTime * 1000)
-      : new Date()
+
+    let createdAt: Date
+    if (remoteCreatedTime) {
+      createdAt = new Date(isMilliseconds ? remoteCreatedTime : remoteCreatedTime * 1000)
+    } else {
+      // If no timestamp provided, use current time
+      // For streaming assistant messages, this ensures they appear after user messages
+      createdAt = new Date()
+      console.log("⚠️ No timestamp provided for message, using current time:", createdAt.toISOString())
+    }
 
     // Log message details for debugging
     const firstTextPart = remoteMessage.parts?.find((p: any) => p.type === "text")
@@ -189,13 +196,11 @@ export class ChatService {
       id: remoteMessage.info?.id,
       sessionId: remoteMessage.info?.sessionID,
       role: remoteMessage.info?.role,
-      timeCreated: createdAt,
+      timeCreated: createdAt.getTime(), // Store as milliseconds for precise ordering
       timeCompleted: remoteMessage.info?.time?.completed
-        ? new Date(
-            remoteMessage.info.time.completed > 946684800000
-              ? remoteMessage.info.time.completed
-              : remoteMessage.info.time.completed * 1000,
-          )
+        ? remoteMessage.info.time.completed > 946684800000
+          ? remoteMessage.info.time.completed
+          : remoteMessage.info.time.completed * 1000
         : null,
       providerId: remoteMessage.info?.providerID || null,
       modelId: remoteMessage.info?.modelID || null,
@@ -221,7 +226,7 @@ export class ChatService {
   /**
    * Transform remote part format to local database format
    */
-  private transformRemoteToLocalPart(remotePart: any, orderIndex?: number): any | null {
+  public transformRemoteToLocalPart(remotePart: any, orderIndex?: number): any | null {
     console.log("Complete part data received:", JSON.stringify(remotePart, null, 2))
 
     // Validate required fields - log warnings but don't crash
@@ -548,5 +553,10 @@ export const useChatService = () => {
     clearSessionCache: (sessionId: string) => chatService.clearSessionCache(sessionId),
 
     isSyncInProgress: (sessionId: string) => chatService.isSyncInProgress(sessionId),
+
+    // Expose transformation methods for streaming
+    transformRemoteToLocalMessage: (remoteMessage: any) => chatService.transformRemoteToLocalMessage(remoteMessage),
+    transformRemoteToLocalPart: (remotePart: any, orderIndex?: number) =>
+      chatService.transformRemoteToLocalPart(remotePart, orderIndex),
   }
 }

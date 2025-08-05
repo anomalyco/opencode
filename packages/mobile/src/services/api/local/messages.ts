@@ -267,8 +267,17 @@ class MessageRepository {
       }
     }
 
-    // Convert to array and reverse for inverted FlatList (newest messages at top)
-    return Array.from(messagesMap.values())
+    // Convert to array for inverted FlatList
+    const messagesArray = Array.from(messagesMap.values())
+
+    // Log final message order for debugging
+    console.log(`📋 Final message order (${messagesArray.length} messages):`)
+    messagesArray.forEach((msg, index) => {
+      const timeStr = msg.timeCreated ? new Date(msg.timeCreated).toISOString() : "undefined"
+      console.log(`  ${index}: ${msg.role} - ${timeStr} - ID: ${msg.id}`)
+    })
+
+    return messagesArray
   }
 
   async createMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
@@ -393,11 +402,15 @@ class MessageRepository {
   }
 
   async upsertMessage(message: Omit<Message, "createdAt" | "updatedAt">) {
+    // Log message insertion for debugging ordering issues
+    const timeStr = message.timeCreated ? new Date(message.timeCreated).toISOString() : "undefined"
+    console.log(`💾 DB Upsert Message: ID=${message.id}, Role=${message.role}, TimeCreated=${timeStr}`)
+
     const result = await db
       .insert(messages)
       .values({
         ...message,
-        createdAt: message.timeCreated || new Date(), // Use remote timestamp for ordering
+        createdAt: message.timeCreated ? new Date(message.timeCreated) : new Date(), // Convert milliseconds to Date for createdAt
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({

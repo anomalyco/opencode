@@ -272,6 +272,12 @@ export const StreamingMessageList = memo(
 
         const items: any[] = []
 
+        // Log message processing order
+        console.log(`🎯 UI Processing ${messagesWithParts.length} messages:`)
+        messagesWithParts.forEach((message: any, msgIndex: number) => {
+          console.log(`  ${msgIndex}: ${message.role} - ${message.timeCreated} - ID: ${message.id}`)
+        })
+
         // Process each message and its parts
         messagesWithParts.forEach((message: any) => {
           // Add parts for this message (if they exist)

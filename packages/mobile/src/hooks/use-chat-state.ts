@@ -16,6 +16,9 @@ import { useChatService } from "@/services/chat-service"
 import { useSSEService } from "@/services/sse-service"
 import type { SSEEvent } from "@/types/opencode-types"
 import { queryKeys } from "@/services/api/keys"
+import db from "@/db"
+import { messageParts } from "@/db/schema"
+import { eq, sql } from "drizzle-orm"
 
 export interface ChatState {
   // Data
@@ -70,6 +73,8 @@ export const useChatState = (sessionId: string): ChatState => {
   // Track last synced count to detect new messages
   const lastSyncedCountRef = useRef(0)
 
+  // No need for complex sequence tracking - we'll query the database
+
   // Handle direct SSE message updates
   const handleMessageUpdated = useCallback(
     async (properties: any) => {
@@ -77,49 +82,39 @@ export const useChatState = (sessionId: string): ChatState => {
       if (!messageInfo || messageInfo.sessionID !== sessionId) return
 
       try {
-        console.log("message: ", messageInfo.role, messageInfo.time)
-        // Transform message info to local format
-        const localMessage = {
-          id: messageInfo.id,
-          sessionId: messageInfo.sessionID,
-          role: messageInfo.role,
-          timeCreated: new Date(messageInfo.time?.created || Date.now()),
-          timeCompleted: messageInfo.time?.completed ? new Date(messageInfo.time.completed) : null,
-          providerId: messageInfo.providerID || null,
-          modelId: messageInfo.modelID || null,
-          mode: messageInfo.mode || null,
-          pathCwd: messageInfo.path?.cwd || null,
-          pathRoot: messageInfo.path?.root || null,
-          isSummary: false,
-          cost: messageInfo.cost || 0,
-          tokensInput: messageInfo.tokens?.input || 0,
-          tokensOutput: messageInfo.tokens?.output || 0,
-          tokensReasoning: messageInfo.tokens?.reasoning || 0,
-          tokensCacheRead: messageInfo.tokens?.cache?.read || 0,
-          tokensCacheWrite: messageInfo.tokens?.cache?.write || 0,
-          errorName: null,
-          errorMessage: null,
-          errorData: null,
-          systemPrompts: null,
-          isSynced: true,
-          lastSyncTimestamp: new Date(),
+        console.log("🔄 Streaming message update:", messageInfo.role, "Time:", messageInfo.time)
+        // console.log("🔄 Full messageInfo:", JSON.stringify(messageInfo, null, 2))
+
+        // Use the same robust transformation logic from chat-service
+        const remoteMessage = { info: messageInfo, parts: properties?.parts || [] }
+        const localMessage = chatService.transformRemoteToLocalMessage(remoteMessage)
+
+        if (localMessage) {
+          const timeStr = localMessage.timeCreated ? new Date(localMessage.timeCreated).toISOString() : "undefined"
+          console.log("🔄 Transformed message timeCreated:", timeStr)
+
+          console.log(`🔄 New message created: ${localMessage.id}`)
+
+          // Upsert message directly to database
+          await upsertMessageMutation.mutateAsync(localMessage)
+
+          // Use setQueryData instead of invalidateQueries for better performance
+          queryClient.setQueryData(queryKeys.local.messages.listWithParts(sessionId), (oldData: any) => {
+            if (!oldData) return oldData
+            const existingIndex = oldData.findIndex((msg: any) => msg.id === localMessage.id)
+            if (existingIndex >= 0) {
+              const newData = [...oldData]
+              newData[existingIndex] = localMessage
+              return newData
+            }
+            return [...oldData, localMessage]
+          })
         }
-        // Upsert message directly to database
-        await upsertMessageMutation.mutateAsync(localMessage)
-        // Use setQueryData instead of invalidateQueries for better performance
-        queryClient.setQueryData(queryKeys.local.messages.listWithParts(sessionId), (oldData: any) => {
-          if (!oldData) return oldData
-          const existingIndex = oldData.findIndex((msg: any) => msg.id === localMessage.id)
-          if (existingIndex >= 0) {
-            const newData = [...oldData]
-            newData[existingIndex] = localMessage
-            return newData
-          }
-          return [...oldData, localMessage]
-        })
-      } catch (error) {}
+      } catch (error) {
+        console.log("Error handling streaming message update:", error)
+      }
     },
-    [sessionId, chatService, queryClient],
+    [sessionId, chatService, queryClient, upsertMessageMutation],
   )
 
   // Handle direct SSE part updates
@@ -130,71 +125,60 @@ export const useChatState = (sessionId: string): ChatState => {
 
       try {
         console.log("part: partinfo: ", partInfo, partInfo.time, partInfo.state?.time, partInfo.state?.status)
-        // Transform part info to local format
-        const localPart = {
-          id: partInfo.id,
-          messageId: partInfo.messageID,
-          sessionId: partInfo.sessionID,
-          type: partInfo.type,
-          textContent: partInfo.text || null,
-          isSynthetic: false,
-          timeStart: partInfo.time?.start ? new Date(partInfo.time.start) : null,
-          timeEnd: partInfo.time?.end ? new Date(partInfo.time.end) : null,
-          // File fields
-          fileMime: null,
-          fileFilename: null,
-          fileUrl: null,
-          fileSourceType: null,
-          fileSourcePath: null,
-          fileSourceTextValue: null,
-          fileSourceTextStart: null,
-          fileSourceTextEnd: null,
-          fileSourceName: null,
-          fileSourceKind: null,
-          fileSourceRange: null,
-          // Tool fields
-          toolCallId: partInfo.callID || null,
-          toolName: partInfo.tool || null,
-          toolStatus: partInfo.state?.status || null,
-          toolInput: partInfo.state?.input ? JSON.stringify(partInfo.state.input) : null,
-          toolOutput: partInfo.state?.output || null,
-          toolTitle: partInfo.state?.title || null,
-          toolMetadata: partInfo.state?.metadata ? JSON.stringify(partInfo.state.metadata) : null,
-          toolError: partInfo.state?.error || null,
-          toolTimeStart: partInfo.state?.time?.start ? new Date(partInfo.state.time.start) : null,
-          toolTimeEnd: partInfo.state?.time?.end ? new Date(partInfo.state.time.end) : null,
-          // Step fields
-          stepCost: partInfo.cost || null,
-          stepTokensInput: partInfo.tokens?.input || null,
-          stepTokensOutput: partInfo.tokens?.output || null,
-          stepTokensReasoning: partInfo.tokens?.reasoning || null,
-          stepTokensCacheRead: partInfo.tokens?.cache?.read || null,
-          stepTokensCacheWrite: partInfo.tokens?.cache?.write || null,
-          // Snapshot fields
-          snapshotId: null,
-          // Patch fields
-          patchHash: null,
-          patchFiles: null,
-          // Local metadata
-          isSynced: true,
-          lastSyncTimestamp: new Date(),
-        }
-        // Upsert part directly to database
-        await upsertPartMutation.mutateAsync(localPart)
 
-        // Immediately invalidate the query after database update
-        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+        // Get the next sequence number by querying the database
+        const messageId = partInfo.messageID
+        const partId = partInfo.id
 
-        // Also throttle additional updates to prevent too many refreshes
-        if (updateThrottleRef.current) {
-          clearTimeout(updateThrottleRef.current)
+        // Check if this part already exists (for updates)
+        const existingParts = await db
+          .select({ sequence: messageParts.sequence })
+          .from(messageParts)
+          .where(eq(messageParts.id, partId))
+          .limit(1)
+
+        let assignedSequence: number
+
+        if (existingParts.length > 0) {
+          // Part already exists, reuse its sequence
+          assignedSequence = existingParts[0].sequence
+          console.log(`📊 EXISTING part ${partId} reusing sequence ${assignedSequence}`)
+        } else {
+          // New part, get the highest sequence for this message and increment
+          const maxSequenceResult = await db
+            .select({ maxSequence: sql<number>`MAX(${messageParts.sequence})` })
+            .from(messageParts)
+            .where(eq(messageParts.messageId, messageId))
+            .limit(1)
+
+          const maxSequence = maxSequenceResult[0]?.maxSequence || 0
+          assignedSequence = maxSequence + 1
+          console.log(`📊 NEW part ${partId} assigned sequence ${assignedSequence} (max was ${maxSequence})`)
         }
-        updateThrottleRef.current = window.setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
-        }, 100) // Backup update every 100ms
-      } catch (error) {}
+
+        // Use the same robust transformation logic from chat-service with database-derived sequence
+        const localPart = chatService.transformRemoteToLocalPart(partInfo, assignedSequence)
+
+        if (localPart) {
+          // Upsert part directly to database
+          await upsertPartMutation.mutateAsync(localPart)
+
+          // Immediately invalidate the query after database update
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+
+          // Also throttle additional updates to prevent too many refreshes
+          if (updateThrottleRef.current) {
+            clearTimeout(updateThrottleRef.current)
+          }
+          updateThrottleRef.current = window.setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
+          }, 100) // Backup update every 100ms
+        }
+      } catch (error) {
+        console.log("Error handling streaming part update:", error)
+      }
     },
-    [sessionId, chatService, queryClient],
+    [sessionId, chatService, queryClient, upsertPartMutation],
   )
 
   // Sync remote messages when count changes
