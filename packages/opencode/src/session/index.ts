@@ -1322,19 +1322,22 @@ export namespace Session {
     state().pending.set(sessionID, controller)
     return {
       signal: controller.signal,
-      [Symbol.dispose]() {
+      async [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
 
-        // Only fire session.idle if we're not in the middle of auto-compacting
         const isAutoCompacting = state().autoCompacting.get(sessionID) ?? false
         if (isAutoCompacting) {
           state().autoCompacting.delete(sessionID)
-        } else {
-          Bus.publish(Event.Idle, {
-            sessionID,
-          })
+          return
         }
+
+        const session = await get(sessionID)
+        if (session.parentID) return
+
+        Bus.publish(Event.Idle, {
+          sessionID,
+        })
       },
     }
   }
