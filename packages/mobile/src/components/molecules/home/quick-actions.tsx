@@ -15,9 +15,7 @@ export const QuickActions = function QuickActions({ onNewSession, isCreatingSess
       </Text>
 
       <Button mode="brand" onPress={onNewSession} loading={isCreatingSession}>
-        <Button.Icon>
-          <Icon icon={Feather} name="plus" size={20} />
-        </Button.Icon>
+        <Button.Icon>{({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}</Button.Icon>
         <Button.Text size="md" weight="medium">
           New Session
         </Button.Text>

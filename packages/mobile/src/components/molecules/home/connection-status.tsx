@@ -80,7 +80,7 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
 
           <Button size="sm" mode="brand" onPress={onOpenConnectionSheet}>
             <Button.Icon>
-              <Icon icon={Feather} name="plus" size={14} />
+              {({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}
             </Button.Icon>
             <Button.Text size="xs" weight="medium">
               Add Server
@@ -105,7 +105,7 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
 
           <Button size="sm" mode="brand" onPress={onOpenConnectionSheet}>
             <Button.Icon>
-              <Icon icon={Feather} name="settings" size={14} />
+              {({ color, size }) => <Icon icon={Feather} name="settings" size={size} color={color} />}
             </Button.Icon>
             <Button.Text size="xs" weight="medium">
               Select Project
@@ -167,7 +167,9 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
           loading={isConnectingState}
         >
           <Button.Icon>
-            <Icon icon={Feather} name={isConnected ? "settings" : "play"} size={14} />
+            {({ color, size }) => (
+              <Icon icon={Feather} name={isConnected ? "settings" : "play"} size={size} color={color} />
+            )}
           </Button.Icon>
           <Button.Text size="xs" weight="medium">
             {getButtonText()}

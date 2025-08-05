@@ -1,5 +1,6 @@
 import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from "react"
-import { Box, Text, Button, BottomSheet } from "@/components/ui/primitives"
+import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
+import { Feather } from "@expo/vector-icons"
 import type { BottomSheetRef } from "@/components/ui/primitives"
 import { BottomSheetView } from "@gorhom/bottom-sheet"
 import { BottomSheetInput } from "./bottom-sheet-input"
@@ -292,6 +293,9 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
             <Box gap="sm">
               {isConnected && isEditing ? (
                 <Button mode="error" onPress={handleDisconnect}>
+                  <Button.Icon>
+                    {({ color, size }) => <Icon icon={Feather} name="wifi-off" size={size} color={color} />}
+                  </Button.Icon>
                   <Button.Text size="md" weight="medium">
                     Disconnect
                   </Button.Text>
@@ -303,6 +307,16 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
                   loading={isConnecting}
                   disabled={!projectName.trim()}
                 >
+                  <Button.Icon>
+                    {({ color, size }) => (
+                      <Icon
+                        icon={Feather}
+                        name={isConnecting ? "loader" : isEditing ? "refresh-cw" : "wifi"}
+                        size={size}
+                        color={color}
+                      />
+                    )}
+                  </Button.Icon>
                   <Button.Text size="md" weight="medium">
                     {isConnecting ? "Connecting..." : isEditing ? "Update & Connect" : "Create & Connect"}
                   </Button.Text>
@@ -311,6 +325,9 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
 
               {isEditing && (
                 <Button mode="error" variant="ghost" onPress={handleDelete}>
+                  <Button.Icon>
+                    {({ color, size }) => <Icon icon={Feather} name="trash-2" size={size} color={color} />}
+                  </Button.Icon>
                   <Button.Text size="md" weight="medium">
                     {deleteConfirmCount > 0 ? "Tap Again to Delete" : "Delete Project"}
                   </Button.Text>
@@ -318,6 +335,9 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
               )}
 
               <Button variant="ghost" onPress={onClose}>
+                <Button.Icon>
+                  {({ color, size }) => <Icon icon={Feather} name="x" size={size} color={color} />}
+                </Button.Icon>
                 <Button.Text size="md" weight="medium">
                   Cancel
                 </Button.Text>

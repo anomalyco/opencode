@@ -167,9 +167,15 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
           </Text>
         </Box>
         {onNewSessionPress && (
-          <Button size="auto" rounded="full" onPress={onNewSessionPress} style={{ padding: 8, marginLeft: 8 }}>
+          <Button
+            mode="brand"
+            size="auto"
+            rounded="full"
+            onPress={onNewSessionPress}
+            style={{ padding: 8, marginLeft: 8 }}
+          >
             <Button.Icon>
-              <Icon icon={Feather} name="plus" size={18} color="brand" />
+              {({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}
             </Button.Icon>
           </Button>
         )}
