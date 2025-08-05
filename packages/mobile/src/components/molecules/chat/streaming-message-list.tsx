@@ -242,54 +242,9 @@ const FilePartRenderer = memo(({ part }: { part: any }) => {
 
 FilePartRenderer.displayName = "FilePartRenderer"
 
-// Simple streaming message placeholder
-const StreamingMessage = memo(({ message }: { message: any }) => {
-  const isUser = message.role === "user"
-
-  return (
-    <Box p="sm">
-      <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
-        <Box
-          background={isUser ? "emphasis" : "lightest"}
-          rounded="lg"
-          p="sm"
-          style={{
-            maxWidth: "85%",
-            minWidth: "20%",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 1,
-          }}
-        >
-          <Box direction="row" alignItems="center" gap="xs">
-            <Box
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: "#999",
-                opacity: 0.6,
-              }}
-            />
-            <Text size="sm" mode="subtle">
-              Thinking...
-            </Text>
-          </Box>
-        </Box>
-      </Box>
-    </Box>
-  )
-})
-
-StreamingMessage.displayName = "StreamingMessage"
-
-// Main item renderer that handles the conditional logic
+// Main item renderer - now only handles parts
 const ItemRenderer = memo(({ item }: { item: any }) => {
-  if (item.type === "message") {
-    return <StreamingMessage message={item.data} />
-  } else if (item.type === "part") {
+  if (item.type === "part") {
     return <PartItem part={item} />
   }
   return null
@@ -307,11 +262,10 @@ export const StreamingMessageList = memo(
       const isUserScrolling = useRef(false)
 
       // Get streaming state for typing indicator
-      const { isLoading, isStreaming, error, refreshMessages } = useChatState(sessionId)
+      const { isStreaming, error } = useChatState(sessionId)
 
       // Fetch parts directly from database - this is our source of truth
-      const { data: parts } = useLocalSessionPartsQuery(sessionId)
-
+      const { data: parts, isLoading } = useLocalSessionPartsQuery(sessionId)
       // Convert parts to list items
       const flattenedItems = useMemo(() => {
         if (!parts) return []
@@ -348,12 +302,11 @@ export const StreamingMessageList = memo(
       // Handle refresh with internal state
       const handleRefresh = useCallback(async () => {
         try {
-          await refreshMessages()
           await onRefresh()
         } catch {
           // Handle error silently
         }
-      }, [refreshMessages, onRefresh])
+      }, [onRefresh])
       // Simplified scroll handler for keyboard dismissal
       const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const currentY = event.nativeEvent.contentOffset.y
