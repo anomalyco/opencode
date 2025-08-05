@@ -264,12 +264,27 @@ export function useDeleteProjectMutation() {
   return useMutation({
     mutationFn: (id: string) => projectsRepo.deleteProject(id),
     onSuccess: () => {
+      // Invalidate project queries immediately
       queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.active() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.activeServerUrl() })
+
+      // Small delay to ensure project switching completes, then invalidate session/message queries
+      setTimeout(() => {
+        // Invalidate session queries to refresh home screen with new active project's data
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
+
+        // Invalidate message queries as well since they're project-specific
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.all })
+
+        // Invalidate remote queries since we might have switched to a different project
+        queryClient.invalidateQueries({ queryKey: queryKeys.remote.sessions.all })
+        queryClient.invalidateQueries({ queryKey: queryKeys.remote.messages.all })
+        queryClient.invalidateQueries({ queryKey: queryKeys.remote.config.all })
+      }, 100)
     },
   })
 }
-
 export function useSetActiveProjectMutation() {
   const queryClient = useQueryClient()
 

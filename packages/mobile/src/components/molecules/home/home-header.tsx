@@ -55,6 +55,16 @@ export const HomeHeader = () => {
     }
   }, [projectsArray, handleEditProject])
 
+  const handleConnectionAction = useCallback(() => {
+    // If no projects exist, open add new project sheet
+    if (projectsArray.length === 0) {
+      handleOpenConnectionSheet()
+    } else {
+      // If projects exist, edit the active one
+      handleEditActiveProject()
+    }
+  }, [projectsArray.length, handleOpenConnectionSheet, handleEditActiveProject])
+
   const handleProjectSelectorPress = useCallback(() => {
     if (projectsArray.length === 0) {
       handleOpenConnectionSheet()
@@ -85,7 +95,7 @@ export const HomeHeader = () => {
           </Box>
 
           {/* Connection Status */}
-          <ConnectionStatus onOpenConnectionSheet={handleEditActiveProject} />
+          <ConnectionStatus onOpenConnectionSheet={handleConnectionAction} />
 
           {/* Quick Actions */}
           <QuickActions onNewSession={handleNewSession} isCreatingSession={isCreatingSession} />

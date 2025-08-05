@@ -4,18 +4,18 @@ import { useProjectsQuery } from "@/services/api/local/projects"
 import { useSessionManager } from "@/services/session-manager"
 import { QuickActions, RecentSessionsHeader } from "@/components/molecules/home"
 import { ConnectionStatusOptimized } from "./connection-status-optimized"
-import { ProjectConnectionSheet } from "@/components/molecules/home/project-connection-sheet"
+import { ProjectConnectionSheetOptimized } from "./project-connection-sheet-optimized"
 import { ProjectListSheetOptimized } from "./project-list-sheet-optimized"
 import { ProjectSelectorButton } from "@/components/molecules/home/project-selector-button"
 
-import type { ProjectConnectionSheetRef } from "@/components/molecules/home/project-connection-sheet"
+import type { ProjectConnectionSheetOptimizedRef } from "./project-connection-sheet-optimized"
 import type { ProjectListSheetOptimizedRef } from "./project-list-sheet-optimized"
 import type { Project } from "@/db/types"
 
 export const HomeHeaderOptimized = memo(() => {
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const connectionSheetRef = useRef<ProjectConnectionSheetRef>(null)
+  const connectionSheetRef = useRef<ProjectConnectionSheetOptimizedRef>(null)
   const projectListSheetRef = useRef<ProjectListSheetOptimizedRef>(null)
 
   const { data: projects } = useProjectsQuery()
@@ -56,6 +56,16 @@ export const HomeHeaderOptimized = memo(() => {
     }
   }, [projectsArray, handleEditProject])
 
+  const handleConnectionAction = useCallback(() => {
+    // If no projects exist, open add new project sheet
+    if (projectsArray.length === 0) {
+      handleOpenConnectionSheet()
+    } else {
+      // If projects exist, edit the active one
+      handleEditActiveProject()
+    }
+  }, [projectsArray.length, handleOpenConnectionSheet, handleEditActiveProject])
+
   const handleProjectSelectorPress = useCallback(() => {
     if (projectsArray.length === 0) {
       handleOpenConnectionSheet()
@@ -86,7 +96,7 @@ export const HomeHeaderOptimized = memo(() => {
           </Box>
 
           {/* Connection Status */}
-          <ConnectionStatusOptimized onOpenConnectionSheet={handleEditActiveProject} />
+          <ConnectionStatusOptimized onOpenConnectionSheet={handleConnectionAction} />
 
           {/* Quick Actions */}
           <QuickActions onNewSession={handleNewSession} isCreatingSession={isCreatingSession} />
@@ -98,7 +108,7 @@ export const HomeHeaderOptimized = memo(() => {
         </Box>
       </Box>
 
-      <ProjectConnectionSheet
+      <ProjectConnectionSheetOptimized
         ref={connectionSheetRef}
         onClose={handleCloseConnectionSheet}
         editingProject={editingProject}
