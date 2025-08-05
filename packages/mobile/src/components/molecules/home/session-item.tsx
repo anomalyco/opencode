@@ -49,7 +49,7 @@ export const SessionItem = memo(({ session, onPress }: SessionItemProps) => {
             <Box direction="row" alignItems="center" gap="xs">
               <Icon icon={Feather} name="clock" size={12} color="muted" />
               <Text size="sm" mode="subtle">
-                {new Date(session.timeUpdated).toLocaleDateString()}
+                {new Date(session.timeUpdated).toLocaleDateString("en-US", { month: "short", day: "2-digit" })}
               </Text>
               <Text size="sm" mode="subtle">
                 •
