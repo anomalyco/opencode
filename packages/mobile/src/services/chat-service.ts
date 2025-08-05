@@ -216,15 +216,13 @@ export class ChatService {
     }
 
     try {
-      console.log("Sending message with request:", request)
       await sendMessageMutation.mutateAsync({
         sessionId,
         data: request,
       })
-      console.log("Message sent successfully")
     } catch (error) {
-      console.error("Message send error:", error)
-      throw error
+      // Ignore HTTP errors since messages are processed via SSE
+      console.log("Message send HTTP error (message may still process via SSE):", error)
     }
   }
 

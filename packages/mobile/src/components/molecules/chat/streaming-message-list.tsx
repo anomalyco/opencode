@@ -154,12 +154,18 @@ export const StreamingMessageList = memo(
             inverted
             ListEmptyComponent={renderEmptyState}
             ListHeaderComponent={<TypingIndicator isVisible={isStreaming} />}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                progressViewOffset={10} // Minimal pull distance
+              />
+            }
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               flexGrow: 1,
               paddingTop: 100,
-              paddingBottom: Math.max(100, keyboardHeight + 20),
+              paddingBottom: Math.max(80, keyboardHeight + 10),
             }}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}

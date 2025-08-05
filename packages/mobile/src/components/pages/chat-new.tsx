@@ -49,7 +49,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
       (event) => {
         setKeyboardHeight(event.endCoordinates.height)
-        setTimeout(() => messageListRef.current?.scrollToBottom(), 100)
       },
     )
 
@@ -108,12 +107,13 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     async (content: string) => {
       try {
         await sendMessage(content, currentMode)
-        setTimeout(() => messageListRef.current?.scrollToBottom(), 100)
       } catch (err) {
-        sonner.error("Failed to send message")
+        // Don't show error since messages are processed via SSE
+        // Real errors will be shown through SSE events
+        console.log("Message send HTTP error (message may still process via SSE):", err)
       }
     },
-    [sendMessage, currentMode, sonner],
+    [sendMessage, currentMode],
   )
 
   // Handle new session
