@@ -188,7 +188,7 @@ export const useChatState = (sessionId: string): ChatState => {
           clearTimeout(updateThrottleRef.current)
         }
         updateThrottleRef.current = window.setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
         }, 100) // Backup update every 100ms
       } catch (error) {}
     },
@@ -226,7 +226,7 @@ export const useChatState = (sessionId: string): ChatState => {
             streamingTimeoutRef.current = null
           }
           // Final update when streaming completes
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
           break
 
         case "message.updated":
@@ -240,7 +240,7 @@ export const useChatState = (sessionId: string): ChatState => {
           }, 30000) // 30 second timeout
 
           // Immediately invalidate query for real-time updates
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
 
           // Handle message update directly from SSE data
           handleMessageUpdated(event.properties)
@@ -257,7 +257,7 @@ export const useChatState = (sessionId: string): ChatState => {
           }, 30000) // 30 second timeout
 
           // Immediately invalidate query for real-time updates
-          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.sessionParts(sessionId) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.local.messages.listWithParts(sessionId) })
 
           // Handle part update directly from SSE data
           handlePartUpdated(event.properties)
