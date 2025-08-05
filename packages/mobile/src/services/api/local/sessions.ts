@@ -8,7 +8,7 @@ import type { Session } from "@/db/types"
 // Raw database operations (internal use)
 class SessionRepository {
   async getSessions() {
-    return await db.select().from(sessions).orderBy(desc(sessions.updatedAt))
+    return await db.select().from(sessions).orderBy(desc(sessions.timeUpdated))
   }
 
   async getSession(id: string) {
