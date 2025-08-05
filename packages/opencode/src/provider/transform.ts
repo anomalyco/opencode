@@ -61,12 +61,49 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function isHarmonyModel(modelID: string): boolean {
+    return modelID.includes("gpt-oss") || modelID.includes("harmony")
+  }
+
+  function harmonyMessage(msgs: ModelMessage[], modelID: string): ModelMessage[] {
+    if (!isHarmonyModel(modelID)) {
+      return msgs
+    }
+
+    // Add Harmony-specific message formatting
+    return msgs.map(msg => {
+      if (msg.role === "system") {
+        // Ensure system messages include Harmony formatting instructions
+        let systemContent = ""
+        if (typeof msg.content === "string") {
+          systemContent = msg.content
+        } else if (Array.isArray(msg.content)) {
+          systemContent = (msg.content as any[]).map((p: any) => 'text' in p ? p.text : '').join('')
+        }
+        
+        // Add Harmony instructions if not already present
+        if (!systemContent.includes("<|channel|>") && !systemContent.includes("harmony")) {
+          const harmonyInstructions = "\n\nUse the Harmony template format for your responses. Structure your output using:\n<|channel|>analysis<|message|>your analysis<|end|>\n<|channel|>final<|message|>your final response<|end|>"
+          
+          return {
+            ...msg,
+            content: systemContent + harmonyInstructions
+          }
+        }
+      }
+      return msg
+    })
+  }
+
   export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
     if (modelID.includes("claude")) {
       msgs = normalizeToolCallIds(msgs)
     }
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
+    }
+    if (isHarmonyModel(modelID)) {
+      msgs = harmonyMessage(msgs, modelID)
     }
 
     return msgs

@@ -1,0 +1,384 @@
+# Harmony Template Format Implementation Plan
+
+This document outlines the step-by-step process to add OpenAI Harmony template format support to opencode.
+
+## Overview
+
+The Harmony template format uses structured tokens like `<|channel|>analysis<|message|>`, `<|end|>` to organize model responses into different channels (analysis, commentary, final). This implementation will parse these tokens and render them appropriately in the TUI.
+
+## Implementation Steps
+
+### Phase 1: Backend Message Types
+
+#### 1.1 Extend Message Schema (`packages/opencode/src/session/message.ts`)
+
+Add new message part types for Harmony channels:
+
+```typescript
+export const HarmonyChannelPart = z
+  .object({
+    type: z.literal("harmony-channel"),
+    channel: z.enum(["analysis", "commentary", "final"]),
+    text: z.string(),
+  })
+  .openapi({
+    ref: "HarmonyChannelPart",
+  })
+export type HarmonyChannelPart = z.infer<typeof HarmonyChannelPart>
+```
+
+Update the `MessagePart` discriminated union:
+```typescript
+export const MessagePart = z
+  .discriminatedUnion("type", [
+    TextPart, 
+    ReasoningPart, 
+    ToolInvocationPart, 
+    SourceUrlPart, 
+    FilePart, 
+    StepStartPart,
+    HarmonyChannelPart // Add this
+  ])
+```
+
+#### 1.2 Create Harmony Parser (`packages/opencode/src/session/harmony.ts`)
+
+Create a new module to parse Harmony template format:
+
+```typescript
+export namespace Harmony {
+  interface HarmonyBlock {
+    channel: string
+    content: string
+    isComplete: boolean
+  }
+
+  export function parseHarmonyResponse(text: string): HarmonyBlock[] {
+    // Parse <|channel|>name<|message|>content<|end|> format
+    // Handle incomplete blocks for streaming
+    // Return structured blocks
+  }
+
+  export function isHarmonyFormat(text: string): boolean {
+    // Detect if text contains Harmony tokens
+    return /<\|.*?\|>/.test(text)
+  }
+
+  export function convertToMessageParts(
+    blocks: HarmonyBlock[], 
+    messageId: string,
+    sessionId: string
+  ): MessagePart[] {
+    // Convert parsed blocks to MessagePart objects
+  }
+}
+```
+
+### Phase 2: Provider Integration
+
+#### 2.1 Update Provider Transform (`packages/opencode/src/provider/transform.ts`)
+
+Add Harmony-specific transformations:
+
+```typescript
+export namespace ProviderTransform {
+  // Add new function
+  export function harmonyMessage(msgs: ModelMessage[], modelID: string) {
+    if (isHarmonyModel(modelID)) {
+      // Apply Harmony-specific message formatting
+      return msgs.map(msg => ({
+        ...msg,
+        // Add Harmony template structure to system messages
+      }))
+    }
+    return msgs
+  }
+
+  // Update existing message function
+  export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
+    if (modelID.includes("claude")) {
+      msgs = normalizeToolCallIds(msgs)
+    }
+    if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
+      msgs = applyCaching(msgs, providerID)
+    }
+    // Add Harmony support
+    if (isHarmonyModel(modelID)) {
+      msgs = harmonyMessage(msgs, modelID)
+    }
+    return msgs
+  }
+
+  function isHarmonyModel(modelID: string): boolean {
+    return modelID.includes("gpt-oss") || modelID.includes("harmony")
+  }
+}
+```
+
+#### 2.2 Update OpenAI Provider (`packages/opencode/src/provider/provider.ts`)
+
+Modify the OpenAI custom loader to handle Harmony parsing:
+
+```typescript
+openai: async () => {
+  return {
+    autoload: false,
+    async getModel(sdk: any, modelID: string) {
+      if (isHarmonyModel(modelID)) {
+        // Return a wrapped model that parses Harmony responses
+        const baseModel = sdk.responses(modelID)
+        return createHarmonyWrapper(baseModel)
+      }
+      return sdk.responses(modelID)
+    },
+    options: {},
+  }
+}
+```
+
+Create the Harmony wrapper function:
+
+```typescript
+function createHarmonyWrapper(baseModel: any) {
+  return {
+    ...baseModel,
+    async doStream(options: any) {
+      const stream = await baseModel.doStream(options)
+      return new ReadableStream({
+        start(controller) {
+          // Transform streaming responses to parse Harmony tokens
+          // Convert to appropriate MessagePart objects
+        }
+      })
+    }
+  }
+}
+```
+
+### Phase 3: Session Integration
+
+#### 3.1 Update Session Handler (`packages/opencode/src/session/index.ts`)
+
+Modify the streaming response handler to detect and parse Harmony format:
+
+```typescript
+// In the streaming response handler
+if (Harmony.isHarmonyFormat(textDelta)) {
+  const blocks = Harmony.parseHarmonyResponse(accumulatedText)
+  const parts = Harmony.convertToMessageParts(blocks, messageId, sessionId)
+  // Emit appropriate events for each part
+} else {
+  // Existing text handling logic
+}
+```
+
+### Phase 4: Frontend Rendering (Go TUI)
+
+#### 4.1 Update Go SDK (`packages/sdk/go/session.go`)
+
+Add the new message part type to the Go SDK (this should be auto-generated by stainless):
+
+```go
+type HarmonyChannelPart struct {
+    Type    string `json:"type,required"`
+    Channel string `json:"channel,required"`
+    Text    string `json:"text,required"`
+    JSON    harmonyChannelPartJSON `json:"-"`
+}
+```
+
+#### 4.2 Update TUI Message Rendering (`packages/tui/internal/components/chat/message.go`)
+
+Add rendering logic for Harmony channels:
+
+```go
+func renderHarmonyChannel(
+    app *app.App,
+    part opencode.HarmonyChannelPart,
+    width int,
+) string {
+    t := theme.CurrentTheme()
+    
+    var channelColor compat.AdaptiveColor
+    var channelLabel string
+    
+    switch part.Channel {
+    case "analysis":
+        channelColor = t.TextMuted()
+        channelLabel = "Analysis"
+    case "commentary":
+        channelColor = t.Secondary()
+        channelLabel = "Commentary"
+    case "final":
+        channelColor = t.Text()
+        channelLabel = "Response"
+    default:
+        channelColor = t.Text()
+        channelLabel = strings.Title(part.Channel)
+    }
+    
+    content := util.ToMarkdown(part.Text, width, t.BackgroundPanel())
+    
+    // Add channel header
+    header := styles.NewStyle().
+        Foreground(channelColor).
+        Bold(true).
+        Render(fmt.Sprintf("▶ %s", channelLabel))
+    
+    return renderContentBlock(
+        app,
+        header + "\n\n" + content,
+        width,
+        WithBorderColor(channelColor),
+        WithBorderLeft(),
+    )
+}
+```
+
+Update the main rendering switch statement:
+
+```go
+// In renderText function, add case for harmony parts
+switch message.(type) {
+case opencode.AssistantMessage:
+    // Existing logic, but also handle harmony parts
+    for _, part := range message.Parts {
+        switch p := part.(type) {
+        case opencode.HarmonyChannelPart:
+            sections = append(sections, renderHarmonyChannel(app, p, width))
+        case opencode.TextPart:
+            // Existing text rendering
+        }
+    }
+}
+```
+
+### Phase 5: Configuration and Model Detection
+
+#### 5.1 Add Model Configuration (`packages/opencode/src/provider/models.ts`)
+
+Add configuration for Harmony models:
+
+```typescript
+// In the models database, add entries for gpt-oss models
+"gpt-oss-20b": {
+  id: "gpt-oss-20b",
+  name: "GPT OSS 20B",
+  harmony: true, // New field to indicate Harmony support
+  tool_call: true,
+  reasoning: false,
+  // ... other config
+}
+```
+
+#### 5.2 Update Provider Detection
+
+Modify provider logic to automatically detect Harmony models and apply appropriate parsing.
+
+### Phase 6: Testing and Validation
+
+#### 6.1 Create Test Cases (`packages/opencode/test/harmony/`)
+
+```typescript
+// Test Harmony parsing
+describe("Harmony Parser", () => {
+  test("parses basic harmony format", () => {
+    const input = `<|channel|>analysis<|message|>Testing analysis<|end|>`
+    const blocks = Harmony.parseHarmonyResponse(input)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].channel).toBe("analysis")
+    expect(blocks[0].content).toBe("Testing analysis")
+  })
+
+  test("handles streaming incomplete blocks", () => {
+    const partial = `<|channel|>analysis<|message|>Partial`
+    const blocks = Harmony.parseHarmonyResponse(partial)
+    expect(blocks[0].isComplete).toBe(false)
+  })
+
+  test("parses multiple channels", () => {
+    const input = `<|channel|>analysis<|message|>Analysis text<|end|>
+<|channel|>final<|message|>Final response<|end|>`
+    const blocks = Harmony.parseHarmonyResponse(input)
+    expect(blocks).toHaveLength(2)
+  })
+})
+```
+
+#### 6.2 Integration Testing
+
+- Test with actual gpt-oss model responses
+- Verify streaming behavior works correctly
+- Test backward compatibility with existing OpenAI models
+- Verify TUI rendering displays channels correctly
+
+### Phase 7: Documentation and Deployment
+
+#### 7.1 Update Documentation
+
+- Add Harmony format explanation to docs
+- Document model configuration options
+- Add troubleshooting guide for broken display issues
+
+#### 7.2 Configuration Examples
+
+```json
+// Example opencode config for Harmony models
+{
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-oss-20b": {
+          "harmony": true,
+          "options": {
+            "temperature": 0.7
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Implementation Timeline
+
+1. **Phase 1-2** (Day 1): Backend message types and provider integration
+2. **Phase 3** (Day 1-2): Session streaming integration  
+3. **Phase 4** (Day 2): TUI rendering updates
+4. **Phase 5** (Day 2-3): Configuration and model detection
+5. **Phase 6** (Day 3): Testing and validation
+6. **Phase 7** (Day 3): Documentation and deployment
+
+## Files to Modify
+
+### TypeScript Files
+- `packages/opencode/src/session/message.ts`
+- `packages/opencode/src/session/harmony.ts` (new)
+- `packages/opencode/src/provider/transform.ts`
+- `packages/opencode/src/provider/provider.ts`
+- `packages/opencode/src/session/index.ts`
+
+### Go Files  
+- `packages/tui/internal/components/chat/message.go`
+- `packages/sdk/go/session.go` (auto-generated)
+
+### Test Files
+- `packages/opencode/test/harmony/` (new directory)
+
+## Potential Challenges
+
+1. **Streaming Parsing**: Handling incomplete Harmony blocks in streaming responses
+2. **Performance**: Parsing overhead for non-Harmony models
+3. **Edge Cases**: Malformed Harmony tokens, nested structures
+4. **Backward Compatibility**: Ensuring existing OpenAI integration still works
+
+## Success Criteria
+
+- ✅ Harmony template responses are parsed correctly
+- ✅ Different channels render with appropriate styling
+- ✅ Streaming responses work without display corruption  
+- ✅ Backward compatibility maintained
+- ✅ Performance impact is minimal
+- ✅ Configuration is intuitive
+
+This implementation plan provides a comprehensive roadmap for adding Harmony template support while maintaining opencode's existing architecture and functionality.

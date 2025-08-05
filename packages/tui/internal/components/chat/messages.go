@@ -467,6 +467,20 @@ func (m *messagesComponent) renderView() tea.Cmd {
 							lineCount += lipgloss.Height(content) + 1
 							blocks = append(blocks, content)
 						}
+					case opencode.HarmonyChannelPart:
+						if reverted {
+							continue
+						}
+						if strings.TrimSpace(part.Text) == "" {
+							continue
+						}
+						
+						content := renderHarmonyChannel(m.app, part, width)
+						if content != "" {
+							partCount++
+							lineCount += lipgloss.Height(content) + 1
+							blocks = append(blocks, content)
+						}
 					case opencode.ToolPart:
 						if reverted {
 							revertedToolCount++
@@ -942,16 +956,33 @@ func (m *messagesComponent) CopyLastMessage() (tea.Model, tea.Cmd) {
 	}
 	lastMessage := m.app.Messages[len(m.app.Messages)-1]
 	var lastTextPart *opencode.TextPart
+	var lastHarmonyPart *opencode.HarmonyChannelPart
+	
 	for _, part := range lastMessage.Parts {
-		if p, ok := part.(opencode.TextPart); ok {
+		switch p := part.(type) {
+		case opencode.TextPart:
 			lastTextPart = &p
+		case opencode.HarmonyChannelPart:
+			// Prefer final channel for copying, otherwise keep the last harmony part
+			if p.Channel == "final" || lastHarmonyPart == nil {
+				lastHarmonyPart = &p
+			}
 		}
 	}
-	if lastTextPart == nil {
+	
+	var textToCopy string
+	if lastHarmonyPart != nil && lastHarmonyPart.Channel == "final" {
+		textToCopy = lastHarmonyPart.Text
+	} else if lastTextPart != nil {
+		textToCopy = lastTextPart.Text
+	} else if lastHarmonyPart != nil {
+		textToCopy = lastHarmonyPart.Text
+	} else {
 		return m, nil
 	}
+	
 	var cmds []tea.Cmd
-	cmds = append(cmds, app.SetClipboard(lastTextPart.Text))
+	cmds = append(cmds, app.SetClipboard(textToCopy))
 	cmds = append(cmds, toast.NewSuccessToast("Message copied to clipboard"))
 	return m, tea.Batch(cmds...)
 }

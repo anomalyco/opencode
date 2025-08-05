@@ -118,10 +118,23 @@ export namespace Provider {
       }
     },
     openai: async () => {
+      function isHarmonyModel(modelID: string): boolean {
+        return modelID.includes("gpt-oss") || modelID.includes("harmony")
+      }
+
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
+          const baseModel = sdk.responses(modelID)
+          
+          if (isHarmonyModel(modelID)) {
+            // For Harmony models, we don't need special streaming handling at the provider level
+            // The parsing will happen in the session layer
+            // Just return the base model as-is
+            return baseModel
+          }
+          
+          return baseModel
         },
         options: {},
       }

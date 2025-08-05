@@ -37,6 +37,7 @@ import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
 import { Mode } from "./mode"
+import { Harmony } from "./harmony"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
@@ -664,7 +665,10 @@ export namespace Session {
         .then((result) => {
           if (result.text)
             return Session.update(input.sessionID, (draft) => {
-              const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              // First clean <think> tags
+              let cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              // Then clean Harmony template tokens if present
+              cleaned = Harmony.extractPlainText(cleaned)
               const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
               draft.title = title.trim()
             })
@@ -934,6 +938,12 @@ export namespace Session {
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
+    
+    // Harmony-specific state
+    const isHarmonyModel = assistantMsg.modelID.includes("gpt-oss") || assistantMsg.modelID.includes("harmony")
+    let harmonyBuffer = ""
+    let processedHarmonyParts = new Set<string>()
+    
     return {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
@@ -1087,9 +1097,72 @@ export namespace Session {
                 break
 
               case "text-delta":
-                if (currentText) {
-                  currentText.text += value.text
-                  if (currentText.text) await updatePart(currentText)
+                if (isHarmonyModel) {
+                  // For Harmony models, accumulate text in buffer and parse channels
+                  harmonyBuffer += value.text
+                  
+                  if (Harmony.isHarmonyFormat(harmonyBuffer)) {
+                    const blocks = Harmony.parseHarmonyResponse(harmonyBuffer)
+                    
+                    // Process completed blocks that haven't been processed yet
+                    for (const block of blocks) {
+                      if (block.isComplete) {
+                        const blockKey = `${block.channel}:${block.content}`
+                        if (!processedHarmonyParts.has(blockKey)) {
+                          processedHarmonyParts.add(blockKey)
+                          
+                          // Create harmony channel part
+                          let channel: "analysis" | "commentary" | "final"
+                          switch (block.channel.toLowerCase()) {
+                            case "analysis":
+                              channel = "analysis"
+                              break
+                            case "commentary":
+                              channel = "commentary"
+                              break
+                            case "final":
+                              channel = "final"
+                              break
+                            default:
+                              channel = "analysis"
+                              break
+                          }
+                          
+                          await updatePart({
+                            id: Identifier.ascending("part"),
+                            messageID: assistantMsg.id,
+                            sessionID: assistantMsg.sessionID,
+                            type: "harmony-channel",
+                            channel,
+                            text: block.content,
+                          } as MessageV2.HarmonyChannelPart)
+                        }
+                      }
+                    }
+                  } else {
+                    // Fallback: if not harmony format, treat as regular text
+                    if (!currentText) {
+                      currentText = {
+                        id: Identifier.ascending("part"),
+                        messageID: assistantMsg.id,
+                        sessionID: assistantMsg.sessionID,
+                        type: "text",
+                        text: harmonyBuffer,
+                        time: {
+                          start: Date.now(),
+                        },
+                      }
+                    } else {
+                      currentText.text = harmonyBuffer
+                    }
+                    if (currentText.text) await updatePart(currentText)
+                  }
+                } else {
+                  // Regular text processing for non-Harmony models
+                  if (currentText) {
+                    currentText.text += value.text
+                    if (currentText.text) await updatePart(currentText)
+                  }
                 }
                 break
 

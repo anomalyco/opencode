@@ -18,6 +18,7 @@ export namespace ModelsDev {
       reasoning: z.boolean(),
       temperature: z.boolean(),
       tool_call: z.boolean(),
+      harmony: z.boolean().optional(),
       cost: z.object({
         input: z.number(),
         output: z.number(),

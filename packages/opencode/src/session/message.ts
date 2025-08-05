@@ -121,8 +121,19 @@ export namespace Message {
     })
   export type StepStartPart = z.infer<typeof StepStartPart>
 
+  export const HarmonyChannelPart = z
+    .object({
+      type: z.literal("harmony-channel"),
+      channel: z.enum(["analysis", "commentary", "final"]),
+      text: z.string(),
+    })
+    .openapi({
+      ref: "HarmonyChannelPart",
+    })
+  export type HarmonyChannelPart = z.infer<typeof HarmonyChannelPart>
+
   export const MessagePart = z
-    .discriminatedUnion("type", [TextPart, ReasoningPart, ToolInvocationPart, SourceUrlPart, FilePart, StepStartPart])
+    .discriminatedUnion("type", [TextPart, ReasoningPart, ToolInvocationPart, SourceUrlPart, FilePart, StepStartPart, HarmonyChannelPart])
     .openapi({
       ref: "MessagePart",
     })

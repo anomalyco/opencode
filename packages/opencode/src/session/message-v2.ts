@@ -196,6 +196,15 @@ export namespace MessageV2 {
   })
   export type StepFinishPart = z.infer<typeof StepFinishPart>
 
+  export const HarmonyChannelPart = PartBase.extend({
+    type: z.literal("harmony-channel"),
+    channel: z.enum(["analysis", "commentary", "final"]),
+    text: z.string(),
+  }).openapi({
+    ref: "HarmonyChannelPart",
+  })
+  export type HarmonyChannelPart = z.infer<typeof HarmonyChannelPart>
+
   const Base = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -212,7 +221,7 @@ export namespace MessageV2 {
   export type User = z.infer<typeof User>
 
   export const Part = z
-    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart, PatchPart])
+    .discriminatedUnion("type", [TextPart, FilePart, ToolPart, StepStartPart, StepFinishPart, SnapshotPart, PatchPart, HarmonyChannelPart])
     .openapi({
       ref: "Part",
     })

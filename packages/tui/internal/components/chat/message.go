@@ -712,6 +712,48 @@ func renderToolAction(name string) string {
 	return "Working..."
 }
 
+func renderHarmonyChannel(
+	app *app.App,
+	part opencode.HarmonyChannelPart,
+	width int,
+) string {
+	t := theme.CurrentTheme()
+	
+	var channelColor compat.AdaptiveColor
+	var channelLabel string
+	
+	switch part.Channel {
+	case opencode.HarmonyChannelPartChannelAnalysis:
+		channelColor = t.TextMuted()
+		channelLabel = "Analysis"
+	case opencode.HarmonyChannelPartChannelCommentary:
+		channelColor = t.Secondary()
+		channelLabel = "Commentary"
+	case opencode.HarmonyChannelPartChannelFinal:
+		channelColor = t.Text()
+		channelLabel = "Response"
+	default:
+		channelColor = t.Text()
+		channelLabel = cases.Title(language.Und).String(string(part.Channel))
+	}
+	
+	content := util.ToMarkdown(part.Text, width, t.BackgroundPanel())
+	
+	// Add channel header with icon
+	header := styles.NewStyle().
+		Foreground(channelColor).
+		Bold(true).
+		Render(fmt.Sprintf("▶ %s", channelLabel))
+	
+	return renderContentBlock(
+		app,
+		header + "\n\n" + content,
+		width,
+		WithBorderColor(channelColor),
+		WithBorderLeft(),
+	)
+}
+
 func renderArgs(args *map[string]any, titleKey string) string {
 	if args == nil || len(*args) == 0 {
 		return ""

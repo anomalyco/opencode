@@ -958,6 +958,11 @@ func init() {
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(HarmonyChannelPart{}),
+			DiscriminatorValue: "harmony-channel",
+		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
 			Type:               reflect.TypeOf(SnapshotPart{}),
 			DiscriminatorValue: "snapshot",
 		},
@@ -1018,18 +1023,19 @@ func (r PartPatchPartType) IsKnown() bool {
 type PartType string
 
 const (
-	PartTypeText       PartType = "text"
-	PartTypeFile       PartType = "file"
-	PartTypeTool       PartType = "tool"
-	PartTypeStepStart  PartType = "step-start"
-	PartTypeStepFinish PartType = "step-finish"
-	PartTypeSnapshot   PartType = "snapshot"
-	PartTypePatch      PartType = "patch"
+	PartTypeText           PartType = "text"
+	PartTypeFile           PartType = "file"
+	PartTypeTool           PartType = "tool"
+	PartTypeStepStart      PartType = "step-start"
+	PartTypeStepFinish     PartType = "step-finish"
+	PartTypeHarmonyChannel PartType = "harmony-channel"
+	PartTypeSnapshot       PartType = "snapshot"
+	PartTypePatch          PartType = "patch"
 )
 
 func (r PartType) IsKnown() bool {
 	switch r {
-	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot, PartTypePatch:
+	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeHarmonyChannel, PartTypeSnapshot, PartTypePatch:
 		return true
 	}
 	return false
@@ -1210,6 +1216,68 @@ func (r stepFinishPartJSON) RawJSON() string {
 }
 
 func (r StepFinishPart) implementsPart() {}
+
+type HarmonyChannelPart struct {
+	ID        string                   `json:"id,required"`
+	Channel   HarmonyChannelPartChannel `json:"channel,required"`
+	MessageID string                   `json:"messageID,required"`
+	SessionID string                   `json:"sessionID,required"`
+	Text      string                   `json:"text,required"`
+	Type      HarmonyChannelPartType   `json:"type,required"`
+	JSON      harmonyChannelPartJSON   `json:"-"`
+}
+
+// harmonyChannelPartJSON contains the JSON metadata for the struct [HarmonyChannelPart]
+type harmonyChannelPartJSON struct {
+	ID          apijson.Field
+	Channel     apijson.Field
+	MessageID   apijson.Field
+	SessionID   apijson.Field
+	Text        apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *HarmonyChannelPart) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r harmonyChannelPartJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r HarmonyChannelPart) implementsPart() {}
+
+type HarmonyChannelPartChannel string
+
+const (
+	HarmonyChannelPartChannelAnalysis   HarmonyChannelPartChannel = "analysis"
+	HarmonyChannelPartChannelCommentary HarmonyChannelPartChannel = "commentary"
+	HarmonyChannelPartChannelFinal      HarmonyChannelPartChannel = "final"
+)
+
+func (r HarmonyChannelPartChannel) IsKnown() bool {
+	switch r {
+	case HarmonyChannelPartChannelAnalysis, HarmonyChannelPartChannelCommentary, HarmonyChannelPartChannelFinal:
+		return true
+	}
+	return false
+}
+
+type HarmonyChannelPartType string
+
+const (
+	HarmonyChannelPartTypeHarmonyChannel HarmonyChannelPartType = "harmony-channel"
+)
+
+func (r HarmonyChannelPartType) IsKnown() bool {
+	switch r {
+	case HarmonyChannelPartTypeHarmonyChannel:
+		return true
+	}
+	return false
+}
 
 type StepFinishPartTokens struct {
 	Cache     StepFinishPartTokensCache `json:"cache,required"`
