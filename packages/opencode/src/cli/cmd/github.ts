@@ -189,7 +189,7 @@ export const GithubInstallCommand = cmd({
         // match https or git pattern
         // ie. https://github.com/sst/opencode.git
         // ie. git@github.com:sst/opencode.git
-        const parsed = info.match(/git@github\.com:(.*)\.git/) ?? info.match(/github\.com\/(.*)\.git/)
+        const parsed = info.match(/git@github\.com:(.*)(\.git)?/) ?? info.match(/github\.com\/(.*)(\.git)?/)
         if (!parsed) {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
@@ -263,7 +263,7 @@ export const GithubInstallCommand = cmd({
           process.platform === "darwin"
             ? `open "${url}"`
             : process.platform === "win32"
-              ? `start "${url}"`
+              ? `start ${url}`
               : `xdg-open "${url}"`
 
         exec(command, (error) => {
@@ -294,9 +294,20 @@ export const GithubInstallCommand = cmd({
         s.stop("Installed GitHub app")
 
         async function getInstallation() {
-          return await fetch(`https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
-            .then((res) => res.json())
-            .then((data) => data.installation)
+          const tries = [
+            app.repo, // First try with the original repo name
+            app.repo.replace(/\.git$/, ""), // If that fails, try without .git suffix
+          ]
+
+          for (const repo of tries) {
+            const installation = await fetch(
+              `https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${repo}`,
+            )
+              .then((res) => res.json())
+              .then((data) => data.installation)
+
+            if (installation) return installation
+          }
         }
       }
 
