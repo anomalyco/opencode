@@ -36,6 +36,13 @@
       "when": 1754370094800,
       "tag": "0004_ordinary_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1754429129131,
+      "tag": "0005_curved_colonel_america",
+      "breakpoints": true
     }
   ]
 }

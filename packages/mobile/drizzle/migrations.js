@@ -6,6 +6,7 @@ import m0001 from './0001_brown_guardian.sql';
 import m0002 from './0002_mysterious_lorna_dane.sql';
 import m0003 from './0003_great_sunspot.sql';
 import m0004 from './0004_ordinary_kang.sql';
+import m0005 from './0005_curved_colonel_america.sql';
 
   export default {
     journal,
@@ -14,7 +15,8 @@ import m0004 from './0004_ordinary_kang.sql';
 m0001,
 m0002,
 m0003,
-m0004
+m0004,
+m0005
     }
   }
   

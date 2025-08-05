@@ -264,24 +264,37 @@ export const StreamingMessageList = memo(
       // Get streaming state for typing indicator
       const { isStreaming, error } = useChatState(sessionId)
 
-      // Fetch parts directly from database - this is our source of truth
-      const { data: parts, isLoading, refetch: refetchParts } = useLocalSessionPartsQuery(sessionId)
-      // Convert parts to list items
+      // Fetch messages with parts directly from database - this is our source of truth
+      const { data: messagesWithParts, isLoading, refetch: refetchParts } = useLocalSessionPartsQuery(sessionId)
+      // Convert messages and parts to flat list items
       const flattenedItems = useMemo(() => {
-        if (!parts) return []
+        if (!messagesWithParts) return []
 
-        const items = parts.map((part: any, index: number) => ({
-          type: "part",
-          id: `part-${part.id}`,
-          data: part,
-          messageId: part.messageId,
-          role: part.role, // Role comes from the joined query now
-          createdAt: part.createdAt,
-          partIndex: index,
-        }))
+        const items: any[] = []
 
-        return items.reverse() // Reverse for inverted FlatList
-      }, [parts])
+        // Process each message and its parts
+        messagesWithParts.forEach((message: any) => {
+          // Add parts for this message (if they exist)
+          if (message.parts && Array.isArray(message.parts)) {
+            message.parts.forEach((part: any, partIndex: number) => {
+              items.push({
+                type: "part",
+                id: `part-${part.id}`,
+                data: {
+                  ...part,
+                  role: message.role, // Add role from parent message
+                },
+                messageId: message.id,
+                role: message.role,
+                createdAt: part.createdAt,
+                partIndex: partIndex,
+              })
+            })
+          }
+        })
+
+        return items // Already in correct order from query
+      }, [messagesWithParts])
       // Scroll to bottom helper
       const scrollToBottom = useCallback(() => {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
@@ -294,10 +307,10 @@ export const StreamingMessageList = memo(
 
       // Auto-scroll when streaming completes
       useEffect(() => {
-        if (!isStreaming && parts && parts.length > 0) {
+        if (!isStreaming && messagesWithParts && messagesWithParts.length > 0) {
           setTimeout(scrollToBottom, 200)
         }
-      }, [isStreaming, parts, scrollToBottom])
+      }, [isStreaming, messagesWithParts, scrollToBottom])
 
       // Handle refresh with internal state
       const handleRefresh = useCallback(async () => {

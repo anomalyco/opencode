@@ -1,0 +1,1 @@
+ALTER TABLE `message_parts` ADD `sequence` integer DEFAULT 0 NOT NULL;

@@ -4,7 +4,7 @@ import { openDatabaseSync } from "expo-sqlite"
 import migrations from "@/drizzle/migrations"
 
 // Create a single database instance
-const expo = openDatabaseSync("test-1.db")
+const expo = openDatabaseSync("testing.db")
 const db = drizzle(expo)
 
 // Run migrations on app start

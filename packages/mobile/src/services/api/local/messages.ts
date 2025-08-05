@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { eq, asc } from "drizzle-orm"
+import { eq, asc, desc } from "drizzle-orm"
 import db from "@/db"
 import { messages, messageParts, sessions } from "@/db/schema"
 import { queryKeys } from "../keys"
@@ -12,23 +12,22 @@ class MessageRepository {
       .select()
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
-      .orderBy(asc(messages.timeCreated))
-    return result
+      .orderBy(desc(messages.timeCreated)) // Newest messages first for inverted FlatList
+    return result // No reverse needed - DESC order works directly with inverted FlatList
   }
-
   async getMessagesWithParts(sessionId: string) {
     // Get messages with their parts in a single query to avoid N+1 problem
     const messagesResult = await db
       .select()
       .from(messages)
       .where(eq(messages.sessionId, sessionId))
-      .orderBy(asc(messages.timeCreated))
+      .orderBy(desc(messages.timeCreated)) // Newest messages first for inverted FlatList
 
     const partsResult = await db
       .select()
       .from(messageParts)
       .where(eq(messageParts.sessionId, sessionId))
-      .orderBy(asc(messageParts.createdAt))
+      .orderBy(asc(messageParts.sequence), asc(messageParts.createdAt)) // Use sequence for proper ordering, fallback to createdAt
 
     // Group parts by messageId
     const partsByMessageId = partsResult.reduce(
@@ -43,10 +42,11 @@ class MessageRepository {
     )
 
     // Attach parts to messages
-    return messagesResult.map((message) => ({
+    const messagesWithParts = messagesResult.map((message) => ({
       ...message,
       parts: partsByMessageId[message.id] || [],
     }))
+    return messagesWithParts // No reverse needed - DESC order works directly with inverted FlatList
   }
 
   async getMessage(id: string) {
@@ -93,37 +93,182 @@ class MessageRepository {
       .select()
       .from(messageParts)
       .where(eq(messageParts.messageId, messageId))
-      .orderBy(asc(messageParts.createdAt))
+      .orderBy(asc(messageParts.sequence), asc(messageParts.createdAt)) // Use sequence for proper ordering, fallback to createdAt
   }
 
-  async getSessionParts(sessionId: string) {
-    // Join with messages to get the role information
+  async getSessionMessagesWithParts(sessionId: string) {
+    // Single query to get all messages with their parts
     const result = await db
       .select({
-        id: messageParts.id,
-        messageId: messageParts.messageId,
-        sessionId: messageParts.sessionId,
-        type: messageParts.type,
-        textContent: messageParts.textContent,
-        createdAt: messageParts.createdAt,
-        updatedAt: messageParts.updatedAt,
-        // Tool fields
-        toolCallId: messageParts.toolCallId,
-        toolName: messageParts.toolName,
-        toolStatus: messageParts.toolStatus,
-        toolInput: messageParts.toolInput,
-        toolOutput: messageParts.toolOutput,
-        toolMetadata: messageParts.toolMetadata,
-        toolError: messageParts.toolError,
-        // Get role from parent message
-        role: messages.role,
-      })
-      .from(messageParts)
-      .leftJoin(messages, eq(messageParts.messageId, messages.id))
-      .where(eq(messageParts.sessionId, sessionId))
-      .orderBy(asc(messageParts.createdAt))
+        // Message fields
+        messageId: messages.id,
+        messageRole: messages.role,
+        messageTimeCreated: messages.timeCreated,
+        messageTimeCompleted: messages.timeCompleted,
+        messageProviderId: messages.providerId,
+        messageModelId: messages.modelId,
+        messageMode: messages.mode,
+        messagePathCwd: messages.pathCwd,
+        messagePathRoot: messages.pathRoot,
+        messageIsSummary: messages.isSummary,
+        messageCost: messages.cost,
+        messageTokensInput: messages.tokensInput,
+        messageTokensOutput: messages.tokensOutput,
+        messageTokensReasoning: messages.tokensReasoning,
+        messageTokensCacheRead: messages.tokensCacheRead,
+        messageTokensCacheWrite: messages.tokensCacheWrite,
+        messageIsSynced: messages.isSynced,
+        messageLastSyncTimestamp: messages.lastSyncTimestamp,
+        messageCreatedAt: messages.createdAt,
+        messageUpdatedAt: messages.updatedAt,
 
-    return result
+        // Part fields (nullable for messages without parts)
+        partId: messageParts.id,
+        partType: messageParts.type,
+        partSequence: messageParts.sequence,
+
+        // Text fields
+        partTextContent: messageParts.textContent,
+        partIsSynthetic: messageParts.isSynthetic,
+
+        // File fields
+        partFileFilename: messageParts.fileFilename,
+        partFileMime: messageParts.fileMime,
+        partFileUrl: messageParts.fileUrl,
+        partFileSourceType: messageParts.fileSourceType,
+        partFileSourcePath: messageParts.fileSourcePath,
+        partFileSourceTextValue: messageParts.fileSourceTextValue,
+        partFileSourceTextStart: messageParts.fileSourceTextStart,
+        partFileSourceTextEnd: messageParts.fileSourceTextEnd,
+        partFileSourceName: messageParts.fileSourceName,
+        partFileSourceKind: messageParts.fileSourceKind,
+        partFileSourceRange: messageParts.fileSourceRange,
+
+        // Tool fields
+        partToolCallId: messageParts.toolCallId,
+        partToolName: messageParts.toolName,
+        partToolStatus: messageParts.toolStatus,
+        partToolInput: messageParts.toolInput,
+        partToolOutput: messageParts.toolOutput,
+        partToolTitle: messageParts.toolTitle,
+        partToolMetadata: messageParts.toolMetadata,
+        partToolError: messageParts.toolError,
+        partToolTimeStart: messageParts.toolTimeStart,
+        partToolTimeEnd: messageParts.toolTimeEnd,
+
+        // Step fields
+        partStepCost: messageParts.stepCost,
+        partStepTokensInput: messageParts.stepTokensInput,
+        partStepTokensOutput: messageParts.stepTokensOutput,
+        partStepTokensReasoning: messageParts.stepTokensReasoning,
+        partStepTokensCacheRead: messageParts.stepTokensCacheRead,
+        partStepTokensCacheWrite: messageParts.stepTokensCacheWrite,
+
+        // Snapshot fields
+        partSnapshotId: messageParts.snapshotId,
+
+        // Patch fields
+        partPatchHash: messageParts.patchHash,
+        partPatchFiles: messageParts.patchFiles,
+
+        // Timing
+        partTimeStart: messageParts.timeStart,
+        partTimeEnd: messageParts.timeEnd,
+
+        // Metadata
+        partCreatedAt: messageParts.createdAt,
+        partUpdatedAt: messageParts.updatedAt,
+        partIsSynced: messageParts.isSynced,
+        partLastSyncTimestamp: messageParts.lastSyncTimestamp,
+      })
+      .from(messages)
+      .leftJoin(messageParts, eq(messages.id, messageParts.messageId))
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(desc(messages.timeCreated), desc(messageParts.sequence)) // Messages chronologically, parts in reverse sequence
+
+    // Group the flat results into messages with parts
+    const messagesMap = new Map()
+
+    for (const row of result) {
+      if (!messagesMap.has(row.messageId)) {
+        messagesMap.set(row.messageId, {
+          id: row.messageId,
+          sessionId: sessionId,
+          role: row.messageRole,
+          timeCreated: row.messageTimeCreated,
+          timeCompleted: row.messageTimeCompleted,
+          providerId: row.messageProviderId,
+          modelId: row.messageModelId,
+          mode: row.messageMode,
+          pathCwd: row.messagePathCwd,
+          pathRoot: row.messagePathRoot,
+          isSummary: row.messageIsSummary,
+          cost: row.messageCost,
+          tokensInput: row.messageTokensInput,
+          tokensOutput: row.messageTokensOutput,
+          tokensReasoning: row.messageTokensReasoning,
+          tokensCacheRead: row.messageTokensCacheRead,
+          tokensCacheWrite: row.messageTokensCacheWrite,
+          isSynced: row.messageIsSynced,
+          lastSyncTimestamp: row.messageLastSyncTimestamp,
+          createdAt: row.messageCreatedAt,
+          updatedAt: row.messageUpdatedAt,
+          parts: [],
+        })
+      }
+
+      // Add part if it exists
+      if (row.partId) {
+        messagesMap.get(row.messageId).parts.push({
+          id: row.partId,
+          messageId: row.messageId,
+          sessionId: sessionId,
+          type: row.partType,
+          sequence: row.partSequence,
+          textContent: row.partTextContent,
+          isSynthetic: row.partIsSynthetic,
+          fileFilename: row.partFileFilename,
+          fileMime: row.partFileMime,
+          fileUrl: row.partFileUrl,
+          fileSourceType: row.partFileSourceType,
+          fileSourcePath: row.partFileSourcePath,
+          fileSourceTextValue: row.partFileSourceTextValue,
+          fileSourceTextStart: row.partFileSourceTextStart,
+          fileSourceTextEnd: row.partFileSourceTextEnd,
+          fileSourceName: row.partFileSourceName,
+          fileSourceKind: row.partFileSourceKind,
+          fileSourceRange: row.partFileSourceRange,
+          toolCallId: row.partToolCallId,
+          toolName: row.partToolName,
+          toolStatus: row.partToolStatus,
+          toolInput: row.partToolInput,
+          toolOutput: row.partToolOutput,
+          toolTitle: row.partToolTitle,
+          toolMetadata: row.partToolMetadata,
+          toolError: row.partToolError,
+          toolTimeStart: row.partToolTimeStart,
+          toolTimeEnd: row.partToolTimeEnd,
+          stepCost: row.partStepCost,
+          stepTokensInput: row.partStepTokensInput,
+          stepTokensOutput: row.partStepTokensOutput,
+          stepTokensReasoning: row.partStepTokensReasoning,
+          stepTokensCacheRead: row.partStepTokensCacheRead,
+          stepTokensCacheWrite: row.partStepTokensCacheWrite,
+          snapshotId: row.partSnapshotId,
+          patchHash: row.partPatchHash,
+          patchFiles: row.partPatchFiles,
+          timeStart: row.partTimeStart,
+          timeEnd: row.partTimeEnd,
+          createdAt: row.partCreatedAt,
+          updatedAt: row.partUpdatedAt,
+          isSynced: row.partIsSynced,
+          lastSyncTimestamp: row.partLastSyncTimestamp,
+        })
+      }
+    }
+
+    // Convert to array and reverse for inverted FlatList (newest messages at top)
+    return Array.from(messagesMap.values())
   }
 
   async createMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
@@ -199,6 +344,7 @@ class MessageRepository {
           sessionId: part.sessionId,
           messageId: part.messageId,
           type: part.type,
+          sequence: part.sequence,
           textContent: part.textContent,
           isSynthetic: part.isSynthetic,
           timeStart: part.timeStart,
@@ -323,7 +469,7 @@ export function useLocalMessagePartsQuery(messageId: string, options?: { enabled
 export function useLocalSessionPartsQuery(sessionId: string) {
   return useQuery({
     queryKey: queryKeys.local.messages.sessionParts(sessionId),
-    queryFn: () => messageRepo.getSessionParts(sessionId),
+    queryFn: () => messageRepo.getSessionMessagesWithParts(sessionId),
     enabled: !!sessionId,
     staleTime: 100, // Very short cache for real-time streaming
   })

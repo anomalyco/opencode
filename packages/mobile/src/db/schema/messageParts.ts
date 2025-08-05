@@ -13,6 +13,7 @@ export const messageParts = sqliteTable("message_parts", {
   type: text("type", {
     enum: ["text", "file", "tool", "step-start", "step-finish", "snapshot", "patch"],
   }).notNull(),
+  sequence: integer("sequence").notNull().default(0), // Order within message for proper sequencing
 
   // Text parts
   textContent: text("text_content"),

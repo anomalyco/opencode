@@ -3,9 +3,9 @@
  * Moves complex logic out of UI components
  */
 
-import type { MessageWithParts, SendMessageRequest, ChatMetrics } from "@/types/opencode-types"
+import type { MessageWithParts, ChatMetrics } from "@/types/opencode-types"
 import { useUpsertLocalMessageMutation, useUpsertLocalMessagePartMutation } from "@/services/api/local/messages"
-import { useSendRemoteMessageMutation } from "@/services/api/remote/messages"
+import { useSendRemoteMessageMutation, type SendMessageRequest } from "@/services/api/remote/messages"
 // User settings functionality temporarily removed - will be re-implemented later
 
 export interface ChatServiceConfig {
@@ -41,15 +41,24 @@ export class ChatService {
     upsertLocalMessagePart: any,
   ): Promise<void> {
     if (this.syncInProgress.has(sessionId)) {
+      console.log(`Sync already in progress for session ${sessionId}`)
       return
     }
 
+    console.log(`Starting sync for session ${sessionId} with ${remoteMessages.length} messages`)
     this.syncInProgress.add(sessionId)
 
     try {
+      let syncedMessages = 0
+      let syncedParts = 0
+
       for (const remoteMessage of remoteMessages) {
         await this.syncSingleMessage(remoteMessage, upsertLocalMessage, upsertLocalMessagePart)
+        syncedMessages++
+        syncedParts += remoteMessage.parts?.length || 0
       }
+
+      console.log(`Sync completed for session ${sessionId}: ${syncedMessages} messages, ${syncedParts} parts`)
     } catch (error) {
       // Handle specific error types gracefully
       if (this.isRecoverableError(error)) {
@@ -70,14 +79,25 @@ export class ChatService {
     upsertLocalMessage: any,
     upsertLocalMessagePart: any,
   ): Promise<void> {
+    const messageId = remoteMessage.info?.id
+    console.log(`Syncing message ${messageId} (${remoteMessage.info?.role})`)
+
     const localMessage = this.transformRemoteToLocalMessage(remoteMessage)
+
+    // Skip if transformation returned null (invalid message)
+    if (!localMessage) {
+      console.log(`Skipping invalid message ${messageId}`)
+      return
+    }
 
     try {
       await upsertLocalMessage.mutateAsync(localMessage)
+      console.log(`Message ${messageId} synced successfully`)
 
       // Sync message parts if they exist - use batching for large messages
       if (remoteMessage.parts && Array.isArray(remoteMessage.parts)) {
         const partsCount = remoteMessage.parts.length
+        console.log(`Syncing ${partsCount} parts for message ${messageId}`)
 
         if (partsCount > 50) {
           // Batch process large messages to prevent UI blocking
@@ -86,6 +106,10 @@ export class ChatService {
           // Process smaller messages normally
           await this.syncMessagePartsSequential(remoteMessage.parts, upsertLocalMessagePart)
         }
+
+        console.log(`All ${partsCount} parts synced for message ${messageId}`)
+      } else {
+        console.log(`No parts to sync for message ${messageId}`)
       }
     } catch (error) {
       // Handle specific error types
@@ -100,14 +124,66 @@ export class ChatService {
   /**
    * Transform remote message format to local database format
    */
-  private transformRemoteToLocalMessage(remoteMessage: any): any {
+  private transformRemoteToLocalMessage(remoteMessage: any): any | null {
+    // Log the complete message data we're now receiving
+    console.log("Complete message data received:", JSON.stringify(remoteMessage, null, 2))
+
+    // Log what enhanced data we're now capturing
+    const enhancedFields = []
+    if (remoteMessage.info?.error) enhancedFields.push("error")
+    if (remoteMessage.info?.system) enhancedFields.push("system")
+    if (remoteMessage.info?.modelID) enhancedFields.push("modelID")
+    if (remoteMessage.info?.providerID) enhancedFields.push("providerID")
+    if (remoteMessage.info?.mode) enhancedFields.push("mode")
+    if (remoteMessage.info?.path) enhancedFields.push("path")
+    if (remoteMessage.info?.cost) enhancedFields.push("cost")
+    if (remoteMessage.info?.tokens) enhancedFields.push("tokens")
+
+    if (enhancedFields.length > 0) {
+      console.log(`Enhanced message data captured: ${enhancedFields.join(", ")}`)
+    }
+
+    // Validate required fields - log warnings but don't crash
+    if (!remoteMessage?.info?.id) {
+      console.log("Warning: Message missing info.id, using fallback")
+      // Generate a fallback ID to prevent crashes
+      remoteMessage = {
+        ...remoteMessage,
+        info: {
+          ...remoteMessage?.info,
+          id: `fallback-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+        },
+      }
+    }
+
+    if (!remoteMessage?.info?.sessionID) {
+      console.log("Warning: Message missing info.sessionID, skipping sync")
+      return null // Return null to skip this message
+    }
+
+    if (!remoteMessage?.info?.role) {
+      console.log("Warning: Message missing info.role, defaulting to 'assistant'")
+      remoteMessage = {
+        ...remoteMessage,
+        info: {
+          ...remoteMessage?.info,
+          role: "assistant",
+        },
+      }
+    }
     // Use remote timestamp for proper ordering
-    const remoteCreatedTime = remoteMessage.info?.time?.created
-    // Check if timestamp is already in milliseconds (> year 2000 in seconds)
+    const remoteCreatedTime = remoteMessage.info?.time?.created // Check if timestamp is already in milliseconds (> year 2000 in seconds)
     const isMilliseconds = remoteCreatedTime && remoteCreatedTime > 946684800000
     const createdAt = remoteCreatedTime
       ? new Date(isMilliseconds ? remoteCreatedTime : remoteCreatedTime * 1000)
       : new Date()
+
+    // Log message details for debugging
+    const firstTextPart = remoteMessage.parts?.find((p: any) => p.type === "text")
+    const textPreview = firstTextPart?.text ? firstTextPart.text.substring(0, 50) + "..." : "No text"
+    console.log(
+      `📝 Message sync: ID=${remoteMessage.info?.id}, Role=${remoteMessage.info?.role}, Time=${createdAt.toISOString()}, Text="${textPreview}"`,
+    )
 
     return {
       id: remoteMessage.info?.id,
@@ -127,16 +203,16 @@ export class ChatService {
       pathCwd: remoteMessage.info?.path?.cwd || null,
       pathRoot: remoteMessage.info?.path?.root || null,
       isSummary: Boolean(remoteMessage.info?.summary),
-      cost: Number(remoteMessage.info?.cost || 0),
-      tokensInput: Number(remoteMessage.info?.tokens?.input || 0),
-      tokensOutput: Number(remoteMessage.info?.tokens?.output || 0),
-      tokensReasoning: Number(remoteMessage.info?.tokens?.reasoning || 0),
-      tokensCacheRead: Number(remoteMessage.info?.tokens?.cache?.read || 0),
-      tokensCacheWrite: Number(remoteMessage.info?.tokens?.cache?.write || 0),
+      cost: this.safeNumber(remoteMessage.info?.cost),
+      tokensInput: this.safeNumber(remoteMessage.info?.tokens?.input),
+      tokensOutput: this.safeNumber(remoteMessage.info?.tokens?.output),
+      tokensReasoning: this.safeNumber(remoteMessage.info?.tokens?.reasoning),
+      tokensCacheRead: this.safeNumber(remoteMessage.info?.tokens?.cache?.read),
+      tokensCacheWrite: this.safeNumber(remoteMessage.info?.tokens?.cache?.write),
       errorName: remoteMessage.info?.error?.name || null,
       errorMessage: remoteMessage.info?.error?.message || null,
-      errorData: remoteMessage.info?.error?.data ? JSON.stringify(remoteMessage.info.error.data) : null,
-      systemPrompts: remoteMessage.info?.system ? JSON.stringify(remoteMessage.info.system) : null,
+      errorData: this.safeJsonStringify(remoteMessage.info?.error?.data),
+      systemPrompts: this.safeJsonStringify(remoteMessage.info?.system),
       isSynced: true,
       lastSyncTimestamp: new Date(),
     }
@@ -145,7 +221,35 @@ export class ChatService {
   /**
    * Transform remote part format to local database format
    */
-  private transformRemoteToLocalPart(remotePart: any, orderIndex?: number): any {
+  private transformRemoteToLocalPart(remotePart: any, orderIndex?: number): any | null {
+    console.log("Complete part data received:", JSON.stringify(remotePart, null, 2))
+
+    // Validate required fields - log warnings but don't crash
+    if (!remotePart?.id) {
+      console.log("Warning: Part missing id, using fallback")
+      remotePart = {
+        ...remotePart,
+        id: `fallback-part-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      }
+    }
+
+    if (!remotePart?.messageID) {
+      console.log("Warning: Part missing messageID, skipping sync")
+      return null // Return null to skip this part
+    }
+
+    if (!remotePart?.sessionID) {
+      console.log("Warning: Part missing sessionID, skipping sync")
+      return null // Return null to skip this part
+    }
+
+    if (!remotePart?.type) {
+      console.log("Warning: Part missing type, defaulting to 'text'")
+      remotePart = {
+        ...remotePart,
+        type: "text",
+      }
+    }
     // Use order index to preserve sequence - add seconds to ensure proper ordering
     const startTime = remotePart.time?.start
     const isMilliseconds = startTime && startTime > 946684800000
@@ -168,15 +272,51 @@ export class ChatService {
       fileFilename: remotePart.filename || null,
       fileMime: remotePart.mime || null,
       fileUrl: remotePart.url || null,
+      fileSourceType: remotePart.source?.type || null,
+      fileSourcePath: remotePart.source?.path || null,
+      fileSourceTextValue: remotePart.source?.text?.value || null,
+      fileSourceTextStart: remotePart.source?.text?.start || null,
+      fileSourceTextEnd: remotePart.source?.text?.end || null,
+      fileSourceName: remotePart.source?.name || null, // for symbol sources
+      fileSourceKind: remotePart.source?.kind || null, // for symbol sources
+      fileSourceRange: this.safeJsonStringify(remotePart.source?.range),
 
       // Tool content
       toolName: remotePart.tool || null,
       toolCallId: remotePart.callID || null,
       toolStatus: remotePart.state?.status || null,
-      toolInput: remotePart.state?.input ? JSON.stringify(remotePart.state.input) : null,
+      toolInput: this.safeJsonStringify(remotePart.state?.input),
       toolOutput: remotePart.state?.output || null,
-      toolMetadata: remotePart.state?.metadata ? JSON.stringify(remotePart.state.metadata) : null,
+      toolTitle: remotePart.state?.title || null,
+      toolMetadata: this.safeJsonStringify(remotePart.state?.metadata),
       toolError: remotePart.state?.error || null,
+      toolTimeStart: remotePart.state?.time?.start
+        ? new Date(
+            remotePart.state.time.start > 946684800000
+              ? remotePart.state.time.start
+              : remotePart.state.time.start * 1000,
+          )
+        : null,
+      toolTimeEnd: remotePart.state?.time?.end
+        ? new Date(
+            remotePart.state.time.end > 946684800000 ? remotePart.state.time.end : remotePart.state.time.end * 1000,
+          )
+        : null,
+
+      // Step finish part fields
+      stepCost: remotePart.cost ? this.safeNumber(remotePart.cost) : null,
+      stepTokensInput: remotePart.tokens?.input ? this.safeNumber(remotePart.tokens.input) : null,
+      stepTokensOutput: remotePart.tokens?.output ? this.safeNumber(remotePart.tokens.output) : null,
+      stepTokensReasoning: remotePart.tokens?.reasoning ? this.safeNumber(remotePart.tokens.reasoning) : null,
+      stepTokensCacheRead: remotePart.tokens?.cache?.read ? this.safeNumber(remotePart.tokens.cache.read) : null,
+      stepTokensCacheWrite: remotePart.tokens?.cache?.write ? this.safeNumber(remotePart.tokens.cache.write) : null,
+
+      // Snapshot part fields
+      snapshotId: remotePart.snapshot || null,
+
+      // Patch part fields
+      patchHash: remotePart.hash || null,
+      patchFiles: this.safeJsonStringify(remotePart.files),
 
       // Timing
       timeStart: orderedTime,
@@ -187,6 +327,9 @@ export class ChatService {
       // Sync metadata
       isSynced: true,
       lastSyncTimestamp: new Date(),
+
+      // Sequence for proper ordering
+      sequence: orderIndex ?? 0,
     }
   }
 
@@ -278,7 +421,11 @@ export class ChatService {
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
       const localPart = this.transformRemoteToLocalPart(part, i)
-      await upsertLocalMessagePart.mutateAsync(localPart)
+
+      // Skip if transformation returned null (invalid part)
+      if (localPart) {
+        await upsertLocalMessagePart.mutateAsync(localPart)
+      }
     }
   }
 
@@ -297,6 +444,11 @@ export class ChatService {
         const globalIndex = i + batchIndex
         const localPart = this.transformRemoteToLocalPart(part, globalIndex)
 
+        // Skip if transformation returned null (invalid part)
+        if (!localPart) {
+          return
+        }
+
         try {
           await upsertLocalMessagePart.mutateAsync(localPart)
         } catch (error) {
@@ -314,6 +466,34 @@ export class ChatService {
         await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY))
       }
     }
+  }
+
+  /**
+   * Safely stringify JSON data with error handling
+   */
+  private safeJsonStringify(data: any): string | null {
+    if (data === null || data === undefined) {
+      return null
+    }
+
+    try {
+      return JSON.stringify(data)
+    } catch (error) {
+      console.error("Failed to stringify JSON data:", error, data)
+      return null
+    }
+  }
+
+  /**
+   * Safely parse numeric values with fallback
+   */
+  private safeNumber(value: any, fallback: number = 0): number {
+    if (value === null || value === undefined) {
+      return fallback
+    }
+
+    const parsed = Number(value)
+    return isNaN(parsed) ? fallback : parsed
   }
 
   /**

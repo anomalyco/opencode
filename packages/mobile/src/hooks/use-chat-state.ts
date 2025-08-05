@@ -77,6 +77,7 @@ export const useChatState = (sessionId: string): ChatState => {
       if (!messageInfo || messageInfo.sessionID !== sessionId) return
 
       try {
+        console.log("message: ", messageInfo.role, messageInfo.time)
         // Transform message info to local format
         const localMessage = {
           id: messageInfo.id,
@@ -128,6 +129,7 @@ export const useChatState = (sessionId: string): ChatState => {
       if (!partInfo || partInfo.sessionID !== sessionId) return
 
       try {
+        console.log("part: partinfo: ", partInfo, partInfo.time, partInfo.state?.time, partInfo.state?.status)
         // Transform part info to local format
         const localPart = {
           id: partInfo.id,
