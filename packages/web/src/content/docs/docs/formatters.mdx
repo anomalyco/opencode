@@ -86,16 +86,20 @@ To disable a specific formatter, set `disabled` to `true`:
 
 You can override the built-in formatters or add new ones by specifying the command, environment variables, and file extensions:
 
-```json title="opencode.json" {4-10}
+```json title="opencode.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
-    "custom-prettier": {
+    "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],
       "environment": {
         "NODE_ENV": "development"
       },
       "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
     }
   }
 }
