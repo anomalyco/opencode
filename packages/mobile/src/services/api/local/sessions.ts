@@ -1,14 +1,36 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { eq, desc } from "drizzle-orm"
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
+import { eq, desc, count } from "drizzle-orm"
 import db from "@/db"
-import { sessions, messages, messageParts } from "@/db/schema"
+import { sessions, messages, messageParts, projects } from "@/db/schema"
 import { queryKeys } from "../keys"
 import type { Session } from "@/db/types"
 
 // Raw database operations (internal use)
 class SessionRepository {
-  async getSessions() {
-    return await db.select().from(sessions).orderBy(desc(sessions.timeUpdated))
+  async getActiveProjectId() {
+    const result = await db.select({ id: projects.id }).from(projects).where(eq(projects.isActive, true)).limit(1)
+    return result[0]?.id || null
+  }
+
+  async getSessions(limit = 20, offset = 0, projectId?: string) {
+    const activeProjectId = projectId || (await this.getActiveProjectId())
+    if (!activeProjectId) return []
+
+    return await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.projectId, activeProjectId))
+      .orderBy(desc(sessions.timeUpdated))
+      .limit(limit)
+      .offset(offset)
+  }
+
+  async getSessionsCount(projectId?: string) {
+    const activeProjectId = projectId || (await this.getActiveProjectId())
+    if (!activeProjectId) return 0
+
+    const result = await db.select({ count: count() }).from(sessions).where(eq(sessions.projectId, activeProjectId))
+    return result[0]?.count || 0
   }
 
   async getSession(id: string) {
@@ -144,10 +166,28 @@ class SessionRepository {
 const sessionRepo = new SessionRepository()
 
 // TanStack Query hooks for local database
-export function useLocalSessionsQuery() {
+export function useLocalSessionsQuery(limit = 20, offset = 0) {
   return useQuery({
-    queryKey: queryKeys.local.sessions.lists(),
-    queryFn: () => sessionRepo.getSessions(),
+    queryKey: queryKeys.local.sessions.lists(limit, offset),
+    queryFn: () => sessionRepo.getSessions(limit, offset),
+  })
+}
+
+export function useLocalSessionsCountQuery() {
+  return useQuery({
+    queryKey: queryKeys.local.sessions.count(),
+    queryFn: () => sessionRepo.getSessionsCount(),
+  })
+}
+
+export function useInfiniteLocalSessionsQuery(pageSize = 20) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.local.sessions.lists(pageSize, 0),
+    queryFn: ({ pageParam = 0 }) => sessionRepo.getSessions(pageSize, pageParam * pageSize),
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === pageSize ? allPages.length : undefined
+    },
+    initialPageParam: 0,
   })
 }
 

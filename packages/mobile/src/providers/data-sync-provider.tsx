@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
 import { useUpsertLocalSessionMutation } from "@/services/api/local/sessions"
-import { useLocalAppConfigQuery } from "@/services/api/local/config"
+import { useActiveProjectQuery } from "@/services/api/local/projects"
 import { queryKeys } from "@/services/api/keys"
 import type { Session } from "@/db/types"
 
@@ -26,24 +26,26 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
   const [hasInitialSync, setHasInitialSync] = useState(false)
 
   const queryClient = useQueryClient()
-  const { data: appConfig } = useLocalAppConfigQuery()
+  const { data: activeProject } = useActiveProjectQuery()
   const { data: remoteSessions, error: remoteError } = useRemoteSessionsQuery()
   const upsertLocalSession = useUpsertLocalSessionMutation()
 
-  const isConnected = appConfig?.connectionStatus === "connected"
+  const isConnected = activeProject?.connectionStatus === "connected"
 
-  const transformRemoteSession = (remoteSession: any): Omit<Session, "createdAt" | "updatedAt"> => ({
+  const transformRemoteSession = (remoteSession: any, projectId: string): Omit<Session, "createdAt" | "updatedAt"> => ({
     id: remoteSession.id,
+    projectId,
     parentId: remoteSession.parentId || null,
     title: remoteSession.title,
     version: remoteSession.version,
-    shareUrl: remoteSession.shareUrl || null,
+    shareUrl: remoteSession.share?.url || null,
     timeCreated: new Date(remoteSession.time.created),
     timeUpdated: new Date(remoteSession.time.updated),
-    revertMessageId: remoteSession.revertMessageId || null,
-    revertPartId: remoteSession.revertPartId || null,
-    revertSnapshot: remoteSession.revertSnapshot || null,
-    revertDiff: remoteSession.revertDiff || null,
+    revertMessageId: remoteSession.revert?.messageID || null,
+    revertPartId: remoteSession.revert?.partID || null,
+    revertSnapshot: remoteSession.revert?.snapshot || null,
+    revertDiff: remoteSession.revert?.diff || null,
+    // Initialize with 0 - will be calculated from messages
     totalCost: 0,
     totalTokensInput: 0,
     totalTokensOutput: 0,
@@ -58,14 +60,14 @@ export const DataSyncProvider = ({ children }: DataSyncProviderProps) => {
   })
 
   const syncSessions = async () => {
-    if (!isConnected || !remoteSessions) return
+    if (!isConnected || !remoteSessions || !activeProject) return
 
     setIsLoading(true)
     try {
       // Process all sessions in parallel instead of sequentially
       const upsertPromises = remoteSessions.map(async (remoteSession) => {
         try {
-          const localSession = transformRemoteSession(remoteSession)
+          const localSession = transformRemoteSession(remoteSession, activeProject.id)
           return await upsertLocalSession.mutateAsync({
             session: localSession,
             preserveRemoteTimestamp: true,

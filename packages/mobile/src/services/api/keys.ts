@@ -6,10 +6,11 @@ export const queryKeys = {
   local: {
     sessions: {
       all: ["local", "sessions"] as const,
-      lists: () => [...queryKeys.local.sessions.all, "list"] as const,
+      lists: (limit?: number, offset?: number) => [...queryKeys.local.sessions.all, "list", { limit, offset }] as const,
       details: () => [...queryKeys.local.sessions.all, "detail"] as const,
       detail: (id: string) => [...queryKeys.local.sessions.details(), id] as const,
       unsynced: () => [...queryKeys.local.sessions.all, "unsynced"] as const,
+      count: () => [...queryKeys.local.sessions.all, "count"] as const,
     },
     messages: {
       all: ["local", "messages"] as const,
@@ -26,6 +27,14 @@ export const queryKeys = {
       details: () => [...queryKeys.local.files.all, "detail"] as const,
       detail: (path: string) => [...queryKeys.local.files.details(), path] as const,
       stats: () => [...queryKeys.local.files.all, "stats"] as const,
+    },
+    projects: {
+      all: ["local", "projects"] as const,
+      lists: () => [...queryKeys.local.projects.all, "list"] as const,
+      details: () => [...queryKeys.local.projects.all, "detail"] as const,
+      byId: (id: string) => [...queryKeys.local.projects.details(), id] as const,
+      active: () => [...queryKeys.local.projects.all, "active"] as const,
+      activeServerUrl: () => [...queryKeys.local.projects.all, "activeServerUrl"] as const,
     },
     config: {
       all: ["local", "config"] as const,

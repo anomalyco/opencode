@@ -77,11 +77,10 @@ export function useSendRemoteMessageMutation() {
       sessionId: string
       data: SendMessageRequest
     }): Promise<MessageResponse> => {
-      // Use shorter timeout for message sending since it's fire-and-forget
-      // The actual response comes through SSE, not HTTP response
-      // 5 seconds should be enough for the server to accept the message
+      // Increase timeout to reduce false timeout errors
+      // The actual response comes through SSE, but we still need the HTTP response
       const response = await apiClient.axios.post(`/session/${sessionId}/message`, data, {
-        timeout: 5000, // 5 second timeout instead of default 30s
+        timeout: 15000, // 15 second timeout instead of 5s
       })
       return response.data
     },

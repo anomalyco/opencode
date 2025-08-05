@@ -12,9 +12,8 @@ import { useSessionManager } from "@/services/session-manager"
 import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
-import { useLocalCurrentModeQuery, useSwitchModeMutation } from "@/services/api/local/config"
+// Mode switching functionality removed - will be re-implemented later
 import { useSonner } from "@/hooks/use-sonner"
-import { Ionicons } from "@expo/vector-icons"
 
 interface ChatPageProps {
   sessionId: string
@@ -30,9 +29,6 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
   const sessionManager = useSessionManager()
   const queryClient = useQueryClient()
 
-  // Mode management
-  const { data: currentMode } = useLocalCurrentModeQuery()
-  const switchModeMutation = useSwitchModeMutation()
   const sonner = useSonner()
 
   // Simplified chat state - no streaming state here
@@ -68,54 +64,30 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
 
   // Auto-scroll is now handled by StreamingMessageList
 
-  // Handle pull-to-refresh with mode toggle
+  // Handle pull-to-refresh
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      // Toggle mode on refresh
-      await switchModeMutation.mutateAsync(currentMode)
       await refreshMessages()
-
-      // Show mode switch toast with appropriate color
-      if (currentMode) {
-        const newMode = currentMode === "plan" ? "build" : "plan"
-        if (newMode === "build") {
-          // Primary color for build mode with hammer icon
-          sonner.info(`Switched to ${newMode} mode`, {
-            duration: 2000,
-            icon: {
-              component: Ionicons,
-              name: "hammer",
-              size: 20,
-            },
-          })
-        } else {
-          // Secondary color for plan mode with document icon
-          sonner.secondary(`Switched to ${newMode} mode`, {
-            duration: 2000,
-            icon: {
-              component: Ionicons,
-              name: "document-text",
-              size: 20,
-            },
-          })
-        }
-      }
+      sonner.success("Messages refreshed")
     } catch (err) {
+      sonner.error("Failed to refresh")
     } finally {
       setRefreshing(false)
     }
-  }, [refreshMessages, switchModeMutation, currentMode, sonner])
+  }, [refreshMessages, sonner])
 
   // Handle send message
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
-        await sendMessage(content, currentMode)
+        await sendMessage(content)
         setTimeout(() => messageListRef.current?.scrollToBottom(), 100)
-      } catch (err) {}
+      } catch (err) {
+        sonner.error("Failed to send message")
+      }
     },
-    [sendMessage, currentMode],
+    [sendMessage, sonner],
   )
 
   // Handle new session
@@ -139,13 +111,8 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           onRefresh={onRefresh}
           refreshing={refreshing}
         />
-        <ChatHeader
-          sessionTitle={session?.title}
-          session={session}
-          onNewSessionPress={handleNewSession}
-          currentMode={currentMode}
-        />
-        <MessageInput onSend={handleSendMessage} currentMode={currentMode} />
+        <ChatHeader sessionTitle={session?.title} session={session} onNewSessionPress={handleNewSession} />
+        <MessageInput onSend={handleSendMessage} />
       </Box>
     </KeyboardAvoidingView>
   )

@@ -1,7 +1,11 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core"
+import { projects } from "./config"
 
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(), // session ID from server
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
   parentId: text("parent_id"), // for session forking
   title: text("title").notNull(),
   version: text("version").notNull(),

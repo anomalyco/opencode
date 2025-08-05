@@ -4,7 +4,9 @@
  */
 
 import EventSource from "react-native-sse"
-import { localConfigService } from "@/services/api/local/config"
+import db from "@/db"
+import { projects } from "@/db/schema"
+import { eq } from "drizzle-orm"
 import type { SSEEvent, SSEEventType, SessionState } from "@/types/opencode-types"
 
 export type SSEEventCallback = (event: SSEEvent) => void
@@ -55,12 +57,14 @@ export class SSEService {
     }
 
     try {
-      // Get the configured server URL
-      const serverUrl = await localConfigService.getServerUrl()
-      if (!serverUrl) {
+      // Get the active project's server URL
+      const activeProject = await db.select().from(projects).where(eq(projects.isActive, true)).limit(1)
+      if (!activeProject[0] || activeProject[0].connectionStatus !== "connected") {
         this.scheduleReconnect()
         return
       }
+
+      const serverUrl = activeProject[0].serverUrl
 
       const sseUrl = `${serverUrl}/event`
 

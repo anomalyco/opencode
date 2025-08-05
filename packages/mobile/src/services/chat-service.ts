@@ -6,7 +6,7 @@
 import type { MessageWithParts, SendMessageRequest, ChatMetrics } from "@/types/opencode-types"
 import { useUpsertLocalMessageMutation, useUpsertLocalMessagePartMutation } from "@/services/api/local/messages"
 import { useSendRemoteMessageMutation } from "@/services/api/remote/messages"
-import { useLocalUserSettingsQuery } from "@/services/api/local/config"
+// User settings functionality temporarily removed - will be re-implemented later
 
 export interface ChatServiceConfig {
   defaultProviderId?: string
@@ -23,7 +23,7 @@ export class ChatService {
   constructor(config: ChatServiceConfig = {}) {
     this.config = {
       defaultProviderId: "anthropic",
-      defaultModelId: "claude-sonnet-4-20250514",
+      defaultModelId: "claude-3-5-sonnet-20241022", // Use a more standard model ID
       autoSync: true,
       retryAttempts: 3,
       ...config,
@@ -216,11 +216,14 @@ export class ChatService {
     }
 
     try {
+      console.log("Sending message with request:", request)
       await sendMessageMutation.mutateAsync({
         sessionId,
         data: request,
       })
+      console.log("Message sent successfully")
     } catch (error) {
+      console.error("Message send error:", error)
       throw error
     }
   }
@@ -352,7 +355,8 @@ export const useChatService = () => {
   const upsertLocalMessage = useUpsertLocalMessageMutation()
   const upsertLocalMessagePart = useUpsertLocalMessagePartMutation()
   const sendMessage = useSendRemoteMessageMutation()
-  const { data: userSettings } = useLocalUserSettingsQuery()
+  // User settings temporarily removed
+  const userSettings = null
 
   return {
     syncRemoteMessages: (sessionId: string, remoteMessages: any[]) =>

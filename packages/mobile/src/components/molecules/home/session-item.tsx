@@ -102,3 +102,5 @@ export const SessionItem = memo(({ session, onPress }: SessionItemProps) => {
     </Box>
   )
 })
+
+SessionItem.displayName = "SessionItem"

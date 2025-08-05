@@ -1,11 +1,21 @@
 import { relations } from "drizzle-orm"
+import { projects } from "./config"
 import { sessions } from "./sessions"
 import { messages } from "./messages"
 import { messageParts } from "./messageParts"
 import { providers, models } from "./providers"
 
+// Project relations
+export const projectsRelations = relations(projects, ({ many }) => ({
+  sessions: many(sessions),
+}))
+
 // Session relations
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [sessions.projectId],
+    references: [projects.id],
+  }),
   parent: one(sessions, {
     fields: [sessions.parentId],
     references: [sessions.id],

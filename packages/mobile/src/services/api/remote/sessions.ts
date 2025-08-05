@@ -28,11 +28,28 @@ interface ShareSessionResponse {
   shareUrl: string
 }
 
+// Helper function to ensure API client uses active project
+async function ensureActiveProjectConnection() {
+  const db = (await import("@/db")).default
+  const { projects } = await import("@/db/schema")
+  const { eq } = await import("drizzle-orm")
+
+  const activeProject = await db.select().from(projects).where(eq(projects.isActive, true)).limit(1)
+  if (!activeProject[0]) {
+    throw new Error("No active project found. Please select a project first.")
+  }
+
+  // Ensure API client is using the active project's server URL
+  await apiClient.updateBaseUrl(activeProject[0].serverHostname, activeProject[0].serverPort)
+
+  return activeProject[0]
+}
 // Query hooks
 export function useRemoteSessionsQuery() {
   return useQuery({
     queryKey: queryKeys.remote.sessions.lists(),
     queryFn: async (): Promise<SessionResponse[]> => {
+      await ensureActiveProjectConnection()
       const response = await apiClient.axios.get("/session")
       return response.data
     },
@@ -45,6 +62,7 @@ export function useRemoteSessionQuery(id: string) {
   return useQuery({
     queryKey: queryKeys.remote.sessions.detail(id),
     queryFn: async (): Promise<SessionResponse> => {
+      await ensureActiveProjectConnection()
       const response = await apiClient.axios.get(`/session/${id}`)
       return response.data
     },
@@ -58,6 +76,7 @@ export function useCreateRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (data: CreateSessionRequest): Promise<SessionResponse> => {
+      await ensureActiveProjectConnection()
       const response = await apiClient.axios.post("/session", data)
       return response.data
     },
@@ -72,6 +91,7 @@ export function useDeleteRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      await ensureActiveProjectConnection()
       await apiClient.axios.delete(`/session/${id}`)
     },
     onSuccess: (_, id) => {
@@ -86,6 +106,7 @@ export function useInitRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      await ensureActiveProjectConnection()
       await apiClient.axios.post(`/session/${id}/init`)
     },
     onSuccess: (_, id) => {
@@ -99,6 +120,7 @@ export function useAbortRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      await ensureActiveProjectConnection()
       await apiClient.axios.post(`/session/${id}/abort`)
     },
     onSuccess: (_, id) => {
@@ -112,6 +134,7 @@ export function useShareRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<ShareSessionResponse> => {
+      await ensureActiveProjectConnection()
       const response = await apiClient.axios.post(`/session/${id}/share`)
       return response.data
     },
@@ -126,6 +149,7 @@ export function useUnshareRemoteSessionMutation() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      await ensureActiveProjectConnection()
       await apiClient.axios.delete(`/session/${id}/share`)
     },
     onSuccess: (_, id) => {

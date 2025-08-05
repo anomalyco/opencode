@@ -1,15 +1,37 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 
-export const appConfig = sqliteTable("app_config", {
-  id: integer("id").primaryKey().default(1),
+export const projects = sqliteTable("projects", {
+  id: text("id").primaryKey(), // project-{uuid}
+  name: text("name").notNull(),
+  description: text("description"),
+  path: text("path").notNull(), // unique project path/identifier
+
+  // Server connection details
   serverUrl: text("server_url").notNull(),
-  serverHostname: text("server_hostname").default("127.0.0.1"),
-  serverPort: integer("server_port").default(4096),
-  connectionString: text("connection_string"),
-  connectionStatus: text("connection_status", { enum: ["connected", "disconnected", "connecting"] }).default(
-    "disconnected",
-  ),
+  serverHostname: text("server_hostname").notNull(),
+  serverPort: integer("server_port").notNull(),
+
+  // App info from /app endpoint
+  appHostname: text("app_hostname"),
+  appGit: integer("app_git", { mode: "boolean" }),
+  appPathConfig: text("app_path_config"),
+  appPathData: text("app_path_data"),
+  appPathRoot: text("app_path_root"),
+  appPathCwd: text("app_path_cwd"),
+  appPathState: text("app_path_state"),
+  appTimeInitialized: integer("app_time_initialized", { mode: "timestamp" }),
+
+  // Connection state
+  connectionStatus: text("connection_status", {
+    enum: ["connected", "disconnected", "connecting"],
+  }).default("disconnected"),
   lastSyncTimestamp: integer("last_sync_timestamp", { mode: "timestamp" }).$defaultFn(() => new Date(0)),
+
+  // UI state
+  isActive: integer("is_active", { mode: "boolean" }).default(false), // currently selected
+  isFavorite: integer("is_favorite", { mode: "boolean" }).default(false),
+  color: text("color"), // for visual distinction
+
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

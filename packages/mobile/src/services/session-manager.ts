@@ -1,6 +1,7 @@
 import { router } from "expo-router"
 import { useCreateRemoteSessionMutation } from "./api/remote/sessions"
 import { useCreateLocalSessionMutation } from "./api/local/sessions"
+import { useActiveProjectQuery } from "./api/local/projects"
 import { useQueryClient } from "@tanstack/react-query"
 
 /**
@@ -11,15 +12,18 @@ export class SessionManager {
   private createRemoteSession: ReturnType<typeof useCreateRemoteSessionMutation>["mutateAsync"]
   private createLocalSession: ReturnType<typeof useCreateLocalSessionMutation>["mutateAsync"]
   private queryClient: any
+  private activeProjectId: string | null
 
   constructor(
     createRemoteSession: ReturnType<typeof useCreateRemoteSessionMutation>["mutateAsync"],
     createLocalSession: ReturnType<typeof useCreateLocalSessionMutation>["mutateAsync"],
     queryClient: any,
+    activeProjectId: string | null,
   ) {
     this.createRemoteSession = createRemoteSession
     this.createLocalSession = createLocalSession
     this.queryClient = queryClient
+    this.activeProjectId = activeProjectId
   }
 
   /**
@@ -47,6 +51,10 @@ export class SessionManager {
    * Let remote server handle creation, then sync to local
    */
   async createNewSession(title?: string): Promise<string> {
+    if (!this.activeProjectId) {
+      throw new Error("No active project found. Please create or select a project first.")
+    }
+
     try {
       const sessionTitle = this.generateSessionTitle(title)
 
@@ -58,6 +66,7 @@ export class SessionManager {
       // Sync remote session to local database
       await this.createLocalSession({
         id: remoteSession.id,
+        projectId: this.activeProjectId,
         parentId: remoteSession.parentId || null,
         title: remoteSession.title,
         version: remoteSession.version,
@@ -123,7 +132,13 @@ export class SessionManager {
 export function useSessionManager() {
   const createRemoteSession = useCreateRemoteSessionMutation()
   const createLocalSession = useCreateLocalSessionMutation()
+  const { data: activeProject } = useActiveProjectQuery()
   const queryClient = useQueryClient()
 
-  return new SessionManager(createRemoteSession.mutateAsync, createLocalSession.mutateAsync, queryClient)
+  return new SessionManager(
+    createRemoteSession.mutateAsync,
+    createLocalSession.mutateAsync,
+    queryClient,
+    activeProject?.id || null,
+  )
 }

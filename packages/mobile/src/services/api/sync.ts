@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "./keys"
-import { localConfigService } from "./local/config"
 import { apiClient } from "./remote/client"
+import { projects } from "@/db/schema"
+import { eq } from "drizzle-orm"
 
 // Sync service for coordinating local and remote data
 export class SyncService {
@@ -21,12 +22,25 @@ export class SyncService {
     this.queryClient = client
   }
 
+  // Get active project - used by all sync operations
+  private async getActiveProject() {
+    const db = (await import("../../db")).default
+    const activeProject = await db.select().from(projects).where(eq(projects.isActive, true)).limit(1)
+    if (!activeProject[0]) {
+      throw new Error("No active project found. Please select a project first.")
+    }
+    return activeProject[0]
+  }
+
   // Optimistic session creation - create locally first, then sync to remote
   async createSessionOptimistic(sessionData: any) {
+    const activeProject = await this.getActiveProject()
+
     // Create locally first for immediate UI feedback
     const localSession = {
       ...sessionData,
       id: `temp_${Date.now()}`, // Temporary ID
+      projectId: activeProject.id,
       isSynced: false,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -36,13 +50,11 @@ export class SyncService {
     this.queryClient?.setQueryData(queryKeys.local.sessions.lists(), (old: any[]) => [localSession, ...(old || [])])
 
     try {
+      // Ensure API client is using the active project's server URL
+      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+
       // Sync to remote
       await apiClient.axios.post("/session", sessionData)
-
-      // Mark sync timestamp
-      await localConfigService.setAppConfig({
-        lastSyncTimestamp: new Date(),
-      })
 
       // Invalidate queries to refresh with real data
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
@@ -59,13 +71,21 @@ export class SyncService {
   // Sync local sessions to remote
   async syncSessionsToRemote() {
     try {
+      const activeProject = await this.getActiveProject()
+
       // Import the session repository to get unsynced sessions
-      const { eq } = await import("drizzle-orm")
+      const { eq, and } = await import("drizzle-orm")
       const db = (await import("../../db")).default
       const { sessions } = await import("../../db/schema")
 
-      // Get unsynced local sessions directly from database
-      const unsyncedSessions = await db.select().from(sessions).where(eq(sessions.isSynced, false))
+      // Ensure API client is using the active project's server URL
+      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+
+      // Get unsynced local sessions for the active project only
+      const unsyncedSessions = await db
+        .select()
+        .from(sessions)
+        .where(and(eq(sessions.projectId, activeProject.id), eq(sessions.isSynced, false)))
 
       for (const session of unsyncedSessions || []) {
         try {
@@ -84,7 +104,9 @@ export class SyncService {
               updatedAt: new Date(),
             })
             .where(eq(sessions.id, session.id))
-        } catch (error) {}
+        } catch (error) {
+          // Continue with other sessions if one fails
+        }
       }
 
       // Refresh all session queries
@@ -98,6 +120,11 @@ export class SyncService {
   // Sync remote sessions to local
   async syncSessionsFromRemote() {
     try {
+      const activeProject = await this.getActiveProject()
+
+      // Ensure API client is using the active project's server URL
+      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+
       // Fetch remote sessions directly
       const response = await apiClient.axios.get("/session")
       const remoteSessions = response.data
@@ -106,25 +133,36 @@ export class SyncService {
       const db = (await import("../../db")).default
       const { sessions } = await import("../../db/schema")
 
-      // Store sessions locally
+      // Store sessions locally with active project ID
       for (const remoteSession of remoteSessions || []) {
         try {
           await db
             .insert(sessions)
             .values({
               id: remoteSession.id,
-              parentId: remoteSession.parentId,
+              projectId: activeProject.id,
+              parentId: remoteSession.parentId || null,
               title: remoteSession.title,
               version: remoteSession.version,
-              shareUrl: remoteSession.shareUrl,
+              shareUrl: remoteSession.share?.url || null,
               timeCreated: new Date(remoteSession.time.created),
               timeUpdated: new Date(remoteSession.time.updated),
-              revertMessageId: remoteSession.revertMessageId,
-              revertPartId: remoteSession.revertPartId,
-              revertSnapshot: remoteSession.revertSnapshot,
-              revertDiff: remoteSession.revertDiff,
+              revertMessageId: remoteSession.revert?.messageID || null,
+              revertPartId: remoteSession.revert?.partID || null,
+              revertSnapshot: remoteSession.revert?.snapshot || null,
+              revertDiff: remoteSession.revert?.diff || null,
+              // Initialize with 0 - will be calculated from messages
+              totalCost: 0,
+              totalTokensInput: 0,
+              totalTokensOutput: 0,
+              totalTokensReasoning: 0,
+              totalTokensCacheRead: 0,
+              totalTokensCacheWrite: 0,
+              messageCount: 0,
               isSynced: true,
               lastSyncTimestamp: new Date(),
+              isFavorite: false,
+              localNotes: null,
               createdAt: new Date(),
               updatedAt: new Date(),
             })
@@ -133,19 +171,21 @@ export class SyncService {
               set: {
                 title: remoteSession.title,
                 version: remoteSession.version,
-                shareUrl: remoteSession.shareUrl,
+                shareUrl: remoteSession.share?.url || null,
                 timeCreated: new Date(remoteSession.time.created),
                 timeUpdated: new Date(remoteSession.time.updated),
-                revertMessageId: remoteSession.revertMessageId,
-                revertPartId: remoteSession.revertPartId,
-                revertSnapshot: remoteSession.revertSnapshot,
-                revertDiff: remoteSession.revertDiff,
+                revertMessageId: remoteSession.revert?.messageID || null,
+                revertPartId: remoteSession.revert?.partID || null,
+                revertSnapshot: remoteSession.revert?.snapshot || null,
+                revertDiff: remoteSession.revert?.diff || null,
                 isSynced: true,
                 lastSyncTimestamp: new Date(),
                 updatedAt: new Date(),
               },
             })
-        } catch (error) {}
+        } catch (error) {
+          // Continue with other sessions if one fails
+        }
       }
 
       this.queryClient?.invalidateQueries({ queryKey: queryKeys.local.sessions.all })

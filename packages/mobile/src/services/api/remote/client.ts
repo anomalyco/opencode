@@ -1,5 +1,4 @@
 import axios, { type AxiosInstance } from "axios"
-import { localConfigService } from "../local/config"
 
 export class ApiClient {
   private static instance: ApiClient
@@ -24,23 +23,21 @@ export class ApiClient {
   }
 
   private setupInterceptors() {
-    // Request interceptor to add base URL
+    // Request interceptor to ensure we're using the active project's server URL
     this.client.interceptors.request.use(async (config) => {
-      // If baseURL is already set (from updateBaseUrl), use it
+      // If baseURL is already set and not empty, use it
       if (config.baseURL) {
         return config
       }
 
       try {
-        const serverUrl = await Promise.race([
-          localConfigService.getServerUrl(),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000)),
-        ])
+        // Get active project's server URL
+        const serverUrl = await this.getActiveProjectServerUrl()
         if (serverUrl) {
           config.baseURL = serverUrl
         }
       } catch (error) {
-        // If we can't get server URL quickly, skip it
+        // If we can't get server URL, let the request proceed and fail naturally
       }
       return config
     })
@@ -49,20 +46,29 @@ export class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error) => {
-        if (error.code === "ECONNREFUSED" || error.code === "NETWORK_ERROR") {
-          await localConfigService.updateConnectionStatus("disconnected")
-        }
+        // Just return the error - connection status will be handled by the calling code
         return Promise.reject(error)
       },
     )
+  }
+
+  private async getActiveProjectServerUrl(): Promise<string | null> {
+    try {
+      const db = (await import("@/db")).default
+      const { projects } = await import("@/db/schema")
+      const { eq } = await import("drizzle-orm")
+
+      const activeProject = await db.select().from(projects).where(eq(projects.isActive, true)).limit(1)
+      return activeProject[0]?.serverUrl || null
+    } catch (error) {
+      return null
+    }
   }
 
   async updateBaseUrl(hostname: string, port: number) {
     const serverUrl = `http://${hostname}:${port}`
     // Set the baseURL immediately for subsequent requests
     this.client.defaults.baseURL = serverUrl
-    // Also ensure the connection settings are saved
-    await localConfigService.setServerConnection(hostname, port)
   }
 
   async updateBaseUrlFromString(connectionString: string) {
@@ -75,8 +81,6 @@ export class ApiClient {
 
     // Set the baseURL immediately for subsequent requests
     this.client.defaults.baseURL = serverUrl
-    // Also ensure the connection settings are saved
-    await localConfigService.setServerConnectionString(connectionString)
   }
 
   get axios() {
@@ -85,16 +89,10 @@ export class ApiClient {
 
   // Health check
   async ping() {
-    try {
-      const response = await this.client.get("/app", {
-        timeout: 5000, // 5 second timeout for ping
-      })
-      await localConfigService.updateConnectionStatus("connected")
-      return response.data
-    } catch (error) {
-      await localConfigService.updateConnectionStatus("disconnected")
-      throw error
-    }
+    const response = await this.client.get("/app", {
+      timeout: 5000, // 5 second timeout for ping
+    })
+    return response.data
   }
 }
 
