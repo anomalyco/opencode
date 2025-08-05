@@ -6,6 +6,7 @@ import {
   useUpdateProjectConnectionStatusMutation,
 } from "@/services/api/local/projects"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { ConnectionService } from "@/services/connection-service"
 import { Feather } from "@expo/vector-icons"
 
 interface ConnectionStatusProps {
@@ -13,12 +14,11 @@ interface ConnectionStatusProps {
 }
 
 export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProps) => {
-  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONALS
   const { data: activeProject } = useActiveProjectQuery()
-  const { data: projects = [] } = useProjectsQuery()
+  const { data: projects } = useProjectsQuery()
   const { data: appInfo } = useRemoteAppInfoQuery()
-  const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
   const [isConnecting, setIsConnecting] = useState(false)
+  const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
 
   const handleConnectionToggle = useCallback(async () => {
     if (!activeProject) return
@@ -27,36 +27,15 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
 
     if (isCurrentlyConnected) {
       // Disconnect
-      await updateConnectionStatus.mutateAsync({
-        projectId: activeProject.id,
-        status: "disconnected",
+      await ConnectionService.disconnectProject(activeProject.id, {
+        updateConnectionStatus: updateConnectionStatus.mutateAsync,
       })
     } else {
       // Connect
       setIsConnecting(true)
       try {
-        await updateConnectionStatus.mutateAsync({
-          projectId: activeProject.id,
-          status: "connecting",
-        })
-
-        // Test connection
-        const serverUrl = `http://${activeProject.serverHostname}:${activeProject.serverPort}`
-
-        // Try to fetch app info to test connection
-        const response = await fetch(`${serverUrl}/api/app`)
-        if (response.ok) {
-          await updateConnectionStatus.mutateAsync({
-            projectId: activeProject.id,
-            status: "connected",
-          })
-        } else {
-          throw new Error("Connection failed")
-        }
-      } catch (error) {
-        await updateConnectionStatus.mutateAsync({
-          projectId: activeProject.id,
-          status: "disconnected",
+        await ConnectionService.connectToProject(activeProject.id, activeProject.serverUrl, {
+          updateConnectionStatus: updateConnectionStatus.mutateAsync,
         })
       } finally {
         setIsConnecting(false)
@@ -67,7 +46,7 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
   // CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
 
   // If no projects exist, show "Add Server" state
-  if (projects.length === 0) {
+  if (!projects || projects.length === 0) {
     return (
       <Box background="subtle" rounded="lg" p="md" border="subtle">
         <Box direction="row" justifyContent="space-between" alignItems="center">
@@ -155,7 +134,7 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
               {activeProject.name}
             </Text>
             <Text size="xs" mode="subtle">
-              {activeProject.serverHostname}:{activeProject.serverPort}
+              {activeProject.serverUrl}
             </Text>
           </Box>
         </Box>

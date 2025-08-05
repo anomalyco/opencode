@@ -54,7 +54,7 @@ export function parseServerUrl(input: string): ParsedServerUrl {
       hostname: url.hostname,
       port,
       protocol,
-      fullUrl: url.toString().replace(/\/$/, ""), // Remove trailing slash
+      fullUrl: url.toString().replace(/\/$/, ""), // Remove trailing slash but preserve path
     }
   } catch (error) {
     throw new Error(`Invalid URL format: ${input}`)

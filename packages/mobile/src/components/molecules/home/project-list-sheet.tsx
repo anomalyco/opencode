@@ -1,9 +1,15 @@
-import { forwardRef, useImperativeHandle, useRef, useCallback } from "react"
+import { forwardRef, useImperativeHandle, useRef, useCallback, useState } from "react"
 import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
 import type { BottomSheetRef } from "@/components/ui/primitives"
 import { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet"
 import { Feather } from "@expo/vector-icons"
-import { useProjectsQuery, useActiveProjectQuery, useSetActiveProjectMutation } from "@/services/api/local/projects"
+import {
+  useProjectsQuery,
+  useActiveProjectQuery,
+  useSetActiveProjectMutation,
+  useUpdateProjectConnectionStatusMutation,
+} from "@/services/api/local/projects"
+import { ConnectionService } from "@/services/connection-service"
 import type { Project } from "@/db/types"
 
 interface ProjectListSheetProps {
@@ -22,6 +28,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
     const { data: projects = [] } = useProjectsQuery()
     const { data: activeProject } = useActiveProjectQuery()
     const setActiveProject = useSetActiveProjectMutation()
+    const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
 
     const bottomSheetRef = useRef<BottomSheetRef>(null)
 
@@ -29,14 +36,45 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
       present: () => bottomSheetRef.current?.present(),
       dismiss: () => bottomSheetRef.current?.dismiss(),
     }))
+    const [connectingProjects, setConnectingProjects] = useState<Set<string>>(new Set())
+
     const handleProjectSelect = useCallback(
       async (project: Project) => {
-        if (project.id !== activeProject?.id) {
-          await setActiveProject.mutateAsync(project.id)
+        const isActive = project.id === activeProject?.id
+        const isConnected = project.connectionStatus === "connected"
+
+        // If project is already active and connected, just close the sheet
+        if (isActive && isConnected) {
+          onClose()
+          return
         }
+
+        try {
+          setConnectingProjects((prev) => new Set(prev).add(project.id))
+
+          const mutations = {
+            setActiveProject: setActiveProject.mutateAsync,
+            updateConnectionStatus: updateConnectionStatus.mutateAsync,
+          }
+
+          if (!isActive) {
+            // Switch to project and connect
+            await ConnectionService.switchAndConnect(project.id, project.serverUrl, mutations)
+          } else {
+            // Just reconnect to active project
+            await ConnectionService.connectToProject(project.id, project.serverUrl, mutations)
+          }
+        } finally {
+          setConnectingProjects((prev) => {
+            const newSet = new Set(prev)
+            newSet.delete(project.id)
+            return newSet
+          })
+        }
+
         onClose()
       },
-      [activeProject?.id, setActiveProject, onClose],
+      [activeProject?.id, setActiveProject, updateConnectionStatus, onClose],
     )
 
     const getConnectionColor = (status: string): any => {
@@ -125,9 +163,17 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
                             >
                               <Icon
                                 icon={Feather}
-                                name={getConnectionIcon(project.connectionStatus || "disconnected")}
+                                name={
+                                  connectingProjects.has(project.id)
+                                    ? "loader"
+                                    : getConnectionIcon(project.connectionStatus || "disconnected")
+                                }
                                 size={20}
-                                color={getConnectionColor(project.connectionStatus || "disconnected")}
+                                color={
+                                  connectingProjects.has(project.id)
+                                    ? "warning"
+                                    : getConnectionColor(project.connectionStatus || "disconnected")
+                                }
                               />
                             </Box>
 
@@ -139,7 +185,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
                               <Box direction="row" alignItems="center" gap="xs">
                                 <Icon icon={Feather} name="server" size={12} color="muted" />
                                 <Text size="sm" mode="subtle" numberOfLines={1}>
-                                  {project.serverHostname}:{project.serverPort}
+                                  {project.serverUrl}
                                 </Text>
                               </Box>
                             </Box>

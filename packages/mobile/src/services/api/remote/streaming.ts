@@ -1,5 +1,5 @@
 import EventSource from "react-native-sse"
-import { localConfigService } from "../local/config"
+import { localProjectsService } from "../local/projects"
 
 // Types for SSE events based on actual API structure
 interface SSEEvent {
@@ -93,7 +93,7 @@ export class StreamingService {
       this.disconnect()
     }
 
-    const serverUrl = await localConfigService.getServerUrl()
+    const serverUrl = await localProjectsService.getServerUrl()
     if (!serverUrl) {
       throw new Error("No server URL configured")
     }
@@ -105,9 +105,12 @@ export class StreamingService {
       },
     })
 
-    this.eventSource.addEventListener("open", () => {
+    this.eventSource.addEventListener("open", async () => {
       this.connected = true
-      localConfigService.updateConnectionStatus("connected")
+      const activeProject = await localProjectsService.getActiveProject()
+      if (activeProject) {
+        await localProjectsService.updateConnectionStatus(activeProject.id, "connected")
+      }
     })
 
     this.eventSource.addEventListener("message", (event: any) => {
@@ -117,9 +120,12 @@ export class StreamingService {
       } catch (error) {}
     })
 
-    this.eventSource.addEventListener("error", () => {
+    this.eventSource.addEventListener("error", async () => {
       this.connected = false
-      localConfigService.updateConnectionStatus("disconnected")
+      const activeProject = await localProjectsService.getActiveProject()
+      if (activeProject) {
+        await localProjectsService.updateConnectionStatus(activeProject.id, "disconnected")
+      }
 
       // Attempt to reconnect after 5 seconds
       setTimeout(() => {
@@ -129,9 +135,12 @@ export class StreamingService {
       }, 5000)
     })
 
-    this.eventSource.addEventListener("close", () => {
+    this.eventSource.addEventListener("close", async () => {
       this.connected = false
-      localConfigService.updateConnectionStatus("disconnected")
+      const activeProject = await localProjectsService.getActiveProject()
+      if (activeProject) {
+        await localProjectsService.updateConnectionStatus(activeProject.id, "disconnected")
+      }
     })
   }
 

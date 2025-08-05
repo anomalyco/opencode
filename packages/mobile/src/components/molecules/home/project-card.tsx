@@ -60,7 +60,7 @@ export const ProjectCard = ({ project, isActive, onPress, onLongPress }: Project
           </Text>
 
           <Text size="xs" mode="subtle" numberOfLines={1} inverse={isActive}>
-            {project.serverHostname}:{project.serverPort}
+            {project.serverUrl}
           </Text>
         </Box>
       </Box>

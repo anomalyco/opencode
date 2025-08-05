@@ -106,7 +106,13 @@ class ProjectsRepository {
   }
 
   async setActiveProject(id: string) {
-    // First, deactivate all projects
+    // First, get the currently active project and disconnect it
+    const currentActive = await this.getActiveProject()
+    if (currentActive && currentActive.id !== id) {
+      await this.updateConnectionStatus(currentActive.id, "disconnected")
+    }
+
+    // Deactivate all projects
     await db.update(projects).set({ isActive: false })
 
     // Then activate the selected project

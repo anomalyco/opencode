@@ -47,6 +47,14 @@ export const HomeHeader = () => {
     connectionSheetRef.current?.present()
   }, [])
 
+  const handleEditActiveProject = useCallback(() => {
+    // Get the active project from the projects array
+    const activeProject = projectsArray.find((p) => p.isActive)
+    if (activeProject) {
+      handleEditProject(activeProject)
+    }
+  }, [projectsArray, handleEditProject])
+
   const handleProjectSelectorPress = useCallback(() => {
     if (projectsArray.length === 0) {
       handleOpenConnectionSheet()
@@ -58,8 +66,6 @@ export const HomeHeader = () => {
   const handleCloseProjectListSheet = useCallback(() => {
     projectListSheetRef.current?.dismiss()
   }, [])
-
-  console.log("rerenders header")
 
   return (
     <>
@@ -79,7 +85,7 @@ export const HomeHeader = () => {
           </Box>
 
           {/* Connection Status */}
-          <ConnectionStatus onOpenConnectionSheet={handleOpenConnectionSheet} />
+          <ConnectionStatus onOpenConnectionSheet={handleEditActiveProject} />
 
           {/* Quick Actions */}
           <QuickActions onNewSession={handleNewSession} isCreatingSession={isCreatingSession} />

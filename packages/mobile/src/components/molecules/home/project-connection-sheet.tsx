@@ -55,10 +55,8 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
       if (editingProject) {
         setProjectName(editingProject.name)
         setProjectDescription(editingProject.description || "")
-        // Reconstruct URL from hostname and port
-        const defaultPort = editingProject.serverUrl.startsWith("https") ? 443 : 80
-        const portSuffix = editingProject.serverPort === defaultPort ? "" : `:${editingProject.serverPort}`
-        setServerUrl(`${editingProject.serverHostname}${portSuffix}`)
+        // Use the full server URL which includes the path
+        setServerUrl(editingProject.serverUrl)
       } else {
         // Reset form for new project
         setProjectName("")
@@ -83,7 +81,6 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
         const parsed = parseServerUrl(serverUrl)
 
         // Update the API client with new connection first
-        console.log("Testing connection to:", parsed.fullUrl)
         await apiClient.updateBaseUrlFromString(parsed.fullUrl)
 
         // Test connection and get server's project info
@@ -122,7 +119,6 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
 
         if (editingProject) {
           // Update existing project
-          console.log("Updating existing project:", editingProject.id)
           const [updatedProject] = await updateProject.mutateAsync({
             id: editingProject.id,
             updates: {
@@ -146,11 +142,6 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
           project = updatedProject
         } else {
           // Create new project
-          console.log("Creating new project:", {
-            name: projectName,
-            serverUrl: parsed.fullUrl,
-            path: serverProjectPath,
-          })
           const [newProject] = await createProject.mutateAsync({
             name: projectName,
             description: projectDescription || null,
@@ -172,15 +163,12 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
             appTimeInitialized: appInfo.time?.initialized ? new Date(appInfo.time.initialized) : null,
           })
           project = newProject
-          console.log("Created project:", project.id)
         }
 
         // Set as active project
-        console.log("Setting active project:", project.id)
         await setActiveProject.mutateAsync(project.id)
 
         // Connection was already tested above, mark as connected
-        console.log("Connection successful!")
         updateConnectionStatus.mutate({
           projectId: project.id,
           status: "connected",
@@ -241,8 +229,11 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
       }
     }
 
-    const isConnected = activeProject?.connectionStatus === "connected"
     const isEditing = !!editingProject
+    // Only show disconnect button if editing the currently active AND connected project
+    const isConnected = isEditing
+      ? editingProject?.id === activeProject?.id && editingProject?.connectionStatus === "connected"
+      : activeProject?.connectionStatus === "connected"
 
     return (
       <BottomSheet
