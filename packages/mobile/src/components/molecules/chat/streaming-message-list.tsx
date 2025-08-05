@@ -74,6 +74,7 @@ const PartItem = memo(({ part }: { part: any }) => {
     if (partType === "text") {
       return !partData.isSynthetic && partData.textContent && !partData.textContent.includes("<system-reminder>")
     }
+    // Skip step parts - they cause UI clutter and sequence issues
     if (partType === "step-start" || partType === "step-finish") {
       return false
     }
@@ -92,6 +93,12 @@ const PartItem = memo(({ part }: { part: any }) => {
 
       case "file":
         return <FilePartRenderer part={partData} />
+
+      case "snapshot":
+        return <SnapshotRenderer part={partData} />
+
+      case "patch":
+        return <PatchRenderer part={partData} />
 
       default:
         return null
@@ -129,16 +136,37 @@ const PartItem = memo(({ part }: { part: any }) => {
 
 // Separate components for different part types to avoid conditional rendering
 const ToolPartRenderer = memo(({ part }: { part: any }) => {
+  // Extract tool data from the complete part data structure
   const toolName = part.toolName || part.tool
   const toolStatus = part.toolStatus || part.state?.status || "pending"
-  const toolInput = part.toolInput ? JSON.parse(part.toolInput) : part.state?.input
+  const toolCallId = part.toolCallId || part.callID
+  const toolInput = part.toolInput
+    ? typeof part.toolInput === "string"
+      ? JSON.parse(part.toolInput)
+      : part.toolInput
+    : part.state?.input
   const toolOutput = part.toolOutput || part.state?.output
-  const toolMetadata = part.toolMetadata ? JSON.parse(part.toolMetadata) : part.state?.metadata
+  const toolMetadata = part.toolMetadata
+    ? typeof part.toolMetadata === "string"
+      ? JSON.parse(part.toolMetadata)
+      : part.toolMetadata
+    : part.state?.metadata
   const toolError = part.toolError || part.state?.error
+  const toolTitle = part.toolTitle || part.state?.title
 
-  // Show status indicator for pending/running tools
+  // Extract timing information
+  const toolTimeStart = part.toolTimeStart || (part.state?.time?.start ? new Date(part.state.time.start) : null)
+  const toolTimeEnd = part.toolTimeEnd || (part.state?.time?.end ? new Date(part.state.time.end) : null)
+
+  // Calculate execution time if available
+  const executionTime = toolTimeStart && toolTimeEnd ? toolTimeEnd.getTime() - toolTimeStart.getTime() : null
+
+  // Show enhanced status indicator for pending/running tools
   if (toolStatus === "pending" || toolStatus === "running") {
-    return <ToolStatusIndicator status={toolStatus} toolName={toolName || "Working..."} />
+    const displayName = toolTitle || toolName || "Working..."
+    const statusText =
+      toolStatus === "running" && executionTime ? `${displayName} (${Math.round(executionTime / 1000)}s)` : displayName
+    return <ToolStatusIndicator status={toolStatus} toolName={statusText} />
   }
 
   // Show basic tool info even if incomplete
@@ -152,11 +180,16 @@ const ToolPartRenderer = memo(({ part }: { part: any }) => {
     )
   }
 
-  // Show error state
+  // Show enhanced error state
   if (toolStatus === "error" && toolError) {
+    const displayName = toolTitle || toolName || "Tool"
+    const errorHeader = `**Error in ${displayName}:**`
+    const errorDetails = toolCallId ? `\n\n*Call ID: ${toolCallId}*` : ""
+    const timingInfo = executionTime ? `\n*Duration: ${Math.round(executionTime / 1000)}s*` : ""
+
     return (
       <Box background="lighter" rounded="md" p="sm" mode="error">
-        <ThemedMarked value={`**Error in ${toolName}:** ${toolError}`} />
+        <ThemedMarked value={`${errorHeader} ${toolError}${errorDetails}${timingInfo}`} />
       </Box>
     )
   }
@@ -216,13 +249,22 @@ const ToolPartRenderer = memo(({ part }: { part: any }) => {
         )
       }
 
-      // Show tool name even without output for completed tools
+      // Show enhanced tool name for completed tools
       if (toolName && toolStatus === "completed") {
+        const displayName = toolTitle || toolName
+        const timingText = executionTime ? ` (${Math.round(executionTime / 1000)}s)` : ""
+
         return (
           <Box background="subtle" rounded="md" p="sm">
             <Text size="xs" weight="medium" mode="subtle">
-              ✓ {toolName}
+              ✓ {displayName}
+              {timingText}
             </Text>
+            {toolCallId && (
+              <Text size="xs" mode="subtle" style={{ opacity: 0.6, marginTop: 2 }}>
+                {toolCallId}
+              </Text>
+            )}
           </Box>
         )
       }
@@ -234,13 +276,99 @@ const ToolPartRenderer = memo(({ part }: { part: any }) => {
 ToolPartRenderer.displayName = "ToolPartRenderer"
 
 const FilePartRenderer = memo(({ part }: { part: any }) => {
-  if (part.fileFilename && part.fileUrl) {
-    return <FileContentRenderer filename={part.fileFilename} content={part.fileUrl} />
+  // Extract file metadata from the complete part data structure
+  const filename = part.fileFilename
+  const fileUrl = part.fileUrl
+  const fileMime = part.fileMime
+  const sourceType = part.fileSourceType // "file" or "symbol"
+  const sourcePath = part.fileSourcePath
+  const sourceTextStart = part.fileSourceTextStart
+  const sourceTextEnd = part.fileSourceTextEnd
+  const sourceName = part.fileSourceName // for symbol sources
+  const sourceRange = part.fileSourceRange
+    ? typeof part.fileSourceRange === "string"
+      ? JSON.parse(part.fileSourceRange)
+      : part.fileSourceRange
+    : null
+
+  // Enhanced file rendering with source information
+  if (filename && fileUrl) {
+    return (
+      <Box>
+        <FileContentRenderer filename={filename} content={fileUrl} />
+        {/* Show additional source metadata if available */}
+        {(sourceType || sourcePath || sourceName) && (
+          <Box mt="xs" p="xs" background="lighter" rounded="sm">
+            <Text size="xs" mode="subtle">
+              {sourceType === "symbol" && sourceName && `Symbol: ${sourceName}`}
+              {sourceType === "file" && sourcePath && `Path: ${sourcePath}`}
+              {sourceTextStart !== null && sourceTextEnd !== null && ` (${sourceTextStart}-${sourceTextEnd})`}
+              {fileMime && ` • ${fileMime}`}
+            </Text>
+            {sourceRange && (
+              <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", marginTop: 2 }}>
+                Range: {JSON.stringify(sourceRange)}
+              </Text>
+            )}
+          </Box>
+        )}
+      </Box>
+    )
   }
+
   return null
 })
 
 FilePartRenderer.displayName = "FilePartRenderer"
+
+// Snapshot Renderer - Shows snapshot references
+const SnapshotRenderer = memo(({ part }: { part: any }) => {
+  const snapshotId = part.snapshotId
+
+  if (!snapshotId) return null
+
+  return (
+    <Box background="subtle" rounded="md" p="sm">
+      <Text size="xs" weight="medium" mode="subtle">
+        📸 Snapshot: {snapshotId}
+      </Text>
+    </Box>
+  )
+})
+
+SnapshotRenderer.displayName = "SnapshotRenderer"
+
+// Patch Renderer - Shows code patches
+const PatchRenderer = memo(({ part }: { part: any }) => {
+  const patchHash = part.patchHash
+  const patchFiles = part.patchFiles
+    ? typeof part.patchFiles === "string"
+      ? JSON.parse(part.patchFiles)
+      : part.patchFiles
+    : null
+
+  if (!patchHash && !patchFiles) return null
+
+  return (
+    <Box background="subtle" rounded="md" p="sm">
+      <Text size="xs" weight="medium" mode="subtle">
+        🔧 Patch Applied
+      </Text>
+      {patchHash && (
+        <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", marginTop: 4 }}>
+          Hash: {patchHash.substring(0, 8)}...
+        </Text>
+      )}
+      {patchFiles && Array.isArray(patchFiles) && patchFiles.length > 0 && (
+        <Text size="xs" mode="subtle" style={{ marginTop: 4 }}>
+          Files: {patchFiles.join(", ")}
+        </Text>
+      )}
+    </Box>
+  )
+})
+
+PatchRenderer.displayName = "PatchRenderer"
 
 // Main item renderer - now only handles parts
 const ItemRenderer = memo(({ item }: { item: any }) => {
