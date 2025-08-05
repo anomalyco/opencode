@@ -12,7 +12,7 @@ import {
 import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
-import { ConnectionService } from "@/services/connection-service"
+import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
 
 interface ProjectListSheetProps {
@@ -65,30 +65,35 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
         try {
           setConnectingProjects((prev) => new Set(prev).add(project.id))
 
-          const mutations = {
-            setActiveProject: setActiveProject.mutateAsync,
-            updateConnectionStatus: updateConnectionStatus.mutateAsync,
-          }
-
-          const callbacks = {
-            onConnectionSuccess: handleConnectionSuccess,
-          }
-
           if (!isActive) {
-            // Switch to project and connect
-            await ConnectionService.switchAndConnect(project.id, project.serverUrl, mutations, callbacks)
-          } else {
-            // Just reconnect to active project
-            await ConnectionService.connectToProject(project.id, project.serverUrl, mutations, callbacks)
+            // Switch to the project first
+            await setActiveProject.mutateAsync(project.id)
           }
 
-          if (!isActive) {
-            // Switch to project and connect
-            await ConnectionService.switchAndConnect(project.id, project.serverUrl, mutations)
-          } else {
-            // Just reconnect to active project
-            await ConnectionService.connectToProject(project.id, project.serverUrl, mutations)
-          }
+          // Connect/reconnect to the project
+          await updateConnectionStatus.mutateAsync({
+            projectId: project.id,
+            status: "connecting",
+          })
+
+          // Update API client base URL and test connection
+          await apiClient.updateBaseUrlFromString(project.serverUrl)
+          await apiClient.ping()
+
+          // Set status to connected on success
+          await updateConnectionStatus.mutateAsync({
+            projectId: project.id,
+            status: "connected",
+          })
+
+          // Call success callback
+          await handleConnectionSuccess()
+        } catch (error) {
+          // Set status to disconnected on failure
+          await updateConnectionStatus.mutateAsync({
+            projectId: project.id,
+            status: "disconnected",
+          })
         } finally {
           setConnectingProjects((prev) => {
             const newSet = new Set(prev)

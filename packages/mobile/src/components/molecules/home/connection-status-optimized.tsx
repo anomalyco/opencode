@@ -1,37 +1,22 @@
-import { useState, useCallback } from "react"
+import React, { useState, useCallback, memo } from "react"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
-import {
-  useActiveProjectQuery,
-  useProjectsQuery,
-  useUpdateProjectConnectionStatusMutation,
-} from "@/services/api/local/projects"
-import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
+import { useActiveProjectQuery, useUpdateProjectConnectionStatusMutation } from "@/services/api/local/projects"
 import { useRemoteSessionsQuery } from "@/services/api/remote/sessions"
 import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
 import { apiClient } from "@/services/api/remote/client"
 import { Feather } from "@expo/vector-icons"
 
-interface ConnectionStatusProps {
+interface ConnectionStatusOptimizedProps {
   onOpenConnectionSheet: () => void
 }
 
-export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProps) => {
+export const ConnectionStatusOptimized = memo<ConnectionStatusOptimizedProps>(({ onOpenConnectionSheet }) => {
   const { data: activeProject } = useActiveProjectQuery()
-  const { data: projects } = useProjectsQuery()
-  const { data: appInfo } = useRemoteAppInfoQuery()
-  const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
-  const queryClient = useQueryClient()
   const [isConnecting, setIsConnecting] = useState(false)
   const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
-
-  const handleConnectionSuccess = useCallback(async () => {
-    // Fetch remote sessions to sync with server
-    await refetchRemoteSessions()
-
-    // Invalidate local session queries to refresh home screen
-    queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
-  }, [refetchRemoteSessions, queryClient])
+  const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
+  const queryClient = useQueryClient()
 
   const handleConnectionToggle = useCallback(async () => {
     if (!activeProject) return
@@ -48,6 +33,7 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
       // Connect
       setIsConnecting(true)
       try {
+        // Set status to connecting
         await updateConnectionStatus.mutateAsync({
           projectId: activeProject.id,
           status: "connecting",
@@ -63,8 +49,9 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
           status: "connected",
         })
 
-        // Call success callback
-        await handleConnectionSuccess()
+        // Fetch remote sessions and invalidate local queries
+        await refetchRemoteSessions()
+        queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.all })
       } catch (error) {
         // Set status to disconnected on failure
         await updateConnectionStatus.mutateAsync({
@@ -75,12 +62,10 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
         setIsConnecting(false)
       }
     }
-  }, [activeProject, updateConnectionStatus, handleConnectionSuccess])
+  }, [activeProject, updateConnectionStatus, refetchRemoteSessions, queryClient])
 
-  // CONDITIONAL RENDERING LOGIC - AFTER ALL HOOKS
-
-  // If no projects exist, show "Add Server" state
-  if (!projects || projects.length === 0) {
+  // Don't render if no active project
+  if (!activeProject) {
     return (
       <Box background="subtle" rounded="lg" p="md" border="subtle">
         <Box direction="row" justifyContent="space-between" alignItems="center">
@@ -90,7 +75,6 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
               Add Your First Server
             </Text>
           </Box>
-
           <Button size="sm" mode="brand" onPress={onOpenConnectionSheet}>
             <Button.Icon>
               {({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}
@@ -104,14 +88,8 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
     )
   }
 
-  // If no active project, don't render anything (handled by project selector)
-  if (!activeProject) {
-    return null
-  }
-
-  // Normal project display when active project exists
   const connectionStatus = activeProject.connectionStatus || "disconnected"
-  const isConnected = connectionStatus === "connected" && appInfo
+  const isConnected = connectionStatus === "connected"
   const isConnectingState = isConnecting || connectionStatus === "connecting"
 
   const getButtonText = () => {
@@ -171,4 +149,6 @@ export const ConnectionStatus = ({ onOpenConnectionSheet }: ConnectionStatusProp
       </Box>
     </Box>
   )
-}
+})
+
+ConnectionStatusOptimized.displayName = "ConnectionStatusOptimized"

@@ -1,10 +1,13 @@
+import React from "react"
 import { Box } from "@/components/ui/primitives"
-import { SessionsList, HomeHeader } from "@/components/molecules/home"
+import { SessionsListOptimized, HomeHeaderOptimized } from "@/components/molecules/home"
+
+const HeaderWrapper = () => <HomeHeaderOptimized />
 
 export const HomePage = () => {
   return (
     <Box flex safeAreaTop background="base">
-      <SessionsList ListHeaderComponent={HomeHeader} />
+      <SessionsListOptimized ListHeaderComponent={HeaderWrapper} />
     </Box>
   )
 }
