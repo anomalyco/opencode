@@ -258,25 +258,17 @@ export const TodoListRenderer: React.FC<TodoListRendererProps> = ({ todos }) => 
           Plan
         </Text>
       </Box>
-      <Box gap="xs">
+      <Box gap="sm">
         {todos.map((todo, index) => (
-          <Box key={index} direction="row" alignItems="flex-start" gap="xs">
+          <Box key={index} direction="row" alignItems="flex-start" gap="sm">
             <Icon
               icon={Feather}
               name={getCheckboxIcon(todo.status) as any}
-              size={16}
+              size={14}
               color={getStatusColor(todo.status) as any}
-              style={{ marginTop: 2 }}
+              style={{ marginTop: 2, flexShrink: 0 }}
             />
-            <Text
-              size="sm"
-              style={{
-                flex: 1,
-                textDecorationLine: todo.status === "cancelled" ? "line-through" : "none",
-                opacity: todo.status === "cancelled" ? 0.6 : 1,
-                fontWeight: todo.status === "in_progress" ? "600" : "normal",
-              }}
-            >
+            <Text size="sm" style={{ flex: 1, lineHeight: 20 }}>
               {todo.content}
             </Text>
           </Box>

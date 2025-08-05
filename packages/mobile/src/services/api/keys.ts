@@ -20,6 +20,7 @@ export const queryKeys = {
       details: () => [...queryKeys.local.messages.all, "detail"] as const,
       detail: (id: string) => [...queryKeys.local.messages.details(), id] as const,
       parts: (messageId: string) => [...queryKeys.local.messages.all, "parts", messageId] as const,
+      sessionParts: (sessionId: string) => [...queryKeys.local.messages.all, "sessionParts", sessionId] as const,
     },
     files: {
       all: ["local", "files"] as const,

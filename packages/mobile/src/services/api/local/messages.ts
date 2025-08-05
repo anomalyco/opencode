@@ -96,6 +96,36 @@ class MessageRepository {
       .orderBy(asc(messageParts.createdAt))
   }
 
+  async getSessionParts(sessionId: string) {
+    // Join with messages to get the role information
+    const result = await db
+      .select({
+        id: messageParts.id,
+        messageId: messageParts.messageId,
+        sessionId: messageParts.sessionId,
+        type: messageParts.type,
+        textContent: messageParts.textContent,
+        createdAt: messageParts.createdAt,
+        updatedAt: messageParts.updatedAt,
+        // Tool fields
+        toolCallId: messageParts.toolCallId,
+        toolName: messageParts.toolName,
+        toolStatus: messageParts.toolStatus,
+        toolInput: messageParts.toolInput,
+        toolOutput: messageParts.toolOutput,
+        toolMetadata: messageParts.toolMetadata,
+        toolError: messageParts.toolError,
+        // Get role from parent message
+        role: messages.role,
+      })
+      .from(messageParts)
+      .leftJoin(messages, eq(messageParts.messageId, messages.id))
+      .where(eq(messageParts.sessionId, sessionId))
+      .orderBy(asc(messageParts.createdAt))
+
+    return result
+  }
+
   async createMessagePart(part: Omit<MessagePart, "createdAt" | "updatedAt">) {
     return await db
       .insert(messageParts)
@@ -287,6 +317,15 @@ export function useLocalMessagePartsQuery(messageId: string, options?: { enabled
     queryFn: () => messageRepo.getMessageParts(messageId),
     enabled: !!messageId && options?.enabled !== false,
     staleTime: 1000, // Cache for 1 second during streaming to reduce database queries
+  })
+}
+
+export function useLocalSessionPartsQuery(sessionId: string) {
+  return useQuery({
+    queryKey: queryKeys.local.messages.sessionParts(sessionId),
+    queryFn: () => messageRepo.getSessionParts(sessionId),
+    enabled: !!sessionId,
+    staleTime: 100, // Very short cache for real-time streaming
   })
 }
 
