@@ -89,102 +89,100 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
             {/* Server List */}
             <BottomSheetScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
               <Box gap="sm">
-                {projects.map((project) => {
-                  const isActive = project.id === activeProject?.id
-                  return (
-                    <Box key={project.id} background="base" rounded="lg" border="subtle">
-                      <Button
-                        variant="ghost"
-                        size="auto"
-                        onPress={() => handleProjectSelect(project)}
-                        style={{
-                          paddingVertical: 16,
-                          paddingHorizontal: 16,
-                        }}
-                      >
-                        <Box direction="row" alignItems="center">
-                          {/* Connection Status Icon */}
-                          <Box
-                            background="lightest"
-                            rounded="lg"
-                            style={{
-                              width: 44,
-                              height: 44,
-                              alignItems: "center",
-                              justifyContent: "center",
-                              marginRight: 16,
-                            }}
-                          >
-                            <Icon
-                              icon={Feather}
-                              name={getConnectionIcon(project.connectionStatus || "disconnected")}
-                              size={20}
-                              color={getConnectionColor(project.connectionStatus || "disconnected")}
-                            />
-                          </Box>
-
-                          {/* Project Info */}
-                          <Box flex style={{ minWidth: 0 }}>
-                            <Text size="md" weight="semibold" numberOfLines={1} style={{ marginBottom: 6 }}>
-                              {project.name}
-                            </Text>
-                            <Box direction="row" alignItems="center" gap="xs">
-                              <Icon icon={Feather} name="server" size={12} color="muted" />
-                              <Text size="sm" mode="subtle" numberOfLines={1}>
-                                {project.serverHostname}:{project.serverPort}
-                              </Text>
-                              {project.description && (
-                                <>
-                                  <Text size="sm" mode="subtle">
-                                    •
-                                  </Text>
-                                  <Text size="sm" mode="subtle" numberOfLines={1}>
-                                    {project.description}
-                                  </Text>
-                                </>
-                              )}
+                {projects
+                  .sort((a, b) => {
+                    const aIsActive = a.id === activeProject?.id
+                    const bIsActive = b.id === activeProject?.id
+                    if (aIsActive && !bIsActive) return -1
+                    if (!aIsActive && bIsActive) return 1
+                    return 0
+                  })
+                  .map((project) => {
+                    const isActive = project.id === activeProject?.id
+                    return (
+                      <Box key={project.id} background="base" rounded="lg" border="subtle">
+                        <Button
+                          variant="ghost"
+                          size="auto"
+                          onPress={() => handleProjectSelect(project)}
+                          style={{
+                            paddingVertical: 16,
+                            paddingHorizontal: 16,
+                          }}
+                        >
+                          <Box direction="row" alignItems="center">
+                            {/* Connection Status Icon */}
+                            <Box
+                              background="lightest"
+                              rounded="lg"
+                              style={{
+                                width: 44,
+                                height: 44,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginRight: 16,
+                              }}
+                            >
+                              <Icon
+                                icon={Feather}
+                                name={getConnectionIcon(project.connectionStatus || "disconnected")}
+                                size={20}
+                                color={getConnectionColor(project.connectionStatus || "disconnected")}
+                              />
                             </Box>
-                          </Box>
 
-                          {/* Status Icons */}
-                          <Box direction="row" alignItems="center" gap="sm" style={{ marginLeft: 16 }}>
-                            {isActive && (
-                              <Box
-                                background="subtle"
-                                rounded="full"
+                            {/* Project Info */}
+                            <Box flex style={{ minWidth: 0 }}>
+                              <Text size="md" weight="semibold" numberOfLines={1} style={{ marginBottom: 6 }}>
+                                {project.name}
+                              </Text>
+                              <Box direction="row" alignItems="center" gap="xs">
+                                <Icon icon={Feather} name="server" size={12} color="muted" />
+                                <Text size="sm" mode="subtle" numberOfLines={1}>
+                                  {project.serverHostname}:{project.serverPort}
+                                </Text>
+                              </Box>
+                            </Box>
+
+                            {/* Status Icons */}
+                            <Box direction="row" alignItems="center" gap="sm" style={{ marginLeft: 16 }}>
+                              {isActive && (
+                                <Box
+                                  background="subtle"
+                                  rounded="full"
+                                  style={{
+                                    width: 28,
+                                    height: 28,
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Icon icon={Feather} name="check" size={12} color="brand" />
+                                </Box>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="auto"
+                                onPress={(e) => {
+                                  e.stopPropagation()
+                                  onEditProject(project)
+                                }}
                                 style={{
                                   width: 28,
                                   height: 28,
+                                  padding: 0,
                                   alignItems: "center",
                                   justifyContent: "center",
                                 }}
                               >
-                                <Icon icon={Feather} name="check" size={12} color="brand" />
-                              </Box>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="auto"
-                              onPress={(e) => {
-                                e.stopPropagation()
-                                onEditProject(project)
-                              }}
-                              style={{
-                                width: 28,
-                                height: 28,
-                                padding: 0,
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <Icon icon={Feather} name="settings" size={14} color="muted" />
-                            </Button>
+                                <Icon icon={Feather} name="settings" size={14} color="muted" />
+                              </Button>
+                            </Box>
                           </Box>
-                        </Box>
-                      </Button>
-                    </Box>
-                  )
-                })}
+                        </Button>
+                      </Box>
+                    )
+                  })}
               </Box>
             </BottomSheetScrollView>
           </Box>

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query"
-import { eq, desc, count } from "drizzle-orm"
+import { eq, desc, count, isNull, and } from "drizzle-orm"
 import db from "@/db"
 import { sessions, messages, messageParts, projects } from "@/db/schema"
 import { queryKeys } from "../keys"
@@ -19,7 +19,12 @@ class SessionRepository {
     return await db
       .select()
       .from(sessions)
-      .where(eq(sessions.projectId, activeProjectId))
+      .where(
+        and(
+          eq(sessions.projectId, activeProjectId),
+          isNull(sessions.parentId), // Only get root sessions (parentId is null)
+        ),
+      )
       .orderBy(desc(sessions.timeUpdated))
       .limit(limit)
       .offset(offset)

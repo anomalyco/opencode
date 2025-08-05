@@ -59,16 +59,9 @@ export const ProjectCard = ({ project, isActive, onPress, onLongPress }: Project
             {project.name}
           </Text>
 
-          <Box>
-            <Text size="xs" mode="subtle" numberOfLines={1} inverse={isActive}>
-              {project.serverHostname}:{project.serverPort}
-            </Text>
-            {project.description && (
-              <Text size="xs" mode="subtle" numberOfLines={1} inverse={isActive}>
-                {project.description}
-              </Text>
-            )}
-          </Box>
+          <Text size="xs" mode="subtle" numberOfLines={1} inverse={isActive}>
+            {project.serverHostname}:{project.serverPort}
+          </Text>
         </Box>
       </Box>
     </AnimatedPressable>

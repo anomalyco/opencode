@@ -59,16 +59,24 @@ export const ProjectsList = ({ onAddServer, onEditProject }: ProjectsListProps) 
         {/* Add Server Card - always first */}
         <AddServerCard onPress={onAddServer} />
 
-        {/* Project Cards */}
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            isActive={project.id === activeProject?.id}
-            onPress={() => handleProjectPress(project.id)}
-            onLongPress={() => handleProjectLongPress(project)}
-          />
-        ))}
+        {/* Project Cards - sorted with active project first */}
+        {projects
+          .sort((a, b) => {
+            const aIsActive = a.id === activeProject?.id
+            const bIsActive = b.id === activeProject?.id
+            if (aIsActive && !bIsActive) return -1
+            if (!aIsActive && bIsActive) return 1
+            return 0
+          })
+          .map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              isActive={project.id === activeProject?.id}
+              onPress={() => handleProjectPress(project.id)}
+              onLongPress={() => handleProjectLongPress(project)}
+            />
+          ))}
       </Box>
     </ScrollView>
   )

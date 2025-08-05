@@ -51,7 +51,7 @@ export class SyncService {
 
     try {
       // Ensure API client is using the active project's server URL
-      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+      await apiClient.updateBaseUrlFromString(activeProject.serverUrl)
 
       // Sync to remote
       await apiClient.axios.post("/session", sessionData)
@@ -79,7 +79,7 @@ export class SyncService {
       const { sessions } = await import("../../db/schema")
 
       // Ensure API client is using the active project's server URL
-      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+      await apiClient.updateBaseUrlFromString(activeProject.serverUrl)
 
       // Get unsynced local sessions for the active project only
       const unsyncedSessions = await db
@@ -123,7 +123,7 @@ export class SyncService {
       const activeProject = await this.getActiveProject()
 
       // Ensure API client is using the active project's server URL
-      await apiClient.updateBaseUrl(activeProject.serverHostname, activeProject.serverPort)
+      await apiClient.updateBaseUrlFromString(activeProject.serverUrl)
 
       // Fetch remote sessions directly
       const response = await apiClient.axios.get("/session")
@@ -141,7 +141,7 @@ export class SyncService {
             .values({
               id: remoteSession.id,
               projectId: activeProject.id,
-              parentId: remoteSession.parentId || null,
+              parentId: remoteSession.parentID || null,
               title: remoteSession.title,
               version: remoteSession.version,
               shareUrl: remoteSession.share?.url || null,
@@ -169,6 +169,7 @@ export class SyncService {
             .onConflictDoUpdate({
               target: sessions.id,
               set: {
+                parentId: remoteSession.parentID || null,
                 title: remoteSession.title,
                 version: remoteSession.version,
                 shareUrl: remoteSession.share?.url || null,

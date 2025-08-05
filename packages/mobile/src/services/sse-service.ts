@@ -67,12 +67,14 @@ export class SSEService {
       const serverUrl = activeProject[0].serverUrl
 
       const sseUrl = `${serverUrl}/event`
+      console.log("SSE: Connecting to:", sseUrl)
 
       this.eventSource = new EventSource(sseUrl, {
         pollingInterval: 0, // Disable automatic reconnections, we handle them manually
       })
 
       this.eventSource.addEventListener("open", (event) => {
+        console.log("SSE: Connection opened", event)
         if (event.type === "open") {
           this.connected = true
           this.reconnectAttempts = 0
@@ -81,16 +83,22 @@ export class SSEService {
       })
 
       this.eventSource.addEventListener("message", (event) => {
+        console.log("SSE: Message received", event.type, event.data)
         if (event.type === "message") {
           try {
             const sseEvent: SSEEvent = JSON.parse(event.data || "{}")
 
             this.handleEvent(sseEvent)
-          } catch (error) {}
+          } catch (error) {
+            console.error("Failed to connect to SSE:", error)
+            console.error("SSE URL was:", sseUrl)
+            this.scheduleReconnect()
+          }
         }
       })
 
       this.eventSource.addEventListener("error", (event) => {
+        console.log("SSE: Error occurred", event.type, event)
         if (event.type === "error") {
           this.handleConnectionError()
         } else if (event.type === "exception") {

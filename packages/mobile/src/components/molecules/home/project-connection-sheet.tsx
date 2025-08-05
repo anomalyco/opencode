@@ -9,14 +9,19 @@ import {
   useUpdateProjectMutation,
   useUpdateProjectConnectionStatusMutation,
   useSetActiveProjectMutation,
+  useDeleteProjectMutation,
+  useProjectsQuery,
 } from "@/services/api/local/projects"
 import { useRemoteAppInfoQuery } from "@/services/api/remote/config"
 import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
+import { parseServerUrl } from "@/utils/url"
+import { useSonner } from "@/hooks/use-sonner"
 
 interface ProjectConnectionSheetProps {
   onClose: () => void
   editingProject?: Project | null
+  onEditExistingProject?: (project: Project) => void
 }
 
 export interface ProjectConnectionSheetRef {
@@ -25,35 +30,39 @@ export interface ProjectConnectionSheetRef {
 }
 
 export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, ProjectConnectionSheetProps>(
-  ({ onClose, editingProject }, ref) => {
+  ({ onClose, editingProject, onEditExistingProject }, ref) => {
     const { data: activeProject } = useActiveProjectQuery()
+    const { data: projects } = useProjectsQuery()
     const createProject = useCreateProjectMutation()
     const updateProject = useUpdateProjectMutation()
     const updateConnectionStatus = useUpdateProjectConnectionStatusMutation()
     const setActiveProject = useSetActiveProjectMutation()
+    const deleteProject = useDeleteProjectMutation()
     const { refetch: refetchAppInfo } = useRemoteAppInfoQuery()
+    const sonner = useSonner()
 
     const bottomSheetRef = useRef<BottomSheetRef>(null)
 
     const [projectName, setProjectName] = useState("")
     const [projectDescription, setProjectDescription] = useState("")
-    const [hostname, setHostname] = useState("127.0.0.1")
-    const [port, setPort] = useState("4096")
+    const [serverUrl, setServerUrl] = useState("127.0.0.1:4096")
     const [isConnecting, setIsConnecting] = useState(false)
+    const [deleteConfirmCount, setDeleteConfirmCount] = useState(0)
 
     // Initialize form with editing project data
     useEffect(() => {
       if (editingProject) {
         setProjectName(editingProject.name)
         setProjectDescription(editingProject.description || "")
-        setHostname(editingProject.serverHostname)
-        setPort(editingProject.serverPort.toString())
+        // Reconstruct URL from hostname and port
+        const defaultPort = editingProject.serverUrl.startsWith("https") ? 443 : 80
+        const portSuffix = editingProject.serverPort === defaultPort ? "" : `:${editingProject.serverPort}`
+        setServerUrl(`${editingProject.serverHostname}${portSuffix}`)
       } else {
         // Reset form for new project
         setProjectName("")
         setProjectDescription("")
-        setHostname("127.0.0.1")
-        setPort("4096")
+        setServerUrl("127.0.0.1:4096")
       }
     }, [editingProject])
 
@@ -70,8 +79,45 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
       let project: Project | undefined
 
       try {
-        const serverUrl = `http://${hostname}:${port}`
-        const projectPath = `/${projectName.toLowerCase().replace(/\s+/g, "-")}`
+        const parsed = parseServerUrl(serverUrl)
+
+        // Update the API client with new connection first
+        console.log("Testing connection to:", parsed.fullUrl)
+        await apiClient.updateBaseUrlFromString(parsed.fullUrl)
+
+        // Test connection and get server's project info
+        const appInfo = await apiClient.ping()
+        const serverProjectPath =
+          appInfo.path?.root || appInfo.path?.cwd || `/${projectName.toLowerCase().replace(/\s+/g, "-")}`
+
+        // Check if a project with the same path already exists (only for new projects)
+        if (!editingProject && projects) {
+          const existingProject = projects.find((p) => p.path === serverProjectPath)
+          if (existingProject) {
+            sonner.warning(
+              `A project "${existingProject.name}" already exists for this server path. Tap to update its URL instead.`,
+              {
+                duration: 8000,
+                persistent: true,
+                onPress: () => {
+                  onClose()
+                  if (onEditExistingProject) {
+                    // If callback is provided, use it to edit the existing project
+                    setTimeout(() => {
+                      onEditExistingProject(existingProject)
+                    }, 300)
+                  } else {
+                    // Fallback: show info message
+                    setTimeout(() => {
+                      sonner.info(`Please edit "${existingProject.name}" project to update its URL`)
+                    }, 300)
+                  }
+                },
+              },
+            )
+            return
+          }
+        }
 
         if (editingProject) {
           // Update existing project
@@ -81,26 +127,48 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
             updates: {
               name: projectName,
               description: projectDescription || null,
-              serverHostname: hostname,
-              serverPort: parseInt(port),
-              serverUrl,
-              path: projectPath,
+              serverHostname: parsed.hostname,
+              serverPort: parsed.port,
+              serverUrl: parsed.fullUrl,
+              path: serverProjectPath,
+              // Update app info from server
+              appHostname: appInfo.hostname,
+              appGit: appInfo.git,
+              appPathConfig: appInfo.path?.config,
+              appPathData: appInfo.path?.data,
+              appPathRoot: appInfo.path?.root,
+              appPathCwd: appInfo.path?.cwd,
+              appPathState: appInfo.path?.state,
+              appTimeInitialized: appInfo.time?.initialized ? new Date(appInfo.time.initialized) : null,
             },
           })
           project = updatedProject
         } else {
           // Create new project
-          console.log("Creating new project:", { name: projectName, serverUrl })
+          console.log("Creating new project:", {
+            name: projectName,
+            serverUrl: parsed.fullUrl,
+            path: serverProjectPath,
+          })
           const [newProject] = await createProject.mutateAsync({
             name: projectName,
             description: projectDescription || null,
-            path: projectPath,
-            serverUrl,
-            serverHostname: hostname,
-            serverPort: parseInt(port),
+            path: serverProjectPath,
+            serverUrl: parsed.fullUrl,
+            serverHostname: parsed.hostname,
+            serverPort: parsed.port,
             connectionStatus: "disconnected",
             isActive: false,
             isFavorite: false,
+            // Store app info from server
+            appHostname: appInfo.hostname,
+            appGit: appInfo.git,
+            appPathConfig: appInfo.path?.config,
+            appPathData: appInfo.path?.data,
+            appPathRoot: appInfo.path?.root,
+            appPathCwd: appInfo.path?.cwd,
+            appPathState: appInfo.path?.state,
+            appTimeInitialized: appInfo.time?.initialized ? new Date(appInfo.time.initialized) : null,
           })
           project = newProject
           console.log("Created project:", project.id)
@@ -110,49 +178,17 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
         console.log("Setting active project:", project.id)
         await setActiveProject.mutateAsync(project.id)
 
-        // Update connection status to connecting
-        console.log("Setting connection status to connecting")
+        // Connection was already tested above, mark as connected
+        console.log("Connection successful!")
         updateConnectionStatus.mutate({
           projectId: project.id,
-          status: "connecting",
+          status: "connected",
         })
 
-        // Small delay to ensure settings are persisted
+        // Small delay to ensure mutation completes, then refetch
         await new Promise((resolve) => setTimeout(resolve, 100))
-
-        // Update the API client with new connection
-        console.log("Updating API client base URL:", serverUrl)
-        await apiClient.updateBaseUrl(hostname, parseInt(port))
-
-        // Test the connection with retry logic
-        console.log("Testing connection...")
-        let lastError
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            console.log(`Connection attempt ${attempt}/3`)
-            await apiClient.ping()
-            console.log("Connection successful!")
-            updateConnectionStatus.mutate({
-              projectId: project.id,
-              status: "connected",
-            })
-            // Small delay to ensure mutation completes, then refetch
-            await new Promise((resolve) => setTimeout(resolve, 100))
-            await refetchAppInfo()
-            onClose()
-            return
-          } catch (error) {
-            console.log(`Connection attempt ${attempt} failed:`, error)
-            lastError = error
-            if (attempt < 3) {
-              // Wait before retry (exponential backoff)
-              await new Promise((resolve) => setTimeout(resolve, attempt * 500))
-            }
-          }
-        }
-
-        // If all retries failed
-        throw lastError
+        await refetchAppInfo()
+        onClose()
       } catch (error) {
         console.error("Connection failed:", error)
 
@@ -166,7 +202,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
         }
 
         // Show error to user
-        alert(`Failed to connect to server: ${error instanceof Error ? error.message : "Unknown error"}`)
+        sonner.error(`Failed to connect to server: ${error instanceof Error ? error.message : "Unknown error"}`)
       } finally {
         setIsConnecting(false)
       }
@@ -182,6 +218,25 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
         await new Promise((resolve) => setTimeout(resolve, 100))
         await refetchAppInfo()
         onClose()
+      }
+    }
+
+    const handleDelete = async () => {
+      if (editingProject) {
+        if (deleteConfirmCount === 0) {
+          setDeleteConfirmCount(1)
+          sonner.warning("Tap again to confirm deletion", { duration: 3000 })
+          // Reset after 3 seconds
+          setTimeout(() => setDeleteConfirmCount(0), 3000)
+        } else {
+          try {
+            await deleteProject.mutateAsync(editingProject.id)
+            sonner.success(`Deleted project "${editingProject.name}"`)
+            onClose()
+          } catch (error) {
+            sonner.error(`Failed to delete project: ${error instanceof Error ? error.message : "Unknown error"}`)
+          }
+        }
       }
     }
 
@@ -226,20 +281,11 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
               />
 
               <BottomSheetInput
-                label="Server Hostname"
-                value={hostname}
-                onChangeText={setHostname}
-                placeholder="127.0.0.1"
-                leftAccessory={<Text>🖥️</Text>}
-              />
-
-              <BottomSheetInput
-                label="Server Port"
-                value={port}
-                onChangeText={setPort}
-                placeholder="4096"
-                keyboardType="numeric"
-                leftAccessory={<Text>🔌</Text>}
+                label="Server URL"
+                value={serverUrl}
+                onChangeText={setServerUrl}
+                placeholder="127.0.0.1:4096 or https://your-domain.com"
+                leftAccessory={<Text>🔗</Text>}
               />
             </Box>
 
@@ -263,6 +309,14 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
                 </Button>
               )}
 
+              {isEditing && (
+                <Button mode="error" variant="ghost" onPress={handleDelete}>
+                  <Button.Text size="md" weight="medium">
+                    {deleteConfirmCount > 0 ? "Tap Again to Delete" : "Delete Project"}
+                  </Button.Text>
+                </Button>
+              )}
+
               <Button variant="ghost" onPress={onClose}>
                 <Button.Text size="md" weight="medium">
                   Cancel
@@ -272,11 +326,13 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
 
             <Box background="subtle" rounded="lg" p="md">
               <Text size="xs" mode="subtle">
-                💡 Make sure your OpenCode server is running with:
+                💡 Examples of valid server URLs:
               </Text>
               <Box mt="xs" background="dim" rounded="md" p="sm">
                 <Text size="xs" weight="medium" mode="brand">
-                  opencode serve --hostname 0.0.0.0 --port {port}
+                  127.0.0.1:4096{"\n"}
+                  https://your-domain.com{"\n"}
+                  https://macbook-pro.li-piano.ts.net
                 </Text>
               </Box>
             </Box>

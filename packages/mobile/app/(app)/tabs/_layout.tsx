@@ -25,7 +25,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings/index"
         options={{
-          title: "Requests",
+          title: "Settings",
         }}
       />
     </Tabs>

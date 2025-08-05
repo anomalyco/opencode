@@ -1,7 +1,3 @@
-import { Text } from "@/primitives"
+import SettingsPage from "@/components/pages/settings"
 
-const Page = () => {
-  return <Text>Settings Page</Text>
-}
-
-export default Page
+export default SettingsPage

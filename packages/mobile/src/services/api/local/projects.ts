@@ -45,7 +45,64 @@ class ProjectsRepository {
   }
 
   async deleteProject(id: string) {
-    return await db.delete(projects).where(eq(projects.id, id))
+    // Import schema tables for cascade delete
+    const { sessions, messages, messageParts } = await import("@/db/schema")
+
+    // Check if this is the active project
+    const projectToDelete = await this.getProjectById(id)
+    const isActiveProject = projectToDelete?.isActive
+
+    // Delete all related data first (cascade delete)
+    // Delete message parts for sessions belonging to this project
+    const projectSessions = await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.projectId, id))
+    const sessionIds = projectSessions.map((s) => s.id)
+
+    if (sessionIds.length > 0) {
+      // Delete message parts for these sessions
+      for (const sessionId of sessionIds) {
+        await db.delete(messageParts).where(eq(messageParts.sessionId, sessionId))
+      }
+
+      // Delete messages for these sessions
+      for (const sessionId of sessionIds) {
+        await db.delete(messages).where(eq(messages.sessionId, sessionId))
+      }
+    }
+
+    // Delete sessions belonging to this project
+    await db.delete(sessions).where(eq(sessions.projectId, id))
+
+    // Delete the project itself
+    const result = await db.delete(projects).where(eq(projects.id, id))
+
+    // Handle active project logic
+    if (isActiveProject) {
+      // Get remaining projects
+      const remainingProjects = await this.getAllProjects()
+
+      if (remainingProjects.length > 0) {
+        // Set the first remaining project as active
+        await this.setActiveProject(remainingProjects[0].id)
+      } else {
+        // No projects left - clear all remaining data
+        await this.clearAllData()
+      }
+    }
+
+    return result
+  }
+
+  private async clearAllData() {
+    // Import all schema tables
+    const { sessions, messages, messageParts, fileCache, providers, syncQueue } = await import("@/db/schema")
+
+    // Clear all data when no projects remain
+    await db.delete(messageParts)
+    await db.delete(messages)
+    await db.delete(sessions)
+    await db.delete(fileCache)
+    await db.delete(providers)
+    await db.delete(syncQueue)
   }
 
   async setActiveProject(id: string) {

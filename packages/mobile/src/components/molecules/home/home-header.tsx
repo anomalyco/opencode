@@ -95,6 +95,7 @@ export const HomeHeader = () => {
         ref={connectionSheetRef}
         onClose={handleCloseConnectionSheet}
         editingProject={editingProject}
+        onEditExistingProject={handleEditProject}
       />
 
       <ProjectListSheet

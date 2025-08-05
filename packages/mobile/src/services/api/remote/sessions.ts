@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { isRootSession } from "@/utils/sessions"
 import { apiClient } from "./client"
 import { queryKeys } from "../keys"
 
 // Types based on the API endpoints from the mobile plan
 interface SessionResponse {
   id: string
-  parentId?: string
+  parentID?: string // API uses parentID (capital D)
   title: string
   version: string
   shareUrl?: string
@@ -40,7 +41,7 @@ async function ensureActiveProjectConnection() {
   }
 
   // Ensure API client is using the active project's server URL
-  await apiClient.updateBaseUrl(activeProject[0].serverHostname, activeProject[0].serverPort)
+  await apiClient.updateBaseUrlFromString(activeProject[0].serverUrl)
 
   return activeProject[0]
 }
@@ -51,7 +52,7 @@ export function useRemoteSessionsQuery() {
     queryFn: async (): Promise<SessionResponse[]> => {
       await ensureActiveProjectConnection()
       const response = await apiClient.axios.get("/session")
-      return response.data
+      return response.data.filter(isRootSession)
     },
     retry: 1, // Only retry once
     retryDelay: 1000, // Wait 1 second before retry
