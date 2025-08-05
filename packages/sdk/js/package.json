@@ -4,7 +4,8 @@
   "version": "0.3.128",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/index.ts --outdir dist --target node"
   },
   "exports": {
     ".": {
