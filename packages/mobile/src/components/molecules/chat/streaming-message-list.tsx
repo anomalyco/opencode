@@ -6,7 +6,7 @@
 import { memo, useRef, useEffect, useCallback, forwardRef, useImperativeHandle, useMemo } from "react"
 import { FlatList, Keyboard, RefreshControl } from "react-native"
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native"
-import { Box, Text, Icon } from "@/components/ui/primitives"
+import { Box, Text, Icon, Button } from "@/components/ui/primitives"
 import { TypingIndicator } from "@/components/molecules/chat"
 import { ThemedMarked } from "@/components/ui/primitives/marked"
 import {
@@ -265,7 +265,7 @@ export const StreamingMessageList = memo(
       const { isStreaming, error } = useChatState(sessionId)
 
       // Fetch parts directly from database - this is our source of truth
-      const { data: parts, isLoading } = useLocalSessionPartsQuery(sessionId)
+      const { data: parts, isLoading, refetch: refetchParts } = useLocalSessionPartsQuery(sessionId)
       // Convert parts to list items
       const flattenedItems = useMemo(() => {
         if (!parts) return []
@@ -345,10 +345,16 @@ export const StreamingMessageList = memo(
                   Start the conversation with OpenCode
                 </Text>
               </Box>
+              <Button variant="ghost" size="sm" onPress={() => refetchParts()} style={{ marginTop: 8 }}>
+                <Icon icon={Feather} name="refresh-cw" size={16} color="muted" />
+                <Text mode="subtle" size="sm" weight="medium">
+                  Retry
+                </Text>
+              </Button>
             </Box>
           </Box>
         ),
-        [],
+        [refetchParts],
       )
 
       // Render message item or part item

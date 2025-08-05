@@ -78,7 +78,15 @@ export const SessionsListOptimized = memo<SessionsListOptimizedProps>(({ ListHea
   const fullSyncMutation = useFullSyncMutation()
 
   const sessions = useMemo(() => {
-    return data?.pages?.flat() ?? []
+    if (!data?.pages) return []
+
+    // Deduplicate sessions by ID while preserving order
+    const seen = new Set()
+    return data.pages.flat().filter((session) => {
+      if (seen.has(session.id)) return false
+      seen.add(session.id)
+      return true
+    })
   }, [data])
 
   const onRefresh = useCallback(async () => {

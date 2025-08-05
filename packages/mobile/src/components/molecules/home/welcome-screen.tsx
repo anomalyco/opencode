@@ -14,10 +14,10 @@ export const WelcomeScreen = memo<WelcomeScreenProps>(({ onAddProject }) => {
         {/* Welcome Message */}
         <Box center gap="sm">
           <Text size="lg" weight="bold" style={{ textAlign: "center" }}>
-            Welcome to OpenCode
+            Hey
           </Text>
           <Text size="md" mode="subtle" style={{ textAlign: "center", lineHeight: 22 }}>
-            Connect to your development environment to start building with AI assistance
+            Connect to your development environment to get started
           </Text>
         </Box>
 
@@ -39,7 +39,7 @@ export const WelcomeScreen = memo<WelcomeScreenProps>(({ onAddProject }) => {
             <Box direction="row" alignItems="center" gap="sm">
               <Icon icon={Feather} name="plus" size={20} color="white" />
               <Text size="md" weight="medium" style={{ color: "white" }}>
-                Connect Your First Project
+                Connect Project
               </Text>
             </Box>
           </Box>

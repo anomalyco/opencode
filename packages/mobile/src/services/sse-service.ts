@@ -83,7 +83,6 @@ export class SSEService {
       })
 
       this.eventSource.addEventListener("message", (event) => {
-        console.log("SSE: Message received", event.type, event.data)
         if (event.type === "message") {
           try {
             const sseEvent: SSEEvent = JSON.parse(event.data || "{}")
