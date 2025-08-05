@@ -49,6 +49,17 @@ export namespace Session {
 
   const OUTPUT_TOKEN_MAX = 32_000
 
+  const parentSessionTitlePrefix = "New session - "
+  const childSessionTitlePrefix = "Child session - "
+
+  function createDefaultTitle(parentID?: string) {
+    return (parentID ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+  }
+
+  function isDefaultTitle(title: string) {
+    return title.startsWith(parentSessionTitlePrefix)
+  }
+
   export const Info = z
     .object({
       id: Identifier.schema("session"),
@@ -154,7 +165,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
+      title: createDefaultTitle(parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -632,7 +643,7 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    if (msgs.length === 1 && !session.parentID) {
+    if (msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
