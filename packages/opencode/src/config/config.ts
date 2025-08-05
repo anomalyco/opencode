@@ -224,7 +224,7 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow")])
+  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
   export type Permission = z.infer<typeof Permission>
 
   export const Info = z

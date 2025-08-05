@@ -60,6 +60,8 @@ export const EditTool = Tool.define("edit", {
               diff,
             },
           })
+        } else if (cfg.permission?.edit === "deny") {
+          throw new Error(`File editing is not allowed by permission configuration`)
         }
         await Bun.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
@@ -89,6 +91,8 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
+      } else if (cfg.permission?.edit === "deny") {
+        throw new Error(`File editing is not allowed by permission configuration`)
       }
 
       await file.write(contentNew)

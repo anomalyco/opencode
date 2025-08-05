@@ -42,6 +42,9 @@ export const WriteTool = Tool.define("write", {
           exists,
         },
       })
+    else if (cfg.permission?.edit === "deny") {
+      throw new Error(`File writing is not allowed by permission configuration`)
+    }
 
     await Bun.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {
