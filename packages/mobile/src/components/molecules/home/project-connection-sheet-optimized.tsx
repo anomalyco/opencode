@@ -335,6 +335,7 @@ export const ProjectConnectionSheetOptimized = memo(
                     onPress={handleSaveAndConnect}
                     loading={isConnecting}
                     disabled={!projectName.trim()}
+                    size="lg"
                   >
                     <Button.Icon>
                       {({ color, size }) => (

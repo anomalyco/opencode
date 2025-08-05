@@ -311,6 +311,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
                   onPress={handleSaveAndConnect}
                   loading={isConnecting}
                   disabled={!projectName.trim()}
+                  size="lg"
                 >
                   <Button.Icon>
                     {({ color, size }) => (
@@ -322,7 +323,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
                       />
                     )}
                   </Button.Icon>
-                  <Button.Text size="md" weight="medium">
+                  <Button.Text weight="medium">
                     {isConnecting ? "Connecting..." : isEditing ? "Update & Connect" : "Create & Connect"}
                   </Button.Text>
                 </Button>

@@ -85,7 +85,7 @@ export const HomeHeaderOptimized = memo(() => {
           {/* Header with Project Selector */}
           <Box direction="row" justifyContent="space-between" alignItems="center">
             <Box gap="xs">
-              <Text size="xl" weight="bold" style={{ lineHeight: 28 }}>
+              <Text size="lg" weight="bold" style={{ lineHeight: 28 }}>
                 opencode
               </Text>
               <Text size="md" mode="subtle" style={{ lineHeight: 20 }}>
