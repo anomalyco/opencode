@@ -34,7 +34,7 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
+  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; timeout?: number }) {
     const app = App.info()
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
@@ -113,8 +113,11 @@ export namespace LSPClient {
       [path: string]: number
     } = {}
 
+    const timeout = input.timeout ?? 3000
+
     const result = {
       root: input.root,
+      timeout,
       get serverID() {
         return input.serverID
       },
@@ -168,7 +171,7 @@ export namespace LSPClient {
               }
             })
           }),
-          3000,
+          result.timeout,
         )
           .catch(() => {})
           .finally(() => {

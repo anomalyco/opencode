@@ -53,39 +53,60 @@ export namespace LSP {
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
+  function createServerInfo(name: string, config: LSPServer.Config, existing?: LSPServer.Info): LSPServer.Info {
+    const base = existing ?? {
+      id: name,
+      root: async (_file, app) => app.path.root,
+      extensions: [],
+      spawn: async () => undefined,
+    }
+
+    return {
+      ...base,
+      id: name,
+      extensions: config.extensions ?? base.extensions,
+      spawn: async (app, root) => {
+        if (config.command) {
+          return {
+            process: spawn(config.command[0], config.command.slice(1), {
+              cwd: root,
+              env: { ...process.env, ...config.env },
+            }),
+            initialization: config.initialization,
+          }
+        }
+
+        const handle = await base.spawn(app, root)
+        return handle
+          ? {
+              ...handle,
+              initialization: { ...handle.initialization, ...config.initialization },
+            }
+          : handle
+      },
+    }
+  }
+
   const state = App.state(
     "lsp",
     async () => {
       const clients: LSPClient.Info[] = []
-      const servers: Record<string, LSPServer.Info> = LSPServer
-      const cfg = await Config.get()
+      const servers: Record<string, LSPServer.Info> = LSPServer.DEFAULTS
+      const serverConfigs: Record<string, LSPServer.Config> = {}
+      const cfg = await Config.state()
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
-        const existing = servers[name]
         if (item.disabled) {
           delete servers[name]
           continue
         }
-        servers[name] = {
-          ...existing,
-          root: existing?.root ?? (async (_file, app) => app.path.root),
-          extensions: item.extensions ?? existing.extensions,
-          spawn: async (_app, root) => {
-            return {
-              process: spawn(item.command[0], item.command.slice(1), {
-                cwd: root,
-                env: {
-                  ...process.env,
-                  ...item.env,
-                },
-              }),
-              initialization: item.initialization,
-            }
-          },
-        }
+        serverConfigs[name] = item
+        const existing = servers[name]
+        servers[name] = createServerInfo(name, item, existing)
       }
       return {
         broken: new Set<string>(),
         servers,
+        serverConfigs,
         clients,
       }
     },
@@ -104,7 +125,7 @@ export namespace LSP {
     const s = await state()
     const extension = path.parse(file).ext
     const result: LSPClient.Info[] = []
-    for (const server of Object.values(LSPServer)) {
+    for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file, App.info())
       if (!root) continue
@@ -121,6 +142,7 @@ export namespace LSP {
         serverID: server.id,
         server: handle,
         root,
+        timeout: s.serverConfigs[server.id]?.timeout,
       }).catch((err) => {
         s.broken.add(root + server.id)
         handle.process.kill()

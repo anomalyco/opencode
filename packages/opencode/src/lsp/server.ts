@@ -362,3 +362,24 @@ export namespace LSPServer {
     },
   }
 }
+
+export namespace LSPServer {
+  export type Config = {
+    command?: string[]
+    extensions?: string[]
+    disabled?: boolean
+    env?: Record<string, string>
+    initialization?: Record<string, any>
+    timeout?: number
+  }
+
+  export const DEFAULTS = {
+    typescript: LSPServer.Typescript,
+    golang: LSPServer.Gopls,
+    "ruby-lsp": LSPServer.RubyLsp,
+    pyright: LSPServer.Pyright,
+    "elixir-ls": LSPServer.ElixirLS,
+    zls: LSPServer.Zls,
+    csharp: LSPServer.CSharp,
+  } as const
+}

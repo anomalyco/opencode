@@ -14,6 +14,7 @@ import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
+import { LSPServer } from "../lsp/server"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -303,20 +304,30 @@ export namespace Config {
       lsp: z
         .record(
           z.string(),
-          z.union([
-            z.object({
-              disabled: z.literal(true),
-            }),
-            z.object({
-              command: z.array(z.string()),
+          z
+            .object({
+              command: z.array(z.string()).optional(),
               extensions: z.array(z.string()).optional(),
               disabled: z.boolean().optional(),
               env: z.record(z.string(), z.string()).optional(),
               initialization: z.record(z.string(), z.any()).optional(),
-            }),
-          ]),
+              timeout: z.number().optional(),
+            })
+            .strict(),
         )
-        .optional(),
+        .optional()
+        .refine(
+          (lspConfig) => {
+            if (!lspConfig) return true
+
+            return Object.entries(lspConfig).every(
+              ([serverName, config]) => serverName in LSPServer.DEFAULTS || config.command,
+            )
+          },
+          {
+            message: `Custom LSP servers require a 'command' field. Built-in servers are: ${Object.keys(LSPServer.DEFAULTS).join(", ")}`,
+          },
+        ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: z
