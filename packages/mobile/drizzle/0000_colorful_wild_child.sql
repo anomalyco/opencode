@@ -1,10 +1,24 @@
-CREATE TABLE `app_config` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+CREATE TABLE `projects` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`path` text NOT NULL,
 	`server_url` text NOT NULL,
-	`server_hostname` text DEFAULT '127.0.0.1',
-	`server_port` integer DEFAULT 4096,
+	`server_hostname` text NOT NULL,
+	`server_port` integer NOT NULL,
+	`app_hostname` text,
+	`app_git` integer,
+	`app_path_config` text,
+	`app_path_data` text,
+	`app_path_root` text,
+	`app_path_cwd` text,
+	`app_path_state` text,
+	`app_time_initialized` integer,
 	`connection_status` text DEFAULT 'disconnected',
 	`last_sync_timestamp` integer,
+	`is_active` integer DEFAULT false,
+	`is_favorite` integer DEFAULT false,
+	`color` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer
 );
@@ -14,6 +28,7 @@ CREATE TABLE `user_settings` (
 	`theme` text DEFAULT 'system',
 	`default_provider_id` text,
 	`default_model_id` text,
+	`current_mode` text DEFAULT 'build',
 	`notifications_enabled` integer DEFAULT true,
 	`haptics_enabled` integer DEFAULT true,
 	`auto_sync` integer DEFAULT true,
@@ -47,6 +62,7 @@ CREATE TABLE `search_cache` (
 --> statement-breakpoint
 CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
+	`project_id` text NOT NULL,
 	`parent_id` text,
 	`title` text NOT NULL,
 	`version` text NOT NULL,
@@ -57,19 +73,28 @@ CREATE TABLE `sessions` (
 	`revert_part_id` text,
 	`revert_snapshot` text,
 	`revert_diff` text,
+	`total_cost` real DEFAULT 0,
+	`total_tokens_input` integer DEFAULT 0,
+	`total_tokens_output` integer DEFAULT 0,
+	`total_tokens_reasoning` integer DEFAULT 0,
+	`total_tokens_cache_read` integer DEFAULT 0,
+	`total_tokens_cache_write` integer DEFAULT 0,
+	`message_count` integer DEFAULT 0,
 	`is_synced` integer DEFAULT false,
 	`last_sync_timestamp` integer,
 	`is_favorite` integer DEFAULT false,
 	`local_notes` text,
+	`model_id` text,
 	`created_at` integer NOT NULL,
-	`updated_at` integer
+	`updated_at` integer,
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE TABLE `messages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`session_id` text NOT NULL,
 	`role` text NOT NULL,
-	`time_created` integer NOT NULL,
+	`time_created` integer DEFAULT (unixepoch('subsec') * 1000) NOT NULL,
 	`time_completed` integer,
 	`provider_id` text,
 	`model_id` text,
@@ -99,6 +124,7 @@ CREATE TABLE `message_parts` (
 	`session_id` text NOT NULL,
 	`message_id` text NOT NULL,
 	`type` text NOT NULL,
+	`sequence` integer DEFAULT 0 NOT NULL,
 	`text_content` text,
 	`is_synthetic` integer DEFAULT false,
 	`time_start` integer,
@@ -141,23 +167,6 @@ CREATE TABLE `message_parts` (
 	FOREIGN KEY (`message_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE TABLE `models` (
-	`id` text PRIMARY KEY NOT NULL,
-	`provider_id` text NOT NULL,
-	`name` text NOT NULL,
-	`description` text,
-	`context_window` integer,
-	`max_output_tokens` integer,
-	`cost_input` real,
-	`cost_output` real,
-	`is_available` integer DEFAULT true,
-	`is_default` integer DEFAULT false,
-	`last_sync_timestamp` integer,
-	`created_at` integer NOT NULL,
-	`updated_at` integer,
-	FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `providers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -189,4 +198,29 @@ CREATE TABLE `sync_queue` (
 	`max_retries` integer DEFAULT 3,
 	`last_error` text,
 	`status` text DEFAULT 'pending'
+);
+--> statement-breakpoint
+CREATE TABLE `models` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`provider_id` text NOT NULL,
+	`provider_name` text NOT NULL,
+	`context_length` integer,
+	`output_length` integer,
+	`input_price` real,
+	`output_price` real,
+	`cache_read_price` real,
+	`cache_write_price` real,
+	`attachment` integer DEFAULT false,
+	`reasoning` integer DEFAULT false,
+	`temperature` integer DEFAULT true,
+	`tool_call` integer DEFAULT false,
+	`knowledge` text,
+	`release_date` text,
+	`last_updated` text,
+	`open_weights` integer DEFAULT false,
+	`is_cached` integer DEFAULT true,
+	`last_sync_timestamp` integer,
+	`created_at` integer NOT NULL,
+	`updated_at` integer
 );

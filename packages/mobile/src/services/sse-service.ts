@@ -67,14 +67,12 @@ export class SSEService {
       const serverUrl = activeProject[0].serverUrl
 
       const sseUrl = `${serverUrl}/event`
-      console.log("SSE: Connecting to:", sseUrl)
 
       this.eventSource = new EventSource(sseUrl, {
         pollingInterval: 0, // Disable automatic reconnections, we handle them manually
       })
 
       this.eventSource.addEventListener("open", (event) => {
-        console.log("SSE: Connection opened", event)
         if (event.type === "open") {
           this.connected = true
           this.reconnectAttempts = 0
@@ -97,7 +95,6 @@ export class SSEService {
       })
 
       this.eventSource.addEventListener("error", (event) => {
-        console.log("SSE: Error occurred", event.type, event)
         if (event.type === "error") {
           this.handleConnectionError()
         } else if (event.type === "exception") {

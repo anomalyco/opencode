@@ -123,6 +123,16 @@ class SessionRepository {
       .where(eq(sessions.id, id))
   }
 
+  async updateSessionModel(id: string, modelId: string) {
+    return await db
+      .update(sessions)
+      .set({
+        modelId,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, id))
+  }
+
   async getUnsyncedSessions() {
     return await db.select().from(sessions).where(eq(sessions.isSynced, false))
   }
@@ -233,6 +243,18 @@ export function useUpdateLocalSessionMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.unsynced() })
+    },
+  })
+}
+
+export function useUpdateSessionModelMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, modelId }: { id: string; modelId: string }) => sessionRepo.updateSessionModel(id, modelId),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.lists() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.sessions.detail(id) })
     },
   })
 }

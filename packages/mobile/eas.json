@@ -27,12 +27,14 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
 
       "env": {
         "EXPO_PUBLIC_ENV": "preview"
       }
     },
     "production": {
+      "channel": "production",
       "autoIncrement": true
     }
   },

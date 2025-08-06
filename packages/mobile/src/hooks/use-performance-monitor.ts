@@ -4,7 +4,6 @@
  */
 
 import { useRef, useCallback } from "react"
-import { batchWriter } from "@/services/api/local/batch-writer"
 
 export const usePerformanceMonitor = (sessionId: string, enabled: boolean = __DEV__) => {
   const eventCountRef = useRef(0)
@@ -18,14 +17,6 @@ export const usePerformanceMonitor = (sessionId: string, enabled: boolean = __DE
     // Log performance every 5 seconds to avoid spam
     const now = Date.now()
     if (now - lastLogTimeRef.current > 5000) {
-      const timeDiff = (now - lastLogTimeRef.current) / 1000
-      const eventsPerSecond = eventCountRef.current / timeDiff
-      const pendingWrites = batchWriter.getPendingCount()
-
-      console.log(
-        `🚀 Performance - Session ${sessionId}: ${Math.round(eventsPerSecond * 10) / 10} events/sec, ${pendingWrites} pending writes`,
-      )
-
       eventCountRef.current = 0
       lastLogTimeRef.current = now
     }
@@ -34,13 +25,8 @@ export const usePerformanceMonitor = (sessionId: string, enabled: boolean = __DE
   // Log performance summary
   const logPerformanceSummary = useCallback(() => {
     if (!enabled) return
-
-    const pendingWrites = batchWriter.getPendingCount()
-    console.group(`🚀 Performance Summary - Session ${sessionId}`)
-    console.log(`💾 Pending writes: ${pendingWrites}`)
-    console.log(`⏱️ Last check: ${new Date().toLocaleTimeString()}`)
-    console.groupEnd()
-  }, [enabled, sessionId])
+    // Performance summary logging removed
+  }, [enabled])
 
   return {
     trackEvent,

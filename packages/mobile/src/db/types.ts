@@ -8,6 +8,7 @@ import type {
   userSettings,
   providers,
   syncQueue,
+  models,
 } from "./schema"
 
 // Select types (for reading from DB)
@@ -19,6 +20,7 @@ export type Project = InferSelectModel<typeof projects>
 export type UserSettings = InferSelectModel<typeof userSettings>
 export type Provider = InferSelectModel<typeof providers>
 export type SyncQueue = InferSelectModel<typeof syncQueue>
+export type Model = InferSelectModel<typeof models>
 
 // Insert types (for creating new records)
 export type NewSession = InferInsertModel<typeof sessions>
@@ -29,3 +31,4 @@ export type NewProject = InferInsertModel<typeof projects>
 export type NewUserSettings = InferInsertModel<typeof userSettings>
 export type NewProvider = InferInsertModel<typeof providers>
 export type NewSyncQueue = InferInsertModel<typeof syncQueue>
+export type NewModel = InferInsertModel<typeof models>

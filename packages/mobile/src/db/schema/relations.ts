@@ -3,7 +3,8 @@ import { projects } from "./config"
 import { sessions } from "./sessions"
 import { messages } from "./messages"
 import { messageParts } from "./messageParts"
-import { providers, models } from "./providers"
+import { providers } from "./providers"
+import { models } from "./models"
 
 // Project relations
 export const projectsRelations = relations(projects, ({ many }) => ({

@@ -33,6 +33,7 @@ export const sessions = sqliteTable("sessions", {
   lastSyncTimestamp: integer("last_sync_timestamp", { mode: "timestamp" }).$defaultFn(() => new Date(0)),
   isFavorite: integer("is_favorite", { mode: "boolean" }).default(false),
   localNotes: text("local_notes"),
+  modelId: text("model_id"), // selected modal for this session
 
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }),

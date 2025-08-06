@@ -20,6 +20,7 @@ const config = {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
+      ascAppId: "6749646049",
     },
     android: {
       adaptiveIcon: {
@@ -42,7 +43,7 @@ const config = {
           image: "./assets/images/splash-icon.png",
           imageWidth: 200,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#0d0f12",
         },
       ],
       [

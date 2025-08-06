@@ -44,6 +44,12 @@ export const queryKeys = {
       serverUrl: () => [...queryKeys.local.config.all, "serverUrl"] as const,
       currentMode: () => [...queryKeys.local.config.all, "currentMode"] as const,
     },
+    models: {
+      all: ["local", "models"] as const,
+      lists: () => [...queryKeys.local.models.all, "list"] as const,
+      details: () => [...queryKeys.local.models.all, "detail"] as const,
+      detail: (id: string) => [...queryKeys.local.models.details(), id] as const,
+    },
   },
 
   // Remote API queries
@@ -76,6 +82,7 @@ export const queryKeys = {
       config: () => [...queryKeys.remote.config.all, "config"] as const,
       providers: () => [...queryKeys.remote.config.all, "providers"] as const,
       modes: () => [...queryKeys.remote.config.all, "modes"] as const,
+      models: () => [...queryKeys.remote.config.all, "models"] as const,
     },
   },
 

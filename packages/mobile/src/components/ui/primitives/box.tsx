@@ -210,7 +210,7 @@ export type BoxProps = {
   pr?: "xs" | "sm" | "md" | "lg"
   border?: "none" | "subtle" | "thin" | "thick"
   shadow?: "none" | "sm" | "md" | "lg"
-  mode?: "primary" | "secondary" | "warning" | "error" | "success" | "disabled"
+  mode?: "primary" | "brand" | "secondary" | "warning" | "error" | "success" | "disabled"
   rounded?: "none" | "sm" | "md" | "lg" | "xl" | "full"
   direction?: "row" | "column"
   m?: "xs" | "sm" | "md" | "lg"
@@ -516,23 +516,27 @@ const styles = StyleSheet.create((theme, rt) => ({
       mode: {
         primary: {
           borderColor: theme.colors.primary[500],
-          backgroundColor: `${theme.colors.primary[500]}20`,
+          backgroundColor: `${theme.colors.primary[500]}30`,
+        },
+        brand: {
+          borderColor: theme.colors.brand[500],
+          backgroundColor: `${theme.colors.brand[500]}30`,
         },
         secondary: {
           borderColor: theme.colors.secondary[500],
-          backgroundColor: `${theme.colors.secondary[500]}20`,
+          backgroundColor: `${theme.colors.secondary[500]}30`,
         },
         warning: {
           borderColor: theme.colors.warning[500],
-          backgroundColor: `${theme.colors.warning[500]}20`,
+          backgroundColor: `${theme.colors.warning[500]}30`,
         },
         error: {
           borderColor: theme.colors.error[500],
-          backgroundColor: `${theme.colors.error[500]}20`,
+          backgroundColor: `${theme.colors.error[500]}30`,
         },
         success: {
           borderColor: theme.colors.success[500],
-          backgroundColor: `${theme.colors.success[500]}20`,
+          backgroundColor: `${theme.colors.success[500]}30`,
         },
         disabled: {
           opacity: 0.5,

@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1754195261397,
-      "tag": "0000_green_mach_iv",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1754295610863,
-      "tag": "0001_brown_guardian",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1754303335289,
-      "tag": "0002_mysterious_lorna_dane",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1754304209492,
-      "tag": "0003_great_sunspot",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1754370094800,
-      "tag": "0004_ordinary_kang",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1754429129131,
-      "tag": "0005_curved_colonel_america",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1754431348925,
-      "tag": "0006_superb_silver_surfer",
+      "when": 1754499059958,
+      "tag": "0000_colorful_wild_child",
       "breakpoints": true
     }
   ]

@@ -217,9 +217,7 @@ export function useRemoteMessagesQuery(sessionId: string) {
   return useQuery({
     queryKey: queryKeys.remote.messages.list(sessionId),
     queryFn: async (): Promise<SessionMessagesResponse[]> => {
-      console.log("calling remote query")
       const response = await apiClient.axios.get(`/session/${sessionId}/message`)
-      // console.log("response", response)
       return response.data
     },
     enabled: !!sessionId,

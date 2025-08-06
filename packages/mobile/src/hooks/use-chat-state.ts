@@ -82,19 +82,11 @@ export const useChatState = (sessionId: string): ChatState => {
       if (!messageInfo || messageInfo.sessionID !== sessionId) return
 
       try {
-        console.log("🔄 Streaming message update:", messageInfo.role, "Time:", messageInfo.time)
-        // console.log("🔄 Full messageInfo:", JSON.stringify(messageInfo, null, 2))
-
         // Use the same robust transformation logic from chat-service
         const remoteMessage = { info: messageInfo, parts: properties?.parts || [] }
         const localMessage = chatService.transformRemoteToLocalMessage(remoteMessage)
 
         if (localMessage) {
-          const timeStr = localMessage.timeCreated ? new Date(localMessage.timeCreated).toISOString() : "undefined"
-          console.log("🔄 Transformed message timeCreated:", timeStr)
-
-          console.log(`🔄 New message created: ${localMessage.id}`)
-
           // Upsert message directly to database
           await upsertMessageMutation.mutateAsync(localMessage)
 
@@ -111,7 +103,7 @@ export const useChatState = (sessionId: string): ChatState => {
           })
         }
       } catch (error) {
-        console.log("Error handling streaming message update:", error)
+        // Handle error silently
       }
     },
     [sessionId, chatService, queryClient, upsertMessageMutation],
@@ -124,8 +116,6 @@ export const useChatState = (sessionId: string): ChatState => {
       if (!partInfo || partInfo.sessionID !== sessionId) return
 
       try {
-        console.log("part: partinfo: ", partInfo, partInfo.time, partInfo.state?.time, partInfo.state?.status)
-
         // Get the next sequence number by querying the database
         const messageId = partInfo.messageID
         const partId = partInfo.id
@@ -142,7 +132,6 @@ export const useChatState = (sessionId: string): ChatState => {
         if (existingParts.length > 0) {
           // Part already exists, reuse its sequence
           assignedSequence = existingParts[0].sequence
-          console.log(`📊 EXISTING part ${partId} reusing sequence ${assignedSequence}`)
         } else {
           // New part, get the highest sequence for this message and increment
           const maxSequenceResult = await db
@@ -153,7 +142,6 @@ export const useChatState = (sessionId: string): ChatState => {
 
           const maxSequence = maxSequenceResult[0]?.maxSequence || 0
           assignedSequence = maxSequence + 1
-          console.log(`📊 NEW part ${partId} assigned sequence ${assignedSequence} (max was ${maxSequence})`)
         }
 
         // Use the same robust transformation logic from chat-service with database-derived sequence
@@ -175,7 +163,7 @@ export const useChatState = (sessionId: string): ChatState => {
           }, 100) // Backup update every 100ms
         }
       } catch (error) {
-        console.log("Error handling streaming part update:", error)
+        // Handle error silently
       }
     },
     [sessionId, chatService, queryClient, upsertPartMutation],

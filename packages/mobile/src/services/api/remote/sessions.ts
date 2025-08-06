@@ -26,7 +26,16 @@ interface CreateSessionRequest {
 }
 
 interface ShareSessionResponse {
-  shareUrl: string
+  id: string
+  title: string
+  version: string
+  time: {
+    created: number
+    updated: number
+  }
+  share?: {
+    url: string
+  }
 }
 
 // Helper function to ensure API client uses active project
@@ -154,6 +163,31 @@ export function useUnshareRemoteSessionMutation() {
       await apiClient.axios.delete(`/session/${id}/share`)
     },
     onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.remote.sessions.detail(id) })
+    },
+  })
+}
+
+export function useSummarizeRemoteSessionMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      providerID,
+      modelID,
+    }: {
+      id: string
+      providerID: string
+      modelID: string
+    }): Promise<void> => {
+      await ensureActiveProjectConnection()
+      await apiClient.axios.post(`/session/${id}/summarize`, {
+        providerID,
+        modelID,
+      })
+    },
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remote.sessions.detail(id) })
     },
   })

@@ -437,12 +437,6 @@ export const StreamingMessageList = memo(
 
         const items: any[] = []
 
-        // Log message processing order
-        console.log(`🎯 UI Processing ${messagesWithParts.length} messages:`)
-        messagesWithParts.forEach((message: any, msgIndex: number) => {
-          console.log(`  ${msgIndex}: ${message.role} - ${message.timeCreated} - ID: ${message.id}`)
-        })
-
         // Process each message and its parts
         messagesWithParts.forEach((message: any) => {
           // Add parts for this message (if they exist)
@@ -511,7 +505,7 @@ export const StreamingMessageList = memo(
       }, []) // Render empty state
       const renderEmptyState = useCallback(
         () => (
-          <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }] }}>
+          <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }], marginBottom: 60 }}>
             <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
               <Icon icon={Feather} name="message-square" size={48} color="muted" />
               <Box center gap="xs">
@@ -592,8 +586,8 @@ export const StreamingMessageList = memo(
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               flexGrow: 1,
-              paddingTop: 100,
-              paddingBottom: Math.max(80, keyboardHeight + 10),
+              paddingTop: 140,
+              paddingBottom: Math.max(120, keyboardHeight + 20),
             }}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}

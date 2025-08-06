@@ -6,7 +6,8 @@
 import type { MessageWithParts, ChatMetrics } from "@/types/opencode-types"
 import { useUpsertLocalMessageMutation, useUpsertLocalMessagePartMutation } from "@/services/api/local/messages"
 import { useSendRemoteMessageMutation, type SendMessageRequest } from "@/services/api/remote/messages"
-// User settings functionality temporarily removed - will be re-implemented later
+import { useUserSettingsQuery } from "@/services/api/local/user-settings"
+import type { UserSettings } from "@/db/types"
 
 export interface ChatServiceConfig {
   defaultProviderId?: string
@@ -41,11 +42,9 @@ export class ChatService {
     upsertLocalMessagePart: any,
   ): Promise<void> {
     if (this.syncInProgress.has(sessionId)) {
-      console.log(`Sync already in progress for session ${sessionId}`)
       return
     }
 
-    console.log(`Starting sync for session ${sessionId} with ${remoteMessages.length} messages`)
     this.syncInProgress.add(sessionId)
 
     try {
@@ -57,8 +56,6 @@ export class ChatService {
         syncedMessages++
         syncedParts += remoteMessage.parts?.length || 0
       }
-
-      console.log(`Sync completed for session ${sessionId}: ${syncedMessages} messages, ${syncedParts} parts`)
     } catch (error) {
       // Handle specific error types gracefully
       if (this.isRecoverableError(error)) {
@@ -79,25 +76,19 @@ export class ChatService {
     upsertLocalMessage: any,
     upsertLocalMessagePart: any,
   ): Promise<void> {
-    const messageId = remoteMessage.info?.id
-    console.log(`Syncing message ${messageId} (${remoteMessage.info?.role})`)
-
     const localMessage = this.transformRemoteToLocalMessage(remoteMessage)
 
     // Skip if transformation returned null (invalid message)
     if (!localMessage) {
-      console.log(`Skipping invalid message ${messageId}`)
       return
     }
 
     try {
       await upsertLocalMessage.mutateAsync(localMessage)
-      console.log(`Message ${messageId} synced successfully`)
 
       // Sync message parts if they exist - use batching for large messages
       if (remoteMessage.parts && Array.isArray(remoteMessage.parts)) {
         const partsCount = remoteMessage.parts.length
-        console.log(`Syncing ${partsCount} parts for message ${messageId}`)
 
         if (partsCount > 50) {
           // Batch process large messages to prevent UI blocking
@@ -106,10 +97,6 @@ export class ChatService {
           // Process smaller messages normally
           await this.syncMessagePartsSequential(remoteMessage.parts, upsertLocalMessagePart)
         }
-
-        console.log(`All ${partsCount} parts synced for message ${messageId}`)
-      } else {
-        console.log(`No parts to sync for message ${messageId}`)
       }
     } catch (error) {
       // Handle specific error types
@@ -125,9 +112,6 @@ export class ChatService {
    * Transform remote message format to local database format
    */
   public transformRemoteToLocalMessage(remoteMessage: any): any | null {
-    // Log the complete message data we're now receiving
-    // console.log("Complete message data received:", JSON.stringify(remoteMessage, null, 2))
-
     // Log what enhanced data we're now capturing
     const enhancedFields = []
     if (remoteMessage.info?.error) enhancedFields.push("error")
@@ -139,13 +123,8 @@ export class ChatService {
     if (remoteMessage.info?.cost) enhancedFields.push("cost")
     if (remoteMessage.info?.tokens) enhancedFields.push("tokens")
 
-    if (enhancedFields.length > 0) {
-      console.log(`Enhanced message data captured: ${enhancedFields.join(", ")}`)
-    }
-
     // Validate required fields - log warnings but don't crash
     if (!remoteMessage?.info?.id) {
-      console.log("Warning: Message missing info.id, using fallback")
       // Generate a fallback ID to prevent crashes
       remoteMessage = {
         ...remoteMessage,
@@ -157,12 +136,10 @@ export class ChatService {
     }
 
     if (!remoteMessage?.info?.sessionID) {
-      console.log("Warning: Message missing info.sessionID, skipping sync")
       return null // Return null to skip this message
     }
 
     if (!remoteMessage?.info?.role) {
-      console.log("Warning: Message missing info.role, defaulting to 'assistant'")
       remoteMessage = {
         ...remoteMessage,
         info: {
@@ -182,15 +159,7 @@ export class ChatService {
       // If no timestamp provided, use current time
       // For streaming assistant messages, this ensures they appear after user messages
       createdAt = new Date()
-      console.log("⚠️ No timestamp provided for message, using current time:", createdAt.toISOString())
     }
-
-    // Log message details for debugging
-    const firstTextPart = remoteMessage.parts?.find((p: any) => p.type === "text")
-    const textPreview = firstTextPart?.text ? firstTextPart.text.substring(0, 50) + "..." : "No text"
-    console.log(
-      `📝 Message sync: ID=${remoteMessage.info?.id}, Role=${remoteMessage.info?.role}, Time=${createdAt.toISOString()}, Text="${textPreview}"`,
-    )
 
     return {
       id: remoteMessage.info?.id,
@@ -227,11 +196,8 @@ export class ChatService {
    * Transform remote part format to local database format
    */
   public transformRemoteToLocalPart(remotePart: any, orderIndex?: number): any | null {
-    console.log("Complete part data received:", JSON.stringify(remotePart, null, 2))
-
-    // Validate required fields - log warnings but don't crash
+    // Validate required fields
     if (!remotePart?.id) {
-      console.log("Warning: Part missing id, using fallback")
       remotePart = {
         ...remotePart,
         id: `fallback-part-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
@@ -239,17 +205,14 @@ export class ChatService {
     }
 
     if (!remotePart?.messageID) {
-      console.log("Warning: Part missing messageID, skipping sync")
       return null // Return null to skip this part
     }
 
     if (!remotePart?.sessionID) {
-      console.log("Warning: Part missing sessionID, skipping sync")
       return null // Return null to skip this part
     }
 
     if (!remotePart?.type) {
-      console.log("Warning: Part missing type, defaulting to 'text'")
       remotePart = {
         ...remotePart,
         type: "text",
@@ -345,15 +308,17 @@ export class ChatService {
     sessionId: string,
     content: string,
     sendMessageMutation: any,
-    userSettings?: any,
+    userSettings?: UserSettings | null,
     mode?: string,
+    providerID?: string,
+    modelID?: string,
   ): Promise<void> {
-    const providerID = userSettings?.defaultProviderId || this.config.defaultProviderId
-    const modelID = userSettings?.defaultModelId || this.config.defaultModelId
+    const finalProviderID = providerID || userSettings?.defaultProviderId || this.config.defaultProviderId
+    const finalModelID = modelID || userSettings?.defaultModelId || this.config.defaultModelId
 
     const request: SendMessageRequest = {
-      providerID: providerID!,
-      modelID: modelID!,
+      providerID: finalProviderID!,
+      modelID: finalModelID!,
       parts: [
         {
           type: "text",
@@ -370,7 +335,6 @@ export class ChatService {
       })
     } catch (error) {
       // Ignore HTTP errors since messages are processed via SSE
-      console.log("Message send HTTP error (message may still process via SSE):", error)
     }
   }
 
@@ -538,15 +502,14 @@ export const useChatService = () => {
   const upsertLocalMessage = useUpsertLocalMessageMutation()
   const upsertLocalMessagePart = useUpsertLocalMessagePartMutation()
   const sendMessage = useSendRemoteMessageMutation()
-  // User settings temporarily removed
-  const userSettings = null
+  const { data: userSettings } = useUserSettingsQuery()
 
   return {
     syncRemoteMessages: (sessionId: string, remoteMessages: any[]) =>
       chatService.syncRemoteMessages(sessionId, remoteMessages, upsertLocalMessage, upsertLocalMessagePart),
 
-    sendMessage: (sessionId: string, content: string, mode?: string) =>
-      chatService.sendMessage(sessionId, content, sendMessage, userSettings, mode),
+    sendMessage: (sessionId: string, content: string, mode?: string, providerID?: string, modelID?: string) =>
+      chatService.sendMessage(sessionId, content, sendMessage, userSettings, mode, providerID, modelID),
 
     calculateMetrics: (messages: any[]) => chatService.calculateMetrics(messages),
 

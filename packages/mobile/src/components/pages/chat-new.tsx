@@ -102,15 +102,20 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
     }
   }, [refreshMessages, switchModeMutation, sonner])
 
+  // Model selection is now handled in useSimpleChatState hook
+
   // Handle send message
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
+        // Model selection is now handled in useSimpleChatState with proper fallback chain:
+        // 1. Session's selected model (modelId)
+        // 2. User settings default
+        // 3. Hardcoded fallback
         await sendMessage(content, currentMode)
       } catch (err) {
         // Don't show error since messages are processed via SSE
         // Real errors will be shown through SSE events
-        console.log("Message send HTTP error (message may still process via SSE):", err)
       }
     },
     [sendMessage, currentMode],
@@ -122,6 +127,36 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
       await sessionManager.navigateToNewSession()
     } catch (error) {}
   }, [sessionManager])
+
+  // Handle mode toggle
+  const handleModeToggle = useCallback(async () => {
+    try {
+      const newMode = await switchModeMutation.mutateAsync()
+
+      // Show mode switch toast with appropriate color
+      if (newMode === "build") {
+        sonner.info("Switched to build mode", {
+          duration: 2000,
+          icon: {
+            component: Ionicons,
+            name: "hammer",
+            size: 20,
+          },
+        })
+      } else {
+        sonner.secondary("Switched to plan mode", {
+          duration: 2000,
+          icon: {
+            component: Ionicons,
+            name: "document-text",
+            size: 20,
+          },
+        })
+      }
+    } catch (err) {
+      sonner.error("Failed to switch mode")
+    }
+  }, [switchModeMutation, sonner])
 
   return (
     <KeyboardAvoidingView
@@ -138,7 +173,12 @@ export const ChatPage = ({ sessionId }: ChatPageProps) => {
           refreshing={refreshing}
         />
         <ChatHeader sessionTitle={session?.title} session={session} onNewSessionPress={handleNewSession} />
-        <MessageInput onSend={handleSendMessage} currentMode={currentMode} />
+        <MessageInput
+          onSend={handleSendMessage}
+          sessionId={sessionId}
+          currentMode={currentMode}
+          onModeToggle={handleModeToggle}
+        />
       </Box>
     </KeyboardAvoidingView>
   )

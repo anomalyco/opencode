@@ -4,15 +4,14 @@ import { openDatabaseSync } from "expo-sqlite"
 import migrations from "@/drizzle/migrations"
 
 // Create a single database instance
-const expo = openDatabaseSync("testing.db")
+const expo = openDatabaseSync("opentest.db")
 const db = drizzle(expo)
 
 // Run migrations on app start
 try {
   migrate(db, migrations)
-  console.log("migrations complete")
 } catch (error) {
-  console.log("failed to mgrate db")
+  // Migration failed - handle silently or with proper error handling
 }
 
 // Export the single instance

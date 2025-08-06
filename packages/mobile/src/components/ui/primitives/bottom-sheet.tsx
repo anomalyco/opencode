@@ -72,7 +72,7 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         keyboardBlurBehavior={keyboardBlurBehavior}
         {...props}
       >
-        <BottomSheetView style={styles.container}>{children}</BottomSheetView>
+        {children}
       </BottomSheetModal>
     )
   },

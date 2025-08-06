@@ -64,7 +64,7 @@ export function useRemoteProvidersQuery() {
     queryKey: queryKeys.remote.config.providers(),
     queryFn: async (): Promise<ProviderResponse[]> => {
       const response = await apiClient.axios.get("/config/providers")
-      return response.data
+      return response.data.providers || []
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   })
@@ -75,6 +75,22 @@ export function useRemoteModesQuery() {
     queryKey: queryKeys.remote.config.modes(),
     queryFn: async (): Promise<ModeResponse[]> => {
       const response = await apiClient.axios.get("/mode")
+      return response.data
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
+  })
+}
+
+interface ModelsResponse {
+  providers: ProviderResponse[]
+  default: Record<string, string>
+}
+
+export function useRemoteModelsQuery() {
+  return useQuery({
+    queryKey: queryKeys.remote.config.models(),
+    queryFn: async (): Promise<ModelsResponse> => {
+      const response = await apiClient.axios.get("/config/providers")
       return response.data
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
