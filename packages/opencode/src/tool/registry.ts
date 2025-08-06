@@ -11,6 +11,7 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { Config } from "../config/config"
 
 export namespace ToolRegistry {
   const ALL = [
@@ -65,11 +66,19 @@ export namespace ToolRegistry {
     return result
   }
 
-  export function enabled(_providerID: string, modelID: string): Record<string, boolean> {
+  export async function enabled(_providerID: string, modelID: string): Promise<Record<string, boolean>> {
+    const cfg = await Config.get()
+    const result: Record<string, boolean> = {}
+
+    if (cfg.permission?.edit === "deny") {
+      result["edit"] = false
+      result["patch"] = false
+      result["write"] = false
+    }
+
     if (modelID.toLowerCase().includes("claude")) {
-      return {
-        patch: false,
-      }
+      result["patch"] = false
+      return result
     }
 
     if (
@@ -79,13 +88,14 @@ export namespace ToolRegistry {
       modelID.includes("o3") ||
       modelID.includes("codex")
     ) {
-      return {
-        patch: false,
-        todowrite: false,
-        todoread: false,
-      }
+      result["patch"] = false
+      result["todowrite"] = false
+      result["todoread"] = false
+
+      return result
     }
-    return {}
+
+    return result
   }
 
   function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {

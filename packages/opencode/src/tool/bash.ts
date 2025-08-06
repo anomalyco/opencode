@@ -93,7 +93,7 @@ export const BashTool = Tool.define("bash", {
 
       // always allow cd if it passes above check
       if (!needsAsk && command[0] !== "cd") {
-        const ask = (() => {
+        const action = (() => {
           for (const [pattern, value] of Object.entries(permissions)) {
             const match = Wildcard.match(node.text, pattern)
             log.info("checking", { text: node.text.trim(), pattern, match })
@@ -101,7 +101,12 @@ export const BashTool = Tool.define("bash", {
           }
           return "ask"
         })()
-        if (ask === "ask") needsAsk = true
+        if (action === "deny") {
+          throw new Error(
+            "The user has specifically restricted access to this command, you are not allowed to execute it.",
+          )
+        }
+        if (action === "ask") needsAsk = true
       }
     }
 

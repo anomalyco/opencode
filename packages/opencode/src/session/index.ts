@@ -717,7 +717,7 @@ export namespace Session {
 
     const enabledTools = pipe(
       mode.tools,
-      mergeDeep(ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
       mergeDeep(input.tools ?? {}),
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
