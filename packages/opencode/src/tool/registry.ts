@@ -75,6 +75,9 @@ export namespace ToolRegistry {
       result["patch"] = false
       result["write"] = false
     }
+    if (cfg?.permission?.bash === "deny") {
+      result["bash"] = false
+    }
 
     if (modelID.toLowerCase().includes("claude")) {
       result["patch"] = false

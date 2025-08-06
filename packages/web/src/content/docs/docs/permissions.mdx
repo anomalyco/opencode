@@ -21,6 +21,7 @@ Use the `permission.edit` key to control whether file editing operations require
 
 - `"ask"` - Prompt for approval before editing files
 - `"allow"` - Allow all file editing operations without approval
+- `"deny"` - Make all file editing tools disabled and unavailable
 
 ```json title="opencode.json" {4}
 {
@@ -41,7 +42,8 @@ Controls whether bash commands require user approval.
 You can specify which commands you want to have run without approval.
 :::
 
-This can be configured globally or with specific patterns. Setting this to `"ask"` is the strictest mode, requiring approval for all bash commands.
+This can be configured globally or with specific patterns. Setting this to `"ask"`, requiring approval for all bash commands.
+Setting this to `"deny"` is the strictest option, blocking LLM from running that command or command pattern.
 
 For example.
 
@@ -52,6 +54,19 @@ For example.
     "$schema": "https://opencode.ai/config.json",
     "permission": {
       "bash": "ask"
+    }
+  }
+  ```
+
+- **Disable all Terraform commands**
+
+  ```json title="opencode.json"
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {
+      "bash": {
+        "terraform *": "deny"
+      }
     }
   }
   ```
