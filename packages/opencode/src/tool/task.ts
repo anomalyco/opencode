@@ -22,6 +22,7 @@ export const TaskTool = Tool.define("task", async () => {
       const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const agent = await Agent.get(params.subagent_type)
+      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
