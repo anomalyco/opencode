@@ -377,8 +377,8 @@ func renderToolDetails(
 	}
 
 	if permission.Metadata != nil {
-		metadata := toolCall.State.Metadata.(map[string]any)
-		if metadata == nil {
+		metadata, ok := toolCall.State.Metadata.(map[string]any)
+		if metadata == nil || !ok {
 			metadata = map[string]any{}
 		}
 		maps.Copy(metadata, permission.Metadata)
