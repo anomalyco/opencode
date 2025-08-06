@@ -558,7 +558,7 @@ export type Config = {
    */
   model?: string
   /**
-   * Small model to use for tasks like summarization and title generation in the format of provider/model
+   * Small model to use for tasks like title generation in the format of provider/model
    */
   small_model?: string
   /**
