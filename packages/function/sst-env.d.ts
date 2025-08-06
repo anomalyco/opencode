@@ -6,6 +6,10 @@
 import "sst"
 declare module "sst" {
   export interface Resource {
+    "ANTHROPIC_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "GITHUB_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -14,9 +18,21 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "OPENAI_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "OPENCODE_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Web": {
       "type": "sst.cloudflare.Astro"
       "url": string
+    }
+    "ZHIPU_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
   }
 }
@@ -26,6 +42,7 @@ declare module "sst" {
   export interface Resource {
     "Api": cloudflare.Service
     "Bucket": cloudflare.R2Bucket
+    "GatewayApi": cloudflare.Service
   }
 }
 

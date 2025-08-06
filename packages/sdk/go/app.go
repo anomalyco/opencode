@@ -151,6 +151,7 @@ type Mode struct {
 	Model       ModeModel       `json:"model"`
 	Prompt      string          `json:"prompt"`
 	Temperature float64         `json:"temperature"`
+	TopP        float64         `json:"topP"`
 	JSON        modeJSON        `json:"-"`
 }
 
@@ -161,6 +162,7 @@ type modeJSON struct {
 	Model       apijson.Field
 	Prompt      apijson.Field
 	Temperature apijson.Field
+	TopP        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

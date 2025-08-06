@@ -34,7 +34,7 @@ export const WriteTool = Tool.define("write", {
         type: "write",
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
-        callID: ctx.toolCallID,
+        callID: ctx.callID,
         title: exists ? "Overwrite this file: " + filepath : "Create new file: " + filepath,
         metadata: {
           filePath: filepath,

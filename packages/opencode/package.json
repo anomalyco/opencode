@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.0.0",
+  "version": "0.3.130",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bun run ./src/index.ts"
+    "dev": "bun run --conditions=development ./src/index.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -30,12 +30,14 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
-    "@clack/prompts": "0.11.0",
+    "@clack/prompts": "1.0.0-alpha.1",
     "@hono/zod-validator": "0.4.2",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@octokit/graphql": "9.0.1",
     "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "0.4.3",
+    "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
@@ -46,11 +48,12 @@
     "hono-openapi": "0.4.8",
     "isomorphic-git": "1.32.1",
     "jsonc-parser": "3.3.1",
+    "minimatch": "10.0.3",
     "open": "10.1.2",
     "remeda": "catalog:",
-    "turndown": "7.2.0",
     "tree-sitter": "0.22.4",
     "tree-sitter-bash": "0.23.3",
+    "turndown": "7.2.0",
     "vscode-jsonrpc": "8.2.1",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",

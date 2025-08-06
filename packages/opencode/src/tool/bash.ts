@@ -1,20 +1,30 @@
 import { z } from "zod"
+import { exec } from "child_process"
+import { text } from "stream/consumers"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { App } from "../app/app"
 import { Permission } from "../permission"
 import { Config } from "../config/config"
-
-// import Parser from "tree-sitter"
-// import Bash from "tree-sitter-bash"
-// import { Config } from "../config/config"
+import { Filesystem } from "../util/filesystem"
+import { lazy } from "../util/lazy"
+import { Log } from "../util/log"
+import { Wildcard } from "../util/wildcard"
+import { $ } from "bun"
 
 const MAX_OUTPUT_LENGTH = 30000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 
-// const parser = new Parser()
-// parser.setLanguage(Bash.language as any)
+const log = Log.create({ service: "bash-tool" })
+
+const parser = lazy(async () => {
+  const { default: Parser } = await import("tree-sitter")
+  const Bash = await import("tree-sitter-bash")
+  const p = new Parser()
+  p.setLanguage(Bash.language as any)
+  return p
+})
 
 export const BashTool = Tool.define("bash", {
   description: DESCRIPTION,
@@ -30,9 +40,8 @@ export const BashTool = Tool.define("bash", {
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const app = App.info()
-    /*
-    const _cfg = await Config.get()
-    const tree = parser.parse(params.command)
+    const cfg = await Config.get()
+    const tree = await parser().then((p) => p.parse(params.command))
     const permissions = (() => {
       const value = cfg.permission?.bash
       if (!value)
@@ -67,9 +76,14 @@ export const BashTool = Tool.define("bash", {
       // not an exhaustive list, but covers most common cases
       if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
         for (const arg of command.slice(1)) {
-          if (arg.startsWith("-")) continue
-          const resolved = path.resolve(app.path.cwd, arg)
-          if (!Filesystem.contains(app.path.cwd, resolved)) {
+          if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
+          const resolved = await $`realpath ${arg}`
+            .quiet()
+            .nothrow()
+            .text()
+            .then((x) => x.trim())
+          log.info("resolved path", { arg, resolved })
+          if (resolved && !Filesystem.contains(app.path.cwd, resolved)) {
             throw new Error(
               `This command references paths outside of ${app.path.cwd} so it is not allowed to be executed.`,
             )
@@ -79,60 +93,54 @@ export const BashTool = Tool.define("bash", {
 
       // always allow cd if it passes above check
       if (!needsAsk && command[0] !== "cd") {
-        const ask = (() => {
+        const action = (() => {
           for (const [pattern, value] of Object.entries(permissions)) {
-            if (new Bun.Glob(pattern).match(node.text)) {
-              return value
-            }
+            const match = Wildcard.match(node.text, pattern)
+            log.info("checking", { text: node.text.trim(), pattern, match })
+            if (match) return value
           }
           return "ask"
         })()
-        if (ask === "ask") needsAsk = true
+        if (action === "deny") {
+          throw new Error(
+            "The user has specifically restricted access to this command, you are not allowed to execute it.",
+          )
+        }
+        if (action === "ask") needsAsk = true
       }
     }
 
     if (needsAsk) {
       await Permission.ask({
-        id: "bash",
+        type: "bash",
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
-        toolCallID: ctx.toolCallID,
+        callID: ctx.callID,
         title: params.command,
         metadata: {
           command: params.command,
         },
       })
     }
-    */
 
-    const cfg = await Config.get()
-    if (cfg.permission?.bash === "ask")
-      await Permission.ask({
-        type: "bash",
-        pattern: params.command.split(" ").slice(0, 2).join(" ").trim(),
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.toolCallID,
-        title: "Run this command: " + params.command,
-        metadata: {
-          command: params.command,
-          description: params.description,
-          timeout: params.timeout,
-        },
-      })
-
-    const process = Bun.spawn({
-      cmd: ["bash", "-c", params.command],
+    const process = exec(params.command, {
       cwd: app.path.cwd,
-      maxBuffer: MAX_OUTPUT_LENGTH,
       signal: ctx.abort,
-      timeout: timeout,
-      stdout: "pipe",
-      stderr: "pipe",
+      maxBuffer: MAX_OUTPUT_LENGTH,
+      timeout,
     })
-    await process.exited
-    const stdout = await new Response(process.stdout).text()
-    const stderr = await new Response(process.stderr).text()
+
+    const stdoutPromise = text(process.stdout!)
+    const stderrPromise = text(process.stderr!)
+
+    await new Promise<void>((resolve) => {
+      process.on("close", () => {
+        resolve()
+      })
+    })
+
+    const stdout = await stdoutPromise
+    const stderr = await stderrPromise
 
     return {
       title: params.command,

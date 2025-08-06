@@ -5,7 +5,15 @@
     "outDir": "dist",
     "module": "preserve",
     "declaration": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "lib": [
+      "es2022",
+      "dom",
+      "dom.iterable"
+    ],
+    "customConditions": [
+      "development"
+    ]
   },
   "include": [
     "src"

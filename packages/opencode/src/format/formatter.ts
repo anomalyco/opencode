@@ -129,7 +129,9 @@ export const clang: Info = {
   command: ["clang-format", "-i", "$FILE"],
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
-    return Bun.which("clang-format") !== null
+    const app = App.info()
+    const items = await Filesystem.findUp(".clang-format", app.path.cwd, app.path.root)
+    return items.length > 0
   },
 }
 

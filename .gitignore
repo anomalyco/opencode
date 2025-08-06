@@ -5,4 +5,4 @@ node_modules
 .idea
 .vscode
 openapi.json
-scratch
+playground

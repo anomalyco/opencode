@@ -200,7 +200,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventPermissionUpdated:
 		m.tail = true
 		return m, m.renderView()
-	case app.PermissionRespondedToMsg:
+	case opencode.EventListResponseEventPermissionReplied:
 		m.tail = true
 		return m, m.renderView()
 	case renderCompleteMsg:
@@ -303,7 +303,9 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						for _, part := range remainingParts {
 							switch part := part.(type) {
 							case opencode.FilePart:
-								fileParts = append(fileParts, part)
+								if part.Source.Text.Start >= 0 && part.Source.Text.End >= part.Source.Text.Start {
+									fileParts = append(fileParts, part)
+								}
 							}
 						}
 						flexItems := []layout.FlexItem{}

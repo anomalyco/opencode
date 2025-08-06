@@ -39,6 +39,15 @@ jobs:
         with:
           bun-version: 1.2.19
 
+      - name: Cache ~/.bun
+        id: cache-bun
+        uses: actions/cache@v3
+        with:
+          path: ~/.bun
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install makepkg
         run: |
           sudo apt-get update
@@ -53,9 +62,11 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
 
+      - name: Install dependencies
+        run: bun install
+
       - name: Publish
         run: |
-          bun install
           OPENCODE_VERSION=${{ inputs.version }} ./script/publish.ts
         env:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}

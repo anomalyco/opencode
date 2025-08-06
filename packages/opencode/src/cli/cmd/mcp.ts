@@ -19,7 +19,7 @@ export const McpAddCommand = cmd({
 
     const name = await prompts.text({
       message: "Enter MCP server name",
-      validate: (x) => (x.length > 0 ? undefined : "Required"),
+      validate: (x) => x && (x.length > 0 ? undefined : "Required"),
     })
     if (prompts.isCancel(name)) throw new UI.CancelledError()
 
@@ -44,7 +44,7 @@ export const McpAddCommand = cmd({
       const command = await prompts.text({
         message: "Enter command to run",
         placeholder: "e.g., opencode x @modelcontextprotocol/server-filesystem",
-        validate: (x) => (x.length > 0 ? undefined : "Required"),
+        validate: (x) => x && (x.length > 0 ? undefined : "Required"),
       })
       if (prompts.isCancel(command)) throw new UI.CancelledError()
 
@@ -58,6 +58,7 @@ export const McpAddCommand = cmd({
         message: "Enter MCP server URL",
         placeholder: "e.g., https://example.com/mcp",
         validate: (x) => {
+          if (!x) return "Required"
           if (x.length === 0) return "Required"
           const isValid = URL.canParse(x)
           return isValid ? undefined : "Invalid URL"

@@ -103,7 +103,8 @@ export const RunCommand = cmd({
       }
       UI.empty()
 
-      const { providerID, modelID } = args.model ? Provider.parseModel(args.model) : await Provider.defaultModel()
+      const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
+      const { providerID, modelID } = args.model ? Provider.parseModel(args.model) : mode.model ?? await Provider.defaultModel()
       UI.println(UI.Style.TEXT_NORMAL_BOLD + "@ ", UI.Style.TEXT_NORMAL + `${providerID}/${modelID}`)
       UI.empty()
 
@@ -156,18 +157,13 @@ export const RunCommand = cmd({
         UI.error(err)
       })
 
-      const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
 
       const messageID = Identifier.ascending("message")
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(mode.model
-          ? mode.model
-          : {
-              providerID,
-              modelID,
-            }),
+        providerID,
+        modelID,
         mode: mode.name,
         parts: [
           {

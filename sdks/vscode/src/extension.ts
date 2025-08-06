@@ -57,7 +57,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     terminal.show()
-    terminal.sendText(`OPENCODE_THEME=system OPENCODE_CALLER=vscode opencode --port ${port}`)
+    terminal.sendText(`OPENCODE_CALLER=vscode opencode --port ${port}`)
 
     const fileRef = getActiveFile()
     if (!fileRef) return

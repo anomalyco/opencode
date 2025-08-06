@@ -318,8 +318,10 @@ on:
 jobs:
   opencode:
     if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
+      contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, ' /opencode') ||
+      startsWith(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -784,7 +786,7 @@ export const GithubRunCommand = cmd({
         console.log("Pushing to new branch...")
         await $`git add .`
         await $`git commit -m "${summary}
-  
+
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         await $`git push -u origin ${branch}`
       }
@@ -793,7 +795,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         console.log("Pushing to local branch...")
         await $`git add .`
         await $`git commit -m "${summary}
-  
+
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         await $`git push`
       }
@@ -805,7 +807,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
 
         await $`git add .`
         await $`git commit -m "${summary}
-  
+
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         await $`git push fork HEAD:${remoteBranch}`
       }

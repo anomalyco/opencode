@@ -143,7 +143,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return toast.NewErrorToast("Failed to respond to permission request")
 					}
 					slog.Debug("Responded to permission request", "response", resp)
-					return app.PermissionRespondedToMsg{Response: response}
+					return nil
 				}
 			}
 		}
@@ -522,8 +522,21 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		slog.Debug("permission updated", "session", msg.Properties.SessionID, "permission", msg.Properties.ID)
 		a.app.Permissions = append(a.app.Permissions, msg.Properties)
 		a.app.CurrentPermission = a.app.Permissions[0]
-		cmds = append(cmds, toast.NewInfoToast(msg.Properties.Title, toast.WithTitle("Permission requested")))
 		a.editor.Blur()
+	case opencode.EventListResponseEventPermissionReplied:
+		index := slices.IndexFunc(a.app.Permissions, func(p opencode.Permission) bool {
+			return p.ID == msg.Properties.PermissionID
+		})
+		if index > -1 {
+			a.app.Permissions = append(a.app.Permissions[:index], a.app.Permissions[index+1:]...)
+		}
+		if a.app.CurrentPermission.ID == msg.Properties.PermissionID {
+			if len(a.app.Permissions) > 0 {
+				a.app.CurrentPermission = a.app.Permissions[0]
+			} else {
+				a.app.CurrentPermission = opencode.Permission{}
+			}
+		}
 	case opencode.EventListResponseEventSessionError:
 		switch err := msg.Properties.Error.AsUnion().(type) {
 		case nil:

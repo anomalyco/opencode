@@ -5,6 +5,10 @@
 
 declare module "sst" {
   export interface Resource {
+    "ANTHROPIC_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Api": {
       "type": "sst.cloudflare.Worker"
       "url": string
@@ -20,9 +24,25 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "GatewayApi": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
+    }
+    "OPENAI_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "OPENCODE_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Web": {
       "type": "sst.cloudflare.Astro"
       "url": string
+    }
+    "ZHIPU_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
   }
 }

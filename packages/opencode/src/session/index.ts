@@ -41,11 +41,23 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
+import { Plugin } from "../plugin"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
 
   const OUTPUT_TOKEN_MAX = 32_000
+
+  const parentSessionTitlePrefix = "New session - "
+  const childSessionTitlePrefix = "Child session - "
+
+  function createDefaultTitle(isChild = false) {
+    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+  }
+
+  function isDefaultTitle(title: string) {
+    return title.startsWith(parentSessionTitlePrefix)
+  }
 
   export const Info = z
     .object({
@@ -120,6 +132,7 @@ export namespace Session {
       const sessions = new Map<string, Info>()
       const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
+      const autoCompacting = new Map<string, boolean>()
       const queued = new Map<
         string,
         {
@@ -135,6 +148,7 @@ export namespace Session {
         sessions,
         messages,
         pending,
+        autoCompacting,
         queued,
       }
     },
@@ -150,7 +164,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
+      title: createDefaultTitle(!!parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -571,7 +585,14 @@ export namespace Session {
         text: PROMPT_PLAN,
         synthetic: true,
       })
-
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: userMsg,
+        parts: userParts,
+      },
+    )
     await updateMessage(userMsg)
     for (const part of userParts) {
       await updatePart(part)
@@ -606,6 +627,8 @@ export namespace Session {
       const tokens =
         previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
       if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
+        state().autoCompacting.set(input.sessionID, true)
+
         await summarize({
           sessionID: input.sessionID,
           providerID: input.providerID,
@@ -614,13 +637,12 @@ export namespace Session {
         return chat(input)
       }
     }
-
     using abort = lock(input.sessionID)
 
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    if (msgs.length === 1 && !session.parentID) {
+    if (msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
@@ -706,7 +728,7 @@ export namespace Session {
 
     const enabledTools = pipe(
       mode.tools,
-      mergeDeep(ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
       mergeDeep(input.tools ?? {}),
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
@@ -716,12 +738,22 @@ export namespace Session {
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args, options) {
-          await processor.track(options.toolCallId)
+          await Plugin.trigger(
+            "tool.execute.before",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            {
+              args,
+            },
+          )
           const result = await item.execute(args, {
             sessionID: input.sessionID,
-            abort: abort.signal,
+            abort: options.abortSignal!,
             messageID: assistantMsg.id,
-            toolCallID: options.toolCallId,
+            callID: options.toolCallId,
             metadata: async (val) => {
               const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
@@ -740,6 +772,15 @@ export namespace Session {
               }
             },
           })
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: item.id,
+              sessionID: input.sessionID,
+              callID: options.toolCallId,
+            },
+            result,
+          )
           return result
         },
         toModelOutput(result) {
@@ -752,11 +793,10 @@ export namespace Session {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
-      if (mode.tools[key] === false) continue
+      if (enabledTools[key] === false) continue
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        await processor.track(opts.toolCallId)
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
@@ -776,6 +816,21 @@ export namespace Session {
       tools[key] = item
     }
 
+    const params = {
+      temperature: model.info.temperature
+        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+        : undefined,
+      topP: mode.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
+    }
+    await Plugin.trigger(
+      "chat.params",
+      {
+        model: model.info,
+        provider: await Provider.getProvider(input.providerID),
+        message: userMsg,
+      },
+      params,
+    )
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
@@ -828,13 +883,26 @@ export namespace Session {
           messages,
         }
       },
+      async experimental_repairToolCall(input) {
+        return {
+          ...input.toolCall,
+          input: JSON.stringify({
+            tool: input.toolCall.toolName,
+            error: input.error.message,
+          }),
+          toolName: "invalid",
+        }
+      },
       maxRetries: 3,
+      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
       providerOptions: {
         [input.providerID]: model.info.options,
       },
+      temperature: params.temperature,
+      topP: params.topP,
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -844,9 +912,6 @@ export namespace Session {
         ),
         ...MessageV2.toModelMessage(msgs),
       ],
-      temperature: model.info.temperature
-        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
-        : undefined,
       tools: model.info.tool_call === false ? undefined : tools,
       model: wrapLanguageModel({
         model: model.language,
@@ -878,15 +943,11 @@ export namespace Session {
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
-    const toolCalls: Record<string, MessageV2.ToolPart> = {}
-    const snapshots: Record<string, string> = {}
+    const toolcalls: Record<string, MessageV2.ToolPart> = {}
+    let snapshot: string | undefined
     return {
-      async track(toolCallID: string) {
-        const hash = await Snapshot.track()
-        if (hash) snapshots[toolCallID] = hash
-      },
       partFromToolCall(toolCallID: string) {
-        return toolCalls[toolCallID]
+        return toolcalls[toolCallID]
       },
       async process(stream: StreamTextResult<Record<string, AITool>, never>) {
         try {
@@ -902,7 +963,7 @@ export namespace Session {
 
               case "tool-input-start":
                 const part = await updatePart({
-                  id: toolCalls[value.id]?.id ?? Identifier.ascending("part"),
+                  id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
                   type: "tool",
@@ -912,7 +973,7 @@ export namespace Session {
                     status: "pending",
                   },
                 })
-                toolCalls[value.id] = part as MessageV2.ToolPart
+                toolcalls[value.id] = part as MessageV2.ToolPart
                 break
 
               case "tool-input-delta":
@@ -922,10 +983,11 @@ export namespace Session {
                 break
 
               case "tool-call": {
-                const match = toolCalls[value.toolCallId]
+                const match = toolcalls[value.toolCallId]
                 if (match) {
                   const part = await updatePart({
                     ...match,
+                    tool: value.toolName,
                     state: {
                       status: "running",
                       input: value.input,
@@ -934,12 +996,12 @@ export namespace Session {
                       },
                     },
                   })
-                  toolCalls[value.toolCallId] = part as MessageV2.ToolPart
+                  toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
                 break
               }
               case "tool-result": {
-                const match = toolCalls[value.toolCallId]
+                const match = toolcalls[value.toolCallId]
                 if (match && match.state.status === "running") {
                   await updatePart({
                     ...match,
@@ -955,27 +1017,13 @@ export namespace Session {
                       },
                     },
                   })
-                  delete toolCalls[value.toolCallId]
-                  const snapshot = snapshots[value.toolCallId]
-                  if (snapshot) {
-                    const patch = await Snapshot.patch(snapshot)
-                    if (patch.files.length) {
-                      await updatePart({
-                        id: Identifier.ascending("part"),
-                        messageID: assistantMsg.id,
-                        sessionID: assistantMsg.sessionID,
-                        type: "patch",
-                        hash: patch.hash,
-                        files: patch.files,
-                      })
-                    }
-                  }
+                  delete toolcalls[value.toolCallId]
                 }
                 break
               }
 
               case "tool-error": {
-                const match = toolCalls[value.toolCallId]
+                const match = toolcalls[value.toolCallId]
                 if (match && match.state.status === "running") {
                   await updatePart({
                     ...match,
@@ -989,19 +1037,7 @@ export namespace Session {
                       },
                     },
                   })
-                  delete toolCalls[value.toolCallId]
-                  const snapshot = snapshots[value.toolCallId]
-                  if (snapshot) {
-                    const patch = await Snapshot.patch(snapshot)
-                    await updatePart({
-                      id: Identifier.ascending("part"),
-                      messageID: assistantMsg.id,
-                      sessionID: assistantMsg.sessionID,
-                      type: "patch",
-                      hash: patch.hash,
-                      files: patch.files,
-                    })
-                  }
+                  delete toolcalls[value.toolCallId]
                 }
                 break
               }
@@ -1016,6 +1052,7 @@ export namespace Session {
                   sessionID: assistantMsg.sessionID,
                   type: "step-start",
                 })
+                snapshot = await Snapshot.track()
                 break
 
               case "finish-step":
@@ -1031,6 +1068,20 @@ export namespace Session {
                   cost: usage.cost,
                 })
                 await updateMessage(assistantMsg)
+                if (snapshot) {
+                  const patch = await Snapshot.patch(snapshot)
+                  if (patch.files.length) {
+                    await updatePart({
+                      id: Identifier.ascending("part"),
+                      messageID: assistantMsg.id,
+                      sessionID: assistantMsg.sessionID,
+                      type: "patch",
+                      hash: patch.hash,
+                      files: patch.files,
+                    })
+                  }
+                  snapshot = undefined
+                }
                 break
 
               case "text-start":
@@ -1115,7 +1166,7 @@ export namespace Session {
         }
         const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
         for (const part of p) {
-          if (part.type === "tool" && part.state.status !== "completed") {
+          if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
             updatePart({
               ...part,
               state: {
@@ -1278,9 +1329,19 @@ export namespace Session {
     state().pending.set(sessionID, controller)
     return {
       signal: controller.signal,
-      [Symbol.dispose]() {
+      async [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
+
+        const isAutoCompacting = state().autoCompacting.get(sessionID) ?? false
+        if (isAutoCompacting) {
+          state().autoCompacting.delete(sessionID)
+          return
+        }
+
+        const session = await get(sessionID)
+        if (session.parentID) return
+
         Bus.publish(Event.Idle, {
           sessionID,
         })
@@ -1303,10 +1364,10 @@ export namespace Session {
     }
     return {
       cost: new Decimal(0)
-        .add(new Decimal(tokens.input).mul(model.cost.input).div(1_000_000))
-        .add(new Decimal(tokens.output).mul(model.cost.output).div(1_000_000))
-        .add(new Decimal(tokens.cache.read).mul(model.cost.cache_read ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.write).mul(model.cost.cache_write ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.input).mul(model.cost?.input ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.output).mul(model.cost?.output ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.read).mul(model.cost?.cache_read ?? 0).div(1_000_000))
+        .add(new Decimal(tokens.cache.write).mul(model.cost?.cache_write ?? 0).div(1_000_000))
         .toNumber(),
       tokens,
     }

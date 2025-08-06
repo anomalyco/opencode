@@ -69,12 +69,7 @@ export default defineConfig({
 
         {
           label: "Usage",
-          items: [
-            "docs/cli",
-            "docs/ide",
-            "docs/share",
-            "docs/github",
-          ]
+          items: ["docs/cli", "docs/ide", "docs/share", "docs/github"],
         },
 
         {
@@ -85,10 +80,14 @@ export default defineConfig({
             "docs/agents",
             "docs/models",
             "docs/themes",
+            "docs/plugins",
             "docs/keybinds",
+            "docs/formatters",
+            "docs/permissions",
+            "docs/lsp",
             "docs/mcp-servers",
-          ]
-        }
+          ],
+        },
       ],
       components: {
         Hero: "./src/components/Hero.astro",

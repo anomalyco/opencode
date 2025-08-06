@@ -14,6 +14,16 @@ import { FileWatcher } from "../../file/watch"
 import { Mode } from "../../session/mode"
 import { Ide } from "../../ide"
 
+declare global {
+  const OPENCODE_TUI_PATH: string
+}
+
+if (typeof OPENCODE_TUI_PATH !== "undefined") {
+  await import(OPENCODE_TUI_PATH as string, {
+    with: { type: "file" },
+  })
+}
+
 export const TuiCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
@@ -71,16 +81,16 @@ export const TuiCommand = cmd({
 
         let cmd = ["go", "run", "./main.go"]
         let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
-        if (Bun.embeddedFiles.length > 0) {
-          const blob = Bun.embeddedFiles[0] as File
-          let binaryName = blob.name
+        const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
+        if (tui) {
+          let binaryName = tui.name
           if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
             binaryName += ".exe"
           }
           const binary = path.join(Global.Path.cache, "tui", binaryName)
           const file = Bun.file(binary)
           if (!(await file.exists())) {
-            await Bun.write(file, blob, { mode: 0o755 })
+            await Bun.write(file, tui, { mode: 0o755 })
             await fs.chmod(binary, 0o755)
           }
           cwd = process.cwd()

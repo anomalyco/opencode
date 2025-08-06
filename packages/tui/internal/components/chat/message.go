@@ -23,17 +23,18 @@ import (
 )
 
 type blockRenderer struct {
-	textColor     compat.AdaptiveColor
-	border        bool
-	borderColor   *compat.AdaptiveColor
-	borderLeft    bool
-	borderRight   bool
-	paddingTop    int
-	paddingBottom int
-	paddingLeft   int
-	paddingRight  int
-	marginTop     int
-	marginBottom  int
+	textColor       compat.AdaptiveColor
+	backgroundColor compat.AdaptiveColor
+	border          bool
+	borderColor     *compat.AdaptiveColor
+	borderLeft      bool
+	borderRight     bool
+	paddingTop      int
+	paddingBottom   int
+	paddingLeft     int
+	paddingRight    int
+	marginTop       int
+	marginBottom    int
 }
 
 type renderingOption func(*blockRenderer)
@@ -41,6 +42,12 @@ type renderingOption func(*blockRenderer)
 func WithTextColor(color compat.AdaptiveColor) renderingOption {
 	return func(c *blockRenderer) {
 		c.textColor = color
+	}
+}
+
+func WithBackgroundColor(color compat.AdaptiveColor) renderingOption {
+	return func(c *blockRenderer) {
+		c.backgroundColor = color
 	}
 }
 
@@ -132,14 +139,15 @@ func renderContentBlock(
 ) string {
 	t := theme.CurrentTheme()
 	renderer := &blockRenderer{
-		textColor:     t.TextMuted(),
-		border:        true,
-		borderLeft:    true,
-		borderRight:   false,
-		paddingTop:    1,
-		paddingBottom: 1,
-		paddingLeft:   2,
-		paddingRight:  2,
+		textColor:       t.TextMuted(),
+		backgroundColor: t.BackgroundPanel(),
+		border:          true,
+		borderLeft:      true,
+		borderRight:     false,
+		paddingTop:      1,
+		paddingBottom:   1,
+		paddingLeft:     2,
+		paddingRight:    2,
 	}
 	for _, option := range options {
 		option(renderer)
@@ -152,7 +160,7 @@ func renderContentBlock(
 
 	style := styles.NewStyle().
 		Foreground(renderer.textColor).
-		Background(t.BackgroundPanel()).
+		Background(renderer.backgroundColor).
 		PaddingTop(renderer.paddingTop).
 		PaddingBottom(renderer.paddingBottom).
 		PaddingLeft(renderer.paddingLeft).
@@ -211,28 +219,51 @@ func renderText(
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width, backgroundColor)
+		content = util.ToMarkdown(text, width+2, t.Background())
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		text = ansi.WordwrapWc(text, width-6, " -")
 
-		// Build list of attachment filenames for highlighting
+		var result strings.Builder
+		lastEnd := int64(0)
+
+		// Apply highlighting to filenames and base style to rest of text BEFORE wrapping
+		textLen := int64(len(text))
 		for _, filePart := range fileParts {
-			atFilename := "@" + filePart.Filename
-			// Find and highlight complete @filename references
-			highlightStyle := base.Foreground(t.Secondary())
-			text = strings.ReplaceAll(text, atFilename, highlightStyle.Render(atFilename))
+			highlight := base.Foreground(t.Secondary())
+			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
+
+			if end > textLen {
+				end = textLen
+			}
+			if start > textLen {
+				start = textLen
+			}
+
+			if start > lastEnd {
+				result.WriteString(base.Render(text[lastEnd:start]))
+			}
+			if start < end {
+				result.WriteString(highlight.Render(text[start:end]))
+			}
+
+			lastEnd = end
 		}
 
-		content = base.Width(width - 6).Render(text)
+		if lastEnd < textLen {
+			result.WriteString(base.Render(text[lastEnd:]))
+		}
+
+		// wrap styled text
+		styledText := result.String()
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " -")
+		content = base.Width(width - 6).Render(wrappedText)
 	}
 
 	timestamp := ts.
 		Local().
 		Format("02 Jan 2006 03:04 PM")
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
-		// don't show the date if it's today
 		timestamp = timestamp[12:]
 	}
 	info := fmt.Sprintf("%s (%s)", author, timestamp)
@@ -266,14 +297,14 @@ func renderText(
 			width,
 			WithTextColor(t.Text()),
 			WithBorderColor(t.Secondary()),
-			WithBorderRight(),
 		)
 	case opencode.AssistantMessage:
 		return renderContentBlock(
 			app,
 			content,
-			width,
-			WithBorderColor(t.Accent()),
+			width+2,
+			WithNoBorder(),
+			WithBackgroundColor(t.Background()),
 		)
 	}
 	return ""
@@ -438,6 +469,10 @@ func renderToolDetails(
 			if stdout != nil {
 				body += ansi.Strip(fmt.Sprintf("%s", stdout))
 			}
+			stderr := metadata["stderr"]
+			if stderr != nil {
+				body += ansi.Strip(fmt.Sprintf("%s", stderr))
+			}
 			body += "```"
 			body = util.ToMarkdown(body, width, backgroundColor)
 		case "webfetch":
@@ -539,6 +574,8 @@ func renderToolName(name string) string {
 	switch name {
 	case "webfetch":
 		return "Fetch"
+	case "invalid":
+		return "Invalid"
 	default:
 		normalizedName := name
 		if after, ok := strings.CutPrefix(name, "opencode_"); ok {
@@ -641,6 +678,10 @@ func renderToolTitle(
 		title = getTodoTitle(toolCall)
 	case "todoread":
 		return "Plan"
+	case "invalid":
+		if actualTool, ok := toolArgsMap["tool"].(string); ok {
+			title = renderToolName(actualTool)
+		}
 	default:
 		toolName := renderToolName(toolCall.Tool)
 		title = fmt.Sprintf("%s %s", toolName, toolArgs)

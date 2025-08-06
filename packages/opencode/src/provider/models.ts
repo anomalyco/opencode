@@ -3,6 +3,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { z } from "zod"
 import { data } from "./models-macro" with { type: "macro" }
+import { Installation } from "../installation"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -50,21 +51,30 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+    refresh()
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
-    if (result) {
-      refresh()
-      return result as Record<string, Provider>
-    }
-    refresh()
+    if (result) return result as Record<string, Provider>
     const json = await data()
     return JSON.parse(json) as Record<string, Provider>
   }
 
-  async function refresh() {
+  export async function refresh() {
     const file = Bun.file(filepath)
-    log.info("refreshing")
-    const result = await fetch("https://models.dev/api.json").catch(() => {})
-    if (result && result.ok) await Bun.write(file, result)
+    log.info("refreshing", {
+      file,
+    })
+    const result = await fetch("https://models.dev/api.json", {
+      headers: {
+        "User-Agent": Installation.USER_AGENT,
+      },
+    }).catch((e) => {
+      log.error("Failed to fetch models.dev", {
+        error: e,
+      })
+    })
+    if (result && result.ok) await Bun.write(file, await result.text())
   }
 }
+
+setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()

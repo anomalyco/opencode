@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig.json",
+  "extends": "@tsconfig/node22/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "module": "preserve",
+    "declaration": true,
+    "moduleResolution": "bundler",
+    "customConditions": [
+      "development"
+    ]
+  },
+  "include": [
+    "src"
+  ]
+}

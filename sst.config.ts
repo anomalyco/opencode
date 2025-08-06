@@ -10,9 +10,10 @@ export default $config({
     }
   },
   async run() {
-    const { api } = await import("./infra/app.js")
+    const { api, gateway } = await import("./infra/app.js")
     return {
       api: api.url,
+      gateway: gateway.url,
     }
   },
 })

@@ -1,13 +1,12 @@
-## Style
+## IMPORTANT
 
-- prefer single word variable/function names
-- avoid try catch where possible - prefer to let exceptions bubble up
-- avoid else statements where possible
-- do not make useless helper functions - inline functionality unless the
-  function is reusable or composable
-- prefer Bun apis
-
-## Workflow
-
-- you can regenerate the golang sdk by calling ./scripts/stainless.ts
-- we use bun for everything
+- Try to keep things in one function unless composable or reusable
+- DO NOT do unnecessary destructuring of variables
+- DO NOT use `else` statements unless necessary
+- DO NOT use `try`/`catch` if it can be avoided
+- AVOID `try`/`catch` where possible
+- AVOID `else` statements
+- AVOID using `any` type
+- AVOID `let` statements
+- PREFER single word variable names where possible
+- Use as many bun apis as possible like Bun.file()

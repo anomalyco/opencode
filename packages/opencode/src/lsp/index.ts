@@ -4,6 +4,8 @@ import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
 import { z } from "zod"
+import { Config } from "../config/config"
+import { spawn } from "child_process"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -55,8 +57,35 @@ export namespace LSP {
     "lsp",
     async () => {
       const clients: LSPClient.Info[] = []
+      const servers: Record<string, LSPServer.Info> = LSPServer
+      const cfg = await Config.get()
+      for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
+        const existing = servers[name]
+        if (item.disabled) {
+          delete servers[name]
+          continue
+        }
+        servers[name] = {
+          ...existing,
+          root: existing?.root ?? (async (_file, app) => app.path.root),
+          extensions: item.extensions ?? existing.extensions,
+          spawn: async (_app, root) => {
+            return {
+              process: spawn(item.command[0], item.command.slice(1), {
+                cwd: root,
+                env: {
+                  ...process.env,
+                  ...item.env,
+                },
+              }),
+              initialization: item.initialization,
+            }
+          },
+        }
+      }
       return {
         broken: new Set<string>(),
+        servers,
         clients,
       }
     },
@@ -76,7 +105,7 @@ export namespace LSP {
     const extension = path.parse(file).ext
     const result: LSPClient.Info[] = []
     for (const server of Object.values(LSPServer)) {
-      if (!server.extensions.includes(extension)) continue
+      if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file, App.info())
       if (!root) continue
       if (s.broken.has(root + server.id)) continue

@@ -8,6 +8,7 @@ export namespace Mode {
     .object({
       name: z.string(),
       temperature: z.number().optional(),
+      topP: z.number().optional(),
       model: z
         .object({
           modelID: z.string(),
@@ -51,7 +52,8 @@ export namespace Mode {
       item.name = key
       if (value.model) item.model = Provider.parseModel(value.model)
       if (value.prompt) item.prompt = value.prompt
-      if (value.temperature) item.temperature = value.temperature
+      if (value.temperature != undefined) item.temperature = value.temperature
+      if (value.top_p != undefined) item.topP = value.top_p
       if (value.tools)
         item.tools = {
           ...value.tools,

@@ -75,6 +75,7 @@ export const AuthLoginCommand = cmd({
       type: "string",
     }),
   async handler(args) {
+    UI.empty()
     prompts.intro("Add credential")
     if (args.url) {
       const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
@@ -99,7 +100,7 @@ export const AuthLoginCommand = cmd({
       prompts.outro("Done")
       return
     }
-    UI.empty()
+    await ModelsDev.refresh().catch(() => {})
     const providers = await ModelsDev.get()
     const priority: Record<string, number> = {
       anthropic: 0,
@@ -109,7 +110,7 @@ export const AuthLoginCommand = cmd({
       openrouter: 4,
       vercel: 5,
     }
-    let provider = await prompts.select({
+    let provider = await prompts.autocomplete({
       message: "Select provider",
       maxItems: 8,
       options: [
@@ -138,7 +139,7 @@ export const AuthLoginCommand = cmd({
     if (provider === "other") {
       provider = await prompts.text({
         message: "Enter provider id",
-        validate: (x) => (x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+        validate: (x) => x && (x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       })
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
       provider = provider.replace(/^@ai-sdk\//, "")
@@ -192,7 +193,7 @@ export const AuthLoginCommand = cmd({
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
-          validate: (x) => (x.length > 0 ? undefined : "Required"),
+          validate: (x) => x && (x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
@@ -228,7 +229,7 @@ export const AuthLoginCommand = cmd({
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
-          validate: (x) => (x.length > 0 ? undefined : "Required"),
+          validate: (x) => x && (x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(code)) throw new UI.CancelledError()
 
@@ -301,7 +302,7 @@ export const AuthLoginCommand = cmd({
 
     const key = await prompts.password({
       message: "Enter your API key",
-      validate: (x) => (x.length > 0 ? undefined : "Required"),
+      validate: (x) => x && (x.length > 0 ? undefined : "Required"),
     })
     if (prompts.isCancel(key)) throw new UI.CancelledError()
     await Auth.set(provider, {

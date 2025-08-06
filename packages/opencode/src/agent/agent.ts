@@ -38,7 +38,10 @@ export namespace Agent {
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
-      if (value.disable) continue
+      if (value.disable) {
+        delete result[key]
+        continue
+      }
       let item = result[key]
       if (!item)
         item = result[key] = {

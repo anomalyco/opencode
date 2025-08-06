@@ -19,19 +19,21 @@ Log.init({ print: false })
 describe("tool.bash", () => {
   test("basic", async () => {
     await App.provide({ cwd: projectRoot }, async () => {
-      await bash.execute(
+      const result = await bash.execute(
         {
-          command: "cd foo/bar && ls",
-          description: "List files in foo/bar",
+          command: "echo 'test'",
+          description: "Echo test message",
         },
         ctx,
       )
+      expect(result.metadata.exit).toBe(0)
+      expect(result.metadata.stdout).toContain("test")
     })
   })
 
-  test("cd ../ should fail", async () => {
+  test("cd ../ should fail outside of project root", async () => {
     await App.provide({ cwd: projectRoot }, async () => {
-      expect(
+      await expect(
         bash.execute(
           {
             command: "cd ../",
@@ -39,7 +41,7 @@ describe("tool.bash", () => {
           },
           ctx,
         ),
-      ).rejects.toThrow()
+      ).rejects.toThrow("This command references paths outside of")
     })
   })
 })

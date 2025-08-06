@@ -23,11 +23,17 @@ export type Event =
       type: "storage.write"
     } & EventStorageWrite)
   | ({
+      type: "file.edited"
+    } & EventFileEdited)
+  | ({
+      type: "server.connected"
+    } & EventServerConnected)
+  | ({
       type: "permission.updated"
     } & EventPermissionUpdated)
   | ({
-      type: "file.edited"
-    } & EventFileEdited)
+      type: "permission.replied"
+    } & EventPermissionReplied)
   | ({
       type: "session.updated"
     } & EventSessionUpdated)
@@ -40,9 +46,6 @@ export type Event =
   | ({
       type: "session.error"
     } & EventSessionError)
-  | ({
-      type: "server.connected"
-    } & EventServerConnected)
   | ({
       type: "file.watcher.updated"
     } & EventFileWatcherUpdated)
@@ -388,14 +391,32 @@ export type EventStorageWrite = {
   }
 }
 
-export type EventPermissionUpdated = {
+export type EventFileEdited = {
   type: string
-  properties: PermissionInfo
+  properties: {
+    file: string
+  }
 }
 
-export type PermissionInfo = {
+export type EventServerConnected = {
+  type: string
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventPermissionUpdated = {
+  type: string
+  properties: Permission
+}
+
+export type Permission = {
   id: string
+  type: string
+  pattern?: string
   sessionID: string
+  messageID: string
+  callID?: string
   title: string
   metadata: {
     [key: string]: unknown
@@ -405,10 +426,12 @@ export type PermissionInfo = {
   }
 }
 
-export type EventFileEdited = {
+export type EventPermissionReplied = {
   type: string
   properties: {
-    file: string
+    sessionID: string
+    permissionID: string
+    response: string
   }
 }
 
@@ -473,13 +496,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventServerConnected = {
-  type: string
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventFileWatcherUpdated = {
   type: string
   properties: {
@@ -520,6 +536,7 @@ export type Config = {
    */
   theme?: string
   keybinds?: KeybindsConfig
+  plugin?: Array<string>
   /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
@@ -541,7 +558,7 @@ export type Config = {
    */
   model?: string
   /**
-   * Small model to use for tasks like title generation in the format of provider/model
+   * Small model to use for tasks like summarization and title generation in the format of provider/model
    */
   small_model?: string
   /**
@@ -615,6 +632,33 @@ export type Config = {
       | ({
           type: "remote"
         } & McpRemoteConfig)
+  }
+  formatter?: {
+    [key: string]: {
+      disabled?: boolean
+      command?: Array<string>
+      environment?: {
+        [key: string]: string
+      }
+      extensions?: Array<string>
+    }
+  }
+  lsp?: {
+    [key: string]:
+      | {
+          disabled: boolean
+        }
+      | {
+          command: Array<string>
+          extensions?: Array<string>
+          disabled?: boolean
+          env?: {
+            [key: string]: string
+          }
+          initialization?: {
+            [key: string]: unknown
+          }
+        }
   }
   /**
    * Additional instruction files or patterns to include
@@ -807,6 +851,7 @@ export type KeybindsConfig = {
 export type ModeConfig = {
   model?: string
   temperature?: number
+  top_p?: number
   prompt?: string
   tools?: {
     [key: string]: boolean
@@ -941,6 +986,7 @@ export type File = {
 export type Mode = {
   name: string
   temperature?: number
+  topP?: number
   model?: {
     modelID: string
     providerID: string
@@ -1239,6 +1285,34 @@ export type SessionChatResponses = {
 
 export type SessionChatResponse = SessionChatResponses[keyof SessionChatResponses]
 
+export type SessionMessageData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+    /**
+     * Message ID
+     */
+    messageID: string
+  }
+  query?: never
+  url: "/session/{id}/message/{messageID}"
+}
+
+export type SessionMessageResponses = {
+  /**
+   * Message
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  }
+}
+
+export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
+
 export type SessionRevertData = {
   body?: {
     messageID: string
@@ -1277,6 +1351,28 @@ export type SessionUnrevertResponses = {
 }
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
+
+export type PostSessionByIdPermissionsByPermissionIdData = {
+  body?: {
+    response: "once" | "always" | "reject"
+  }
+  path: {
+    id: string
+    permissionID: string
+  }
+  query?: never
+  url: "/session/{id}/permissions/{permissionID}"
+}
+
+export type PostSessionByIdPermissionsByPermissionIdResponses = {
+  /**
+   * Permission processed successfully
+   */
+  200: boolean
+}
+
+export type PostSessionByIdPermissionsByPermissionIdResponse =
+  PostSessionByIdPermissionsByPermissionIdResponses[keyof PostSessionByIdPermissionsByPermissionIdResponses]
 
 export type ConfigProvidersData = {
   body?: never
@@ -1491,7 +1587,104 @@ export type TuiOpenHelpResponses = {
 
 export type TuiOpenHelpResponse = TuiOpenHelpResponses[keyof TuiOpenHelpResponses]
 
+export type TuiOpenSessionsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/tui/open-sessions"
+}
+
+export type TuiOpenSessionsResponses = {
+  /**
+   * Session dialog opened successfully
+   */
+  200: boolean
+}
+
+export type TuiOpenSessionsResponse = TuiOpenSessionsResponses[keyof TuiOpenSessionsResponses]
+
+export type TuiOpenThemesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/tui/open-themes"
+}
+
+export type TuiOpenThemesResponses = {
+  /**
+   * Theme dialog opened successfully
+   */
+  200: boolean
+}
+
+export type TuiOpenThemesResponse = TuiOpenThemesResponses[keyof TuiOpenThemesResponses]
+
+export type TuiOpenModelsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/tui/open-models"
+}
+
+export type TuiOpenModelsResponses = {
+  /**
+   * Model dialog opened successfully
+   */
+  200: boolean
+}
+
+export type TuiOpenModelsResponse = TuiOpenModelsResponses[keyof TuiOpenModelsResponses]
+
+export type TuiSubmitPromptData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/tui/submit-prompt"
+}
+
+export type TuiSubmitPromptResponses = {
+  /**
+   * Prompt submitted successfully
+   */
+  200: boolean
+}
+
+export type TuiSubmitPromptResponse = TuiSubmitPromptResponses[keyof TuiSubmitPromptResponses]
+
+export type TuiClearPromptData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/tui/clear-prompt"
+}
+
+export type TuiClearPromptResponses = {
+  /**
+   * Prompt cleared successfully
+   */
+  200: boolean
+}
+
+export type TuiClearPromptResponse = TuiClearPromptResponses[keyof TuiClearPromptResponses]
+
+export type TuiExecuteCommandData = {
+  body?: {
+    command: string
+  }
+  path?: never
+  query?: never
+  url: "/tui/execute-command"
+}
+
+export type TuiExecuteCommandResponses = {
+  /**
+   * Command executed successfully
+   */
+  200: boolean
+}
+
+export type TuiExecuteCommandResponse = TuiExecuteCommandResponses[keyof TuiExecuteCommandResponses]
+
 export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
-

@@ -51,14 +51,16 @@ type Config struct {
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
 	// Disable providers that are loaded automatically
-	DisabledProviders []string           `json:"disabled_providers"`
-	Experimental      ConfigExperimental `json:"experimental"`
+	DisabledProviders []string                   `json:"disabled_providers"`
+	Experimental      ConfigExperimental         `json:"experimental"`
+	Formatter         map[string]ConfigFormatter `json:"formatter"`
 	// Additional instruction files or patterns to include
 	Instructions []string `json:"instructions"`
 	// Custom keybind configurations
 	Keybinds KeybindsConfig `json:"keybinds"`
 	// @deprecated Always uses stretch layout.
-	Layout ConfigLayout `json:"layout"`
+	Layout ConfigLayout         `json:"layout"`
+	Lsp    map[string]ConfigLsp `json:"lsp"`
 	// MCP (Model Context Protocol) server configurations
 	Mcp map[string]ConfigMcp `json:"mcp"`
 	// Modes configuration, see https://opencode.ai/docs/modes
@@ -66,6 +68,7 @@ type Config struct {
 	// Model to use in the format of provider/model, eg anthropic/claude-2
 	Model      string           `json:"model"`
 	Permission ConfigPermission `json:"permission"`
+	Plugin     []string         `json:"plugin"`
 	// Custom provider configurations and model overrides
 	Provider map[string]ConfigProvider `json:"provider"`
 	// Control sharing behavior:'manual' allows manual sharing via commands, 'auto'
@@ -89,13 +92,16 @@ type configJSON struct {
 	Autoupdate        apijson.Field
 	DisabledProviders apijson.Field
 	Experimental      apijson.Field
+	Formatter         apijson.Field
 	Instructions      apijson.Field
 	Keybinds          apijson.Field
 	Layout            apijson.Field
+	Lsp               apijson.Field
 	Mcp               apijson.Field
 	Mode              apijson.Field
 	Model             apijson.Field
 	Permission        apijson.Field
+	Plugin            apijson.Field
 	Provider          apijson.Field
 	Share             apijson.Field
 	SmallModel        apijson.Field
@@ -247,6 +253,32 @@ func (r configExperimentalHookSessionCompletedJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigFormatter struct {
+	Command     []string            `json:"command"`
+	Disabled    bool                `json:"disabled"`
+	Environment map[string]string   `json:"environment"`
+	Extensions  []string            `json:"extensions"`
+	JSON        configFormatterJSON `json:"-"`
+}
+
+// configFormatterJSON contains the JSON metadata for the struct [ConfigFormatter]
+type configFormatterJSON struct {
+	Command     apijson.Field
+	Disabled    apijson.Field
+	Environment apijson.Field
+	Extensions  apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigFormatter) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configFormatterJSON) RawJSON() string {
+	return r.raw
+}
+
 // @deprecated Always uses stretch layout.
 type ConfigLayout string
 
@@ -262,6 +294,139 @@ func (r ConfigLayout) IsKnown() bool {
 	}
 	return false
 }
+
+type ConfigLsp struct {
+	// This field can have the runtime type of [[]string].
+	Command  interface{} `json:"command"`
+	Disabled bool        `json:"disabled"`
+	// This field can have the runtime type of [map[string]string].
+	Env interface{} `json:"env"`
+	// This field can have the runtime type of [[]string].
+	Extensions interface{} `json:"extensions"`
+	// This field can have the runtime type of [map[string]interface{}].
+	Initialization interface{}   `json:"initialization"`
+	JSON           configLspJSON `json:"-"`
+	union          ConfigLspUnion
+}
+
+// configLspJSON contains the JSON metadata for the struct [ConfigLsp]
+type configLspJSON struct {
+	Command        apijson.Field
+	Disabled       apijson.Field
+	Env            apijson.Field
+	Extensions     apijson.Field
+	Initialization apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
+}
+
+func (r configLspJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r *ConfigLsp) UnmarshalJSON(data []byte) (err error) {
+	*r = ConfigLsp{}
+	err = apijson.UnmarshalRoot(data, &r.union)
+	if err != nil {
+		return err
+	}
+	return apijson.Port(r.union, &r)
+}
+
+// AsUnion returns a [ConfigLspUnion] interface which you can cast to the specific
+// types for more type safety.
+//
+// Possible runtime types of the union are [ConfigLspDisabled], [ConfigLspObject].
+func (r ConfigLsp) AsUnion() ConfigLspUnion {
+	return r.union
+}
+
+// Union satisfied by [ConfigLspDisabled] or [ConfigLspObject].
+type ConfigLspUnion interface {
+	implementsConfigLsp()
+}
+
+func init() {
+	apijson.RegisterUnion(
+		reflect.TypeOf((*ConfigLspUnion)(nil)).Elem(),
+		"",
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ConfigLspDisabled{}),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ConfigLspObject{}),
+		},
+	)
+}
+
+type ConfigLspDisabled struct {
+	Disabled ConfigLspDisabledDisabled `json:"disabled,required"`
+	JSON     configLspDisabledJSON     `json:"-"`
+}
+
+// configLspDisabledJSON contains the JSON metadata for the struct
+// [ConfigLspDisabled]
+type configLspDisabledJSON struct {
+	Disabled    apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigLspDisabled) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configLspDisabledJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r ConfigLspDisabled) implementsConfigLsp() {}
+
+type ConfigLspDisabledDisabled bool
+
+const (
+	ConfigLspDisabledDisabledTrue ConfigLspDisabledDisabled = true
+)
+
+func (r ConfigLspDisabledDisabled) IsKnown() bool {
+	switch r {
+	case ConfigLspDisabledDisabledTrue:
+		return true
+	}
+	return false
+}
+
+type ConfigLspObject struct {
+	Command        []string               `json:"command,required"`
+	Disabled       bool                   `json:"disabled"`
+	Env            map[string]string      `json:"env"`
+	Extensions     []string               `json:"extensions"`
+	Initialization map[string]interface{} `json:"initialization"`
+	JSON           configLspObjectJSON    `json:"-"`
+}
+
+// configLspObjectJSON contains the JSON metadata for the struct [ConfigLspObject]
+type configLspObjectJSON struct {
+	Command        apijson.Field
+	Disabled       apijson.Field
+	Env            apijson.Field
+	Extensions     apijson.Field
+	Initialization apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
+}
+
+func (r *ConfigLspObject) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configLspObjectJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r ConfigLspObject) implementsConfigLsp() {}
 
 type ConfigMcp struct {
 	// Type of MCP server connection
@@ -864,6 +1029,7 @@ type ModeConfig struct {
 	Prompt      string          `json:"prompt"`
 	Temperature float64         `json:"temperature"`
 	Tools       map[string]bool `json:"tools"`
+	TopP        float64         `json:"top_p"`
 	JSON        modeConfigJSON  `json:"-"`
 }
 
@@ -874,6 +1040,7 @@ type modeConfigJSON struct {
 	Prompt      apijson.Field
 	Temperature apijson.Field
 	Tools       apijson.Field
+	TopP        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

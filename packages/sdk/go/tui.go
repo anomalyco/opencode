@@ -39,10 +39,58 @@ func (r *TuiService) AppendPrompt(ctx context.Context, body TuiAppendPromptParam
 	return
 }
 
+// Clear the prompt
+func (r *TuiService) ClearPrompt(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/clear-prompt"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Execute a TUI command (e.g. switch_mode)
+func (r *TuiService) ExecuteCommand(ctx context.Context, body TuiExecuteCommandParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/execute-command"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
 // Open the help dialog
 func (r *TuiService) OpenHelp(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "tui/open-help"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Open the model dialog
+func (r *TuiService) OpenModels(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/open-models"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Open the session dialog
+func (r *TuiService) OpenSessions(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/open-sessions"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Open the theme dialog
+func (r *TuiService) OpenThemes(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/open-themes"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
+// Submit the prompt
+func (r *TuiService) SubmitPrompt(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/submit-prompt"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
 	return
 }
@@ -52,5 +100,13 @@ type TuiAppendPromptParams struct {
 }
 
 func (r TuiAppendPromptParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
+}
+
+type TuiExecuteCommandParams struct {
+	Command param.Field[string] `json:"command,required"`
+}
+
+func (r TuiExecuteCommandParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
 }
