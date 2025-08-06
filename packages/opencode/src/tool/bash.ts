@@ -1,6 +1,5 @@
 import { z } from "zod"
-import { exec } from "child_process"
-import { text } from "stream/consumers"
+import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { App } from "../app/app"
@@ -118,34 +117,77 @@ export const BashTool = Tool.define("bash", {
       })
     }
 
-    const process = exec(params.command, {
+    const process = spawn("/bin/sh", ["-c", params.command], {
       cwd: app.path.cwd,
       signal: ctx.abort,
-      maxBuffer: MAX_OUTPUT_LENGTH,
-      timeout,
     })
 
-    const stdoutPromise = text(process.stdout!)
-    const stderrPromise = text(process.stderr!)
+    let stdoutBuffer = ""
+    let stderrBuffer = ""
+    let timeoutId: NodeJS.Timeout | undefined
 
-    await new Promise<void>((resolve) => {
-      process.on("close", () => {
-        resolve()
+    if (timeout) {
+      timeoutId = setTimeout(() => {
+        process.kill("SIGTERM")
+      }, timeout)
+    }
+
+    if (process.stdout) {
+      process.stdout.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf8")
+        stdoutBuffer += text
+
+        if (stdoutBuffer.length > MAX_OUTPUT_LENGTH) {
+          stdoutBuffer = stdoutBuffer.slice(0, MAX_OUTPUT_LENGTH)
+        }
+
+        ctx.metadata({
+          title: params.command,
+          metadata: {
+            stdout: stdoutBuffer,
+            stderr: stderrBuffer,
+            description: params.description,
+          },
+        })
+      })
+    }
+
+    if (process.stderr) {
+      process.stderr.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf8")
+        stderrBuffer += text
+
+        if (stderrBuffer.length > MAX_OUTPUT_LENGTH) {
+          stderrBuffer = stderrBuffer.slice(0, MAX_OUTPUT_LENGTH)
+        }
+
+        ctx.metadata({
+          title: params.command,
+          metadata: {
+            stdout: stdoutBuffer,
+            stderr: stderrBuffer,
+            description: params.description,
+          },
+        })
+      })
+    }
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      process.on("close", (code) => {
+        if (timeoutId) clearTimeout(timeoutId)
+        resolve(code)
       })
     })
-
-    const stdout = await stdoutPromise
-    const stderr = await stderrPromise
 
     return {
       title: params.command,
       metadata: {
-        stderr,
-        stdout,
-        exit: process.exitCode,
+        stderr: stderrBuffer,
+        stdout: stdoutBuffer,
+        exit: exitCode,
         description: params.description,
       },
-      output: [`<stdout>`, stdout ?? "", `</stdout>`, `<stderr>`, stderr ?? "", `</stderr>`].join("\n"),
+      output: [`<stdout>`, stdoutBuffer ?? "", `</stdout>`, `<stderr>`, stderrBuffer ?? "", `</stderr>`].join("\n"),
     }
   },
 })
