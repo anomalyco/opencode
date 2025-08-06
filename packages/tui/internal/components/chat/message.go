@@ -223,12 +223,11 @@ func renderText(
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		text = ansi.WordwrapWc(text, width-6, " -")
 
 		var result strings.Builder
 		lastEnd := int64(0)
 
-		// Apply highlighting to filenames and base style to rest of text
+		// Apply highlighting to filenames and base style to rest of text BEFORE wrapping
 		textLen := int64(len(text))
 		for _, filePart := range fileParts {
 			highlight := base.Foreground(t.Secondary())
@@ -254,7 +253,11 @@ func renderText(
 		if lastEnd < textLen {
 			result.WriteString(base.Render(text[lastEnd:]))
 		}
-		content = base.Width(width - 6).Render(result.String())
+
+		// wrap styled text
+		styledText := result.String()
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " -")
+		content = base.Width(width - 6).Render(wrappedText)
 	}
 
 	timestamp := ts.
