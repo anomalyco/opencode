@@ -1,4 +1,4 @@
-import { Plugin } from "./index"
+import { Plugin } from "../../packages/plugin/src/index"
 
 export const ExamplePlugin: Plugin = async ({ app, client, $ }) => {
   return {

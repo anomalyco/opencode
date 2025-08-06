@@ -120,7 +120,7 @@
         "lang-map": "0.4.0",
         "luxon": "3.6.1",
         "marked": "15.0.12",
-        "marked-shiki": "1.2.0",
+        "marked-shiki": "1.2.1",
         "rehype-autolink-headings": "7.1.0",
         "remeda": "2.26.0",
         "sharp": "0.32.5",
@@ -139,9 +139,6 @@
     "sharp",
     "esbuild",
   ],
-  "patchedDependencies": {
-    "marked-shiki@1.2.0": "patches/marked-shiki@1.2.0.patch",
-  },
   "catalog": {
     "@tsconfig/node22": "22.0.2",
     "@types/node": "22.13.9",
@@ -1174,7 +1171,7 @@
 
     "marked": ["marked@15.0.12", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA=="],
 
-    "marked-shiki": ["marked-shiki@1.2.0", "", { "peerDependencies": { "marked": ">=7.0.0", "shiki": ">=1.0.0" } }, "sha512-N924hp8veE6Mc91g5/kCNVoTU7TkeJfB2G2XEWb+k1fVA0Bck2T0rVt93d39BlOYH6ohP4Q9BFlPk+UkblhXbg=="],
+    "marked-shiki": ["marked-shiki@1.2.1", "", { "peerDependencies": { "marked": ">=7.0.0", "shiki": ">=1.0.0" } }, "sha512-yHxYQhPY5oYaIRnROn98foKhuClark7M373/VpLxiy5TrDu9Jd/LsMwo8w+U91Up4oDb9IXFrP0N1MFRz8W/DQ=="],
 
     "math-intrinsics": ["math-intrinsics@1.1.0", "", {}, "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g=="],
 
