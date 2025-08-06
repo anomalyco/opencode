@@ -13,7 +13,6 @@ import {
   type ModelMessage,
   stepCountIs,
   type StreamTextResult,
-  InvalidToolInputError,
 } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
@@ -48,6 +47,17 @@ export namespace Session {
   const log = Log.create({ service: "session" })
 
   const OUTPUT_TOKEN_MAX = 32_000
+
+  const parentSessionTitlePrefix = "New session - "
+  const childSessionTitlePrefix = "Child session - "
+
+  function createDefaultTitle(isChild = false) {
+    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+  }
+
+  function isDefaultTitle(title: string) {
+    return title.startsWith(parentSessionTitlePrefix)
+  }
 
   export const Info = z
     .object({
@@ -154,7 +164,7 @@ export namespace Session {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: (parentID ? "Child session - " : "New Session - ") + new Date().toISOString(),
+      title: createDefaultTitle(!!parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -632,7 +642,7 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
-    if (msgs.length === 1 && !session.parentID) {
+    if (msgs.length === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
@@ -718,7 +728,7 @@ export namespace Session {
 
     const enabledTools = pipe(
       mode.tools,
-      mergeDeep(ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
       mergeDeep(input.tools ?? {}),
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
@@ -874,17 +884,14 @@ export namespace Session {
         }
       },
       async experimental_repairToolCall(input) {
-        if (InvalidToolInputError.isInstance(input.error)) {
-          return {
-            ...input.toolCall,
-            input: JSON.stringify({
-              tool: input.toolCall.toolName,
-              error: input.error.message,
-            }),
-            toolName: "invalid",
-          }
+        return {
+          ...input.toolCall,
+          input: JSON.stringify({
+            tool: input.toolCall.toolName,
+            error: input.error.message,
+          }),
+          toolName: "invalid",
         }
-        return null
       },
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),

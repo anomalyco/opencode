@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
 import { z } from "zod"
+import { Config } from "../config/config"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -26,6 +27,8 @@ export namespace Snapshot {
   export async function track() {
     const app = App.info()
     if (!app.git) return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
     const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`

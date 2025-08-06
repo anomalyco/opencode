@@ -23,17 +23,18 @@ import (
 )
 
 type blockRenderer struct {
-	textColor     compat.AdaptiveColor
-	border        bool
-	borderColor   *compat.AdaptiveColor
-	borderLeft    bool
-	borderRight   bool
-	paddingTop    int
-	paddingBottom int
-	paddingLeft   int
-	paddingRight  int
-	marginTop     int
-	marginBottom  int
+	textColor       compat.AdaptiveColor
+	backgroundColor compat.AdaptiveColor
+	border          bool
+	borderColor     *compat.AdaptiveColor
+	borderLeft      bool
+	borderRight     bool
+	paddingTop      int
+	paddingBottom   int
+	paddingLeft     int
+	paddingRight    int
+	marginTop       int
+	marginBottom    int
 }
 
 type renderingOption func(*blockRenderer)
@@ -41,6 +42,12 @@ type renderingOption func(*blockRenderer)
 func WithTextColor(color compat.AdaptiveColor) renderingOption {
 	return func(c *blockRenderer) {
 		c.textColor = color
+	}
+}
+
+func WithBackgroundColor(color compat.AdaptiveColor) renderingOption {
+	return func(c *blockRenderer) {
+		c.backgroundColor = color
 	}
 }
 
@@ -132,14 +139,15 @@ func renderContentBlock(
 ) string {
 	t := theme.CurrentTheme()
 	renderer := &blockRenderer{
-		textColor:     t.TextMuted(),
-		border:        true,
-		borderLeft:    true,
-		borderRight:   false,
-		paddingTop:    1,
-		paddingBottom: 1,
-		paddingLeft:   2,
-		paddingRight:  2,
+		textColor:       t.TextMuted(),
+		backgroundColor: t.BackgroundPanel(),
+		border:          true,
+		borderLeft:      true,
+		borderRight:     false,
+		paddingTop:      1,
+		paddingBottom:   1,
+		paddingLeft:     2,
+		paddingRight:    2,
 	}
 	for _, option := range options {
 		option(renderer)
@@ -152,7 +160,7 @@ func renderContentBlock(
 
 	style := styles.NewStyle().
 		Foreground(renderer.textColor).
-		Background(t.BackgroundPanel()).
+		Background(renderer.backgroundColor).
 		PaddingTop(renderer.paddingTop).
 		PaddingBottom(renderer.paddingBottom).
 		PaddingLeft(renderer.paddingLeft).
@@ -211,16 +219,15 @@ func renderText(
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width, backgroundColor)
+		content = util.ToMarkdown(text, width+2, t.Background())
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		text = ansi.WordwrapWc(text, width-6, " -")
 
 		var result strings.Builder
 		lastEnd := int64(0)
 
-		// Apply highlighting to filenames and base style to rest of text
+		// Apply highlighting to filenames and base style to rest of text BEFORE wrapping
 		textLen := int64(len(text))
 		for _, filePart := range fileParts {
 			highlight := base.Foreground(t.Secondary())
@@ -246,7 +253,11 @@ func renderText(
 		if lastEnd < textLen {
 			result.WriteString(base.Render(text[lastEnd:]))
 		}
-		content = base.Width(width - 6).Render(result.String())
+
+		// wrap styled text
+		styledText := result.String()
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " -")
+		content = base.Width(width - 6).Render(wrappedText)
 	}
 
 	timestamp := ts.
@@ -286,14 +297,14 @@ func renderText(
 			width,
 			WithTextColor(t.Text()),
 			WithBorderColor(t.Secondary()),
-			WithBorderRight(),
 		)
 	case opencode.AssistantMessage:
 		return renderContentBlock(
 			app,
 			content,
-			width,
-			WithBorderColor(t.Accent()),
+			width+2,
+			WithNoBorder(),
+			WithBackgroundColor(t.Background()),
 		)
 	}
 	return ""

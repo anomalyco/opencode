@@ -224,7 +224,7 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Permission = z.union([z.literal("ask"), z.literal("allow")])
+  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
   export type Permission = z.infer<typeof Permission>
 
   export const Info = z
@@ -233,6 +233,7 @@ export namespace Config {
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       plugin: z.string().array().optional(),
+      snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
