@@ -84,11 +84,12 @@ export namespace Log {
   }
 
   let last = Date.now()
-  export function create(tags?: Record<string, any>) {
+  export function create(tags?: Record<string, any>, useCache = true) {
     tags = tags || {}
 
     const service = tags["service"]
-    if (service && typeof service === "string") {
+    const shouldUsingCached = useCache && service && typeof service === "string"
+    if (shouldUsingCached) {
       const cached = loggers.get(service)
       if (cached) {
         return cached
@@ -134,7 +135,7 @@ export namespace Log {
         return result
       },
       clone() {
-        return Log.create({ ...tags })
+        return Log.create({ ...tags }, false)
       },
       time(message: string, extra?: Record<string, any>) {
         const now = Date.now()
@@ -155,7 +156,7 @@ export namespace Log {
       },
     }
 
-    if (service && typeof service === "string") {
+    if (shouldUsingCached) {
       loggers.set(service, result)
     }
 
