@@ -5,7 +5,7 @@ export const TestReplyLogger: Plugin = async ({ $, client }) => {
     async "chat.reply"(input) {
       const logFile = "test-ai-replies.log"
       const timestamp = new Date().toISOString()
-      const entry = `[${timestamp}] Session: ${input.sessionID}\nMessage ID: ${input.messageID}\nReply: ${input.text}\n${"=".repeat(80)}\n\n`
+      const entry = `[${timestamp}] Session: ${input.sessionID}\nMessage ID: ${input.messageID}\nProvider: ${input.providerID} | Model: ${input.modelID}\nReply: ${input.text}\n${"=".repeat(80)}\n\n`
 
       try {
         await $`echo ${entry} >> ${logFile}`
@@ -30,18 +30,18 @@ export const TestReplyLogger: Plugin = async ({ $, client }) => {
           // Add 2 second delay before sending auto-reply
           setTimeout(async () => {
             try {
-              // Send auto-reply using the client
+              // Send auto-reply using the SAME provider and model as the current session
               await client.session.chat({
                 path: { id: input.sessionID },
                 body: {
-                  providerID: "github-copilot",
-                  modelID: "gpt-4.1",
+                  providerID: input.providerID, // Use current session's provider
+                  modelID: input.modelID, // Use current session's model
                   parts: [{ type: "text", text: replyText }],
                 },
               })
 
               // Log the auto-reply
-              const autoReplyEntry = `[${new Date().toISOString()}] AUTO-REPLY triggered by "${keyword}": ${replyText}\n${"=".repeat(80)}\n\n`
+              const autoReplyEntry = `[${new Date().toISOString()}] AUTO-REPLY triggered by "${keyword}" using ${input.providerID}/${input.modelID}: ${replyText}\n${"=".repeat(80)}\n\n`
               await $`echo ${autoReplyEntry} >> ${logFile}`
             } catch (error) {
               // Silent error handling for auto-reply

@@ -17,7 +17,14 @@ export interface Hooks {
   /**
    * Called when AI generates a complete reply
    */
-  "chat.reply"?: (input: { sessionID: string; messageID: string; text: string; parts: Part[] }) => Promise<void>
+  "chat.reply"?: (input: {
+    sessionID: string
+    messageID: string
+    text: string
+    parts: Part[]
+    providerID: string
+    modelID: string
+  }) => Promise<void>
   /**
    * Modify parameters sent to LLM
    */

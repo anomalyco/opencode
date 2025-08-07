@@ -74,3 +74,10 @@ Reply:
 ================================================================================
 [2025-08-07T11:17:49.812Z] AUTO-REPLY triggered by "test": This is an auto-reply to your test!
 ================================================================================
+[2025-08-07T11:21:03.721Z] Session: ses_77bbcb7deffeG2aBpoMgmaQFE5
+Message ID: msg_88443487d001v8N2oMQO7qdgXO
+Provider: github-copilot | Model: gpt-4.1
+Reply: Hello! Here’s a bright greeting for you—just like the color yellow, I hope your day is cheerful and full of energy!
+================================================================================
+[2025-08-07T11:21:05.888Z] AUTO-REPLY triggered by "yellow" using github-copilot/gpt-4.1: hahaha
+================================================================================

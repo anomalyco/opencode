@@ -942,6 +942,8 @@ export namespace Session {
         messageID: result.info.id,
         text,
         parts: result.parts,
+        providerID: result.info.providerID,
+        modelID: result.info.modelID,
       },
       {},
     )
