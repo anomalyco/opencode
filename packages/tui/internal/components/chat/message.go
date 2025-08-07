@@ -219,7 +219,7 @@ func renderText(
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width+2, t.Background())
+		content = util.ToMarkdown(text, width, t.Background())
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
@@ -302,7 +302,7 @@ func renderText(
 		return renderContentBlock(
 			app,
 			content,
-			width+2,
+			width,
 			WithNoBorder(),
 			WithBackgroundColor(t.Background()),
 		)
