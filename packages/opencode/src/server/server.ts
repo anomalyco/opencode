@@ -220,7 +220,7 @@ export namespace Server {
         },
       )
       .get(
-        "/session/:sessionID",
+        "/session/:id",
         describeRoute({
           description: "Get session",
           operationId: "session.get",
