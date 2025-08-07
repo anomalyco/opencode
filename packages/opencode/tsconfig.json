@@ -9,6 +9,15 @@
     ],
     "customConditions": [
       "development"
-    ]
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@opencode-ai/sdk": [
+        "../sdk/js/src/index.ts"
+      ],
+      "@opencode-ai/plugin": [
+        "../plugin/src/index.ts"
+      ]
+    }
   }
 }
