@@ -1,6 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useState } from "react"
-import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
-import type { BottomSheetRef } from "@/components/ui/primitives"
+import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet"
 import { Feather } from "@expo/vector-icons"
 import {
@@ -14,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
 import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
+import { BottomSheetModal, type BottomSheetModalRef } from "@/primitives/bottom-sheet-modal"
 
 interface ProjectListSheetProps {
   onClose: () => void
@@ -35,7 +35,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
     const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
     const queryClient = useQueryClient()
 
-    const bottomSheetRef = useRef<BottomSheetRef>(null)
+    const bottomSheetRef = useRef<BottomSheetModalRef>(null)
 
     useImperativeHandle(ref, () => ({
       present: () => bottomSheetRef.current?.present(),
@@ -129,7 +129,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
       }
     }
     return (
-      <BottomSheet
+      <BottomSheetModal
         ref={bottomSheetRef}
         snapPoints={["75%"]}
         onDismiss={onClose}
@@ -263,7 +263,7 @@ export const ProjectListSheet = forwardRef<ProjectListSheetRef, ProjectListSheet
             </BottomSheetScrollView>
           </Box>
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
     )
   },
 )

@@ -17,7 +17,7 @@ interface ModelsSheetProps {
 
 export const ModelsSheet = memo(
   forwardRef<BottomSheetRef, ModelsSheetProps>(({ sessionId, onModelSelect }, ref) => {
-    const { theme } = useUnistyles()
+    const { theme, rt } = useUnistyles()
     const [searchQuery, setSearchQuery] = useState("")
     const sonner = useSonner()
 
@@ -76,7 +76,7 @@ export const ModelsSheet = memo(
       }
     }
 
-    const handleModelSelect = async (model: ModelWithProvider) => {
+    const handleModelSelect = useCallback(async (model: ModelWithProvider) => {
       try {
         // Update the session's selected model in local DB
         await updateSessionModel.mutateAsync({
@@ -95,7 +95,7 @@ export const ModelsSheet = memo(
         sonner.error("Failed to switch model")
         dismissSheet()
       }
-    }
+    }, [])
 
     const renderModel = useCallback(
       ({ item, index, section }: { item: ModelWithProvider; index: number; section: any }) => (
@@ -160,7 +160,7 @@ export const ModelsSheet = memo(
 
     const renderSectionHeader = useCallback(
       ({ section }: { section: { title: string } }) => (
-        <Box style={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8 }}>
+        <Box pl="md" pr="md" pt="md" pb="sm" background="base">
           <Text
             size="sm"
             weight="semibold"
@@ -218,7 +218,7 @@ export const ModelsSheet = memo(
     )
 
     return (
-      <BottomSheet ref={ref} snapPoints={["75%"]} enablePanDownToClose={true}>
+      <BottomSheet ref={ref} snapPoints={["75%"]} enablePanDownToClose={true} keyboardBehavior="extend">
         {renderHeader()}
         <BottomSheetSectionList
           sections={modalSections}
@@ -227,8 +227,9 @@ export const ModelsSheet = memo(
           keyExtractor={(item: ModelWithProvider) => item.id}
           showsVerticalScrollIndicator={false}
           style={{ height: 300 }}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          stickySectionHeadersEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: rt.insets.bottom + 50 }}
           ListEmptyComponent={() => (
             <Box flex center p="lg">
               <Text mode="subtle" size="lg">

@@ -1,9 +1,10 @@
 import { forwardRef, useImperativeHandle, useRef } from "react"
 import type { ReactNode } from "react"
-import BottomSheetComponent, { BottomSheetBackdrop, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet"
+import { BottomSheetModal as BottomSheetModalComponent, BottomSheetBackdrop } from "@gorhom/bottom-sheet"
+import type { BottomSheetBackdropProps } from "@gorhom/bottom-sheet"
 import { useUnistyles } from "react-native-unistyles"
 
-interface BottomSheetProps {
+interface BottomSheetModalProps {
   children: ReactNode
   snapPoints?: string[] | number[]
   onDismiss?: () => void
@@ -14,22 +15,22 @@ interface BottomSheetProps {
   keyboardBlurBehavior?: "none" | "restore"
 }
 
-export interface BottomSheetRef {
+export interface BottomSheetModalRef {
   present: () => void
   dismiss: () => void
   snapToIndex: (index: number) => void
   snapToPosition: (position: string | number) => void
 }
 
-export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
+export const BottomSheetModal = forwardRef<BottomSheetModalRef, BottomSheetModalProps>(
   (
     {
       children,
-      snapPoints = ["60%", "95%"],
+      snapPoints = ["60%"],
       onDismiss,
       enablePanDownToClose = true,
       backdropOpacity = 0.75,
-      index = -1,
+      index = 0,
       keyboardBehavior = "interactive",
       keyboardBlurBehavior = "none",
       ...props
@@ -37,13 +38,12 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     ref,
   ) => {
     const { theme } = useUnistyles()
+    const bottomSheetModalRef = useRef<BottomSheetModalComponent>(null)
     const styles = createStyles(theme)
 
-    const bottomSheetModalRef = useRef<BottomSheetComponent>(null)
-
     useImperativeHandle(ref, () => ({
-      present: () => bottomSheetModalRef.current?.expand(),
-      dismiss: () => bottomSheetModalRef.current?.close(),
+      present: () => bottomSheetModalRef.current?.present(),
+      dismiss: () => bottomSheetModalRef.current?.dismiss(),
       snapToIndex: (index: number) => bottomSheetModalRef.current?.snapToIndex(index),
       snapToPosition: (position: string | number) => bottomSheetModalRef.current?.snapToPosition(position),
     }))
@@ -59,31 +59,21 @@ export const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     )
 
     return (
-      <BottomSheetComponent
+      <BottomSheetModalComponent
         ref={bottomSheetModalRef}
         snapPoints={snapPoints}
-        onClose={onDismiss}
+        onDismiss={onDismiss}
         backdropComponent={renderBackdrop}
         enablePanDownToClose={enablePanDownToClose}
         index={index}
+        backgroundStyle={styles.background}
+        handleIndicatorStyle={styles.handleIndicator}
         keyboardBehavior={keyboardBehavior}
         keyboardBlurBehavior={keyboardBlurBehavior}
-        style={{
-          backgroundColor: theme.colors.background.base,
-        }}
-        containerStyle={{
-          zIndex: 1000,
-        }}
-        backgroundStyle={{
-          backgroundColor: theme.colors.background.base,
-        }}
-        handleIndicatorStyle={{
-          backgroundColor: theme.colors.background.lightest,
-        }}
         {...props}
       >
         {children}
-      </BottomSheetComponent>
+      </BottomSheetModalComponent>
     )
   },
 )
@@ -108,4 +98,4 @@ const createStyles = (theme: any) => ({
   },
 })
 
-BottomSheet.displayName = "BottomSheet"
+BottomSheetModal.displayName = "BottomSheet"

@@ -19,7 +19,7 @@ interface CommandsSheetProps {
 
 export const CommandsSheet = memo(
   forwardRef<BottomSheetRef, CommandsSheetProps>(({ sessionId, onShowModels }, ref) => {
-    const { theme } = useUnistyles()
+    const { theme, rt } = useUnistyles()
     const sonner = useSonner()
     const [loadingCommand, setLoadingCommand] = useState<string | null>(null)
 
@@ -36,7 +36,7 @@ export const CommandsSheet = memo(
       }
     }
 
-    const handleCommandPress = async (command: Command) => {
+    const handleCommandPress = useCallback(async (command: Command) => {
       setLoadingCommand(command.id)
       try {
         switch (command.action) {
@@ -88,7 +88,7 @@ export const CommandsSheet = memo(
       } finally {
         setLoadingCommand(null)
       }
-    }
+    }, [])
 
     const renderCommand = useCallback(
       ({ item, index }: { item: Command; index: number }) => (
@@ -176,7 +176,7 @@ export const CommandsSheet = memo(
     )
 
     return (
-      <BottomSheet ref={ref} snapPoints={["50%"]} enablePanDownToClose={true}>
+      <BottomSheet ref={ref} snapPoints={["50%"]} enablePanDownToClose={true} keyboardBehavior="fillParent">
         {renderHeader()}
         <BottomSheetFlatList
           data={MOBILE_COMMANDS}
@@ -184,9 +184,9 @@ export const CommandsSheet = memo(
           keyExtractor={(item: Command) => item.id}
           showsVerticalScrollIndicator={false}
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: rt.insets.bottom + 50 }}
           ListHeaderComponent={() => (
-            <Box style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
+            <Box pl="md" pr="md" pb="sm" pt="md">
               <Text
                 size="sm"
                 weight="semibold"

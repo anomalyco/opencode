@@ -1,7 +1,6 @@
 import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from "react"
-import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
+import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import { Feather } from "@expo/vector-icons"
-import type { BottomSheetRef } from "@/components/ui/primitives"
 import { BottomSheetView } from "@gorhom/bottom-sheet"
 import { BottomSheetInput } from "./bottom-sheet-input"
 import {
@@ -21,6 +20,7 @@ import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
 import { parseServerUrl } from "@/utils/url"
 import { useSonner } from "@/hooks/use-sonner"
+import { BottomSheetModal, type BottomSheetModalRef } from "@/primitives/bottom-sheet-modal"
 
 interface ProjectConnectionSheetProps {
   onClose: () => void
@@ -47,7 +47,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
     const queryClient = useQueryClient()
     const sonner = useSonner()
 
-    const bottomSheetRef = useRef<BottomSheetRef>(null)
+    const bottomSheetRef = useRef<BottomSheetModalRef>(null)
 
     const [projectName, setProjectName] = useState("")
     const [projectDescription, setProjectDescription] = useState("")
@@ -250,7 +250,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
       : activeProject?.connectionStatus === "connected"
 
     return (
-      <BottomSheet
+      <BottomSheetModal
         ref={bottomSheetRef}
         snapPoints={["70%"]}
         onDismiss={onClose}
@@ -364,7 +364,7 @@ export const ProjectConnectionSheet = forwardRef<ProjectConnectionSheetRef, Proj
             </Box>
           </Box>
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
     )
   },
 )

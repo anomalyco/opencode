@@ -1,7 +1,7 @@
 import React, { useState, forwardRef, useImperativeHandle, useRef, useEffect, useCallback, memo } from "react"
-import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
+import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import { Feather } from "@expo/vector-icons"
-import type { BottomSheetRef } from "@/components/ui/primitives"
+import type { BottomSheetModalRef } from "@/components/ui/primitives/bottom-sheet-modal"
 import { BottomSheetView } from "@gorhom/bottom-sheet"
 import { BottomSheetInput } from "./bottom-sheet-input"
 import {
@@ -21,6 +21,7 @@ import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
 import { parseServerUrl } from "@/utils/url"
 import { useSonner } from "@/hooks/use-sonner"
+import { BottomSheetModal } from "../../ui/primitives/bottom-sheet-modal"
 
 interface ProjectConnectionSheetOptimizedProps {
   onClose: () => void
@@ -39,7 +40,7 @@ const MemoizedBottomSheetInput = memo(BottomSheetInput)
 export const ProjectConnectionSheetOptimized = memo(
   forwardRef<ProjectConnectionSheetOptimizedRef, ProjectConnectionSheetOptimizedProps>(
     ({ onClose, editingProject, onEditExistingProject }, ref) => {
-      const bottomSheetRef = useRef<BottomSheetRef>(null)
+      const bottomSheetRef = useRef<BottomSheetModalRef>(null)
 
       // Local state for form inputs - memoized to prevent re-renders
       const [projectName, setProjectName] = useState("")
@@ -272,7 +273,7 @@ export const ProjectConnectionSheetOptimized = memo(
       const isEditing = !!editingProject
 
       return (
-        <BottomSheet
+        <BottomSheetModal
           ref={bottomSheetRef}
           snapPoints={["70%"]}
           onDismiss={onClose}
@@ -373,7 +374,7 @@ export const ProjectConnectionSheetOptimized = memo(
               </Box>
             </Box>
           </BottomSheetView>
-        </BottomSheet>
+        </BottomSheetModal>
       )
     },
   ),

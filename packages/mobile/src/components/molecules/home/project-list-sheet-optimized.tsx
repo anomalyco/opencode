@@ -1,6 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useCallback, useState, memo } from "react"
-import { Box, Text, Button, BottomSheet, Icon } from "@/components/ui/primitives"
-import type { BottomSheetRef } from "@/components/ui/primitives"
+import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import { BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet"
 import { Feather } from "@expo/vector-icons"
 import {
@@ -14,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/services/api/keys"
 import { apiClient } from "@/services/api/remote/client"
 import type { Project } from "@/db/types"
+import { BottomSheetModal, type BottomSheetModalRef } from "@/primitives/bottom-sheet-modal"
 
 interface ProjectListSheetOptimizedProps {
   onClose: () => void
@@ -152,7 +152,7 @@ export const ProjectListSheetOptimized = memo(
       const { refetch: refetchRemoteSessions } = useRemoteSessionsQuery()
       const queryClient = useQueryClient()
 
-      const bottomSheetRef = useRef<BottomSheetRef>(null)
+      const bottomSheetRef = useRef<BottomSheetModalRef>(null)
       const [connectingProjects, setConnectingProjects] = useState<Set<string>>(new Set())
 
       useImperativeHandle(ref, () => ({
@@ -226,7 +226,7 @@ export const ProjectListSheetOptimized = memo(
       })
 
       return (
-        <BottomSheet
+        <BottomSheetModal
           ref={bottomSheetRef}
           snapPoints={["75%"]}
           onDismiss={onClose}
@@ -268,7 +268,7 @@ export const ProjectListSheetOptimized = memo(
               </BottomSheetScrollView>
             </Box>
           </BottomSheetView>
-        </BottomSheet>
+        </BottomSheetModal>
       )
     },
   ),
