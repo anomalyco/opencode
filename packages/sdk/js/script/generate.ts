@@ -12,7 +12,10 @@ await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../ope
 
 await createClient({
   input: "./openapi.json",
-  output: "./src/gen",
+  output: {
+    path: "./src/gen",
+    tsConfigPath: path.join(dir, 'tsconfig.json')
+  },
   plugins: [
     {
       name: "@hey-api/typescript",

@@ -3,9 +3,9 @@
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "module": "preserve",
+    "module": "nodenext",
     "declaration": true,
-    "moduleResolution": "bundler",
+    "moduleResolution": "nodenext",
     "lib": [
       "es2022",
       "dom",
