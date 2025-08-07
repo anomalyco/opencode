@@ -10,6 +10,44 @@ import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
 import { Global } from "../../global"
+import { WindowsUtils } from "../../util/windows"
+
+/**
+ * Safely open a URL in the browser, with Windows antivirus-aware fallbacks
+ */
+async function safeOpenUrl(url: string): Promise<void> {
+  if (WindowsUtils.isWindows()) {
+    prompts.note("Opening browser...")
+    const result = await WindowsUtils.openUrl(url)
+    
+    if (result.success) {
+      prompts.log.success(`Browser opened using ${result.method}`)
+    } else {
+      // Show Windows-specific instructions when all methods fail
+      const instructions = WindowsUtils.getManualOpenInstructions(url)
+      instructions.forEach(line => {
+        if (line.startsWith("⚠️") || line.startsWith("💡")) {
+          prompts.log.warn(line)
+        } else if (line.trim() === "") {
+          // Empty line
+        } else {
+          prompts.log.info(line)
+        }
+      })
+    }
+  } else {
+    // Non-Windows: use the standard open library
+    prompts.note("Trying to open browser...")
+    try {
+      await open(url)
+    } catch (e) {
+      prompts.log.error(
+        "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
+      )
+      prompts.log.info(url)
+    }
+  }
+}
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -181,15 +219,7 @@ export const AuthLoginCommand = cmd({
         // some weird bug where program exits without this
         await new Promise((resolve) => setTimeout(resolve, 10))
         const { url, verifier } = await AuthAnthropic.authorize("max")
-        prompts.note("Trying to open browser...")
-        try {
-          await open(url)
-        } catch (e) {
-          prompts.log.error(
-            "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
-          )
-        }
-        prompts.log.info(url)
+        await safeOpenUrl(url)
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
@@ -217,15 +247,7 @@ export const AuthLoginCommand = cmd({
         // some weird bug where program exits without this
         await new Promise((resolve) => setTimeout(resolve, 10))
         const { url, verifier } = await AuthAnthropic.authorize("console")
-        prompts.note("Trying to open browser...")
-        try {
-          await open(url)
-        } catch (e) {
-          prompts.log.error(
-            "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
-          )
-        }
-        prompts.log.info(url)
+        await safeOpenUrl(url)
 
         const code = await prompts.text({
           message: "Paste the authorization code here: ",
