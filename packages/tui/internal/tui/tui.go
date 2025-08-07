@@ -612,6 +612,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
+	case tea.PasteMsg, tea.ClipboardMsg:
+		// Paste events: prioritize modal if active, otherwise editor
+		if a.modal != nil {
+			updatedModal, cmd := a.modal.Update(msg)
+			a.modal = updatedModal.(layout.Modal)
+			return a, cmd
+		} else {
+			updatedEditor, cmd := a.editor.Update(msg)
+			a.editor = updatedEditor.(chat.EditorComponent)
+			return a, cmd
+		}
 
 	// API
 	case api.Request:
@@ -679,17 +690,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	a.status = s.(status.StatusComponent)
 
-	u, cmd := a.editor.Update(msg)
-	a.editor = u.(chat.EditorComponent)
+	updatedEditor, cmd := a.editor.Update(msg)
+	a.editor = updatedEditor.(chat.EditorComponent)
 	cmds = append(cmds, cmd)
 
-	u, cmd = a.messages.Update(msg)
-	a.messages = u.(chat.MessagesComponent)
+	updatedMessages, cmd := a.messages.Update(msg)
+	a.messages = updatedMessages.(chat.MessagesComponent)
 	cmds = append(cmds, cmd)
 
 	if a.modal != nil {
-		u, cmd := a.modal.Update(msg)
-		a.modal = u.(layout.Modal)
+		updatedModal, cmd := a.modal.Update(msg)
+		a.modal = updatedModal.(layout.Modal)
 		cmds = append(cmds, cmd)
 	}
 
