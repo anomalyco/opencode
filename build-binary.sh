@@ -66,15 +66,45 @@ bun build \
     ./src/index.ts \
     ./tui-binary-embedded
 
-# Clean up temporary TUI binary
-rm -f ./tui-binary-embedded
-cd "$SCRIPT_DIR"
+# Copy tree-sitter packages to the distribution
+echo "📦 Copying tree-sitter packages..."
+mkdir -p "$DIST_DIR/node_modules"
+cp -r "../../node_modules/tree-sitter" "$DIST_DIR/node_modules/"
+cp -r "../../node_modules/tree-sitter-bash" "$DIST_DIR/node_modules/"
+
+# Copy supporting dependencies that tree-sitter needs
+for dep in nan node-addon-api prebuild-install; do
+    if [ -d "../../node_modules/$dep" ]; then
+        cp -r "../../node_modules/$dep" "$DIST_DIR/node_modules/"
+        echo "✅ Copied $dep"
+    fi
+done
 
 # Make binaries executable
 chmod +x "$DIST_DIR/bin/opencode"
 
+# Rename the original binary to opencode-fallback and make the wrapper the default
+mv "$DIST_DIR/bin/opencode" "$DIST_DIR/bin/opencode-fallback"
+
+# Create the default opencode binary as a wrapper script that sets NODE_PATH
+cat > "$DIST_DIR/bin/opencode" << 'EOF'
+#!/bin/bash
+# Default opencode binary with tree-sitter support
+
+# Get the directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Set NODE_PATH to the node_modules directory relative to the binary
+export NODE_PATH="$SCRIPT_DIR/../node_modules:$NODE_PATH"
+
+# Execute the actual opencode binary with all arguments
+exec "$SCRIPT_DIR/opencode-fallback" "$@"
+EOF
+
+chmod +x "$DIST_DIR/bin/opencode"
+
 echo "✅ Build complete!"
-echo "📍 Binary location: $DIST_DIR/bin/opencode"
+echo "📍 Binary location: $DIST_DIR/bin/opencode (with tree-sitter support)"
+echo "📍 Fallback binary: $DIST_DIR/bin/opencode-fallback (basic mode)"
 echo ""
 echo "🚀 This custom build includes:"
 echo "   ✅ AI reply logging plugin"
@@ -82,11 +112,13 @@ echo "   ✅ Auto-reply on keywords (yellow → hahaha, etc.)"
 echo "   ✅ Dynamic provider/model matching"
 echo "   ✅ Embedded TUI binary for unified experience"
 echo "   ✅ Full TUI and server support in single binary"
+echo "   ✅ Tree-sitter support by default"
 echo ""
 echo "🚀 To install as system default:"
 echo "   sudo cp $DIST_DIR/bin/opencode /usr/local/bin/opencode-custom"
 echo ""
 echo "🧪 To test the binary:"
-echo "   $DIST_DIR/bin/opencode --version"
-echo "   $DIST_DIR/bin/opencode serve  # Start server with AI reply plugin"
-echo "   $DIST_DIR/bin/opencode        # Start TUI mode with AI reply plugin"
+echo "   $DIST_DIR/bin/opencode --version              # Full tree-sitter support (default)"
+echo "   $DIST_DIR/bin/opencode-fallback --version     # Basic fallback mode"
+echo "   $DIST_DIR/bin/opencode serve                  # Start server with AI reply plugin"
+echo "   $DIST_DIR/bin/opencode                        # Start TUI mode with AI reply plugin"

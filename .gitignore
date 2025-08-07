@@ -8,3 +8,4 @@ openapi.json
 playground
 build/
 *.log
+tui-binary-embedded
