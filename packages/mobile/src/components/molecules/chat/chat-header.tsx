@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef } from "react"
+import { memo, useState, useEffect, useRef, useCallback } from "react"
 import { Box, Text, Button, Icon } from "@/components/ui/primitives"
 import BlurView from "@/components/ui/primitives/blur-view"
 import { Feather } from "@expo/vector-icons"
@@ -7,17 +7,16 @@ import { calculateSessionContext, formatSessionContext } from "@/utils/calculate
 import { useSSEService } from "@/services/sse-service"
 import { useRemoteMessagesQuery } from "@/services/api/remote/messages"
 import { useChatService } from "@/services/chat-service"
-import type { Session } from "@/db/types"
+import { useLocalSessionQuery } from "@/services/api/local/sessions"
+import { useSessionManager } from "@/services/session-manager"
+import { useCurrentModeQuery } from "@/services/api/local/user-settings"
 import type { SSEEvent } from "@/types/opencode-types"
 
 interface ChatHeaderProps {
-  sessionTitle?: string
-  session?: Session | null
-  onNewSessionPress?: () => void
-  currentMode?: string
+  sessionId: string
 }
 
-export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, currentMode }: ChatHeaderProps) => {
+export const ChatHeader = memo(({ sessionId }: ChatHeaderProps) => {
   const router = useRouter()
   const [sessionInfoText, setSessionInfoText] = useState("AI Development Assistant")
   const sseService = useSSEService()
@@ -25,22 +24,34 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
   const updateTimeoutRef = useRef<number | null>(null)
   const [hasSyncedMessages, setHasSyncedMessages] = useState(false)
 
+  // Get session data and services
+  const { data: session } = useLocalSessionQuery(sessionId)
+  const { data: currentMode } = useCurrentModeQuery()
+  const sessionManager = useSessionManager()
+
   // Fetch remote messages to trigger sync
-  const { data: remoteMessages } = useRemoteMessagesQuery(session?.id || "")
+  const { data: remoteMessages } = useRemoteMessagesQuery(sessionId)
 
   const handleBackPress = () => {
     router.back()
   }
 
+  // Handle new session
+  const handleNewSession = useCallback(async () => {
+    try {
+      await sessionManager.navigateToNewSession()
+    } catch (error) {}
+  }, [sessionManager])
+
   // Update session context
   const updateSessionInfo = async () => {
-    if (!session?.id) {
+    if (!sessionId) {
       setSessionInfoText("AI Development Assistant")
       return
     }
 
     try {
-      const context = await calculateSessionContext(session.id)
+      const context = await calculateSessionContext(sessionId)
       const formatted = formatSessionContext(context, false)
       setSessionInfoText(formatted)
     } catch (error) {
@@ -51,13 +62,13 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
 
   // Sync remote messages when they're available (only if not already synced)
   useEffect(() => {
-    if (!session?.id || !remoteMessages || hasSyncedMessages) return
+    if (!sessionId || !remoteMessages || hasSyncedMessages) return
 
     if (remoteMessages.length > 0) {
       // Small delay to let the message list component handle sync first
       const syncTimeout = setTimeout(() => {
         chatService
-          .syncRemoteMessages(session.id, remoteMessages)
+          .syncRemoteMessages(sessionId, remoteMessages)
           .then(() => {
             setHasSyncedMessages(true)
             // Update session info after sync
@@ -72,21 +83,21 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
 
       return () => clearTimeout(syncTimeout)
     }
-  }, [session?.id, remoteMessages, hasSyncedMessages, chatService])
+  }, [sessionId, remoteMessages, hasSyncedMessages, chatService])
 
   // Calculate session context (matching TUI logic)
   useEffect(() => {
     updateSessionInfo()
-  }, [session?.id, session?.messageCount])
+  }, [sessionId, session?.messageCount])
 
   // Reset sync state when session changes
   useEffect(() => {
     setHasSyncedMessages(false)
-  }, [session?.id])
+  }, [sessionId])
 
   // Listen for streaming updates to refresh usage in real-time
   useEffect(() => {
-    if (!session?.id) return
+    if (!sessionId) return
 
     const handleSSEEvent = (event: SSEEvent) => {
       switch (event.type) {
@@ -110,7 +121,7 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
       }
     }
 
-    const unsubscribe = sseService.subscribeToSession(session.id, handleSSEEvent)
+    const unsubscribe = sseService.subscribeToSession(sessionId, handleSSEEvent)
 
     return () => {
       unsubscribe()
@@ -118,7 +129,7 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
         clearTimeout(updateTimeoutRef.current)
       }
     }
-  }, [session?.id, sseService])
+  }, [sessionId, sseService])
 
   return (
     <BlurView
@@ -160,25 +171,23 @@ export const ChatHeader = memo(({ sessionTitle, session, onNewSessionPress, curr
         </Box>
         <Box style={{ flex: 1 }}>
           <Text size="lg" weight="semibold" numberOfLines={1}>
-            {sessionTitle || "OpenCode Assistant"}
+            {session?.title || "OpenCode Assistant"}
           </Text>
           <Text size="xs" mode="subtle">
             {sessionInfoText}
           </Text>
         </Box>
-        {onNewSessionPress && (
-          <Button
-            mode="brand"
-            size="auto"
-            rounded="full"
-            onPress={onNewSessionPress}
-            style={{ padding: 8, marginLeft: 8 }}
-          >
-            <Button.Icon>
-              {({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}
-            </Button.Icon>
-          </Button>
-        )}
+        <Button
+          mode="brand"
+          size="auto"
+          rounded="full"
+          onPress={handleNewSession}
+          style={{ padding: 8, marginLeft: 8 }}
+        >
+          <Button.Icon>
+            {({ color, size }) => <Icon icon={Feather} name="plus" size={size} color={color} />}
+          </Button.Icon>
+        </Button>
       </Box>
     </BlurView>
   )

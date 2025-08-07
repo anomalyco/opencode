@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "db": "drizzle-kit",
-    "update:preview": "eas update --platform ios --channel preview --environment preview -m"
+    "update:preview": "eas update --platform ios --channel preview --environment preview -m",
+    "update:production": "eas update --platform ios --channel production --environment production -m"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

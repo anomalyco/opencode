@@ -294,25 +294,8 @@ export const TodoListRenderer: React.FC<TodoListRendererProps> = ({ todos }) => 
   )
 }
 
-// Diff renderer (simplified version)
-interface DiffRendererProps {
-  filename: string
-  diff: string
-}
-
-export const DiffRenderer: React.FC<DiffRendererProps> = ({ filename, diff }) => {
-  return (
-    <Box background="light" rounded="lg" p="sm" gap="xs" mode="success">
-      <Box direction="row" alignItems="center" gap="xs" pb="xs">
-        <Icon icon={Feather} name="edit-3" size={14} color="success" />
-        <Text size="sm" weight="medium" style={{ flex: 1 }} numberOfLines={1} ellipsizeMode="head">
-          Edit {filename}
-        </Text>
-      </Box>
-      <ThemedMarked value={`\`\`\`diff\n${diff}\n\`\`\``} />
-    </Box>
-  )
-}
+// Export the optimized DiffRenderer from separate file
+export { DiffRenderer } from "./diff-renderer"
 
 // Web fetch content renderer
 interface WebFetchRendererProps {

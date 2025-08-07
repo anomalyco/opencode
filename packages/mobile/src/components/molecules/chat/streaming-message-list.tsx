@@ -18,15 +18,14 @@ import {
   WebFetchRenderer,
 } from "./message-renderers"
 import { useLocalSessionPartsQuery } from "@/services/api/local/messages"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/services/api/keys"
 
 import { Feather } from "@expo/vector-icons"
 import { useChatState } from "@/hooks/use-chat-state"
 
 interface StreamingMessageListProps {
   sessionId: string
-  keyboardHeight: number
-  onRefresh: () => Promise<void>
-  refreshing: boolean
 }
 
 export interface StreamingMessageListRef {
@@ -37,241 +36,317 @@ export interface StreamingMessageListRef {
 const MemoizedFlatList = memo(FlatList<any>)
 
 // Component to render individual message parts
-const PartItem = memo(({ part }: { part: any }) => {
-  const isUser = part.role === "user"
-  const partData = part.data
+const PartItem = memo(
+  ({ part }: { part: any }) => {
+    const isUser = part.role === "user"
+    const partData = part.data
 
-  // Calculate all values with useMemo to avoid conditional hook calls
-  const partType = useMemo(() => {
-    return partData.type || (partData.toolName ? "tool" : partData.fileFilename ? "file" : "text")
-  }, [partData])
+    // Calculate all values with useMemo to avoid conditional hook calls
+    const partType = useMemo(() => {
+      return partData.type || (partData.toolName ? "tool" : partData.fileFilename ? "file" : "text")
+    }, [partData])
 
-  const isShortMessage = useMemo(() => {
+    const isShortMessage = useMemo(() => {
+      return (
+        partType === "text" &&
+        partData.textContent &&
+        partData.textContent.length < 100 &&
+        partData.textContent.split("\n").length <= 2
+      )
+    }, [partType, partData])
+
+    // Check if this is a very short text message that should have minimal width
+    const isVeryShortMessage = useMemo(() => {
+      return (
+        partType === "text" &&
+        partData.textContent &&
+        partData.textContent.length < 20 &&
+        partData.textContent.split("\n").length === 1
+      )
+    }, [partType, partData])
+
+    // Check if this is a todo/plan message that needs more width
+    const isTodoMessage = useMemo(() => {
+      return partData.toolName === "todowrite" || partData.toolName === "todoread"
+    }, [partData])
+
+    const isDiffMessage = useMemo(() => {
+      return partData.toolName === "edit"
+    }, [partData])
+
+    const shouldRender = useMemo(() => {
+      if (partType === "text") {
+        return !partData.isSynthetic && partData.textContent && !partData.textContent.includes("<system-reminder>")
+      }
+      // Skip step parts - they cause UI clutter and sequence issues
+      if (partType === "step-start" || partType === "step-finish") {
+        return false
+      }
+      return true
+    }, [partType, partData])
+
+    const content = useMemo(() => {
+      if (!shouldRender) return null
+
+      switch (partType) {
+        case "text":
+          return <ThemedMarked value={partData.textContent} />
+
+        case "tool":
+          return <ToolPartRenderer part={partData} />
+
+        case "file":
+          return <FilePartRenderer part={partData} />
+
+        case "snapshot":
+          return <SnapshotRenderer part={partData} />
+
+        case "patch":
+          return <PatchRenderer part={partData} />
+
+        default:
+          return null
+      }
+    }, [shouldRender, partType, partData])
+
+    // Early return if shouldn't render
+    if (!shouldRender || !content) {
+      return null
+    }
+
     return (
-      partType === "text" &&
-      partData.textContent &&
-      partData.textContent.length < 100 &&
-      partData.textContent.split("\n").length <= 2
-    )
-  }, [partType, partData])
-
-  // Check if this is a very short text message that should have minimal width
-  const isVeryShortMessage = useMemo(() => {
-    return (
-      partType === "text" &&
-      partData.textContent &&
-      partData.textContent.length < 20 &&
-      partData.textContent.split("\n").length === 1
-    )
-  }, [partType, partData])
-
-  // Check if this is a todo/plan message that needs more width
-  const isTodoMessage = useMemo(() => {
-    return partData.toolName === "todowrite" || partData.toolName === "todoread"
-  }, [partData])
-
-  const shouldRender = useMemo(() => {
-    if (partType === "text") {
-      return !partData.isSynthetic && partData.textContent && !partData.textContent.includes("<system-reminder>")
-    }
-    // Skip step parts - they cause UI clutter and sequence issues
-    if (partType === "step-start" || partType === "step-finish") {
-      return false
-    }
-    return true
-  }, [partType, partData])
-
-  const content = useMemo(() => {
-    if (!shouldRender) return null
-
-    switch (partType) {
-      case "text":
-        return <ThemedMarked value={partData.textContent} />
-
-      case "tool":
-        return <ToolPartRenderer part={partData} />
-
-      case "file":
-        return <FilePartRenderer part={partData} />
-
-      case "snapshot":
-        return <SnapshotRenderer part={partData} />
-
-      case "patch":
-        return <PatchRenderer part={partData} />
-
-      default:
-        return null
-    }
-  }, [shouldRender, partType, partData])
-
-  // Early return if shouldn't render
-  if (!shouldRender || !content) {
-    return null
-  }
-
-  return (
-    <Box p="sm">
-      <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
-        <Box
-          background={isUser ? "emphasis" : "lightest"}
-          rounded="lg"
-          p={partType === "tool" ? undefined : isShortMessage ? "sm" : "md"}
-          style={{
-            maxWidth: "85%",
-            minWidth: isTodoMessage ? "70%" : isVeryShortMessage ? "auto" : partType === "text" ? "40%" : "20%",
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 1,
-          }}
-        >
-          {content}
+      <Box p="sm">
+        <Box direction="row" justifyContent={isUser ? "flex-end" : "flex-start"}>
+          <Box
+            background={isUser ? "emphasis" : "lightest"}
+            rounded="lg"
+            p={partType === "tool" ? undefined : isShortMessage ? "sm" : "md"}
+            style={{
+              maxWidth: "85%",
+              minWidth: isTodoMessage
+                ? "70%"
+                : isDiffMessage
+                  ? "85%"
+                  : isVeryShortMessage
+                    ? "auto"
+                    : partType === "text"
+                      ? "40%"
+                      : "20%",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 2,
+              elevation: 1,
+            }}
+          >
+            {content}
+          </Box>
         </Box>
       </Box>
-    </Box>
-  )
-})
+    )
+  },
+  (prevProps, nextProps) => {
+    const prev = prevProps.part.data
+    const next = nextProps.part.data
+
+    // More specific comparison to prevent unnecessary re-renders
+    if (prev.type !== next.type) return false
+
+    // For text content
+    if (prev.type === "text" && prev.textContent !== next.textContent) return false
+
+    // For tool content - only re-render if status or output changes
+    if (prev.type === "tool") {
+      return (
+        prev.toolStatus === next.toolStatus &&
+        prev.toolOutput === next.toolOutput &&
+        prev.toolError === next.toolError &&
+        prev.toolMetadata === next.toolMetadata
+      )
+    }
+
+    // For file content
+    if (prev.type === "file") {
+      return prev.fileFilename === next.fileFilename && prev.fileUrl === next.fileUrl
+    }
+
+    return true // No changes detected
+  },
+)
 
 // Separate components for different part types to avoid conditional rendering
-const ToolPartRenderer = memo(({ part }: { part: any }) => {
-  // Extract tool data from the complete part data structure
-  const toolName = part.toolName || part.tool
-  const toolStatus = part.toolStatus || part.state?.status || "pending"
-  const toolCallId = part.toolCallId || part.callID
-  const toolInput = part.toolInput
-    ? typeof part.toolInput === "string"
-      ? JSON.parse(part.toolInput)
-      : part.toolInput
-    : part.state?.input
-  const toolOutput = part.toolOutput || part.state?.output
-  const toolMetadata = part.toolMetadata
-    ? typeof part.toolMetadata === "string"
-      ? JSON.parse(part.toolMetadata)
-      : part.toolMetadata
-    : part.state?.metadata
-  const toolError = part.toolError || part.state?.error
-  const toolTitle = part.toolTitle || part.state?.title
+const ToolPartRenderer = memo(
+  ({ part }: { part: any }) => {
+    // Extract tool data from the complete part data structure
+    const toolName = part.toolName || part.tool
+    const toolStatus = part.toolStatus || part.state?.status || "pending"
+    const toolCallId = part.toolCallId || part.callID
+    const toolInput = part.toolInput
+      ? typeof part.toolInput === "string"
+        ? JSON.parse(part.toolInput)
+        : part.toolInput
+      : part.state?.input
+    const toolOutput = part.toolOutput || part.state?.output
+    const toolMetadata = part.toolMetadata
+      ? typeof part.toolMetadata === "string"
+        ? JSON.parse(part.toolMetadata)
+        : part.toolMetadata
+      : part.state?.metadata
+    const toolError = part.toolError || part.state?.error
+    const toolTitle = part.toolTitle || part.state?.title
 
-  // Extract timing information
-  const toolTimeStart = part.toolTimeStart || (part.state?.time?.start ? new Date(part.state.time.start) : null)
-  const toolTimeEnd = part.toolTimeEnd || (part.state?.time?.end ? new Date(part.state.time.end) : null)
+    // Extract timing information
+    const toolTimeStart = part.toolTimeStart || (part.state?.time?.start ? new Date(part.state.time.start) : null)
+    const toolTimeEnd = part.toolTimeEnd || (part.state?.time?.end ? new Date(part.state.time.end) : null)
 
-  // Calculate execution time if available
-  const executionTime = toolTimeStart && toolTimeEnd ? toolTimeEnd.getTime() - toolTimeStart.getTime() : null
+    // Calculate execution time if available
+    const executionTime = toolTimeStart && toolTimeEnd ? toolTimeEnd.getTime() - toolTimeStart.getTime() : null
 
-  // Show enhanced status indicator for pending/running tools
-  if (toolStatus === "pending" || toolStatus === "running") {
-    const displayName = toolTitle || toolName || "Working..."
-    const statusText =
-      toolStatus === "running" && executionTime ? `${displayName} (${Math.round(executionTime / 1000)}s)` : displayName
-    return <ToolStatusIndicator status={toolStatus} toolName={statusText} />
-  }
+    // Show enhanced status indicator for pending/running tools
+    if (toolStatus === "pending" || toolStatus === "running") {
+      const displayName = toolTitle || toolName || "Working..."
+      const statusText =
+        toolStatus === "running" && executionTime
+          ? `${displayName} (${Math.round(executionTime / 1000)}s)`
+          : displayName
+      return <ToolStatusIndicator status={toolStatus} toolName={statusText} />
+    }
 
-  // Show basic tool info even if incomplete
-  if (!toolName && !toolOutput && !toolError) {
-    return (
-      <Box background="subtle" rounded="md" p="sm">
-        <Text size="xs" weight="medium" mode="subtle">
-          Tool call in progress...
-        </Text>
-      </Box>
-    )
-  }
+    // Show basic tool info even if incomplete
+    if (!toolName && !toolOutput && !toolError) {
+      return (
+        <Box background="subtle" rounded="md" p="sm">
+          <Text size="xs" weight="medium" mode="subtle">
+            Tool call in progress...
+          </Text>
+        </Box>
+      )
+    }
 
-  // Show enhanced error state
-  if (toolStatus === "error" && toolError) {
-    const displayName = toolTitle || toolName || "Tool"
-    const errorHeader = `**Error in ${displayName}:**`
-    const errorDetails = toolCallId ? `\n\n*Call ID: ${toolCallId}*` : ""
-    const timingInfo = executionTime ? `\n*Duration: ${Math.round(executionTime / 1000)}s*` : ""
+    // Show enhanced error state
+    if (toolStatus === "error" && toolError) {
+      const displayName = toolTitle || toolName || "Tool"
+      const errorHeader = `**Error in ${displayName}:**`
+      const errorDetails = toolCallId ? `\n\n*Call ID: ${toolCallId}*` : ""
+      const timingInfo = executionTime ? `\n*Duration: ${Math.round(executionTime / 1000)}s*` : ""
 
-    return (
-      <Box background="lighter" rounded="md" p="sm" mode="error">
-        <ThemedMarked value={`${errorHeader} ${toolError}${errorDetails}${timingInfo}`} />
-      </Box>
-    )
-  }
+      return (
+        <Box background="lighter" rounded="md" p="sm" mode="error">
+          <ThemedMarked value={`${errorHeader} ${toolError}${errorDetails}${timingInfo}`} />
+        </Box>
+      )
+    }
 
-  // Render completed tools based on type
-  switch (toolName) {
-    case "read":
-      if (toolMetadata?.preview && toolInput?.filePath) {
-        return <FileContentRenderer filename={toolInput.filePath} content={toolMetadata.preview} truncateLines={6} />
-      }
-      break
+    // Render completed tools based on type
+    switch (toolName) {
+      case "read":
+        if (toolMetadata?.preview && toolInput?.filePath) {
+          return <FileContentRenderer filename={toolInput.filePath} content={toolMetadata.preview} truncateLines={6} />
+        }
+        break
 
-    case "edit":
-      if (toolMetadata?.diff && toolInput?.filePath) {
-        return <DiffRenderer filename={toolInput.filePath} diff={toolMetadata.diff} />
-      }
-      break
+      case "edit":
+        if (toolMetadata?.diff && toolInput?.filePath) {
+          return <DiffRenderer filename={toolInput.filePath} diff={toolMetadata.diff} />
+        }
+        break
 
-    case "write":
-      if (toolInput?.filePath && toolInput?.content) {
-        return <FileContentRenderer filename={toolInput.filePath} content={toolInput.content} />
-      }
-      break
+      case "write":
+        if (toolInput?.filePath && toolInput?.content) {
+          return <FileContentRenderer filename={toolInput.filePath} content={toolInput.content} />
+        }
+        break
 
-    case "bash":
-      if (toolInput?.command) {
-        return <BashRenderer command={toolInput.command} stdout={toolMetadata?.stdout} stderr={toolMetadata?.stderr} />
-      }
-      break
+      case "bash":
+        if (toolInput?.command) {
+          return (
+            <BashRenderer command={toolInput.command} stdout={toolMetadata?.stdout} stderr={toolMetadata?.stderr} />
+          )
+        }
+        break
 
-    case "todowrite":
-      if (toolMetadata?.todos) {
-        return <TodoListRenderer todos={toolMetadata.todos} />
-      }
-      break
+      case "todowrite":
+        if (toolMetadata?.todos) {
+          return <TodoListRenderer todos={toolMetadata.todos} />
+        }
+        break
 
-    case "webfetch":
-      if (toolInput?.url && toolOutput) {
-        return <WebFetchRenderer url={toolInput.url} content={toolOutput} format={toolInput.format || "text"} />
-      }
-      break
+      case "webfetch":
+        if (toolInput?.url && toolOutput) {
+          return <WebFetchRenderer url={toolInput.url} content={toolOutput} format={toolInput.format || "text"} />
+        }
+        break
 
-    default:
-      // Generic tool output - with expandable for tools that produce small text output
-      if (toolOutput) {
-        return <GenericToolOutputRenderer toolName={toolName} toolOutput={toolOutput} />
-      }
+      default:
+        // Generic tool output - with expandable for tools that produce small text output
+        if (toolOutput) {
+          return <GenericToolOutputRenderer toolName={toolName} toolOutput={toolOutput} />
+        }
 
-      // Show enhanced tool name for completed tools
-      if (toolName && toolStatus === "completed") {
-        const displayName = toolTitle || toolName
-        const timingText = executionTime ? ` (${Math.round(executionTime / 1000)}s)` : ""
+        // Show enhanced tool name for completed tools
+        if (toolName && toolStatus === "completed") {
+          const displayName = toolTitle || toolName
+          const timingText = executionTime ? ` (${Math.round(executionTime / 1000)}s)` : ""
 
-        return (
-          <Box background="subtle" rounded="md" p="sm">
-            <Text size="xs" weight="medium" mode="subtle">
-              ✓ {displayName}
-              {timingText}
-            </Text>
-            {toolCallId && (
-              <Text size="xs" mode="subtle" style={{ opacity: 0.6, marginTop: 2 }}>
-                {toolCallId}
+          return (
+            <Box background="subtle" rounded="md" p="sm">
+              <Text size="xs" weight="medium" mode="subtle">
+                ✓ {displayName}
+                {timingText}
               </Text>
-            )}
-          </Box>
-        )
-      }
-  }
+              {toolCallId && (
+                <Text size="xs" mode="subtle" style={{ opacity: 0.6, marginTop: 2 }}>
+                  {toolCallId}
+                </Text>
+              )}
+            </Box>
+          )
+        }
+    }
 
-  return null
-})
+    return null
+  },
+  (prevProps, nextProps) => {
+    const prev = prevProps.part
+    const next = nextProps.part
+
+    // Only re-render if tool-specific data changes
+    return (
+      prev.toolName === next.toolName &&
+      prev.toolStatus === next.toolStatus &&
+      prev.toolOutput === next.toolOutput &&
+      prev.toolError === next.toolError &&
+      prev.toolMetadata === next.toolMetadata &&
+      prev.toolInput === next.toolInput
+    )
+  },
+)
 
 ToolPartRenderer.displayName = "ToolPartRenderer"
 
 // Generic tool output renderer with expandable functionality for small text
-const GenericToolOutputRenderer = memo(({ toolName, toolOutput }: { toolName: string; toolOutput: string }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
+const GenericToolOutputRenderer = memo(
+  ({ toolName, toolOutput }: { toolName: string; toolOutput: string }) => {
+    const [isExpanded, setIsExpanded] = useState(false)
 
-  // Tools that typically produce small, hard-to-read output
-  const needsExpansion = ["task", "glob", "grep", "list"].includes(toolName) && toolOutput.length > 200
+    // Tools that typically produce small, hard-to-read output
+    const needsExpansion = ["task", "glob", "grep", "list"].includes(toolName) && toolOutput.length > 200
 
-  if (!needsExpansion) {
+    if (!needsExpansion) {
+      return (
+        <Box background="subtle" rounded="md" p="sm">
+          <Box mb="xs">
+            <Text size="xs" weight="medium" mode="subtle">
+              {toolName || "Tool"}
+            </Text>
+          </Box>
+          <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 16 }}>
+            {toolOutput}
+          </Text>
+        </Box>
+      )
+    }
+
     return (
       <Box background="subtle" rounded="md" p="sm">
         <Box mb="xs">
@@ -279,36 +354,27 @@ const GenericToolOutputRenderer = memo(({ toolName, toolOutput }: { toolName: st
             {toolName || "Tool"}
           </Text>
         </Box>
-        <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 16 }}>
-          {toolOutput}
-        </Text>
+        <Box style={{ maxHeight: isExpanded ? undefined : 100, overflow: "hidden" }}>
+          <Text size="sm" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 18 }}>
+            {toolOutput}
+          </Text>
+        </Box>
+        <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)} style={{ marginTop: 8 }}>
+          <Box direction="row" center gap="xs" p="xs">
+            <Text size="xs" mode="subtle" weight="medium">
+              {isExpanded ? "Show less" : "Show more"}
+            </Text>
+            <Icon icon={Feather} name={isExpanded ? "chevron-up" : "chevron-down"} size={12} color="muted" />
+          </Box>
+        </TouchableOpacity>
       </Box>
     )
-  }
-
-  return (
-    <Box background="subtle" rounded="md" p="sm">
-      <Box mb="xs">
-        <Text size="xs" weight="medium" mode="subtle">
-          {toolName || "Tool"}
-        </Text>
-      </Box>
-      <Box style={{ maxHeight: isExpanded ? undefined : 100, overflow: "hidden" }}>
-        <Text size="sm" mode="subtle" style={{ fontFamily: "monospace", lineHeight: 18 }}>
-          {toolOutput}
-        </Text>
-      </Box>
-      <TouchableOpacity onPress={() => setIsExpanded(!isExpanded)} style={{ marginTop: 8 }}>
-        <Box direction="row" center gap="xs" p="xs">
-          <Text size="xs" mode="subtle" weight="medium">
-            {isExpanded ? "Show less" : "Show more"}
-          </Text>
-          <Icon icon={Feather} name={isExpanded ? "chevron-up" : "chevron-down"} size={12} color="muted" />
-        </Box>
-      </TouchableOpacity>
-    </Box>
-  )
-})
+  },
+  (prevProps, nextProps) => {
+    // Only re-render if content actually changes
+    return prevProps.toolName === nextProps.toolName && prevProps.toolOutput === nextProps.toolOutput
+  },
+)
 
 GenericToolOutputRenderer.displayName = "GenericToolOutputRenderer"
 
@@ -408,208 +474,237 @@ const PatchRenderer = memo(({ part }: { part: any }) => {
 PatchRenderer.displayName = "PatchRenderer"
 
 // Main item renderer - now only handles parts
-const ItemRenderer = memo(({ item }: { item: any }) => {
-  if (item.type === "part") {
-    return <PartItem part={item} />
-  }
-  return null
-})
+const ItemRenderer = memo(
+  ({ item }: { item: any }) => {
+    if (item.type === "part") {
+      return <PartItem part={item} />
+    }
+    return null
+  },
+  (prevProps, nextProps) => {
+    // Quick reference equality check first
+    if (prevProps.item === nextProps.item) return true
+
+    // Deep comparison only if references differ
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.item.type === nextProps.item.type &&
+      prevProps.item.data === nextProps.item.data
+    )
+  },
+)
 
 ItemRenderer.displayName = "ItemRenderer"
 
 PartItem.displayName = "PartItem"
 
 export const StreamingMessageList = memo(
-  forwardRef<StreamingMessageListRef, StreamingMessageListProps>(
-    ({ sessionId, keyboardHeight, onRefresh, refreshing }, ref) => {
-      const flatListRef = useRef<FlatList>(null)
-      const lastScrollY = useRef(0)
-      const isUserScrolling = useRef(false)
+  forwardRef<StreamingMessageListRef, StreamingMessageListProps>(({ sessionId }, ref) => {
+    const flatListRef = useRef<FlatList>(null)
+    const lastScrollY = useRef(0)
+    const isUserScrolling = useRef(false)
+    const [refreshing, setRefreshing] = useState(false)
 
-      // Get streaming state for typing indicator
-      const { isStreaming, error } = useChatState(sessionId)
+    // Get streaming state for typing indicator
+    const { isStreaming, error } = useChatState(sessionId)
 
-      // Fetch messages with parts directly from database - this is our source of truth
-      const { data: messagesWithParts, isLoading, refetch: refetchParts } = useLocalSessionPartsQuery(sessionId)
-      // Convert messages and parts to flat list items
-      const flattenedItems = useMemo(() => {
-        if (!messagesWithParts) return []
+    // Query client for refresh
+    const queryClient = useQueryClient()
 
-        const items: any[] = []
+    // Fetch messages with parts directly from database - this is our source of truth
+    const { data: messagesWithParts, isLoading, refetch: refetchParts } = useLocalSessionPartsQuery(sessionId)
+    // Convert messages and parts to flat list items
+    const flattenedItems = useMemo(() => {
+      if (!messagesWithParts) return []
 
-        // Process each message and its parts
-        messagesWithParts.forEach((message: any) => {
-          // Add parts for this message (if they exist)
-          if (message.parts && Array.isArray(message.parts)) {
-            message.parts.forEach((part: any, partIndex: number) => {
-              items.push({
-                type: "part",
-                id: `part-${part.id}`,
-                data: {
-                  ...part,
-                  role: message.role, // Add role from parent message
-                },
-                messageId: message.id,
-                role: message.role,
-                createdAt: part.createdAt,
-                partIndex: partIndex,
-              })
+      const items: any[] = []
+
+      // Process each message and its parts
+      messagesWithParts.forEach((message: any) => {
+        // Add parts for this message (if they exist)
+        if (message.parts && Array.isArray(message.parts)) {
+          message.parts.forEach((part: any, partIndex: number) => {
+            items.push({
+              type: "part",
+              id: `part-${part.id}`,
+              data: {
+                ...part,
+                role: message.role, // Add role from parent message
+              },
+              messageId: message.id,
+              role: message.role,
+              createdAt: part.createdAt,
+              partIndex: partIndex,
             })
-          }
+          })
+        }
+      })
+
+      return items // Already in correct order from query
+    }, [messagesWithParts])
+    // Scroll to bottom helper
+    const scrollToBottom = useCallback(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
+    }, [])
+
+    // Expose scrollToBottom to parent
+    useImperativeHandle(ref, () => ({
+      scrollToBottom,
+    }))
+
+    // Handle refresh with query invalidation
+    const handleRefresh = useCallback(async () => {
+      setRefreshing(true)
+      try {
+        // Invalidate relevant queries to refetch data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.local.sessions.detail(sessionId),
         })
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.local.messages.list(sessionId),
+        })
+      } catch {
+        // Handle error silently
+      } finally {
+        setRefreshing(false)
+      }
+    }, [queryClient, sessionId]) // Simplified scroll handler for keyboard dismissal
+    const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentY = event.nativeEvent.contentOffset.y
+      const deltaY = currentY - lastScrollY.current
 
-        return items // Already in correct order from query
-      }, [messagesWithParts])
-      // Scroll to bottom helper
-      const scrollToBottom = useCallback(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
-      }, [])
-
-      // Expose scrollToBottom to parent
-      useImperativeHandle(ref, () => ({
-        scrollToBottom,
-      }))
-
-      // Handle refresh with internal state
-      const handleRefresh = useCallback(async () => {
-        try {
-          await onRefresh()
-        } catch {
-          // Handle error silently
-        }
-      }, [onRefresh])
-      // Simplified scroll handler for keyboard dismissal
-      const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const currentY = event.nativeEvent.contentOffset.y
-        const deltaY = currentY - lastScrollY.current
-
-        // Only dismiss keyboard when:
-        // 1. Scrolling up (positive deltaY in inverted list)
-        // 2. Not in pull-to-refresh zone (currentY > -30)
-        // 3. User is actively dragging (not auto-scroll)
-        if (deltaY > 8 && currentY > -30 && isUserScrolling.current) {
-          Keyboard.dismiss()
-        }
-
-        lastScrollY.current = currentY
-      }, [])
-
-      // Track when user starts scrolling
-      const handleScrollBeginDrag = useCallback(() => {
-        isUserScrolling.current = true
-      }, [])
-
-      // Track when scrolling ends
-      const handleScrollEndDrag = useCallback(() => {
-        isUserScrolling.current = false
-      }, []) // Render empty state
-      const renderEmptyState = useCallback(
-        () => (
-          <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }], marginBottom: 60 }}>
-            <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
-              <Icon icon={Feather} name="message-square" size={48} color="muted" />
-              <Box center gap="xs">
-                <Text mode="subtle" size="md" weight="medium">
-                  No messages yet
-                </Text>
-                <Text mode="subtle" size="sm" style={{ textAlign: "center", lineHeight: 18 }}>
-                  Start the conversation with OpenCode
-                </Text>
-              </Box>
-              <Button variant="ghost" size="sm" onPress={() => refetchParts()} style={{ marginTop: 8 }}>
-                <Icon icon={Feather} name="refresh-cw" size={16} color="muted" />
-                <Text mode="subtle" size="sm" weight="medium">
-                  Retry
-                </Text>
-              </Button>
-            </Box>
-          </Box>
-        ),
-        [refetchParts],
-      )
-
-      // Render message item or part item
-      const renderItem = useCallback(({ item }: { item: any }) => {
-        return <ItemRenderer item={item} />
-      }, [])
-
-      // Error banner component
-      const ErrorBanner = useCallback(() => {
-        if (!error) return null
-
-        return (
-          <Box p="md" background="lighter" m="md" rounded="md" gap="sm">
-            <Box direction="row" center gap="sm">
-              <Icon icon={Feather} name="alert-circle" size={16} color="muted" />
-              <Text mode="subtle" size="sm" weight="medium" style={{ flex: 1 }}>
-                Connection issue - some messages may not load
-              </Text>
-            </Box>
-            <Box direction="row" gap="sm">
-              <Text mode="subtle" size="xs" style={{ opacity: 0.7 }}>
-                {error.length > 50 ? error.substring(0, 50) + "..." : error}
-              </Text>
-            </Box>
-          </Box>
-        )
-      }, [error])
-
-      // Show loading state
-      if (isLoading) {
-        return (
-          <Box flex center>
-            <Box animation="pulse" animationConfig={{ repeat: 3 }}>
-              <Text mode="subtle">Loading messages...</Text>
-            </Box>
-          </Box>
-        )
+      // Only dismiss keyboard when:
+      // 1. Scrolling up (positive deltaY in inverted list)
+      // 2. Not in pull-to-refresh zone (currentY > -30)
+      // 3. User is actively dragging (not auto-scroll)
+      if (deltaY > 8 && currentY > -30 && isUserScrolling.current) {
+        Keyboard.dismiss()
       }
 
+      lastScrollY.current = currentY
+    }, [])
+
+    // Track when user starts scrolling
+    const handleScrollBeginDrag = useCallback(() => {
+      isUserScrolling.current = true
+    }, [])
+
+    // Track when scrolling ends
+    const handleScrollEndDrag = useCallback(() => {
+      isUserScrolling.current = false
+    }, []) // Render empty state
+    const renderEmptyState = useCallback(
+      () => (
+        <Box center p="lg" m="md" style={{ transform: [{ scaleY: -1 }], marginBottom: 60 }}>
+          <Box center p="lg" background="subtle" rounded="lg" border="subtle" gap="md">
+            <Icon icon={Feather} name="message-square" size={48} color="muted" />
+            <Box center gap="xs">
+              <Text mode="subtle" size="md" weight="medium">
+                No messages yet
+              </Text>
+              <Text mode="subtle" size="sm" style={{ textAlign: "center", lineHeight: 18 }}>
+                Start the conversation with OpenCode
+              </Text>
+            </Box>
+            <Button variant="ghost" size="sm" onPress={() => refetchParts()} style={{ marginTop: 8 }}>
+              <Icon icon={Feather} name="refresh-cw" size={16} color="muted" />
+              <Text mode="subtle" size="sm" weight="medium">
+                Retry
+              </Text>
+            </Button>
+          </Box>
+        </Box>
+      ),
+      [refetchParts],
+    )
+
+    // Optimized keyExtractor for stable keys
+    const keyExtractor = useCallback((item: any) => {
+      // Use stable keys that don't change during streaming
+      return `${item.type}-${item.id}`
+    }, [])
+
+    // Render message item or part item
+    const renderItem = useCallback(({ item }: { item: any }) => {
+      return <ItemRenderer item={item} />
+    }, []) // No dependencies - ItemRenderer handles its own memoization
+
+    // Error banner component
+    const ErrorBanner = useCallback(() => {
+      if (!error) return null
+
       return (
-        <Box flex>
-          <ErrorBanner />
-          <MemoizedFlatList
-            ref={flatListRef}
-            data={flattenedItems}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            inverted
-            ListEmptyComponent={renderEmptyState}
-            ListHeaderComponent={<TypingIndicator isVisible={isStreaming} />}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                progressViewOffset={10} // Minimal pull distance
-              />
-            }
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              flexGrow: 1,
-              paddingTop: 140,
-              paddingBottom: Math.max(120, keyboardHeight + 20),
-            }}
-            keyboardShouldPersistTaps="handled"
-            onScroll={handleScroll}
-            onScrollBeginDrag={handleScrollBeginDrag}
-            onScrollEndDrag={handleScrollEndDrag}
-            scrollEventThrottle={16}
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 0,
-              autoscrollToTopThreshold: 10,
-            }}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={8}
-            windowSize={8}
-            initialNumToRender={8}
-            updateCellsBatchingPeriod={100}
-            disableVirtualization={false}
-            legacyImplementation={false}
-          />
+        <Box p="md" background="lighter" m="md" rounded="md" gap="sm">
+          <Box direction="row" center gap="sm">
+            <Icon icon={Feather} name="alert-circle" size={16} color="muted" />
+            <Text mode="subtle" size="sm" weight="medium" style={{ flex: 1 }}>
+              Connection issue - some messages may not load
+            </Text>
+          </Box>
+          <Box direction="row" gap="sm">
+            <Text mode="subtle" size="xs" style={{ opacity: 0.7 }}>
+              {error.length > 50 ? error.substring(0, 50) + "..." : error}
+            </Text>
+          </Box>
         </Box>
       )
-    },
-  ),
+    }, [error])
+
+    // Show loading state
+    if (isLoading) {
+      return (
+        <Box flex center>
+          <Box animation="pulse" animationConfig={{ repeat: 3 }}>
+            <Text mode="subtle">Loading messages...</Text>
+          </Box>
+        </Box>
+      )
+    }
+
+    return (
+      <Box flex>
+        <ErrorBanner />
+        <MemoizedFlatList
+          ref={flatListRef}
+          data={flattenedItems}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          inverted
+          ListEmptyComponent={renderEmptyState}
+          ListHeaderComponent={<TypingIndicator isVisible={isStreaming} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              progressViewOffset={10} // Minimal pull distance
+            />
+          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingTop: 140,
+            paddingBottom: 120,
+          }}
+          keyboardShouldPersistTaps="handled"
+          onScroll={handleScroll}
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onScrollEndDrag={handleScrollEndDrag}
+          scrollEventThrottle={32}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 5,
+          }}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={200}
+          disableVirtualization={false}
+          legacyImplementation={false}
+        />
+      </Box>
+    )
+  }),
 )
 
 StreamingMessageList.displayName = "StreamingMessageList"
