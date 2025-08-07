@@ -381,7 +381,18 @@ func (a *App) InitializeProvider() tea.Cmd {
 		}
 	}
 
-	// Priority 3: Recent model usage (most recently used model)
+	// Priority 3: Current agent's preferred model
+	if selectedProvider == nil && a.Agent().Model.ModelID != "" {
+		if provider, model := findModelByProviderAndModelID(providers, a.Agent().Model.ProviderID, a.Agent().Model.ModelID); provider != nil && model != nil {
+			selectedProvider = provider
+			selectedModel = model
+			slog.Debug("Selected model from current agent", "provider", provider.ID, "model", model.ID, "agent", a.Agent().Name)
+		} else {
+			slog.Debug("Agent model not found", "provider", a.Agent().Model.ProviderID, "model", a.Agent().Model.ModelID, "agent", a.Agent().Name)
+		}
+	}
+
+	// Priority 4: Recent model usage (most recently used model)
 	if selectedProvider == nil && len(a.State.RecentlyUsedModels) > 0 {
 		recentUsage := a.State.RecentlyUsedModels[0] // Most recent is first
 		if provider, model := findModelByProviderAndModelID(providers, recentUsage.ProviderID, recentUsage.ModelID); provider != nil &&
@@ -400,7 +411,7 @@ func (a *App) InitializeProvider() tea.Cmd {
 		}
 	}
 
-	// Priority 4: State-based model (backwards compatibility)
+	// Priority 5: State-based model (backwards compatibility)
 	if selectedProvider == nil && a.State.Provider != "" && a.State.Model != "" {
 		if provider, model := findModelByProviderAndModelID(providers, a.State.Provider, a.State.Model); provider != nil &&
 			model != nil {
@@ -412,7 +423,7 @@ func (a *App) InitializeProvider() tea.Cmd {
 		}
 	}
 
-	// Priority 5: Internal priority fallback (Anthropic preferred, then first available)
+	// Priority 6: Internal priority fallback (Anthropic preferred, then first available)
 	if selectedProvider == nil {
 		// Try Anthropic first as internal priority
 		if provider := findProviderByID(providers, "anthropic"); provider != nil {
