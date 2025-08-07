@@ -60,6 +60,8 @@ bun build \
     --define OPENCODE_VERSION="'custom-$(date +%Y%m%d)-with-ai-reply-plugin'" \
     --compile \
     --target="bun-$BUN_PLATFORM-$BUN_ARCH" \
+    --external tree-sitter \
+    --external tree-sitter-bash \
     --outfile="$DIST_DIR/bin/opencode" \
     ./src/index.ts \
     ./tui-binary-embedded
