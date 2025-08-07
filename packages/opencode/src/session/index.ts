@@ -929,6 +929,23 @@ export namespace Session {
       }),
     })
     const result = await processor.process(stream)
+
+    // Extract text from assistant reply for plugin hook
+    const textParts = result.parts.filter((part) => part.type === "text") as MessageV2.TextPart[]
+    const text = textParts.map((part) => part.text).join("")
+
+    // Trigger chat.reply plugin hook
+    await Plugin.trigger(
+      "chat.reply",
+      {
+        sessionID: input.sessionID,
+        messageID: result.info.id,
+        text,
+        parts: result.parts,
+      },
+      {},
+    )
+
     const queued = state().queued.get(input.sessionID) ?? []
     const unprocessed = queued.find((x) => !x.processed)
     if (unprocessed) {
