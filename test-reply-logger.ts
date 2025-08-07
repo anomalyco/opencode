@@ -14,11 +14,9 @@ export const TestReplyLogger: Plugin = async ({ $, client }) => {
       }
 
       // Auto-reply functionality: Check for keywords in AI response
-      const keywords = ["yellow", "test", "hello"] as const
+      const keywords = ["yellow"] as const
       const autoReplies: Record<(typeof keywords)[number], string> = {
         yellow: "hahaha",
-        test: "This is an auto-reply to your test!",
-        hello: "Hello back from the auto-reply plugin!",
       }
 
       // Check if AI response contains any keywords (case insensitive)
