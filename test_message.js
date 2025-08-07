@@ -1,6 +1,7 @@
 import { createOpencodeClient } from "./packages/sdk/js/src/index.ts"
 
 async function main() {
+  const messageText = process.argv[2] || "Hello"
   const client = createOpencodeClient({ baseUrl: "http://localhost:4096" })
 
   // 1. Create session
@@ -19,7 +20,7 @@ async function main() {
       providerID,
       modelID,
       mode,
-      parts: [{ type: "text", text: "Hello, world!" }],
+      parts: [{ type: "text", text: messageText }],
     },
   })
   // Only log concatenated text from all parts
