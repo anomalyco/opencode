@@ -5,7 +5,7 @@ import { Box, Text, Icon } from "@/components/ui/primitives"
 import { BottomSheet, type BottomSheetRef } from "@/components/ui/primitives/bottom-sheet"
 import type { ModelWithProvider } from "@/types/commands"
 import { useUnistyles } from "react-native-unistyles"
-import { useLocalModelsQuery } from "@/services/api/local/models"
+import { useLocalModelsQuery, useFrequentModelsQuery } from "@/services/api/local/models"
 import { useUpdateSessionModelMutation } from "@/services/api/local/sessions"
 import { Feather } from "@expo/vector-icons"
 import { useSonner } from "@/hooks/use-sonner"
@@ -21,8 +21,9 @@ export const ModelsSheet = memo(
     const [searchQuery, setSearchQuery] = useState("")
     const sonner = useSonner()
 
-    // Fetch local models
+    // Fetch local models and frequent models
     const { data: localModels } = useLocalModelsQuery()
+    const { data: frequentModels } = useFrequentModelsQuery()
 
     // Mutation to update session model
     const updateSessionModel = useUpdateSessionModelMutation()
@@ -33,7 +34,27 @@ export const ModelsSheet = memo(
         return []
       }
 
-      // Filter models based on search first
+      const sections: { title: string; data: ModelWithProvider[] }[] = []
+
+      // Add frequent models section if available and no search query
+      if (frequentModels && frequentModels.length > 0 && !searchQuery.trim()) {
+        const frequentModelData = frequentModels.map((model) => ({
+          id: model.id,
+          name: model.name,
+          providerId: model.providerId,
+          providerName: model.providerName,
+          contextLength: model.contextLength || undefined,
+          inputPrice: model.inputPrice || undefined,
+          outputPrice: model.outputPrice || undefined,
+        }))
+
+        sections.push({
+          title: "Recently Used",
+          data: frequentModelData,
+        })
+      }
+
+      // Filter models based on search
       const filteredModels = searchQuery.trim()
         ? localModels.filter(
             (modal) =>
@@ -42,8 +63,14 @@ export const ModelsSheet = memo(
           )
         : localModels
 
-      // Group by provider
-      const groupedByProvider = filteredModels.reduce(
+      // Remove frequent models from the main list to avoid duplicates
+      const frequentModelIds = new Set(frequentModels?.map((m) => m.id) || [])
+      const remainingModels = searchQuery.trim()
+        ? filteredModels
+        : filteredModels.filter((model) => !frequentModelIds.has(model.id))
+
+      // Group remaining models by provider
+      const groupedByProvider = remainingModels.reduce(
         (acc, modal) => {
           const providerId = modal.providerId
           if (!acc[providerId]) {
@@ -66,9 +93,11 @@ export const ModelsSheet = memo(
         {} as Record<string, { title: string; data: ModelWithProvider[] }>,
       )
 
-      const sections = Object.values(groupedByProvider)
+      // Add provider sections
+      sections.push(...Object.values(groupedByProvider))
+
       return sections
-    }, [localModels, searchQuery])
+    }, [localModels, frequentModels, searchQuery])
 
     const dismissSheet = () => {
       if (ref && typeof ref === "object" && ref.current) {
@@ -76,86 +105,112 @@ export const ModelsSheet = memo(
       }
     }
 
-    const handleModelSelect = useCallback(async (model: ModelWithProvider) => {
-      try {
-        // Update the session's selected model in local DB
-        await updateSessionModel.mutateAsync({
-          id: sessionId,
-          modelId: model.id,
-        })
+    const handleModelSelect = useCallback(
+      async (model: ModelWithProvider) => {
+        try {
+          // Update the session's selected model in local DB
+          await updateSessionModel.mutateAsync({
+            id: sessionId,
+            modelId: model.id,
+          })
 
-        sonner.success(`Switched to ${model.name}`)
+          sonner.success(`Switched to ${model.name}`)
 
-        // Call optional callback
-        onModelSelect?.(model)
+          // Call optional callback
+          onModelSelect?.(model)
 
-        dismissSheet()
-      } catch (error) {
-        console.error("Model selection failed:", error)
-        sonner.error("Failed to switch model")
-        dismissSheet()
-      }
-    }, [])
+          dismissSheet()
+        } catch (error) {
+          console.error("Model selection failed:", error)
+          sonner.error("Failed to switch model")
+          dismissSheet()
+        }
+      },
+      [sessionId, updateSessionModel, sonner, onModelSelect, dismissSheet],
+    )
 
     const renderModel = useCallback(
-      ({ item, index, section }: { item: ModelWithProvider; index: number; section: any }) => (
-        <Box
-          background="lightest"
-          style={{
-            marginHorizontal: 16,
-            borderTopLeftRadius: index === 0 ? 12 : 0,
-            borderTopRightRadius: index === 0 ? 12 : 0,
-            borderBottomLeftRadius: index === section.data.length - 1 ? 12 : 0,
-            borderBottomRightRadius: index === section.data.length - 1 ? 12 : 0,
-            overflow: "hidden",
-          }}
-        >
-          <Pressable
-            onPress={() => handleModelSelect(item)}
+      ({ item, index, section }: { item: ModelWithProvider; index: number; section: any }) => {
+        const isFrequentSection = section.title === "Recently Used"
+        const frequentModel = isFrequentSection ? frequentModels?.find((m) => m.id === item.id) : null
+
+        return (
+          <Box
+            background="lightest"
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 12,
+              marginHorizontal: 16,
+              borderTopLeftRadius: index === 0 ? 12 : 0,
+              borderTopRightRadius: index === 0 ? 12 : 0,
+              borderBottomLeftRadius: index === section.data.length - 1 ? 12 : 0,
+              borderBottomRightRadius: index === section.data.length - 1 ? 12 : 0,
+              overflow: "hidden",
             }}
           >
-            <Box direction="row" alignItems="center">
-              {/* Icon */}
+            <Pressable
+              onPress={() => handleModelSelect(item)}
+              style={{
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+              }}
+            >
+              <Box direction="row" alignItems="center">
+                {/* Icon */}
+                <Box
+                  background="subtle"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: 12,
+                  }}
+                >
+                  <Icon icon={Feather} name="cpu" size={20} color={theme.colors.brand[500]} />
+                </Box>
+
+                {/* Content */}
+                <Box flex>
+                  <Text weight="medium">{item.name}</Text>
+                  {item.contextLength && (
+                    <Text size="sm" mode="subtle" style={{ marginTop: 2 }}>
+                      {item.contextLength.toLocaleString()} tokens
+                    </Text>
+                  )}
+                </Box>
+
+                {/* Usage count badge for frequent models */}
+                {frequentModel && (
+                  <Box
+                    mode="brand"
+                    rounded="xl"
+                    p="xs"
+                    style={{
+                      minWidth: 24,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text size="xs" inverse weight="medium" mode="brand">
+                      {frequentModel.usageCount}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+            </Pressable>
+            {index < section.data.length - 1 && (
               <Box
                 background="subtle"
                 style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 12,
+                  height: 1,
+                  marginLeft: 68,
                 }}
-              >
-                <Icon icon={Feather} name="cpu" size={20} color={theme.colors.brand[500]} />
-              </Box>
-
-              {/* Content */}
-              <Box flex>
-                <Text weight="medium">{item.name}</Text>
-                {item.contextLength && (
-                  <Text size="sm" style={{ color: theme.colors.text.subtle, marginTop: 2 }}>
-                    {item.contextLength.toLocaleString()} tokens
-                  </Text>
-                )}
-              </Box>
-            </Box>
-          </Pressable>
-          {index < section.data.length - 1 && (
-            <Box
-              background="subtle"
-              style={{
-                height: 1,
-                marginLeft: 68,
-              }}
-            />
-          )}
-        </Box>
-      ),
-      [theme, handleModelSelect],
+              />
+            )}
+          </Box>
+        )
+      },
+      [theme, handleModelSelect, frequentModels],
     )
 
     const renderSectionHeader = useCallback(

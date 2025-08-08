@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { eq } from "drizzle-orm"
+import { eq, sql, desc } from "drizzle-orm"
 import db from "@/db"
-import { models } from "@/db/schema"
+import { models, sessions } from "@/db/schema"
 import type { Model, NewModel } from "@/db/types"
 import { queryKeys } from "../keys"
 
@@ -23,6 +23,47 @@ export function useLocalModelQuery(id: string) {
       return result[0] || null
     },
     enabled: !!id,
+  })
+}
+
+export function useFrequentModelsQuery() {
+  return useQuery({
+    queryKey: queryKeys.local.models.frequent(),
+    queryFn: async (): Promise<(Model & { usageCount: number })[]> => {
+      const result = await db
+        .select({
+          id: models.id,
+          name: models.name,
+          providerId: models.providerId,
+          providerName: models.providerName,
+          contextLength: models.contextLength,
+          outputLength: models.outputLength,
+          inputPrice: models.inputPrice,
+          outputPrice: models.outputPrice,
+          cacheReadPrice: models.cacheReadPrice,
+          cacheWritePrice: models.cacheWritePrice,
+          attachment: models.attachment,
+          reasoning: models.reasoning,
+          temperature: models.temperature,
+          toolCall: models.toolCall,
+          knowledge: models.knowledge,
+          releaseDate: models.releaseDate,
+          lastUpdated: models.lastUpdated,
+          openWeights: models.openWeights,
+          isCached: models.isCached,
+          lastSyncTimestamp: models.lastSyncTimestamp,
+          createdAt: models.createdAt,
+          updatedAt: models.updatedAt,
+          usageCount: sql<number>`count(${sessions.modelId})`.as("usage_count"),
+        })
+        .from(models)
+        .innerJoin(sessions, eq(models.id, sessions.modelId))
+        .groupBy(models.id)
+        .orderBy(desc(sql`count(${sessions.modelId})`))
+        .limit(5)
+
+      return result as (Model & { usageCount: number })[]
+    },
   })
 }
 

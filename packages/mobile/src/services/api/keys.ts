@@ -49,6 +49,7 @@ export const queryKeys = {
       lists: () => [...queryKeys.local.models.all, "list"] as const,
       details: () => [...queryKeys.local.models.all, "detail"] as const,
       detail: (id: string) => [...queryKeys.local.models.details(), id] as const,
+      frequent: () => [...queryKeys.local.models.all, "frequent"] as const,
     },
   },
 
