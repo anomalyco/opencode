@@ -335,7 +335,12 @@ export namespace Config {
           ]),
         )
         .optional(),
-      instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      instructions: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Additional instruction files or patterns to include (AGENTS.md and local/global CLAUDE.md picked up automatically)",
+        ),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: z
         .object({
