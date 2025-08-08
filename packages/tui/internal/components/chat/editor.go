@@ -32,43 +32,43 @@ type AttachmentInsertedMsg struct{}
 // unescapeClipboardText trims surrounding quotes from clipboard text and returns the inner content.
 // It avoids interpreting backslash escape sequences unless the text is explicitly quoted.
 func (m *editorComponent) unescapeClipboardText(s string) string {
-    t := strings.TrimSpace(s)
-    if len(t) >= 2 {
-        first := t[0]
-        last := t[len(t)-1]
-        if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-            if u, err := strconv.Unquote(t); err == nil {
-                return u
-            }
-            return t[1 : len(t)-1]
-        }
-    }
-    return t
+	t := strings.TrimSpace(s)
+	if len(t) >= 2 {
+		first := t[0]
+		last := t[len(t)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			if u, err := strconv.Unquote(t); err == nil {
+				return u
+			}
+			return t[1 : len(t)-1]
+		}
+	}
+	return t
 }
 
 // pathExists checks if the given path exists. Relative paths are resolved against the app CWD.
 // Supports expanding '~' to the user's home directory.
 func (m *editorComponent) pathExists(p string) bool {
-    if p == "" {
-        return false
-    }
-    if strings.HasPrefix(p, "~") {
-        if home, err := os.UserHomeDir(); err == nil {
-            if p == "~" {
-                p = home
-            } else if strings.HasPrefix(p, "~/") {
-                p = filepath.Join(home, p[2:])
-            }
-        }
-    }
-    check := p
-    if !filepath.IsAbs(check) {
-        check = filepath.Join(m.app.Info.Path.Cwd, check)
-    }
-    if _, err := os.Stat(check); err == nil {
-        return true
-    }
-    return false
+	if p == "" {
+		return false
+	}
+	if strings.HasPrefix(p, "~") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if p == "~" {
+				p = home
+			} else if strings.HasPrefix(p, "~/") {
+				p = filepath.Join(home, p[2:])
+			}
+		}
+	}
+	check := p
+	if !filepath.IsAbs(check) {
+		check = filepath.Join(m.app.Info.Path.Cwd, check)
+	}
+	if _, err := os.Stat(check); err == nil {
+		return true
+	}
+	return false
 }
 
 type EditorComponent interface {
@@ -201,7 +201,6 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		textRaw := string(msg)
 		text := m.unescapeClipboardText(textRaw)
 
-
 		// Case 1: pasted content contains one or more inline @paths -> insert attachments inline
 		// We scan the raw pasted text to preserve original content around attachments.
 		if strings.Contains(textRaw, "@") {
@@ -289,6 +288,21 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.textarea.InsertAttachment(att)
 					m.textarea.InsertString(" ")
 					return m, util.CmdHandler(AttachmentInsertedMsg{})
+				}
+			}
+		}
+
+		// Case 3: plain path pasted (e.g., drag-and-drop) -> attach if image or PDF
+		{
+			p := filepath.Clean(text)
+			if m.pathExists(p) {
+				mime := getMediaTypeFromExtension(strings.ToLower(filepath.Ext(p)))
+				if strings.HasPrefix(mime, "image/") || mime == "application/pdf" {
+					if att := m.createAttachmentFromFile(p); att != nil {
+						m.textarea.InsertAttachment(att)
+						m.textarea.InsertString(" ")
+						return m, util.CmdHandler(AttachmentInsertedMsg{})
+					}
 				}
 			}
 		}

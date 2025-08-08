@@ -78,25 +78,25 @@ func TestPasteMultipleInlineAtPaths_AttachesEach(t *testing.T) {
 	p1 := createTempTextFile(t, dir, "m1.txt", "one")
 	p2 := createTempTextFile(t, dir, "m2.txt", "two")
 
-    // Build a paste with text around, two @paths, and punctuation after the first
-    paste := "Please check @" + p1 + ", and also @" + p2 + " thanks"
+	// Build a paste with text around, two @paths, and punctuation after the first
+	paste := "Please check @" + p1 + ", and also @" + p2 + " thanks"
 
-    _, cmd := m.Update(tea.PasteMsg(paste))
-    if cmd == nil {
-        t.Fatalf("expected command to be returned for multi inline paste")
-    }
-    if _, ok := cmd().(AttachmentInsertedMsg); !ok {
-        t.Fatalf("expected AttachmentInsertedMsg for multi inline paste")
-    }
+	_, cmd := m.Update(tea.PasteMsg(paste))
+	if cmd == nil {
+		t.Fatalf("expected command to be returned for multi inline paste")
+	}
+	if _, ok := cmd().(AttachmentInsertedMsg); !ok {
+		t.Fatalf("expected AttachmentInsertedMsg for multi inline paste")
+	}
 
-    atts := m.textarea.GetAttachments()
-    if len(atts) != 2 {
-        t.Fatalf("expected 2 attachments, got %d", len(atts))
-    }
-    v := m.Value()
-    if !strings.Contains(v, "Please check") || !strings.Contains(v, "and also") || !strings.Contains(v, "thanks") {
-        t.Fatalf("expected surrounding text to be preserved, got: %q", v)
-    }
+	atts := m.textarea.GetAttachments()
+	if len(atts) != 2 {
+		t.Fatalf("expected 2 attachments, got %d", len(atts))
+	}
+	v := m.Value()
+	if !strings.Contains(v, "Please check") || !strings.Contains(v, "and also") || !strings.Contains(v, "thanks") {
+		t.Fatalf("expected surrounding text to be preserved, got: %q", v)
+	}
 }
 
 func createTempTextFile(t *testing.T, dir, name, content string) string {
@@ -111,6 +111,26 @@ func createTempTextFile(t *testing.T, dir, name, content string) string {
 	p := filepath.Join(dir, name)
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		t.Fatalf("failed to get abs path: %v", err)
+	}
+	return abs
+}
+
+func createTempBinFile(t *testing.T, dir, name string, data []byte) string {
+	t.Helper()
+	if dir == "" {
+		td, err := os.MkdirTemp("", "editor-test-*")
+		if err != nil {
+			t.Fatalf("failed to make temp dir: %v", err)
+		}
+		dir = td
+	}
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, data, 0o600); err != nil {
+		t.Fatalf("failed to write temp bin file: %v", err)
 	}
 	abs, err := filepath.Abs(p)
 	if err != nil {
@@ -178,6 +198,53 @@ func TestPlainTextPaste_NoAttachment_NoMsg(t *testing.T) {
 	}
 	if len(m.textarea.GetAttachments()) != 0 {
 		t.Fatalf("expected no attachments for plain text paste")
+	}
+}
+
+func TestPlainPathPng_AttachesImage(t *testing.T) {
+	m := newTestEditor()
+	// Minimal bytes; content isn't validated, extension determines mime
+	p := createTempBinFile(t, "", "img.png", []byte{0x89, 'P', 'N', 'G'})
+
+	_, cmd := m.Update(tea.PasteMsg(p))
+	if cmd == nil {
+		t.Fatalf("expected command to be returned for image path paste")
+	}
+	if _, ok := cmd().(AttachmentInsertedMsg); !ok {
+		t.Fatalf("expected AttachmentInsertedMsg for image path paste")
+	}
+	atts := m.textarea.GetAttachments()
+	if len(atts) != 1 {
+		t.Fatalf("expected 1 attachment, got %d", len(atts))
+	}
+	if atts[0].MediaType != "image/png" {
+		t.Fatalf("expected image/png mime, got %q", atts[0].MediaType)
+	}
+	if v := m.Value(); !strings.HasSuffix(v, " ") {
+		t.Fatalf("expected trailing space after attachment, got value: %q", v)
+	}
+}
+
+func TestPlainPathPdf_AttachesPDF(t *testing.T) {
+	m := newTestEditor()
+	p := createTempBinFile(t, "", "doc.pdf", []byte("%PDF-1.4"))
+
+	_, cmd := m.Update(tea.PasteMsg(p))
+	if cmd == nil {
+		t.Fatalf("expected command to be returned for pdf path paste")
+	}
+	if _, ok := cmd().(AttachmentInsertedMsg); !ok {
+		t.Fatalf("expected AttachmentInsertedMsg for pdf path paste")
+	}
+	atts := m.textarea.GetAttachments()
+	if len(atts) != 1 {
+		t.Fatalf("expected 1 attachment, got %d", len(atts))
+	}
+	if atts[0].MediaType != "application/pdf" {
+		t.Fatalf("expected application/pdf mime, got %q", atts[0].MediaType)
+	}
+	if v := m.Value(); !strings.HasSuffix(v, " ") {
+		t.Fatalf("expected trailing space after attachment, got value: %q", v)
 	}
 }
 
