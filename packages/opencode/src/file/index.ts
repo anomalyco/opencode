@@ -3,9 +3,7 @@ import { Bus } from "../bus"
 import { $ } from "bun"
 import { createPatch } from "diff"
 import path from "path"
-import * as git from "isomorphic-git"
 import { App } from "../app/app"
-import fs from "fs"
 import { Log } from "../util/log"
 
 export namespace File {
@@ -105,12 +103,8 @@ export namespace File {
       .then((x) => x.trim())
     if (app.git) {
       const rel = path.relative(app.path.root, full)
-      const diff = await git.status({
-        fs,
-        dir: app.path.root,
-        filepath: rel,
-      })
-      if (diff !== "unmodified") {
+      const diff = await $`git diff ${rel}`.cwd(app.path.root).quiet().nothrow().text()
+      if (diff.trim()) {
         const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
