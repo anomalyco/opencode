@@ -3,6 +3,8 @@ title: CLI
 description: The opencode CLI options and commands.
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
 Running the opencode CLI starts it for the current directory.
 
 ```bash
@@ -17,34 +19,136 @@ opencode /path/to/project
 
 ---
 
+## Slash commands
+
+When using the opencode CLI, you can type `/` followed by a command name to quickly execute actions. For example:
+
+:::tip
+You can also use `@` to reference files in your messages.
+:::
+
+```bash frame="none"
+/help
+```
+
+Here are all available slash commands:
+
+- **`/help`**
+
+  Show the help dialog.
+
+- **`/editor`**
+
+  Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+
+- **`/export`**
+
+  Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+
+- **`/new`**
+
+  Start a new session. _Alias_: `/clear`
+
+- **`/sessions`**
+
+  List and switch between sessions. _Aliases_: `/resume`, `/continue`
+
+- **`/share`**
+
+  Share current session. [Learn more](/docs/share).
+
+- **`/unshare`**
+
+  Unshare current session. [Learn more](/docs/share#un-sharing).
+
+- **`/compact`**
+
+  Compact the current session. _Alias_: `/summarize`
+
+- **`/details`**
+
+  Toggle tool execution details.
+
+- **`/models`**
+
+  List available models.
+
+- **`/themes`**
+
+  List available themes.
+
+- **`/init`**
+
+  Create or update `AGENTS.md` file. [Learn more](/docs/rules).
+
+- **`/undo`**
+
+  Undo last message.
+
+- **`/redo`**
+
+  Redo message.
+
+- **`/exit`**
+
+  Exit opencode. _Aliases_: `/quit`, `/q`
+
+---
+
+### Editor setup
+
+Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash export EDITOR=nano # or vim, code, etc. ``` To make it permanent, add this to your shell profile;
+    `~/.bashrc`, `~/.zshrc`, etc.
+  </TabItem>
+  <TabItem label="Windows (CMD)">
+    ```bash set EDITOR=notepad # or code, vim, etc. ``` To make it permanent, use **System Properties** > **Environment
+    Variables**.
+  </TabItem>
+  <TabItem label="Windows (PowerShell)">
+    ```bash $env:EDITOR = "notepad" # or "code", "vim", etc. ``` To make it permanent, add this to your PowerShell
+    profile.
+  </TabItem>
+</Tabs>
+
+Popular editor options include:
+
+- `code` - Visual Studio Code
+- `vim` - Vim editor
+- `nano` - Nano editor
+- `notepad` - Windows Notepad
+- `subl` - Sublime Text
+
+---
+
 ## Commands
 
 The opencode CLI also has the following commands.
 
 ---
 
-### run
+### agent
 
-Run opencode in non-interactive mode by passing a prompt directly.
+Manage agents for opencode.
 
 ```bash
-opencode run [message..]
+opencode agent [command]
 ```
 
-This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
+---
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+#### create
+
+Create a new agent with custom configuration.
+
+```bash
+opencode agent create
 ```
 
-#### Flags
-
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--share`    |       | Share the session                          |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
+This command will guide you through creating a new agent with a custom system prompt and tool configuration.
 
 ---
 
@@ -96,6 +200,102 @@ opencode auth logout
 
 ---
 
+### github
+
+Manage the GitHub agent for repository automation.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+Install the GitHub agent in your repository.
+
+```bash
+opencode github install
+```
+
+This sets up the necessary GitHub Actions workflow and guides you through the configuration process. [Learn more](/docs/github).
+
+---
+
+#### run
+
+Run the GitHub agent. This is typically used in GitHub Actions.
+
+```bash
+opencode github run
+```
+
+##### Flags
+
+| Flag      | Description                                      |
+| --------- | ------------------------------------------------ |
+| `--event` | GitHub mock event to run the agent for           |
+| `--token` | GitHub personal access token  |
+
+---
+
+### models
+
+List all available models from configured providers.
+
+```bash
+opencode models
+```
+
+This command displays all models available across your configured providers in the format `provider/model`.
+
+---
+
+### run
+
+Run opencode in non-interactive mode by passing a prompt directly.
+
+```bash
+opencode run [message..]
+```
+
+This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+#### Flags
+
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--continue` | `-c`  | Continue the last session                  |
+| `--session`  | `-s`  | Session ID to continue                     |
+| `--share`    |       | Share the session                          |
+| `--model`    | `-m`  | Model to use in the form of provider/model |
+| `--agent`    |       | Agent to use                               |
+
+---
+
+### serve
+
+Start a headless opencode server for API access.
+
+```bash
+opencode serve
+```
+
+This starts an HTTP server that provides API access to opencode functionality without the TUI interface.
+
+#### Flags
+
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--port`     | `-p`  | Port to listen on          |
+| `--hostname` | `-h`  | Hostname to listen on |
+
+---
+
 ### upgrade
 
 Updates opencode to the latest version or a specific version.
@@ -116,17 +316,26 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+#### Flags
+
+| Flag       | Short | Description                                               |
+| ---------- | ----- | --------------------------------------------------------- |
+| `--method` | `-m`  | The installation method that was used; curl, npm, pnpm, bun, brew |
+
 ---
 
 ## Flags
 
-The opencode CLI takes the following flags.
+The opencode CLI takes the following global flags.
 
-| Flag           | Short | Description          |
-| -------------- | ----- | -------------------- |
-| `--help`       | `-h`  | Display help         |
-| `--version`    |       | Print version number |
-| `--print-logs` |       | Print logs to stderr |
-| `--prompt`     | `-p`  | Prompt to use        |
+| Flag           | Short | Description                                |
+| -------------- | ----- | ------------------------------------------ |
+| `--help`       | `-h`  | Display help                               |
+| `--version`    |       | Print version number                       |
+| `--print-logs` |       | Print logs to stderr                       |
+| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR)       |
+| `--prompt`     | `-p`  | Prompt to use                              |
 | `--model`      | `-m`  | Model to use in the form of provider/model |
-| `--mode`       |       | Mode to use          |
+| `--mode`       |       | Mode to use                                |
+| `--port`       |       | Port to listen on             |
+| `--hostname`   |       | Hostname to listen on  |

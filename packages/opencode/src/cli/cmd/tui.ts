@@ -11,8 +11,8 @@ import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
-import { Mode } from "../../session/mode"
 import { Ide } from "../../ide"
+import { Agent } from "../../agent/agent"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -115,7 +115,7 @@ export const TuiCommand = cmd({
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
             OPENCODE_APP_INFO: JSON.stringify(app),
-            OPENCODE_MODES: JSON.stringify(await Mode.list()),
+            OPENCODE_AGENTS: JSON.stringify(await Agent.list()),
           },
           onExit: () => {
             server.stop()

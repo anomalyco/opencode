@@ -51,12 +51,12 @@ resources:
       logLevel: LogLevel
       provider: Provider
       model: Model
-      mode: Mode
+      agent: Agent
     methods:
       get: get /app
       init: post /app/init
       log: post /log
-      modes: get /mode
+      agents: get /agent
       providers: get /config/providers
 
   find:
@@ -99,6 +99,8 @@ resources:
       fileSource: FileSource
       symbolSource: SymbolSource
       toolPart: ToolPart
+      agentPart: AgentPart
+      agentPartInput: AgentPartInput
       stepStartPart: StepStartPart
       stepFinishPart: StepFinishPart
       snapshotPart: SnapshotPart

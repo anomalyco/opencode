@@ -31,7 +31,7 @@ func main() {
 
 	var model *string = flag.String("model", "", "model to begin with")
 	var prompt *string = flag.String("prompt", "", "prompt to begin with")
-	var mode *string = flag.String("mode", "", "mode to begin with")
+	var agent *string = flag.String("agent", "", "agent to begin with")
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
@@ -44,9 +44,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	modesStr := os.Getenv("OPENCODE_MODES")
-	var modes []opencode.Mode
-	err = json.Unmarshal([]byte(modesStr), &modes)
+	agentsStr := os.Getenv("OPENCODE_AGENTS")
+	var agents []opencode.Agent
+	err = json.Unmarshal([]byte(agentsStr), &agents)
 	if err != nil {
 		slog.Error("Failed to unmarshal modes", "error", err)
 		os.Exit(1)
@@ -86,7 +86,7 @@ func main() {
 	logger := slog.New(apiHandler)
 	slog.SetDefault(logger)
 
-	slog.Debug("TUI launched", "app", appInfoStr, "modes", modesStr, "url", url)
+	slog.Debug("TUI launched", "app", appInfoStr, "modes", agentsStr, "url", url)
 
 	go func() {
 		err = clipboard.Init()
@@ -96,7 +96,7 @@ func main() {
 	}()
 
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, modes, httpClient, model, prompt, mode)
+	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent)
 	if err != nil {
 		panic(err)
 	}

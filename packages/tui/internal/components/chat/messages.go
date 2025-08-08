@@ -300,11 +300,16 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						}
 						remainingParts := message.Parts[partIndex+1:]
 						fileParts := make([]opencode.FilePart, 0)
+						agentParts := make([]opencode.AgentPart, 0)
 						for _, part := range remainingParts {
 							switch part := part.(type) {
 							case opencode.FilePart:
 								if part.Source.Text.Start >= 0 && part.Source.Text.End >= part.Source.Text.Start {
 									fileParts = append(fileParts, part)
+								}
+							case opencode.AgentPart:
+								if part.Source.Start >= 0 && part.Source.End >= part.Source.Start {
+									agentParts = append(agentParts, part)
 								}
 							}
 						}
@@ -355,6 +360,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								width,
 								files,
 								fileParts,
+								agentParts,
 							)
 							content = lipgloss.PlaceHorizontal(
 								m.width,
@@ -433,6 +439,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 									width,
 									"",
 									[]opencode.FilePart{},
+									[]opencode.AgentPart{},
 									toolCallParts...,
 								)
 								content = lipgloss.PlaceHorizontal(
@@ -453,6 +460,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								width,
 								"",
 								[]opencode.FilePart{},
+								[]opencode.AgentPart{},
 								toolCallParts...,
 							)
 							content = lipgloss.PlaceHorizontal(

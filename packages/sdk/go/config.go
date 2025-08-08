@@ -43,7 +43,7 @@ func (r *ConfigService) Get(ctx context.Context, opts ...option.RequestOption) (
 type Config struct {
 	// JSON schema reference for configuration validation
 	Schema string `json:"$schema"`
-	// Modes configuration, see https://opencode.ai/docs/modes
+	// Agent configuration, see https://opencode.ai/docs/agent
 	Agent ConfigAgent `json:"agent"`
 	// @deprecated Use 'share' field instead. Share newly created sessions
 	// automatically
@@ -63,7 +63,7 @@ type Config struct {
 	Lsp    map[string]ConfigLsp `json:"lsp"`
 	// MCP (Model Context Protocol) server configurations
 	Mcp map[string]ConfigMcp `json:"mcp"`
-	// Modes configuration, see https://opencode.ai/docs/modes
+	// @deprecated Use `agent` field instead.
 	Mode ConfigMode `json:"mode"`
 	// Model to use in the format of provider/model, eg anthropic/claude-2
 	Model      string           `json:"model"`
@@ -119,16 +119,20 @@ func (r configJSON) RawJSON() string {
 	return r.raw
 }
 
-// Modes configuration, see https://opencode.ai/docs/modes
+// Agent configuration, see https://opencode.ai/docs/agent
 type ConfigAgent struct {
+	Build       ConfigAgentBuild       `json:"build"`
 	General     ConfigAgentGeneral     `json:"general"`
+	Plan        ConfigAgentPlan        `json:"plan"`
 	ExtraFields map[string]ConfigAgent `json:"-,extras"`
 	JSON        configAgentJSON        `json:"-"`
 }
 
 // configAgentJSON contains the JSON metadata for the struct [ConfigAgent]
 type configAgentJSON struct {
+	Build       apijson.Field
 	General     apijson.Field
+	Plan        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -141,16 +145,82 @@ func (r configAgentJSON) RawJSON() string {
 	return r.raw
 }
 
+type ConfigAgentBuild struct {
+	// Description of when to use the agent
+	Description string               `json:"description"`
+	Disable     bool                 `json:"disable"`
+	Mode        ConfigAgentBuildMode `json:"mode"`
+	Model       string               `json:"model"`
+	Prompt      string               `json:"prompt"`
+	Temperature float64              `json:"temperature"`
+	Tools       map[string]bool      `json:"tools"`
+	TopP        float64              `json:"top_p"`
+	JSON        configAgentBuildJSON `json:"-"`
+}
+
+// configAgentBuildJSON contains the JSON metadata for the struct
+// [ConfigAgentBuild]
+type configAgentBuildJSON struct {
+	Description apijson.Field
+	Disable     apijson.Field
+	Mode        apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	Tools       apijson.Field
+	TopP        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigAgentBuild) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configAgentBuildJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigAgentBuildMode string
+
+const (
+	ConfigAgentBuildModeSubagent ConfigAgentBuildMode = "subagent"
+	ConfigAgentBuildModePrimary  ConfigAgentBuildMode = "primary"
+	ConfigAgentBuildModeAll      ConfigAgentBuildMode = "all"
+)
+
+func (r ConfigAgentBuildMode) IsKnown() bool {
+	switch r {
+	case ConfigAgentBuildModeSubagent, ConfigAgentBuildModePrimary, ConfigAgentBuildModeAll:
+		return true
+	}
+	return false
+}
+
 type ConfigAgentGeneral struct {
-	Description string                 `json:"description,required"`
+	// Description of when to use the agent
+	Description string                 `json:"description"`
+	Disable     bool                   `json:"disable"`
+	Mode        ConfigAgentGeneralMode `json:"mode"`
+	Model       string                 `json:"model"`
+	Prompt      string                 `json:"prompt"`
+	Temperature float64                `json:"temperature"`
+	Tools       map[string]bool        `json:"tools"`
+	TopP        float64                `json:"top_p"`
 	JSON        configAgentGeneralJSON `json:"-"`
-	ModeConfig
 }
 
 // configAgentGeneralJSON contains the JSON metadata for the struct
 // [ConfigAgentGeneral]
 type configAgentGeneralJSON struct {
 	Description apijson.Field
+	Disable     apijson.Field
+	Mode        apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	Tools       apijson.Field
+	TopP        apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -161,6 +231,73 @@ func (r *ConfigAgentGeneral) UnmarshalJSON(data []byte) (err error) {
 
 func (r configAgentGeneralJSON) RawJSON() string {
 	return r.raw
+}
+
+type ConfigAgentGeneralMode string
+
+const (
+	ConfigAgentGeneralModeSubagent ConfigAgentGeneralMode = "subagent"
+	ConfigAgentGeneralModePrimary  ConfigAgentGeneralMode = "primary"
+	ConfigAgentGeneralModeAll      ConfigAgentGeneralMode = "all"
+)
+
+func (r ConfigAgentGeneralMode) IsKnown() bool {
+	switch r {
+	case ConfigAgentGeneralModeSubagent, ConfigAgentGeneralModePrimary, ConfigAgentGeneralModeAll:
+		return true
+	}
+	return false
+}
+
+type ConfigAgentPlan struct {
+	// Description of when to use the agent
+	Description string              `json:"description"`
+	Disable     bool                `json:"disable"`
+	Mode        ConfigAgentPlanMode `json:"mode"`
+	Model       string              `json:"model"`
+	Prompt      string              `json:"prompt"`
+	Temperature float64             `json:"temperature"`
+	Tools       map[string]bool     `json:"tools"`
+	TopP        float64             `json:"top_p"`
+	JSON        configAgentPlanJSON `json:"-"`
+}
+
+// configAgentPlanJSON contains the JSON metadata for the struct [ConfigAgentPlan]
+type configAgentPlanJSON struct {
+	Description apijson.Field
+	Disable     apijson.Field
+	Mode        apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	Tools       apijson.Field
+	TopP        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigAgentPlan) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configAgentPlanJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigAgentPlanMode string
+
+const (
+	ConfigAgentPlanModeSubagent ConfigAgentPlanMode = "subagent"
+	ConfigAgentPlanModePrimary  ConfigAgentPlanMode = "primary"
+	ConfigAgentPlanModeAll      ConfigAgentPlanMode = "all"
+)
+
+func (r ConfigAgentPlanMode) IsKnown() bool {
+	switch r {
+	case ConfigAgentPlanModeSubagent, ConfigAgentPlanModePrimary, ConfigAgentPlanModeAll:
+		return true
+	}
+	return false
 }
 
 type ConfigExperimental struct {
@@ -516,11 +653,11 @@ func (r ConfigMcpType) IsKnown() bool {
 	return false
 }
 
-// Modes configuration, see https://opencode.ai/docs/modes
+// @deprecated Use `agent` field instead.
 type ConfigMode struct {
-	Build       ModeConfig            `json:"build"`
-	Plan        ModeConfig            `json:"plan"`
-	ExtraFields map[string]ModeConfig `json:"-,extras"`
+	Build       ConfigModeBuild       `json:"build"`
+	Plan        ConfigModePlan        `json:"plan"`
+	ExtraFields map[string]ConfigMode `json:"-,extras"`
 	JSON        configModeJSON        `json:"-"`
 }
 
@@ -538,6 +675,108 @@ func (r *ConfigMode) UnmarshalJSON(data []byte) (err error) {
 
 func (r configModeJSON) RawJSON() string {
 	return r.raw
+}
+
+type ConfigModeBuild struct {
+	// Description of when to use the agent
+	Description string              `json:"description"`
+	Disable     bool                `json:"disable"`
+	Mode        ConfigModeBuildMode `json:"mode"`
+	Model       string              `json:"model"`
+	Prompt      string              `json:"prompt"`
+	Temperature float64             `json:"temperature"`
+	Tools       map[string]bool     `json:"tools"`
+	TopP        float64             `json:"top_p"`
+	JSON        configModeBuildJSON `json:"-"`
+}
+
+// configModeBuildJSON contains the JSON metadata for the struct [ConfigModeBuild]
+type configModeBuildJSON struct {
+	Description apijson.Field
+	Disable     apijson.Field
+	Mode        apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	Tools       apijson.Field
+	TopP        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModeBuild) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModeBuildJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModeBuildMode string
+
+const (
+	ConfigModeBuildModeSubagent ConfigModeBuildMode = "subagent"
+	ConfigModeBuildModePrimary  ConfigModeBuildMode = "primary"
+	ConfigModeBuildModeAll      ConfigModeBuildMode = "all"
+)
+
+func (r ConfigModeBuildMode) IsKnown() bool {
+	switch r {
+	case ConfigModeBuildModeSubagent, ConfigModeBuildModePrimary, ConfigModeBuildModeAll:
+		return true
+	}
+	return false
+}
+
+type ConfigModePlan struct {
+	// Description of when to use the agent
+	Description string             `json:"description"`
+	Disable     bool               `json:"disable"`
+	Mode        ConfigModePlanMode `json:"mode"`
+	Model       string             `json:"model"`
+	Prompt      string             `json:"prompt"`
+	Temperature float64            `json:"temperature"`
+	Tools       map[string]bool    `json:"tools"`
+	TopP        float64            `json:"top_p"`
+	JSON        configModePlanJSON `json:"-"`
+}
+
+// configModePlanJSON contains the JSON metadata for the struct [ConfigModePlan]
+type configModePlanJSON struct {
+	Description apijson.Field
+	Disable     apijson.Field
+	Mode        apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	Tools       apijson.Field
+	TopP        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigModePlan) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configModePlanJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigModePlanMode string
+
+const (
+	ConfigModePlanModeSubagent ConfigModePlanMode = "subagent"
+	ConfigModePlanModePrimary  ConfigModePlanMode = "primary"
+	ConfigModePlanModeAll      ConfigModePlanMode = "all"
+)
+
+func (r ConfigModePlanMode) IsKnown() bool {
+	switch r {
+	case ConfigModePlanModeSubagent, ConfigModePlanModePrimary, ConfigModePlanModeAll:
+		return true
+	}
+	return false
 }
 
 type ConfigPermission struct {
@@ -588,11 +827,12 @@ type ConfigPermissionBashString string
 const (
 	ConfigPermissionBashStringAsk   ConfigPermissionBashString = "ask"
 	ConfigPermissionBashStringAllow ConfigPermissionBashString = "allow"
+	ConfigPermissionBashStringDeny  ConfigPermissionBashString = "deny"
 )
 
 func (r ConfigPermissionBashString) IsKnown() bool {
 	switch r {
-	case ConfigPermissionBashStringAsk, ConfigPermissionBashStringAllow:
+	case ConfigPermissionBashStringAsk, ConfigPermissionBashStringAllow, ConfigPermissionBashStringDeny:
 		return true
 	}
 	return false
@@ -609,11 +849,12 @@ type ConfigPermissionBashMapItem string
 const (
 	ConfigPermissionBashMapAsk   ConfigPermissionBashMapItem = "ask"
 	ConfigPermissionBashMapAllow ConfigPermissionBashMapItem = "allow"
+	ConfigPermissionBashMapDeny  ConfigPermissionBashMapItem = "deny"
 )
 
 func (r ConfigPermissionBashMapItem) IsKnown() bool {
 	switch r {
-	case ConfigPermissionBashMapAsk, ConfigPermissionBashMapAllow:
+	case ConfigPermissionBashMapAsk, ConfigPermissionBashMapAllow, ConfigPermissionBashMapDeny:
 		return true
 	}
 	return false
@@ -624,11 +865,12 @@ type ConfigPermissionEdit string
 const (
 	ConfigPermissionEditAsk   ConfigPermissionEdit = "ask"
 	ConfigPermissionEditAllow ConfigPermissionEdit = "allow"
+	ConfigPermissionEditDeny  ConfigPermissionEdit = "deny"
 )
 
 func (r ConfigPermissionEdit) IsKnown() bool {
 	switch r {
-	case ConfigPermissionEditAsk, ConfigPermissionEditAllow:
+	case ConfigPermissionEditAsk, ConfigPermissionEditAllow, ConfigPermissionEditDeny:
 		return true
 	}
 	return false
@@ -866,9 +1108,13 @@ type KeybindsConfig struct {
 	SessionShare string `json:"session_share,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
-	// Next mode
+	// Next agent
+	SwitchAgent string `json:"switch_agent,required"`
+	// Previous agent
+	SwitchAgentReverse string `json:"switch_agent_reverse,required"`
+	// @deprecated use switch_agent. Next mode
 	SwitchMode string `json:"switch_mode,required"`
-	// Previous Mode
+	// @deprecated use switch_agent_reverse. Previous mode
 	SwitchModeReverse string `json:"switch_mode_reverse,required"`
 	// List available themes
 	ThemeList string `json:"theme_list,required"`
@@ -913,6 +1159,8 @@ type keybindsConfigJSON struct {
 	SessionNew           apijson.Field
 	SessionShare         apijson.Field
 	SessionUnshare       apijson.Field
+	SwitchAgent          apijson.Field
+	SwitchAgentReverse   apijson.Field
 	SwitchMode           apijson.Field
 	SwitchModeReverse    apijson.Field
 	ThemeList            apijson.Field
@@ -1021,34 +1269,4 @@ func (r McpRemoteConfigType) IsKnown() bool {
 		return true
 	}
 	return false
-}
-
-type ModeConfig struct {
-	Disable     bool            `json:"disable"`
-	Model       string          `json:"model"`
-	Prompt      string          `json:"prompt"`
-	Temperature float64         `json:"temperature"`
-	Tools       map[string]bool `json:"tools"`
-	TopP        float64         `json:"top_p"`
-	JSON        modeConfigJSON  `json:"-"`
-}
-
-// modeConfigJSON contains the JSON metadata for the struct [ModeConfig]
-type modeConfigJSON struct {
-	Disable     apijson.Field
-	Model       apijson.Field
-	Prompt      apijson.Field
-	Temperature apijson.Field
-	Tools       apijson.Field
-	TopP        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *ModeConfig) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r modeConfigJSON) RawJSON() string {
-	return r.raw
 }

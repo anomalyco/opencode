@@ -16,29 +16,29 @@ type ModelUsage struct {
 	LastUsed   time.Time `toml:"last_used"`
 }
 
-type ModeModel struct {
+type AgentModel struct {
 	ProviderID string `toml:"provider_id"`
 	ModelID    string `toml:"model_id"`
 }
 
 type State struct {
-	Theme              string               `toml:"theme"`
-	ScrollSpeed        *int                 `toml:"scroll_speed"`
-	ModeModel          map[string]ModeModel `toml:"mode_model"`
-	Provider           string               `toml:"provider"`
-	Model              string               `toml:"model"`
-	Mode               string               `toml:"mode"`
-	RecentlyUsedModels []ModelUsage         `toml:"recently_used_models"`
-	MessagesRight      bool                 `toml:"messages_right"`
-	SplitDiff          bool                 `toml:"split_diff"`
-	MessageHistory     []Prompt             `toml:"message_history"`
+	Theme              string                `toml:"theme"`
+	ScrollSpeed        *int                  `toml:"scroll_speed"`
+	AgentModel         map[string]AgentModel `toml:"agent_model"`
+	Provider           string                `toml:"provider"`
+	Model              string                `toml:"model"`
+	Agent              string                `toml:"agent"`
+	RecentlyUsedModels []ModelUsage          `toml:"recently_used_models"`
+	MessagesRight      bool                  `toml:"messages_right"`
+	SplitDiff          bool                  `toml:"split_diff"`
+	MessageHistory     []Prompt              `toml:"message_history"`
 }
 
 func NewState() *State {
 	return &State{
 		Theme:              "opencode",
-		Mode:               "build",
-		ModeModel:          make(map[string]ModeModel),
+		Agent:              "build",
+		AgentModel:         make(map[string]AgentModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
 		MessageHistory:     make([]Prompt, 0),
 	}

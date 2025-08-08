@@ -15,10 +15,10 @@ import type {
   SessionCreateData,
   SessionCreateResponses,
   SessionCreateErrors,
-  SessionGetData,
-  SessionGetResponses,
   SessionDeleteData,
   SessionDeleteResponses,
+  SessionGetData,
+  SessionGetResponses,
   SessionInitData,
   SessionInitResponses,
   SessionAbortData,
@@ -55,8 +55,8 @@ import type {
   FileStatusResponses,
   AppLogData,
   AppLogResponses,
-  AppModesData,
-  AppModesResponses,
+  AppAgentsData,
+  AppAgentsResponses,
   TuiAppendPromptData,
   TuiAppendPromptResponses,
   TuiOpenHelpData,
@@ -151,11 +151,11 @@ class App extends _HeyApiClient {
   }
 
   /**
-   * List all modes
+   * List all agents
    */
-  public modes<ThrowOnError extends boolean = false>(options?: Options<AppModesData, ThrowOnError>) {
-    return (options?.client ?? this._client).get<AppModesResponses, unknown, ThrowOnError>({
-      url: "/mode",
+  public agents<ThrowOnError extends boolean = false>(options?: Options<AppAgentsData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<AppAgentsResponses, unknown, ThrowOnError>({
+      url: "/agent",
       ...options,
     })
   }
@@ -205,20 +205,20 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * Get session
+   * Delete a session and all its data
    */
-  public get<ThrowOnError extends boolean = false>(options: Options<SessionGetData, ThrowOnError>) {
-    return (options.client ?? this._client).get<SessionGetResponses, unknown, ThrowOnError>({
-      url: "/session/{sessionID}",
+  public delete<ThrowOnError extends boolean = false>(options: Options<SessionDeleteData, ThrowOnError>) {
+    return (options.client ?? this._client).delete<SessionDeleteResponses, unknown, ThrowOnError>({
+      url: "/session/{id}",
       ...options,
     })
   }
 
   /**
-   * Delete a session and all its data
+   * Get session
    */
-  public delete<ThrowOnError extends boolean = false>(options: Options<SessionDeleteData, ThrowOnError>) {
-    return (options.client ?? this._client).delete<SessionDeleteResponses, unknown, ThrowOnError>({
+  public get<ThrowOnError extends boolean = false>(options: Options<SessionGetData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionGetResponses, unknown, ThrowOnError>({
       url: "/session/{id}",
       ...options,
     })
@@ -471,7 +471,7 @@ class Tui extends _HeyApiClient {
   }
 
   /**
-   * Execute a TUI command (e.g. switch_mode)
+   * Execute a TUI command (e.g. switch_agent)
    */
   public executeCommand<ThrowOnError extends boolean = false>(options?: Options<TuiExecuteCommandData, ThrowOnError>) {
     return (options?.client ?? this._client).post<TuiExecuteCommandResponses, unknown, ThrowOnError>({

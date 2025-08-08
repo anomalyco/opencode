@@ -1,4 +1,6 @@
 import "zod-openapi/extend"
+import { Trace } from "./trace"
+Trace.init()
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -18,9 +20,6 @@ import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
-import { Trace } from "./trace"
-
-Trace.init()
 
 const cancel = new AbortController()
 

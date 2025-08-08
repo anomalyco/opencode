@@ -55,6 +55,22 @@ func (p Prompt) ToMessage(
 		Text:      text,
 	}}
 	for _, attachment := range p.Attachments {
+		if attachment.Type == "agent" {
+			source, _ := attachment.GetAgentSource()
+			parts = append(parts, opencode.AgentPart{
+				ID:        id.Ascending(id.Part),
+				MessageID: messageID,
+				SessionID: sessionID,
+				Name:      source.Name,
+				Source: opencode.AgentPartSource{
+					Value: attachment.Display,
+					Start: int64(attachment.StartIndex),
+					End:   int64(attachment.EndIndex),
+				},
+			})
+			continue
+		}
+
 		text := opencode.FilePartSourceText{
 			Start: int64(attachment.StartIndex),
 			End:   int64(attachment.EndIndex),
@@ -122,6 +138,17 @@ func (m Message) ToPrompt() (*Prompt, error) {
 					continue
 				}
 				text += p.Text + " "
+			case opencode.AgentPart:
+				attachments = append(attachments, &attachment.Attachment{
+					ID:         p.ID,
+					Type:       "agent",
+					Display:    p.Source.Value,
+					StartIndex: int(p.Source.Start),
+					EndIndex:   int(p.Source.End),
+					Source: &attachment.AgentSource{
+						Name: p.Name,
+					},
+				})
 			case opencode.FilePart:
 				switch p.Source.Type {
 				case "file":
@@ -236,68 +263,18 @@ func (m Message) ToSessionChatParams() []opencode.SessionChatParamsPartUnion {
 				Filename: opencode.F(p.Filename),
 				Source:   opencode.F(source),
 			})
+		case opencode.AgentPart:
+			parts = append(parts, opencode.AgentPartInputParam{
+				ID:   opencode.F(p.ID),
+				Type: opencode.F(opencode.AgentPartInputTypeAgent),
+				Name: opencode.F(p.Name),
+				Source: opencode.F(opencode.AgentPartInputSourceParam{
+					Value: opencode.F(p.Source.Value),
+					Start: opencode.F(p.Source.Start),
+					End:   opencode.F(p.Source.End),
+				}),
+			})
 		}
-	}
-	return parts
-}
-
-func (p Prompt) ToSessionChatParams() []opencode.SessionChatParamsPartUnion {
-	parts := []opencode.SessionChatParamsPartUnion{
-		opencode.TextPartInputParam{
-			Type: opencode.F(opencode.TextPartInputTypeText),
-			Text: opencode.F(p.Text),
-		},
-	}
-	for _, att := range p.Attachments {
-		filePart := opencode.FilePartInputParam{
-			Type:     opencode.F(opencode.FilePartInputTypeFile),
-			Mime:     opencode.F(att.MediaType),
-			URL:      opencode.F(att.URL),
-			Filename: opencode.F(att.Filename),
-		}
-		switch att.Type {
-		case "file":
-			if fs, ok := att.GetFileSource(); ok {
-				filePart.Source = opencode.F(
-					opencode.FilePartSourceUnionParam(opencode.FileSourceParam{
-						Type: opencode.F(opencode.FileSourceTypeFile),
-						Path: opencode.F(fs.Path),
-						Text: opencode.F(opencode.FilePartSourceTextParam{
-							Start: opencode.F(int64(att.StartIndex)),
-							End:   opencode.F(int64(att.EndIndex)),
-							Value: opencode.F(att.Display),
-						}),
-					}),
-				)
-			}
-		case "symbol":
-			if ss, ok := att.GetSymbolSource(); ok {
-				filePart.Source = opencode.F(
-					opencode.FilePartSourceUnionParam(opencode.SymbolSourceParam{
-						Type: opencode.F(opencode.SymbolSourceTypeSymbol),
-						Path: opencode.F(ss.Path),
-						Name: opencode.F(ss.Name),
-						Kind: opencode.F(int64(ss.Kind)),
-						Range: opencode.F(opencode.SymbolSourceRangeParam{
-							Start: opencode.F(opencode.SymbolSourceRangeStartParam{
-								Line:      opencode.F(float64(ss.Range.Start.Line)),
-								Character: opencode.F(float64(ss.Range.Start.Char)),
-							}),
-							End: opencode.F(opencode.SymbolSourceRangeEndParam{
-								Line:      opencode.F(float64(ss.Range.End.Line)),
-								Character: opencode.F(float64(ss.Range.End.Char)),
-							}),
-						}),
-						Text: opencode.F(opencode.FilePartSourceTextParam{
-							Start: opencode.F(int64(att.StartIndex)),
-							End:   opencode.F(int64(att.EndIndex)),
-							Value: opencode.F(att.Display),
-						}),
-					}),
-				)
-			}
-		}
-		parts = append(parts, filePart)
 	}
 	return parts
 }

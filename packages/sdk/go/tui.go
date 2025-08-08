@@ -47,7 +47,7 @@ func (r *TuiService) ClearPrompt(ctx context.Context, opts ...option.RequestOpti
 	return
 }
 
-// Execute a TUI command (e.g. switch_mode)
+// Execute a TUI command (e.g. switch_agent)
 func (r *TuiService) ExecuteCommand(ctx context.Context, body TuiExecuteCommandParams, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "tui/execute-command"

@@ -66,9 +66,10 @@ export namespace ToolRegistry {
     return result
   }
 
-  export async function enabled(_providerID: string, modelID: string): Promise<Record<string, boolean>> {
+  export async function enabled(_providerID: string, _modelID: string): Promise<Record<string, boolean>> {
     const cfg = await Config.get()
     const result: Record<string, boolean> = {}
+    result["patch"] = false
 
     if (cfg.permission?.edit === "deny") {
       result["edit"] = false
@@ -77,25 +78,6 @@ export namespace ToolRegistry {
     }
     if (cfg?.permission?.bash === "deny") {
       result["bash"] = false
-    }
-
-    if (modelID.toLowerCase().includes("claude")) {
-      result["patch"] = false
-      return result
-    }
-
-    if (
-      modelID.toLowerCase().includes("qwen") ||
-      modelID.includes("gpt-") ||
-      modelID.includes("o1") ||
-      modelID.includes("o3") ||
-      modelID.includes("codex")
-    ) {
-      result["patch"] = false
-      result["todowrite"] = false
-      result["todoread"] = false
-
-      return result
     }
 
     return result

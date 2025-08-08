@@ -8,8 +8,13 @@ import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 
 export const TaskTool = Tool.define("task", async () => {
-  const agents = await Agent.list()
-  const description = DESCRIPTION.replace("{agents}", agents.map((a) => `- ${a.name}: ${a.description}`).join("\n"))
+  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const description = DESCRIPTION.replace(
+    "{agents}",
+    agents
+      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+      .join("\n"),
+  )
   return {
     description,
     parameters: z.object({
@@ -51,11 +56,12 @@ export const TaskTool = Tool.define("task", async () => {
         sessionID: session.id,
         modelID: model.modelID,
         providerID: model.providerID,
-        mode: msg.info.mode,
-        system: agent.prompt,
+        agent: agent.name,
         tools: {
-          ...agent.tools,
+          todowrite: false,
+          todoread: false,
           task: false,
+          ...agent.tools,
         },
         parts: [
           {

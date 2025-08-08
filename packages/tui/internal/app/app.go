@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"log/slog"
@@ -27,15 +28,14 @@ type Message struct {
 
 type App struct {
 	Info              opencode.App
-	Modes             []opencode.Mode
+	Agents            []opencode.Agent
 	Providers         []opencode.Provider
 	Version           string
 	StatePath         string
 	Config            *opencode.Config
 	Client            *opencode.Client
 	State             *State
-	ModeIndex         int
-	Mode              *opencode.Mode
+	AgentIndex        int
 	Provider          *opencode.Provider
 	Model             *opencode.Model
 	Session           *opencode.Session
@@ -45,9 +45,13 @@ type App struct {
 	Commands          commands.CommandRegistry
 	InitialModel      *string
 	InitialPrompt     *string
-	IntitialMode      *string
+	InitialAgent      *string
 	compactCancel     context.CancelFunc
 	IsLeaderSequence  bool
+}
+
+func (a *App) Agent() *opencode.Agent {
+	return &a.Agents[a.AgentIndex]
 }
 
 type SessionCreatedMsg = struct {
@@ -83,11 +87,11 @@ func New(
 	ctx context.Context,
 	version string,
 	appInfo opencode.App,
-	modes []opencode.Mode,
+	agents []opencode.Agent,
 	httpClient *opencode.Client,
 	initialModel *string,
 	initialPrompt *string,
-	initialMode *string,
+	initialAgent *string,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -108,8 +112,8 @@ func New(
 		SaveState(appStatePath, appState)
 	}
 
-	if appState.ModeModel == nil {
-		appState.ModeModel = make(map[string]ModeModel)
+	if appState.AgentModel == nil {
+		appState.AgentModel = make(map[string]AgentModel)
 	}
 
 	if configInfo.Theme != "" {
@@ -121,27 +125,29 @@ func New(
 		appState.Theme = themeEnv
 	}
 
-	var modeIndex int
-	var mode *opencode.Mode
+	agentIndex := slices.IndexFunc(agents, func(a opencode.Agent) bool {
+		return a.Mode != "subagent"
+	})
+	var agent *opencode.Agent
 	modeName := "build"
-	if appState.Mode != "" {
-		modeName = appState.Mode
+	if appState.Agent != "" {
+		modeName = appState.Agent
 	}
-	if initialMode != nil && *initialMode != "" {
-		modeName = *initialMode
+	if initialAgent != nil && *initialAgent != "" {
+		modeName = *initialAgent
 	}
-	for i, m := range modes {
+	for i, m := range agents {
 		if m.Name == modeName {
-			modeIndex = i
+			agentIndex = i
 			break
 		}
 	}
-	mode = &modes[modeIndex]
+	agent = &agents[agentIndex]
 
-	if mode.Model.ModelID != "" {
-		appState.ModeModel[mode.Name] = ModeModel{
-			ProviderID: mode.Model.ProviderID,
-			ModelID:    mode.Model.ModelID,
+	if agent.Model.ModelID != "" {
+		appState.AgentModel[agent.Name] = AgentModel{
+			ProviderID: agent.Model.ProviderID,
+			ModelID:    agent.Model.ModelID,
 		}
 	}
 
@@ -167,20 +173,19 @@ func New(
 
 	app := &App{
 		Info:          appInfo,
-		Modes:         modes,
+		Agents:        agents,
 		Version:       version,
 		StatePath:     appStatePath,
 		Config:        configInfo,
 		State:         appState,
 		Client:        httpClient,
-		ModeIndex:     modeIndex,
-		Mode:          mode,
+		AgentIndex:    agentIndex,
 		Session:       &opencode.Session{},
 		Messages:      []Message{},
 		Commands:      commands.LoadFromConfig(configInfo),
 		InitialModel:  initialModel,
 		InitialPrompt: initialPrompt,
-		IntitialMode:  initialMode,
+		InitialAgent:  initialAgent,
 	}
 
 	return app, nil
@@ -222,22 +227,24 @@ func SetClipboard(text string) tea.Cmd {
 
 func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 	if forward {
-		a.ModeIndex++
-		if a.ModeIndex >= len(a.Modes) {
-			a.ModeIndex = 0
+		a.AgentIndex++
+		if a.AgentIndex >= len(a.Agents) {
+			a.AgentIndex = 0
 		}
 	} else {
-		a.ModeIndex--
-		if a.ModeIndex < 0 {
-			a.ModeIndex = len(a.Modes) - 1
+		a.AgentIndex--
+		if a.AgentIndex < 0 {
+			a.AgentIndex = len(a.Agents) - 1
 		}
 	}
-	a.Mode = &a.Modes[a.ModeIndex]
+	if a.Agent().Mode == "subagent" {
+		return a.cycleMode(forward)
+	}
 
-	modelID := a.Mode.Model.ModelID
-	providerID := a.Mode.Model.ProviderID
+	modelID := a.Agent().Model.ModelID
+	providerID := a.Agent().Model.ProviderID
 	if modelID == "" {
-		if model, ok := a.State.ModeModel[a.Mode.Name]; ok {
+		if model, ok := a.State.AgentModel[a.Agent().Name]; ok {
 			modelID = model.ModelID
 			providerID = model.ProviderID
 		}
@@ -258,20 +265,23 @@ func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 		}
 	}
 
-	a.State.Mode = a.Mode.Name
+	a.State.Agent = a.Agent().Name
 	return a, a.SaveState()
 }
 
-func (a *App) SwitchMode() (*App, tea.Cmd) {
+func (a *App) SwitchAgent() (*App, tea.Cmd) {
 	return a.cycleMode(true)
 }
 
-func (a *App) SwitchModeReverse() (*App, tea.Cmd) {
+func (a *App) SwitchAgentReverse() (*App, tea.Cmd) {
 	return a.cycleMode(false)
 }
 
 // findModelByFullID finds a model by its full ID in the format "provider/model"
-func findModelByFullID(providers []opencode.Provider, fullModelID string) (*opencode.Provider, *opencode.Model) {
+func findModelByFullID(
+	providers []opencode.Provider,
+	fullModelID string,
+) (*opencode.Provider, *opencode.Model) {
 	modelParts := strings.SplitN(fullModelID, "/", 2)
 	if len(modelParts) < 2 {
 		return nil, nil
@@ -284,7 +294,10 @@ func findModelByFullID(providers []opencode.Provider, fullModelID string) (*open
 }
 
 // findModelByProviderAndModelID finds a model by provider ID and model ID
-func findModelByProviderAndModelID(providers []opencode.Provider, providerID, modelID string) (*opencode.Provider, *opencode.Model) {
+func findModelByProviderAndModelID(
+	providers []opencode.Provider,
+	providerID, modelID string,
+) (*opencode.Provider, *opencode.Model) {
 	for _, provider := range providers {
 		if provider.ID != providerID {
 			continue
@@ -330,7 +343,7 @@ func (a *App) InitializeProvider() tea.Cmd {
 	a.Providers = providers
 
 	// retains backwards compatibility with old state format
-	if model, ok := a.State.ModeModel[a.State.Mode]; ok {
+	if model, ok := a.State.AgentModel[a.State.Agent]; ok {
 		a.State.Provider = model.ProviderID
 		a.State.Model = model.ModelID
 	}
@@ -340,10 +353,17 @@ func (a *App) InitializeProvider() tea.Cmd {
 
 	// Priority 1: Command line --model flag (InitialModel)
 	if a.InitialModel != nil && *a.InitialModel != "" {
-		if provider, model := findModelByFullID(providers, *a.InitialModel); provider != nil && model != nil {
+		if provider, model := findModelByFullID(providers, *a.InitialModel); provider != nil &&
+			model != nil {
 			selectedProvider = provider
 			selectedModel = model
-			slog.Debug("Selected model from command line", "provider", provider.ID, "model", model.ID)
+			slog.Debug(
+				"Selected model from command line",
+				"provider",
+				provider.ID,
+				"model",
+				model.ID,
+			)
 		} else {
 			slog.Debug("Command line model not found", "model", *a.InitialModel)
 		}
@@ -351,7 +371,8 @@ func (a *App) InitializeProvider() tea.Cmd {
 
 	// Priority 2: Config file model setting
 	if selectedProvider == nil && a.Config.Model != "" {
-		if provider, model := findModelByFullID(providers, a.Config.Model); provider != nil && model != nil {
+		if provider, model := findModelByFullID(providers, a.Config.Model); provider != nil &&
+			model != nil {
 			selectedProvider = provider
 			selectedModel = model
 			slog.Debug("Selected model from config", "provider", provider.ID, "model", model.ID)
@@ -363,10 +384,17 @@ func (a *App) InitializeProvider() tea.Cmd {
 	// Priority 3: Recent model usage (most recently used model)
 	if selectedProvider == nil && len(a.State.RecentlyUsedModels) > 0 {
 		recentUsage := a.State.RecentlyUsedModels[0] // Most recent is first
-		if provider, model := findModelByProviderAndModelID(providers, recentUsage.ProviderID, recentUsage.ModelID); provider != nil && model != nil {
+		if provider, model := findModelByProviderAndModelID(providers, recentUsage.ProviderID, recentUsage.ModelID); provider != nil &&
+			model != nil {
 			selectedProvider = provider
 			selectedModel = model
-			slog.Debug("Selected model from recent usage", "provider", provider.ID, "model", model.ID)
+			slog.Debug(
+				"Selected model from recent usage",
+				"provider",
+				provider.ID,
+				"model",
+				model.ID,
+			)
 		} else {
 			slog.Debug("Recent model not found", "provider", recentUsage.ProviderID, "model", recentUsage.ModelID)
 		}
@@ -374,7 +402,8 @@ func (a *App) InitializeProvider() tea.Cmd {
 
 	// Priority 4: State-based model (backwards compatibility)
 	if selectedProvider == nil && a.State.Provider != "" && a.State.Model != "" {
-		if provider, model := findModelByProviderAndModelID(providers, a.State.Provider, a.State.Model); provider != nil && model != nil {
+		if provider, model := findModelByProviderAndModelID(providers, a.State.Provider, a.State.Model); provider != nil &&
+			model != nil {
 			selectedProvider = provider
 			selectedModel = model
 			slog.Debug("Selected model from state", "provider", provider.ID, "model", model.ID)
@@ -390,7 +419,13 @@ func (a *App) InitializeProvider() tea.Cmd {
 			if model := getDefaultModel(providersResponse, *provider); model != nil {
 				selectedProvider = provider
 				selectedModel = model
-				slog.Debug("Selected model from internal priority (Anthropic)", "provider", provider.ID, "model", model.ID)
+				slog.Debug(
+					"Selected model from internal priority (Anthropic)",
+					"provider",
+					provider.ID,
+					"model",
+					model.ID,
+				)
 			}
 		}
 
@@ -400,7 +435,13 @@ func (a *App) InitializeProvider() tea.Cmd {
 			if model := getDefaultModel(providersResponse, *provider); model != nil {
 				selectedProvider = provider
 				selectedModel = model
-				slog.Debug("Selected model from fallback (first available)", "provider", provider.ID, "model", model.ID)
+				slog.Debug(
+					"Selected model from fallback (first available)",
+					"provider",
+					provider.ID,
+					"model",
+					model.ID,
+				)
 			}
 		}
 	}
@@ -552,7 +593,7 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
-			Mode:       opencode.F(a.Mode.Name),
+			Agent:      opencode.F(a.Agent().Name),
 			MessageID:  opencode.F(messageID),
 			Parts:      opencode.F(message.ToSessionChatParams()),
 		})

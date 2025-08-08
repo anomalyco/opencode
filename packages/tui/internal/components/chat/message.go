@@ -209,6 +209,7 @@ func renderText(
 	width int,
 	extra string,
 	fileParts []opencode.FilePart,
+	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
 ) string {
 	t := theme.CurrentTheme()
@@ -219,7 +220,7 @@ func renderText(
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width+2, t.Background())
+		content = util.ToMarkdown(text, width, t.Background())
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
@@ -229,9 +230,47 @@ func renderText(
 
 		// Apply highlighting to filenames and base style to rest of text BEFORE wrapping
 		textLen := int64(len(text))
+
+		// Collect all parts to highlight (both file and agent parts)
+		type highlightPart struct {
+			start int64
+			end   int64
+			color compat.AdaptiveColor
+		}
+		var highlights []highlightPart
+
+		// Add file parts with secondary color
 		for _, filePart := range fileParts {
-			highlight := base.Foreground(t.Secondary())
-			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
+			highlights = append(highlights, highlightPart{
+				start: filePart.Source.Text.Start,
+				end:   filePart.Source.Text.End,
+				color: t.Secondary(),
+			})
+		}
+
+		// Add agent parts with secondary color (same as file parts)
+		for _, agentPart := range agentParts {
+			highlights = append(highlights, highlightPart{
+				start: agentPart.Source.Start,
+				end:   agentPart.Source.End,
+				color: t.Secondary(),
+			})
+		}
+
+		// Sort highlights by start position
+		slices.SortFunc(highlights, func(a, b highlightPart) int {
+			if a.start < b.start {
+				return -1
+			}
+			if a.start > b.start {
+				return 1
+			}
+			return 0
+		})
+
+		for _, part := range highlights {
+			highlight := base.Foreground(part.color)
+			start, end := part.start, part.end
 
 			if end > textLen {
 				end = textLen
@@ -302,7 +341,7 @@ func renderText(
 		return renderContentBlock(
 			app,
 			content,
-			width+2,
+			width,
 			WithNoBorder(),
 			WithBackgroundColor(t.Background()),
 		)

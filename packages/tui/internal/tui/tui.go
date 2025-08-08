@@ -69,6 +69,7 @@ type Model struct {
 	commandProvider      completions.CompletionProvider
 	fileProvider         completions.CompletionProvider
 	symbolsProvider      completions.CompletionProvider
+	agentsProvider       completions.CompletionProvider
 	showCompletionDialog bool
 	leaderBinding        *key.Binding
 	toastManager         *toast.ToastManager
@@ -211,8 +212,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor = updated.(chat.EditorComponent)
 			cmds = append(cmds, cmd)
 
-			// Set both file and symbols providers for @ completion
-			a.completions = dialog.NewCompletionDialogComponent("@", a.fileProvider, a.symbolsProvider)
+			// Set file, symbols, and agents providers for @ completion
+			a.completions = dialog.NewCompletionDialogComponent("@", a.agentsProvider, a.fileProvider, a.symbolsProvider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -585,7 +586,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
-		a.app.State.ModeModel[a.app.Mode.Name] = app.ModeModel{
+		a.app.State.AgentModel[a.app.Agent().Name] = app.AgentModel{
 			ProviderID: msg.Provider.ID,
 			ModelID:    msg.Model.ID,
 		}
@@ -612,6 +613,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.editor.SetExitKeyInDebounce(false)
 	case dialog.FindSelectedMsg:
 		return a.openFile(msg.FilePath)
+	case tea.PasteMsg, tea.ClipboardMsg:
+		// Paste events: prioritize modal if active, otherwise editor
+		if a.modal != nil {
+			updatedModal, cmd := a.modal.Update(msg)
+			a.modal = updatedModal.(layout.Modal)
+			return a, cmd
+		} else {
+			updatedEditor, cmd := a.editor.Update(msg)
+			a.editor = updatedEditor.(chat.EditorComponent)
+			return a, cmd
+		}
 
 	// API
 	case api.Request:
@@ -679,17 +691,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	a.status = s.(status.StatusComponent)
 
-	u, cmd := a.editor.Update(msg)
-	a.editor = u.(chat.EditorComponent)
+	updatedEditor, cmd := a.editor.Update(msg)
+	a.editor = updatedEditor.(chat.EditorComponent)
 	cmds = append(cmds, cmd)
 
-	u, cmd = a.messages.Update(msg)
-	a.messages = u.(chat.MessagesComponent)
+	updatedMessages, cmd := a.messages.Update(msg)
+	a.messages = updatedMessages.(chat.MessagesComponent)
 	cmds = append(cmds, cmd)
 
 	if a.modal != nil {
-		u, cmd := a.modal.Update(msg)
-		a.modal = u.(layout.Modal)
+		updatedModal, cmd := a.modal.Update(msg)
+		a.modal = updatedModal.(layout.Modal)
 		cmds = append(cmds, cmd)
 	}
 
@@ -940,12 +952,12 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.AppHelpCommand:
 		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
-	case commands.SwitchModeCommand:
-		updated, cmd := a.app.SwitchMode()
+	case commands.SwitchAgentCommand:
+		updated, cmd := a.app.SwitchAgent()
 		a.app = updated
 		cmds = append(cmds, cmd)
-	case commands.SwitchModeReverseCommand:
-		updated, cmd := a.app.SwitchModeReverse()
+	case commands.SwitchAgentReverseCommand:
+		updated, cmd := a.app.SwitchAgentReverse()
 		a.app = updated
 		cmds = append(cmds, cmd)
 	case commands.EditorOpenCommand:
@@ -1209,6 +1221,7 @@ func NewModel(app *app.App) tea.Model {
 	commandProvider := completions.NewCommandCompletionProvider(app)
 	fileProvider := completions.NewFileContextGroup(app)
 	symbolsProvider := completions.NewSymbolsContextGroup(app)
+	agentsProvider := completions.NewAgentsContextGroup(app)
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
@@ -1229,6 +1242,7 @@ func NewModel(app *app.App) tea.Model {
 		commandProvider:      commandProvider,
 		fileProvider:         fileProvider,
 		symbolsProvider:      symbolsProvider,
+		agentsProvider:       agentsProvider,
 		leaderBinding:        leaderBinding,
 		showCompletionDialog: false,
 		toastManager:         toast.NewToastManager(),

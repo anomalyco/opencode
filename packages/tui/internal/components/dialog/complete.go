@@ -66,11 +66,16 @@ func (c *completionDialogComponent) Init() tea.Cmd {
 
 func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 	return func() tea.Msg {
-		allItems := make([]completions.CompletionSuggestion, 0)
+		// Collect results from all providers and preserve provider order
+		type providerItems struct {
+			idx   int
+			items []completions.CompletionSuggestion
+		}
+
+		itemsByProvider := make([]providerItems, 0, len(c.providers))
 		providersWithResults := 0
 
-		// Collect results from all providers
-		for _, provider := range c.providers {
+		for idx, provider := range c.providers {
 			items, err := provider.GetChildEntries(query)
 			if err != nil {
 				slog.Error(
@@ -84,33 +89,46 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 			}
 			if len(items) > 0 {
 				providersWithResults++
-				allItems = append(allItems, items...)
+				itemsByProvider = append(itemsByProvider, providerItems{idx: idx, items: items})
 			}
 		}
 
-		// If there's a query, use fuzzy ranking to sort results
-		if query != "" && providersWithResults > 1 {
+		// If there's a query, fuzzy-rank within each provider, then concatenate by provider order
+		if query != "" && providersWithResults > 0 {
 			t := theme.CurrentTheme()
 			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
-			// Create a slice of display values for fuzzy matching
-			displayValues := make([]string, len(allItems))
-			for i, item := range allItems {
-				displayValues[i] = item.Display(baseStyle)
+
+			// Ensure stable provider order just in case
+			sort.SliceStable(itemsByProvider, func(i, j int) bool { return itemsByProvider[i].idx < itemsByProvider[j].idx })
+
+			final := make([]completions.CompletionSuggestion, 0)
+			for _, entry := range itemsByProvider {
+				// Build display values for fuzzy matching within this provider
+				displayValues := make([]string, len(entry.items))
+				for i, item := range entry.items {
+					displayValues[i] = item.Display(baseStyle)
+				}
+
+				matches := fuzzy.RankFindFold(query, displayValues)
+				sort.Sort(matches)
+
+				// Reorder items for this provider based on fuzzy ranking
+				ranked := make([]completions.CompletionSuggestion, 0, len(matches))
+				for _, m := range matches {
+					ranked = append(ranked, entry.items[m.OriginalIndex])
+				}
+				final = append(final, ranked...)
 			}
 
-			matches := fuzzy.RankFindFold(query, displayValues)
-			sort.Sort(matches)
-
-			// Reorder items based on fuzzy ranking
-			rankedItems := make([]completions.CompletionSuggestion, 0, len(matches))
-			for _, match := range matches {
-				rankedItems = append(rankedItems, allItems[match.OriginalIndex])
-			}
-
-			return rankedItems
+			return final
 		}
 
-		return allItems
+		// No query or no results: just concatenate in provider order
+		all := make([]completions.CompletionSuggestion, 0)
+		for _, entry := range itemsByProvider {
+			all = append(all, entry.items...)
+		}
+		return all
 	}
 }
 func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

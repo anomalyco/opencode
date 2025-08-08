@@ -36,12 +36,12 @@ import { NamedError } from "../util/error"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
-import { Mode } from "./mode"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
+import { Agent } from "../agent/agent"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -322,9 +322,9 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id, false)
       }
-      await unshare(sessionID).catch(() => {})
-      await Storage.remove(`session/info/${sessionID}`).catch(() => {})
-      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
+      await unshare(sessionID).catch(() => { })
+      await Storage.remove(`session/info/${sessionID}`).catch(() => { })
+      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => { })
       state().sessions.delete(sessionID)
       state().messages.delete(sessionID)
       if (emitEvent) {
@@ -357,7 +357,7 @@ export namespace Session {
     messageID: Identifier.schema("message").optional(),
     providerID: z.string(),
     modelID: z.string(),
-    mode: z.string().optional(),
+    agent: z.string().optional(),
     system: z.string().optional(),
     tools: z.record(z.boolean()).optional(),
     parts: z.array(
@@ -382,6 +382,16 @@ export namespace Session {
           .openapi({
             ref: "FilePartInput",
           }),
+        MessageV2.AgentPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .openapi({
+            ref: "AgentPartInput",
+          }),
       ]),
     ),
   })
@@ -393,7 +403,7 @@ export namespace Session {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
 
-    const inputMode = input.mode ?? "build"
+    const inputAgent = input.agent ?? "build"
 
     // Process revert cleanup first, before creating new messages
     const session = await get(input.sessionID)
@@ -513,7 +523,7 @@ export namespace Session {
                     sessionID: input.sessionID,
                     abort: new AbortController().signal,
                     messageID: userMsg.id,
-                    metadata: async () => {},
+                    metadata: async () => { },
                   }),
                 )
                 return [
@@ -566,6 +576,28 @@ export namespace Session {
               ]
           }
         }
+
+        if (part.type === "agent") {
+          return [
+            {
+              id: Identifier.ascending("part"),
+              ...part,
+              messageID: userMsg.id,
+              sessionID: input.sessionID,
+            },
+            {
+              id: Identifier.ascending("part"),
+              messageID: userMsg.id,
+              sessionID: input.sessionID,
+              type: "text",
+              synthetic: true,
+              text:
+                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name,
+            },
+          ]
+        }
+
         return [
           {
             id: Identifier.ascending("part"),
@@ -576,7 +608,7 @@ export namespace Session {
         ]
       }),
     ).then((x) => x.flat())
-    if (inputMode === "plan")
+    if (inputAgent === "plan")
       userParts.push({
         id: Identifier.ascending("part"),
         messageID: userMsg.id,
@@ -600,7 +632,7 @@ export namespace Session {
 
     // mark session as updated
     // used for session list sorting (indicates when session was most recently interacted with)
-    await update(input.sessionID, (_draft) => {})
+    await update(input.sessionID, (_draft) => { })
 
     if (isLocked(input.sessionID)) {
       return new Promise((resolve) => {
@@ -680,15 +712,15 @@ export namespace Session {
               draft.title = title.trim()
             })
         })
-        .catch(() => {})
+        .catch(() => { })
     }
 
-    const mode = await Mode.get(inputMode)
+    const agent = await Agent.get(inputAgent)
     let system = SystemPrompt.header(input.providerID)
     system.push(
       ...(() => {
         if (input.system) return [input.system]
-        if (mode.prompt) return [mode.prompt]
+        if (agent.prompt) return [agent.prompt]
         return SystemPrompt.provider(input.modelID)
       })(),
     )
@@ -702,7 +734,7 @@ export namespace Session {
       id: Identifier.ascending("message"),
       role: "assistant",
       system,
-      mode: inputMode,
+      mode: inputAgent,
       path: {
         cwd: app.path.cwd,
         root: app.path.root,
@@ -727,7 +759,7 @@ export namespace Session {
     const processor = createProcessor(assistantMsg, model.info)
 
     const enabledTools = pipe(
-      mode.tools,
+      agent.tools,
       mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
       mergeDeep(input.tools ?? {}),
     )
@@ -818,9 +850,9 @@ export namespace Session {
 
     const params = {
       temperature: model.info.temperature
-        ? (mode.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+        ? (agent.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
         : undefined,
-      topP: mode.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
+      topP: agent.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
     }
     await Plugin.trigger(
       "chat.params",
@@ -871,7 +903,7 @@ export namespace Session {
             },
             modelID: input.modelID,
             providerID: input.providerID,
-            mode: inputMode,
+            mode: inputAgent,
             time: {
               created: Date.now(),
             },
@@ -895,7 +927,7 @@ export namespace Session {
       },
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      maxOutputTokens: outputLimit,
+      maxOutputTokens: model.info.id.startsWith("gpt-5") ? undefined : outputLimit,
       abortSignal: abort.signal,
       stopWhen: stepCountIs(1000),
       providerOptions: {

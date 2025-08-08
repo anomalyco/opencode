@@ -288,6 +288,31 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
 			return m, nil
+		case "agents":
+			atIndex := m.textarea.LastRuneIndex('@')
+			if atIndex == -1 {
+				// Should not happen, but as a fallback, just insert.
+				m.textarea.InsertString(msg.Item.Value + " ")
+				return m, nil
+			}
+
+			cursorCol := m.textarea.CursorColumn()
+			m.textarea.ReplaceRange(atIndex, cursorCol, "")
+
+			name := msg.Item.Value
+			attachment := &attachment.Attachment{
+				ID:      uuid.NewString(),
+				Type:    "agent",
+				Display: "@" + name,
+				Source: &attachment.AgentSource{
+					Name: name,
+				},
+			}
+
+			m.textarea.InsertAttachment(attachment)
+			m.textarea.InsertString(" ")
+			return m, nil
+
 		default:
 			slog.Debug("Unknown provider", "provider", msg.Item.ProviderID)
 			return m, nil
