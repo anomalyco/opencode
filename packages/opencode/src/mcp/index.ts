@@ -46,53 +46,76 @@ export namespace MCP {
               },
             }),
           ]
+          let lastError: Error | undefined
           for (const transport of transports) {
-            const client = await experimental_createMCPClient({
-              name: key,
-              transport,
-            }).catch(() => {})
-            if (!client) continue
-            clients[key] = client
-            break
+            try {
+              const client = await experimental_createMCPClient({
+                name: key,
+                transport,
+              })
+              if (client) {
+                clients[key] = client
+                break
+              }
+            } catch (error) {
+              lastError = error instanceof Error ? error : new Error(String(error))
+              log.debug("transport failed", { key, transport: transport.constructor.name, error: lastError.message })
+            }
           }
-          if (!clients[key])
+          if (!clients[key]) {
+            const errorMessage = lastError
+              ? `MCP server ${key} failed to connect: ${lastError.message}`
+              : `MCP server ${key} failed to connect to ${mcp.url}`
+            log.error("remote mcp connection failed", { key, url: mcp.url, error: lastError?.message })
             Bus.publish(Session.Event.Error, {
               error: {
                 name: "UnknownError",
                 data: {
-                  message: `MCP server ${key} failed to start`,
+                  message: errorMessage,
                 },
               },
             })
+          }
         }
 
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: new StdioClientTransport({
-              stderr: "ignore",
-              command: cmd,
-              args,
-              env: {
-                ...process.env,
-                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-                ...mcp.environment,
-              },
-            }),
-          }).catch(() => {})
-          if (!client) {
+          try {
+            const client = await experimental_createMCPClient({
+              name: key,
+              transport: new StdioClientTransport({
+                stderr: "ignore",
+                command: cmd,
+                args,
+                env: {
+                  ...process.env,
+                  ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+                  ...mcp.environment,
+                },
+              }),
+            })
+            if (client) {
+              clients[key] = client
+            }
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? `MCP server ${key} failed to start: ${error.message}`
+                : `MCP server ${key} failed to start`
+            log.error("local mcp startup failed", {
+              key,
+              command: mcp.command,
+              error: error instanceof Error ? error.message : String(error),
+            })
             Bus.publish(Session.Event.Error, {
               error: {
                 name: "UnknownError",
                 data: {
-                  message: `MCP server ${key} failed to start`,
+                  message: errorMessage,
                 },
               },
             })
-            continue
           }
-          clients[key] = client
         }
       }
 
