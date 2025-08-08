@@ -35,28 +35,40 @@ export namespace MCP {
         log.info("found", { key, type: mcp.type })
         if (mcp.type === "remote") {
           const transports = [
-            new StreamableHTTPClientTransport(new URL(mcp.url), {
-              requestInit: {
-                headers: mcp.headers,
-              },
-            }),
-            new SSEClientTransport(new URL(mcp.url), {
-              requestInit: {
-                headers: mcp.headers,
-              },
-            }),
+            {
+              name: "StreamableHTTP",
+              transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
+                requestInit: {
+                  headers: mcp.headers,
+                },
+              }),
+            },
+            {
+              name: "SSE",
+              transport: new SSEClientTransport(new URL(mcp.url), {
+                requestInit: {
+                  headers: mcp.headers,
+                },
+              }),
+            },
           ]
           let lastError: Error | undefined
-          for (const transport of transports) {
+          for (const { name, transport } of transports) {
             const client = await experimental_createMCPClient({
               name: key,
               transport,
             }).catch((error) => {
               lastError = error instanceof Error ? error : new Error(String(error))
-              log.debug("transport failed", { key, transport: transport.constructor.name, error: lastError.message })
+              log.debug("transport connection failed", {
+                key,
+                transport: name,
+                url: mcp.url,
+                error: lastError.message,
+              })
               return null
             })
             if (client) {
+              log.debug("transport connection succeeded", { key, transport: name })
               clients[key] = client
               break
             }
