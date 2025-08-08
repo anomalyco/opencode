@@ -8,6 +8,7 @@ import { useDeleteProjectMutation, useProjectsQuery } from "@/services/api/local
 import { useSonner } from "@/hooks/use-sonner"
 import { useQueryClient } from "@tanstack/react-query"
 import db from "@/db"
+import * as Application from "expo-application"
 
 type SettingItemType = "switch" | "action"
 
@@ -125,6 +126,19 @@ export default function SettingsPage() {
           value: isDarkMode,
           onToggle: toggleTheme,
           onPress: toggleTheme,
+        },
+      ],
+    },
+    {
+      id: "about",
+      title: "About",
+      items: [
+        {
+          id: "version",
+          title: "Version",
+          subtitle: `${Application.applicationName} v${Application.nativeApplicationVersion} (${Application.nativeBuildVersion})`,
+          iconName: "ℹ️",
+          type: "action",
         },
       ],
     },
