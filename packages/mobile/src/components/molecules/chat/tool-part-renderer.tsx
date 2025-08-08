@@ -10,6 +10,12 @@ import {
   TodoListRenderer,
   DiffRenderer,
   WebFetchRenderer,
+  GlobRenderer,
+  GrepRenderer,
+  ListRenderer,
+  PatchRenderer,
+  TodoReadRenderer,
+  TaskRenderer,
 } from "./renderers"
 
 interface ToolPartRendererProps {
@@ -18,6 +24,20 @@ interface ToolPartRendererProps {
 
 export const ToolPartRenderer = memo(
   ({ part }: ToolPartRendererProps) => {
+    // Handle patch parts differently since they have different structure
+    if (part.type === "patch") {
+      const patchHash = part.patchHash
+      const patchFiles = part.patchFiles
+        ? typeof part.patchFiles === "string"
+          ? JSON.parse(part.patchFiles)
+          : part.patchFiles
+        : null
+
+      if (patchHash || patchFiles) {
+        return <PatchRenderer hash={patchHash} files={patchFiles || []} patch={undefined} />
+      }
+    }
+
     const toolName = part.toolName || part.tool
     const toolStatus = part.toolStatus || part.state?.status || "pending"
     const toolCallId = part.toolCallId || part.callID

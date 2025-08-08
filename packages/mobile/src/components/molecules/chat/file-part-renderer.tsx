@@ -1,6 +1,6 @@
 import { memo } from "react"
 import { Box, Text } from "@/components/ui/primitives"
-import { FileContentRenderer } from "./renderers"
+import { FileContentRenderer, PatchRenderer as PatchRendererComponent } from "./renderers"
 
 interface FilePartRendererProps {
   part: any
@@ -100,25 +100,17 @@ const PatchRenderer = memo(({ part }: { part: any }) => {
       : part.patchFiles
     : null
 
+  // Add debug logging to see what data we have
+  console.log("📦 FILE PATCH RENDERER DEBUG:", {
+    patchHash,
+    patchFiles,
+    partData: part,
+  })
+
   if (!patchHash && !patchFiles) return null
 
-  return (
-    <Box background="subtle" rounded="md" p="sm">
-      <Text size="xs" weight="medium" mode="subtle">
-        🔧 Patch Applied
-      </Text>
-      {patchHash && (
-        <Text size="xs" mode="subtle" style={{ fontFamily: "monospace", marginTop: 4 }}>
-          Hash: {patchHash.substring(0, 8)}...
-        </Text>
-      )}
-      {patchFiles && Array.isArray(patchFiles) && patchFiles.length > 0 && (
-        <Text size="xs" mode="subtle" style={{ marginTop: 4 }}>
-          Files: {patchFiles.join(", ")}
-        </Text>
-      )}
-    </Box>
-  )
+  // Use our fancy PatchRenderer component
+  return <PatchRendererComponent hash={patchHash} files={patchFiles || []} patch={undefined} />
 })
 
 PatchRenderer.displayName = "PatchRenderer"

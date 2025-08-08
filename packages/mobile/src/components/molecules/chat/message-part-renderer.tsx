@@ -63,9 +63,11 @@ export const MessagePartRenderer = memo(
         case "tool":
           return <ToolPartRenderer part={partData} />
 
+        case "patch":
+          return <ToolPartRenderer part={partData} />
+
         case "file":
         case "snapshot":
-        case "patch":
           return <FilePartRenderer part={partData} type={partType} />
 
         default:
@@ -83,7 +85,7 @@ export const MessagePartRenderer = memo(
           <Box
             background={isUser ? "emphasis" : "lightest"}
             rounded="lg"
-            p={partType === "tool" ? undefined : isShortMessage ? "sm" : "md"}
+            p={partType === "tool" || partType === "patch" ? undefined : isShortMessage ? "sm" : "md"}
             style={{
               maxWidth: "85%",
               minWidth: isTodoMessage
