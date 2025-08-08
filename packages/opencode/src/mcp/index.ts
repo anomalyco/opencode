@@ -48,18 +48,17 @@ export namespace MCP {
           ]
           let lastError: Error | undefined
           for (const transport of transports) {
-            try {
-              const client = await experimental_createMCPClient({
-                name: key,
-                transport,
-              })
-              if (client) {
-                clients[key] = client
-                break
-              }
-            } catch (error) {
+            const client = await experimental_createMCPClient({
+              name: key,
+              transport,
+            }).catch((error) => {
               lastError = error instanceof Error ? error : new Error(String(error))
               log.debug("transport failed", { key, transport: transport.constructor.name, error: lastError.message })
+              return null
+            })
+            if (client) {
+              clients[key] = client
+              break
             }
           }
           if (!clients[key]) {
@@ -80,24 +79,19 @@ export namespace MCP {
 
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command
-          try {
-            const client = await experimental_createMCPClient({
-              name: key,
-              transport: new StdioClientTransport({
-                stderr: "ignore",
-                command: cmd,
-                args,
-                env: {
-                  ...process.env,
-                  ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-                  ...mcp.environment,
-                },
-              }),
-            })
-            if (client) {
-              clients[key] = client
-            }
-          } catch (error) {
+          const client = await experimental_createMCPClient({
+            name: key,
+            transport: new StdioClientTransport({
+              stderr: "ignore",
+              command: cmd,
+              args,
+              env: {
+                ...process.env,
+                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+                ...mcp.environment,
+              },
+            }),
+          }).catch((error) => {
             const errorMessage =
               error instanceof Error
                 ? `MCP server ${key} failed to start: ${error.message}`
@@ -115,6 +109,10 @@ export namespace MCP {
                 },
               },
             })
+            return null
+          })
+          if (client) {
+            clients[key] = client
           }
         }
       }
