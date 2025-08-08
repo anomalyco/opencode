@@ -43,7 +43,7 @@ export const userSettings = sqliteTable("user_settings", {
   theme: text("theme", { enum: ["light", "dark", "system"] }).default("system"),
   defaultProviderId: text("default_provider_id"),
   defaultModelId: text("default_model_id"),
-  currentMode: text("current_mode").default("build"),
+  currentAgent: text("current_agent").default("build"),
   notificationsEnabled: integer("notifications_enabled", { mode: "boolean" }).default(true),
   hapticsEnabled: integer("haptics_enabled", { mode: "boolean" }).default(true),
   autoSync: integer("auto_sync", { mode: "boolean" }).default(true),

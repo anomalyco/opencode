@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` RENAME COLUMN "current_mode" TO "current_agent";

@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { eq } from "drizzle-orm"
 import db from "@/db"
-import { projects, userSettings } from "@/db/schema"
+import { projects } from "@/db/schema"
 import { queryKeys } from "../keys"
-import type { Project, NewProject, UserSettings } from "@/db/types"
+import type { Project, NewProject } from "@/db/types"
 
 // Raw database operations (internal use)
 class ProjectsRepository {
@@ -164,33 +164,6 @@ class ProjectsRepository {
     if (!project) return null
     return project.serverUrl
   }
-
-  async getCurrentMode() {
-    const result = await db.select().from(userSettings).limit(1)
-    const settings = result[0]
-    return settings?.currentMode || "build"
-  }
-
-  async setCurrentMode(mode: string) {
-    const existing = await db.select().from(userSettings).limit(1)
-    if (existing.length > 0) {
-      return await db
-        .update(userSettings)
-        .set({ currentMode: mode, updatedAt: new Date() })
-        .where(eq(userSettings.id, 1))
-        .returning()
-    } else {
-      return await db
-        .insert(userSettings)
-        .values({
-          id: 1,
-          currentMode: mode,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as UserSettings)
-        .returning()
-    }
-  }
 }
 
 const projectsRepo = new ProjectsRepository()
@@ -222,13 +195,6 @@ export function useActiveProjectServerUrlQuery() {
   return useQuery({
     queryKey: queryKeys.local.projects.activeServerUrl(),
     queryFn: () => projectsRepo.getServerUrl(),
-  })
-}
-
-export function useCurrentModeQuery() {
-  return useQuery({
-    queryKey: queryKeys.local.config.currentMode(),
-    queryFn: () => projectsRepo.getCurrentMode(),
   })
 }
 
@@ -354,39 +320,6 @@ export function useUpdateProjectAppInfoMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.byId(projectId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.projects.active() })
-    },
-  })
-}
-
-export function useSetCurrentModeMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (mode: string) => projectsRepo.setCurrentMode(mode),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
-    },
-  })
-}
-
-export function useSwitchModeMutation() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (currentMode?: string) => {
-      // Toggle between build and plan modes locally
-      const newMode = currentMode === "build" ? "plan" : "build"
-
-      // Update local mode state
-      await projectsRepo.setCurrentMode(newMode)
-
-      return { newMode }
-    },
-    onSuccess: () => {
-      // Invalidate local queries to update UI
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
     },
   })
 }

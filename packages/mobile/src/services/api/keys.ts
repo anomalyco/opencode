@@ -42,7 +42,7 @@ export const queryKeys = {
       appConfig: () => [...queryKeys.local.config.all, "app"] as const,
       userSettings: () => [...queryKeys.local.config.all, "user"] as const,
       serverUrl: () => [...queryKeys.local.config.all, "serverUrl"] as const,
-      currentMode: () => [...queryKeys.local.config.all, "currentMode"] as const,
+      currentAgent: () => [...queryKeys.local.config.all, "currentAgent"] as const,
     },
     models: {
       all: ["local", "models"] as const,
@@ -83,6 +83,7 @@ export const queryKeys = {
       providers: () => [...queryKeys.remote.config.all, "providers"] as const,
       modes: () => [...queryKeys.remote.config.all, "modes"] as const,
       models: () => [...queryKeys.remote.config.all, "models"] as const,
+      agents: () => [...queryKeys.remote.config.all, "agents"] as const,
     },
   },
 

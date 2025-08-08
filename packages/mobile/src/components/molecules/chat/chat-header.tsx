@@ -9,7 +9,7 @@ import { useRemoteMessagesQuery } from "@/services/api/remote/messages"
 import { useChatService } from "@/services/chat-service"
 import { useLocalSessionQuery } from "@/services/api/local/sessions"
 import { useSessionManager } from "@/services/session-manager"
-import { useCurrentModeQuery } from "@/services/api/local/user-settings"
+import { useCurrentAgentQuery } from "@/services/api/local/user-settings"
 import type { SSEEvent } from "@/types/opencode-types"
 
 interface ChatHeaderProps {
@@ -26,7 +26,7 @@ export const ChatHeader = memo(({ sessionId }: ChatHeaderProps) => {
 
   // Get session data and services
   const { data: session } = useLocalSessionQuery(sessionId)
-  const { data: currentMode } = useCurrentModeQuery()
+  const { data: currentAgent } = useCurrentAgentQuery()
   const sessionManager = useSessionManager()
 
   // Fetch remote messages to trigger sync
@@ -147,7 +147,7 @@ export const ChatHeader = memo(({ sessionId }: ChatHeaderProps) => {
         alignItems="center"
         p="md"
         safeAreaTop
-        mode={currentMode === "plan" ? "secondary" : undefined}
+        mode={currentAgent === "plan" ? "secondary" : undefined}
         style={{
           borderBottomWidth: 1,
           borderBottomColor: "rgba(0,0,0,0.1)",

@@ -33,22 +33,38 @@ class UserSettingsRepository {
     }
   }
 
-  async getCurrentMode() {
+  async getCurrentAgent() {
     const settings = await this.getUserSettings()
-    return settings?.currentMode || "build"
+    return settings?.currentAgent || "build"
   }
 
-  async setCurrentMode(mode: string) {
+  async setCurrentAgent(agent: string) {
     return await this.setUserSettings({
-      currentMode: mode,
+      currentAgent: agent,
     })
   }
 
-  async switchMode() {
-    const currentMode = await this.getCurrentMode()
-    const newMode = currentMode === "build" ? "plan" : "build"
-    await this.setCurrentMode(newMode)
-    return newMode
+  async cycleAgent(forward: boolean = true, availableAgents?: string[]) {
+    // Use provided agents or fallback to default
+    const agents = availableAgents || ["general", "build", "plan", "example-driven-docs-writer"]
+    const currentAgent = await this.getCurrentAgent()
+    let currentIndex = agents.indexOf(currentAgent)
+
+    // If current agent is not found in the array, start from the beginning
+    if (currentIndex === -1) {
+      currentIndex = 0
+    }
+
+    let newIndex
+    if (forward) {
+      newIndex = currentIndex + 1 >= agents.length ? 0 : currentIndex + 1
+    } else {
+      newIndex = currentIndex - 1 < 0 ? agents.length - 1 : currentIndex - 1
+    }
+
+    const newAgent = agents[newIndex]
+    await this.setCurrentAgent(newAgent)
+    return newAgent
   }
 }
 
@@ -62,10 +78,10 @@ export function useUserSettingsQuery() {
   })
 }
 
-export function useCurrentModeQuery() {
+export function useCurrentAgentQuery() {
   return useQuery({
-    queryKey: queryKeys.local.config.currentMode(),
-    queryFn: () => userSettingsRepo.getCurrentMode(),
+    queryKey: queryKeys.local.config.currentAgent(),
+    queryFn: () => userSettingsRepo.getCurrentAgent(),
   })
 }
 
@@ -81,29 +97,29 @@ export function useSetUserSettingsMutation() {
   })
 }
 
-export function useSetCurrentModeMutation() {
+export function useSetCurrentAgentMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (mode: string) => userSettingsRepo.setCurrentMode(mode),
+    mutationFn: (agent: string) => userSettingsRepo.setCurrentAgent(agent),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentAgent() })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
     },
   })
 }
 
-export function useSwitchModeMutation() {
+export function useSwitchAgentMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => userSettingsRepo.switchMode(),
+    mutationFn: ({ forward = true, availableAgents }: { forward?: boolean; availableAgents?: string[] }) =>
+      userSettingsRepo.cycleAgent(forward, availableAgents),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentMode() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.local.config.currentAgent() })
       queryClient.invalidateQueries({ queryKey: queryKeys.local.config.userSettings() })
     },
   })
 }
-
 // Export the repository for direct access when needed
 export const localUserSettingsService = userSettingsRepo

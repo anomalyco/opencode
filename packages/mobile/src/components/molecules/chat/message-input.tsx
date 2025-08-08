@@ -10,7 +10,8 @@ import type { BottomSheetRef } from "@/components/ui/primitives/bottom-sheet"
 import { useLocalSessionQuery } from "@/services/api/local/sessions"
 import { useSessionModelSelection } from "@/hooks/use-model-selection"
 import { useSimpleChatState } from "@/hooks/use-simple-chat-state"
-import { useCurrentModeQuery, useSwitchModeMutation } from "@/services/api/local/user-settings"
+import { useCurrentAgentQuery, useSwitchAgentMutation } from "@/services/api/local/user-settings"
+import { useAgentNames } from "@/services/api/remote/agents"
 import { useSonner } from "@/hooks/use-sonner"
 
 interface MessageInputProps {
@@ -31,10 +32,11 @@ export const MessageInput = memo(
     const { data: session } = useLocalSessionQuery(sessionId)
     const modelSelection = useSessionModelSelection(session)
 
-    // Get chat state and mode management
+    // Get chat state and agent management
     const { sendMessage } = useSimpleChatState(sessionId)
-    const { data: currentMode } = useCurrentModeQuery()
-    const switchModeMutation = useSwitchModeMutation()
+    const { data: currentAgent } = useCurrentAgentQuery()
+    const switchAgentMutation = useSwitchAgentMutation()
+    const agentNames = useAgentNames()
     const sonner = useSonner()
 
     useEffect(() => {
@@ -56,51 +58,53 @@ export const MessageInput = memo(
         const messageText = text.trim()
         setText("") // Clear immediately
         try {
-          await sendMessage(messageText, currentMode)
+          await sendMessage(messageText, currentAgent)
         } catch {
           // Restore text on error
           setText(messageText)
         }
       }
-    }, [text, sendMessage, currentMode, disabled])
+    }, [text, sendMessage, currentAgent, disabled])
     const handleCommandPress = () => {
       console.log(commandsSheetRef)
-      commandsSheetRef?.current?.present()
+      if (commandsSheetRef && typeof commandsSheetRef === "object" && "current" in commandsSheetRef) {
+        commandsSheetRef.current?.present()
+      }
     }
 
     const handleShowModels = () => {
-      modelsSheetRef?.current?.present()
+      if (modelsSheetRef && typeof modelsSheetRef === "object" && "current" in modelsSheetRef) {
+        modelsSheetRef.current?.present()
+      }
     }
 
-    // Handle mode toggle
-    const handleModeToggle = useCallback(async () => {
+    // Handle agent cycling
+    const handleAgentToggle = useCallback(async () => {
       try {
-        const newMode = await switchModeMutation.mutateAsync()
+        const newAgent = await switchAgentMutation.mutateAsync({ forward: true, availableAgents: agentNames })
 
-        // Show mode switch toast with appropriate color
-        if (newMode === "build") {
-          sonner.info("Switched to build mode", {
-            duration: 2000,
-            icon: {
-              component: Ionicons,
-              name: "hammer",
-              size: 20,
-            },
-          })
-        } else {
-          sonner.secondary("Switched to plan mode", {
-            duration: 2000,
-            icon: {
-              component: Ionicons,
-              name: "document-text",
-              size: 20,
-            },
-          })
+        // Show agent switch toast with appropriate styling
+        const agentConfig = {
+          build: { name: "Build", icon: "hammer", mode: "brand" },
+          plan: { name: "Plan", icon: "document-text", mode: "secondary" },
+          general: { name: "General", icon: "search", mode: "info" },
+          "example-driven-docs-writer": { name: "Docs Writer", icon: "book", mode: "success" },
         }
+
+        const config = agentConfig[newAgent as keyof typeof agentConfig] || agentConfig.build
+
+        sonner.info(`Switched to ${config.name} agent`, {
+          duration: 2000,
+          icon: {
+            component: Ionicons,
+            name: config.icon as any,
+            size: 20,
+          },
+        })
       } catch (err) {
-        sonner.error("Failed to switch mode")
+        sonner.error("Failed to switch agent")
       }
-    }, [switchModeMutation, sonner])
+    }, [switchAgentMutation, sonner, agentNames, currentAgent])
     return (
       <BlurView
         intensity={80}
@@ -115,16 +119,45 @@ export const MessageInput = memo(
         <Box p="sm" safeAreaBottom={!keyboardVisible}>
           {/* Mode indicator box */}
           <Box direction="row" alignItems="center" justifyContent="space-between" mb="sm" pl="xs" pr="xs">
-            {/* Mode badge */}
-            <Button size="auto" variant="ghost" onPress={handleModeToggle}>
-              <Box mode={currentMode === "plan" ? "secondary" : "brand"} rounded="full" pl="sm" pr="sm" pt="xs" pb="xs">
+            {/* Agent badge */}
+            <Button size="auto" variant="ghost" onPress={handleAgentToggle}>
+              <Box
+                mode={
+                  currentAgent === "plan"
+                    ? "secondary"
+                    : currentAgent === "general"
+                      ? "warning"
+                      : currentAgent === "example-driven-docs-writer"
+                        ? "success"
+                        : "brand"
+                }
+                rounded="full"
+                pl="sm"
+                pr="sm"
+                pt="xs"
+                pb="xs"
+              >
                 <Text
                   size="xs"
                   weight="medium"
-                  mode={currentMode === "plan" ? "subtle" : "brand"}
+                  mode={
+                    currentAgent === "plan"
+                      ? "subtle"
+                      : currentAgent === "general"
+                        ? "warning"
+                        : currentAgent === "example-driven-docs-writer"
+                          ? "success"
+                          : "brand"
+                  }
                   style={{ textTransform: "uppercase", letterSpacing: 0.5 }}
                 >
-                  {currentMode === "plan" ? "Plan" : "Build"}
+                  {currentAgent === "plan"
+                    ? "Plan"
+                    : currentAgent === "general"
+                      ? "General"
+                      : currentAgent === "example-driven-docs-writer"
+                        ? "Docs"
+                        : "Build"}
                 </Text>
               </Box>
             </Button>
