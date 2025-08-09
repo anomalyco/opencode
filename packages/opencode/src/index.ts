@@ -19,6 +19,9 @@ import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 
+// Set environment variable to indicate this is an AI agent
+process.env["AGENT"] = "1"
+
 const cancel = new AbortController()
 
 process.on("unhandledRejection", (e) => {
