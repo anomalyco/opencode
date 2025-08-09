@@ -488,7 +488,7 @@ export type EventSessionDeleted = {
 export type EventSessionIdle = {
   type: string
   properties: {
-    sessionID: string
+    info: Session
   }
 }
 
