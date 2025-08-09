@@ -1,4 +1,4 @@
-export const ValidTSPlugin = async (context: any) => {
+export const ValidTSPlugin = async (_context: any) => {
   return {
     event: async () => {
       // Test event handler
@@ -12,7 +12,7 @@ export const ValidTSPlugin = async (context: any) => {
   }
 }
 
-export const AnotherValidPlugin = async (context: any) => {
+export const AnotherValidPlugin = async (_context: any) => {
   return {
     "permission.ask": async (_input: any, output: any) => {
       output.status = "allow"

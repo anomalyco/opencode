@@ -55,13 +55,31 @@ describe("Plugin loading logic", () => {
   })
 
   test("handles syntax error imports gracefully", async () => {
-    const syntaxErrorPath = path.join(fixturesPath, "syntax-error.js")
+    // Test with actual JS file that has syntax error
+    const syntaxErrorContent = `
+export const SyntaxErrorPlugin = async () => {
+  return {
+    "chat.message": async () => {
+      // Missing closing brace to cause syntax error
+`
+
+    // Create temporary file with syntax error
+    const tmpFile = path.join(fixturesPath, "temp-syntax-error.js")
+    await Bun.write(tmpFile, syntaxErrorContent)
 
     let importError = null
-    const mod = await import(syntaxErrorPath).catch((error) => {
+    const mod = await import(tmpFile).catch((error) => {
       importError = error
       return null
     })
+
+    // Clean up
+    await Bun.file(tmpFile)
+      .exists()
+      .then((exists) => {
+        if (exists) return import("fs/promises").then((fs) => fs.unlink(tmpFile))
+      })
+      .catch(() => {})
 
     expect(mod).toBe(null)
     expect(importError).toBeTruthy()
