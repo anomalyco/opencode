@@ -105,8 +105,8 @@ export namespace Config {
     result.plugin = result.plugin || []
     result.plugin.push(
       ...[
-        ...(await Filesystem.globUp("plugin/*.ts", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/plugin/*.ts", app.path.cwd, app.path.root)),
+        ...(await Filesystem.globUp("plugin/*.{ts,js}", Global.Path.config, Global.Path.config)),
+        ...(await Filesystem.globUp(".opencode/plugin/*.{ts,js}", app.path.cwd, app.path.root)),
       ].map((x) => "file://" + x),
     )
 
