@@ -37,11 +37,12 @@ type toolsDialog struct {
 }
 
 type toolItem struct {
-	name        string
-	displayName string
-	enabled     bool
-	source      string // "builtin" or "mcp"
-	overridden  bool   // differs from default (agent default + global default)
+	name           string
+	displayName    string
+	enabled        bool
+	source         string // "builtin" or "mcp"
+	overridden     bool   // differs from default (agent default + global default)
+	defaultEnabled bool   // cached default enabled value from API
 }
 
 func (t toolItem) Render(selected bool, width int, baseStyle styles.Style) string {
@@ -92,7 +93,7 @@ func (d *toolsDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if d.allTools[i].name == selectedName {
 					d.allTools[i].enabled = !d.allTools[i].enabled
 				}
-				base := app.IsToolDefaultEnabled(d.allTools[i].name)
+				base := d.allTools[i].defaultEnabled
 				if agentSetting, ok := agent.Tools[d.allTools[i].name]; ok {
 					base = agentSetting
 				}
@@ -206,11 +207,12 @@ func (d *toolsDialog) setupAllTools() {
 	}
 
 	// Build deterministic ordered list: collect names, sort by source then name
-	// Filter out tools that should not be shown to users
+	// Only show tools that are meant to be user-manageable (defaultEnabled indicates this)
 	keys := make([]string, 0, len(availableTools))
-	for k := range availableTools {
-		// Skip patch and invalid tools as they are not meant to be user-manageable
-		if k == "patch" || k == "invalid" {
+	for k, toolInfo := range availableTools {
+		// Only include tools that have a default enabled state
+		// Tools without defaultEnabled (nil) or explicitly disabled are not user-manageable
+		if toolInfo.DefaultEnabled != nil && !*toolInfo.DefaultEnabled {
 			continue
 		}
 		keys = append(keys, k)
@@ -234,7 +236,7 @@ func (d *toolsDialog) setupAllTools() {
 	d.allTools = make([]toolItem, 0, len(keys))
 	for _, toolName := range keys {
 		toolInfo := availableTools[toolName]
-		defaultEnabled := app.IsToolDefaultEnabled(toolName)
+		defaultEnabled := app.IsToolDefaultEnabledFromToolInfo(toolInfo)
 		if agentSetting, exists := agent.Tools[toolName]; exists {
 			defaultEnabled = agentSetting
 		}
@@ -244,7 +246,14 @@ func (d *toolsDialog) setupAllTools() {
 		}
 		overridden := enabled != defaultEnabled
 		displayName := toolName
-		d.allTools = append(d.allTools, toolItem{name: toolName, displayName: displayName, enabled: enabled, source: toolInfo.Source, overridden: overridden})
+		d.allTools = append(d.allTools, toolItem{
+			name:           toolName,
+			displayName:    displayName,
+			enabled:        enabled,
+			source:         toolInfo.Source,
+			overridden:     overridden,
+			defaultEnabled: app.IsToolDefaultEnabledFromToolInfo(toolInfo),
+		})
 	}
 
 	ordered := make([]string, 0, len(d.allTools))

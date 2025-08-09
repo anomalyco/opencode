@@ -52,8 +52,6 @@ type App struct {
 	compactCancel        context.CancelFunc
 	IsLeaderSequence     bool
 	SessionToolOverrides map[string]map[string]bool // session-scoped tool overrides (not persisted)
-	toolCache            map[string]ToolInfo        // cached tools by name
-	toolCacheTS          time.Time                  // timestamp of last fetch
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -704,19 +702,28 @@ func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
 }
 
 type ToolInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Source      string `json:"source"` // "builtin" or "mcp"
+	Name           string `json:"name"`
+	Description    string `json:"description,omitempty"`
+	Source         string `json:"source"`         // "builtin" or "mcp"
+	DefaultEnabled *bool  `json:"defaultEnabled"` // pointer to allow nil detection
+}
+
+// IsToolDefaultEnabled returns whether a tool is enabled by default before any
+// agent-specific settings or overrides are applied. Now uses API response data.
+func IsToolDefaultEnabledFromToolInfo(toolInfo ToolInfo) bool {
+	if toolInfo.DefaultEnabled != nil {
+		return *toolInfo.DefaultEnabled
+	}
+	// Fallback for older API responses that don't include defaultEnabled
+	return toolInfo.Name != "patch" && toolInfo.Name != "invalid"
 }
 
 // IsToolDefaultEnabled returns whether a tool is enabled by default before any
 // agent-specific settings or overrides are applied.
+// DEPRECATED: Use IsToolDefaultEnabledFromToolInfo for new code
 func IsToolDefaultEnabled(name string) bool { return name != "patch" && name != "invalid" }
 
 func (a *App) ListTools(ctx context.Context) (map[string]ToolInfo, error) {
-	if a.toolCache != nil && time.Since(a.toolCacheTS) < time.Minute {
-		return a.toolCache, nil
-	}
 	u := os.Getenv("OPENCODE_SERVER")
 	if u == "" {
 		return nil, fmt.Errorf("OPENCODE_SERVER environment variable not set")
@@ -740,8 +747,6 @@ func (a *App) ListTools(ctx context.Context) (map[string]ToolInfo, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
 		return nil, fmt.Errorf("decode tools: %w", err)
 	}
-	a.toolCache = tools
-	a.toolCacheTS = time.Now()
 	return tools, nil
 }
 
