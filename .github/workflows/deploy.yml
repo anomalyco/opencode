@@ -17,7 +17,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v1
         with:
-          bun-version: 1.2.17
+          bun-version: 1.2.19
 
       - run: bun install
 

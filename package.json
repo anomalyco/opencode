@@ -3,7 +3,7 @@
   "name": "opencode",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.2.14",
+  "packageManager": "bun@1.2.19",
   "scripts": {
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
@@ -46,7 +46,10 @@
   "trustedDependencies": [
     "esbuild",
     "protobufjs",
-    "sharp"
+    "sharp",
+    "tree-sitter",
+    "tree-sitter-bash",
+    "web-tree-sitter"
   ],
   "patchedDependencies": {}
 }

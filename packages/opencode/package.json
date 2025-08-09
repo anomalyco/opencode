@@ -52,6 +52,7 @@
     "remeda": "catalog:",
     "tree-sitter": "0.22.4",
     "tree-sitter-bash": "0.23.3",
+    "web-tree-sitter": "0.22.6",
     "turndown": "7.2.0",
     "vscode-jsonrpc": "8.2.1",
     "xdg-basedir": "5.1.0",

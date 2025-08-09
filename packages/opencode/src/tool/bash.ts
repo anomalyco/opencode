@@ -19,11 +19,28 @@ const MAX_TIMEOUT = 10 * 60 * 1000
 const log = Log.create({ service: "bash-tool" })
 
 const parser = lazy(async () => {
-  const { default: Parser } = await import("tree-sitter")
-  const Bash = await import("tree-sitter-bash")
-  const p = new Parser()
-  p.setLanguage(Bash.language as any)
-  return p
+  try {
+    const { default: Parser } = await import("tree-sitter")
+    const Bash = await import("tree-sitter-bash")
+    const p = new Parser()
+    p.setLanguage(Bash.language as any)
+    return p
+  } catch (e) {
+    const { default: Parser } = await import("web-tree-sitter")
+    const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, { with: { type: "wasm" } })
+    await Parser.init({
+      locateFile() {
+        return treeWasm
+      },
+    })
+    const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
+      with: { type: "wasm" },
+    })
+    const bashLanguage = await Parser.Language.load(bashWasm)
+    const p = new Parser()
+    p.setLanguage(bashLanguage)
+    return p
+  }
 })
 
 export const BashTool = Tool.define("bash", {
