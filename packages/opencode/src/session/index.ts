@@ -113,7 +113,7 @@ export namespace Session {
     Idle: Bus.event(
       "session.idle",
       z.object({
-        sessionID: z.string(),
+        info: Info,
       }),
     ),
     Error: Bus.event(
@@ -1381,7 +1381,7 @@ export namespace Session {
         if (session.parentID) return
 
         Bus.publish(Event.Idle, {
-          sessionID,
+          info: session,
         })
       },
     }
