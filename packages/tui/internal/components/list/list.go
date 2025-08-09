@@ -173,7 +173,13 @@ func (c *listComponent[T]) moveUp() {
 		}
 	}
 
-	// If no selectable item found above, stay at current position
+	// If no selectable item found above, wrap to the bottom
+	for i := len(c.items) - 1; i > c.selectedIdx; i-- {
+		if c.isSelectable(c.items[i]) {
+			c.selectedIdx = i
+			return
+		}
+	}
 }
 
 // moveDown moves the selection down, skipping non-selectable items
@@ -183,20 +189,19 @@ func (c *listComponent[T]) moveDown() {
 	}
 
 	originalIdx := c.selectedIdx
-	for {
-		if c.selectedIdx < len(c.items)-1 {
-			c.selectedIdx++
-		} else {
-			break
-		}
-
-		if c.isSelectable(c.items[c.selectedIdx]) {
+	// First try moving down from current position
+	for i := c.selectedIdx + 1; i < len(c.items); i++ {
+		if c.isSelectable(c.items[i]) {
+			c.selectedIdx = i
 			return
 		}
+	}
 
-		// Prevent infinite loop
-		if c.selectedIdx == originalIdx {
-			break
+	// If no selectable item found below, wrap to the top
+	for i := 0; i < originalIdx; i++ {
+		if c.isSelectable(c.items[i]) {
+			c.selectedIdx = i
+			return
 		}
 	}
 }
