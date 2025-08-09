@@ -65,6 +65,66 @@ export namespace LSPServer {
     },
   }
 
+  export const ESLint: Info = {
+    id: "eslint",
+    root: NearestRoot([
+      "eslint.config.js",
+      "eslint.config.mjs",
+      "eslint.config.cjs",
+      "eslint.config.ts",
+      "eslint.config.mts",
+      "eslint.config.cts",
+      ".eslintrc.js",
+      ".eslintrc.cjs",
+      ".eslintrc.yaml",
+      ".eslintrc.yml",
+      ".eslintrc.json",
+      "package.json",
+    ]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    async spawn(app, root) {
+      const eslint = await Bun.resolve("eslint", app.path.cwd).catch(() => {})
+      if (!eslint) return
+      const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
+      if (!(await Bun.file(serverPath).exists())) {
+        log.info("downloading and building VS Code ESLint server")
+        const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
+        if (!response.ok) return
+
+        const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
+        await Bun.file(zipPath).write(response)
+
+        await $`unzip -o -q ${zipPath}`.cwd(Global.Path.bin).nothrow()
+        await fs.rm(zipPath, { force: true })
+
+        const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
+        const finalPath = path.join(Global.Path.bin, "vscode-eslint")
+
+        if (await Bun.file(finalPath).exists()) {
+          await fs.rm(finalPath, { force: true, recursive: true })
+        }
+        await fs.rename(extractedPath, finalPath)
+
+        await $`npm install`.cwd(finalPath).quiet()
+        await $`npm run compile`.cwd(finalPath).quiet()
+
+        log.info("installed VS Code ESLint server", { serverPath })
+      }
+
+      const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Gopls: Info = {
     id: "golang",
     root: async (file, app) => {
