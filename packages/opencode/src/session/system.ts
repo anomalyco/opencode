@@ -71,8 +71,22 @@ export namespace SystemPrompt {
     paths.add(path.join(os.homedir(), ".claude", "CLAUDE.md"))
 
     if (config.instructions) {
-      for (const instruction of config.instructions) {
-        const matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+      for (let instruction of config.instructions) {
+        if (instruction.startsWith("~/")) {
+          instruction = path.join(os.homedir(), instruction.slice(2))
+        }
+        let matches: string[] = []
+        if (path.isAbsolute(instruction)) {
+          matches = await Array.fromAsync(
+            new Bun.Glob(path.basename(instruction)).scan({
+              cwd: path.dirname(instruction),
+              absolute: true,
+              onlyFiles: true,
+            }),
+          ).catch(() => [])
+        } else {
+          matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+        }
         matches.forEach((path) => paths.add(path))
       }
     }
