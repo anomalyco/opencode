@@ -3,6 +3,10 @@
   --sl-color-divider: var(--sl-color-gray-5);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 .expressive-code .frame {
   box-shadow: none;
 }
