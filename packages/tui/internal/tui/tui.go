@@ -595,6 +595,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		cmds = append(cmds, a.app.SaveState())
+	case app.ToolsUpdatedMsg:
+		// Session-scoped overrides only; do not persist to state
+		if len(msg.Overrides) == 0 {
+			delete(a.app.SessionToolOverrides, msg.Agent)
+		} else {
+			if a.app.SessionToolOverrides == nil {
+				a.app.SessionToolOverrides = make(map[string]map[string]bool)
+			}
+			a.app.SessionToolOverrides[msg.Agent] = msg.Overrides
+		}
+		cmds = append(cmds, toast.NewSuccessToast("Tools updated (session only)"))
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		cmds = append(cmds, a.app.SaveState())
@@ -645,6 +656,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/tui/open-models":
 			modelDialog := dialog.NewModelDialog(a.app)
 			a.modal = modelDialog
+		case "/tui/open-tools":
+			toolsDialog := dialog.NewToolsDialog(a.app)
+			a.modal = toolsDialog
 		case "/tui/append-prompt":
 			var body struct {
 				Text string `json:"text"`
@@ -1115,6 +1129,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.ModelListCommand:
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
+	case commands.ToolListCommand:
+		toolsDialog := dialog.NewToolsDialog(a.app)
+		a.modal = toolsDialog
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog

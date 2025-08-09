@@ -20,6 +20,8 @@ import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { lazy } from "../util/lazy"
 import { Agent } from "../agent/agent"
+import { MCP } from "../mcp"
+import { ToolRegistry } from "../tool/registry"
 
 const ERRORS = {
   400: {
@@ -890,6 +892,73 @@ export namespace Server {
         async (c) => {
           const modes = await Agent.list()
           return c.json(modes)
+        },
+      )
+      .get(
+        "/app/tools",
+        describeRoute({
+          description: "List all available tools",
+          operationId: "app.tools",
+          responses: {
+            200: {
+              description: "List of tools",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.record(
+                      z.string(),
+                      z.object({
+                        name: z.string(),
+                        description: z.string().optional(),
+                        source: z.enum(["builtin", "mcp"]),
+                      }),
+                    ),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const tools: Record<string, { name: string; description?: string; source: "builtin" | "mcp" }> = {}
+
+          // Add built-in tools dynamically from registry
+          try {
+            const builtinTools = await ToolRegistry.tools("", "") // provider/model not needed for getting tool info
+            for (const tool of builtinTools) {
+              tools[tool.id] = {
+                name: tool.id,
+                description: tool.description,
+                source: "builtin",
+              }
+            }
+          } catch (error) {
+            // Fallback to just tool IDs if registry fails
+            const builtinToolIds = ToolRegistry.ids()
+            for (const toolName of builtinToolIds) {
+              tools[toolName] = {
+                name: toolName,
+                source: "builtin",
+              }
+            }
+          }
+
+          // Add MCP tools
+          try {
+            const mcpTools = await MCP.tools()
+            for (const [toolName, tool] of Object.entries(mcpTools)) {
+              tools[toolName] = {
+                name: toolName,
+                description: tool.description,
+                source: "mcp",
+              }
+            }
+          } catch (error) {
+            // MCP tools might not be available, that's okay
+            log.warn("Failed to load MCP tools", { error })
+          }
+
+          return c.json(tools)
         },
       )
       .post(

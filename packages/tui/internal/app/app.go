@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"log/slog"
 
@@ -27,27 +30,30 @@ type Message struct {
 }
 
 type App struct {
-	Info              opencode.App
-	Agents            []opencode.Agent
-	Providers         []opencode.Provider
-	Version           string
-	StatePath         string
-	Config            *opencode.Config
-	Client            *opencode.Client
-	State             *State
-	AgentIndex        int
-	Provider          *opencode.Provider
-	Model             *opencode.Model
-	Session           *opencode.Session
-	Messages          []Message
-	Permissions       []opencode.Permission
-	CurrentPermission opencode.Permission
-	Commands          commands.CommandRegistry
-	InitialModel      *string
-	InitialPrompt     *string
-	InitialAgent      *string
-	compactCancel     context.CancelFunc
-	IsLeaderSequence  bool
+	Info                 opencode.App
+	Agents               []opencode.Agent
+	Providers            []opencode.Provider
+	Version              string
+	StatePath            string
+	Config               *opencode.Config
+	Client               *opencode.Client
+	State                *State
+	AgentIndex           int
+	Provider             *opencode.Provider
+	Model                *opencode.Model
+	Session              *opencode.Session
+	Messages             []Message
+	Permissions          []opencode.Permission
+	CurrentPermission    opencode.Permission
+	Commands             commands.CommandRegistry
+	InitialModel         *string
+	InitialPrompt        *string
+	InitialAgent         *string
+	compactCancel        context.CancelFunc
+	IsLeaderSequence     bool
+	SessionToolOverrides map[string]map[string]bool // session-scoped tool overrides (not persisted)
+	toolCache            map[string]ToolInfo        // cached tools by name
+	toolCacheTS          time.Time                  // timestamp of last fetch
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -81,6 +87,17 @@ type FileRenderedMsg struct {
 }
 type PermissionRespondedToMsg struct {
 	Response opencode.SessionPermissionRespondParamsResponse
+}
+
+// ToolsUpdatedMsg is emitted when tool overrides for an agent are updated via the dialog
+// Overrides contains only explicit deviations (true/false) from defaults for that agent
+// Agent is the agent name whose overrides were changed
+// When Overrides is empty the entry for the agent should be removed
+// The dialog implementation will compute these overrides prior to emitting the message
+// NOTE: Overrides are session-scoped and NOT persisted to disk.
+type ToolsUpdatedMsg struct {
+	Agent     string
+	Overrides map[string]bool
 }
 
 func New(
@@ -172,20 +189,21 @@ func New(
 	slog.Debug("Loaded config", "config", configInfo)
 
 	app := &App{
-		Info:          appInfo,
-		Agents:        agents,
-		Version:       version,
-		StatePath:     appStatePath,
-		Config:        configInfo,
-		State:         appState,
-		Client:        httpClient,
-		AgentIndex:    agentIndex,
-		Session:       &opencode.Session{},
-		Messages:      []Message{},
-		Commands:      commands.LoadFromConfig(configInfo),
-		InitialModel:  initialModel,
-		InitialPrompt: initialPrompt,
-		InitialAgent:  initialAgent,
+		Info:                 appInfo,
+		Agents:               agents,
+		Version:              version,
+		StatePath:            appStatePath,
+		Config:               configInfo,
+		State:                appState,
+		Client:               httpClient,
+		AgentIndex:           agentIndex,
+		Session:              &opencode.Session{},
+		Messages:             []Message{},
+		Commands:             commands.LoadFromConfig(configInfo),
+		InitialModel:         initialModel,
+		InitialPrompt:        initialPrompt,
+		InitialAgent:         initialAgent,
+		SessionToolOverrides: make(map[string]map[string]bool),
 	}
 
 	return app, nil
@@ -590,13 +608,17 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 	a.Messages = append(a.Messages, message)
 
 	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
+		params := opencode.SessionChatParams{
 			ProviderID: opencode.F(a.Provider.ID),
 			ModelID:    opencode.F(a.Model.ID),
 			Agent:      opencode.F(a.Agent().Name),
 			MessageID:  opencode.F(messageID),
 			Parts:      opencode.F(message.ToSessionChatParams()),
-		})
+		}
+		if ov, ok := a.SessionToolOverrides[a.Agent().Name]; ok && len(ov) > 0 {
+			params.Tools = opencode.F(ov)
+		}
+		_, err := a.Client.Session.Chat(ctx, a.Session.ID, params)
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
 			slog.Error(errormsg)
@@ -681,6 +703,49 @@ func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
 	return providers.Providers, nil
 }
 
+type ToolInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Source      string `json:"source"` // "builtin" or "mcp"
+}
+
+// IsToolDefaultEnabled returns whether a tool is enabled by default before any
+// agent-specific settings or overrides are applied.
+func IsToolDefaultEnabled(name string) bool { return name != "patch" && name != "invalid" }
+
+func (a *App) ListTools(ctx context.Context) (map[string]ToolInfo, error) {
+	if a.toolCache != nil && time.Since(a.toolCacheTS) < time.Minute {
+		return a.toolCache, nil
+	}
+	u := os.Getenv("OPENCODE_SERVER")
+	if u == "" {
+		return nil, fmt.Errorf("OPENCODE_SERVER environment variable not set")
+	}
+	u = strings.TrimSuffix(u, "/") + "/app/tools"
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create tools request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch tools: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tools API status %d", resp.StatusCode)
+	}
+	var tools map[string]ToolInfo
+	if err := json.NewDecoder(resp.Body).Decode(&tools); err != nil {
+		return nil, fmt.Errorf("decode tools: %w", err)
+	}
+	a.toolCache = tools
+	a.toolCacheTS = time.Now()
+	return tools, nil
+}
+
+// Removed getFallbackTools() - server is the single source of truth
 // func (a *App) loadCustomKeybinds() {
 //
 // }

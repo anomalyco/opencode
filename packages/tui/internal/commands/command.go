@@ -119,6 +119,7 @@ const (
 	SessionExportCommand        CommandName = "session_export"
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
+	ToolListCommand             CommandName = "tool_list"
 	ThemeListCommand            CommandName = "theme_list"
 	FileListCommand             CommandName = "file_list"
 	FileCloseCommand            CommandName = "file_close"
@@ -247,6 +248,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "list models",
 			Keybindings: parseBindings("<leader>m"),
 			Trigger:     []string{"models"},
+		},
+		{
+			Name:        ToolListCommand,
+			Description: "toggle tools",
+			Keybindings: parseBindings("<leader>o"),
+			Trigger:     []string{"tools"},
 		},
 		{
 			Name:        ThemeListCommand,
