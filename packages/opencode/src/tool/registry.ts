@@ -79,6 +79,9 @@ export namespace ToolRegistry {
     if (cfg?.permission?.bash === "deny") {
       result["bash"] = false
     }
+    if (cfg?.permission?.webfetch === "deny") {
+      result["webfetch"] = false
+    }
 
     return result
   }

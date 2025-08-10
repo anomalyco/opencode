@@ -341,6 +341,7 @@ export namespace Config {
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          webfetch: Permission.optional(),
         })
         .optional(),
       experimental: z
