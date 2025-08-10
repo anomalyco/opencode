@@ -68,3 +68,10 @@ func (m *MockTextAreaWrapper) Init() tea.Cmd {
 func (m *MockTextAreaWrapper) View() string {
 	return m.value
 }
+
+// CreateTestKeyMsg creates a mock KeyPressMsg for testing
+func CreateTestKeyMsg(keyStr string) tea.KeyPressMsg {
+	return tea.KeyPressMsg{
+		Text: keyStr,
+	}
+}

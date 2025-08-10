@@ -1,6 +1,7 @@
 package vim
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -206,7 +207,24 @@ func TestCommandParser_ParseMotion(t *testing.T) {
 	parser := NewCommandParser()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotMotion, gotRest := parser.ParseMotion(tt.input, tt.wantCount)
+			// Extract count from input if present
+			inputCount := 1
+			inputRest := tt.input
+			
+			// Parse numeric prefix
+			idx := 0
+			for idx < len(inputRest) && inputRest[idx] >= '0' && inputRest[idx] <= '9' {
+				idx++
+			}
+			if idx > 0 {
+				countStr := inputRest[:idx]
+				inputRest = inputRest[idx:]
+				if parsed, err := strconv.Atoi(countStr); err == nil {
+					inputCount = parsed
+				}
+			}
+			
+			gotMotion, gotRest := parser.ParseMotion(inputRest, inputCount)
 			
 			if gotMotion == nil && tt.wantMotion != nil {
 				t.Fatal("ParseMotion() returned nil, want motion")

@@ -2,6 +2,7 @@ package vim
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -126,8 +127,10 @@ func getDefaultLeaderMappings() map[string]LeaderMapping {
 		"P": {Command: "paste_above", Description: "Paste from system clipboard above"},
 		"y": {Command: "yank_all", Description: "Yank entire buffer"},
 		"d": {Command: "delete_all", Description: "Delete entire buffer"},
-		"/": {Command: "search", Description: "Start search"},
 		"v": {Command: "visual_all", Description: "Select all text"},
+		"r": {Command: "reload", Description: "Reload configuration"},
+		"n": {Command: "next_buffer", Description: "Go to next buffer"},
+		"b": {Command: "prev_buffer", Description: "Go to previous buffer"},
 	}
 }
 
@@ -195,8 +198,8 @@ func (m *VimModeManager) GetCount() int {
 	if m.pendingCount == "" {
 		return 1
 	}
-	count := 1
-	if _, err := fmt.Sscanf(m.pendingCount, "%d", &count); err != nil {
+	count, err := strconv.Atoi(m.pendingCount)
+	if err != nil {
 		return 1
 	}
 	return count

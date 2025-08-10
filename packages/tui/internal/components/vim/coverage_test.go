@@ -84,7 +84,7 @@ func TestOurAddedLeaderKeySystem(t *testing.T) {
 	}
 	
 	// Test default leader mappings we added
-	mappings := []string{"w", "q", "c", "p", "P", "y", "d", "/", "v"}
+	mappings := []string{"w", "q", "c", "p", "P", "y", "d", "v", "r", "n", "b"}
 	for _, key := range mappings {
 		mapping, ok := m.GetLeaderMapping(key)
 		if !ok {

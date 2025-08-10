@@ -152,14 +152,8 @@ func (p *CommandParser) ParseCommand(input string) (*Command, error) {
 		case "d", "c", "y":
 			// Check for doubled operator (dd, cc, yy)
 			if len(rest) >= 2 && rest[1] == rest[0] {
-				cmdType := CommandDelete
-				if op == "c" {
-					cmdType = CommandChange
-				} else if op == "y" {
-					cmdType = CommandYank
-				}
 				return &Command{
-					Type:     cmdType,
+					Type:     p.getOperatorCommandType(op),
 					Count:    count,
 					Register: register,
 					Motion: &Motion{
@@ -181,14 +175,8 @@ func (p *CommandParser) ParseCommand(input string) (*Command, error) {
 				}
 			}
 			
-			cmdType := CommandDelete
-			if op == "c" {
-				cmdType = CommandChange
-			} else if op == "y" {
-				cmdType = CommandYank
-			}
 			return &Command{
-				Type:     cmdType,
+				Type:     p.getOperatorCommandType(op),
 				Count:    count,
 				Register: register,
 				Motion:   motion,
@@ -680,4 +668,18 @@ func (p *CommandParser) ParseTextObject(obj string) string {
 	}
 
 	return ""
+}
+
+// getOperatorCommandType returns the CommandType for an operator
+func (p *CommandParser) getOperatorCommandType(op string) CommandType {
+	switch op {
+	case "d":
+		return CommandDelete
+	case "c":
+		return CommandChange
+	case "y":
+		return CommandYank
+	default:
+		return CommandOperator
+	}
 }
