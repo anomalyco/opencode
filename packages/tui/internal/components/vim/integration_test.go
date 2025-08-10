@@ -4,10 +4,12 @@ import (
 	"testing"
 )
 
-// Test the specific features we added in our vim implementation
+// This file contains integration tests for the complete vim mode implementation.
+// It focuses on testing the interaction between different vim components and
+// ensuring that the features work together correctly.
 
-// Test f/F/t/T character search motions that we added
-func TestOurAddedCharacterSearchMotions(t *testing.T) {
+// TestCharacterSearchMotions tests f/F/t/T character search motions
+func TestCharacterSearchMotions(t *testing.T) {
 	engine := NewMotionEngine()
 	
 	// Test data: "hello world"
@@ -67,8 +69,8 @@ func TestOurAddedCharacterSearchMotions(t *testing.T) {
 	}
 }
 
-// Test leader key functionality we added
-func TestOurAddedLeaderKeySystem(t *testing.T) {
+// TestLeaderKeySystem tests the leader key functionality
+func TestLeaderKeySystem(t *testing.T) {
 	m := NewVimModeManager()
 	m.Enable()
 	
@@ -116,8 +118,8 @@ func TestOurAddedLeaderKeySystem(t *testing.T) {
 	}
 }
 
-// Test the bug fixes we implemented
-func TestOurBugFixes(t *testing.T) {
+// TestVimOperatorBehavior tests correct vim operator behavior
+func TestVimOperatorBehavior(t *testing.T) {
 	t.Run("D command deletes to end of line", func(t *testing.T) {
 		// The D command should delete from cursor to end of line
 		parser := NewCommandParser()
@@ -189,8 +191,8 @@ func TestOurBugFixes(t *testing.T) {
 	})
 }
 
-// Test factory pattern we added for switching between vim and regular textarea
-func TestOurFactoryPattern(t *testing.T) {
+// TestFactoryPattern tests the factory pattern for mode switching
+func TestFactoryPattern(t *testing.T) {
 	t.Run("Factory pattern validates conceptually", func(t *testing.T) {
 		// The factory pattern we implemented:
 		// 1. Creates regular or vim textarea based on config
@@ -208,8 +210,8 @@ func TestOurFactoryPattern(t *testing.T) {
 	})
 }
 
-// Test visual indicator we added
-func TestOurVisualIndicator(t *testing.T) {
+// TestVisualIndicator tests visual mode selection rendering
+func TestVisualIndicator(t *testing.T) {
 	t.Run("Visual indicator shows selection", func(t *testing.T) {
 		vi := NewVisualIndicator(
 			Position{Row: 0, Col: 2},

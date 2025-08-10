@@ -24,8 +24,6 @@ type VimTextarea struct {
 	pendingKeys       string // For multi-character commands like 'gg'
 }
 
-// No longer needed - use standard library min/max (Go 1.21+)
-
 // NewVimTextarea creates a new Vim-enabled textarea
 func NewVimTextarea() *VimTextarea {
 	ta := textarea.New()
