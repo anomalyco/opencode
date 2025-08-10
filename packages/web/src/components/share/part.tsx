@@ -144,7 +144,15 @@ export function Part(props: PartProps) {
                   DateTime.DATETIME_FULL_WITH_SECONDS,
                 )}
               >
-                {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
+                {DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
+                  DateTime.DATETIME_MED,
+                )}
+                {` | ${props.message.modelID}`}
+                {props.message.mode && (
+                  <span style={{ "font-weight": "bold", color: "var(--sl-color-accent)" }}>
+                    {` | ${props.message.mode}`}
+                  </span>
+                )}
               </Footer>
             )}
           </div>
@@ -158,7 +166,17 @@ export function Part(props: PartProps) {
         {props.part.type === "step-start" && props.message.role === "assistant" && (
           <div data-component="step-start">
             <div data-slot="provider">{props.message.providerID}</div>
-            <div data-slot="model">{props.message.modelID}</div>
+            <div data-slot="model">
+              {DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
+                DateTime.DATETIME_MED,
+              )}
+              {` | ${props.message.modelID}`}
+              {props.message.mode && (
+                <span style={{ "font-weight": "bold", color: "var(--sl-color-accent)" }}>
+                  {` | ${props.message.mode}`}
+                </span>
+              )}
+            </div>
           </div>
         )}
         {props.part.type === "tool" && props.part.state.status === "error" && (
@@ -653,9 +671,7 @@ function TaskTool(props: ToolProps) {
         <span data-slot="name">Task</span>
         <span data-slot="target">{props.state.input.description}</span>
       </div>
-      <div data-component="tool-input">
-        &ldquo;{props.state.input.prompt}&rdquo;
-      </div>
+      <div data-component="tool-input">&ldquo;{props.state.input.prompt}&rdquo;</div>
       <ResultsButton showCopy="Show output" hideCopy="Hide output">
         <div data-component="tool-output">
           <ContentMarkdown expand text={props.state.output} />

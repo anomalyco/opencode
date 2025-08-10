@@ -324,9 +324,49 @@ func renderText(
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}
-	info := fmt.Sprintf("%s (%s)", author, timestamp)
-	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 
+	// Check if this is an assistant message with mode (agent) information
+	var modelAndAgentSuffix string
+	if assistantMsg, ok := message.(opencode.AssistantMessage); ok && assistantMsg.Mode != "" {
+		// Find the agent index by name to get the correct color
+		var agentIndex int
+		for i, agent := range app.Agents {
+			if agent.Name == assistantMsg.Mode {
+				agentIndex = i
+				break
+			}
+		}
+
+		// Get agent color based on the original agent index (same as status bar)
+		agentColors := []compat.AdaptiveColor{
+			t.TextMuted(),
+			t.Secondary(),
+			t.Accent(),
+			t.Success(),
+			t.Warning(),
+			t.Primary(),
+			t.Error(),
+		}
+		var agentColor compat.AdaptiveColor
+		if agentIndex >= 0 && agentIndex < len(agentColors) {
+			agentColor = agentColors[agentIndex]
+		}
+
+		// Style the agent name with the same color as status bar
+		agentName := strings.Title(assistantMsg.Mode)
+		styledAgentName := styles.NewStyle().Foreground(agentColor).Bold(true).Render(agentName)
+		modelAndAgentSuffix = fmt.Sprintf(" | %s | %s", assistantMsg.ModelID, styledAgentName)
+	}
+
+	var info string
+	if modelAndAgentSuffix != "" {
+		// For assistant messages: "timestamp | modelID | agentName"
+		info = fmt.Sprintf("%s%s", timestamp, modelAndAgentSuffix)
+	} else {
+		// For user messages: "author (timestamp)"
+		info = fmt.Sprintf("%s (%s)", author, timestamp)
+	}
+	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
 		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
