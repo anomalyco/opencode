@@ -338,19 +338,7 @@ func renderText(
 		}
 
 		// Get agent color based on the original agent index (same as status bar)
-		agentColors := []compat.AdaptiveColor{
-			t.TextMuted(),
-			t.Secondary(),
-			t.Accent(),
-			t.Success(),
-			t.Warning(),
-			t.Primary(),
-			t.Error(),
-		}
-		var agentColor compat.AdaptiveColor
-		if agentIndex >= 0 && agentIndex < len(agentColors) {
-			agentColor = agentColors[agentIndex]
-		}
+		agentColor := util.GetAgentColor(agentIndex)
 
 		// Style the agent name with the same color as status bar
 		agentName := strings.Title(assistantMsg.Mode)
