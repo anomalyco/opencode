@@ -121,6 +121,7 @@ const (
 	ToolDetailsCommand          CommandName = "tool_details"
 	ModelListCommand            CommandName = "model_list"
 	AgentListCommand            CommandName = "agent_list"
+	ModelCycleRecentCommand     CommandName = "model_cycle_recent"
 	ThemeListCommand            CommandName = "theme_list"
 	FileListCommand             CommandName = "file_list"
 	FileCloseCommand            CommandName = "file_close"
@@ -255,6 +256,11 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "list agents",
 			Keybindings: parseBindings("<leader>a"),
 			Trigger:     []string{"agents"},
+		},
+		{
+			Name:        ModelCycleRecentCommand,
+			Description: "cycle recent models",
+			Keybindings: parseBindings("f2"),
 		},
 		{
 			Name:        ThemeListCommand,

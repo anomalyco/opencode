@@ -1148,6 +1148,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.AgentListCommand:
 		agentDialog := dialog.NewAgentDialog(a.app)
 		a.modal = agentDialog
+	case commands.ModelCycleRecentCommand:
+		slog.Debug("ModelCycleRecentCommand triggered")
+		updated, cmd := a.app.CycleRecentModel()
+		a.app = updated
+		cmds = append(cmds, cmd)
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog
