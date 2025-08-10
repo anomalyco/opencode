@@ -76,7 +76,7 @@ export const prettier: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
