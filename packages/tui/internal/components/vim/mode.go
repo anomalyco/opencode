@@ -88,7 +88,16 @@ type VimModeManager struct {
 	lastChange      *Change // For dot repeat
 	registers       map[string]*Register
 	searchPattern   string
-	searchDirection bool // true for forward, false for backward
+	searchDirection bool   // true for forward, false for backward
+	leaderKey       string // Leader key for custom mappings
+	leaderActive    bool   // Whether leader key was just pressed
+	leaderMappings  map[string]LeaderMapping // Custom leader key mappings
+}
+
+// LeaderMapping represents a custom leader key mapping
+type LeaderMapping struct {
+	Command     string
+	Description string
 }
 
 // NewVimModeManager creates a new VimModeManager
@@ -96,12 +105,29 @@ func NewVimModeManager() *VimModeManager {
 	return &VimModeManager{
 		currentMode: ModeNormal,
 		enabled:     false,
+		leaderKey:   " ", // Default to space as leader
 		registers: map[string]*Register{
 			"\"": {Content: "", Linewise: false}, // unnamed register
 			"0":  {Content: "", Linewise: false}, // yank register
 			"+":  {Content: "", Linewise: false}, // system clipboard
 			"*":  {Content: "", Linewise: false}, // system clipboard (alternative)
 		},
+		leaderMappings: getDefaultLeaderMappings(),
+	}
+}
+
+// getDefaultLeaderMappings returns the default leader key mappings
+func getDefaultLeaderMappings() map[string]LeaderMapping {
+	return map[string]LeaderMapping{
+		"w": {Command: "save", Description: "Save current buffer"},
+		"q": {Command: "quit", Description: "Quit vim mode"},
+		"c": {Command: "clear", Description: "Clear prompt"},
+		"p": {Command: "paste_below", Description: "Paste from system clipboard below"},
+		"P": {Command: "paste_above", Description: "Paste from system clipboard above"},
+		"y": {Command: "yank_all", Description: "Yank entire buffer"},
+		"d": {Command: "delete_all", Description: "Delete entire buffer"},
+		"/": {Command: "search", Description: "Start search"},
+		"v": {Command: "visual_all", Description: "Select all text"},
 	}
 }
 
@@ -265,6 +291,40 @@ func (m *VimModeManager) GetSearchPattern() (string, bool) {
 	return m.searchPattern, m.searchDirection
 }
 
+// SetLeaderKey sets the leader key
+func (m *VimModeManager) SetLeaderKey(key string) {
+	m.leaderKey = key
+}
+
+// GetLeaderKey returns the current leader key
+func (m *VimModeManager) GetLeaderKey() string {
+	return m.leaderKey
+}
+
+// SetLeaderActive sets whether the leader key is active
+func (m *VimModeManager) SetLeaderActive(active bool) {
+	m.leaderActive = active
+}
+
+// IsLeaderActive returns whether the leader key is active
+func (m *VimModeManager) IsLeaderActive() bool {
+	return m.leaderActive
+}
+
+// SetLeaderMapping sets a custom leader key mapping
+func (m *VimModeManager) SetLeaderMapping(key string, mapping LeaderMapping) {
+	if m.leaderMappings == nil {
+		m.leaderMappings = make(map[string]LeaderMapping)
+	}
+	m.leaderMappings[key] = mapping
+}
+
+// GetLeaderMapping returns a leader key mapping
+func (m *VimModeManager) GetLeaderMapping(key string) (LeaderMapping, bool) {
+	mapping, ok := m.leaderMappings[key]
+	return mapping, ok
+}
+
 // GetStatusLine returns a string for the status line
 func (m *VimModeManager) GetStatusLine() string {
 	if !m.enabled {
@@ -272,6 +332,11 @@ func (m *VimModeManager) GetStatusLine() string {
 	}
 
 	var parts []string
+
+	// Show leader key active
+	if m.leaderActive {
+		parts = append(parts, fmt.Sprintf("<%s>", m.leaderKey))
+	}
 
 	// Mode indicator
 	if m.currentMode != ModeNormal && m.currentMode != ModeVisual && m.currentMode != ModeVisualLine {

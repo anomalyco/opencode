@@ -17,6 +17,10 @@ const (
 	MotionDocumentStart
 	MotionDocumentEnd
 	MotionSearch
+	MotionFindChar      // f{char}
+	MotionFindCharBack  // F{char}
+	MotionTillChar      // t{char}
+	MotionTillCharBack  // T{char}
 )
 
 // Motion represents a movement command
@@ -25,6 +29,7 @@ type Motion struct {
 	Count     int
 	Inclusive bool // For operator-pending mode
 	Direction int  // -1 for backward, 1 for forward
+	Char      rune // For f/F/t/T motions
 }
 
 // MotionEngine handles cursor movements and text object calculations
@@ -67,6 +72,14 @@ func (e *MotionEngine) ExecuteMotion(buffer [][]any, cursor Position, motion Mot
 		if lastRow >= 0 {
 			newPos = Position{Row: lastRow, Col: len(buffer[lastRow])}
 		}
+	case MotionFindChar:
+		newPos = e.findChar(buffer, cursor, motion.Char, count, true, true)
+	case MotionFindCharBack:
+		newPos = e.findChar(buffer, cursor, motion.Char, count, false, true)
+	case MotionTillChar:
+		newPos = e.findChar(buffer, cursor, motion.Char, count, true, false)
+	case MotionTillCharBack:
+		newPos = e.findChar(buffer, cursor, motion.Char, count, false, false)
 	}
 
 	return e.clampPosition(buffer, newPos)
@@ -123,12 +136,14 @@ func (e *MotionEngine) moveByLines(buffer [][]any, pos Position, count int) Posi
 	// Try to maintain column position
 	col := pos.Col
 	if row >= 0 && row < len(buffer) {
-		if col > len(buffer[row]) {
+		// If the target line is shorter than our current column position,
+		// position at the end of the line
+		if col >= len(buffer[row]) {
 			col = len(buffer[row])
-		}
-		// In normal mode, don't go past last character
-		if col > 0 && col == len(buffer[row]) {
-			col--
+			// In normal mode, don't go past last character
+			if col > 0 {
+				col--
+			}
 		}
 	}
 
@@ -540,4 +555,50 @@ func (e *MotionEngine) getAroundPairs(buffer [][]any, cursor Position, open, clo
 func (e *MotionEngine) isWhitespace(item any) bool {
 	r, ok := item.(rune)
 	return ok && unicode.IsSpace(r)
+}
+
+// findChar finds a character on the current line
+func (e *MotionEngine) findChar(buffer [][]any, pos Position, target rune, count int, forward bool, inclusive bool) Position {
+	if pos.Row >= len(buffer) {
+		return pos
+	}
+
+	line := buffer[pos.Row]
+	col := pos.Col
+	found := 0
+
+	if forward {
+		// Start from next character
+		for i := col + 1; i < len(line); i++ {
+			if r, ok := line[i].(rune); ok && r == target {
+				found++
+				if found == count {
+					if inclusive {
+						return Position{Row: pos.Row, Col: i}
+					} else {
+						// Till - stop before the character
+						return Position{Row: pos.Row, Col: i - 1}
+					}
+				}
+			}
+		}
+	} else {
+		// Backward search
+		for i := col - 1; i >= 0; i-- {
+			if r, ok := line[i].(rune); ok && r == target {
+				found++
+				if found == count {
+					if inclusive {
+						return Position{Row: pos.Row, Col: i}
+					} else {
+						// Till - stop after the character
+						return Position{Row: pos.Row, Col: i + 1}
+					}
+				}
+			}
+		}
+	}
+
+	// Character not found, return original position
+	return pos
 }

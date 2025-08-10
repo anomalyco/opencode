@@ -140,6 +140,23 @@ export namespace Config {
         .describe("Custom provider configurations and model overrides"),
       mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      vim: z
+        .object({
+          enabled: z.boolean().optional().default(false).describe("Enable Vim mode by default"),
+          leader: z.string().optional().default("\\s").describe("Leader key for Vim mode (\\s for space)"),
+          mappings: z
+            .record(
+              z.string(),
+              z.object({
+                command: z.string().describe("Command to execute"),
+                description: z.string().optional().describe("Description of the mapping"),
+              }),
+            )
+            .optional()
+            .describe("Custom leader key mappings"),
+        })
+        .optional()
+        .describe("Vim mode configuration"),
       experimental: z
         .object({
           hook: z
