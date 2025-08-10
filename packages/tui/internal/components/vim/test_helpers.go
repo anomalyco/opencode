@@ -60,3 +60,11 @@ func (m *MockTextAreaWrapper) InsertRunesFromUserInput(r []rune) {
 func (m *MockTextAreaWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
+
+func (m *MockTextAreaWrapper) Init() tea.Cmd {
+	return nil
+}
+
+func (m *MockTextAreaWrapper) View() string {
+	return m.value
+}

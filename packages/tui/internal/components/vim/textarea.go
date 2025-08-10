@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
+	"github.com/sst/opencode/internal/attachment"
 	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/components/textarea"
 )
@@ -1133,13 +1134,22 @@ func (v *VimTextarea) Reset() {
 }
 
 // GetAttachments returns the attachments
-func (v *VimTextarea) GetAttachments() []*textarea.Attachment {
-	return v.Model.GetAttachments()
+func (v *VimTextarea) GetAttachments() []any {
+	// Convert attachment.Attachment to any
+	attachments := v.Model.GetAttachments()
+	result := make([]any, len(attachments))
+	for i, a := range attachments {
+		result[i] = a
+	}
+	return result
 }
 
 // SetAttachment sets an attachment
-func (v *VimTextarea) SetAttachment(attachment *textarea.Attachment) {
-	v.Model.InsertAttachment(attachment)
+func (v *VimTextarea) SetAttachment(a any) {
+	// Convert any to *attachment.Attachment if possible
+	if att, ok := a.(*attachment.Attachment); ok {
+		v.Model.InsertAttachment(att)
+	}
 }
 
 // Paste handles paste operations
@@ -1159,8 +1169,10 @@ func (v *VimTextarea) ReplaceRange(start, end int, replacement string) {
 }
 
 // InsertAttachment inserts an attachment
-func (v *VimTextarea) InsertAttachment(attachment *textarea.Attachment) {
-	v.Model.InsertAttachment(attachment)
+func (v *VimTextarea) InsertAttachment(a any) {
+	if att, ok := a.(*attachment.Attachment); ok {
+		v.Model.InsertAttachment(att)
+	}
 }
 
 // Public methods specific to Vim
@@ -1247,7 +1259,7 @@ func (v *VimTextarea) CursorEnd() {
 }
 
 func (v *VimTextarea) Row() int {
-	return v.Model.CursorRow()
+	return v.Model.Line()
 }
 
 func (v *VimTextarea) Column() int {

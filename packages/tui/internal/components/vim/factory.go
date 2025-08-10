@@ -2,17 +2,83 @@ package vim
 
 import (
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/textarea"
 )
+
+// TextAreaInterface defines the common interface for text areas
+type TextAreaInterface interface {
+	Value() string
+	SetValue(string)
+	Focus() tea.Cmd
+	Blur()
+	GetAttachments() []any
+	SetAttachment(any)
+	InsertRunesFromUserInput([]rune)
+	Update(tea.Msg) (tea.Model, tea.Cmd)
+}
+
+// TextAreaWrapper wraps a regular textarea to implement TextAreaInterface
+type TextAreaWrapper struct {
+	Model *textarea.Model
+}
+
+func (w *TextAreaWrapper) Value() string {
+	return w.Model.Value()
+}
+
+func (w *TextAreaWrapper) SetValue(v string) {
+	w.Model.SetValue(v)
+}
+
+func (w *TextAreaWrapper) Focus() tea.Cmd {
+	return w.Model.Focus()
+}
+
+func (w *TextAreaWrapper) Blur() {
+	w.Model.Blur()
+}
+
+func (w *TextAreaWrapper) GetAttachments() []any {
+	attachments := w.Model.GetAttachments()
+	result := make([]any, len(attachments))
+	for i, a := range attachments {
+		result[i] = a
+	}
+	return result
+}
+
+func (w *TextAreaWrapper) SetAttachment(a any) {
+	// Model doesn't have SetAttachment, only InsertAttachment
+	// This is handled differently in the actual implementation
+}
+
+func (w *TextAreaWrapper) InsertRunesFromUserInput(r []rune) {
+	w.Model.InsertRunesFromUserInput(r)
+}
+
+func (w *TextAreaWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Model.Update returns (Model, Cmd) not (*Model, Cmd)
+	var cmd tea.Cmd
+	updatedModel, cmd := w.Model.Update(msg)
+	*w.Model = updatedModel
+	return w, cmd
+}
+
+func (w *TextAreaWrapper) Init() tea.Cmd {
+	return nil // textarea.Model doesn't have Init
+}
+
+func (w *TextAreaWrapper) View() string {
+	return w.Model.View()
+}
 
 // TextAreaFactory creates the appropriate text area based on configuration
 type TextAreaFactory struct {
 	app            *app.App
 	useVim         bool
 	regular        textarea.Model
-	regularWrapper *textarea.ModelWrapper
+	regularWrapper *TextAreaWrapper
 	vim            *VimTextarea
 }
 
@@ -32,22 +98,24 @@ func NewTextAreaFactory(app *app.App) *TextAreaFactory {
 
 	// Check configuration
 	useVim := false
-	if app.Config != nil && app.Config.Vim != nil && app.Config.Vim.Enabled {
-		useVim = true
-		vta.EnableVimMode()
-	}
+	// Note: Config.Vim doesn't exist yet in the SDK
+	// This would be enabled via a future configuration update
+	// if app.Config != nil && app.Config.Vim != nil && app.Config.Vim.Enabled {
+	//     useVim = true
+	//     vta.EnableVimMode()
+	// }
 
 	return &TextAreaFactory{
 		app:            app,
 		useVim:         useVim,
 		regular:        ta,
-		regularWrapper: textarea.NewWrapper(ta),
+		regularWrapper: &TextAreaWrapper{Model: &ta},
 		vim:            vta,
 	}
 }
 
 // Current returns the currently active text area
-func (f *TextAreaFactory) Current() textarea.TextArea {
+func (f *TextAreaFactory) Current() TextAreaInterface {
 	if f.useVim {
 		return f.vim
 	}
@@ -87,12 +155,13 @@ func (f *TextAreaFactory) ToggleVimMode() {
 	}
 
 	// Update configuration in memory
-	if f.app.Config != nil {
-		if f.app.Config.Vim == nil {
-			f.app.Config.Vim = &opencode.ConfigVim{}
-		}
-		f.app.Config.Vim.Enabled = f.useVim
-	}
+	// Note: Config.Vim doesn't exist yet in the SDK
+	// if f.app.Config != nil {
+	//     if f.app.Config.Vim == nil {
+	//         f.app.Config.Vim = &opencode.ConfigVim{}
+	//     }
+	//     f.app.Config.Vim.Enabled = f.useVim
+	// }
 }
 
 // IsVimMode returns whether vim mode is currently active
