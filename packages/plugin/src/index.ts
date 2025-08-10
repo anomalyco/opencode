@@ -6,26 +6,26 @@ export type PluginInput = {
   app: App
   $: BunShell
 }
-export type Plugin = (input: PluginInput) => Promise<Hooks>
+export type Plugin = (input: PluginInput) => Promise<Hooks> | Hooks;
 
 export interface Hooks {
-  event?: (input: { event: Event }) => Promise<void>
+  event?: (input: { event: Event }) => Promise<void> | void
   /**
    * Called when a new message is received
    */
-  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[] }) => Promise<void>
+  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[] }) => Promise<void> | void
   /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
     input: { model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number },
-  ) => Promise<void>
-  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  ) => Promise<void> | void
+  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void> | void
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
-  ) => Promise<void>
+  ) => Promise<void> | void
   "tool.execute.after"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: {
@@ -33,5 +33,5 @@ export interface Hooks {
       output: string
       metadata: any
     },
-  ) => Promise<void>
+  ) => Promise<void> | void
 }
