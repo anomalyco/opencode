@@ -54,12 +54,31 @@ export const GrepTool = Tool.define("grep", {
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
-      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
+      // Fix for Windows file paths: split from the right side to handle colons in drive letters
+      // We need to find the last two colons to separate file:path:line_number:content
+      const parts = line.split(":")
+      if (parts.length < 3) continue
+
+      // The line number is the last part that is purely numeric
+      let lineNumIndex = -1
+      for (let i = parts.length - 2; i >= 1; i--) {
+        if (/^\d+$/.test(parts[i])) {
+          lineNumIndex = i
+          break
+        }
+      }
+      
+      if (lineNumIndex === -1) continue
+
+      // Reconstruct the file path from parts 0 to lineNumIndex-1
+      const filePath = parts.slice(0, lineNumIndex).join(":")
+      const lineNumStr = parts[lineNumIndex]
+      // Join the rest as line content
+      const lineText = parts.slice(lineNumIndex + 1).join(":")
+
+      if (!filePath || !lineNumStr || !lineText) continue
 
       const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join(":")
-
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => null)
       if (!stats) continue
