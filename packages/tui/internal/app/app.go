@@ -693,6 +693,17 @@ func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+func (a *App) UpdateSession(ctx context.Context, sessionID string, title string) error {
+	_, err := a.Client.Session.Update(ctx, sessionID, opencode.SessionUpdateParams{
+		Title: opencode.F(title),
+	})
+	if err != nil {
+		slog.Error("Failed to update session", "error", err)
+		return err
+	}
+	return nil
+}
+
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
 	response, err := a.Client.Session.Messages(ctx, sessionId)
 	if err != nil {
