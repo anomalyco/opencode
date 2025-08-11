@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import path from "path"
 
 console.log("=== publishing ===\n")
 

@@ -452,7 +452,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						}
 
 						if finished {
-							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails)
+							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails, toolCallParts)
 							content, cached = m.cache.Get(key)
 							if !cached {
 								content = renderText(

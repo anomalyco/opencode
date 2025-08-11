@@ -793,6 +793,10 @@ export type KeybindsConfig = {
    */
   tool_details: string
   /**
+   * Toggle thinking blocks
+   */
+  thinking_blocks: string
+  /**
    * List available models
    */
   model_list: string

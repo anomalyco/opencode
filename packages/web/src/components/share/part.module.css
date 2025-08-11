@@ -128,7 +128,7 @@
     max-width: var(--md-tool-width);
   }
 
-  [data-component="assistant-reasoning"] {
+  /* [data-component="assistant-reasoning"] {
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -150,7 +150,7 @@
         right: calc(0.5rem - 1px);
       }
     }
-  }
+  } */
 
   [data-component="assistant-text"] {
     min-width: 0;
