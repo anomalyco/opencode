@@ -375,7 +375,6 @@ func renderText(
 		info = author + timestamp
 	}
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
-		content = content + "\n"
 		for _, toolCall := range toolCalls {
 			title := renderToolTitle(toolCall, width-2)
 			style := styles.NewStyle()
@@ -390,9 +389,9 @@ func renderText(
 
 	sections := []string{content}
 	if extra != "" {
-		sections = append(sections, "\n"+extra)
+		sections = append(sections, "\n"+extra+"\n")
 	}
-	sections = append(sections, "\n"+info)
+	sections = append(sections, info)
 	content = strings.Join(sections, "\n")
 
 	switch message.(type) {
