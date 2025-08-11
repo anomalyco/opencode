@@ -152,7 +152,11 @@ export const BashTool = Tool.define("bash", {
       timeout,
     })
 
+    let terminated = false
+    let terminatedByTimeout = true
     let output = ""
+    let stderr = ""
+    let stdout = ""
 
     // Initialize metadata with empty output
     ctx.metadata({
@@ -164,6 +168,7 @@ export const BashTool = Tool.define("bash", {
 
     process.stdout?.on("data", (chunk) => {
       output += chunk.toString()
+      stdout += chunk.toString()
       ctx.metadata({
         metadata: {
           output: output,
@@ -174,6 +179,7 @@ export const BashTool = Tool.define("bash", {
 
     process.stderr?.on("data", (chunk) => {
       output += chunk.toString()
+      stderr += chunk.toString()
       ctx.metadata({
         metadata: {
           output: output,
@@ -182,8 +188,15 @@ export const BashTool = Tool.define("bash", {
       })
     })
 
+    process.on("error", () => {
+      terminatedByTimeout = false
+    })
+
     await new Promise<void>((resolve) => {
-      process.on("close", () => {
+      process.on("close", (_, signal) => {
+        if (signal) {
+          terminated = true
+        }
         resolve()
       })
     })
@@ -195,6 +208,10 @@ export const BashTool = Tool.define("bash", {
         description: params.description,
       },
     })
+    let forLLM = `<stdout>${stdout}</stdout>\n<stderr>${stderr}</stderr>\n<exitCode>${process.exitCode}</exitCode>`
+    if (terminated && terminatedByTimeout) {
+      forLLM += `\n<timeout>Process was terminated by timeout after ${timeout}ms. Consider increasing the timeout parameter for the bash tool and trying again.</timeout>`
+    }
 
     if (output.length > MAX_OUTPUT_LENGTH) {
       output = output.slice(0, MAX_OUTPUT_LENGTH)
@@ -208,7 +225,7 @@ export const BashTool = Tool.define("bash", {
         exit: process.exitCode,
         description: params.description,
       },
-      output,
+      output: forLLM,
     }
   },
 })

@@ -29,6 +29,7 @@ describe("tool.bash", () => {
       )
       expect(result.metadata.exit).toBe(0)
       expect(result.metadata.output).toContain("test")
+      expect(result.output).not.toContain("<timeout>")
     })
   })
 
@@ -43,6 +44,34 @@ describe("tool.bash", () => {
           ctx,
         ),
       ).rejects.toThrow("This command references paths outside of")
+    })
+  })
+
+  test("timeout error should be emitted for long running commands", async () => {
+    await App.provide({ cwd: projectRoot }, async () => {
+      const result = await bash.execute(
+        {
+          command: "sleep 1",
+          description: "Sleep for 1 seconds",
+          timeout: 500,
+        },
+        ctx,
+      )
+      expect(result.output).toContain("<timeout>")
+    })
+  })
+
+  test("exit code should be captured for failing commands", async () => {
+    await App.provide({ cwd: projectRoot }, async () => {
+      const result = await bash.execute(
+        {
+          command: 'bun --eval "process.exit(42)"',
+          description: "Exit with code 42",
+        },
+        ctx,
+      )
+      expect(result.metadata.exit).toBe(42)
+      expect(result.output).toContain("<exitCode>42</exitCode>")
     })
   })
 })
