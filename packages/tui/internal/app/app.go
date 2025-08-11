@@ -46,6 +46,7 @@ type App struct {
 	InitialModel      *string
 	InitialPrompt     *string
 	InitialAgent      *string
+	InitialSession    *string
 	compactCancel     context.CancelFunc
 	IsLeaderSequence  bool
 }
@@ -95,6 +96,7 @@ func New(
 	initialModel *string,
 	initialPrompt *string,
 	initialAgent *string,
+	initialSession *string,
 ) (*App, error) {
 	util.RootPath = appInfo.Path.Root
 	util.CwdPath = appInfo.Path.Cwd
@@ -175,20 +177,21 @@ func New(
 	slog.Debug("Loaded config", "config", configInfo)
 
 	app := &App{
-		Info:          appInfo,
-		Agents:        agents,
-		Version:       version,
-		StatePath:     appStatePath,
-		Config:        configInfo,
-		State:         appState,
-		Client:        httpClient,
-		AgentIndex:    agentIndex,
-		Session:       &opencode.Session{},
-		Messages:      []Message{},
-		Commands:      commands.LoadFromConfig(configInfo),
-		InitialModel:  initialModel,
-		InitialPrompt: initialPrompt,
-		InitialAgent:  initialAgent,
+		Info:           appInfo,
+		Agents:         agents,
+		Version:        version,
+		StatePath:      appStatePath,
+		Config:         configInfo,
+		State:          appState,
+		Client:         httpClient,
+		AgentIndex:     agentIndex,
+		Session:        &opencode.Session{},
+		Messages:       []Message{},
+		Commands:       commands.LoadFromConfig(configInfo),
+		InitialModel:   initialModel,
+		InitialPrompt:  initialPrompt,
+		InitialAgent:   initialAgent,
+		InitialSession: initialSession,
 	}
 
 	return app, nil
@@ -504,6 +507,28 @@ func (a *App) InitializeProvider() tea.Cmd {
 		Provider: *selectedProvider,
 		Model:    *selectedModel,
 	}))
+
+	// Load initial session if provided
+	if a.InitialSession != nil && *a.InitialSession != "" {
+		cmds = append(cmds, func() tea.Msg {
+			// Find the session by ID
+			sessions, err := a.ListSessions(context.Background())
+			if err != nil {
+				slog.Error("Failed to list sessions for initial session", "error", err)
+				return toast.NewErrorToast("Failed to load initial session")()
+			}
+
+			for _, session := range sessions {
+				if session.ID == *a.InitialSession {
+					return SessionSelectedMsg(&session)
+				}
+			}
+
+			slog.Warn("Initial session not found", "sessionID", *a.InitialSession)
+			return toast.NewErrorToast("Session not found: " + *a.InitialSession)()
+		})
+	}
+
 	if a.InitialPrompt != nil && *a.InitialPrompt != "" {
 		cmds = append(cmds, util.CmdHandler(SendPrompt{Text: *a.InitialPrompt}))
 	}

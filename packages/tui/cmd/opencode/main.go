@@ -32,6 +32,7 @@ func main() {
 	var model *string = flag.String("model", "", "model to begin with")
 	var prompt *string = flag.String("prompt", "", "prompt to begin with")
 	var agent *string = flag.String("agent", "", "agent to begin with")
+	var sessionID *string = flag.String("session", "", "session ID")
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
@@ -96,7 +97,7 @@ func main() {
 	}()
 
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent)
+	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent, sessionID)
 	if err != nil {
 		panic(err)
 	}
