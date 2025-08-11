@@ -90,7 +90,7 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 
 Prevent opencode from reading `.env` files:
 
-```javascript title=".opencode/plugin/slack.js"
+```javascript title=".opencode/plugin/env-protection.js"
 export const EnvProtection = async ({ client, $ }) => {
   return {
     tool: {
