@@ -143,6 +143,7 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								}
 								s.sessions[idx].Title = newTitle
 								s.renameMode = false
+								s.modal.SetTitle("Switch Session")
 								s.updateListItems()
 								return toast.NewSuccessToast("Session renamed successfully")()
 							},
@@ -150,10 +151,12 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				s.renameMode = false
+				s.modal.SetTitle("Switch Session")
 				s.updateListItems()
 				return s, nil
 			case "esc":
 				s.renameMode = false
+				s.modal.SetTitle("Switch Session")
 				s.updateListItems()
 				return s, nil
 			default:
@@ -186,6 +189,7 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.renameMode = true
 					s.renameIndex = idx
 					s.setupRenameInput(s.sessions[idx].Title)
+					s.modal.SetTitle("Rename Session")
 					s.updateListItems()
 					return s, textinput.Blink
 				}
