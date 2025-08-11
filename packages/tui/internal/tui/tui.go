@@ -599,6 +599,32 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		cmds = append(cmds, a.app.SaveState())
+	case app.AgentSelectedMsg:
+		// Find the agent index
+		for i, agent := range a.app.Agents {
+			if agent.Name == msg.Agent.Name {
+				a.app.AgentIndex = i
+				break
+			}
+		}
+		a.app.State.Agent = msg.Agent.Name
+
+		// Switch to the agent's preferred model if available
+		if model, ok := a.app.State.AgentModel[msg.Agent.Name]; ok {
+			for _, provider := range a.app.Providers {
+				if provider.ID == model.ProviderID {
+					a.app.Provider = &provider
+					for _, m := range provider.Models {
+						if m.ID == model.ModelID {
+							a.app.Model = &m
+							break
+						}
+					}
+					break
+				}
+			}
+		}
+		cmds = append(cmds, a.app.SaveState())
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		cmds = append(cmds, a.app.SaveState())
@@ -1119,6 +1145,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.ModelListCommand:
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
+	case commands.AgentListCommand:
+		agentDialog := dialog.NewAgentDialog(a.app)
+		a.modal = agentDialog
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog

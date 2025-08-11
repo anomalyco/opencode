@@ -70,6 +70,9 @@ type ModelSelectedMsg struct {
 	Provider opencode.Provider
 	Model    opencode.Model
 }
+type AgentSelectedMsg struct {
+	Agent opencode.Agent
+}
 type SessionClearedMsg struct{}
 type CompactSessionMsg struct{}
 type SendPrompt = Prompt
