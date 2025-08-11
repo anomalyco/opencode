@@ -105,8 +105,6 @@ export namespace Provider {
               if (body?.messages && body.messages.length > 0) {
                 const lastMessage = body.messages[body.messages.length - 1]
                 isAgentCall = lastMessage.role && ["tool", "assistant"].includes(lastMessage.role)
-                //NOTE: Should this also use lastMessage or given the vision
-                //flow does this even matter
                 isVisionRequest = body.messages.some(
                   (msg: any) =>
                     Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
