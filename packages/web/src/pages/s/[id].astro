@@ -51,6 +51,33 @@ else {
 }
 
 const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${id}`;
+
+console.log(JSON.stringify(data.messages, null, 2));
+
+const a = {
+  "msg_899ff50c2001YfBz26NxXqlp0I": {
+    "parts": [
+      {
+        "id": "prt_899ff50c2002y2Gd3u4eJvT57c",
+        "type": "text",
+        "text": "what tools do you have?",
+        "synthetic": false,
+        "time": {
+          "start": 0,
+          "end": 0
+        },
+        "messageID": "msg_899ff50c2001YfBz26NxXqlp0I",
+        "sessionID": "ses_76600af43ffebGSI60ANL2FTY1"
+      }
+    ],
+    "id": "msg_899ff50c2001YfBz26NxXqlp0I",
+    "role": "user",
+    "sessionID": "ses_76600af43ffebGSI60ANL2FTY1",
+    "time": {
+      "created": 1754930303176
+    }
+  },
+}
 ---
 <StarlightPage
   hasSidebar={false}
@@ -95,7 +122,7 @@ const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=$
     id={id}
     api={apiUrl}
     info={data.info}
-    messages={data.messages}
+    messages={a}
     client:only="solid"
   />
 </StarlightPage>
