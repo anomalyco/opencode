@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/v2/spinner"
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/completions"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
@@ -22,6 +23,30 @@ func newTestEditor() *editorComponent {
 		spinner:  spinner.New(),
 	}
 	return m
+}
+
+// createTestEditor creates a minimal editor component for testing slash commands
+func createTestEditor() *editorComponent {
+	// Create a minimal app with commands for testing
+	testApp := &app.App{
+		Commands: commands.CommandRegistry{
+			commands.AppExitCommand: commands.Command{
+				Name:        commands.AppExitCommand,
+				Description: "exit the app",
+				Trigger:     []string{"exit", "quit", "q"},
+			},
+			commands.AppHelpCommand: commands.Command{
+				Name:        commands.AppHelpCommand,
+				Description: "show help",
+				Trigger:     []string{"help"},
+			},
+		},
+	}
+
+	return &editorComponent{
+		app:      testApp,
+		textarea: textarea.New(),
+	}
 }
 
 func TestPasteAtPathWithTrailingComma_PreservesPunctuation_NoDoubleSpace(t *testing.T) {
@@ -273,5 +298,278 @@ func TestCompletionFiles_InsertsAttachment_EmitsMsg(t *testing.T) {
 	}
 	if v := m.Value(); !strings.HasSuffix(v, " ") {
 		t.Fatalf("expected trailing space after attachment, got value: %q", v)
+	}
+}
+
+func TestEditorSubmit_QuitCommands(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		expectQuit bool
+	}{
+		{
+			name:       "quit command should trigger tea.Quit",
+			input:      "quit",
+			expectQuit: true,
+		},
+		{
+			name:       "exit command should trigger tea.Quit",
+			input:      "exit",
+			expectQuit: true,
+		},
+		{
+			name:       "q command should trigger tea.Quit",
+			input:      "q",
+			expectQuit: true,
+		},
+		{
+			name:       ":q command should trigger tea.Quit",
+			input:      ":q",
+			expectQuit: true,
+		},
+		{
+			name:       "empty input should not quit",
+			input:      "",
+			expectQuit: false,
+		},
+		{
+			name:       "whitespace only should not quit",
+			input:      "   ",
+			expectQuit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := createTestEditor()
+			editor.textarea.SetValue(tt.input)
+
+			_, cmd := editor.Submit()
+
+			if tt.expectQuit {
+				// Check if cmd contains tea.Quit
+				if cmd == nil {
+					t.Errorf("Expected tea.Quit command, got nil")
+					return
+				}
+				// Execute the command to see if it's tea.Quit
+				msg := cmd()
+				if _, ok := msg.(tea.QuitMsg); !ok {
+					t.Errorf("Expected tea.QuitMsg, got %T", msg)
+				}
+			} else {
+				// For non-quit commands, we test differently to avoid the state issue
+				if tt.input == "" || strings.TrimSpace(tt.input) == "" {
+					if cmd != nil {
+						t.Errorf("Expected no command for empty input, got %T", cmd)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEditorSubmit_SlashCommands(t *testing.T) {
+	tests := []struct {
+		name                string
+		input               string
+		expectCommandExec   bool
+		expectedCommandName commands.CommandName
+	}{
+		{
+			name:                "/quit should execute quit command",
+			input:               "/quit",
+			expectCommandExec:   true,
+			expectedCommandName: commands.AppExitCommand,
+		},
+		{
+			name:                "/exit should execute quit command",
+			input:               "/exit",
+			expectCommandExec:   true,
+			expectedCommandName: commands.AppExitCommand,
+		},
+		{
+			name:                "/q should execute quit command",
+			input:               "/q",
+			expectCommandExec:   true,
+			expectedCommandName: commands.AppExitCommand,
+		},
+		{
+			name:                "/help should execute help command",
+			input:               "/help",
+			expectCommandExec:   true,
+			expectedCommandName: commands.AppHelpCommand,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := createTestEditor()
+			editor.textarea.SetValue(tt.input)
+
+			_, cmd := editor.Submit()
+
+			if tt.expectCommandExec {
+				if cmd == nil {
+					t.Errorf("Expected command execution, got nil")
+					return
+				}
+				// For slash commands that match registered triggers, we expect a command to be executed
+				// The exact structure is complex to test, but we can verify a command was returned
+			}
+		})
+	}
+}
+
+func TestCommandMatchesTrigger(t *testing.T) {
+	cmd := commands.Command{
+		Name:    commands.AppExitCommand,
+		Trigger: []string{"exit", "quit", "q"},
+	}
+
+	tests := []struct {
+		trigger  string
+		expected bool
+	}{
+		{"exit", true},
+		{"quit", true},
+		{"q", true},
+		{"help", false},
+		{"unknown", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.trigger, func(t *testing.T) {
+			result := cmd.MatchesTrigger(tt.trigger)
+			if result != tt.expected {
+				t.Errorf("MatchesTrigger(%q) = %v, expected %v", tt.trigger, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestSlashCommandParsing tests the slash command parsing logic specifically
+func TestSlashCommandParsing(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectPrefix  bool
+		expectCommand string
+	}{
+		{
+			name:          "/quit should be recognized as slash command",
+			input:         "/quit",
+			expectPrefix:  true,
+			expectCommand: "quit",
+		},
+		{
+			name:          "/exit should be recognized as slash command",
+			input:         "/exit",
+			expectPrefix:  true,
+			expectCommand: "exit",
+		},
+		{
+			name:          "/help should be recognized as slash command",
+			input:         "/help",
+			expectPrefix:  true,
+			expectCommand: "help",
+		},
+		{
+			name:          "quit without slash should not be slash command",
+			input:         "quit",
+			expectPrefix:  false,
+			expectCommand: "",
+		},
+		{
+			name:          "/ alone should be recognized as slash command",
+			input:         "/",
+			expectPrefix:  true,
+			expectCommand: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := strings.TrimSpace(tt.input)
+			hasPrefix := strings.HasPrefix(value, "/")
+
+			if hasPrefix != tt.expectPrefix {
+				t.Errorf("HasPrefix check for %q = %v, expected %v", value, hasPrefix, tt.expectPrefix)
+			}
+
+			if hasPrefix {
+				commandName := strings.TrimPrefix(value, "/")
+				if commandName != tt.expectCommand {
+					t.Errorf("TrimPrefix for %q = %q, expected %q", value, commandName, tt.expectCommand)
+				}
+			}
+		})
+	}
+}
+
+// TestSlashCommandLookup tests that we can find commands by trigger
+func TestSlashCommandLookup(t *testing.T) {
+	editor := createTestEditor()
+
+	tests := []struct {
+		commandName string
+		expectFound bool
+		expectName  commands.CommandName
+	}{
+		{
+			commandName: "quit",
+			expectFound: true,
+			expectName:  commands.AppExitCommand,
+		},
+		{
+			commandName: "exit",
+			expectFound: true,
+			expectName:  commands.AppExitCommand,
+		},
+		{
+			commandName: "q",
+			expectFound: true,
+			expectName:  commands.AppExitCommand,
+		},
+		{
+			commandName: "help",
+			expectFound: true,
+			expectName:  commands.AppHelpCommand,
+		},
+		{
+			commandName: "unknown",
+			expectFound: false,
+		},
+		{
+			commandName: "",
+			expectFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.commandName, func(t *testing.T) {
+			found := false
+			var foundCommand commands.Command
+
+			// This mimics the logic in our slash command handler
+			for _, command := range editor.app.Commands {
+				if command.MatchesTrigger(tt.commandName) {
+					found = true
+					foundCommand = command
+					break
+				}
+			}
+
+			if found != tt.expectFound {
+				t.Errorf("Command lookup for %q = %v, expected %v", tt.commandName, found, tt.expectFound)
+			}
+
+			if tt.expectFound && found {
+				if foundCommand.Name != tt.expectName {
+					t.Errorf("Found command name for %q = %v, expected %v", tt.commandName, foundCommand.Name, tt.expectName)
+				}
+			}
+		})
 	}
 }

@@ -567,6 +567,22 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// Handle slash commands
+	if strings.HasPrefix(value, "/") {
+		commandName := strings.TrimSpace(strings.TrimPrefix(value, "/"))
+		// Check if this is a registered command trigger
+		for _, command := range m.app.Commands {
+			if command.MatchesTrigger(commandName) {
+				var cmds []tea.Cmd
+				updated, cmd := m.Clear()
+				m = updated.(*editorComponent)
+				cmds = append(cmds, cmd)
+				cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(command)))
+				return m, tea.Batch(cmds...)
+			}
+		}
+	}
+
 	if len(value) > 0 && value[len(value)-1] == '\\' {
 		// If the last character is a backslash, remove it and add a newline
 		backslashCol := m.textarea.CurrentRowLength() - 1

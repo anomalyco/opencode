@@ -222,6 +222,26 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if a.showCompletionDialog {
+			// Special handling for Enter: check if typed text exactly matches a command
+			if keyString == "enter" {
+				typedText := strings.TrimSpace(a.editor.Value())
+
+				if strings.HasPrefix(typedText, "/") {
+					commandName := strings.TrimSpace(strings.TrimPrefix(typedText, "/"))
+
+					// Check if this exactly matches a command trigger
+					for _, command := range a.app.Commands {
+						if command.MatchesTrigger(commandName) {
+							a.showCompletionDialog = false
+							updated, cmd := a.editor.Submit()
+							a.editor = updated.(chat.EditorComponent)
+							cmds = append(cmds, cmd)
+							return a, tea.Batch(cmds...)
+						}
+					}
+				}
+			}
+
 			switch keyString {
 			case "tab", "enter", "esc", "ctrl+c", "up", "down", "ctrl+p", "ctrl+n":
 				updated, cmd := a.completions.Update(msg)
