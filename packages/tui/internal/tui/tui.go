@@ -355,6 +355,11 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.modal = nil
 		return a, cmd
+	case dialog.ReopenSessionModalMsg:
+		// Reopen the session modal (used when exiting rename mode)
+		sessionDialog := dialog.NewSessionDialog(a.app)
+		a.modal = sessionDialog
+		return a, nil
 	case commands.ExecuteCommandMsg:
 		updated, cmd := a.executeCommand(commands.Command(msg))
 		return updated, cmd

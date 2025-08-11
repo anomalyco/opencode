@@ -154,11 +154,6 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s.modal.SetTitle("Switch Session")
 				s.updateListItems()
 				return s, nil
-			case "esc":
-				s.renameMode = false
-				s.modal.SetTitle("Switch Session")
-				s.updateListItems()
-				return s, nil
 			default:
 				var cmd tea.Cmd
 				s.renameInput, cmd = s.renameInput.Update(msg)
@@ -330,7 +325,22 @@ func (s *sessionDialog) deleteSession(sessionID string) tea.Cmd {
 	}
 }
 
+// ReopenSessionModalMsg is emitted when the session modal should be reopened
+type ReopenSessionModalMsg struct{}
+
 func (s *sessionDialog) Close() tea.Cmd {
+	if s.renameMode {
+		// If in rename mode, exit rename mode and return a command to reopen the modal
+		s.renameMode = false
+		s.modal.SetTitle("Switch Session")
+		s.updateListItems()
+
+		// Return a command that will reopen the session modal
+		return func() tea.Msg {
+			return ReopenSessionModalMsg{}
+		}
+	}
+	// Normal close behavior
 	return nil
 }
 
