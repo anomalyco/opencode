@@ -1,6 +1,4 @@
 import "zod-openapi/extend"
-import { Trace } from "./trace"
-Trace.init()
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"

@@ -210,7 +210,18 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clipboard = msg.clipboard
 		m.loading = false
 		m.tail = m.viewport.AtBottom()
+
+		// Preserve scroll across reflow
+		// if the user was at bottom, keep following; otherwise restore the previous offset.
+		wasAtBottom := m.viewport.AtBottom()
+		prevYOffset := m.viewport.YOffset
 		m.viewport = msg.viewport
+		if wasAtBottom {
+			m.viewport.GotoBottom()
+		} else {
+			m.viewport.YOffset = prevYOffset
+		}
+
 		m.header = msg.header
 		if m.dirty {
 			cmds = append(cmds, m.renderView())
@@ -218,7 +229,6 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.tail = m.viewport.AtBottom()
-
 	viewport, cmd := m.viewport.Update(msg)
 	m.viewport = viewport
 	cmds = append(cmds, cmd)
@@ -359,6 +369,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								files,
+								false,
 								fileParts,
 								agentParts,
 							)
@@ -438,6 +449,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 									m.showToolDetails,
 									width,
 									"",
+									false,
 									[]opencode.FilePart{},
 									[]opencode.AgentPart{},
 									toolCallParts...,
@@ -459,6 +471,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								"",
+								false,
 								[]opencode.FilePart{},
 								[]opencode.AgentPart{},
 								toolCallParts...,
@@ -536,6 +549,35 @@ func (m *messagesComponent) renderView() tea.Cmd {
 							lineCount += lipgloss.Height(content) + 1
 							blocks = append(blocks, content)
 						}
+					case opencode.ReasoningPart:
+						if reverted {
+							continue
+						}
+						text := "..."
+						if part.Text != "" {
+							text = part.Text
+						}
+						content = renderText(
+							m.app,
+							message.Info,
+							text,
+							casted.ModelID,
+							m.showToolDetails,
+							width,
+							"",
+							true,
+							[]opencode.FilePart{},
+							[]opencode.AgentPart{},
+						)
+						content = lipgloss.PlaceHorizontal(
+							m.width,
+							lipgloss.Center,
+							content,
+							styles.WhitespaceStyle(t.Background()),
+						)
+						partCount++
+						lineCount += lipgloss.Height(content) + 1
+						blocks = append(blocks, content)
 					}
 				}
 			}

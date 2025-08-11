@@ -128,6 +128,29 @@
     max-width: var(--md-tool-width);
   }
 
+  [data-component="assistant-reasoning"] {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex-grow: 1;
+    max-width: var(--md-tool-width);
+
+    & > [data-component="assistant-reasoning-markdown"] {
+      align-self: flex-start;
+      font-size: 0.875rem;
+      border: 1px solid var(--sl-color-blue-high);
+      padding: 0.5rem calc(0.5rem + 3px);
+      border-radius: 0.25rem;
+      position: relative;
+
+      [data-component="copy-button"] {
+        top: 0.5rem;
+        right: calc(0.5rem - 1px);
+      }
+    }
+  }
+
   [data-component="assistant-text"] {
     min-width: 0;
     display: flex;

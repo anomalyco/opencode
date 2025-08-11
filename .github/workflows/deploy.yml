@@ -24,3 +24,4 @@ jobs:
       - run: bun sst deploy --stage=${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}

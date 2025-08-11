@@ -962,18 +962,20 @@ type Part struct {
 	Cost      float64  `json:"cost"`
 	Filename  string   `json:"filename"`
 	// This field can have the runtime type of [[]string].
-	Files    interface{} `json:"files"`
-	Hash     string      `json:"hash"`
-	Mime     string      `json:"mime"`
-	Name     string      `json:"name"`
-	Snapshot string      `json:"snapshot"`
+	Files interface{} `json:"files"`
+	Hash  string      `json:"hash"`
+	Mime  string      `json:"mime"`
+	Name  string      `json:"name"`
+	// This field can have the runtime type of [map[string]interface{}].
+	ProviderMetadata interface{} `json:"providerMetadata"`
+	Snapshot         string      `json:"snapshot"`
 	// This field can have the runtime type of [FilePartSource], [AgentPartSource].
 	Source interface{} `json:"source"`
 	// This field can have the runtime type of [ToolPartState].
 	State     interface{} `json:"state"`
 	Synthetic bool        `json:"synthetic"`
 	Text      string      `json:"text"`
-	// This field can have the runtime type of [TextPartTime].
+	// This field can have the runtime type of [TextPartTime], [ReasoningPartTime].
 	Time interface{} `json:"time"`
 	// This field can have the runtime type of [StepFinishPartTokens].
 	Tokens interface{} `json:"tokens"`
@@ -985,28 +987,29 @@ type Part struct {
 
 // partJSON contains the JSON metadata for the struct [Part]
 type partJSON struct {
-	ID          apijson.Field
-	MessageID   apijson.Field
-	SessionID   apijson.Field
-	Type        apijson.Field
-	CallID      apijson.Field
-	Cost        apijson.Field
-	Filename    apijson.Field
-	Files       apijson.Field
-	Hash        apijson.Field
-	Mime        apijson.Field
-	Name        apijson.Field
-	Snapshot    apijson.Field
-	Source      apijson.Field
-	State       apijson.Field
-	Synthetic   apijson.Field
-	Text        apijson.Field
-	Time        apijson.Field
-	Tokens      apijson.Field
-	Tool        apijson.Field
-	URL         apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ID               apijson.Field
+	MessageID        apijson.Field
+	SessionID        apijson.Field
+	Type             apijson.Field
+	CallID           apijson.Field
+	Cost             apijson.Field
+	Filename         apijson.Field
+	Files            apijson.Field
+	Hash             apijson.Field
+	Mime             apijson.Field
+	Name             apijson.Field
+	ProviderMetadata apijson.Field
+	Snapshot         apijson.Field
+	Source           apijson.Field
+	State            apijson.Field
+	Synthetic        apijson.Field
+	Text             apijson.Field
+	Time             apijson.Field
+	Tokens           apijson.Field
+	Tool             apijson.Field
+	URL              apijson.Field
+	raw              string
+	ExtraFields      map[string]apijson.Field
 }
 
 func (r partJSON) RawJSON() string {
@@ -1025,14 +1028,16 @@ func (r *Part) UnmarshalJSON(data []byte) (err error) {
 // AsUnion returns a [PartUnion] interface which you can cast to the specific types
 // for more type safety.
 //
-// Possible runtime types of the union are [TextPart], [FilePart], [ToolPart],
-// [StepStartPart], [StepFinishPart], [SnapshotPart], [PartPatchPart], [AgentPart].
+// Possible runtime types of the union are [TextPart], [ReasoningPart], [FilePart],
+// [ToolPart], [StepStartPart], [StepFinishPart], [SnapshotPart], [PartPatchPart],
+// [AgentPart].
 func (r Part) AsUnion() PartUnion {
 	return r.union
 }
 
-// Union satisfied by [TextPart], [FilePart], [ToolPart], [StepStartPart],
-// [StepFinishPart], [SnapshotPart], [PartPatchPart] or [AgentPart].
+// Union satisfied by [TextPart], [ReasoningPart], [FilePart], [ToolPart],
+// [StepStartPart], [StepFinishPart], [SnapshotPart], [PartPatchPart] or
+// [AgentPart].
 type PartUnion interface {
 	implementsPart()
 }
@@ -1045,6 +1050,11 @@ func init() {
 			TypeFilter:         gjson.JSON,
 			Type:               reflect.TypeOf(TextPart{}),
 			DiscriminatorValue: "text",
+		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(ReasoningPart{}),
+			DiscriminatorValue: "reasoning",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
@@ -1134,6 +1144,7 @@ type PartType string
 
 const (
 	PartTypeText       PartType = "text"
+	PartTypeReasoning  PartType = "reasoning"
 	PartTypeFile       PartType = "file"
 	PartTypeTool       PartType = "tool"
 	PartTypeStepStart  PartType = "step-start"
@@ -1145,10 +1156,81 @@ const (
 
 func (r PartType) IsKnown() bool {
 	switch r {
-	case PartTypeText, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot, PartTypePatch, PartTypeAgent:
+	case PartTypeText, PartTypeReasoning, PartTypeFile, PartTypeTool, PartTypeStepStart, PartTypeStepFinish, PartTypeSnapshot, PartTypePatch, PartTypeAgent:
 		return true
 	}
 	return false
+}
+
+type ReasoningPart struct {
+	ID               string                 `json:"id,required"`
+	MessageID        string                 `json:"messageID,required"`
+	SessionID        string                 `json:"sessionID,required"`
+	Text             string                 `json:"text,required"`
+	Type             ReasoningPartType      `json:"type,required"`
+	ProviderMetadata map[string]interface{} `json:"providerMetadata"`
+	Time             ReasoningPartTime      `json:"time"`
+	JSON             reasoningPartJSON      `json:"-"`
+}
+
+// reasoningPartJSON contains the JSON metadata for the struct [ReasoningPart]
+type reasoningPartJSON struct {
+	ID               apijson.Field
+	MessageID        apijson.Field
+	SessionID        apijson.Field
+	Text             apijson.Field
+	Type             apijson.Field
+	ProviderMetadata apijson.Field
+	Time             apijson.Field
+	raw              string
+	ExtraFields      map[string]apijson.Field
+}
+
+func (r *ReasoningPart) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r reasoningPartJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r ReasoningPart) implementsPart() {}
+
+type ReasoningPartType string
+
+const (
+	ReasoningPartTypeReasoning ReasoningPartType = "reasoning"
+)
+
+func (r ReasoningPartType) IsKnown() bool {
+	switch r {
+	case ReasoningPartTypeReasoning:
+		return true
+	}
+	return false
+}
+
+type ReasoningPartTime struct {
+	Start float64               `json:"start,required"`
+	End   float64               `json:"end"`
+	JSON  reasoningPartTimeJSON `json:"-"`
+}
+
+// reasoningPartTimeJSON contains the JSON metadata for the struct
+// [ReasoningPartTime]
+type reasoningPartTimeJSON struct {
+	Start       apijson.Field
+	End         apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ReasoningPartTime) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r reasoningPartTimeJSON) RawJSON() string {
+	return r.raw
 }
 
 type Session struct {

@@ -14,6 +14,7 @@ export namespace Agent {
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      options: z.record(z.any()),
       model: z
         .object({
           modelID: z.string(),
@@ -39,15 +40,18 @@ export namespace Agent {
           todoread: false,
           todowrite: false,
         },
+        options: {},
         mode: "subagent",
       },
       build: {
         name: "build",
         tools: {},
+        options: {},
         mode: "primary",
       },
       plan: {
         name: "plan",
+        options: {},
         tools: {
           write: false,
           edit: false,
@@ -66,6 +70,7 @@ export namespace Agent {
         item = result[key] = {
           name: key,
           mode: "all",
+          options: {},
           tools: {},
         }
       if (value.model) item.model = Provider.parseModel(value.model)
@@ -79,6 +84,11 @@ export namespace Agent {
       if (value.temperature != undefined) item.temperature = value.temperature
       if (value.top_p != undefined) item.topP = value.top_p
       if (value.mode) item.mode = value.mode
+      if (value.options)
+        item.options = {
+          ...item.options,
+          ...value.options,
+        }
     }
     return result
   })

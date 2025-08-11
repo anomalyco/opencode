@@ -61,7 +61,7 @@ export default function Share(props: {
   const [store, setStore] = createStore<{
     info?: Session.Info
     messages: Record<string, MessageWithParts>
-  }>({ info: props.info, messages: mapValues(props.messages, (x: any) => "metadata" in x ? fromV1(x) : x) })
+  }>({ info: props.info, messages: mapValues(props.messages, (x: any) => ("metadata" in x ? fromV1(x) : x)) })
   const messages = createMemo(() => Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)))
   const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected", "Disconnected"])
   createEffect(() => {
@@ -128,12 +128,10 @@ export default function Share(props: {
             setStore("messages", messageID, reconcile(d.content))
           }
           if (type === "part") {
-            setStore("messages", d.content.messageID, "parts", arr => {
+            setStore("messages", d.content.messageID, "parts", (arr) => {
               const index = arr.findIndex((x) => x.id === d.content.id)
-              if (index === -1)
-                arr.push(d.content)
-              if (index > -1)
-                arr[index] = d.content
+              if (index === -1) arr.push(d.content)
+              if (index > -1) arr[index] = d.content
               return [...arr]
             })
           }
@@ -350,7 +348,7 @@ export default function Share(props: {
                       if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
                         return false
                       return true
-                    })
+                    }),
                   )
 
                   return (

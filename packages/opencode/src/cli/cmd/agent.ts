@@ -73,6 +73,29 @@ const AgentCreateCommand = cmd({
       })
       if (prompts.isCancel(selectedTools)) throw new UI.CancelledError()
 
+      const modeResult = await prompts.select({
+        message: "Agent mode",
+        options: [
+          {
+            label: "All",
+            value: "all" as const,
+            hint: "Can function in both primary and subagent roles",
+          },
+          {
+            label: "Primary",
+            value: "primary" as const,
+            hint: "Acts as a primary/main agent",
+          },
+          {
+            label: "Subagent",
+            value: "subagent" as const,
+            hint: "Can be used as a subagent by other agents",
+          },
+        ],
+        initialValue: "all",
+      })
+      if (prompts.isCancel(modeResult)) throw new UI.CancelledError()
+
       const tools: Record<string, boolean> = {}
       for (const tool of availableTools) {
         if (!selectedTools.includes(tool)) {
@@ -82,6 +105,7 @@ const AgentCreateCommand = cmd({
 
       const frontmatter: any = {
         description: generated.whenToUse,
+        mode: modeResult,
       }
       if (Object.keys(tools).length > 0) {
         frontmatter.tools = tools

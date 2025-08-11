@@ -1,0 +1,23 @@
+{
+  "name": "@opencode/cloud-function",
+  "version": "0.3.130",
+  "$schema": "https://json.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20250522.0",
+    "@types/node": "catalog:",
+    "openai": "5.11.0",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "2.0.0",
+    "@ai-sdk/openai": "2.0.2",
+    "@ai-sdk/openai-compatible": "1.0.1",
+    "@hono/zod-validator": "catalog:",
+    "@openauthjs/openauth": "0.0.0-20250322224806",
+    "ai": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  }
+}

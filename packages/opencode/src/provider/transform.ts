@@ -81,4 +81,28 @@ export namespace ProviderTransform {
     if (modelID.toLowerCase().includes("qwen")) return 1
     return undefined
   }
+
+  export function options(_providerID: string, modelID: string) {
+    if (modelID.includes("gpt-5")) {
+      return {
+        reasoningEffort: "minimal",
+        textVerbosity: "low",
+        // reasoningSummary: "auto",
+        // include: ["reasoning.encrypted_content"],
+      }
+    }
+    // if (modelID.includes("claude")) {
+    //   return {
+    //     thinking: {
+    //       type: "enabled",
+    //       budgetTokens: 32000,
+    //     },
+    //   }
+    // }
+    // if (_providerID === "bedrock") {
+    //   return {
+    //     reasoningConfig: { type: "enabled", budgetTokens: 32000 },
+    //   }
+    // }
+  }
 }

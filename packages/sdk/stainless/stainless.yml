@@ -101,6 +101,7 @@ resources:
       toolPart: ToolPart
       agentPart: AgentPart
       agentPartInput: AgentPartInput
+      reasoningPart: ReasoningPart
       stepStartPart: StepStartPart
       stepFinishPart: StepFinishPart
       snapshotPart: SnapshotPart

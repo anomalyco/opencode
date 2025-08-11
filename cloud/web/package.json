@@ -1,0 +1,32 @@
+{
+  "name": "@opencode/cloud-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "bun build:server && bun build:client",
+    "build:client": "vite build --outDir dist/client",
+    "build:server": "vite build --ssr src/entry-server.tsx --outDir dist/server",
+    "serve": "vite preview",
+    "sst:dev": "bun sst shell --target Console -- bun dev"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "6.2.2",
+    "vite-plugin-pages": "0.32.5",
+    "vite-plugin-solid": "2.11.6"
+  },
+  "dependencies": {
+    "@kobalte/core": "0.13.9",
+    "@openauthjs/solid": "0.0.0-20250322224806",
+    "@solid-primitives/storage": "4.3.1",
+    "@solidjs/meta": "0.29.4",
+    "@solidjs/router": "0.15.3",
+    "solid-js": "1.9.5",
+    "solid-list": "0.3.0"
+  }
+}

@@ -1,0 +1,239 @@
+.root {
+  display: contents;
+
+  [data-slot="messages"] {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    height: 0;
+    /* This is important for flexbox to allow scrolling */
+    font-family: var(--font-mono);
+    color: var(--color-text);
+    row-gap: var(--space-4);
+    /* Add consistent spacing between messages */
+
+    /* Remove top border for first user message */
+    &>[data-component="message"][data-user]:first-child::before {
+      display: none;
+    }
+
+    &:has([data-component="loading"]) [data-component="clear"] {
+      display: none;
+    }
+  }
+
+  [data-component="message"] {
+    width: 100%;
+    padding: var(--space-2) var(--space-4);
+    line-height: var(--font-line-height);
+    white-space: pre-wrap;
+    align-self: flex-start;
+    min-height: auto;
+    /* Allow natural height for all messages */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+
+    /* User message styling */
+    &[data-user] {
+      padding: var(--space-6) var(--space-4);
+      position: relative;
+      font-weight: 600;
+      color: var(--color-text);
+      /* margin: 0.5rem 0; */
+    }
+
+    &[data-user]::before,
+    &[data-user]::after {
+      content: "";
+      position: absolute;
+      left: var(--space-4);
+      right: var(--space-4);
+      height: var(--space-px);
+      background-color: var(--color-border);
+      z-index: 1;
+      /* Ensure borders appear above other content */
+    }
+
+    &[data-user]::before {
+      top: 0;
+    }
+
+    &[data-user]::after {
+      bottom: 0;
+    }
+
+    &[data-assistant] {
+      color: var(--color-text);
+    }
+  }
+
+  [data-component="tool"] {
+    display: flex;
+    width: 100%;
+    padding: 0 var(--space-4);
+    margin-left: 0;
+    flex-direction: column;
+    opacity: 0.7;
+    gap: var(--space-2);
+    align-items: flex-start;
+    color: var(--color-text-dimmed);
+    min-height: auto;
+    /* Allow natural height */
+
+    [data-slot="header"] {
+      display: flex;
+      gap: var(--space-2);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      align-items: center;
+      width: 100%;
+    }
+
+    [data-slot="name"] {
+      letter-spacing: -0.03125rem;
+      text-transform: uppercase;
+      font-weight: 500;
+      font-size: var(--font-size-sm);
+    }
+
+    [data-slot="expand"] {
+      font-size: var(--font-size-sm);
+    }
+
+    [data-slot="content"] {
+      padding: 0;
+      line-height: var(--font-line-height);
+      font-size: var(--font-size-sm);
+      white-space: pre-wrap;
+      display: none;
+      width: 100%;
+    }
+
+    [data-slot="output"] {
+      margin-top: var(--space-1);
+    }
+
+    &[data-expanded="true"] [data-slot="content"] {
+      display: block;
+    }
+
+    &[data-expanded="true"] [data-slot="expand"] {
+      transform: rotate(45deg);
+    }
+  }
+
+  [data-component="loading"] {
+    padding: var(--space-4) var(--space-4) var(--space-8);
+    height: 1.5rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    font-size: var(--font-size-sm);
+    letter-spacing: var(--space-1);
+    color: var(--color-text);
+
+    & span {
+      opacity: 0;
+      animation: loading-dots 1.4s linear infinite;
+    }
+
+    & span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    & span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+
+  [data-component="clear"] {
+    position: relative;
+    padding: var(--space-4) var(--space-4);
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: var(--space-4);
+      right: var(--space-4);
+      top: 0;
+      height: var(--space-px);
+      background-color: var(--color-border);
+      z-index: 1;
+    }
+
+    & [data-component="button"] {
+      padding-left: 0;
+    }
+  }
+
+  [data-slot="footer"] {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border-top: 2px solid var(--color-border);
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    /* Ensure it's above other content */
+    margin-top: auto;
+    /* Push to bottom if content is short */
+    width: 100%;
+  }
+
+  [data-component="chat"] {
+    display: flex;
+    padding: var(--space-0-5) 0;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+
+    textarea {
+      --padding-y: var(--space-4);
+      --line-height: 1.5;
+      --text-height: calc(var(--line-height) * var(--font-size-lg));
+      --height: calc(var(--text-height) + var(--padding-y) * 2);
+
+      width: 100%;
+      resize: none;
+      line-height: var(--line-height);
+      height: var(--height);
+      min-height: var(--height);
+      max-height: calc(5 * var(--text-height) + var(--padding-y) * 2);
+      padding: var(--padding-y) var(--space-4);
+      border-radius: 0;
+      background-color: transparent;
+      color: var(--color-text);
+      border: none;
+      outline: none;
+      font-size: var(--font-size-lg);
+    }
+
+    textarea::placeholder {
+      color: var(--color-text-dimmed);
+      opacity: 0.75;
+    }
+
+    textarea:focus {
+      outline: 0;
+    }
+
+    & [data-component="button"] {
+      height: 100%;
+    }
+  }
+}
+
+@keyframes loading-dots {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  40%,
+  60% {
+    opacity: 1;
+  }
+}

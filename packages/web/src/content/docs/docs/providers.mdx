@@ -546,7 +546,7 @@ To use Kimi K2 from Moonshot AI:
 
 1. Head over to the [Moonshot AI console](https://platform.moonshot.ai/console), create an account, and click **Create API key**.
 
-2. Run `opencode auth login` and select **Other**.
+2. Run `opencode auth login` and select **Moonshot AI**.
 
    ```bash
    $ opencode auth login
@@ -555,11 +555,11 @@ To use Kimi K2 from Moonshot AI:
    │
    ◆  Select provider
    │  ...
-   │  ● Other
+   │  ● Moonshot AI
    └
    ```
 
-3. Enter `moonshot` as the provider ID.
+3. Enter your Moonshot API key.
 
    ```bash
    $ opencode auth login
@@ -567,48 +567,14 @@ To use Kimi K2 from Moonshot AI:
    ┌  Add credential
    │
    ◇  Select provider
-   │  Other
-   │
-   ◇  Enter provider id
-   │  moonshot
-   └
-   ```
-
-4. Enter your Moonshot API key.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
+   │  Moonshot AI
    │
    ◇  Enter your API key
-   │  sk-...
+   │  _
    └
    ```
 
-5. Configure Moonshot in your opencode config.
-
-   ```json title="opencode.json" ""moonshot"" {5-15}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "moonshot": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "Moonshot AI",
-         "options": {
-           "baseURL": "https://api.moonshot.ai/v1"
-         },
-         "models": {
-           "kimi-k2-0711-preview": {
-             "name": "Kimi K2"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-6. Run the `/models` command to select _Kimi K2_.
+4. Run the `/models` command to select _Kimi K2_.
 
 ---
 

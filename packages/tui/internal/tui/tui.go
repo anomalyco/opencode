@@ -382,6 +382,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Messages = []app.Message{}
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
+	case chat.AttachmentInsertedMsg:
+		// Close completion dialog when the editor inserts an attachment
+		a.showCompletionDialog = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -420,6 +423,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					switch casted := p.(type) {
 					case opencode.TextPart:
 						return casted.ID == msg.Properties.Part.ID
+					case opencode.ReasoningPart:
+						return casted.ID == msg.Properties.Part.ID
 					case opencode.FilePart:
 						return casted.ID == msg.Properties.Part.ID
 					case opencode.ToolPart:
@@ -457,6 +462,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				partIndex := slices.IndexFunc(message.Parts, func(p opencode.PartUnion) bool {
 					switch casted := p.(type) {
 					case opencode.TextPart:
+						return casted.ID == msg.Properties.PartID
+					case opencode.ReasoningPart:
 						return casted.ID == msg.Properties.PartID
 					case opencode.FilePart:
 						return casted.ID == msg.Properties.PartID

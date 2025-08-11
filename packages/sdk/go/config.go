@@ -74,9 +74,10 @@ type Config struct {
 	// Control sharing behavior:'manual' allows manual sharing via commands, 'auto'
 	// enables automatic sharing, 'disabled' disables all sharing
 	Share ConfigShare `json:"share"`
-	// Small model to use for tasks like title generation in the
-	// format of provider/model
+	// Small model to use for tasks like title generation in the format of
+	// provider/model
 	SmallModel string `json:"small_model"`
+	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
 	Theme string `json:"theme"`
 	// Custom username to display in conversations instead of system username
@@ -105,6 +106,7 @@ type configJSON struct {
 	Provider          apijson.Field
 	Share             apijson.Field
 	SmallModel        apijson.Field
+	Snapshot          apijson.Field
 	Theme             apijson.Field
 	Username          apijson.Field
 	raw               string
@@ -780,9 +782,10 @@ func (r ConfigModePlanMode) IsKnown() bool {
 }
 
 type ConfigPermission struct {
-	Bash ConfigPermissionBashUnion `json:"bash"`
-	Edit ConfigPermissionEdit      `json:"edit"`
-	JSON configPermissionJSON      `json:"-"`
+	Bash     ConfigPermissionBashUnion `json:"bash"`
+	Edit     ConfigPermissionEdit      `json:"edit"`
+	Webfetch ConfigPermissionWebfetch  `json:"webfetch"`
+	JSON     configPermissionJSON      `json:"-"`
 }
 
 // configPermissionJSON contains the JSON metadata for the struct
@@ -790,6 +793,7 @@ type ConfigPermission struct {
 type configPermissionJSON struct {
 	Bash        apijson.Field
 	Edit        apijson.Field
+	Webfetch    apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -871,6 +875,22 @@ const (
 func (r ConfigPermissionEdit) IsKnown() bool {
 	switch r {
 	case ConfigPermissionEditAsk, ConfigPermissionEditAllow, ConfigPermissionEditDeny:
+		return true
+	}
+	return false
+}
+
+type ConfigPermissionWebfetch string
+
+const (
+	ConfigPermissionWebfetchAsk   ConfigPermissionWebfetch = "ask"
+	ConfigPermissionWebfetchAllow ConfigPermissionWebfetch = "allow"
+	ConfigPermissionWebfetchDeny  ConfigPermissionWebfetch = "deny"
+)
+
+func (r ConfigPermissionWebfetch) IsKnown() bool {
+	switch r {
+	case ConfigPermissionWebfetchAsk, ConfigPermissionWebfetchAllow, ConfigPermissionWebfetchDeny:
 		return true
 	}
 	return false

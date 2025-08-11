@@ -208,6 +208,7 @@ func renderText(
 	showToolDetails bool,
 	width int,
 	extra string,
+	isThinking bool,
 	fileParts []opencode.FilePart,
 	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
@@ -219,8 +220,15 @@ func renderText(
 	var content string
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
+		bg := t.Background()
+		if isThinking {
+			bg = t.BackgroundPanel()
+		}
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width, t.Background())
+		content = util.ToMarkdown(text, width, bg)
+		if isThinking {
+			content = styles.NewStyle().Background(bg).Foreground(t.TextMuted()).Render("Thinking") + "\n\n" + content
+		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
@@ -268,7 +276,26 @@ func renderText(
 			return 0
 		})
 
+		// Merge overlapping highlights to prevent duplication
+		merged := make([]highlightPart, 0)
 		for _, part := range highlights {
+			if len(merged) == 0 {
+				merged = append(merged, part)
+				continue
+			}
+
+			last := &merged[len(merged)-1]
+			// If current part overlaps with the last one, merge them
+			if part.start <= last.end {
+				if part.end > last.end {
+					last.end = part.end
+				}
+			} else {
+				merged = append(merged, part)
+			}
+		}
+
+		for _, part := range merged {
 			highlight := base.Foreground(part.color)
 			start, end := part.start, part.end
 
@@ -305,9 +332,37 @@ func renderText(
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}
-	info := fmt.Sprintf("%s (%s)", author, timestamp)
-	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 
+	// Check if this is an assistant message with mode (agent) information
+	var modelAndAgentSuffix string
+	if assistantMsg, ok := message.(opencode.AssistantMessage); ok && assistantMsg.Mode != "" {
+		// Find the agent index by name to get the correct color
+		var agentIndex int
+		for i, agent := range app.Agents {
+			if agent.Name == assistantMsg.Mode {
+				agentIndex = i
+				break
+			}
+		}
+
+		// Get agent color based on the original agent index (same as status bar)
+		agentColor := util.GetAgentColor(agentIndex)
+
+		// Style the agent name with the same color as status bar
+		agentName := strings.Title(assistantMsg.Mode)
+		styledAgentName := styles.NewStyle().Foreground(agentColor).Bold(true).Render(agentName)
+		modelAndAgentSuffix = fmt.Sprintf(" | %s | %s", assistantMsg.ModelID, styledAgentName)
+	}
+
+	var info string
+	if modelAndAgentSuffix != "" {
+		// For assistant messages: "timestamp | modelID | agentName"
+		info = fmt.Sprintf("%s%s", timestamp, modelAndAgentSuffix)
+	} else {
+		// For user messages: "author (timestamp)"
+		info = fmt.Sprintf("%s (%s)", author, timestamp)
+	}
+	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
 		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
@@ -338,6 +393,16 @@ func renderText(
 			WithBorderColor(t.Secondary()),
 		)
 	case opencode.AssistantMessage:
+		if isThinking {
+			return renderContentBlock(
+				app,
+				content,
+				width,
+				WithTextColor(t.Text()),
+				WithBackgroundColor(t.BackgroundPanel()),
+				WithBorderColor(t.BackgroundPanel()),
+			)
+		}
 		return renderContentBlock(
 			app,
 			content,

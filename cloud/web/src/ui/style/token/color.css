@@ -1,0 +1,88 @@
+:root {
+  --color-white: hsl(0, 0%, 100%);
+  --color-gray-1: hsl(224, 20%, 94%);
+  --color-gray-2: hsl(224, 6%, 77%);
+  --color-gray-3: hsl(224, 6%, 56%);
+  --color-gray-4: hsl(224, 7%, 36%);
+  --color-gray-5: hsl(224, 10%, 23%);
+  --color-gray-6: hsl(224, 14%, 16%);
+  --color-black: hsl(224, 10%, 10%);
+
+  --hue-orange: 41;
+  --color-orange-low: hsl(var(--hue-orange), 39%, 22%);
+  --color-orange: hsl(var(--hue-orange), 82%, 63%);
+  --color-orange-high: hsl(var(--hue-orange), 82%, 87%);
+  --hue-green: 101;
+  --color-green-low: hsl(var(--hue-green), 39%, 22%);
+  --color-green: hsl(var(--hue-green), 82%, 63%);
+  --color-green-high: hsl(var(--hue-green), 82%, 80%);
+  --hue-blue: 234;
+  --color-blue-low: hsl(var(--hue-blue), 54%, 20%);
+  --color-blue: hsl(var(--hue-blue), 100%, 60%);
+  --color-blue-high: hsl(var(--hue-blue), 100%, 87%);
+  --hue-purple: 281;
+  --color-purple-low: hsl(var(--hue-purple), 39%, 22%);
+  --color-purple: hsl(var(--hue-purple), 82%, 63%);
+  --color-purple-high: hsl(var(--hue-purple), 82%, 89%);
+  --hue-red: 339;
+  --color-red-low: hsl(var(--hue-red), 39%, 22%);
+  --color-red: hsl(var(--hue-red), 82%, 63%);
+  --color-red-high: hsl(var(--hue-red), 82%, 87%);
+
+  --color-accent-low: hsl(13, 75%, 30%);
+  --color-accent: hsl(13, 88%, 57%);
+  --color-accent-high: hsl(13, 100%, 78%);
+
+  --color-text: var(--color-gray-1);
+  --color-text-dimmed: var(--color-gray-3);
+  --color-text-accent: var(--color-accent);
+  --color-text-invert: var(--color-black);
+  --color-text-accent-invert: var(--color-accent-high);
+  --color-bg: var(--color-black);
+  --color-bg-surface: var(--color-gray-5);
+  --color-bg-accent: var(--color-accent-high);
+  --color-border: var(--color-gray-2);
+
+  --color-backdrop-overlay: hsla(223, 13%, 10%, 0.66);
+}
+
+:root[data-color-mode="light"] {
+  --color-white: hsl(224, 10%, 10%);
+  --color-gray-1: hsl(224, 14%, 16%);
+  --color-gray-2: hsl(224, 10%, 23%);
+  --color-gray-3: hsl(224, 7%, 36%);
+  --color-gray-4: hsl(224, 6%, 56%);
+  --color-gray-5: hsl(224, 6%, 77%);
+  --color-gray-6: hsl(224, 20%, 94%);
+  --color-gray-7: hsl(224, 19%, 97%);
+  --color-black: hsl(0, 0%, 100%);
+
+  --color-orange-high: hsl(var(--hue-orange), 80%, 25%);
+  --color-orange: hsl(var(--hue-orange), 90%, 60%);
+  --color-orange-low: hsl(var(--hue-orange), 90%, 88%);
+  --color-green-high: hsl(var(--hue-green), 80%, 22%);
+  --color-green: hsl(var(--hue-green), 90%, 46%);
+  --color-green-low: hsl(var(--hue-green), 85%, 90%);
+  --color-blue-high: hsl(var(--hue-blue), 80%, 30%);
+  --color-blue: hsl(var(--hue-blue), 90%, 60%);
+  --color-blue-low: hsl(var(--hue-blue), 88%, 90%);
+  --color-purple-high: hsl(var(--hue-purple), 90%, 30%);
+  --color-purple: hsl(var(--hue-purple), 90%, 60%);
+  --color-purple-low: hsl(var(--hue-purple), 80%, 90%);
+  --color-red-high: hsl(var(--hue-red), 80%, 30%);
+  --color-red: hsl(var(--hue-red), 90%, 60%);
+  --color-red-low: hsl(var(--hue-red), 80%, 90%);
+
+  --color-accent-high: hsl(13, 75%, 26%);
+  --color-accent: hsl(13, 88%, 60%);
+  --color-accent-low: hsl(13, 100%, 89%);
+
+  --color-text-accent: var(--color-accent);
+  --color-text-dimmed: var(--color-gray-4);
+  --color-text-invert: var(--color-black);
+  --color-text-accent-invert: var(--color-accent-low);
+  --color-bg-surface: var(--color-gray-6);
+  --color-bg-accent: var(--color-accent);
+
+  --color-backdrop-overlay: hsla(225, 9%, 36%, 0.66);
+}

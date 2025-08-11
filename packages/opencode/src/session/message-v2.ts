@@ -118,6 +118,21 @@ export namespace MessageV2 {
   })
   export type TextPart = z.infer<typeof TextPart>
 
+  export const ReasoningPart = PartBase.extend({
+    type: z.literal("reasoning"),
+    text: z.string(),
+    providerMetadata: z.record(z.any()).optional(),
+    time: z
+      .object({
+        start: z.number(),
+        end: z.number().optional(),
+      })
+      .optional(),
+  }).openapi({
+    ref: "ReasoningPart",
+  })
+  export type ReasoningPart = z.infer<typeof ReasoningPart>
+
   export const ToolPart = PartBase.extend({
     type: z.literal("tool"),
     callID: z.string(),
@@ -229,6 +244,7 @@ export namespace MessageV2 {
   export const Part = z
     .discriminatedUnion("type", [
       TextPart,
+      ReasoningPart,
       FilePart,
       ToolPart,
       StepStartPart,

@@ -27,6 +27,50 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
+type AttachmentInsertedMsg struct{}
+
+// unescapeClipboardText trims surrounding quotes from clipboard text and returns the inner content.
+// It avoids interpreting backslash escape sequences unless the text is explicitly quoted.
+func (m *editorComponent) unescapeClipboardText(s string) string {
+	t := strings.TrimSpace(s)
+	if len(t) >= 2 {
+		first := t[0]
+		last := t[len(t)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			if u, err := strconv.Unquote(t); err == nil {
+				return u
+			}
+			return t[1 : len(t)-1]
+		}
+	}
+	return t
+}
+
+// pathExists checks if the given path exists. Relative paths are resolved against the app CWD.
+// Supports expanding '~' to the user's home directory.
+func (m *editorComponent) pathExists(p string) bool {
+	if p == "" {
+		return false
+	}
+	if strings.HasPrefix(p, "~") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if p == "~" {
+				p = home
+			} else if strings.HasPrefix(p, "~/") {
+				p = filepath.Join(home, p[2:])
+			}
+		}
+	}
+	check := p
+	if !filepath.IsAbs(check) {
+		check = filepath.Join(m.app.Info.Path.Cwd, check)
+	}
+	if _, err := os.Stat(check); err == nil {
+		return true
+	}
+	return false
+}
+
 type EditorComponent interface {
 	tea.Model
 	tea.ViewModel
@@ -153,60 +197,123 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case tea.PasteMsg:
-		text := string(msg)
+		// Normalize clipboard text first
+		textRaw := string(msg)
+		text := m.unescapeClipboardText(textRaw)
 
-		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
-			statPath := filePath
-			if !filepath.IsAbs(filePath) {
-				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+		// Case 1: pasted content contains one or more inline @paths -> insert attachments inline
+		// We scan the raw pasted text to preserve original content around attachments.
+		if strings.Contains(textRaw, "@") {
+			last := 0
+			idx := 0
+			inserted := 0
+			for idx < len(textRaw) {
+				r, size := utf8.DecodeRuneInString(textRaw[idx:])
+				if r != '@' {
+					idx += size
+					continue
+				}
+
+				// Insert preceding chunk before attempting to consume a path
+				if idx > last {
+					m.textarea.InsertRunesFromUserInput([]rune(textRaw[last:idx]))
+				}
+
+				// Extract candidate path after '@' up to whitespace
+				start := idx + size
+				end := start
+				for end < len(textRaw) {
+					nr, ns := utf8.DecodeRuneInString(textRaw[end:])
+					if nr == ' ' || nr == '\t' || nr == '\n' || nr == '\r' {
+						break
+					}
+					end += ns
+				}
+
+				if end > start {
+					raw := textRaw[start:end]
+					// Trim common trailing punctuation that may follow paths in prose
+					trimmed := strings.TrimRight(raw, ",.;:)]}\\\"'?!")
+					suffix := raw[len(trimmed):]
+					p := filepath.Clean(trimmed)
+					if m.pathExists(p) {
+						att := m.createAttachmentFromPath(p)
+						if att != nil {
+							m.textarea.InsertAttachment(att)
+							if suffix != "" {
+								m.textarea.InsertRunesFromUserInput([]rune(suffix))
+							}
+							// Insert a trailing space only if the next rune isn't already whitespace
+							insertSpace := true
+							if end < len(textRaw) {
+								nr, _ := utf8.DecodeRuneInString(textRaw[end:])
+								if nr == ' ' || nr == '\t' || nr == '\n' || nr == '\r' {
+									insertSpace = false
+								}
+							}
+							if insertSpace {
+								m.textarea.InsertString(" ")
+							}
+							inserted++
+							last = end
+							idx = end
+							continue
+						}
+					}
+				}
+
+				// No valid path -> keep the '@' literally
+				m.textarea.InsertRune('@')
+				last = start
+				idx = start
 			}
-			if _, err := os.Stat(statPath); err == nil {
-				attachment := m.createAttachmentFromPath(filePath)
-				if attachment != nil {
-					m.textarea.InsertAttachment(attachment)
+			// Insert any trailing content after the last processed segment
+			if last < len(textRaw) {
+				m.textarea.InsertRunesFromUserInput([]rune(textRaw[last:]))
+			}
+			if inserted > 0 {
+				return m, util.CmdHandler(AttachmentInsertedMsg{})
+			}
+		}
+
+		// Case 2: user typed '@' and then pasted a valid path -> replace '@' with attachment
+		at := m.textarea.LastRuneIndex('@')
+		if at != -1 && at == m.textarea.CursorColumn()-1 {
+			p := filepath.Clean(text)
+			if m.pathExists(p) {
+				cur := m.textarea.CursorColumn()
+				m.textarea.ReplaceRange(at, cur, "")
+				att := m.createAttachmentFromPath(p)
+				if att != nil {
+					m.textarea.InsertAttachment(att)
 					m.textarea.InsertString(" ")
-					return m, nil
+					return m, util.CmdHandler(AttachmentInsertedMsg{})
 				}
 			}
 		}
 
-		text = strings.ReplaceAll(text, "\\", "")
-		text, err := strconv.Unquote(`"` + text + `"`)
-		if err != nil {
-			slog.Error("Failed to unquote text", "error", err)
-			text := string(msg)
-			if m.shouldSummarizePastedText(text) {
-				m.handleLongPaste(text)
-			} else {
-				m.textarea.InsertRunesFromUserInput([]rune(msg))
+		// Case 3: plain path pasted (e.g., drag-and-drop) -> attach if image or PDF
+		{
+			p := filepath.Clean(text)
+			if m.pathExists(p) {
+				mime := getMediaTypeFromExtension(strings.ToLower(filepath.Ext(p)))
+				if strings.HasPrefix(mime, "image/") || mime == "application/pdf" {
+					if att := m.createAttachmentFromFile(p); att != nil {
+						m.textarea.InsertAttachment(att)
+						m.textarea.InsertString(" ")
+						return m, util.CmdHandler(AttachmentInsertedMsg{})
+					}
+				}
 			}
-			return m, nil
-		}
-		if _, err := os.Stat(text); err != nil {
-			slog.Error("Failed to paste file", "error", err)
-			text := string(msg)
-			if m.shouldSummarizePastedText(text) {
-				m.handleLongPaste(text)
-			} else {
-				m.textarea.InsertRunesFromUserInput([]rune(msg))
-			}
-			return m, nil
 		}
 
-		filePath := text
-
-		attachment := m.createAttachmentFromFile(filePath)
-		if attachment == nil {
-			if m.shouldSummarizePastedText(text) {
-				m.handleLongPaste(text)
-			} else {
-				m.textarea.InsertRunesFromUserInput([]rune(msg))
-			}
+		// Default: do not auto-convert. Insert raw text or summarize long pastes.
+		if m.shouldSummarizePastedText(textRaw) {
+			m.handleLongPaste(textRaw)
 			return m, nil
 		}
-
-		m.textarea.InsertAttachment(attachment)
-		m.textarea.InsertString(" ")
+		m.textarea.InsertRunesFromUserInput([]rune(textRaw))
+		return m, nil
 	case tea.ClipboardMsg:
 		text := string(msg)
 		// Check if the pasted text is long and should be summarized
@@ -233,7 +340,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if atIndex == -1 {
 				// Should not happen, but as a fallback, just insert.
 				m.textarea.InsertString(msg.Item.Value + " ")
-				return m, nil
+				return m, util.CmdHandler(AttachmentInsertedMsg{})
 			}
 
 			// The range to replace is from the '@' up to the current cursor position.
@@ -247,13 +354,13 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			attachment := m.createAttachmentFromPath(filePath)
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
-			return m, nil
+			return m, util.CmdHandler(AttachmentInsertedMsg{})
 		case "symbols":
 			atIndex := m.textarea.LastRuneIndex('@')
 			if atIndex == -1 {
 				// Should not happen, but as a fallback, just insert.
 				m.textarea.InsertString(msg.Item.Value + " ")
-				return m, nil
+				return m, util.CmdHandler(AttachmentInsertedMsg{})
 			}
 
 			cursorCol := m.textarea.CursorColumn()
@@ -287,13 +394,13 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
-			return m, nil
+			return m, util.CmdHandler(AttachmentInsertedMsg{})
 		case "agents":
 			atIndex := m.textarea.LastRuneIndex('@')
 			if atIndex == -1 {
 				// Should not happen, but as a fallback, just insert.
 				m.textarea.InsertString(msg.Item.Value + " ")
-				return m, nil
+				return m, util.CmdHandler(AttachmentInsertedMsg{})
 			}
 
 			cursorCol := m.textarea.CursorColumn()
@@ -311,8 +418,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
-			return m, nil
-
+			return m, util.CmdHandler(AttachmentInsertedMsg{})
 		default:
 			slog.Debug("Unknown provider", "provider", msg.Item.ProviderID)
 			return m, nil
