@@ -37,14 +37,17 @@ jobs:
 
           Please check all the code changes in this pull request against the guidelines in AGENTS.md file in this repository. Diffs are important but make sure you read the entire file to get proper context.
 
-          For each violation you find, create a file comment using the gh CLI with the suggested fix.
+          For each violation you find, create a file comment using the gh CLI
 
-          \`\`\`bash
-          gh pr review ${{ github.event.pull_request.number }} --comment-body '[description-of-problem]' --file 'path/to/file.ts' --line [line_number] --body '```suggestion
-          [corrected code here]
-          ```'
+          ```
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments -f body='[description of problem]' -f path='[path-to-file]' -F line=[line-number] -f side='RIGHT'
+          ```
+
+          If you have a suggestion for how to fix the problem the body can include a suggestion:
+          ```
+          \`\`\`suggestion
+          [suggested code here]
           \`\`\`
-
-          If you do not have a fix you can just lave a comment without the suggestion.
+          ```
 
           Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
