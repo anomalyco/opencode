@@ -523,7 +523,7 @@ export namespace Session {
                   t.execute(args, {
                     sessionID: input.sessionID,
                     abort: new AbortController().signal,
-                    agent: agent.name,
+                    agent: input.agent!,
                     messageID: userMsg.id,
                     metadata: async () => {},
                   }),
