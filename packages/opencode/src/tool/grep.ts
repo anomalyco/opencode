@@ -60,13 +60,16 @@ export const GrepTool = Tool.define("grep", {
       if (parts.length < 3) continue
 
       // The line number is the last part that is purely numeric
-      let lineNumIndex = -1
-      for (let i = parts.length - 2; i >= 1; i--) {
-        if (/^\d+$/.test(parts[i])) {
-          lineNumIndex = i
-          break
+      const findLineNumberIndex = (parts: string[]): number => {
+        for (let i = parts.length - 2; i >= 1; i--) {
+          if (/^\d+$/.test(parts[i])) {
+            return i
+          }
         }
+        return -1
       }
+      
+      const lineNumIndex = findLineNumberIndex(parts)
       
       if (lineNumIndex === -1) continue
 
