@@ -2045,6 +2045,109 @@ func itemWidth(item any) int {
 	return 0
 }
 
+// forceWrapAttachment splits an attachment's display text across multiple lines
+func forceWrapAttachment(att *attachment.Attachment, width int) [][]any {
+	if width <= 0 {
+		return [][]any{{att}}
+	}
+
+	display := att.Display
+	displayRunes := []rune(display)
+
+	if len(displayRunes) <= width {
+		return [][]any{{att}}
+	}
+
+	var lines [][]any
+	start := 0
+
+	for start < len(displayRunes) {
+		// Calculate how many runes fit in this line
+		end := start + width
+		if end > len(displayRunes) {
+			end = len(displayRunes)
+		}
+
+		// Create a wrapped attachment for this segment
+		wrappedAtt := &attachment.Attachment{
+			ID:        att.ID,
+			Type:      att.Type,
+			Display:   string(displayRunes[start:end]),
+			URL:       att.URL,
+			Filename:  att.Filename,
+			MediaType: att.MediaType,
+			Source:    att.Source,
+		}
+
+		lines = append(lines, []any{wrappedAtt})
+		start = end
+	}
+
+	return lines
+}
+
+// forceWrapWord splits a word that's too long to fit within the given width
+func forceWrapWord(word []any, width int) [][]any {
+	if width <= 0 || len(word) == 0 {
+		return [][]any{word}
+	}
+
+	var lines [][]any
+	currentLine := []any{}
+	currentWidth := 0
+
+	for _, item := range word {
+		if att, ok := item.(*attachment.Attachment); ok {
+			// Handle attachment that might be too wide
+			attWidth := uniseg.StringWidth(att.Display)
+
+			// If the attachment display is too wide, split it
+			if attWidth > width {
+				// Finish current line if it has content
+				if len(currentLine) > 0 {
+					lines = append(lines, currentLine)
+					currentLine = []any{}
+					currentWidth = 0
+				}
+
+				// Split the attachment display across multiple lines
+				wrappedAttachment := forceWrapAttachment(att, width)
+				lines = append(lines, wrappedAttachment...)
+				continue
+			}
+
+			// If adding this attachment would exceed the width, start a new line
+			if currentWidth+attWidth > width && len(currentLine) > 0 {
+				lines = append(lines, currentLine)
+				currentLine = []any{}
+				currentWidth = 0
+			}
+
+			currentLine = append(currentLine, item)
+			currentWidth += attWidth
+		} else if r, ok := item.(rune); ok {
+			itemWidth := rw.RuneWidth(r)
+
+			// If adding this rune would exceed the width, start a new line
+			if currentWidth+itemWidth > width && len(currentLine) > 0 {
+				lines = append(lines, currentLine)
+				currentLine = []any{}
+				currentWidth = 0
+			}
+
+			currentLine = append(currentLine, item)
+			currentWidth += itemWidth
+		}
+	}
+
+	// Add the last line if it has content
+	if len(currentLine) > 0 {
+		lines = append(lines, currentLine)
+	}
+
+	return lines
+}
+
 func wrapInterfaces(content []any, width int) [][]any {
 	if width <= 0 {
 		return [][]any{content}
@@ -2076,11 +2179,49 @@ func wrapInterfaces(content []any, width int) [][]any {
 			if !inSpaces {
 				// End of a word
 				if lineW > 0 && lineW+wordW > width {
-					lines = append(lines, word)
-					lineW = wordW
+					// If the word itself is too long to fit on a line, force-wrap it
+					if wordW > width {
+						wrappedLines := forceWrapWord(word, width)
+						lines = append(lines, wrappedLines...)
+						// Calculate width of the last wrapped line
+						lastLine := wrappedLines[len(wrappedLines)-1]
+						lineW = 0
+						for _, item := range lastLine {
+							if r, ok := item.(rune); ok {
+								lineW += rw.RuneWidth(r)
+							} else if att, ok := item.(*attachment.Attachment); ok {
+								lineW += uniseg.StringWidth(att.Display)
+							}
+						}
+					} else {
+						lines = append(lines, word)
+						lineW = wordW
+					}
 				} else {
-					lines[len(lines)-1] = append(lines[len(lines)-1], word...)
-					lineW += wordW
+					// Check if the word needs to be force-wrapped even when it fits on the current line
+					if wordW > width {
+						currentLine := lines[len(lines)-1]
+						wrappedWord := forceWrapWord(word, width-lineW)
+						if len(wrappedWord) > 0 {
+							lines[len(lines)-1] = append(currentLine, wrappedWord[0]...)
+							for i := 1; i < len(wrappedWord); i++ {
+								lines = append(lines, wrappedWord[i])
+							}
+							// Calculate width of the last wrapped line
+							lastLine := wrappedWord[len(wrappedWord)-1]
+							lineW = 0
+							for _, item := range lastLine {
+								if r, ok := item.(rune); ok {
+									lineW += rw.RuneWidth(r)
+								} else if att, ok := item.(*attachment.Attachment); ok {
+									lineW += uniseg.StringWidth(att.Display)
+								}
+							}
+						}
+					} else {
+						lines[len(lines)-1] = append(lines[len(lines)-1], word...)
+						lineW += wordW
+					}
 				}
 				word = nil
 				wordW = 0
@@ -2110,11 +2251,49 @@ func wrapInterfaces(content []any, width int) [][]any {
 	// Handle any remaining word/spaces at the end of the content.
 	if wordW > 0 {
 		if lineW > 0 && lineW+wordW > width {
-			lines = append(lines, word)
-			lineW = wordW
+			// If the word itself is too long to fit on a line, force-wrap it
+			if wordW > width {
+				wrappedLines := forceWrapWord(word, width)
+				lines = append(lines, wrappedLines...)
+				// Calculate width of the last wrapped line
+				lastLine := wrappedLines[len(wrappedLines)-1]
+				lineW = 0
+				for _, item := range lastLine {
+					if r, ok := item.(rune); ok {
+						lineW += rw.RuneWidth(r)
+					} else if att, ok := item.(*attachment.Attachment); ok {
+						lineW += uniseg.StringWidth(att.Display)
+					}
+				}
+			} else {
+				lines = append(lines, word)
+				lineW = wordW
+			}
 		} else {
-			lines[len(lines)-1] = append(lines[len(lines)-1], word...)
-			lineW += wordW
+			// Check if the word needs to be force-wrapped even when it fits on the current line
+			if wordW > width {
+				currentLine := lines[len(lines)-1]
+				wrappedWord := forceWrapWord(word, width-lineW)
+				if len(wrappedWord) > 0 {
+					lines[len(lines)-1] = append(currentLine, wrappedWord[0]...)
+					for i := 1; i < len(wrappedWord); i++ {
+						lines = append(lines, wrappedWord[i])
+					}
+					// Calculate width of the last wrapped line
+					lastLine := wrappedWord[len(wrappedWord)-1]
+					lineW = 0
+					for _, item := range lastLine {
+						if r, ok := item.(rune); ok {
+							lineW += rw.RuneWidth(r)
+						} else if att, ok := item.(*attachment.Attachment); ok {
+							lineW += uniseg.StringWidth(att.Display)
+						}
+					}
+				}
+			} else {
+				lines[len(lines)-1] = append(lines[len(lines)-1], word...)
+				lineW += wordW
+			}
 		}
 	}
 	if spaceW > 0 {

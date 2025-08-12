@@ -11,7 +11,7 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
-import { Config } from "../config/config"
+import type { Agent } from "../agent/agent"
 
 export namespace ToolRegistry {
   const ALL = [
@@ -66,20 +66,23 @@ export namespace ToolRegistry {
     return result
   }
 
-  export async function enabled(_providerID: string, _modelID: string): Promise<Record<string, boolean>> {
-    const cfg = await Config.get()
+  export async function enabled(
+    _providerID: string,
+    _modelID: string,
+    agent: Agent.Info,
+  ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
     result["patch"] = false
 
-    if (cfg.permission?.edit === "deny") {
+    if (agent.permission.edit === "deny") {
       result["edit"] = false
       result["patch"] = false
       result["write"] = false
     }
-    if (cfg?.permission?.bash === "deny") {
+    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
       result["bash"] = false
     }
-    if (cfg?.permission?.webfetch === "deny") {
+    if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
     }
 

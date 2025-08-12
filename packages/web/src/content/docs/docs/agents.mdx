@@ -358,6 +358,147 @@ Here are all the tools can be controlled through the agent config.
 
 ---
 
+### Permissions
+
+Permissions control what actions an agent can take.
+
+- edit, bash, webfetch
+
+Each permission can be set to allow, ask, or deny.
+
+- allow, ask, deny
+
+Configure permissions globally in opencode.json.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "allow",
+    "webfetch": "deny"
+  }
+}
+```
+
+You can override permissions per agent in JSON.
+
+```json title="opencode.json" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "*": "allow",
+          "git push": "ask",
+          "terraform *": "deny"
+        },
+        "webfetch": "ask"
+      }
+    }
+  }
+}
+```
+
+You can also set permissions in Markdown agents.
+
+```markdown title="~/.config/opencode/agent/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+Bash permissions support granular patterns for fine-grained control.
+
+```json title="Allow most, ask for risky, deny terraform"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "git push": "ask",
+      "terraform *": "deny"
+    }
+  }
+}
+```
+
+If you provide a granular bash map, the default becomes ask unless you set \* explicitly.
+
+```json title="Granular defaults to ask"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "git status": "allow"
+    }
+  }
+}
+```
+
+Agent-level permissions merge over global settings.
+
+- Global sets defaults; agent overrides when specified
+
+Specific bash rules can override a global default.
+
+```json title="Global ask, agent allows safe commands"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": { "bash": "ask" },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": { "git status": "allow", "*": "ask" }
+      }
+    }
+  }
+}
+```
+
+Permissions affect tool availability and prompts differently.
+
+- deny hides tools (edit also hides write/patch); ask prompts; allow runs
+
+For quick reference, here are common setups.
+
+```json title="Read-only reviewer"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "review": {
+      "permission": { "edit": "deny", "bash": "deny", "webfetch": "allow" }
+    }
+  }
+}
+```
+
+```json title="Planning agent that can browse but cannot change code"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "plan": {
+      "permission": { "edit": "deny", "bash": "deny", "webfetch": "ask" }
+    }
+  }
+}
+```
+
+See the full permissions guide for more patterns.
+
+- /docs/permissions
+
+---
+
 ### Mode
 
 Control the agent's mode with the `mode` config. The `mode` option is used to determine how the agent can be used.

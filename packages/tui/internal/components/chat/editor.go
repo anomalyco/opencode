@@ -31,6 +31,7 @@ type EditorComponent interface {
 	tea.Model
 	tea.ViewModel
 	Content() string
+	Cursor() *tea.Cursor
 	Lines() int
 	Value() string
 	Length() int
@@ -407,6 +408,10 @@ func (m *editorComponent) Content() string {
 	return content
 }
 
+func (m *editorComponent) Cursor() *tea.Cursor {
+	return m.textarea.Cursor()
+}
+
 func (m *editorComponent) View() string {
 	width := m.width
 	if m.app.Session.ID == "" {
@@ -694,6 +699,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
+	ta.VirtualCursor = false
 	ta = updateTextareaStyles(ta)
 
 	m := &editorComponent{

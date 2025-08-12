@@ -1,0 +1,49 @@
+name: Guidelines Check
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  check-guidelines:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Check PR guidelines compliance
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "*": "deny" } }'
+        run: |
+          opencode run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
+
+          PR description:
+          ${{ github.event.pull_request.body }}
+
+          Please check all the code changes in this pull request against the guidelines in AGENTS.md file in this repository.
+
+          For each violation you find, create a file comment using the gh CLI. Use this exact format for each violation:
+
+          \`\`\`bash
+          gh pr review ${{ github.event.pull_request.number }} --comment-body 'This violates the AGENTS.md guideline: [specific rule]. Consider: [suggestion]' --file 'path/to/file.ts' --line [line_number]
+          \`\`\`
+
+          When possible, also submit code change suggestions using:
+
+          \`\`\`bash
+          gh pr review ${{ github.event.pull_request.number }} --comment-body 'Suggested fix for AGENTS.md guideline violation:' --file 'path/to/file.ts' --line [line_number] --body '```suggestion
+          [corrected code here]
+          ```'
+          \`\`\`
+
+          Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."

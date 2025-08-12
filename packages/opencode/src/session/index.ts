@@ -523,6 +523,7 @@ export namespace Session {
                   t.execute(args, {
                     sessionID: input.sessionID,
                     abort: new AbortController().signal,
+                    agent: agent.name,
                     messageID: userMsg.id,
                     metadata: async () => {},
                   }),
@@ -765,7 +766,7 @@ export namespace Session {
 
     const enabledTools = pipe(
       agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID, agent)),
       mergeDeep(input.tools ?? {}),
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
@@ -791,6 +792,7 @@ export namespace Session {
             abort: options.abortSignal!,
             messageID: assistantMsg.id,
             callID: options.toolCallId,
+            agent: agent.name,
             metadata: async (val) => {
               const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {

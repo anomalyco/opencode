@@ -7,6 +7,7 @@ export namespace Tool {
   export type Context<M extends Metadata = Metadata> = {
     sessionID: string
     messageID: string
+    agent: string
     callID?: string
     abort: AbortSignal
     metadata(input: { title?: string; metadata?: M }): void

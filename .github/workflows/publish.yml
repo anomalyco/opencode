@@ -48,20 +48,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Install makepkg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
+      # Temporarily disabled AUR steps
+      # - name: Install makepkg
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y pacman-package-manager
 
       - name: Setup SSH for AUR
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
-
+      #     ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
       - name: Install dependencies
         run: bun install
 
