@@ -25,7 +25,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "*": "deny" } }'
         run: |
-          opencode run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
+          opencode --print-logs run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
           <pr-number>
           ${{ github.event.pull_request.number }}
