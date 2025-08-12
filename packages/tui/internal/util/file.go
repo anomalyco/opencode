@@ -85,6 +85,7 @@ func Extension(path string) string {
 func ToMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
 	r := styles.GetMarkdownRenderer(width-6, backgroundColor)
 	content = strings.ReplaceAll(content, RootPath+"/", "")
+	content = strings.ReplaceAll(content, "-", "\u2011")
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")
 
@@ -105,5 +106,6 @@ func ToMarkdown(content string, width int, backgroundColor compat.AdaptiveColor)
 		}
 	}
 	content = strings.Join(lines, "\n")
+	content = strings.ReplaceAll(content, "\u2011", "-")
 	return strings.TrimSuffix(content, "\n")
 }
