@@ -75,7 +75,7 @@ export function IconRobot(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
 }
 
 // https://icones.js.org/collection/ri?s=brain&icon=ri:brain-2-line
-/* export function IconBrain(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconBrain(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
       <path
@@ -84,4 +84,4 @@ export function IconRobot(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
       />
     </svg>
   )
-} */
+}

@@ -14,8 +14,8 @@ import { App } from "../app/app"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
-import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
+import { Agent } from "../agent/agent"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -40,7 +40,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error(`File ${filePath} is not in the current working directory`)
     }
 
-    const cfg = await Config.get()
+    const agent = await Agent.get(ctx.agent)
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -48,7 +48,7 @@ export const EditTool = Tool.define("edit", {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-        if (cfg.permission?.edit === "ask") {
+        if (agent.permission.edit === "ask") {
           await Permission.ask({
             type: "edit",
             sessionID: ctx.sessionID,
@@ -77,7 +77,7 @@ export const EditTool = Tool.define("edit", {
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
       diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-      if (cfg.permission?.edit === "ask") {
+      if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
           sessionID: ctx.sessionID,

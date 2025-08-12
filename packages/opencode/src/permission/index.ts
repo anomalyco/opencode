@@ -155,7 +155,7 @@ export namespace Permission {
       public readonly permissionID: string,
       public readonly toolCallID?: string,
     ) {
-      super(`The user rejected permission to use this functionality`)
+      super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
     }
   }
 }
