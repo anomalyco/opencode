@@ -670,6 +670,28 @@ func (m *Model) InsertAttachment(att *attachment.Attachment) {
 	m.SetCursorColumn(m.col)
 }
 
+// removeAttachmentAtCursor replaces the attachment at or immediately before the
+// cursor with its textual display and positions the cursor at the end of the
+// inserted text. Returns true if an attachment was removed.
+func (m *Model) removeAttachmentAtCursor() bool {
+	att, startIdx, _ := m.isAttachmentAtCursor()
+	if att == nil {
+		return false
+	}
+	// Replace the attachment element with the display runes
+	before := m.value[m.row][:startIdx]
+	after := m.value[m.row][startIdx+1:]
+	replacement := runesToInterfaces([]rune(att.Display))
+	newRow := make([]any, 0, len(before)+len(replacement)+len(after))
+	newRow = append(newRow, before...)
+	newRow = append(newRow, replacement...)
+	newRow = append(newRow, after...)
+	m.value[m.row] = newRow
+	m.col = startIdx + len(replacement)
+	m.SetCursorColumn(m.col)
+	return true
+}
+
 // ReplaceRange replaces text from startCol to endCol on the current row with the given string.
 // This preserves attachments outside the replaced range.
 func (m *Model) ReplaceRange(startCol, endCol int, replacement string) {
@@ -1577,6 +1599,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			m.deleteBeforeCursor()
 		case key.Matches(msg, m.KeyMap.DeleteCharacterBackward):
+			// If the cursor is at or just after an attachment, convert it to text instead of deleting
+			if att, _, _ := m.isAttachmentAtCursor(); att != nil {
+				if m.removeAttachmentAtCursor() {
+					break
+				}
+			}
 			m.col = clamp(m.col, 0, len(m.value[m.row]))
 			if m.col <= 0 {
 				m.mergeLineAbove(m.row)
@@ -1587,6 +1615,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.SetCursorColumn(m.col - 1)
 			}
 		case key.Matches(msg, m.KeyMap.DeleteCharacterForward):
+			// If the cursor is on an attachment, convert it to text instead of deleting
+			if att, _, _ := m.isAttachmentAtCursor(); att != nil {
+				if m.removeAttachmentAtCursor() {
+					break
+				}
+			}
 			if len(m.value[m.row]) > 0 && m.col < len(m.value[m.row]) {
 				m.value[m.row] = slices.Delete(m.value[m.row], m.col, m.col+1)
 			}
