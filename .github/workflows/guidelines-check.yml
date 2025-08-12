@@ -37,7 +37,7 @@ jobs:
 
           Please check all the code changes in this pull request against the guidelines in AGENTS.md file in this repository. Diffs are important but make sure you read the entire file to get proper context.
 
-          For each violation you find, create a file comment using the gh CLI
+          For each violation you find, create a file comment using the gh CLI - make it clear these are merely suggestions and the human can make a call on what to do.
 
           ```
           gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments -f body='[description of problem]' -f path='[path-to-file]' -F line=[line-number] -f side='RIGHT'
