@@ -5,7 +5,7 @@ import { z } from "zod"
 import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
-import { mergeDeep, pipe } from "remeda"
+import { mergeDeep } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
@@ -17,11 +17,13 @@ import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErro
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+  const supportedLocalCfgs = ["opencode.json", "opencode.jsonc"]
+  const supportedGlobalCfgs = ["config.json", "opencode.json", "opencode.jsonc"]
 
   export const state = App.state("config", async (app) => {
     const auth = await Auth.all()
     let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
+    for (const file of supportedLocalCfgs) {
       const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await loadFile(resolved))
@@ -380,12 +382,10 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
-    )
+    let result: Info = {}
+    for (const file of supportedGlobalCfgs) {
+      result = mergeDeep(result, await loadFile(path.join(Global.Path.config, file)))
+    }
 
     await import(path.join(Global.Path.config, "config"), {
       with: {
@@ -505,5 +505,39 @@ export namespace Config {
 
   export function get() {
     return state()
+  }
+
+  // reads local or global config files
+  export async function loadFiles(
+    global: boolean,
+    app: { path: { cwd: string; root: string } },
+  ): Promise<Map<string, Info>> {
+    const configs = new Map<string, Info>()
+
+    if (global) {
+      for (const file of supportedGlobalCfgs) {
+        const configPath = path.join(Global.Path.config, file)
+        const exists = await Bun.file(configPath).exists()
+        if (exists) {
+          const config = await loadFile(configPath)
+          configs.set(configPath, config)
+        }
+      }
+      return configs
+    }
+
+    for (const file of supportedLocalCfgs) {
+      const found = await Filesystem.findUp(file, app.path.cwd, app.path.root)
+      for (const resolved of found.toReversed()) {
+        const config = await loadFile(resolved)
+        configs.set(resolved, config)
+      }
+    }
+    return configs
+  }
+
+  export async function write(configPath: string, data: Info) {
+    const content = JSON.stringify(data, null, 2)
+    await Bun.write(configPath, content)
   }
 }
