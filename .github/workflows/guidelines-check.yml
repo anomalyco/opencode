@@ -27,10 +27,15 @@ jobs:
         run: |
           opencode run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
-          PR description:
-          ${{ github.event.pull_request.body }}
+          <pr-number>
+          ${{ github.event.pull_request.number }}
+          </pr-number>
 
-          Please check all the code changes in this pull request against the guidelines in AGENTS.md file in this repository.
+          <pr-description>
+          ${{ github.event.pull_request.body }}
+          </pr-description>
+
+          Please check all the code changes in this pull request against the guidelines in AGENTS.md file in this repository. Diffs are important but make sure you read the entire file to get proper context.
 
           For each violation you find, create a file comment using the gh CLI. Use this exact format for each violation:
 
