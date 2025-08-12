@@ -40,17 +40,12 @@ const PluginInstallCommand = cmd({
     await App.provide({ cwd: process.cwd() }, async (app) => {
       const configs = await Config.loadFiles(args["global"], app)
       const [target, config] = readConfig(configs)
-      console.log(JSON.stringify(args))
       const packages = args["package"].filter((pkg: string) => !config.plugin?.includes(pkg))
       if (packages.length === 0) {
         UI.error("No plugins to install")
         return
       }
-      if (config.plugin) {
-        config.plugin.push(...packages)
-      } else {
-        config.plugin = packages
-      }
+      config.plugin ??= []
       await Config.write(target, config)
 
       UI.println(`${packages.length} package${packages.length !== 1 ? "s" : ""} installed`)
@@ -80,8 +75,8 @@ const PluginUninstallCommand = cmd({
     await App.provide({ cwd: process.cwd() }, async (app) => {
       const configs = await Config.loadFiles(args["global"], app)
       const [target, config] = readConfig(configs)
-      const packagesToRemove = (args["package"] as string[]).filter((pkg: string) => config.plugin?.includes(pkg))
-      config.plugin = config.plugin?.filter((pkg) => !(args["package"] as string[]).includes(pkg)) || []
+      const packagesToRemove = args["package"].filter((pkg: string) => config.plugin?.includes(pkg))
+      config.plugin = config.plugin?.filter((pkg) => !args["package"].includes(pkg)) || []
       await Config.write(target, config)
 
       UI.println(`${packagesToRemove.length} package${packagesToRemove.length !== 1 ? "s" : ""} uninstalled`)
