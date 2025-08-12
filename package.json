@@ -28,6 +28,7 @@
     }
   },
   "dependencies": {
+    "chokidar": "4.0.3",
     "pulumi-stripe": "0.0.24"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { Bus } from "../bus"
-import fs from "fs"
+import chokidar from "chokidar"
 import { App } from "../app/app"
 import { Log } from "../util/log"
 import { Flag } from "../flag/flag"
@@ -23,19 +23,17 @@ export namespace FileWatcher {
       const app = App.use()
       if (!app.info.git) return {}
       try {
-        const watcher = fs.watch(app.info.path.cwd, { recursive: true }, (event, file) => {
-          log.info("change", { file, event })
+        let watcher = chokidar.watch(app.info.path.cwd, { ignoreInitial: true })
+        watcher.on('change', file => {
+          log.info("change", { file, event: "change" })
           if (!file) return
           // for some reason async local storage is lost here
           // https://github.com/oven-sh/bun/issues/20754
-          App.provideExisting(app, async () => {
-            Bus.publish(Event.Updated, {
-              file,
-              event,
-            })
-          })
+          App.provideExisting(app, async () =>
+            Bus.publish(Event.Updated, { file, event: "change", })
+          )
         })
-        return { watcher }
+        return { watcher  }
       } catch {
         return {}
       }

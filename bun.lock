@@ -4,6 +4,7 @@
     "": {
       "name": "opencode",
       "dependencies": {
+        "chokidar": "4.0.3",
         "pulumi-stripe": "0.0.24",
       },
       "devDependencies": {
@@ -13,7 +14,7 @@
     },
     "cloud/core": {
       "name": "@opencode/cloud-core",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "drizzle-orm": "0.41.0",
@@ -27,7 +28,7 @@
     },
     "cloud/function": {
       "name": "@opencode/cloud-function",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -47,7 +48,7 @@
     },
     "cloud/web": {
       "name": "@opencode/cloud-web",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@kobalte/core": "0.13.9",
         "@openauthjs/solid": "0.0.0-20250322224806",
@@ -66,7 +67,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "22.0.0",
@@ -81,7 +82,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -133,7 +134,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
       },
@@ -145,7 +146,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.80.1",
         "@tsconfig/node22": "catalog:",
@@ -154,7 +155,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "0.4.19",
+      "version": "0.4.37",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -190,16 +191,6 @@
     "esbuild",
     "protobufjs",
   ],
-  "catalog": {
-    "@hono/zod-validator": "0.4.2",
-    "@tsconfig/node22": "22.0.2",
-    "@types/node": "22.13.9",
-    "ai": "5.0.8",
-    "hono": "4.7.10",
-    "remeda": "2.26.0",
-    "typescript": "5.8.2",
-    "zod": "3.25.76",
-  },
   "packages": {
     "@actions/core": ["@actions/core@1.11.1", "", { "dependencies": { "@actions/exec": "^1.1.1", "@actions/http-client": "^2.0.1" } }, "sha512-hXJCSrkwfA46Vd9Z3q4cpEpHB1rL5NG04+/rbqW9d3+CSvtB1tYe8UTpAlixa1vj0m/ULglfEK2UKxMGxCxv5A=="],
 
