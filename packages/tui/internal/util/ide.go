@@ -6,11 +6,11 @@ import (
 )
 
 var SUPPORTED_IDES = []struct {
-	Search string
+	Search    string
 	ShortName string
 }{
 	{"Windsurf", "Windsurf"},
-	{"Visual Studio Code", "VS Code"},
+	{"Visual Studio Code", "vscode"},
 	{"Cursor", "Cursor"},
 	{"VSCodium", "VSCodium"},
 }
@@ -28,3 +28,4 @@ func Ide() string {
 
 	return "unknown"
 }
+

@@ -126,19 +126,26 @@ export namespace LSPClient {
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
           const file = Bun.file(input.path)
           const text = await file.text()
-          const version = files[input.path]
-          if (version !== undefined) {
-            diagnostics.delete(input.path)
-            await connection.sendNotification("textDocument/didClose", {
-              textDocument: {
-                uri: `file://` + input.path,
-              },
-            })
-          }
-          log.info("textDocument/didOpen", input)
-          diagnostics.delete(input.path)
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+
+          const version = files[input.path]
+          if (version !== undefined) {
+            const next = version + 1
+            files[input.path] = next
+            log.info("textDocument/didChange", { path: input.path, version: next })
+            await connection.sendNotification("textDocument/didChange", {
+              textDocument: {
+                uri: `file://` + input.path,
+                version: next,
+              },
+              contentChanges: [{ text }],
+            })
+            return
+          }
+
+          log.info("textDocument/didOpen", input)
+          diagnostics.delete(input.path)
           await connection.sendNotification("textDocument/didOpen", {
             textDocument: {
               uri: `file://` + input.path,

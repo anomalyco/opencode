@@ -19,7 +19,7 @@ import {
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
 } from "../icons"
-import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic /*, IconBrain */ } from "../icons/custom"
+import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "../icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
@@ -83,9 +83,9 @@ export function Part(props: PartProps) {
               >
                 {(model) => <ProviderIcon model={model()} size={18} />}
               </Match>
-              {/* <Match when={props.part.type === "reasoning" && props.message.role === "assistant"}>
+              <Match when={props.part.type === "reasoning" && props.message.role === "assistant"}>
                 <IconBrain width={18} height={18} />
-              </Match> */}
+              </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
               </Match>
@@ -148,33 +148,26 @@ export function Part(props: PartProps) {
                 )}
               >
                 {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
-                {/*
-                  DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
-                  DateTime.DATETIME_MED,
-                )}
-                {` | ${props.message.modelID}`}
-                {props.message.mode && (
-                  <span style={{ color: "var(--sl-color-accent)" }}>{` | ${props.message.mode}`}</span>
-                )
-                */}
               </Footer>
             )}
           </div>
         )}
-        {/* {props.message.role === "assistant" && props.part.type === "reasoning" && (
+        {props.message.role === "assistant" && props.part.type === "reasoning" && (
           <div data-component="tool">
             <div data-component="tool-title">
               <span data-slot="name">Thinking</span>
             </div>
-            <div data-component="assistant-reasoning">
-              <ResultsButton showCopy="Show details" hideCopy="Hide details">
-                <div data-component="assistant-reasoning-markdown">
-                  <ContentMarkdown expand text={props.part.text || "Thinking..."} />
-                </div>
-              </ResultsButton>
+            <Show when={props.part.text}>
+              <div data-component="assistant-reasoning">
+                <ResultsButton showCopy="Show details" hideCopy="Hide details">
+                  <div data-component="assistant-reasoning-markdown">
+                    <ContentMarkdown expand text={props.part.text || "Thinking..."} />
+                  </div>
+                </ResultsButton>
               </div>
+            </Show>
           </div>
-        )} */}
+        )}
         {
           props.message.role === "user" && props.part.type === "file" && (
             <div data-component="attachment">
@@ -188,17 +181,6 @@ export function Part(props: PartProps) {
             <div data-component="step-start">
               <div data-slot="provider">{props.message.providerID}</div>
               <div data-slot="model">{props.message.modelID}</div>
-              { /*
-              <div data-slot="model">
-                {DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
-                  DateTime.DATETIME_MED,
-                )}
-                {` | ${props.message.modelID}`}
-                {props.message.mode && (
-                  <span style={{ color: "var(--sl-color-accent)" }}>{` | ${props.message.mode}`}</span>
-                )}
-              </div>
-              */ }
             </div>
           )
         }

@@ -8,6 +8,7 @@ const ctx = {
   sessionID: "test",
   messageID: "",
   toolCallID: "",
+  agent: "build",
   abort: AbortSignal.any([]),
   metadata: () => {},
 }
@@ -33,7 +34,7 @@ describe("tool.bash", () => {
 
   test("cd ../ should fail outside of project root", async () => {
     await App.provide({ cwd: projectRoot }, async () => {
-      await expect(
+      expect(
         bash.execute(
           {
             command: "cd ../",
