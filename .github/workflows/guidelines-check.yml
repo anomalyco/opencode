@@ -23,7 +23,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "*": "deny" } }'
+          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "gh review*": "deny", "*": "deny" } }'
         run: |
           opencode run -m anthropic/claude-sonnet-4-20250514 "A new pull request has been created: '${{ github.event.pull_request.title }}'
 
@@ -39,7 +39,7 @@ jobs:
 
           Use the gh cli to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
 
-          Command should be like this
+          Command MUST be like this.
           ```
           gh api \
             --method POST \
