@@ -71,25 +71,6 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 ---
 
-### Modes
-
-opencode comes with two built-in modes: _build_, the default with all tools enabled. And _plan_, restricted mode with file modification tools disabled. You can override these built-in modes or define your own custom modes with the `mode` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mode": {
-    "build": {},
-    "plan": {},
-    "my-custom-mode": {}
-  }
-}
-```
-
-[Learn more here](/docs/modes).
-
----
-
 ### Models
 
 You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
@@ -337,7 +318,7 @@ Use `{file:path/to/file}` to substitute the contents of a file:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["{file:./custom-instructions.md}"],
+  "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {
       "options": {

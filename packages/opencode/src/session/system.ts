@@ -13,7 +13,7 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_COPILOT_GPT_5 from "./prompt/copilot-gpt-5.txt"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -22,7 +22,7 @@ export namespace SystemPrompt {
   }
 
   export function provider(modelID: string) {
-    if (modelID.includes("gpt-5")) return [PROMPT_CODEX]
+    if (modelID.includes("gpt-5")) return [PROMPT_COPILOT_GPT_5]
     if (modelID.includes("gpt-") || modelID.includes("o1") || modelID.includes("o3")) return [PROMPT_BEAST]
     if (modelID.includes("gemini-")) return [PROMPT_GEMINI]
     if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]

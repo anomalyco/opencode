@@ -210,7 +210,24 @@ export namespace LSPServer {
     extensions: [".py", ".pyi"],
     root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
     async spawn(_, root) {
-      const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
+      let binary = Bun.which("pyright-langserver")
+      const args = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
+        if (!(await Bun.file(js).exists())) {
+          await Bun.spawn([BunProc.which(), "install", "pyright"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push(...["run", js])
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
         cwd: root,
         env: {
           ...process.env,
@@ -416,6 +433,83 @@ export namespace LSPServer {
 
       return {
         process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Clangd: Info = {
+    id: "clangd",
+    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
+    extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
+    async spawn(_, root) {
+      let bin = Bun.which("clangd", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+      if (!bin) {
+        log.info("downloading clangd from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch clangd release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        let assetName = ""
+
+        if (platform === "darwin") {
+          assetName = "clangd-mac-"
+        } else if (platform === "linux") {
+          assetName = "clangd-linux-"
+        } else if (platform === "win32") {
+          assetName = "clangd-windows-"
+        } else {
+          log.error(`Platform ${platform} is not supported by clangd auto-download`)
+          return
+        }
+
+        assetName += release.tag_name + ".zip"
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest clangd release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download clangd")
+          return
+        }
+
+        const zipPath = path.join(Global.Path.bin, "clangd.zip")
+        await Bun.file(zipPath).write(downloadResponse)
+
+        await $`unzip -o -q ${zipPath}`.cwd(Global.Path.bin).nothrow()
+        await fs.rm(zipPath, { force: true })
+
+        const extractedDir = path.join(Global.Path.bin, assetName.replace(".zip", ""))
+        bin = path.join(extractedDir, "bin", "clangd" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract clangd binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed clangd`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["--background-index", "--clang-tidy"], {
           cwd: root,
         }),
       }

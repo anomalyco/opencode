@@ -33,6 +33,7 @@ type MessagesComponent interface {
 	HalfPageUp() (tea.Model, tea.Cmd)
 	HalfPageDown() (tea.Model, tea.Cmd)
 	ToolDetailsVisible() bool
+	ThinkingBlocksVisible() bool
 	GotoTop() (tea.Model, tea.Cmd)
 	GotoBottom() (tea.Model, tea.Cmd)
 	CopyLastMessage() (tea.Model, tea.Cmd)
@@ -41,20 +42,21 @@ type MessagesComponent interface {
 }
 
 type messagesComponent struct {
-	width, height   int
-	app             *app.App
-	header          string
-	viewport        viewport.Model
-	clipboard       []string
-	cache           *PartCache
-	loading         bool
-	showToolDetails bool
-	rendering       bool
-	dirty           bool
-	tail            bool
-	partCount       int
-	lineCount       int
-	selection       *selection
+	width, height      int
+	app                *app.App
+	header             string
+	viewport           viewport.Model
+	clipboard          []string
+	cache              *PartCache
+	loading            bool
+	showToolDetails    bool
+	showThinkingBlocks bool
+	rendering          bool
+	dirty              bool
+	tail               bool
+	partCount          int
+	lineCount          int
+	selection          *selection
 }
 
 type selection struct {
@@ -94,6 +96,7 @@ func (s selection) coords(offset int) *selection {
 }
 
 type ToggleToolDetailsMsg struct{}
+type ToggleThinkingBlocksMsg struct{}
 
 func (m *messagesComponent) Init() tea.Cmd {
 	return tea.Batch(m.viewport.Init())
@@ -160,7 +163,12 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.renderView()
 	case ToggleToolDetailsMsg:
 		m.showToolDetails = !m.showToolDetails
-		return m, m.renderView()
+		m.app.State.ShowToolDetails = &m.showToolDetails
+		return m, tea.Batch(m.renderView(), m.app.SaveState())
+	case ToggleThinkingBlocksMsg:
+		m.showThinkingBlocks = !m.showThinkingBlocks
+		m.app.State.ShowThinkingBlocks = &m.showThinkingBlocks
+		return m, tea.Batch(m.renderView(), m.app.SaveState())
 	case app.SessionLoadedMsg, app.SessionClearedMsg:
 		m.cache.Clear()
 		m.tail = true
@@ -289,6 +297,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		for _, message := range m.app.Messages {
 			var content string
 			var cached bool
+			error := ""
 
 			switch casted := message.Info.(type) {
 			case opencode.UserMessage:
@@ -443,7 +452,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						}
 
 						if finished {
-							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails)
+							key := m.cache.GenerateKey(casted.ID, part.Text, width, m.showToolDetails, toolCallParts)
 							content, cached = m.cache.Get(key)
 							if !cached {
 								content = renderText(
@@ -560,36 +569,50 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						if reverted {
 							continue
 						}
-						text := "..."
-						if part.Text != "" {
-							text = part.Text
+						if !m.showThinkingBlocks {
+							continue
 						}
-						content = renderText(
-							m.app,
-							message.Info,
-							text,
-							casted.ModelID,
-							m.showToolDetails,
-							width,
-							"",
-							true,
-							[]opencode.FilePart{},
-							[]opencode.AgentPart{},
-						)
-						content = lipgloss.PlaceHorizontal(
-							m.width,
-							lipgloss.Center,
-							content,
-							styles.WhitespaceStyle(t.Background()),
-						)
-						partCount++
-						lineCount += lipgloss.Height(content) + 1
-						blocks = append(blocks, content)
-						hasContent = true
+						if part.Text != "" {
+							text := part.Text
+							content = renderText(
+								m.app,
+								message.Info,
+								text,
+								casted.ModelID,
+								m.showToolDetails,
+								width,
+								"",
+								true,
+								[]opencode.FilePart{},
+								[]opencode.AgentPart{},
+							)
+							content = lipgloss.PlaceHorizontal(
+								m.width,
+								lipgloss.Center,
+								content,
+								styles.WhitespaceStyle(t.Background()),
+							)
+							partCount++
+							lineCount += lipgloss.Height(content) + 1
+							blocks = append(blocks, content)
+							hasContent = true
+						}
 					}
 				}
 
-				if !hasContent {
+				switch err := casted.Error.AsUnion().(type) {
+				case nil:
+				case opencode.AssistantMessageErrorMessageOutputLengthError:
+					error = "Message output length exceeded"
+				case opencode.ProviderAuthError:
+					error = err.Data.Message
+				case opencode.MessageAbortedError:
+					error = "Request was aborted"
+				case opencode.UnknownError:
+					error = err.Data.Message
+				}
+
+				if !hasContent && error == "" && !reverted {
 					content = renderText(
 						m.app,
 						message.Info,
@@ -611,21 +634,6 @@ func (m *messagesComponent) renderView() tea.Cmd {
 					partCount++
 					lineCount += lipgloss.Height(content) + 1
 					blocks = append(blocks, content)
-				}
-			}
-
-			error := ""
-			if assistant, ok := message.Info.(opencode.AssistantMessage); ok {
-				switch err := assistant.Error.AsUnion().(type) {
-				case nil:
-				case opencode.AssistantMessageErrorMessageOutputLengthError:
-					error = "Message output length exceeded"
-				case opencode.ProviderAuthError:
-					error = err.Data.Message
-				case opencode.MessageAbortedError:
-					error = "Request was aborted"
-				case opencode.UnknownError:
-					error = err.Data.Message
 				}
 			}
 
@@ -1008,6 +1016,10 @@ func (m *messagesComponent) ToolDetailsVisible() bool {
 	return m.showToolDetails
 }
 
+func (m *messagesComponent) ThinkingBlocksVisible() bool {
+	return m.showThinkingBlocks
+}
+
 func (m *messagesComponent) GotoTop() (tea.Model, tea.Cmd) {
 	m.viewport.GotoTop()
 	return m, nil
@@ -1204,11 +1216,23 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 		vp.MouseWheelDelta = 4
 	}
 
+	// Default to showing tool details, hidden thinking blocks
+	showToolDetails := true
+	if app.State.ShowToolDetails != nil {
+		showToolDetails = *app.State.ShowToolDetails
+	}
+
+	showThinkingBlocks := false
+	if app.State.ShowThinkingBlocks != nil {
+		showThinkingBlocks = *app.State.ShowThinkingBlocks
+	}
+
 	return &messagesComponent{
-		app:             app,
-		viewport:        vp,
-		showToolDetails: true,
-		cache:           NewPartCache(),
-		tail:            true,
+		app:                app,
+		viewport:           vp,
+		showToolDetails:    showToolDetails,
+		showThinkingBlocks: showThinkingBlocks,
+		cache:              NewPartCache(),
+		tail:               true,
 	}
 }

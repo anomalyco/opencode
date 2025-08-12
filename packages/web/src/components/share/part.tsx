@@ -147,55 +147,53 @@ export function Part(props: PartProps) {
                   DateTime.DATETIME_FULL_WITH_SECONDS,
                 )}
               >
-                {DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
-                  DateTime.DATETIME_MED,
-                )}
-                {` | ${props.message.modelID}`}
-                {props.message.mode && (
-                  <span style={{ "font-weight": "bold", color: "var(--sl-color-accent)" }}>
-                    {` | ${props.message.mode}`}
-                  </span>
-                )}
+                {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
               </Footer>
             )}
           </div>
         )}
         {props.message.role === "assistant" && props.part.type === "reasoning" && (
-          <div data-component="assistant-reasoning">
-            <div data-component="assistant-reasoning-markdown">
-              <ContentMarkdown expand={props.last} text={props.part.text || "Thinking..."} />
+          <div data-component="tool">
+            <div data-component="tool-title">
+              <span data-slot="name">Thinking</span>
             </div>
+            <Show when={props.part.text}>
+              <div data-component="assistant-reasoning">
+                <ResultsButton showCopy="Show details" hideCopy="Hide details">
+                  <div data-component="assistant-reasoning-markdown">
+                    <ContentMarkdown expand text={props.part.text || "Thinking..."} />
+                  </div>
+                </ResultsButton>
+              </div>
+            </Show>
           </div>
         )}
-        {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
-            <div data-slot="filename">{props.part.filename}</div>
-          </div>
-        )}
-        {props.part.type === "step-start" && props.message.role === "assistant" && (
-          <div data-component="step-start">
-            <div data-slot="provider">{props.message.providerID}</div>
-            <div data-slot="model">
-              {DateTime.fromMillis(props.message.time.completed || props.message.time.created).toLocaleString(
-                DateTime.DATETIME_MED,
-              )}
-              {` | ${props.message.modelID}`}
-              {props.message.mode && (
-                <span style={{ "font-weight": "bold", color: "var(--sl-color-accent)" }}>
-                  {` | ${props.message.mode}`}
-                </span>
-              )}
+        {
+          props.message.role === "user" && props.part.type === "file" && (
+            <div data-component="attachment">
+              <div data-slot="copy">Attachment</div>
+              <div data-slot="filename">{props.part.filename}</div>
             </div>
-          </div>
-        )}
-        {props.part.type === "tool" && props.part.state.status === "error" && (
-          <div data-component="tool" data-tool="error">
-            <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
-            <Spacer />
-          </div>
-        )}
-        {props.part.type === "tool" &&
+          )
+        }
+        {
+          props.part.type === "step-start" && props.message.role === "assistant" && (
+            <div data-component="step-start">
+              <div data-slot="provider">{props.message.providerID}</div>
+              <div data-slot="model">{props.message.modelID}</div>
+            </div>
+          )
+        }
+        {
+          props.part.type === "tool" && props.part.state.status === "error" && (
+            <div data-component="tool" data-tool="error">
+              <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
+              <Spacer />
+            </div>
+          )
+        }
+        {
+          props.part.type === "tool" &&
           props.part.state.status === "completed" &&
           props.message.role === "assistant" && (
             <>
@@ -297,9 +295,10 @@ export function Part(props: PartProps) {
                   .toMillis()}
               />
             </>
-          )}
-      </div>
-    </div>
+          )
+        }
+      </div >
+    </div >
   )
 }
 
