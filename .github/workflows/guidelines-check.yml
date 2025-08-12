@@ -39,4 +39,14 @@ jobs:
 
           Use the gh cli to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
 
+          Command should be like this
+          ```
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            -f 'body=[summary of issue]' -f 'commit_id=${{ github.event.pull_request.head.sha }}' -f 'path=[path-to-file]' -F "line=[line]" -f 'side=RIGHT'
+          ```
+
           Only create comments for actual violations. If the code follows all guidelines, don't run any gh commands."
