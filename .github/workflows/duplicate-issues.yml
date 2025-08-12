@@ -23,7 +23,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "*": "deny" } }'
+          OPENCODE_PERMISSION: '{ "bash": { "gh*": "allow", "*": "deny" }, "webfetch": "deny" }'
         run: |
           opencode run -m anthropic/claude-sonnet-4-20250514 "A new issue has been created: '${{ github.event.issue.title }}'
 
