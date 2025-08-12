@@ -112,6 +112,10 @@ export namespace Config {
       ].map((x) => "file://" + x),
     )
 
+    if (Flag.OPENCODE_PERMISSION) {
+      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+    }
+
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
@@ -166,6 +170,9 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
+  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
+  export type Permission = z.infer<typeof Permission>
+
   export const Agent = z
     .object({
       model: z.string().optional(),
@@ -176,6 +183,13 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]).optional(),
+      permission: z
+        .object({
+          edit: Permission.optional(),
+          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          webfetch: Permission.optional(),
+        })
+        .optional(),
     })
     .catchall(z.any())
     .openapi({
@@ -204,6 +218,7 @@ export namespace Config {
       session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
       tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
+      thinking_blocks: z.string().optional().default("<leader>b").describe("Toggle thinking blocks"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       file_list: z.string().optional().default("<leader>f").describe("List files"),
@@ -243,9 +258,6 @@ export namespace Config {
     ref: "LayoutConfig",
   })
   export type Layout = z.infer<typeof Layout>
-
-  export const Permission = z.union([z.literal("ask"), z.literal("allow"), z.literal("deny")])
-  export type Permission = z.infer<typeof Permission>
 
   export const Info = z
     .object({
@@ -296,7 +308,7 @@ export namespace Config {
         .record(
           ModelsDev.Provider.partial()
             .extend({
-              models: z.record(ModelsDev.Model.partial()),
+              models: z.record(ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
                   apiKey: z.string().optional(),

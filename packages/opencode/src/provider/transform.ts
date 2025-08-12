@@ -74,6 +74,7 @@ export namespace ProviderTransform {
 
   export function temperature(_providerID: string, modelID: string) {
     if (modelID.toLowerCase().includes("qwen")) return 0.55
+    if (modelID.toLowerCase().includes("claude")) return 1
     return 0
   }
 
@@ -82,8 +83,13 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(_providerID: string, modelID: string) {
+  export function options(providerID: string, modelID: string): Record<string, any> | undefined {
     if (modelID.includes("gpt-5")) {
+      if (providerID === "azure") {
+        return {
+          reasoningEffort: "minimal",
+        }
+      }
       return {
         reasoningEffort: "minimal",
         textVerbosity: "low",

@@ -119,6 +119,7 @@ const (
 	SessionCompactCommand       CommandName = "session_compact"
 	SessionExportCommand        CommandName = "session_export"
 	ToolDetailsCommand          CommandName = "tool_details"
+	ThinkingBlocksCommand       CommandName = "thinking_blocks"
 	ModelListCommand            CommandName = "model_list"
 	AgentListCommand            CommandName = "agent_list"
 	ModelCycleRecentCommand     CommandName = "model_cycle_recent"
@@ -244,6 +245,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "toggle tool details",
 			Keybindings: parseBindings("<leader>d"),
 			Trigger:     []string{"details"},
+		},
+		{
+			Name:        ThinkingBlocksCommand,
+			Description: "toggle thinking blocks",
+			Keybindings: parseBindings("<leader>b"),
+			Trigger:     []string{"thinking"},
 		},
 		{
 			Name:        ModelListCommand,

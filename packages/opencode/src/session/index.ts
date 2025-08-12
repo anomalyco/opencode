@@ -42,6 +42,7 @@ import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
 import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
+import { Wildcard } from "../util/wildcard"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -522,6 +523,7 @@ export namespace Session {
                   t.execute(args, {
                     sessionID: input.sessionID,
                     abort: new AbortController().signal,
+                    agent: agent.name,
                     messageID: userMsg.id,
                     metadata: async () => {},
                   }),
@@ -764,11 +766,11 @@ export namespace Session {
 
     const enabledTools = pipe(
       agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID)),
+      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID, agent)),
       mergeDeep(input.tools ?? {}),
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
-      if (enabledTools[item.id] === false) continue
+      if (Wildcard.all(item.id, enabledTools) === false) continue
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
@@ -790,6 +792,7 @@ export namespace Session {
             abort: options.abortSignal!,
             messageID: assistantMsg.id,
             callID: options.toolCallId,
+            agent: agent.name,
             metadata: async (val) => {
               const match = processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
@@ -829,7 +832,7 @@ export namespace Session {
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
-      if (enabledTools[key] === false) continue
+      if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
@@ -1007,7 +1010,7 @@ export namespace Session {
       async process(stream: StreamTextResult<Record<string, AITool>, never>) {
         try {
           let currentText: MessageV2.TextPart | undefined
-          // let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
 
           for await (const value of stream.fullStream) {
             log.info("part", {
@@ -1017,7 +1020,6 @@ export namespace Session {
               case "start":
                 break
 
-              /*
               case "reasoning-start":
                 if (value.id in reasoningMap) {
                   continue
@@ -1055,7 +1057,6 @@ export namespace Session {
                   delete reasoningMap[value.id]
                 }
                 break
-                */
 
               case "tool-input-start":
                 const part = await updatePart({

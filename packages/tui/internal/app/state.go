@@ -32,6 +32,8 @@ type State struct {
 	MessagesRight      bool                  `toml:"messages_right"`
 	SplitDiff          bool                  `toml:"split_diff"`
 	MessageHistory     []Prompt              `toml:"message_history"`
+	ShowToolDetails    *bool                 `toml:"show_tool_details"`
+	ShowThinkingBlocks *bool                 `toml:"show_thinking_blocks"`
 }
 
 func NewState() *State {

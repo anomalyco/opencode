@@ -627,7 +627,7 @@ export type Config = {
       env?: Array<string>
       id?: string
       npm?: string
-      models: {
+      models?: {
         [key: string]: {
           id?: string
           name?: string
@@ -793,6 +793,10 @@ export type KeybindsConfig = {
    */
   tool_details: string
   /**
+   * Toggle thinking blocks
+   */
+  thinking_blocks: string
+  /**
    * List available models
    */
   model_list: string
@@ -908,6 +912,15 @@ export type AgentConfig = {
    */
   description?: string
   mode?: string
+  permission?: {
+    edit?: string
+    bash?:
+      | string
+      | {
+          [key: string]: string
+        }
+    webfetch?: string
+  }
   [key: string]:
     | unknown
     | string
@@ -917,6 +930,15 @@ export type AgentConfig = {
       }
     | boolean
     | string
+    | {
+        edit?: string
+        bash?:
+          | string
+          | {
+              [key: string]: string
+            }
+        webfetch?: string
+      }
     | undefined
 }
 
@@ -1057,6 +1079,13 @@ export type Agent = {
   mode: string
   topP?: number
   temperature?: number
+  permission: {
+    edit: string
+    bash: {
+      [key: string]: string
+    }
+    webfetch?: string
+  }
   model?: {
     modelID: string
     providerID: string

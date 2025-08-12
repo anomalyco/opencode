@@ -220,14 +220,17 @@ func renderText(
 	var content string
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
-		bg := t.Background()
+		backgroundColor = t.Background()
 		if isThinking {
-			bg = t.BackgroundPanel()
+			backgroundColor = t.BackgroundPanel()
 		}
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width, bg)
+		if casted.Time.Completed > 0 {
+			ts = time.UnixMilli(int64(casted.Time.Completed))
+		}
+		content = util.ToMarkdown(text, width, backgroundColor)
 		if isThinking {
-			content = styles.NewStyle().Background(bg).Foreground(t.TextMuted()).Render("Thinking") + "\n\n" + content
+			content = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking") + "\n\n" + content
 		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
@@ -332,8 +335,12 @@ func renderText(
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}
+	timestamp = styles.NewStyle().
+		Background(backgroundColor).
+		Foreground(t.TextMuted()).
+		Render(" (" + timestamp + ")")
 
-	// Check if this is an assistant message with mode (agent) information
+	// Check if this is an assistant message with agent information
 	var modelAndAgentSuffix string
 	if assistantMsg, ok := message.(opencode.AssistantMessage); ok && assistantMsg.Mode != "" {
 		// Find the agent index by name to get the correct color
@@ -349,22 +356,25 @@ func renderText(
 		agentColor := util.GetAgentColor(agentIndex)
 
 		// Style the agent name with the same color as status bar
-		agentName := strings.Title(assistantMsg.Mode)
-		styledAgentName := styles.NewStyle().Foreground(agentColor).Bold(true).Render(agentName)
-		modelAndAgentSuffix = fmt.Sprintf(" | %s | %s", assistantMsg.ModelID, styledAgentName)
+		agentName := cases.Title(language.Und).String(assistantMsg.Mode)
+		styledAgentName := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(agentColor).
+			Render(agentName + " ")
+		styledModelID := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(t.TextMuted()).
+			Render(assistantMsg.ModelID)
+		modelAndAgentSuffix = styledAgentName + styledModelID
 	}
 
 	var info string
 	if modelAndAgentSuffix != "" {
-		// For assistant messages: "timestamp | modelID | agentName"
-		info = fmt.Sprintf("%s%s", timestamp, modelAndAgentSuffix)
+		info = modelAndAgentSuffix + timestamp
 	} else {
-		// For user messages: "author (timestamp)"
-		info = fmt.Sprintf("%s (%s)", author, timestamp)
+		info = author + timestamp
 	}
-	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
-		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
 			title := renderToolTitle(toolCall, width-2)
 			style := styles.NewStyle()
@@ -372,15 +382,16 @@ func renderText(
 				style = style.Foreground(t.Error())
 			}
 			title = style.Render(title)
-			title = "∟ " + title + "\n"
+			title = "\n∟ " + title
 			content = content + title
 		}
 	}
 
-	sections := []string{content, info}
+	sections := []string{content}
 	if extra != "" {
-		sections = append(sections, "\n"+extra)
+		sections = append(sections, "\n"+extra+"\n")
 	}
+	sections = append(sections, info)
 	content = strings.Join(sections, "\n")
 
 	switch message.(type) {
