@@ -28,7 +28,16 @@ export namespace Provider {
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic(provider) {
       const access = await AuthAnthropic.access()
-      if (!access) return { autoload: false }
+      if (!access)
+        return {
+          autoload: false,
+          options: {
+            headers: {
+              "anthropic-beta":
+                "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            },
+          },
+        }
       for (const model of Object.values(provider.models)) {
         model.cost = {
           input: 0,
@@ -44,7 +53,8 @@ export namespace Provider {
             const headers = {
               ...init.headers,
               authorization: `Bearer ${access}`,
-              "anthropic-beta": "oauth-2025-04-20",
+              "anthropic-beta":
+                "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
             }
             delete headers["x-api-key"]
             return fetch(input, {
