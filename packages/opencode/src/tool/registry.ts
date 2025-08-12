@@ -68,7 +68,7 @@ export namespace ToolRegistry {
 
   export async function enabled(
     _providerID: string,
-    _modelID: string,
+    modelID: string,
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
@@ -84,6 +84,11 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+    }
+
+    if (modelID.includes("qwen")) {
+      result["todowrite"] = false
+      result["todoread"] = false
     }
 
     return result

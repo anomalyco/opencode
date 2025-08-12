@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -85,6 +86,8 @@ func Extension(path string) string {
 func ToMarkdown(content string, width int, backgroundColor compat.AdaptiveColor) string {
 	r := styles.GetMarkdownRenderer(width-6, backgroundColor)
 	content = strings.ReplaceAll(content, RootPath+"/", "")
+	hyphenRegex := regexp.MustCompile(`-([^ ]|$)`)
+	content = hyphenRegex.ReplaceAllString(content, "\u2011$1")
 	rendered, _ := r.Render(content)
 	lines := strings.Split(rendered, "\n")
 
@@ -105,5 +108,6 @@ func ToMarkdown(content string, width int, backgroundColor compat.AdaptiveColor)
 		}
 	}
 	content = strings.Join(lines, "\n")
+	content = strings.ReplaceAll(content, "\u2011", "-")
 	return strings.TrimSuffix(content, "\n")
 }

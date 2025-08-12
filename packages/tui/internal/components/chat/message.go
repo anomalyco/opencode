@@ -325,7 +325,9 @@ func renderText(
 
 		// wrap styled text
 		styledText := result.String()
-		wrappedText := ansi.WordwrapWc(styledText, width-6, " -")
+		styledText = strings.ReplaceAll(styledText, "-", "\u2011")
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " ")
+		wrappedText = strings.ReplaceAll(wrappedText, "\u2011", "-")
 		content = base.Width(width - 6).Render(wrappedText)
 	}
 
