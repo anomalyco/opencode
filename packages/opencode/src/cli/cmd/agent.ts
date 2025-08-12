@@ -3,6 +3,7 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
+import { Provider } from "../../provider/provider"
 import path from "path"
 import matter from "gray-matter"
 import { App } from "../../app/app"
@@ -10,7 +11,14 @@ import { App } from "../../app/app"
 const AgentCreateCommand = cmd({
   command: "create",
   describe: "create a new agent",
-  async handler() {
+  builder: (yargs) => {
+    return yargs.option("model", {
+      type: "string",
+      alias: ["m"],
+      describe: "model to use in the format of provider/model",
+    })
+  },
+  async handler(args) {
     await App.provide({ cwd: process.cwd() }, async (app) => {
       UI.empty()
       prompts.intro("Create agent")
@@ -43,10 +51,33 @@ const AgentCreateCommand = cmd({
       })
       if (prompts.isCancel(query)) throw new UI.CancelledError()
 
+      let modelConfig: { providerID: string; modelID: string } | undefined
+      if (args.model) {
+        try {
+          const parsed = Provider.parseModel(args.model)
+          const provider = await Provider.getProvider(parsed.providerID)
+          if (!provider) {
+            throw new Error(`Provider '${parsed.providerID}' not found`)
+          }
+          await Provider.getModel(parsed.providerID, parsed.modelID)
+          modelConfig = parsed
+        } catch (error) {
+          prompts.log.error(`Invalid model: ${args.model}`)
+          prompts.log.error(error instanceof Error ? error.message : String(error))
+          throw new UI.CancelledError()
+        }
+      }
+
       const spinner = prompts.spinner()
 
-      spinner.start("Generating agent configuration...")
-      const generated = await Agent.generate({ description: query })
+      const spinnerMessage = modelConfig
+        ? `Generating agent configuration using ${modelConfig.providerID}/${modelConfig.modelID}...`
+        : "Generating agent configuration..."
+      spinner.start(spinnerMessage)
+      const generated = await Agent.generate({
+        description: query,
+        model: modelConfig,
+      })
       spinner.stop(`Agent ${generated.identifier} generated`)
 
       const availableTools = [
