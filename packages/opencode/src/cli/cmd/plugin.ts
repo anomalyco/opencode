@@ -4,16 +4,14 @@ import { Config } from "../../config/config"
 import { UI } from "../ui"
 
 function readConfig(configs: Map<string, Config.Info>): [string, Config.Info] {
-  let target = Array.from(configs.keys())[0]
   for (const [key, config] of configs.entries()) {
     if (config.plugin === undefined) continue
     // find first config w/ plugin
     if (config.plugin.length > 0) {
-      target = key
-      break
+      return [key, config ?? {}]
     }
-    target = key
   }
+  const target = Array.from(configs.keys())[0]
   return [target, configs.get(target) ?? {}]
 }
 
