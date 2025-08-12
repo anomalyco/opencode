@@ -240,6 +240,9 @@ func (a *agentDialog) setupAllAgents() {
 	// Build agent items from app.Agents (no API call needed) - their pattern
 	a.allAgents = make([]agentSelectItem, 0, len(a.app.Agents))
 	for i, agent := range a.app.Agents {
+		if agent.Mode == "subagent" {
+			continue // Skip subagents entirely
+		}
 		isCurrent := agent.Name == currentAgentName
 
 		// Create display name (capitalize first letter)
@@ -307,7 +310,10 @@ func (a *agentDialog) buildSearchResults(query string) []list.Item {
 	agentMap := make(map[string]agentSelectItem)
 
 	for _, agent := range a.allAgents {
-		// Search by name only
+		// Only include non-subagents in search
+		if agent.mode == "subagent" {
+			continue
+		}
 		searchStr := agent.name
 		agentNames = append(agentNames, searchStr)
 		agentMap[searchStr] = agent
@@ -352,42 +358,23 @@ func (a *agentDialog) buildGroupedResults() []list.Item {
 		recentAgentNames[recent.name] = true
 	}
 
-	// Separate agents by type (excluding recent ones)
-	primaryAndUserAgents := make([]agentSelectItem, 0)
-	subAgents := make([]agentSelectItem, 0)
-
+	// Only show non-subagents (primary/user) in the main section
+	mainAgents := make([]agentSelectItem, 0)
 	for _, agent := range a.allAgents {
 		if !recentAgentNames[agent.name] {
-			switch agent.mode {
-			case "subagent":
-				subAgents = append(subAgents, agent)
-			default:
-				// primary, all, and any other types go in main "Agents" section
-				primaryAndUserAgents = append(primaryAndUserAgents, agent)
-			}
+			mainAgents = append(mainAgents, agent)
 		}
 	}
 
-	// Sort each category alphabetically
-	sort.Slice(primaryAndUserAgents, func(i, j int) bool {
-		return primaryAndUserAgents[i].name < primaryAndUserAgents[j].name
-	})
-	sort.Slice(subAgents, func(i, j int) bool {
-		return subAgents[i].name < subAgents[j].name
+	// Sort main agents alphabetically
+	sort.Slice(mainAgents, func(i, j int) bool {
+		return mainAgents[i].name < mainAgents[j].name
 	})
 
 	// Add main agents section
-	if len(primaryAndUserAgents) > 0 {
+	if len(mainAgents) > 0 {
 		items = append(items, list.HeaderItem("Agents"))
-		for _, agent := range primaryAndUserAgents {
-			items = append(items, agent)
-		}
-	}
-
-	// Add subagents section
-	if len(subAgents) > 0 {
-		items = append(items, list.HeaderItem("Subagents"))
-		for _, agent := range subAgents {
+		for _, agent := range mainAgents {
 			items = append(items, agent)
 		}
 	}
