@@ -25,6 +25,7 @@ await Promise.all([
   fs.mkdir(Global.Path.config, { recursive: true }),
   fs.mkdir(Global.Path.state, { recursive: true }),
   fs.mkdir(Global.Path.log, { recursive: true }),
+  fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
 
 const CACHE_VERSION = "7"
