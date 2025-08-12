@@ -9,6 +9,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
+// GetTimeFormat returns the appropriate Go time format string based on config
+func GetTimeFormat(config string) string {
+	switch config {
+	case "24h":
+		return "2006-01-02 15:04:05"
+	case "12h":
+		return "2006-01-02 03:04:05 PM"
+	default:
+		return "2006-01-02 15:04:05" // fallback to 24h
+	}
+}
+
 func CmdHandler(msg tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		return msg

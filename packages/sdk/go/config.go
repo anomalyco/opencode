@@ -80,6 +80,8 @@ type Config struct {
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
 	Theme string `json:"theme"`
+	// Time format for conversation exports: 'auto' detects from system, '12h' for 12-hour format, '24h' for 24-hour format
+	TimeFormat string `json:"timeFormat"`
 	// Custom username to display in conversations instead of system username
 	Username string     `json:"username"`
 	JSON     configJSON `json:"-"`
@@ -108,6 +110,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	TimeFormat        apijson.Field
 	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field

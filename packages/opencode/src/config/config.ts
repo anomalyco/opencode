@@ -18,6 +18,41 @@ import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErro
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  function detectSystemTimeFormat(): "12h" | "24h" {
+    try {
+      // First try to use LC_TIME if set
+      let locale = undefined
+      if (process.env["LC_TIME"]) {
+        // Convert LC_TIME format (de_DE.UTF-8) to BCP 47 format (de-DE)
+        locale = process.env["LC_TIME"].replace(/\..*$/, "").replace(/_/g, "-")
+      }
+
+      // Use explicit locale if available, otherwise system default
+      const formatter = new Intl.DateTimeFormat(locale, {
+        hour: "numeric",
+        minute: "numeric",
+      })
+
+      // Create a test date and format it
+      const testDate = new Date(2024, 0, 1, 15, 30) // 3:30 PM
+      const formatted = formatter.format(testDate)
+
+      // Check for 24h indicators: contains "15", or contains time without AM/PM
+      // Also handle different separators (: vs .)
+      const has24hHour = formatted.includes("15")
+      const hasNoAmPm = !formatted.match(/AM|PM|am|pm/i)
+      const hasTimeDigits = formatted.match(/\d+[:.]\d+/)
+
+      if (has24hHour || (hasTimeDigits && hasNoAmPm)) {
+        return "24h"
+      }
+      return "12h"
+    } catch (error) {
+      log.warn("Failed to detect system time format, defaulting to 12h", { error })
+      return "12h"
+    }
+  }
+
   export const state = App.state("config", async (app) => {
     const auth = await Auth.all()
     let result = await global()
@@ -131,6 +166,11 @@ export namespace Config {
     if (!result.username) {
       const os = await import("os")
       result.username = os.userInfo().username
+    }
+
+    // Auto-detect time format if set to "auto"
+    if (result.timeFormat === "auto") {
+      result.timeFormat = detectSystemTimeFormat()
     }
 
     log.info("loaded", result)
@@ -285,6 +325,13 @@ export namespace Config {
         .string()
         .optional()
         .describe("Custom username to display in conversations instead of system username"),
+      timeFormat: z
+        .enum(["auto", "12h", "24h"])
+        .optional()
+        .default("auto")
+        .describe(
+          "Time format for conversation exports: 'auto' detects from system, '12h' for 12-hour format, '24h' for 24-hour format",
+        ),
       mode: z
         .object({
           build: Agent.optional(),
@@ -425,7 +472,7 @@ export namespace Config {
         if (err.code === "ENOENT") return
         throw new JsonError({ path: filepath }, { cause: err })
       })
-    if (!text) return {}
+    if (!text) return { timeFormat: "auto" } as Info
     return load(text, filepath)
   }
 

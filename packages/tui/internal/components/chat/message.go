@@ -331,9 +331,17 @@ func renderText(
 		content = base.Width(width - 6).Render(wrappedText)
 	}
 
-	timestamp := ts.
-		Local().
-		Format("02 Jan 2006 03:04 PM")
+	// Get the appropriate time format based on config
+	timeFormat := util.GetTimeFormat(app.Config.TimeFormat)
+	// For interface display, we need day + time format
+	var interfaceTimeFormat string
+	if timeFormat == "2006-01-02 15:04:05" { // 24h format
+		interfaceTimeFormat = "02 Jan 2006 15:04"
+	} else { // 12h format
+		interfaceTimeFormat = "02 Jan 2006 03:04 PM"
+	}
+
+	timestamp := ts.Local().Format(interfaceTimeFormat)
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}

@@ -1115,7 +1115,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		}
 
 		// Format to Markdown
-		markdownContent := formatConversationToMarkdown(messages)
+		markdownContent := formatConversationToMarkdown(messages, a.app)
 
 		// Check if EDITOR is set
 		editor := os.Getenv("EDITOR")
@@ -1322,7 +1322,7 @@ func NewModel(app *app.App) tea.Model {
 	return model
 }
 
-func formatConversationToMarkdown(messages []app.Message) string {
+func formatConversationToMarkdown(messages []app.Message, app *app.App) string {
 	var builder strings.Builder
 
 	builder.WriteString("# Conversation History\n\n")
@@ -1344,8 +1344,11 @@ func formatConversationToMarkdown(messages []app.Message) string {
 			continue
 		}
 
+		// Get the appropriate time format based on config
+		timeFormat := util.GetTimeFormat(app.Config.TimeFormat)
+
 		builder.WriteString(
-			fmt.Sprintf("**%s** (*%s*)\n\n", role, timestamp.Format("2006-01-02 15:04:05")),
+			fmt.Sprintf("**%s** (*%s*)\n\n", role, timestamp.Format(timeFormat)),
 		)
 
 		for _, part := range msg.Parts {
