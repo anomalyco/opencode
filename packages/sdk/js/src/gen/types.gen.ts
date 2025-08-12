@@ -912,6 +912,15 @@ export type AgentConfig = {
    */
   description?: string
   mode?: string
+  permission?: {
+    edit?: string
+    bash?:
+      | string
+      | {
+          [key: string]: string
+        }
+    webfetch?: string
+  }
   [key: string]:
     | unknown
     | string
@@ -921,6 +930,15 @@ export type AgentConfig = {
       }
     | boolean
     | string
+    | {
+        edit?: string
+        bash?:
+          | string
+          | {
+              [key: string]: string
+            }
+        webfetch?: string
+      }
     | undefined
 }
 
@@ -1061,6 +1079,13 @@ export type Agent = {
   mode: string
   topP?: number
   temperature?: number
+  permission: {
+    edit: string
+    bash: {
+      [key: string]: string
+    }
+    webfetch?: string
+  }
   model?: {
     modelID: string
     providerID: string
