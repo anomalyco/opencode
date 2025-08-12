@@ -40,15 +40,16 @@ const PluginInstallCommand = cmd({
     await App.provide({ cwd: process.cwd() }, async (app) => {
       const configs = await Config.loadFiles(args["global"], app)
       const [target, config] = readConfig(configs)
-      const packages = args["package"].filter((pkg: string) => !config.plugin?.includes(pkg))
-      if (packages.length === 0) {
+      const pkgs = args["package"].filter((pkg: string) => !config.plugin?.includes(pkg))
+      if (pkgs.length === 0) {
         UI.error("No plugins to install")
         return
       }
       config.plugin ??= []
+      config.plugin.push(...pkgs)
       await Config.write(target, config)
 
-      UI.println(`${packages.length} package${packages.length !== 1 ? "s" : ""} installed`)
+      UI.println(`${pkgs.length} package${pkgs.length !== 1 ? "s" : ""} installed`)
     })
   },
 })
@@ -62,24 +63,24 @@ const PluginUninstallCommand = cmd({
         type: "string",
         array: true,
         demandOption: true,
-        description: "plugin(s) to install",
+        description: "plugin(s) to uninstall",
       })
       .option("global", {
         type: "boolean",
         default: false,
         alias: ["g"],
-        description: "install the plugin globally",
+        description: "uninstall the plugin globally",
       })
   },
   async handler(args) {
     await App.provide({ cwd: process.cwd() }, async (app) => {
       const configs = await Config.loadFiles(args["global"], app)
       const [target, config] = readConfig(configs)
-      const packagesToRemove = args["package"].filter((pkg: string) => config.plugin?.includes(pkg))
+      const pkgs = args["package"].filter((pkg: string) => config.plugin?.includes(pkg))
       config.plugin = config.plugin?.filter((pkg) => !args["package"].includes(pkg)) || []
       await Config.write(target, config)
 
-      UI.println(`${packagesToRemove.length} package${packagesToRemove.length !== 1 ? "s" : ""} uninstalled`)
+      UI.println(`${pkgs.length} package${pkgs.length !== 1 ? "s" : ""} uninstalled`)
     })
   },
 })
