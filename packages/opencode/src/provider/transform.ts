@@ -90,7 +90,7 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = sessionID
     }
 
-    if (modelID.includes("gpt-5")) {
+    if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
       result["reasoningEffort"] = "minimal"
       if (providerID !== "azure") {
         result["textVerbosity"] = "low"
