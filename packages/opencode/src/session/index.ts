@@ -1051,10 +1051,10 @@ export namespace Session {
     await updatePart(part)
     const app = App.info()
     const script = `
-    [[ -f ~/.zshrc ]] && source ~/.zshrc 2>/dev/null || true
-    [[ -f ~/.bashrc ]] && source ~/.bashrc 2>/dev/null || true
-    eval "${input.command}"
-  `
+     [[ -f ~/.zshrc ]] && source ~/.zshrc >/dev/null 2>&1 || true
+     [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+     eval "${input.command}"
+   `
     const proc = spawn(process.env["SHELL"] ?? "bash", ["-c", "-l", script], {
       cwd: app.path.cwd,
       signal: abort.signal,
