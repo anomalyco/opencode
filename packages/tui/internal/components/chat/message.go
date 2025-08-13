@@ -25,35 +25,38 @@ import (
 )
 
 // shouldUse24HourFormat determines if 24-hour time format should be used
-// based on config and system detection
-func shouldUse24HourFormat(config *opencode.Config) bool {
+// based on config and lazy system detection
+func shouldUse24HourFormat(config *opencode.Config, state *app.State) bool {
 	switch config.TimeFormat {
 	case "24h":
 		return true
 	case "12h":
 		return false
 	default:
-		// Default to detect behavior
-		if runtime.GOOS == "darwin" {
-			return detectMacOS24HourFormat()
+		// Lazy evaluation: detect and cache on first use
+		if state.DetectedTimeFormat24h == nil {
+			detected := detectSystemTimeFormat()
+			state.DetectedTimeFormat24h = &detected
 		}
-		return false // fallback to 12h on other platforms
+		return *state.DetectedTimeFormat24h
 	}
 }
 
-// detectMacOS24HourFormat checks if macOS system prefers 24-hour format
-func detectMacOS24HourFormat() bool {
-	cmd := exec.Command("date", "+%X")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
+// detectSystemTimeFormat detects if the system prefers 24-hour format
+func detectSystemTimeFormat() bool {
+	// Only try detection on macOS
+	if runtime.GOOS == "darwin" {
+		cmd := exec.Command("date", "+%X")
+		output, err := cmd.Output()
+		if err != nil {
+			return false
+		}
 
-	sysTime := strings.TrimSpace(string(output))
-	// If system time format contains AM/PM indicators, use 12h format
-	hasAmPm := strings.Contains(strings.ToUpper(sysTime), "AM") ||
-		strings.Contains(strings.ToUpper(sysTime), "PM")
-	return !hasAmPm
+		sysTime := strings.TrimSpace(string(output))
+		// If system time contains AM/PM, it's 12-hour format
+		return !strings.Contains(sysTime, "AM") && !strings.Contains(sysTime, "PM")
+	}
+	return false // fallback to 12h on other platforms
 }
 
 type blockRenderer struct {
@@ -366,7 +369,7 @@ func renderText(
 	}
 
 	var timeFormat string
-	if shouldUse24HourFormat(app.Config) {
+	if shouldUse24HourFormat(app.Config, app.State) {
 		timeFormat = "02 Jan 2006 15:04"
 	} else {
 		timeFormat = "02 Jan 2006 03:04 PM"

@@ -27,19 +27,20 @@ type AgentModel struct {
 }
 
 type State struct {
-	Theme              string                `toml:"theme"`
-	ScrollSpeed        *int                  `toml:"scroll_speed"`
-	AgentModel         map[string]AgentModel `toml:"agent_model"`
-	Provider           string                `toml:"provider"`
-	Model              string                `toml:"model"`
-	Agent              string                `toml:"agent"`
-	RecentlyUsedModels []ModelUsage          `toml:"recently_used_models"`
-	RecentlyUsedAgents []AgentUsage          `toml:"recently_used_agents"`
-	MessagesRight      bool                  `toml:"messages_right"`
-	SplitDiff          bool                  `toml:"split_diff"`
-	MessageHistory     []Prompt              `toml:"message_history"`
-	ShowToolDetails    *bool                 `toml:"show_tool_details"`
-	ShowThinkingBlocks *bool                 `toml:"show_thinking_blocks"`
+	Theme                 string                `toml:"theme"`
+	ScrollSpeed           *int                  `toml:"scroll_speed"`
+	AgentModel            map[string]AgentModel `toml:"agent_model"`
+	Provider              string                `toml:"provider"`
+	Model                 string                `toml:"model"`
+	Agent                 string                `toml:"agent"`
+	RecentlyUsedModels    []ModelUsage          `toml:"recently_used_models"`
+	RecentlyUsedAgents    []AgentUsage          `toml:"recently_used_agents"`
+	MessagesRight         bool                  `toml:"messages_right"`
+	SplitDiff             bool                  `toml:"split_diff"`
+	MessageHistory        []Prompt              `toml:"message_history"`
+	ShowToolDetails       *bool                 `toml:"show_tool_details"`
+	ShowThinkingBlocks    *bool                 `toml:"show_thinking_blocks"`
+	DetectedTimeFormat24h *bool                 `toml:"detected_time_format_24h"`
 }
 
 func NewState() *State {
