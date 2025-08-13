@@ -66,4 +66,31 @@ export namespace Filesystem {
     }
     return result
   }
+
+  export async function* globsUp(options: { patterns: string[]; start: string; stop?: string }) {
+    const { patterns, start, stop } = options
+    let current = start
+    while (true) {
+      for (const pattern of patterns) {
+        try {
+          const glob = new Bun.Glob(pattern)
+          for await (const match of glob.scan({
+            cwd: current,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          })) {
+            yield match
+          }
+        } catch {
+          // Skip invalid glob patterns
+        }
+      }
+      if (stop === current) break
+      const parent = dirname(current)
+      if (parent === current) break
+      current = parent
+    }
+  }
 }
