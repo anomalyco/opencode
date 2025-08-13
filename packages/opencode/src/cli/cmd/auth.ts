@@ -287,8 +287,14 @@ export const AuthLoginCommand = cmd({
         prompts.log.info(url)
         const spinner = prompts.spinner()
         spinner.start("Waiting for authorization...")
-        const ok = await done
-        spinner.stop(ok ? "Login successful" : "Login failed", ok ? 0 : 1)
+        const status = await done
+        if (status === "success") {
+          spinner.stop("Login successful")
+        } else if (status === "needs_setup") {
+          spinner.stop("Login incomplete — please finish your OpenAI organization/project setup in the browser", 1)
+        } else {
+          spinner.stop("Login failed", 1)
+        }
         prompts.outro("Done")
         return
       }
