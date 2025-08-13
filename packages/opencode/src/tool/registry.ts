@@ -1,6 +1,7 @@
 import z from "zod"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
+import { MorphEditTool } from "./morphedit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
@@ -18,6 +19,7 @@ export namespace ToolRegistry {
     InvalidTool,
     BashTool,
     EditTool,
+    MorphEditTool,
     WebFetchTool,
     GlobTool,
     GrepTool,
@@ -89,6 +91,16 @@ export namespace ToolRegistry {
     if (modelID.includes("qwen")) {
       result["todowrite"] = false
       result["todoread"] = false
+    }
+
+    // If MORPH_API_KEY exists, only enable morphedit and disable other edit tools
+    if (process.env.MORPH_API_KEY) {
+      result["edit"] = false
+      result["multiedit"] = false
+      result["patch"] = false
+    } else {
+      // If no MORPH_API_KEY, disable morphedit tool
+      result["morphedit"] = false
     }
 
     return result
