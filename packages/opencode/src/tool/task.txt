@@ -1,4 +1,4 @@
-Launch a new agent to handle complex, multi-step tasks autonomously. 
+Launch a new agent to handle complex, multi-step tasks autonomously.
 
 Available agent types and the tools they have access to:
 {agents}
@@ -23,7 +23,7 @@ Usage notes:
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 
-Example usage:
+Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
 <example_agent_descriptions>
 "code-reviewer": use this agent after you are done writing a signficant piece of code
@@ -48,7 +48,7 @@ function isPrime(n) {
 Since a signficant piece of code was written and the task was completed, now use the code-reviewer agent to review the code
 </commentary>
 assistant: Now let me use the code-reviewer agent to review the code
-assistant: Uses the Task tool to launch the with the code-reviewer agent 
+assistant: Uses the Task tool to launch the with the code-reviewer agent
 </example>
 
 <example>
