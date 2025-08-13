@@ -27,10 +27,13 @@ jobs:
         run: |
           opencode run -m anthropic/claude-sonnet-4-20250514 "A new issue has been created: '${{ github.event.issue.title }}'
 
+          Issue number:
+          ${{ github.event.issue.number }}
           Issue body:
           ${{ github.event.issue.body }}
 
-          Please search through existing issues in this repository to find any potential duplicates of this new issue. Consider:
+          Please search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
+          Consider:
           1. Similar titles or descriptions
           2. Same error messages or symptoms
           3. Related functionality or components
