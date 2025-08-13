@@ -1,6 +1,7 @@
 import { AuthAnthropic } from "../../auth/anthropic"
 import { AuthCopilot } from "../../auth/copilot"
 import { Auth } from "../../auth"
+import { AuthOpenAI } from "../../auth/openai"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import open from "open"
@@ -257,6 +258,37 @@ export const AuthLoginCommand = cmd({
         } catch (error) {
           prompts.log.error("Invalid code or failed to create API key")
         }
+        prompts.outro("Done")
+        return
+      }
+    }
+
+    if (provider === "openai") {
+      const method = await prompts.select({
+        message: "Login method",
+        options: [
+          { label: "Login with ChatGPT (create API key via OAuth)", value: "chatgpt" },
+          { label: "Manually enter API Key", value: "api" },
+        ],
+      })
+      if (prompts.isCancel(method)) throw new UI.CancelledError()
+
+      if (method === "chatgpt") {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        const { url, done } = await AuthOpenAI.prepare()
+        prompts.note("Trying to open browser...")
+        try {
+          await open(url)
+        } catch (e) {
+          prompts.log.error(
+            "Failed to open browser perhaps you are running without a display or X server, please open the following URL in your browser:",
+          )
+        }
+        prompts.log.info(url)
+        const spinner = prompts.spinner()
+        spinner.start("Waiting for authorization...")
+        const ok = await done
+        spinner.stop(ok ? "Login successful" : "Login failed", ok ? 0 : 1)
         prompts.outro("Done")
         return
       }
