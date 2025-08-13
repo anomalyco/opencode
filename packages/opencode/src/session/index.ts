@@ -674,7 +674,7 @@ export namespace Session {
         providerOptions: {
           [input.providerID]: {
             ...small.info.options,
-            ...ProviderTransform.options(input.providerID, small.info.id),
+            ...ProviderTransform.options(input.providerID, small.info.id, input.sessionID),
           },
         },
         messages: [
@@ -868,7 +868,7 @@ export namespace Session {
           : undefined,
         topP: agent.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
         options: {
-          ...ProviderTransform.options(input.providerID, input.modelID),
+          ...ProviderTransform.options(input.providerID, input.modelID, input.sessionID),
           ...model.info.options,
           ...agent.options,
         },

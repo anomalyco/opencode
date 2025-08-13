@@ -1240,6 +1240,26 @@ export type SessionGetResponses = {
 
 export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 
+export type SessionUpdateData = {
+  body?: {
+    title?: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/session/{id}"
+}
+
+export type SessionUpdateResponses = {
+  /**
+   * Successfully updated session
+   */
+  200: Session
+}
+
+export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
+
 export type SessionInitData = {
   body?: {
     messageID: string

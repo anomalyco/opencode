@@ -71,9 +71,11 @@ type ModelSelectedMsg struct {
 	Provider opencode.Provider
 	Model    opencode.Model
 }
+
 type AgentSelectedMsg struct {
-	Agent opencode.Agent
+	AgentName string
 }
+
 type SessionClearedMsg struct{}
 type CompactSessionMsg struct{}
 type SendPrompt = Prompt
@@ -272,6 +274,7 @@ func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 	}
 
 	a.State.Agent = a.Agent().Name
+	a.State.UpdateAgentUsage(a.Agent().Name)
 	return a, a.SaveState()
 }
 
@@ -314,6 +317,45 @@ func (a *App) CycleRecentModel() (*App, tea.Cmd) {
 	}
 	a.State.RecentlyUsedModels = recentModels
 	return a, toast.NewErrorToast("Recent model not found")
+}
+
+func (a *App) SwitchToAgent(agentName string) (*App, tea.Cmd) {
+	// Find the agent index by name
+	for i, agent := range a.Agents {
+		if agent.Name == agentName {
+			a.AgentIndex = i
+			break
+		}
+	}
+
+	// Set up model for the new agent
+	modelID := a.Agent().Model.ModelID
+	providerID := a.Agent().Model.ProviderID
+	if modelID == "" {
+		if model, ok := a.State.AgentModel[a.Agent().Name]; ok {
+			modelID = model.ModelID
+			providerID = model.ProviderID
+		}
+	}
+
+	if modelID != "" {
+		for _, provider := range a.Providers {
+			if provider.ID == providerID {
+				a.Provider = &provider
+				for _, model := range provider.Models {
+					if model.ID == modelID {
+						a.Model = &model
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+
+	a.State.Agent = a.Agent().Name
+	a.State.UpdateAgentUsage(agentName)
+	return a, a.SaveState()
 }
 
 // findModelByFullID finds a model by its full ID in the format "provider/model"
@@ -713,6 +755,17 @@ func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
 	_, err := a.Client.Session.Delete(ctx, sessionID)
 	if err != nil {
 		slog.Error("Failed to delete session", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (a *App) UpdateSession(ctx context.Context, sessionID string, title string) error {
+	_, err := a.Client.Session.Update(ctx, sessionID, opencode.SessionUpdateParams{
+		Title: opencode.F(title),
+	})
+	if err != nil {
+		slog.Error("Failed to update session", "error", err)
 		return err
 	}
 	return nil

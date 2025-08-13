@@ -296,6 +296,47 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .patch(
+        "/session/:id",
+        describeRoute({
+          description: "Update session properties",
+          operationId: "session.update",
+          responses: {
+            200: {
+              description: "Successfully updated session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        zValidator(
+          "json",
+          z.object({
+            title: z.string().optional(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const updates = c.req.valid("json")
+
+          const updatedSession = await Session.update(sessionID, (session) => {
+            if (updates.title !== undefined) {
+              session.title = updates.title
+            }
+          })
+
+          return c.json(updatedSession)
+        },
+      )
       .post(
         "/session/:id/init",
         describeRoute({

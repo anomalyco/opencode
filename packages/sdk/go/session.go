@@ -66,6 +66,18 @@ func (r *SessionService) Delete(ctx context.Context, id string, opts ...option.R
 	return
 }
 
+// Update session properties
+func (r *SessionService) Update(ctx context.Context, id string, body SessionUpdateParams, opts ...option.RequestOption) (res *Session, err error) {
+	opts = append(r.Options[:], opts...)
+	if id == "" {
+		err = errors.New("missing required id parameter")
+		return
+	}
+	path := fmt.Sprintf("session/%s", id)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPatch, path, body, &res, opts...)
+	return
+}
+
 // Abort a session
 func (r *SessionService) Abort(ctx context.Context, id string, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
@@ -2354,5 +2366,13 @@ type SessionSummarizeParams struct {
 }
 
 func (r SessionSummarizeParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
+}
+
+type SessionUpdateParams struct {
+	Title param.Field[string] `json:"title"`
+}
+
+func (r SessionUpdateParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
 }

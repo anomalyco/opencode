@@ -12,7 +12,7 @@ export function FormatError(input: unknown) {
   }
   if (Config.InvalidError.isInstance(input))
     return [
-      `Config file at ${input.data.path} is invalid`,
+      `Config file at ${input.data.path} is invalid` + (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
     ].join("\n")
 

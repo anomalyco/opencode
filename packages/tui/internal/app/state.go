@@ -16,6 +16,11 @@ type ModelUsage struct {
 	LastUsed   time.Time `toml:"last_used"`
 }
 
+type AgentUsage struct {
+	AgentName string    `toml:"agent_name"`
+	LastUsed  time.Time `toml:"last_used"`
+}
+
 type AgentModel struct {
 	ProviderID string `toml:"provider_id"`
 	ModelID    string `toml:"model_id"`
@@ -29,6 +34,7 @@ type State struct {
 	Model              string                `toml:"model"`
 	Agent              string                `toml:"agent"`
 	RecentlyUsedModels []ModelUsage          `toml:"recently_used_models"`
+	RecentlyUsedAgents []AgentUsage          `toml:"recently_used_agents"`
 	MessagesRight      bool                  `toml:"messages_right"`
 	SplitDiff          bool                  `toml:"split_diff"`
 	MessageHistory     []Prompt              `toml:"message_history"`
@@ -42,6 +48,7 @@ func NewState() *State {
 		Agent:              "build",
 		AgentModel:         make(map[string]AgentModel),
 		RecentlyUsedModels: make([]ModelUsage, 0),
+		RecentlyUsedAgents: make([]AgentUsage, 0),
 		MessageHistory:     make([]Prompt, 0),
 	}
 }
@@ -78,6 +85,42 @@ func (s *State) RemoveModelFromRecentlyUsed(providerID, modelID string) {
 	for i, usage := range s.RecentlyUsedModels {
 		if usage.ProviderID == providerID && usage.ModelID == modelID {
 			s.RecentlyUsedModels = append(s.RecentlyUsedModels[:i], s.RecentlyUsedModels[i+1:]...)
+			return
+		}
+	}
+}
+
+// UpdateAgentUsage updates the recently used agents list with the specified agent
+func (s *State) UpdateAgentUsage(agentName string) {
+	now := time.Now()
+
+	// Check if this agent is already in the list
+	for i, usage := range s.RecentlyUsedAgents {
+		if usage.AgentName == agentName {
+			s.RecentlyUsedAgents[i].LastUsed = now
+			usage := s.RecentlyUsedAgents[i]
+			copy(s.RecentlyUsedAgents[1:i+1], s.RecentlyUsedAgents[0:i])
+			s.RecentlyUsedAgents[0] = usage
+			return
+		}
+	}
+
+	newUsage := AgentUsage{
+		AgentName: agentName,
+		LastUsed:  now,
+	}
+
+	// Prepend to slice and limit to last 20 entries
+	s.RecentlyUsedAgents = append([]AgentUsage{newUsage}, s.RecentlyUsedAgents...)
+	if len(s.RecentlyUsedAgents) > 20 {
+		s.RecentlyUsedAgents = s.RecentlyUsedAgents[:20]
+	}
+}
+
+func (s *State) RemoveAgentFromRecentlyUsed(agentName string) {
+	for i, usage := range s.RecentlyUsedAgents {
+		if usage.AgentName == agentName {
+			s.RecentlyUsedAgents = append(s.RecentlyUsedAgents[:i], s.RecentlyUsedAgents[i+1:]...)
 			return
 		}
 	}

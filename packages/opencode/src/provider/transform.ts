@@ -83,32 +83,19 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  export function options(providerID: string, modelID: string): Record<string, any> | undefined {
+  export function options(providerID: string, modelID: string, sessionID: string): Record<string, any> | undefined {
+    const result: Record<string, any> = {}
+
+    if (providerID === "openai") {
+      result["promptCacheKey"] = sessionID
+    }
+
     if (modelID.includes("gpt-5")) {
-      if (providerID === "azure") {
-        return {
-          reasoningEffort: "minimal",
-        }
-      }
-      return {
-        reasoningEffort: "minimal",
-        textVerbosity: "low",
-        // reasoningSummary: "auto",
-        // include: ["reasoning.encrypted_content"],
+      result["reasoningEffort"] = "minimal"
+      if (providerID !== "azure") {
+        result["textVerbosity"] = "low"
       }
     }
-    // if (modelID.includes("claude")) {
-    //   return {
-    //     thinking: {
-    //       type: "enabled",
-    //       budgetTokens: 32000,
-    //     },
-    //   }
-    // }
-    // if (_providerID === "bedrock") {
-    //   return {
-    //     reasoningConfig: { type: "enabled", budgetTokens: 32000 },
-    //   }
-    // }
+    return result
   }
 }

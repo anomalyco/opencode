@@ -97,47 +97,45 @@ if (!snapshot) {
   const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
-  /*
-  // AUR package
-  const pkgbuild = [
-    "# Maintainer: dax",
-    "# Maintainer: adam",
-    "",
-    "pkgname='${pkg}'",
-    `pkgver=${version.split("-")[0]}`,
-    "options=('!debug' '!strip')",
-    "pkgrel=1",
-    "pkgdesc='The AI coding agent built for the terminal.'",
-    "url='https://github.com/sst/opencode'",
-    "arch=('aarch64' 'x86_64')",
-    "license=('MIT')",
-    "provides=('opencode')",
-    "conflicts=('opencode')",
-    "depends=('fzf' 'ripgrep')",
-    "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-arm64.zip")`,
-    `sha256sums_aarch64=('${arm64Sha}')`,
-    "",
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-x64.zip")`,
-    `sha256sums_x86_64=('${x64Sha}')`,
-    "",
-    "package() {",
-    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
-    "}",
-    "",
-  ].join("\n")
+  // // AUR package
+  // const pkgbuild = [
+  //   "# Maintainer: dax",
+  //   "# Maintainer: adam",
+  //   "",
+  //   "pkgname='${pkg}'",
+  //   `pkgver=${version.split("-")[0]}`,
+  //   "options=('!debug' '!strip')",
+  //   "pkgrel=1",
+  //   "pkgdesc='The AI coding agent built for the terminal.'",
+  //   "url='https://github.com/sst/opencode'",
+  //   "arch=('aarch64' 'x86_64')",
+  //   "license=('MIT')",
+  //   "provides=('opencode')",
+  //   "conflicts=('opencode')",
+  //   "depends=('fzf' 'ripgrep')",
+  //   "",
+  //   `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-arm64.zip")`,
+  //   `sha256sums_aarch64=('${arm64Sha}')`,
+  //   "",
+  //   `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-x64.zip")`,
+  //   `sha256sums_x86_64=('${x64Sha}')`,
+  //   "",
+  //   "package() {",
+  //   '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+  //   "}",
+  //   "",
+  // ].join("\n")
 
-  for (const pkg of ["opencode", "opencode-bin"]) {
-    await $`rm -rf ./dist/aur-${pkg}`
-    await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
-    await $`cd ./dist/aur-${pkg} && git checkout master`
-    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
-    await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
-    await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
-    await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
-    if (!dry) await $`cd ./dist/aur-${pkg} && git push`
-  }
-  */
+  // for (const pkg of ["opencode"]) {
+  //   await $`rm -rf ./dist/aur-${pkg}`
+  //   await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+  //   await $`cd ./dist/aur-${pkg} && git checkout master`
+  //   await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
+  //   await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
+  //   await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
+  //   await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
+  //   if (!dry) await $`cd ./dist/aur-${pkg} && git push`
+  // }
 
   // Homebrew formula
   const homebrewFormula = [

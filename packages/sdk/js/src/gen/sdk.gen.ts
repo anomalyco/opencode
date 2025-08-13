@@ -19,6 +19,8 @@ import type {
   SessionDeleteResponses,
   SessionGetData,
   SessionGetResponses,
+  SessionUpdateData,
+  SessionUpdateResponses,
   SessionInitData,
   SessionInitResponses,
   SessionAbortData,
@@ -221,6 +223,20 @@ class Session extends _HeyApiClient {
     return (options.client ?? this._client).get<SessionGetResponses, unknown, ThrowOnError>({
       url: "/session/{id}",
       ...options,
+    })
+  }
+
+  /**
+   * Update session properties
+   */
+  public update<ThrowOnError extends boolean = false>(options: Options<SessionUpdateData, ThrowOnError>) {
+    return (options.client ?? this._client).patch<SessionUpdateResponses, unknown, ThrowOnError>({
+      url: "/session/{id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     })
   }
 
