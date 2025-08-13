@@ -729,6 +729,10 @@ export type Config = {
       }>
     }
   }
+  /**
+   * Time format preference: 'detect' auto-detects system preference (macOS only), '12h' forces 12-hour format, '24h' forces 24-hour format
+   */
+  time_format: "detect" | "12h" | "24h"
 }
 
 export type KeybindsConfig = {

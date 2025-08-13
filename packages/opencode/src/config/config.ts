@@ -381,6 +381,13 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          time_format: z
+            .enum(["detect", "12h", "24h"])
+            .optional()
+            .default("detect")
+            .describe(
+              "Time format preference: 'detect' auto-detects system preference (macOS only), '12h' forces 12-hour format, '24h' forces 24-hour format",
+            ),
         })
         .optional(),
     })

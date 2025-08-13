@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -21,6 +23,38 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// shouldUse24HourFormat determines if 24-hour time format should be used
+// based on config and system detection
+func shouldUse24HourFormat(config *opencode.Config) bool {
+	switch config.TimeFormat {
+	case "24h":
+		return true
+	case "12h":
+		return false
+	default:
+		// Default to detect behavior
+		if runtime.GOOS == "darwin" {
+			return detectMacOS24HourFormat()
+		}
+		return false // fallback to 12h on other platforms
+	}
+}
+
+// detectMacOS24HourFormat checks if macOS system prefers 24-hour format
+func detectMacOS24HourFormat() bool {
+	cmd := exec.Command("date", "+%X")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	sysTime := strings.TrimSpace(string(output))
+	// If system time format contains AM/PM indicators, use 12h format
+	hasAmPm := strings.Contains(strings.ToUpper(sysTime), "AM") ||
+		strings.Contains(strings.ToUpper(sysTime), "PM")
+	return !hasAmPm
+}
 
 type blockRenderer struct {
 	textColor       compat.AdaptiveColor
@@ -331,9 +365,14 @@ func renderText(
 		content = base.Width(width - 6).Render(wrappedText)
 	}
 
-	timestamp := ts.
-		Local().
-		Format("02 Jan 2006 03:04 PM")
+	var timeFormat string
+	if shouldUse24HourFormat(app.Config) {
+		timeFormat = "02 Jan 2006 15:04"
+	} else {
+		timeFormat = "02 Jan 2006 03:04 PM"
+	}
+
+	timestamp := ts.Local().Format(timeFormat)
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}
