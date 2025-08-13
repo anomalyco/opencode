@@ -1055,7 +1055,13 @@ export namespace Session {
      [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
      eval "${input.command}"
    `
-    const proc = spawn(process.env["SHELL"] ?? "bash", ["-c", "-l", script], {
+    const shell = process.env["SHELL"] ?? "bash"
+    const isFish = shell.includes("fish")
+    const args = isFish
+      ? ["-c", script] // fish with just -c
+      : ["-c", "-l", script]
+
+    const proc = spawn(shell, args, {
       cwd: app.path.cwd,
       signal: abort.signal,
       env: {
