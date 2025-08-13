@@ -94,6 +94,7 @@ export const BashTool = Tool.define("bash", {
     if (needsAsk) {
       await Permission.ask({
         type: "bash",
+        pattern: params.command,
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
         callID: ctx.callID,

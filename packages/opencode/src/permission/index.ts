@@ -82,11 +82,13 @@ export namespace Permission {
       sessionID: input.sessionID,
       messageID: input.messageID,
       toolCallID: input.callID,
+      pattern: input.pattern,
     })
     if (approved[input.sessionID]?.[input.pattern ?? input.type]) return
     const info: Info = {
       id: Identifier.ascending("permission"),
       type: input.type,
+      pattern: input.pattern,
       sessionID: input.sessionID,
       messageID: input.messageID,
       callID: input.callID,
