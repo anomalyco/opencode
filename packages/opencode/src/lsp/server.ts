@@ -100,7 +100,12 @@ export namespace LSPServer {
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
         const finalPath = path.join(Global.Path.bin, "vscode-eslint")
 
-        if (await Bun.file(finalPath).exists()) {
+        if (!(await fs.exists(extractedPath))) {
+          log.warn("there was a problem extracting vscode-eslint")
+          return
+        }
+
+        if (await fs.exists(finalPath)) {
           await fs.rm(finalPath, { force: true, recursive: true })
         }
         await fs.rename(extractedPath, finalPath)
