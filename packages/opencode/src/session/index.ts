@@ -1062,10 +1062,8 @@ export namespace Session {
      eval "${input.command}"
    `
     const shell = process.env["SHELL"] ?? "bash"
-    const isFish = shell.includes("fish")
-    const args = isFish
-      ? ["-c", script] // fish with just -c
-      : ["-c", "-l", script]
+    const supportsLoginFlag = !shell.includes("fish") && !shell.includes("nu")
+    const args = supportsLoginFlag ? ["-c", "-l", script] : ["-c", script]
 
     const proc = spawn(shell, args, {
       cwd: app.path.cwd,
