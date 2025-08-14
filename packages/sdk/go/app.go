@@ -72,6 +72,7 @@ func (r *AppService) Providers(ctx context.Context, opts ...option.RequestOption
 }
 
 type Agent struct {
+	BuiltIn     bool                   `json:"builtIn,required"`
 	Mode        AgentMode              `json:"mode,required"`
 	Name        string                 `json:"name,required"`
 	Options     map[string]interface{} `json:"options,required"`
@@ -87,6 +88,7 @@ type Agent struct {
 
 // agentJSON contains the JSON metadata for the struct [Agent]
 type agentJSON struct {
+	BuiltIn     apijson.Field
 	Mode        apijson.Field
 	Name        apijson.Field
 	Options     apijson.Field
