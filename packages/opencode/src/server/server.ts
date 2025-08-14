@@ -88,7 +88,7 @@ export namespace Server {
               version: "0.0.3",
               description: "opencode api",
             },
-            openapi: "3.0.0",
+            openapi: "3.1.1",
           },
         }),
       )
@@ -1133,7 +1133,7 @@ export namespace Server {
           version: "1.0.0",
           description: "opencode api",
         },
-        openapi: "3.0.0",
+        openapi: "3.1.1",
       },
     })
     return result
