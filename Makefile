@@ -12,7 +12,7 @@ GOFLAGS ?=
 GOWORK ?= off
 export GOWORK
 
-VERSION ?= 0.4.45
+VERSION ?= 0.4.46
 COMMIT  := $(shell git rev-parse --short=12 HEAD)
 LDV     := -s -w -X main.Version=$(VERSION) -X main.Commit=$(COMMIT)
 
@@ -50,3 +50,20 @@ release:
 
 clean:
 	@rm -f $(PKG_DIR)/opencode $(OUT_BIN) artifacts/opencode-v$(VERSION).sha256 2>/dev/null || true
+
+RELEASE_PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
+
+release-all:
+	@mkdir -p $(BIN_DIR) artifacts
+	@cd $(PKG_DIR); \
+	LDV="-s -w -X main.Version=$(VERSION) -X main.Commit=$$(git -C .. rev-parse --short=12 HEAD)"; \
+	for T in $(RELEASE_PLATFORMS); do \
+		GOOS=$${T%/*} GOARCH=$${T#*/} CGO_ENABLED=0 \
+		go build -trimpath -ldflags "$$LDV" \
+			-o ../../$(BIN_DIR)/opencode-$$GOOS-$$GOARCH ./cmd/opencode; \
+		echo "built $(BIN_DIR)/opencode-$$GOOS-$$GOARCH"; \
+	done
+	@for f in $(BIN_DIR)/opencode-*; do \
+		shasum -a 256 $$f | tee artifacts/$$(basename $$f).sha256; \
+	done
+	@echo "Release build complete: $(BIN_DIR) + checksums in artifacts/"
