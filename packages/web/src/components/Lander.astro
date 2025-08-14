@@ -5,7 +5,9 @@ import type { Props } from '@astrojs/starlight/props';
 
 import CopyIcon from "../assets/lander/copy.svg";
 import CheckIcon from "../assets/lander/check.svg";
-import Screenshot from "../assets/lander/screenshot-splash.png";
+import TuiScreenshot from "../assets/lander/screenshot-splash.png";
+import VscodeScreenshot from "../assets/lander/screenshot-vscode.png";
+import GithubScreenshot from "../assets/lander/screenshot-github.png";
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, image, actions = [] } = data.hero || {};
@@ -18,6 +20,7 @@ const imageAttrs = {
 };
 
 const github = config.social.filter(s => s.icon === 'github')[0];
+const discord = config.social.filter(s => s.icon === 'discord')[0];
 
 const command = "curl -fsSL"
 const protocol = "https://"
@@ -35,7 +38,7 @@ if (image) {
         lightImage = image.light;
     } else {
         rawHtml = image.html;
-    }
+  }
 }
 ---
 <div class="hero">
@@ -53,7 +56,7 @@ if (image) {
 
     <section class="cta">
       <div class="col1">
-        <a href="/docs">Docs</a>
+        <a href="/docs">Get Started</a>
       </div>
       <div class="col2">
       <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
@@ -65,9 +68,6 @@ if (image) {
             <CheckIcon />
           </span>
         </button>
-      </div>
-      <div class="col3">
-        <a href={github.href}>GitHub</a>
       </div>
     </section>
 
@@ -82,19 +82,95 @@ if (image) {
       </ul>
     </section>
 
+    <section class="alternatives">
+      <div class="col1">
+        <h3>npm</h3>
+        <button class="command" data-command="npm install -g opencode-ai">
+          <code>
+            <span>npm install -g</span> <span class="highlight">opencode-ai</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col2">
+        <h3>Bun</h3>
+        <button class="command" data-command="bun install -g opencode-ai">
+          <code>
+            <span>bun install -g</span> <span class="highlight">opencode-ai</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col3">
+        <h3>Homebrew</h3>
+        <button class="command" data-command="brew install sst/tap/opencode">
+          <code>
+            <span>brew install</span> <span class="highlight">sst/tap/opencode</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col4">
+        <h3>Paru</h3>
+        <button class="command" data-command="paru -S opencode-bin">
+          <code>
+            <span>paru -S</span> <span class="highlight">opencode-bin</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+    </section>
+
     <section class="images">
-      <div>
-        <p>opencode TUI with the tokyonight theme</p>
-        <Image width={600} src={Screenshot} alt="opencode TUI with the tokyonight theme" />
+      <div class="left">
+        <figure>
+          <figcaption>opencode TUI with the tokyonight theme</figcaption>
+          <a href="/docs/cli">
+            <Image src={TuiScreenshot} alt="opencode TUI with the tokyonight theme" />
+          </a>
+        </figure>
+      </div>
+      <div class="right">
+        <div class="row1">
+          <figure>
+            <figcaption>opencode in VS Code</figcaption>
+            <a href="/docs/ide">
+              <Image src={VscodeScreenshot} alt="opencode in VS Code" />
+            </a>
+          </figure>
+        </div>
+        <div class="row2">
+          <figure>
+            <figcaption>opencode in GitHub</figcaption>
+            <a href="/docs/github">
+              <Image src={GithubScreenshot} alt="opencode in GitHub" />
+            </a>
+          </figure>
+        </div>
       </div>
     </section>
 
     <section class="footer">
       <div class="col1">
-        <span>Version: Beta</span>
+        <a href={github.href} target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
       <div class="col2">
-        <span>Author: <a href="https://sst.dev">SST</a></span>
+        <a href={discord.href} target="_blank" rel="noopener noreferrer">Discord</a>
+      </div>
+      <div class="col3">
+      <span>&copy;2025 <a href="https://anoma.ly" target="_blank" rel="noopener noreferrer">Anomaly Innovations</a></span>
       </div>
     </section>
 </div>
@@ -102,7 +178,7 @@ if (image) {
 <style>
 .hero {
   --padding: 3rem;
-  --vertical-padding: 2rem;
+  --vertical-padding: 1.5rem;
   --heading-font-size: var(--sl-text-3xl);
 
   margin: 1rem;
@@ -111,7 +187,7 @@ if (image) {
 @media (max-width: 30rem) {
   .hero {
     --padding: 1rem;
-    --vertical-padding: 1rem;
+    --vertical-padding: 0.75rem;
     --heading-font-size: var(--sl-text-2xl);
 
     margin: 0.5rem;
@@ -143,31 +219,29 @@ section.cta {
 
   @media (max-width: 50rem) {
     flex-direction: column;
-
-    & > div.col1 { order: 1; }
-    & > div.col3 { order: 2; }
-    & > div.col2 { order: 3; }
   }
 
   & > div {
     line-height: 1.4;
-    padding: calc(var(--padding) / 2) 1rem;
+    padding: var(--vertical-padding) var(--padding);
 
     a {
       font-size: 1rem;
     }
   }
-  & > div.col1, & > div.col3 {
-    flex: 1 1 auto;
+  & > div.col1 {
+    flex: 0 0 auto;
     text-align: center;
     text-transform: uppercase;
 
     @media (max-width: 50rem) {
-      padding-bottom: calc(var(--padding) / 2 + 4px);
+      padding-bottom: calc(var(--vertical-padding) + 4px);
     }
   }
   & > div.col2 {
-    flex: 0 0 auto;
+    flex: 1;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   & > div + div {
@@ -261,13 +335,40 @@ section.content {
 }
 
 section.images {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  justify-content: space-between;
+  --images-height: 600px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: var(--images-height);
   border-top: 2px solid var(--sl-color-border);
 
-  & > div {
+  & > div.left {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  & > div.right {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    grid-row: 1;
+    grid-column: 2;
+    border-left: 2px solid var(--sl-color-border);
+
+    & > div.row1 {
+      display: flex;
+      grid-row: 1;
+      border-bottom: 2px solid var(--sl-color-border);
+      height: calc(var(--images-height) / 2);
+    }
+
+    & > div.row2 {
+      display: flex;
+      grid-row: 2;
+      height: calc(var(--images-height) / 2);
+    }
+  }
+
+  figure {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -276,51 +377,237 @@ section.images {
     border-width: 0;
     border-style: solid;
     border-color: var(--sl-color-border);
+    min-height: 0;
+    overflow: hidden;
 
-    & > div, p {
-      flex: 1;
+    & > div, figcaption {
       display: flex;
       align-items: center;
     }
-  }
 
-  p {
-    letter-spacing: -0.03125rem;
-    text-transform: uppercase;
-    color: var(--sl-color-text-dimmed);
+    & > div {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-    @media (max-width: 30rem) {
-      font-size: 0.75rem;
+    a {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    figcaption {
+      letter-spacing: -0.03125rem;
+      text-transform: uppercase;
+      color: var(--sl-color-text-dimmed);
+      flex-shrink: 0;
+
+      @media (max-width: 30rem) {
+        font-size: 0.75rem;
+      }
     }
   }
 
-  img {
-    align-self: center;
-    width: 100%;
-    max-width: 600px;
-    height: auto;
+  & > div.left figure {
+    height: var(--images-height);
+    box-sizing: border-box;
   }
 
-  & > div + div {
-    border-width: 0 0 0 2px;
+  & > div.right figure {
+    height: calc(var(--images-height) / 2);
+    box-sizing: border-box;
+  }
+
+  & > div.left img {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    object-fit: contain;
+  }
+
+  & > div.right img {
+    width: 100%;
+    height: calc(100% - 2rem);
+    object-fit: contain;
+    display: block;
   }
 
   @media (max-width: 30rem) {
     & {
-      flex-direction: column;
+      --images-height: auto;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
     }
-    & > div + div {
-      border-width: 2px 0 0 0;
+
+    & > div.left {
+      grid-row: 1;
+      grid-column: 1;
+    }
+
+    & > div.right {
+      grid-row: 2;
+      grid-column: 1;
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+
+      & > div.row1,
+      & > div.row2 {
+        height: auto;
+      }
+    }
+
+    & > div.left figure,
+    & > div.right figure {
+      height: auto;
+    }
+
+    & > div.left img,
+    & > div.right img {
+      width: 100%;
+      height: auto;
+      max-height: none;
     }
   }
 }
 
-section.approach {
+section.alternatives {
   border-top: 2px solid var(--sl-color-border);
-  padding: var(--padding);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
 
-  p + p {
-    margin-top: var(--vertical-padding);
+  @media (max-width: 40rem) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  & > div {
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--vertical-padding) / 2) calc(var(--padding) / 2) calc(var(--vertical-padding) / 2 + 0.125rem);
+    text-align: left;
+    gap: 0.5rem;
+
+    @media (max-width: 40rem) {
+      text-align: left;
+    }
+  }
+
+  & > div.col1 {
+    border-bottom: 2px solid var(--sl-color-border);
+
+    @media (max-width: 40rem) {
+      border-bottom: none;
+    }
+  }
+
+  & > div.col2 {
+    border-left: 2px solid var(--sl-color-border);
+    border-bottom: 2px solid var(--sl-color-border);
+
+    @media (max-width: 40rem) {
+      border-left: none;
+      border-bottom: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  & > div.col3 {
+    @media (max-width: 40rem) {
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  & > div.col4 {
+    border-left: 2px solid var(--sl-color-border);
+    @media (max-width: 40rem) {
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  h3 {
+    letter-spacing: -0.03125rem;
+    text-transform: uppercase;
+    color: var(--sl-color-text-dimmed);
+    font-weight: normal;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .command {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    justify-content: flex-start;
+    cursor: pointer;
+    width: 100%;
+
+    @media (max-width: 40rem) {
+      justify-content: flex-start;
+    }
+    
+    @media (max-width: 30rem) {
+      justify-content: center;
+    }
+
+    code {
+      color: var(--sl-color-text-secondary);
+      font-size: 1rem;
+
+      @media (max-width: 24rem) {
+        font-size: 0.875rem;
+      }
+    }
+
+    code .highlight {
+      color: var(--sl-color-text);
+      font-weight: 500;
+    }
+
+    .copy {
+      line-height: 1;
+      padding: 0;
+
+      @media (max-width: 40rem) {
+        display: none;
+      }
+    }
+
+    .copy svg {
+      width: 1rem;
+      height: 1rem;
+      vertical-align: middle;
+    }
+
+    .copy svg:first-child {
+      color: var(--sl-color-text-dimmed);
+    }
+
+    .copy svg:last-child {
+      color: var(--sl-color-text);
+      display: none;
+    }
+
+    &.success .copy {
+      pointer-events: none;
+    }
+
+    &.success .copy svg:first-child {
+      display: none;
+    }
+
+    &.success .copy svg:last-child {
+      display: inline;
+    }
   }
 }
 
@@ -333,11 +620,41 @@ section.footer {
     flex: 1;
     text-align: center;
     text-transform: uppercase;
-    padding: calc(var(--padding) / 2) 0.5rem;
+    padding: var(--vertical-padding) 0.5rem;
   }
 
   & > div + div {
     border-left: 2px solid var(--sl-color-border);
+  }
+
+  /* Below 800px: first two columns shrink to content, third expands */
+  @media (max-width: 50rem) {
+    & > div.col1,
+    & > div.col2 {
+      flex: 0 0 auto;
+      padding-left: calc(var(--padding) / 2);
+      padding-right: calc(var(--padding) / 2);
+    }
+
+    & > div.col3 {
+      flex: 1;
+    }
+  }
+
+  /* Mobile: third column on its own row */
+  @media (max-width: 30rem) {
+    flex-wrap: wrap;
+
+    & > div.col1,
+    & > div.col2 {
+      flex: 1;
+    }
+
+    & > div.col3 {
+      flex: 1 0 100%;
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
   }
 }
 </style>
@@ -361,13 +678,15 @@ section.footer {
 </style>
 
 <script>
-  const button = document.querySelector("button.command") as HTMLButtonElement;
+  const buttons = document.querySelectorAll("button.command") as NodeListOf<HTMLButtonElement>
 
-  button?.addEventListener("click", () => {
-    navigator.clipboard.writeText(button.dataset.command!);
-    button.classList.toggle("success");
-    setTimeout(() => {
-      button.classList.toggle("success");
-    }, 1500);
-  });
+  buttons.forEach(button => {
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(button.dataset.command!)
+      button.classList.toggle("success")
+      setTimeout(() => {
+        button.classList.toggle("success");
+      }, 1500)
+    })
+  })
 </script>
