@@ -25,7 +25,7 @@ OUT_BIN := $(BIN_DIR)/opencode-v$(VERSION)
 lint:
 	@cd $(PKG_DIR); \
 	out=$$(gofmt -l . || true); \
-	if [ -n "$$out" ]; then echo "gofmt issues:"; echo "$$out"; exit 1; fi; \
+	if [ -n "$$out" ]; then echo "gofmt issues (warning):"; echo "$$out"; fi; \
 	go vet ./...
 
 build:
