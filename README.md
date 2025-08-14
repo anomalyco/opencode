@@ -8,6 +8,7 @@
   </a>
 </p>
 <p align="center">AI coding agent, built for the terminal.</p>
+<p align="center"><em>This is a fork of the original opencode project</em></p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -15,6 +16,63 @@
 </p>
 
 [![opencode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+
+---
+
+## Building from Source
+
+To build opencode locally as a single binary:
+
+### Prerequisites
+
+- **Bun** - JavaScript runtime and package manager
+- **Go 1.24.x** - For the TUI component
+
+If you're using `asdf` for version management, ensure you have Go 1.24.4+ available:
+```bash
+asdf list golang  # Check available versions
+```
+
+### Build Instructions
+
+1. **Install Bun** (if not already installed):
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   export PATH="$HOME/.bun/bin:$PATH"
+   ```
+
+2. **Build the Go TUI component**:
+   ```bash
+   cd packages/tui
+   CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o ../opencode/dist/tui ./cmd/opencode/main.go
+   ```
+   
+   > **Note**: Adjust `GOOS` and `GOARCH` for your target platform (e.g., `GOOS=linux GOARCH=amd64` for Linux x64)
+
+3. **Build the main binary**:
+   ```bash
+   cd packages/opencode
+   mkdir -p dist
+   bun build \
+     --define OPENCODE_TUI_PATH="'/absolute/path/to/opencode/packages/opencode/dist/tui'" \
+     --define OPENCODE_VERSION="'local-build'" \
+     --compile \
+     --target=bun-darwin-arm64 \
+     --outfile=dist/opencode \
+     ./src/index.ts
+   ```
+   
+   > **Note**: 
+   > - Replace `/absolute/path/to/opencode/` with your actual project path
+   > - Adjust `--target=bun-darwin-arm64` for your platform (e.g., `bun-linux-x64`)
+
+4. **Test the binary**:
+   ```bash
+   ./dist/opencode --version
+   ./dist/opencode --help
+   ```
+
+The resulting binary at `packages/opencode/dist/opencode` is self-contained and ready to run on your target platform.
 
 ---
 
