@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///home/yokowasis/git/opencode-sst/test-reply-logger.ts"],
   "mcp": {
     "context7": {
       "type": "remote",

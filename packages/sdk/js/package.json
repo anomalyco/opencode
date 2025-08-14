@@ -4,6 +4,7 @@
   "version": "0.4.45",
   "type": "module",
   "scripts": {
+    "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "exports": {

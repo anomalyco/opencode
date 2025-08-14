@@ -7,3 +7,6 @@ node_modules
 openapi.json
 playground
 tmp
+build/
+*.log
+tui-binary-embedded
