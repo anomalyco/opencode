@@ -611,7 +611,10 @@ export namespace Server {
               description: "Created message",
               content: {
                 "application/json": {
-                  schema: resolver(MessageV2.Assistant),
+                  schema: resolver(z.object({
+                      info: MessageV2.Assistant,
+                      parts: MessageV2.Part.array(),
+                    })),
                 },
               },
             },
