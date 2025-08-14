@@ -147,6 +147,8 @@ export namespace AuthOpenAI {
         // Inspect ID token claims for organization/project
         let orgId: string | undefined
         let projectId: string | undefined
+        let completedOnboarding = false
+        let isOrgOwner = false
         let planType: string | undefined
         try {
           const parts = tokenJson.id_token.split(".")
@@ -155,6 +157,8 @@ export namespace AuthOpenAI {
             const auth = (idPayload?.["https://api.openai.com/auth"]) || {}
             orgId = auth.organization_id
             projectId = auth.project_id
+            completedOnboarding = !!auth.completed_platform_onboarding
+            isOrgOwner = !!auth.is_org_owner
           }
         } catch {}
 
@@ -167,17 +171,21 @@ export namespace AuthOpenAI {
           }
         } catch {}
 
+        // Determine if setup is needed based on claims
+        const needsSetup = !completedOnboarding && isOrgOwner
+
         // If missing organization/project, do not attempt API-key exchange
         if (!orgId || !projectId) {
-          resolveDone("needs_setup")
           const qp = new URLSearchParams({
-            needs_setup: "true",
+            needs_setup: needsSetup ? "true" : "false",
             platform_url: "https://platform.openai.com",
             org_id: orgId || "",
             project_id: projectId || "",
             plan_type: planType || "",
             id_token: tokenJson.id_token,
           })
+          // Treat this as a successful auth step; browser will guide remaining setup
+          resolveDone(needsSetup ? "needs_setup" : "success")
           queueMicrotask(() => server.stop())
           return new Response(null, { status: 302, headers: { Location: `http://localhost:${PORT}/success?${qp}` } })
         }
@@ -216,7 +224,7 @@ export namespace AuthOpenAI {
 
         await Auth.set("openai", { type: "api", key })
 
-        resolveDone("success")
+        resolveDone(needsSetup ? "needs_setup" : "success")
         queueMicrotask(() => server.stop())
         return new Response(null, {
           status: 302,

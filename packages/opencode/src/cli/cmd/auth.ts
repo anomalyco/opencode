@@ -291,7 +291,7 @@ export const AuthLoginCommand = cmd({
         if (status === "success") {
           spinner.stop("Login successful")
         } else if (status === "needs_setup") {
-          spinner.stop("Login incomplete — please finish your OpenAI organization/project setup in the browser", 1)
+          spinner.stop("Login successful — finish your OpenAI organization/project setup in the browser")
         } else {
           spinner.stop("Login failed", 1)
         }
