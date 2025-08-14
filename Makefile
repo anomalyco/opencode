@@ -4,15 +4,32 @@ VERSION ?= 0.4.45
 COMMIT  := 
 LDV     := -s -w -X main.Version= -X main.Commit=
 
-.PHONY: build smoke lint ci-local
+BIN_DIR := tools/opencode-bin
+OUT_BIN := /opencode-v
+PKG_DIR := packages/tui
+
+.PHONY: build smoke lint ci-local release release-push clean
 
 build:
-	cd packages/tui && go mod download && go build -trimpath -ldflags "" -o ./opencode ./cmd/opencode
+	@mkdir -p 
+	cd  && go mod download && go build -trimpath -ldflags "" -o ./opencode ./cmd/opencode
 
 smoke: build
-	cd packages/tui && ./opencode --version && ./opencode health | sed -n 1,25p
+	cd  && ./opencode --version && ./opencode health | sed -n 1,25p
 
 lint:
-	cd packages/tui && out=50363(gofmt -l . || true); if [ -n "50363out" ]; then echo "gofmt issues:"; echo "50363out"; exit 1; fi; go vet ./...
+	cd  && out=54023(gofmt -l . || true); if [ -n "54023out" ]; then echo "gofmt issues:"; echo "54023out"; exit 1; fi; go vet ./...
 
 ci-local: lint smoke
+
+release:
+	@mkdir -p  artifacts
+	cd  && go mod download && go build -trimpath -ldflags "" -o ../../ ./cmd/opencode
+	shasum -a 256  | tee artifacts/opencode-v.sha256
+	git tag -f v -m "release: v"
+
+release-push: release
+	git push --follow-tags || true
+
+clean:
+	rm -f /opencode 
