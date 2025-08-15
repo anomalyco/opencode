@@ -297,6 +297,34 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .post(
+        "/session/:id/copy",
+        describeRoute({
+          description: "Copy a session and all its data",
+          operationId: "session.copy",
+          responses: {
+            200: {
+              description: "Successfully copied session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const newSession = await Session.copy(sessionID)
+          return c.json(newSession)
+        },
+      )
       .patch(
         "/session/:id",
         describeRoute({

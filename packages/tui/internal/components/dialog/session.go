@@ -188,6 +188,11 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.updateListItems()
 					return s, textinput.Blink
 				}
+			case "c":
+				if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
+					originalSession := s.sessions[idx]
+					return s, s.copySession(originalSession)
+				}
 			case "x", "delete", "backspace":
 				if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
 					if s.deleteConfirmation == idx {
@@ -248,7 +253,7 @@ func (s *sessionDialog) Render(background string) string {
 	keyStyle := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundPanel()).Render
 	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
 
-	leftHelp := keyStyle("n") + mutedStyle(" new session") + " " + keyStyle("r") + mutedStyle(" rename")
+	leftHelp := keyStyle("n") + mutedStyle(" new session") + " " + keyStyle("r") + mutedStyle(" rename") + " " + keyStyle("c") + mutedStyle(" copy")
 	rightHelp := keyStyle("x/del") + mutedStyle(" delete session")
 
 	bgColor := t.BackgroundPanel()
@@ -322,6 +327,32 @@ func (s *sessionDialog) deleteSession(sessionID string) tea.Cmd {
 			return toast.NewErrorToast("Failed to delete session: " + err.Error())()
 		}
 		return nil
+	}
+}
+
+func (s *sessionDialog) copySession(originalSession opencode.Session) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Call the new copy API endpoint
+		_, err := s.app.Client.Session.Copy(ctx, originalSession.ID)
+		if err != nil {
+			return toast.NewErrorToast("Failed to copy session: " + err.Error())()
+		}
+
+		// Refresh the session list to include the new session
+		sessions, _ := s.app.ListSessions(ctx)
+		var filteredSessions []opencode.Session
+		for _, sess := range sessions {
+			if sess.ParentID != "" {
+				continue
+			}
+			filteredSessions = append(filteredSessions, sess)
+		}
+		s.sessions = filteredSessions
+		s.updateListItems()
+
+		return toast.NewSuccessToast("Session copied successfully")()
 	}
 }
 
