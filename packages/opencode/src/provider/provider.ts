@@ -320,9 +320,18 @@ export namespace Provider {
       const pkg = provider.npm ?? provider.id
       const mod = await import(await BunProc.install(pkg, "latest"))
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      let options = { ...s.providers[provider.id]?.options }
+      // Inject custom fetch for local OpenAI-compatible providers
+      if ((provider.npm === "@ai-sdk/openai-compatible" || pkg === "@ai-sdk/openai-compatible") && options["baseURL"]) {
+        // Always override fetch to set timeout (default: 5min = 300000ms, or user-configurable, or false for unlimited)
+        const userTimeout = options["timeout"] !== undefined ? options["timeout"] : 300000
+        options["fetch"] = async (input: any, init?: any) => {
+          return await fetch(input, { ...init, timeout: userTimeout })
+        }
+      }
       const loaded = fn({
         name: provider.id,
-        ...s.providers[provider.id]?.options,
+        ...options,
       })
       s.sdk.set(provider.id, loaded)
       return loaded as SDK
