@@ -48,20 +48,33 @@ func (n navigationItem) Render(
 	width int,
 	isFirstInViewport bool,
 	baseStyle styles.Style,
+	isCurrent bool,
 ) string {
 	t := theme.CurrentTheme()
 	infoStyle := baseStyle.Background(t.BackgroundPanel()).Foreground(t.Info()).Render
 	textStyle := baseStyle.Background(t.BackgroundPanel()).Foreground(t.Text()).Render
 
+	// Add dot after timestamp if this is the current message - only apply color when not selected
+	var dot string
+	var dotVisualLen int
+	if isCurrent {
+		if selected {
+			dot = "● "
+		} else {
+			dot = lipgloss.NewStyle().Foreground(t.Success()).Render("● ")
+		}
+		dotVisualLen = 2 // "● " is 2 characters wide
+	}
+
 	// Format timestamp - only apply color when not selected
 	var timeStr string
 	var timeVisualLen int
 	if selected {
-		timeStr = n.timestamp.Format("15:04") + " "
-		timeVisualLen = lipgloss.Width(timeStr)
+		timeStr = n.timestamp.Format("15:04") + " " + dot
+		timeVisualLen = lipgloss.Width(n.timestamp.Format("15:04")+" ") + dotVisualLen
 	} else {
-		timeStr = infoStyle(n.timestamp.Format("15:04") + " ")
-		timeVisualLen = lipgloss.Width(timeStr)
+		timeStr = infoStyle(n.timestamp.Format("15:04")+" ") + dot
+		timeVisualLen = lipgloss.Width(n.timestamp.Format("15:04")+" ") + dotVisualLen
 	}
 
 	// Tool count display (fixed width for alignment) - only apply color when not selected
@@ -78,7 +91,7 @@ func (n navigationItem) Render(
 	}
 
 	// Calculate available space for content
-	// Reserve space for: timestamp + space + toolInfo + padding + some buffer
+	// Reserve space for: timestamp + dot + space + toolInfo + padding + some buffer
 	reservedSpace := timeVisualLen + 1 + toolInfoVisualLen + 4
 	contentWidth := max(width-reservedSpace, 8)
 
@@ -295,7 +308,32 @@ func NewNavigationDialog(app *app.App) NavigationDialog {
 		list.WithAlphaNumericKeys[navigationItem](true),
 		list.WithRenderFunc(
 			func(item navigationItem, selected bool, width int, baseStyle styles.Style) string {
-				return item.Render(selected, width, false, baseStyle)
+				// Determine if this item is the current message for the session
+				isCurrent := false
+				if app.Session.Revert.MessageID != "" {
+					// When reverted, Session.Revert.MessageID contains the NEXT user message ID
+					// So we need to find the previous user message to highlight the correct one
+					for i, navItem := range items {
+						if navItem.messageID == app.Session.Revert.MessageID && i > 0 {
+							// Found the next message, so the previous one is current
+							isCurrent = item.messageID == items[i-1].messageID
+							break
+						}
+					}
+				} else if len(app.Messages) > 0 {
+					// If not reverted, highlight the last user message
+					lastUserMsgID := ""
+					for i := len(app.Messages) - 1; i >= 0; i-- {
+						if userMsg, ok := app.Messages[i].Info.(opencode.UserMessage); ok {
+							lastUserMsgID = userMsg.ID
+							break
+						}
+					}
+					isCurrent = item.messageID == lastUserMsgID
+				}
+				// Only show the dot if undo/redo/restore is available
+				showDot := app.Session.Revert.MessageID != ""
+				return item.Render(selected, width, false, baseStyle, isCurrent && showDot)
 			},
 		),
 		list.WithSelectableFunc(func(item navigationItem) bool {
@@ -308,7 +346,7 @@ func NewNavigationDialog(app *app.App) NavigationDialog {
 		list: listComponent,
 		app:  app,
 		modal: modal.New(
-			modal.WithTitle("Jump to Message"),
+			modal.WithTitle("Session Timeline"),
 			modal.WithMaxWidth(layout.Current.Container.Width-8),
 		),
 	}
