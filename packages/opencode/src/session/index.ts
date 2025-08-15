@@ -341,6 +341,47 @@ export namespace Session {
     }
   }
 
+  export async function fork(sessionID: string) {
+    const originalSession = await get(sessionID)
+
+    // Create a new session
+    const newSession = await create(originalSession.parentID)
+
+    // Update the new session's title to indicate it's a fork
+    const newTitle = "Fork of " + originalSession.title
+    await update(newSession.id, (draft) => {
+      draft.title = newTitle
+    })
+
+    // Copy all messages from the original session to the new session
+    const sessionMessages = await messages(sessionID)
+    for (const message of sessionMessages) {
+      // Copy message info
+      const newMessageInfo = {
+        ...message.info,
+        id: Identifier.ascending("message"), // Generate new message ID
+        sessionID: newSession.id, // Update session ID
+      }
+      await Storage.writeJSON(`session/message/${newSession.id}/${newMessageInfo.id}`, newMessageInfo)
+
+      // Copy all parts for this message
+      for (const part of message.parts) {
+        const newPart = {
+          ...part,
+          id: Identifier.ascending("part"), // Generate new part ID
+          messageID: newMessageInfo.id, // Update message ID
+          sessionID: newSession.id, // Update session ID
+        }
+        await Storage.writeJSON(`session/part/${newSession.id}/${newMessageInfo.id}/${newPart.id}`, newPart)
+      }
+    }
+
+    // Refresh the session state
+    state().sessions.set(newSession.id, await get(newSession.id))
+
+    return await get(newSession.id)
+  }
+
   async function updateMessage(msg: MessageV2.Info) {
     await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
     Bus.publish(MessageV2.Event.Updated, {

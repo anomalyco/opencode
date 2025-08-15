@@ -78,6 +78,18 @@ func (r *SessionService) Delete(ctx context.Context, id string, opts ...option.R
 	return
 }
 
+// Fork a session and all its data
+func (r *SessionService) Fork(ctx context.Context, id string, opts ...option.RequestOption) (res *Session, err error) {
+	opts = append(r.Options[:], opts...)
+	if id == "" {
+		err = errors.New("missing required id parameter")
+		return
+	}
+	path := fmt.Sprintf("session/%s/fork", id)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	return
+}
+
 // Abort a session
 func (r *SessionService) Abort(ctx context.Context, id string, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)

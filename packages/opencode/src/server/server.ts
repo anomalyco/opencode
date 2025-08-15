@@ -297,6 +297,34 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .post(
+        "/session/:id/fork",
+        describeRoute({
+          description: "Fork a session and all its data",
+          operationId: "session.fork",
+          responses: {
+            200: {
+              description: "Successfully forked session",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const newSession = await Session.fork(sessionID)
+          return c.json(newSession)
+        },
+      )
       .patch(
         "/session/:id",
         describeRoute({
