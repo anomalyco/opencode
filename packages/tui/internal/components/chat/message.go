@@ -602,7 +602,12 @@ func renderToolDetails(
 				}
 			}
 		case "bash":
-			command := toolInputMap["command"].(string)
+			var command string
+			if cmd, ok := toolInputMap["command"].(string); ok {
+				command = cmd
+			} else {
+				command = ""
+			}
 			body = fmt.Sprintf("```console\n$ %s\n", command)
 			output := metadata["output"]
 			if output != nil {
@@ -611,7 +616,13 @@ func renderToolDetails(
 			body += "```"
 			body = util.ToMarkdown(body, width, backgroundColor)
 		case "webfetch":
-			if format, ok := toolInputMap["format"].(string); ok && result != nil {
+			var format string
+			if f, ok := toolInputMap["format"].(string); ok {
+				format = f
+			} else {
+				format = ""
+			}
+			if format != "" && result != nil {
 				body = *result
 				body = util.TruncateHeight(body, 10)
 				if format == "html" || format == "markdown" {
@@ -621,38 +632,55 @@ func renderToolDetails(
 		case "todowrite":
 			todos := metadata["todos"]
 			if todos != nil {
-				for _, item := range todos.([]any) {
-					todo := item.(map[string]any)
-					content := todo["content"].(string)
-					switch todo["status"] {
-					case "completed":
-						body += fmt.Sprintf("- [x] %s\n", content)
-					case "cancelled":
-						// strike through cancelled todo
-						body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
-					case "in_progress":
-						// highlight in progress todo
-						body += fmt.Sprintf("- [ ] `%s`\n", content)
-					default:
-						body += fmt.Sprintf("- [ ] %s\n", content)
+				if todoList, ok := todos.([]any); ok {
+					for _, item := range todoList {
+						if todo, ok := item.(map[string]any); ok {
+							var content string
+							if c, ok := todo["content"].(string); ok {
+								content = c
+							} else {
+								content = ""
+							}
+
+							var status string
+							if s, ok := todo["status"].(string); ok {
+								status = s
+							} else {
+								status = ""
+							}
+
+							switch status {
+							case "completed":
+								body += fmt.Sprintf("- [x] %s\n", content)
+							case "cancelled":
+								// strike through cancelled todo
+								body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
+							case "in_progress":
+								// highlight in progress todo
+								body += fmt.Sprintf("- [ ] `%s`\n", content)
+							default:
+								body += fmt.Sprintf("- [ ] %s\n", content)
+							}
+						}
 					}
+					body = util.ToMarkdown(body, width, backgroundColor)
 				}
-				body = util.ToMarkdown(body, width, backgroundColor)
 			}
 		case "task":
 			summary := metadata["summary"]
 			if summary != nil {
-				toolcalls := summary.([]any)
-				steps := []string{}
-				for _, item := range toolcalls {
-					data, _ := json.Marshal(item)
-					var toolCall opencode.ToolPart
-					_ = json.Unmarshal(data, &toolCall)
-					step := renderToolTitle(toolCall, width-2)
-					step = "∟ " + step
-					steps = append(steps, step)
+				if toolcalls, ok := summary.([]any); ok {
+					steps := []string{}
+					for _, item := range toolcalls {
+						data, _ := json.Marshal(item)
+						var toolCall opencode.ToolPart
+						_ = json.Unmarshal(data, &toolCall)
+						step := renderToolTitle(toolCall, width-2)
+						step = "∟ " + step
+						steps = append(steps, step)
+					}
+					body = strings.Join(steps, "\n")
 				}
-				body = strings.Join(steps, "\n")
 			}
 			body = defaultStyle(body)
 		default:
