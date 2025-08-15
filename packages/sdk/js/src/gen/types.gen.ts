@@ -23,17 +23,14 @@ export type Event =
       type: "storage.write"
     } & EventStorageWrite)
   | ({
-      type: "file.edited"
-    } & EventFileEdited)
-  | ({
-      type: "server.connected"
-    } & EventServerConnected)
-  | ({
       type: "permission.updated"
     } & EventPermissionUpdated)
   | ({
       type: "permission.replied"
     } & EventPermissionReplied)
+  | ({
+      type: "file.edited"
+    } & EventFileEdited)
   | ({
       type: "session.updated"
     } & EventSessionUpdated)
@@ -46,6 +43,9 @@ export type Event =
   | ({
       type: "session.error"
     } & EventSessionError)
+  | ({
+      type: "server.connected"
+    } & EventServerConnected)
   | ({
       type: "file.watcher.updated"
     } & EventFileWatcherUpdated)
@@ -348,6 +348,9 @@ export type ToolStateError = {
     [key: string]: unknown
   }
   error: string
+  metadata?: {
+    [key: string]: unknown
+  }
   time: {
     start: number
     end: number
@@ -425,20 +428,6 @@ export type EventStorageWrite = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventPermissionUpdated = {
   type: "permission.updated"
   properties: Permission
@@ -466,6 +455,13 @@ export type EventPermissionReplied = {
     sessionID: string
     permissionID: string
     response: string
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
   }
 }
 
@@ -530,6 +526,13 @@ export type EventSessionError = {
   }
 }
 
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
@@ -573,6 +576,15 @@ export type Config = {
    * Custom keybind configurations
    */
   keybinds?: KeybindsConfig
+  /**
+   * TUI specific settings
+   */
+  tui?: {
+    /**
+     * TUI scroll speed
+     */
+    scroll_speed: number
+  }
   plugin?: Array<string>
   snapshot?: boolean
   /**
@@ -747,25 +759,29 @@ export type KeybindsConfig = {
    */
   app_help: string
   /**
-   * @deprecated use switch_agent. Next mode
+   * Exit the application
    */
-  switch_mode: string
-  /**
-   * @deprecated use switch_agent_reverse. Previous mode
-   */
-  switch_mode_reverse: string
-  /**
-   * Next agent
-   */
-  switch_agent: string
-  /**
-   * Previous agent
-   */
-  switch_agent_reverse: string
+  app_exit: string
   /**
    * Open external editor
    */
   editor_open: string
+  /**
+   * List available themes
+   */
+  theme_list: string
+  /**
+   * Create/update AGENTS.md
+   */
+  project_init: string
+  /**
+   * Toggle tool details
+   */
+  tool_details: string
+  /**
+   * Toggle thinking blocks
+   */
+  thinking_blocks: string
   /**
    * Export session to editor
    */
@@ -795,57 +811,13 @@ export type KeybindsConfig = {
    */
   session_compact: string
   /**
-   * Toggle tool details
+   * Cycle to next child session
    */
-  tool_details: string
+  session_child_cycle: string
   /**
-   * Toggle thinking blocks
+   * Cycle to previous child session
    */
-  thinking_blocks: string
-  /**
-   * List available models
-   */
-  model_list: string
-  /**
-   * List available themes
-   */
-  theme_list: string
-  /**
-   * List files
-   */
-  file_list: string
-  /**
-   * Close file
-   */
-  file_close: string
-  /**
-   * Search file
-   */
-  file_search: string
-  /**
-   * Split/unified diff
-   */
-  file_diff_toggle: string
-  /**
-   * Create/update AGENTS.md
-   */
-  project_init: string
-  /**
-   * Clear input field
-   */
-  input_clear: string
-  /**
-   * Paste from clipboard
-   */
-  input_paste: string
-  /**
-   * Submit input
-   */
-  input_submit: string
-  /**
-   * Insert newline in input
-   */
-  input_newline: string
+  session_child_cycle_reverse: string
   /**
    * Scroll messages up by one page
    */
@@ -863,14 +835,6 @@ export type KeybindsConfig = {
    */
   messages_half_page_down: string
   /**
-   * Navigate to previous message
-   */
-  messages_previous: string
-  /**
-   * Navigate to next message
-   */
-  messages_next: string
-  /**
    * Navigate to first message
    */
   messages_first: string
@@ -879,17 +843,9 @@ export type KeybindsConfig = {
    */
   messages_last: string
   /**
-   * Toggle layout
-   */
-  messages_layout_toggle: string
-  /**
    * Copy message
    */
   messages_copy: string
-  /**
-   * @deprecated use messages_undo. Revert message
-   */
-  messages_revert: string
   /**
    * Undo message
    */
@@ -899,9 +855,93 @@ export type KeybindsConfig = {
    */
   messages_redo: string
   /**
-   * Exit the application
+   * List available models
    */
-  app_exit: string
+  model_list: string
+  /**
+   * Next recent model
+   */
+  model_cycle_recent: string
+  /**
+   * Previous recent model
+   */
+  model_cycle_recent_reverse: string
+  /**
+   * List agents
+   */
+  agent_list: string
+  /**
+   * Next agent
+   */
+  agent_cycle: string
+  /**
+   * Previous agent
+   */
+  agent_cycle_reverse: string
+  /**
+   * Clear input field
+   */
+  input_clear: string
+  /**
+   * Paste from clipboard
+   */
+  input_paste: string
+  /**
+   * Submit input
+   */
+  input_submit: string
+  /**
+   * Insert newline in input
+   */
+  input_newline: string
+  /**
+   * @deprecated use agent_cycle. Next mode
+   */
+  switch_mode: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous mode
+   */
+  switch_mode_reverse: string
+  /**
+   * @deprecated use agent_cycle. Next agent
+   */
+  switch_agent: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous agent
+   */
+  switch_agent_reverse: string
+  /**
+   * @deprecated Currently not available. List files
+   */
+  file_list: string
+  /**
+   * @deprecated Close file
+   */
+  file_close: string
+  /**
+   * @deprecated Search file
+   */
+  file_search: string
+  /**
+   * @deprecated Split/unified diff
+   */
+  file_diff_toggle: string
+  /**
+   * @deprecated Navigate to previous message
+   */
+  messages_previous: string
+  /**
+   * @deprecated Navigate to next message
+   */
+  messages_next: string
+  /**
+   * @deprecated Toggle layout
+   */
+  messages_layout_toggle: string
+  /**
+   * @deprecated use messages_undo. Revert message
+   */
+  messages_revert: string
 }
 
 export type AgentConfig = {
@@ -1083,6 +1123,7 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
+  builtIn: boolean
   topP?: number
   temperature?: number
   permission: {
@@ -1103,6 +1144,35 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
+}
+
+export type Auth =
+  | ({
+      type: "oauth"
+    } & OAuth)
+  | ({
+      type: "api"
+    } & ApiAuth)
+  | ({
+      type: "wellknown"
+    } & WellKnownAuth)
+
+export type OAuth = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+}
+
+export type ApiAuth = {
+  type: "api"
+  key: string
+}
+
+export type WellKnownAuth = {
+  type: "wellknown"
+  key: string
+  token: string
 }
 
 export type EventSubscribeData = {
@@ -1186,7 +1256,10 @@ export type SessionListResponses = {
 export type SessionListResponse = SessionListResponses[keyof SessionListResponses]
 
 export type SessionCreateData = {
-  body?: never
+  body?: {
+    parentID?: string
+    title?: string
+  }
   path?: never
   query?: never
   url: "/session"
@@ -1265,6 +1338,24 @@ export type SessionUpdateResponses = {
 }
 
 export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
+
+export type SessionChildrenData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/session/{id}/children"
+}
+
+export type SessionChildrenResponses = {
+  /**
+   * List of children
+   */
+  200: Array<Session>
+}
+
+export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
 export type SessionInitData = {
   body?: {
@@ -1857,6 +1948,53 @@ export type TuiExecuteCommandResponses = {
 }
 
 export type TuiExecuteCommandResponse = TuiExecuteCommandResponses[keyof TuiExecuteCommandResponses]
+
+export type TuiShowToastData = {
+  body?: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+  }
+  path?: never
+  query?: never
+  url: "/tui/show-toast"
+}
+
+export type TuiShowToastResponses = {
+  /**
+   * Toast notification shown successfully
+   */
+  200: boolean
+}
+
+export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
+
+export type AuthSetData = {
+  body?: Auth
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/auth/{id}"
+}
+
+export type AuthSetErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
+
+export type AuthSetResponses = {
+  /**
+   * Successfully set authentication credentials
+   */
+  200: boolean
+}
+
+export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
 
 export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})

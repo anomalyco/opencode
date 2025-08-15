@@ -127,6 +127,12 @@ export namespace Config {
     if (result.keybinds?.switch_mode_reverse && !result.keybinds.switch_agent_reverse) {
       result.keybinds.switch_agent_reverse = result.keybinds.switch_mode_reverse
     }
+    if (result.keybinds?.switch_agent && !result.keybinds.agent_cycle) {
+      result.keybinds.agent_cycle = result.keybinds.switch_agent
+    }
+    if (result.keybinds?.switch_agent_reverse && !result.keybinds.agent_cycle_reverse) {
+      result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
+    }
 
     if (!result.username) {
       const os = await import("os")
@@ -199,15 +205,12 @@ export namespace Config {
     .object({
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      switch_mode: z.string().optional().default("none").describe("@deprecated use switch_agent. Next mode"),
-      switch_mode_reverse: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated use switch_agent_reverse. Previous mode"),
-      switch_agent: z.string().optional().default("tab").describe("Next agent"),
-      switch_agent_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
+      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
+      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
+      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
+      thinking_blocks: z.string().optional().default("<leader>b").describe("Toggle thinking blocks"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
@@ -215,19 +218,12 @@ export namespace Config {
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
-      thinking_blocks: z.string().optional().default("<leader>b").describe("Toggle thinking blocks"),
-      model_list: z.string().optional().default("<leader>m").describe("List available models"),
-      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
-      file_list: z.string().optional().default("<leader>f").describe("List files"),
-      file_close: z.string().optional().default("esc").describe("Close file"),
-      file_search: z.string().optional().default("<leader>/").describe("Search file"),
-      file_diff_toggle: z.string().optional().default("<leader>v").describe("Split/unified diff"),
-      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
-      input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
-      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
-      input_submit: z.string().optional().default("enter").describe("Submit input"),
-      input_newline: z.string().optional().default("shift+enter,ctrl+j").describe("Insert newline in input"),
+      session_child_cycle: z.string().optional().default("ctrl+right").describe("Cycle to next child session"),
+      session_child_cycle_reverse: z
+        .string()
+        .optional()
+        .default("ctrl+left")
+        .describe("Cycle to previous child session"),
       messages_page_up: z.string().optional().default("pgup").describe("Scroll messages up by one page"),
       messages_page_down: z.string().optional().default("pgdown").describe("Scroll messages down by one page"),
       messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
@@ -236,21 +232,51 @@ export namespace Config {
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_previous: z.string().optional().default("ctrl+up").describe("Navigate to previous message"),
-      messages_next: z.string().optional().default("ctrl+down").describe("Navigate to next message"),
       messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
       messages_last: z.string().optional().default("ctrl+alt+g").describe("Navigate to last message"),
-      messages_layout_toggle: z.string().optional().default("<leader>p").describe("Toggle layout"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
-      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
-      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
+      model_list: z.string().optional().default("<leader>m").describe("List available models"),
+      model_cycle_recent: z.string().optional().default("f2").describe("Next recent model"),
+      model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recent model"),
+      agent_list: z.string().optional().default("<leader>a").describe("List agents"),
+      agent_cycle: z.string().optional().default("tab").describe("Next agent"),
+      agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+      input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
+      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_submit: z.string().optional().default("enter").describe("Submit input"),
+      input_newline: z.string().optional().default("shift+enter,ctrl+j").describe("Insert newline in input"),
+      // Deprecated commands
+      switch_mode: z.string().optional().default("none").describe("@deprecated use agent_cycle. Next mode"),
+      switch_mode_reverse: z
+        .string()
+        .optional()
+        .default("none")
+        .describe("@deprecated use agent_cycle_reverse. Previous mode"),
+      switch_agent: z.string().optional().default("tab").describe("@deprecated use agent_cycle. Next agent"),
+      switch_agent_reverse: z
+        .string()
+        .optional()
+        .default("shift+tab")
+        .describe("@deprecated use agent_cycle_reverse. Previous agent"),
+      file_list: z.string().optional().default("none").describe("@deprecated Currently not available. List files"),
+      file_close: z.string().optional().default("none").describe("@deprecated Close file"),
+      file_search: z.string().optional().default("none").describe("@deprecated Search file"),
+      file_diff_toggle: z.string().optional().default("none").describe("@deprecated Split/unified diff"),
+      messages_previous: z.string().optional().default("none").describe("@deprecated Navigate to previous message"),
+      messages_next: z.string().optional().default("none").describe("@deprecated Navigate to next message"),
+      messages_layout_toggle: z.string().optional().default("none").describe("@deprecated Toggle layout"),
+      messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
     })
     .strict()
     .openapi({
       ref: "KeybindsConfig",
     })
+
+  export const TUI = z.object({
+    scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+  })
 
   export const Layout = z.enum(["auto", "stretch"]).openapi({
     ref: "LayoutConfig",
@@ -262,6 +288,7 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      tui: TUI.optional().describe("TUI specific settings"),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z

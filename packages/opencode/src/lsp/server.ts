@@ -65,6 +65,67 @@ export namespace LSPServer {
     },
   }
 
+  export const Vue: Info = {
+    id: "vue",
+    extensions: [".vue"],
+    root: NearestRoot([
+      "tsconfig.json",
+      "jsconfig.json",
+      "package.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "bun.lockb",
+      "bun.lock",
+      "vite.config.ts",
+      "vite.config.js",
+      "nuxt.config.ts",
+      "nuxt.config.js",
+      "vue.config.js",
+    ]),
+    async spawn(_, root) {
+      let binary = Bun.which("vue-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "@vue",
+          "language-server",
+          "bin",
+          "vue-language-server.js",
+        )
+        if (!(await Bun.file(js).exists())) {
+          await Bun.spawn([BunProc.which(), "install", "@vue/language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+        initialization: {
+          // Leave empty; the server will auto-detect workspace TypeScript.
+        },
+      }
+    },
+  }
+
   export const ESLint: Info = {
     id: "eslint",
     root: NearestRoot([
@@ -81,7 +142,7 @@ export namespace LSPServer {
       ".eslintrc.json",
       "package.json",
     ]),
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(app, root) {
       const eslint = await Bun.resolve("eslint", app.path.cwd).catch(() => {})
       if (!eslint) return

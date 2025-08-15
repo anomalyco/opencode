@@ -13,6 +13,7 @@ export namespace Agent {
       name: z.string(),
       description: z.string().optional(),
       mode: z.union([z.literal("subagent"), z.literal("primary"), z.literal("all")]),
+      builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       permission: z.object({
@@ -58,6 +59,7 @@ export namespace Agent {
         options: {},
         permission: agentPermission,
         mode: "subagent",
+        builtIn: true,
       },
       build: {
         name: "build",
@@ -65,6 +67,7 @@ export namespace Agent {
         options: {},
         permission: agentPermission,
         mode: "primary",
+        builtIn: true,
       },
       plan: {
         name: "plan",
@@ -76,6 +79,7 @@ export namespace Agent {
           patch: false,
         },
         mode: "primary",
+        builtIn: true,
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
@@ -91,6 +95,7 @@ export namespace Agent {
           permission: agentPermission,
           options: {},
           tools: {},
+          builtIn: false,
         }
       const { model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
       item.options = {

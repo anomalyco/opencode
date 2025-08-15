@@ -21,6 +21,8 @@ import type {
   SessionGetResponses,
   SessionUpdateData,
   SessionUpdateResponses,
+  SessionChildrenData,
+  SessionChildrenResponses,
   SessionInitData,
   SessionInitResponses,
   SessionAbortData,
@@ -77,6 +79,11 @@ import type {
   TuiClearPromptResponses,
   TuiExecuteCommandData,
   TuiExecuteCommandResponses,
+  TuiShowToastData,
+  TuiShowToastResponses,
+  AuthSetData,
+  AuthSetResponses,
+  AuthSetErrors,
 } from "./types.gen.js"
 import { client as _heyApiClient } from "./client.gen.js"
 
@@ -205,6 +212,10 @@ class Session extends _HeyApiClient {
     return (options?.client ?? this._client).post<SessionCreateResponses, SessionCreateErrors, ThrowOnError>({
       url: "/session",
       ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
     })
   }
 
@@ -239,6 +250,16 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Get a session's children
+   */
+  public children<ThrowOnError extends boolean = false>(options: Options<SessionChildrenData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionChildrenResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/children",
+      ...options,
     })
   }
 
@@ -503,7 +524,7 @@ class Tui extends _HeyApiClient {
   }
 
   /**
-   * Execute a TUI command (e.g. switch_agent)
+   * Execute a TUI command (e.g. agent_cycle)
    */
   public executeCommand<ThrowOnError extends boolean = false>(options?: Options<TuiExecuteCommandData, ThrowOnError>) {
     return (options?.client ?? this._client).post<TuiExecuteCommandResponses, unknown, ThrowOnError>({
@@ -512,6 +533,36 @@ class Tui extends _HeyApiClient {
       headers: {
         "Content-Type": "application/json",
         ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * Show a toast notification in the TUI
+   */
+  public showToast<ThrowOnError extends boolean = false>(options?: Options<TuiShowToastData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<TuiShowToastResponses, unknown, ThrowOnError>({
+      url: "/tui/show-toast",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+}
+
+class Auth extends _HeyApiClient {
+  /**
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(options: Options<AuthSetData, ThrowOnError>) {
+    return (options.client ?? this._client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
       },
     })
   }
@@ -544,4 +595,5 @@ export class OpencodeClient extends _HeyApiClient {
   find = new Find({ client: this._client })
   file = new File({ client: this._client })
   tui = new Tui({ client: this._client })
+  auth = new Auth({ client: this._client })
 }

@@ -163,12 +163,12 @@ export namespace Session {
     },
   )
 
-  export async function create(parentID?: string) {
+  export async function create(parentID?: string, title?: string) {
     const result: Info = {
       id: Identifier.descending("session"),
       version: Installation.VERSION,
       parentID,
-      title: createDefaultTitle(!!parentID),
+      title: title ?? createDefaultTitle(!!parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
@@ -1056,20 +1056,28 @@ export namespace Session {
     }
     await updatePart(part)
     const app = App.info()
-    const script = `
-     [[ -f ~/.zshrc ]] && source ~/.zshrc >/dev/null 2>&1 || true
-     [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-     eval "${input.command}"
-   `
     const shell = process.env["SHELL"] ?? "bash"
-    const isFish = shell.includes("fish")
-    const args = isFish
-      ? ["-c", script] // fish with just -c
-      : ["-c", "-l", script]
+    const shellName = path.basename(shell)
+
+    const scripts: Record<string, string> = {
+      nu: input.command,
+      fish: `eval "${input.command}"`,
+    }
+
+    const script =
+      scripts[shellName] ??
+      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+       eval "${input.command}"`
+
+    const isFishOrNu = shellName === "fish" || shellName === "nu"
+    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
 
     const proc = spawn(shell, args, {
       cwd: app.path.cwd,
       signal: abort.signal,
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         TERM: "dumb",
@@ -1262,6 +1270,7 @@ export namespace Session {
                       status: "error",
                       input: value.input,
                       error: (value.error as any).toString(),
+                      metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                       time: {
                         start: match.state.time.start,
                         end: Date.now(),
