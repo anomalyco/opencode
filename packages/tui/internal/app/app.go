@@ -290,7 +290,7 @@ func (a *App) SwitchAgentReverse() (*App, tea.Cmd) {
 	return a.cycleMode(false)
 }
 
-func (a *App) CycleRecentModel() (*App, tea.Cmd) {
+func (a *App) cycleRecentModel(forward bool) (*App, tea.Cmd) {
 	recentModels := a.State.RecentlyUsedModels
 	if len(recentModels) > 5 {
 		recentModels = recentModels[:5]
@@ -299,15 +299,21 @@ func (a *App) CycleRecentModel() (*App, tea.Cmd) {
 		return a, toast.NewInfoToast("Need at least 2 recent models to cycle")
 	}
 	nextIndex := 0
+	prevIndex := 0
 	for i, recentModel := range recentModels {
 		if a.Provider != nil && a.Model != nil && recentModel.ProviderID == a.Provider.ID &&
 			recentModel.ModelID == a.Model.ID {
 			nextIndex = (i + 1) % len(recentModels)
+			prevIndex = (i - 1 + len(recentModels)) % len(recentModels)
 			break
 		}
 	}
+	targetIndex := nextIndex
+	if !forward {
+		targetIndex = prevIndex
+	}
 	for range recentModels {
-		currentRecentModel := recentModels[nextIndex%len(recentModels)]
+		currentRecentModel := recentModels[targetIndex%len(recentModels)]
 		provider, model := findModelByProviderAndModelID(
 			a.Providers,
 			currentRecentModel.ProviderID,
@@ -327,8 +333,8 @@ func (a *App) CycleRecentModel() (*App, tea.Cmd) {
 			)
 		}
 		recentModels = append(
-			recentModels[:nextIndex%len(recentModels)],
-			recentModels[nextIndex%len(recentModels)+1:]...)
+			recentModels[:targetIndex%len(recentModels)],
+			recentModels[targetIndex%len(recentModels)+1:]...)
 		if len(recentModels) < 2 {
 			a.State.RecentlyUsedModels = recentModels
 			return a, tea.Sequence(
@@ -339,6 +345,14 @@ func (a *App) CycleRecentModel() (*App, tea.Cmd) {
 	}
 	a.State.RecentlyUsedModels = recentModels
 	return a, toast.NewErrorToast("Recent model not found")
+}
+
+func (a *App) CycleRecentModel() (*App, tea.Cmd) {
+	return a.cycleRecentModel(true)
+}
+
+func (a *App) CycleRecentModelReverse() (*App, tea.Cmd) {
+	return a.cycleRecentModel(false)
 }
 
 func (a *App) SwitchToAgent(agentName string) (*App, tea.Cmd) {

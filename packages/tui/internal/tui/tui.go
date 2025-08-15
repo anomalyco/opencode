@@ -1190,6 +1190,10 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		updated, cmd := a.app.CycleRecentModel()
 		a.app = updated
 		cmds = append(cmds, cmd)
+	case commands.ModelCycleRecentReverseCommand:
+		updated, cmd := a.app.CycleRecentModelReverse()
+		a.app = updated
+		cmds = append(cmds, cmd)
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog
