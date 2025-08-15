@@ -98,6 +98,13 @@ export const RunCommand = cmd({
         }
       }
 
+      // Load available providers before attempting to parse model
+      const providers = await Provider.list()
+      if (Object.keys(providers).length === 0) {
+        UI.error("No providers available. Please set up authentication first.")
+        return
+      }
+
       const agent = await (async () => {
         if (args.agent) return Agent.get(args.agent)
         const build = Agent.get("build")
