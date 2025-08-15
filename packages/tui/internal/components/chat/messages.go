@@ -203,6 +203,11 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Properties.Part.SessionID == m.app.Session.ID {
 			cmds = append(cmds, m.renderView())
 		}
+	case opencode.EventListResponseEventMessageRemoved:
+		if msg.Properties.SessionID == m.app.Session.ID {
+			m.cache.Clear()
+			cmds = append(cmds, m.renderView())
+		}
 	case opencode.EventListResponseEventMessagePartRemoved:
 		if msg.Properties.SessionID == m.app.Session.ID {
 			// Clear the cache when a part is removed to ensure proper re-rendering

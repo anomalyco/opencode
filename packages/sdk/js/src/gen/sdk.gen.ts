@@ -77,6 +77,9 @@ import type {
   TuiClearPromptResponses,
   TuiExecuteCommandData,
   TuiExecuteCommandResponses,
+  AuthSetData,
+  AuthSetResponses,
+  AuthSetErrors,
 } from "./types.gen.js"
 import { client as _heyApiClient } from "./client.gen.js"
 
@@ -517,6 +520,22 @@ class Tui extends _HeyApiClient {
   }
 }
 
+class Auth extends _HeyApiClient {
+  /**
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(options: Options<AuthSetData, ThrowOnError>) {
+    return (options.client ?? this._client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{id}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+}
+
 export class OpencodeClient extends _HeyApiClient {
   /**
    * Respond to a permission request
@@ -544,4 +563,5 @@ export class OpencodeClient extends _HeyApiClient {
   find = new Find({ client: this._client })
   file = new File({ client: this._client })
   tui = new Tui({ client: this._client })
+  auth = new Auth({ client: this._client })
 }

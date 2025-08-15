@@ -45,6 +45,7 @@ import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { ulid } from "ulid"
+import { defer } from "../util/defer"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -763,6 +764,11 @@ export namespace Session {
       sessionID: input.sessionID,
     }
     await updateMessage(assistantMsg)
+    await using _ = defer(async () => {
+      if (assistantMsg.time.completed) return
+      await Storage.remove(`session/message/${input.sessionID}/${assistantMsg.id}`)
+      await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: assistantMsg.id })
+    })
     const tools: Record<string, AITool> = {}
 
     const processor = createProcessor(assistantMsg, model.info)
@@ -1056,10 +1062,8 @@ export namespace Session {
      eval "${input.command}"
    `
     const shell = process.env["SHELL"] ?? "bash"
-    const isFish = shell.includes("fish")
-    const args = isFish
-      ? ["-c", script] // fish with just -c
-      : ["-c", "-l", script]
+    const supportsLoginFlag = !shell.includes("fish") && !shell.includes("nu")
+    const args = supportsLoginFlag ? ["-c", "-l", script] : ["-c", script]
 
     const proc = spawn(shell, args, {
       cwd: app.path.cwd,

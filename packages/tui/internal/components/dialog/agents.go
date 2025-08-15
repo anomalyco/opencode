@@ -76,20 +76,15 @@ func (a agentSelectItem) Render(
 
 	agentName := a.displayName
 
-	// For user agents and subagents, show description; for built-in, show mode
+	// Determine if agent is built-in or custom using the agent's builtIn field
 	var displayText string
-	if a.description != "" && (a.mode == "all" || a.mode == "subagent") {
-		// User agent or subagent with description
-		displayText = a.description
+	if a.agent.BuiltIn {
+		displayText = "(built-in)"
 	} else {
-		// Built-in without description - show mode
-		switch a.mode {
-		case "primary":
-			displayText = "(built-in)"
-		case "all":
+		if a.description != "" {
+			displayText = a.description
+		} else {
 			displayText = "(user)"
-		default:
-			displayText = ""
 		}
 	}
 
@@ -206,23 +201,19 @@ func (a *agentDialog) calculateOptimalWidth(agents []agentSelectItem) int {
 	for _, agent := range agents {
 		// Calculate the width needed for this item: "AgentName - Description" (visual improvement)
 		itemWidth := len(agent.displayName)
-		if agent.description != "" && (agent.mode == "all" || agent.mode == "subagent") {
-			// User agent or subagent - use description (capped to maxDescriptionLength)
-			descLength := len(agent.description)
-			if descLength > maxDescriptionLength {
-				descLength = maxDescriptionLength
-			}
-			itemWidth += descLength + 3 // " - "
+
+		if agent.agent.BuiltIn {
+			itemWidth += len("(built-in)") + 3 // " - "
 		} else {
-			// Built-in without description - use mode
-			var modeText string
-			switch agent.mode {
-			case "primary":
-				modeText = "(built-in)"
-			case "all":
-				modeText = "(user)"
+			if agent.description != "" {
+				descLength := len(agent.description)
+				if descLength > maxDescriptionLength {
+					descLength = maxDescriptionLength
+				}
+				itemWidth += descLength + 3 // " - "
+			} else {
+				itemWidth += len("(user)") + 3 // " - "
 			}
-			itemWidth += len(modeText) + 3 // " - "
 		}
 
 		if itemWidth > maxWidth {
