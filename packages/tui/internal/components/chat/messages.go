@@ -39,6 +39,7 @@ type MessagesComponent interface {
 	CopyLastMessage() (tea.Model, tea.Cmd)
 	UndoLastMessage() (tea.Model, tea.Cmd)
 	RedoLastMessage() (tea.Model, tea.Cmd)
+	ScrollToMessage(messageID string) (tea.Model, tea.Cmd)
 }
 
 type messagesComponent struct {
@@ -57,6 +58,7 @@ type messagesComponent struct {
 	partCount          int
 	lineCount          int
 	selection          *selection
+	messagePositions   map[string]int // map message ID to line position
 }
 
 type selection struct {
@@ -228,6 +230,7 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rendering = false
 		m.clipboard = msg.clipboard
 		m.loading = false
+		m.messagePositions = msg.messagePositions
 		m.tail = m.viewport.AtBottom()
 
 		// Preserve scroll across reflow
@@ -256,11 +259,12 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 type renderCompleteMsg struct {
-	viewport  viewport.Model
-	clipboard []string
-	header    string
-	partCount int
-	lineCount int
+	viewport         viewport.Model
+	clipboard        []string
+	header           string
+	partCount        int
+	lineCount        int
+	messagePositions map[string]int
 }
 
 func (m *messagesComponent) renderView() tea.Cmd {
@@ -286,6 +290,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		blocks := make([]string, 0)
 		partCount := 0
 		lineCount := 0
+		messagePositions := make(map[string]int) // Track message ID to line position
 
 		orphanedToolCalls := make([]opencode.ToolPart, 0)
 
@@ -308,6 +313,9 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 			switch casted := message.Info.(type) {
 			case opencode.UserMessage:
+				// Track the position of this user message
+				messagePositions[casted.ID] = lineCount
+
 				if casted.ID == m.app.Session.Revert.MessageID {
 					reverted = true
 					revertedMessageCount = 1
@@ -767,11 +775,12 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		}
 
 		return renderCompleteMsg{
-			header:    header,
-			clipboard: clipboard,
-			viewport:  viewport,
-			partCount: partCount,
-			lineCount: lineCount,
+			header:           header,
+			clipboard:        clipboard,
+			viewport:         viewport,
+			partCount:        partCount,
+			lineCount:        lineCount,
+			messagePositions: messagePositions,
 		}
 	}
 }
@@ -1190,6 +1199,18 @@ func (m *messagesComponent) RedoLastMessage() (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m *messagesComponent) ScrollToMessage(messageID string) (tea.Model, tea.Cmd) {
+	if m.messagePositions == nil {
+		return m, nil
+	}
+
+	if position, exists := m.messagePositions[messageID]; exists {
+		m.viewport.SetYOffset(position)
+		m.tail = false // Stop auto-scrolling to bottom when manually navigating
+	}
+	return m, nil
+}
+
 func NewMessagesComponent(app *app.App) MessagesComponent {
 	vp := viewport.New()
 	vp.KeyMap = viewport.KeyMap{}
@@ -1218,5 +1239,6 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 		showThinkingBlocks: showThinkingBlocks,
 		cache:              NewPartCache(),
 		tail:               true,
+		messagePositions:   make(map[string]int),
 	}
 }

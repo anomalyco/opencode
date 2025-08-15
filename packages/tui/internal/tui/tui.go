@@ -631,7 +631,39 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, util.CmdHandler(app.SessionLoadedMsg{})
 	case app.SessionCreatedMsg:
 		a.app.Session = msg.Session
-		return a, util.CmdHandler(app.SessionLoadedMsg{})
+	case dialog.ScrollToMessageMsg:
+		updated, cmd := a.messages.ScrollToMessage(msg.MessageID)
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
+	case dialog.RestoreToMessageMsg:
+		cmd := func() tea.Msg {
+			// Find next user message after target
+			var nextMessageID string
+			for i := msg.Index + 1; i < len(a.app.Messages); i++ {
+				if userMsg, ok := a.app.Messages[i].Info.(opencode.UserMessage); ok {
+					nextMessageID = userMsg.ID
+					break
+				}
+			}
+
+			var response *opencode.Session
+			var err error
+
+			if nextMessageID == "" {
+				// Last message - use unrevert to restore full conversation
+				response, err = a.app.Client.Session.Unrevert(context.Background(), a.app.Session.ID)
+			} else {
+				// Revert to next message to make target the last visible
+				response, err = a.app.Client.Session.Revert(context.Background(), a.app.Session.ID,
+					opencode.SessionRevertParams{MessageID: opencode.F(nextMessageID)})
+			}
+
+			if err != nil || response == nil {
+				return toast.NewErrorToast("Failed to restore to message")
+			}
+			return app.MessageRevertedMsg{Session: *response, Message: app.Message{}}
+		}
+		cmds = append(cmds, cmd)
 	case app.MessageRevertedMsg:
 		if msg.Session.ID == a.app.Session.ID {
 			a.app.Session = &msg.Session
@@ -691,6 +723,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/tui/open-sessions":
 			sessionDialog := dialog.NewSessionDialog(a.app)
 			a.modal = sessionDialog
+		case "/tui/open-navigation":
+			navigationDialog := dialog.NewNavigationDialog(a.app)
+			a.modal = navigationDialog
 		case "/tui/open-themes":
 			themeDialog := dialog.NewThemeDialog()
 			a.modal = themeDialog
@@ -1106,6 +1141,12 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
 		a.modal = sessionDialog
+	case commands.SessionNavigationCommand:
+		if a.app.Session.ID == "" {
+			return a, toast.NewErrorToast("No active session")
+		}
+		navigationDialog := dialog.NewNavigationDialog(a.app)
+		a.modal = navigationDialog
 	case commands.SessionShareCommand:
 		if a.app.Session.ID == "" {
 			return a, nil
