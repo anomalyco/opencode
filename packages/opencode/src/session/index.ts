@@ -1056,14 +1056,22 @@ export namespace Session {
     }
     await updatePart(part)
     const app = App.info()
-    const script = `
-     [[ -f ~/.zshrc ]] && source ~/.zshrc >/dev/null 2>&1 || true
-     [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-     eval "${input.command}"
-   `
     const shell = process.env["SHELL"] ?? "bash"
-    const supportsLoginFlag = !shell.includes("fish") && !shell.includes("nu")
-    const args = supportsLoginFlag ? ["-c", "-l", script] : ["-c", script]
+    const shellName = path.basename(shell)
+
+    const scripts: Record<string, string> = {
+      nu: input.command,
+      fish: `eval "${input.command}"`,
+    }
+
+    const script =
+      scripts[shellName] ??
+      `[[ -f ~/.zshrc ]] && source ~/.zshrc >/dev/null 2>&1 || true
+       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+       eval "${input.command}"`
+
+    const isFishOrNu = shellName === "fish" || shellName === "nu"
+    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
 
     const proc = spawn(shell, args, {
       cwd: app.path.cwd,
