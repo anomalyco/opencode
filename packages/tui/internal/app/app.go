@@ -50,6 +50,7 @@ type App struct {
 	compactCancel     context.CancelFunc
 	IsLeaderSequence  bool
 	IsBashMode        bool
+	ScrollSpeed       int
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -198,6 +199,7 @@ func New(
 		InitialPrompt:  initialPrompt,
 		InitialAgent:   initialAgent,
 		InitialSession: initialSession,
+		ScrollSpeed:    int(configInfo.Tui.ScrollSpeed),
 	}
 
 	return app, nil
@@ -725,7 +727,7 @@ func (a *App) MarkProjectInitialized(ctx context.Context) error {
 }
 
 func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
-	session, err := a.Client.Session.New(ctx)
+	session, err := a.Client.Session.New(ctx, opencode.SessionNewParams{})
 	if err != nil {
 		return nil, err
 	}

@@ -1194,11 +1194,7 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 	vp := viewport.New()
 	vp.KeyMap = viewport.KeyMap{}
 
-	if app.State.ScrollSpeed != nil && *app.State.ScrollSpeed > 0 {
-		vp.MouseWheelDelta = *app.State.ScrollSpeed
-	} else {
-		vp.MouseWheelDelta = 2
-	}
+	vp.MouseWheelDelta = app.ScrollSpeed
 
 	// Default to showing tool details, hidden thinking blocks
 	showToolDetails := true

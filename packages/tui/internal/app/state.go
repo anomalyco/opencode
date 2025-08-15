@@ -28,7 +28,6 @@ type AgentModel struct {
 
 type State struct {
 	Theme              string                `toml:"theme"`
-	ScrollSpeed        *int                  `toml:"scroll_speed"`
 	AgentModel         map[string]AgentModel `toml:"agent_model"`
 	Provider           string                `toml:"provider"`
 	Model              string                `toml:"model"`

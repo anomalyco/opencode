@@ -39,10 +39,10 @@ func NewSessionService(opts ...option.RequestOption) (r *SessionService) {
 }
 
 // Create a new session
-func (r *SessionService) New(ctx context.Context, opts ...option.RequestOption) (res *Session, err error) {
+func (r *SessionService) New(ctx context.Context, body SessionNewParams, opts ...option.RequestOption) (res *Session, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "session"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return
 }
 
@@ -2322,6 +2322,15 @@ func (r *SessionMessagesResponse) UnmarshalJSON(data []byte) (err error) {
 
 func (r sessionMessagesResponseJSON) RawJSON() string {
 	return r.raw
+}
+
+type SessionNewParams struct {
+	ParentID param.Field[string] `json:"parentID"`
+	Title    param.Field[string] `json:"title"`
+}
+
+func (r SessionNewParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
 }
 
 type SessionUpdateParams struct {

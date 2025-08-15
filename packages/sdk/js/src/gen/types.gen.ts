@@ -576,6 +576,15 @@ export type Config = {
    * Custom keybind configurations
    */
   keybinds?: KeybindsConfig
+  /**
+   * TUI specific settings
+   */
+  tui?: {
+    /**
+     * TUI scroll speed
+     */
+    scroll_speed: number
+  }
   plugin?: Array<string>
   snapshot?: boolean
   /**
