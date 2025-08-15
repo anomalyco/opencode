@@ -463,6 +463,16 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          editor: z
+            .object({
+              summary_thresholds: z
+                .object({
+                  lines: z.number().min(1).optional(),
+                  chars: z.number().min(1).optional(),
+                })
+                .optional(),
+            })
+            .optional(),
         })
         .optional(),
     })

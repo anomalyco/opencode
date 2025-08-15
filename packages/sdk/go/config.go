@@ -693,14 +693,16 @@ func (r configCommandJSON) RawJSON() string {
 }
 
 type ConfigExperimental struct {
-	Hook ConfigExperimentalHook `json:"hook"`
-	JSON configExperimentalJSON `json:"-"`
+	Hook   ConfigExperimentalHook   `json:"hook"`
+	Editor ConfigExperimentalEditor `json:"editor"`
+	JSON   configExperimentalJSON   `json:"-"`
 }
 
 // configExperimentalJSON contains the JSON metadata for the struct
 // [ConfigExperimental]
 type configExperimentalJSON struct {
 	Hook        apijson.Field
+	Editor      apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -779,6 +781,50 @@ func (r *ConfigExperimentalHookSessionCompleted) UnmarshalJSON(data []byte) (err
 }
 
 func (r configExperimentalHookSessionCompletedJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigExperimentalEditor struct {
+	SummaryThresholds ConfigExperimentalEditorSummaryThresholds `json:"summary_thresholds"`
+	JSON              configExperimentalEditorJSON              `json:"-"`
+}
+
+// configExperimentalEditorJSON contains the JSON metadata for the struct
+// [ConfigExperimentalEditor]
+type configExperimentalEditorJSON struct {
+	SummaryThresholds apijson.Field
+	raw               string
+	ExtraFields       map[string]apijson.Field
+}
+
+func (r *ConfigExperimentalEditor) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configExperimentalEditorJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigExperimentalEditorSummaryThresholds struct {
+	Lines int64                                         `json:"lines"`
+	Chars int64                                         `json:"chars"`
+	JSON  configExperimentalEditorSummaryThresholdsJSON `json:"-"`
+}
+
+// configExperimentalEditorSummaryThresholdsJSON contains the JSON metadata for the struct
+// [ConfigExperimentalEditorSummaryThresholds]
+type configExperimentalEditorSummaryThresholdsJSON struct {
+	Lines       apijson.Field
+	Chars       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigExperimentalEditorSummaryThresholds) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configExperimentalEditorSummaryThresholdsJSON) RawJSON() string {
 	return r.raw
 }
 

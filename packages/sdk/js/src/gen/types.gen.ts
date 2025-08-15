@@ -761,6 +761,12 @@ export type Config = {
         }
       }>
     }
+    editor?: {
+      summary_thresholds?: {
+        lines?: number
+        chars?: number
+      }
+    }
   }
 }
 

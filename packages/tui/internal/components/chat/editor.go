@@ -652,8 +652,20 @@ func (m *editorComponent) shouldSummarizePastedText(text string) bool {
 	lineCount := len(lines)
 	charCount := len(text)
 
-	// Consider text long if it has more than 3 lines or more than 150 characters
-	return lineCount > 3 || charCount > 150
+	// Default thresholds
+	linesThreshold := int64(3)
+	charsThreshold := int64(150)
+
+	// Override with config if provided
+	if m.app.Config != nil && m.app.Config.Experimental.Editor.SummaryThresholds.Lines > 0 {
+		linesThreshold = m.app.Config.Experimental.Editor.SummaryThresholds.Lines
+	}
+	if m.app.Config != nil && m.app.Config.Experimental.Editor.SummaryThresholds.Chars > 0 {
+		charsThreshold = m.app.Config.Experimental.Editor.SummaryThresholds.Chars
+	}
+
+	// Consider text long if it exceeds the thresholds
+	return lineCount > int(linesThreshold) || charCount > int(charsThreshold)
 }
 
 // handleLongPaste handles long pasted text by creating a summary attachment
