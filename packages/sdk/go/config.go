@@ -80,6 +80,8 @@ type Config struct {
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
 	Theme string `json:"theme"`
+	// TUI specific settings
+	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
 	Username string     `json:"username"`
 	JSON     configJSON `json:"-"`
@@ -108,6 +110,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	Tui               apijson.Field
 	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
@@ -1652,6 +1655,28 @@ func (r ConfigShare) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+// TUI specific settings
+type ConfigTui struct {
+	// TUI scroll speed
+	ScrollSpeed float64       `json:"scroll_speed,required"`
+	JSON        configTuiJSON `json:"-"`
+}
+
+// configTuiJSON contains the JSON metadata for the struct [ConfigTui]
+type configTuiJSON struct {
+	ScrollSpeed apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configTuiJSON) RawJSON() string {
+	return r.raw
 }
 
 type KeybindsConfig struct {

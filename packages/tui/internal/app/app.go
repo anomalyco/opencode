@@ -50,6 +50,7 @@ type App struct {
 	compactCancel     context.CancelFunc
 	IsLeaderSequence  bool
 	IsBashMode        bool
+	ScrollSpeed       int
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -198,6 +199,7 @@ func New(
 		InitialPrompt:  initialPrompt,
 		InitialAgent:   initialAgent,
 		InitialSession: initialSession,
+		ScrollSpeed:    int(configInfo.Tui.ScrollSpeed),
 	}
 
 	return app, nil

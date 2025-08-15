@@ -273,11 +273,16 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const TUI = z.object({
+    scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+  })
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      tui: TUI.optional().describe("TUI specific settings"),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z
