@@ -1076,6 +1076,7 @@ export namespace Session {
     const proc = spawn(shell, args, {
       cwd: app.path.cwd,
       signal: abort.signal,
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         TERM: "dumb",
