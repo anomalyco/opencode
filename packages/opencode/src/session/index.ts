@@ -1066,7 +1066,8 @@ export namespace Session {
 
     const script =
       scripts[shellName] ??
-      `[[ -f ~/.zshrc ]] && source ~/.zshrc >/dev/null 2>&1 || true
+      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
        [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
        eval "${input.command}"`
 
