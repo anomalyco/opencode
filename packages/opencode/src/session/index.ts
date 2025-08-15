@@ -341,14 +341,14 @@ export namespace Session {
     }
   }
 
-  export async function copy(sessionID: string) {
+  export async function fork(sessionID: string) {
     const originalSession = await get(sessionID)
 
     // Create a new session
     const newSession = await create(originalSession.parentID)
 
-    // Update the new session's title to indicate it's a copy
-    const newTitle = "Copy of " + originalSession.title
+    // Update the new session's title to indicate it's a fork
+    const newTitle = "Fork of " + originalSession.title
     await update(newSession.id, (draft) => {
       draft.title = newTitle
     })

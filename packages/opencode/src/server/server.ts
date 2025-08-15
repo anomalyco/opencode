@@ -298,13 +298,13 @@ export namespace Server {
         },
       )
       .post(
-        "/session/:id/copy",
+        "/session/:id/fork",
         describeRoute({
-          description: "Copy a session and all its data",
-          operationId: "session.copy",
+          description: "Fork a session and all its data",
+          operationId: "session.fork",
           responses: {
             200: {
-              description: "Successfully copied session",
+              description: "Successfully forked session",
               content: {
                 "application/json": {
                   schema: resolver(Session.Info),
@@ -321,7 +321,7 @@ export namespace Server {
         ),
         async (c) => {
           const sessionID = c.req.valid("param").id
-          const newSession = await Session.copy(sessionID)
+          const newSession = await Session.fork(sessionID)
           return c.json(newSession)
         },
       )

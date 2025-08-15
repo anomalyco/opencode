@@ -188,10 +188,10 @@ func (s *sessionDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.updateListItems()
 					return s, textinput.Blink
 				}
-			case "c":
+			case "f":
 				if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
 					originalSession := s.sessions[idx]
-					return s, s.copySession(originalSession)
+					return s, s.forkSession(originalSession)
 				}
 			case "x", "delete", "backspace":
 				if _, idx := s.list.GetSelectedItem(); idx >= 0 && idx < len(s.sessions) {
@@ -253,7 +253,7 @@ func (s *sessionDialog) Render(background string) string {
 	keyStyle := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundPanel()).Render
 	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
 
-	leftHelp := keyStyle("n") + mutedStyle(" new session") + " " + keyStyle("r") + mutedStyle(" rename") + " " + keyStyle("c") + mutedStyle(" copy")
+	leftHelp := keyStyle("n") + mutedStyle(" new session") + " " + keyStyle("r") + mutedStyle(" rename") + " " + keyStyle("f") + mutedStyle(" fork")
 	rightHelp := keyStyle("x/del") + mutedStyle(" delete session")
 
 	bgColor := t.BackgroundPanel()
@@ -330,14 +330,14 @@ func (s *sessionDialog) deleteSession(sessionID string) tea.Cmd {
 	}
 }
 
-func (s *sessionDialog) copySession(originalSession opencode.Session) tea.Cmd {
+func (s *sessionDialog) forkSession(originalSession opencode.Session) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 
-		// Call the new copy API endpoint
-		_, err := s.app.Client.Session.Copy(ctx, originalSession.ID)
+		// Call the new fork API endpoint
+		_, err := s.app.Client.Session.Fork(ctx, originalSession.ID)
 		if err != nil {
-			return toast.NewErrorToast("Failed to copy session: " + err.Error())()
+			return toast.NewErrorToast("Failed to fork session: " + err.Error())()
 		}
 
 		// Refresh the session list to include the new session
@@ -352,7 +352,7 @@ func (s *sessionDialog) copySession(originalSession opencode.Session) tea.Cmd {
 		s.sessions = filteredSessions
 		s.updateListItems()
 
-		return toast.NewSuccessToast("Session copied successfully")()
+		return toast.NewSuccessToast("Session forked successfully")()
 	}
 }
 
