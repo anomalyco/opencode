@@ -44,16 +44,31 @@ export namespace Config {
 
     result.agent = result.agent || {}
     const markdownAgents = [
-      ...(await Filesystem.globUp("agent/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/agent/*.md", app.path.cwd, app.path.root)),
+      ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/agent/**/*.md", app.path.cwd, app.path.root)),
     ]
     for (const item of markdownAgents) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
 
+      // Extract relative path from agent folder for nested agents
+      let agentName = path.basename(item, ".md")
+      const agentFolderPath = item.includes("/.opencode/agent/")
+        ? item.split("/.opencode/agent/")[1]
+        : item.includes("/agent/")
+          ? item.split("/agent/")[1]
+          : agentName + ".md"
+
+      // If agent is in a subfolder, include folder path in name
+      if (agentFolderPath.includes("/")) {
+        const relativePath = agentFolderPath.replace(".md", "")
+        const pathParts = relativePath.split("/")
+        agentName = pathParts.slice(0, -1).join("/").toUpperCase() + "/" + pathParts[pathParts.length - 1].toUpperCase()
+      }
+
       const config = {
-        name: path.basename(item, ".md"),
+        name: agentName,
         ...md.data,
         prompt: md.content.trim(),
       }
