@@ -409,6 +409,7 @@ export namespace Config {
           }),
         )
         .optional(),
+      lsp_server_autoinstall: z.boolean().optional(),
       lsp: z
         .record(
           z.string(),

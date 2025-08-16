@@ -7,6 +7,7 @@ import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
+import { Config } from "../config/config"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -30,6 +31,15 @@ export namespace LSPServer {
       if (!first.value) return app.path.root
       return path.dirname(first.value)
     }
+  }
+
+  async function may_autoinstall(lsp: string) {
+    const cfg = await Config.get()
+    if (cfg.lsp_server_autoinstall === false) {
+      log.info(`Skipping LSP server ${lsp} autoinstallation`)
+      return false
+    }
+    return true
   }
 
   export interface Info {
@@ -148,6 +158,7 @@ export namespace LSPServer {
       if (!eslint) return
       const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
       if (!(await Bun.file(serverPath).exists())) {
+        if (!may_autoinstall("VS Code ESLint")) return
         log.info("downloading and building VS Code ESLint server")
         const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
         if (!response.ok) return
@@ -323,6 +334,7 @@ export namespace LSPServer {
             return
           }
 
+          if (!may_autoinstall("elixir-ls")) return
           log.info("downloading elixir-ls from GitHub releases")
 
           const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
@@ -372,6 +384,7 @@ export namespace LSPServer {
           return
         }
 
+        if (!may_autoinstall("zls")) return
         log.info("downloading zls from GitHub releases")
 
         const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
@@ -527,6 +540,7 @@ export namespace LSPServer {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
+        if (!may_autoinstall("clangd")) return
         log.info("downloading clangd from GitHub releases")
 
         const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
