@@ -88,6 +88,44 @@ Here are some common issues and how to resolve them.
 
 ---
 
+### ProviderInitError
+
+If you encounter a ProviderInitError, you likely have an invalid or corrupted configuration.
+
+To resolve this:
+
+1. First, verify your provider is set up correctly by following the [providers guide](/docs/providers)
+2. If the issue persists, try clearing your stored configuration:
+
+   ```bash
+   rm -rf ~/.local/share/opencode
+   ```
+
+3. Re-authenticate with your provider:
+   ```bash
+   opencode auth login <provider>
+   ```
+
+---
+
+### AI_APICallError and provider package issues
+
+If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+
+To resolve provider package issues:
+
+1. Clear the provider package cache:
+
+   ```bash
+   rm -rf ~/.cache/opencode
+   ```
+
+2. Restart opencode to reinstall the latest provider packages
+
+This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+
+---
+
 ### Copy/paste not working on Linux
 
 Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
@@ -116,4 +154,3 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
-
