@@ -67,6 +67,19 @@ export namespace Config {
       throw new InvalidError({ path: item }, { cause: parsed.error })
     }
 
+    const mcpFiles = [
+      ...(await Filesystem.globUp("mcp/*.json", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/mcp/*.json", app.path.cwd, app.path.root)),
+    ]
+    for (const item of mcpFiles) {
+      const mcp = await loadMcpFile(item)
+      const name = path.basename(item, ".json")
+      if (!result.mcp) {
+        result.mcp = {}
+      }
+      result.mcp[name] = mcp
+    }
+
     // Load mode markdown files
     result.mode = result.mode || {}
     const markdownModes = [
@@ -444,7 +457,7 @@ export namespace Config {
     return result
   })
 
-  async function loadFile(filepath: string): Promise<Info> {
+  async function loadTextFile(filepath: string) {
     log.info("loading", { path: filepath })
     let text = await Bun.file(filepath)
       .text()
@@ -452,11 +465,27 @@ export namespace Config {
         if (err.code === "ENOENT") return
         throw new JsonError({ path: filepath }, { cause: err })
       })
+    return text
+  }
+
+  async function loadFile(filepath: string): Promise<Info> {
+    const text = await loadTextFile(filepath)
     if (!text) return {}
     return load(text, filepath)
   }
 
-  async function load(text: string, configFilepath: string) {
+  async function loadMcpFile(filepath: string): Promise<Mcp> {
+    const text = await loadTextFile(filepath)
+    if (!text) {
+      throw new JsonError({
+        path: filepath,
+        message: "Empty json file",
+      })
+    }
+    return loadMcp(text, filepath)
+  }
+
+  async function loadJson(text: string, configFilepath: string) {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
@@ -518,7 +547,11 @@ export namespace Config {
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
+    return data
+  }
 
+  async function load(text: string, configFilepath: string) {
+    const data = await loadJson(text, configFilepath)
     const parsed = Info.safeParse(data)
     if (parsed.success) {
       if (!parsed.data.$schema) {
@@ -546,6 +579,16 @@ export namespace Config {
       message: z.string().optional(),
     }),
   )
+
+  async function loadMcp(text: string, configFilepath: string) {
+    const data = await loadJson(text, configFilepath)
+    const parsed = Mcp.safeParse(data)
+    if (parsed.success) {
+      return parsed.data
+    }
+
+    throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+  }
 
   export const InvalidError = NamedError.create(
     "ConfigInvalidError",
