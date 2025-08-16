@@ -55,9 +55,9 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "prompt to use",
       })
-      .option("mode", {
+      .option("agent", {
         type: "string",
-        describe: "mode to use",
+        describe: "agent to use",
       })
       .option("port", {
         type: "number",
@@ -129,7 +129,7 @@ export const TuiCommand = cmd({
             ...cmd,
             ...(args.model ? ["--model", args.model] : []),
             ...(args.prompt ? ["--prompt", args.prompt] : []),
-            ...(args.mode ? ["--mode", args.mode] : []),
+            ...(args.agent ? ["--agent", args.agent] : []),
             ...(sessionID ? ["--session", sessionID] : []),
           ],
           cwd,
