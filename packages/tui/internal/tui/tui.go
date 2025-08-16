@@ -621,6 +621,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		}
 	case app.SessionSelectedMsg:
+		updated, cmd := a.messages.Update(msg)
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
+
 		messages, err := a.app.ListMessages(context.Background(), msg.ID)
 		if err != nil {
 			slog.Error("Failed to list messages", "error", err.Error())
@@ -628,7 +632,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.app.Session = msg
 		a.app.Messages = messages
-		return a, util.CmdHandler(app.SessionLoadedMsg{})
+		cmds = append(cmds, util.CmdHandler(app.SessionLoadedMsg{}))
+		return a, tea.Batch(cmds...)
 	case app.SessionCreatedMsg:
 		a.app.Session = msg.Session
 	case dialog.ScrollToMessageMsg:
