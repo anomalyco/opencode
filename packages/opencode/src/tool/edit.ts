@@ -74,7 +74,11 @@ export const EditTool = Tool.define("edit", {
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+
+      const fileLineEnding = contentOld.includes("\r\n") ? "\r\n" : "\n"
+      const normalizedNewString = params.newString.replace(/\r\n|\r|\n/g, fileLineEnding)
+
+      contentNew = replace(contentOld, params.oldString, normalizedNewString, params.replaceAll)
 
       diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
       if (agent.permission.edit === "ask") {
@@ -182,20 +186,14 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
     }
 
     if (matches) {
-      let matchStartIndex = 0
-      for (let k = 0; k < i; k++) {
-        matchStartIndex += originalLines[k].length + 1
+      const matchingLines = originalLines.slice(i, i + searchLines.length)
+      let matchString = matchingLines.join("\n")
+
+      if (matchString.endsWith("\r")) {
+        matchString = matchString.slice(0, -1)
       }
 
-      let matchEndIndex = matchStartIndex
-      for (let k = 0; k < searchLines.length; k++) {
-        matchEndIndex += originalLines[i + k].length
-        if (k < searchLines.length - 1) {
-          matchEndIndex += 1 // Add newline character except for the last line
-        }
-      }
-
-      yield content.substring(matchStartIndex, matchEndIndex)
+      yield matchString
     }
   }
 }
