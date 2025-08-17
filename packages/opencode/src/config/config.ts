@@ -72,7 +72,14 @@ export namespace Config {
       ...(await Filesystem.globUp(".opencode/mcp/*.json", app.path.cwd, app.path.root)),
     ]
     for (const item of mcpFiles) {
-      const mcp = await loadMcpFile(item)
+      const text = await loadTextFile(item)
+      if (!text) {
+        throw new JsonError({
+          path: item,
+          message: "Empty json file",
+        })
+      }
+      const mcp = await loadMcp(text, item)
       const name = path.basename(item, ".json")
       if (!result.mcp) {
         result.mcp = {}
@@ -472,17 +479,6 @@ export namespace Config {
     const text = await loadTextFile(filepath)
     if (!text) return {}
     return load(text, filepath)
-  }
-
-  async function loadMcpFile(filepath: string): Promise<Mcp> {
-    const text = await loadTextFile(filepath)
-    if (!text) {
-      throw new JsonError({
-        path: filepath,
-        message: "Empty json file",
-      })
-    }
-    return loadMcp(text, filepath)
   }
 
   async function loadJson(text: string, configFilepath: string) {
