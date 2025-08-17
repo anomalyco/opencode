@@ -1150,6 +1150,7 @@ export namespace Session {
         try {
           let currentText: MessageV2.TextPart | undefined
           let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+          let tollCalled = false;
 
           for await (const value of stream.fullStream) {
             log.info("part", {
@@ -1219,6 +1220,7 @@ export namespace Session {
                 break
 
               case "tool-call": {
+                tollCalled = true;
                 const match = toolcalls[value.toolCallId]
                 if (match) {
                   const part = await updatePart({
@@ -1254,6 +1256,7 @@ export namespace Session {
                     },
                   })
                   delete toolcalls[value.toolCallId]
+                  tollCalled = false;
                 }
                 break
               }
@@ -1337,14 +1340,14 @@ export namespace Session {
                 break
 
               case "text-delta":
-                if (currentText) {
+                if (currentText && !tollCalled) {
                   currentText.text += value.text
                   if (currentText.text) await updatePart(currentText)
                 }
                 break
 
               case "text-end":
-                if (currentText) {
+                if (currentText && !tollCalled) {
                   currentText.text = currentText.text.trimEnd()
                   currentText.time = {
                     start: Date.now(),
