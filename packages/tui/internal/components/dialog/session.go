@@ -234,7 +234,10 @@ func (s *sessionDialog) Render(background string) string {
 		t := theme.CurrentTheme()
 		renameView := s.renameInput.View()
 
-		mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
+		mutedStyle := styles.NewStyle().
+			Foreground(t.TextMuted()).
+			Background(t.BackgroundPanel()).
+			Render
 		helpText := mutedStyle("Enter to confirm, Esc to cancel")
 		helpText = styles.NewStyle().PaddingLeft(1).PaddingTop(1).Render(helpText)
 
@@ -245,11 +248,15 @@ func (s *sessionDialog) Render(background string) string {
 	listView := s.list.View()
 
 	t := theme.CurrentTheme()
-	keyStyle := styles.NewStyle().Foreground(t.Text()).Background(t.BackgroundPanel()).Render
+	keyStyle := styles.NewStyle().
+		Foreground(t.Text()).
+		Background(t.BackgroundPanel()).
+		Bold(true).
+		Render
 	mutedStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundPanel()).Render
 
-	leftHelp := keyStyle("n") + mutedStyle(" new session") + " " + keyStyle("r") + mutedStyle(" rename")
-	rightHelp := keyStyle("x/del") + mutedStyle(" delete session")
+	leftHelp := keyStyle("n") + mutedStyle(" new   ") + keyStyle("r") + mutedStyle(" rename")
+	rightHelp := keyStyle("x/del") + mutedStyle(" delete")
 
 	bgColor := t.BackgroundPanel()
 	helpText := layout.Render(layout.FlexOptions{

@@ -5,8 +5,7 @@ import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { AuthAnthropic } from "../auth/anthropic"
-import { AuthCopilot } from "../auth/copilot"
+import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -26,103 +25,13 @@ export namespace Provider {
   type Source = "env" | "config" | "custom" | "api"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic(provider) {
-      const access = await AuthAnthropic.access()
-      if (!access)
-        return {
-          autoload: false,
-          options: {
-            headers: {
-              "anthropic-beta":
-                "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-            },
-          },
-        }
-      for (const model of Object.values(provider.models)) {
-        model.cost = {
-          input: 0,
-          output: 0,
-        }
-      }
+    async anthropic() {
       return {
-        autoload: true,
+        autoload: false,
         options: {
-          apiKey: "",
-          async fetch(input: any, init: any) {
-            const access = await AuthAnthropic.access()
-            const headers = {
-              ...init.headers,
-              authorization: `Bearer ${access}`,
-              "anthropic-beta":
-                "oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-            }
-            delete headers["x-api-key"]
-            return fetch(input, {
-              ...init,
-              headers,
-            })
-          },
-        },
-      }
-    },
-    "github-copilot": async (provider) => {
-      const copilot = await AuthCopilot()
-      if (!copilot) return { autoload: false }
-      let info = await Auth.get("github-copilot")
-      if (!info || info.type !== "oauth") return { autoload: false }
-
-      if (provider && provider.models) {
-        for (const model of Object.values(provider.models)) {
-          model.cost = {
-            input: 0,
-            output: 0,
-          }
-        }
-      }
-
-      return {
-        autoload: true,
-        options: {
-          apiKey: "",
-          async fetch(input: any, init: any) {
-            const info = await Auth.get("github-copilot")
-            if (!info || info.type !== "oauth") return
-            if (!info.access || info.expires < Date.now()) {
-              const tokens = await copilot.access(info.refresh)
-              if (!tokens) throw new Error("GitHub Copilot authentication expired")
-              await Auth.set("github-copilot", {
-                type: "oauth",
-                ...tokens,
-              })
-              info.access = tokens.access
-            }
-            let isAgentCall = false
-            let isVisionRequest = false
-            try {
-              const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body
-              if (body?.messages) {
-                isAgentCall = body.messages.some((msg: any) => msg.role && ["tool", "assistant"].includes(msg.role))
-                isVisionRequest = body.messages.some(
-                  (msg: any) =>
-                    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
-                )
-              }
-            } catch {}
-            const headers: Record<string, string> = {
-              ...init.headers,
-              ...copilot.HEADERS,
-              Authorization: `Bearer ${info.access}`,
-              "Openai-Intent": "conversation-edits",
-              "X-Initiator": isAgentCall ? "agent" : "user",
-            }
-            if (isVisionRequest) {
-              headers["Copilot-Vision-Request"] = "true"
-            }
-            delete headers["x-api-key"]
-            return fetch(input, {
-              ...init,
-              headers,
-            })
+          headers: {
+            "anthropic-beta":
+              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
       }
@@ -348,6 +257,17 @@ export namespace Provider {
       if (result && (result.autoload || providers[providerID])) {
         mergeProvider(providerID, result.options ?? {}, "custom", result.getModel)
       }
+    }
+
+    for (const plugin of await Plugin.list()) {
+      if (!plugin.auth) continue
+      const providerID = plugin.auth.provider
+      if (disabled.has(providerID)) continue
+      const auth = await Auth.get(providerID)
+      if (!auth) continue
+      if (!plugin.auth.loader) continue
+      const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+      mergeProvider(plugin.auth.provider, options ?? {}, "custom")
     }
 
     // load config

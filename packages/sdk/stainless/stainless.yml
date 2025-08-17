@@ -113,7 +113,9 @@ resources:
       toolStateError: ToolStateError
 
     methods:
+      get: get /session/{id}
       list: get /session
+      children: get /session/{id}/children
       create: post /session
       delete: delete /session/{id}
       init: post /session/{id}/init
@@ -146,6 +148,7 @@ resources:
       openThemes: post /tui/open-themes
       openModels: post /tui/open-models
       executeCommand: post /tui/execute-command
+      showToast: post /tui/show-toast
 
 settings:
   disable_mock_tests: true

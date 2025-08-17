@@ -62,7 +62,7 @@ export namespace Permission {
     async (state) => {
       for (const pending of Object.values(state.pending)) {
         for (const item of Object.values(pending)) {
-          item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID))
+          item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID, item.info.metadata))
         }
       }
     },
@@ -105,7 +105,7 @@ export namespace Permission {
       }).then((x) => x.status)
     ) {
       case "deny":
-        throw new RejectedError(info.sessionID, info.id, info.callID)
+        throw new RejectedError(info.sessionID, info.id, info.callID, info.metadata)
       case "allow":
         return
     }
@@ -131,7 +131,7 @@ export namespace Permission {
     if (!match) return
     delete pending[input.sessionID][input.permissionID]
     if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID))
+      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
       return
     }
     match.resolve()
@@ -156,6 +156,7 @@ export namespace Permission {
       public readonly sessionID: string,
       public readonly permissionID: string,
       public readonly toolCallID?: string,
+      public readonly metadata?: Record<string, any>,
     ) {
       super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
     }

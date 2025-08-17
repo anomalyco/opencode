@@ -52,9 +52,9 @@ jobs:
           - A suggestion to check those issues first
 
           Use this format for the comment:
-          '👋 This issue might be a duplicate of existing issues. Please check:
+          'This issue might be a duplicate of existing issues. Please check:
           - #[issue_number]: [brief description of similarity]
 
-          If none of these address your specific case, please let us know how this issue differs.'
+          Feel free to ignore if none of these address your specific case.'
 
           If no clear duplicates are found, do not comment."

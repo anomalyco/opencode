@@ -23,17 +23,14 @@ export type Event =
       type: "storage.write"
     } & EventStorageWrite)
   | ({
-      type: "file.edited"
-    } & EventFileEdited)
-  | ({
-      type: "server.connected"
-    } & EventServerConnected)
-  | ({
       type: "permission.updated"
     } & EventPermissionUpdated)
   | ({
       type: "permission.replied"
     } & EventPermissionReplied)
+  | ({
+      type: "file.edited"
+    } & EventFileEdited)
   | ({
       type: "session.updated"
     } & EventSessionUpdated)
@@ -47,6 +44,9 @@ export type Event =
       type: "session.error"
     } & EventSessionError)
   | ({
+      type: "server.connected"
+    } & EventServerConnected)
+  | ({
       type: "file.watcher.updated"
     } & EventFileWatcherUpdated)
   | ({
@@ -54,14 +54,14 @@ export type Event =
     } & EventIdeInstalled)
 
 export type EventInstallationUpdated = {
-  type: string
+  type: "installation.updated"
   properties: {
     version: string
   }
 }
 
 export type EventLspClientDiagnostics = {
-  type: string
+  type: "lsp.client.diagnostics"
   properties: {
     serverID: string
     path: string
@@ -69,7 +69,7 @@ export type EventLspClientDiagnostics = {
 }
 
 export type EventMessageUpdated = {
-  type: string
+  type: "message.updated"
   properties: {
     info: Message
   }
@@ -86,7 +86,7 @@ export type Message =
 export type UserMessage = {
   id: string
   sessionID: string
-  role: string
+  role: "user"
   time: {
     created: number
   }
@@ -95,7 +95,7 @@ export type UserMessage = {
 export type AssistantMessage = {
   id: string
   sessionID: string
-  role: string
+  role: "assistant"
   time: {
     created: number
     completed?: number
@@ -135,7 +135,7 @@ export type AssistantMessage = {
 }
 
 export type ProviderAuthError = {
-  name: string
+  name: "ProviderAuthError"
   data: {
     providerID: string
     message: string
@@ -143,28 +143,28 @@ export type ProviderAuthError = {
 }
 
 export type UnknownError = {
-  name: string
+  name: "UnknownError"
   data: {
     message: string
   }
 }
 
 export type MessageOutputLengthError = {
-  name: string
+  name: "MessageOutputLengthError"
   data: {
     [key: string]: unknown
   }
 }
 
 export type MessageAbortedError = {
-  name: string
+  name: "MessageAbortedError"
   data: {
     [key: string]: unknown
   }
 }
 
 export type EventMessageRemoved = {
-  type: string
+  type: "message.removed"
   properties: {
     sessionID: string
     messageID: string
@@ -172,7 +172,7 @@ export type EventMessageRemoved = {
 }
 
 export type EventMessagePartUpdated = {
-  type: string
+  type: "message.part.updated"
   properties: {
     part: Part
   }
@@ -211,7 +211,7 @@ export type TextPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "text"
   text: string
   synthetic?: boolean
   time?: {
@@ -224,7 +224,7 @@ export type ReasoningPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "reasoning"
   text: string
   metadata?: {
     [key: string]: unknown
@@ -239,7 +239,7 @@ export type FilePart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "file"
   mime: string
   filename?: string
   url: string
@@ -256,7 +256,7 @@ export type FilePartSource =
 
 export type FileSource = {
   text: FilePartSourceText
-  type: string
+  type: "file"
   path: string
 }
 
@@ -268,7 +268,7 @@ export type FilePartSourceText = {
 
 export type SymbolSource = {
   text: FilePartSourceText
-  type: string
+  type: "symbol"
   path: string
   range: Range
   name: string
@@ -290,7 +290,7 @@ export type ToolPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "tool"
   callID: string
   tool: string
   state: ToolState
@@ -311,11 +311,11 @@ export type ToolState =
     } & ToolStateError)
 
 export type ToolStatePending = {
-  status: string
+  status: "pending"
 }
 
 export type ToolStateRunning = {
-  status: string
+  status: "running"
   input?: unknown
   title?: string
   metadata?: {
@@ -327,7 +327,7 @@ export type ToolStateRunning = {
 }
 
 export type ToolStateCompleted = {
-  status: string
+  status: "completed"
   input: {
     [key: string]: unknown
   }
@@ -343,11 +343,14 @@ export type ToolStateCompleted = {
 }
 
 export type ToolStateError = {
-  status: string
+  status: "error"
   input: {
     [key: string]: unknown
   }
   error: string
+  metadata?: {
+    [key: string]: unknown
+  }
   time: {
     start: number
     end: number
@@ -358,14 +361,14 @@ export type StepStartPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "step-start"
 }
 
 export type StepFinishPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "step-finish"
   cost: number
   tokens: {
     input: number
@@ -382,7 +385,7 @@ export type SnapshotPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "snapshot"
   snapshot: string
 }
 
@@ -390,7 +393,7 @@ export type PatchPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "patch"
   hash: string
   files: Array<string>
 }
@@ -399,7 +402,7 @@ export type AgentPart = {
   id: string
   sessionID: string
   messageID: string
-  type: string
+  type: "agent"
   name: string
   source?: {
     value: string
@@ -409,7 +412,7 @@ export type AgentPart = {
 }
 
 export type EventMessagePartRemoved = {
-  type: string
+  type: "message.part.removed"
   properties: {
     sessionID: string
     messageID: string
@@ -418,29 +421,15 @@ export type EventMessagePartRemoved = {
 }
 
 export type EventStorageWrite = {
-  type: string
+  type: "storage.write"
   properties: {
     key: string
     content?: unknown
   }
 }
 
-export type EventFileEdited = {
-  type: string
-  properties: {
-    file: string
-  }
-}
-
-export type EventServerConnected = {
-  type: string
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventPermissionUpdated = {
-  type: string
+  type: "permission.updated"
   properties: Permission
 }
 
@@ -461,7 +450,7 @@ export type Permission = {
 }
 
 export type EventPermissionReplied = {
-  type: string
+  type: "permission.replied"
   properties: {
     sessionID: string
     permissionID: string
@@ -469,8 +458,15 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type EventSessionUpdated = {
-  type: string
+  type: "session.updated"
   properties: {
     info: Session
   }
@@ -497,21 +493,21 @@ export type Session = {
 }
 
 export type EventSessionDeleted = {
-  type: string
+  type: "session.deleted"
   properties: {
     info: Session
   }
 }
 
 export type EventSessionIdle = {
-  type: string
+  type: "session.idle"
   properties: {
     sessionID: string
   }
 }
 
 export type EventSessionError = {
-  type: string
+  type: "session.error"
   properties: {
     sessionID?: string
     error?:
@@ -530,16 +526,23 @@ export type EventSessionError = {
   }
 }
 
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventFileWatcherUpdated = {
-  type: string
+  type: "file.watcher.updated"
   properties: {
     file: string
-    event: string
+    event: "rename" | "change"
   }
 }
 
 export type EventIdeInstalled = {
-  type: string
+  type: "ide.installed"
   properties: {
     ide: string
   }
@@ -569,7 +572,19 @@ export type Config = {
    * Theme name to use for the interface
    */
   theme?: string
+  /**
+   * Custom keybind configurations
+   */
   keybinds?: KeybindsConfig
+  /**
+   * TUI specific settings
+   */
+  tui?: {
+    /**
+     * TUI scroll speed
+     */
+    scroll_speed: number
+  }
   plugin?: Array<string>
   snapshot?: boolean
   /**
@@ -683,7 +698,7 @@ export type Config = {
   lsp?: {
     [key: string]:
       | {
-          disabled: boolean
+          disabled: true
         }
       | {
           command: Array<string>
@@ -701,15 +716,18 @@ export type Config = {
    * Additional instruction files or patterns to include
    */
   instructions?: Array<string>
+  /**
+   * @deprecated Always uses stretch layout.
+   */
   layout?: LayoutConfig
   permission?: {
-    edit?: string
+    edit?: "ask" | "allow" | "deny"
     bash?:
-      | string
+      | ("ask" | "allow" | "deny")
       | {
-          [key: string]: string
+          [key: string]: "ask" | "allow" | "deny"
         }
-    webfetch?: string
+    webfetch?: "ask" | "allow" | "deny"
   }
   experimental?: {
     hook?: {
@@ -741,25 +759,29 @@ export type KeybindsConfig = {
    */
   app_help: string
   /**
-   * @deprecated use switch_agent. Next mode
+   * Exit the application
    */
-  switch_mode: string
-  /**
-   * @deprecated use switch_agent_reverse. Previous mode
-   */
-  switch_mode_reverse: string
-  /**
-   * Next agent
-   */
-  switch_agent: string
-  /**
-   * Previous agent
-   */
-  switch_agent_reverse: string
+  app_exit: string
   /**
    * Open external editor
    */
   editor_open: string
+  /**
+   * List available themes
+   */
+  theme_list: string
+  /**
+   * Create/update AGENTS.md
+   */
+  project_init: string
+  /**
+   * Toggle tool details
+   */
+  tool_details: string
+  /**
+   * Toggle thinking blocks
+   */
+  thinking_blocks: string
   /**
    * Export session to editor
    */
@@ -789,57 +811,13 @@ export type KeybindsConfig = {
    */
   session_compact: string
   /**
-   * Toggle tool details
+   * Cycle to next child session
    */
-  tool_details: string
+  session_child_cycle: string
   /**
-   * Toggle thinking blocks
+   * Cycle to previous child session
    */
-  thinking_blocks: string
-  /**
-   * List available models
-   */
-  model_list: string
-  /**
-   * List available themes
-   */
-  theme_list: string
-  /**
-   * List files
-   */
-  file_list: string
-  /**
-   * Close file
-   */
-  file_close: string
-  /**
-   * Search file
-   */
-  file_search: string
-  /**
-   * Split/unified diff
-   */
-  file_diff_toggle: string
-  /**
-   * Create/update AGENTS.md
-   */
-  project_init: string
-  /**
-   * Clear input field
-   */
-  input_clear: string
-  /**
-   * Paste from clipboard
-   */
-  input_paste: string
-  /**
-   * Submit input
-   */
-  input_submit: string
-  /**
-   * Insert newline in input
-   */
-  input_newline: string
+  session_child_cycle_reverse: string
   /**
    * Scroll messages up by one page
    */
@@ -857,14 +835,6 @@ export type KeybindsConfig = {
    */
   messages_half_page_down: string
   /**
-   * Navigate to previous message
-   */
-  messages_previous: string
-  /**
-   * Navigate to next message
-   */
-  messages_next: string
-  /**
    * Navigate to first message
    */
   messages_first: string
@@ -873,17 +843,9 @@ export type KeybindsConfig = {
    */
   messages_last: string
   /**
-   * Toggle layout
-   */
-  messages_layout_toggle: string
-  /**
    * Copy message
    */
   messages_copy: string
-  /**
-   * @deprecated use messages_undo. Revert message
-   */
-  messages_revert: string
   /**
    * Undo message
    */
@@ -893,9 +855,93 @@ export type KeybindsConfig = {
    */
   messages_redo: string
   /**
-   * Exit the application
+   * List available models
    */
-  app_exit: string
+  model_list: string
+  /**
+   * Next recent model
+   */
+  model_cycle_recent: string
+  /**
+   * Previous recent model
+   */
+  model_cycle_recent_reverse: string
+  /**
+   * List agents
+   */
+  agent_list: string
+  /**
+   * Next agent
+   */
+  agent_cycle: string
+  /**
+   * Previous agent
+   */
+  agent_cycle_reverse: string
+  /**
+   * Clear input field
+   */
+  input_clear: string
+  /**
+   * Paste from clipboard
+   */
+  input_paste: string
+  /**
+   * Submit input
+   */
+  input_submit: string
+  /**
+   * Insert newline in input
+   */
+  input_newline: string
+  /**
+   * @deprecated use agent_cycle. Next mode
+   */
+  switch_mode: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous mode
+   */
+  switch_mode_reverse: string
+  /**
+   * @deprecated use agent_cycle. Next agent
+   */
+  switch_agent: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous agent
+   */
+  switch_agent_reverse: string
+  /**
+   * @deprecated Currently not available. List files
+   */
+  file_list: string
+  /**
+   * @deprecated Close file
+   */
+  file_close: string
+  /**
+   * @deprecated Search file
+   */
+  file_search: string
+  /**
+   * @deprecated Split/unified diff
+   */
+  file_diff_toggle: string
+  /**
+   * @deprecated Navigate to previous message
+   */
+  messages_previous: string
+  /**
+   * @deprecated Navigate to next message
+   */
+  messages_next: string
+  /**
+   * @deprecated Toggle layout
+   */
+  messages_layout_toggle: string
+  /**
+   * @deprecated use messages_undo. Revert message
+   */
+  messages_revert: string
 }
 
 export type AgentConfig = {
@@ -911,15 +957,15 @@ export type AgentConfig = {
    * Description of when to use the agent
    */
   description?: string
-  mode?: string
+  mode?: "subagent" | "primary" | "all"
   permission?: {
-    edit?: string
+    edit?: "ask" | "allow" | "deny"
     bash?:
-      | string
+      | ("ask" | "allow" | "deny")
       | {
-          [key: string]: string
+          [key: string]: "ask" | "allow" | "deny"
         }
-    webfetch?: string
+    webfetch?: "ask" | "allow" | "deny"
   }
   [key: string]:
     | unknown
@@ -929,15 +975,15 @@ export type AgentConfig = {
         [key: string]: boolean
       }
     | boolean
-    | string
+    | ("subagent" | "primary" | "all")
     | {
-        edit?: string
+        edit?: "ask" | "allow" | "deny"
         bash?:
-          | string
+          | ("ask" | "allow" | "deny")
           | {
-              [key: string]: string
+              [key: string]: "ask" | "allow" | "deny"
             }
-        webfetch?: string
+        webfetch?: "ask" | "allow" | "deny"
       }
     | undefined
 }
@@ -980,7 +1026,7 @@ export type McpLocalConfig = {
   /**
    * Type of MCP server connection
    */
-  type: string
+  type: "local"
   /**
    * Command and arguments to run the MCP server
    */
@@ -1001,7 +1047,7 @@ export type McpRemoteConfig = {
   /**
    * Type of MCP server connection
    */
-  type: string
+  type: "remote"
   /**
    * URL of the remote MCP server
    */
@@ -1028,7 +1074,7 @@ export type _Error = {
 
 export type TextPartInput = {
   id?: string
-  type: string
+  type: "text"
   text: string
   synthetic?: boolean
   time?: {
@@ -1039,7 +1085,7 @@ export type TextPartInput = {
 
 export type FilePartInput = {
   id?: string
-  type: string
+  type: "file"
   mime: string
   filename?: string
   url: string
@@ -1048,7 +1094,7 @@ export type FilePartInput = {
 
 export type AgentPartInput = {
   id?: string
-  type: string
+  type: "agent"
   name: string
   source?: {
     value: string
@@ -1076,15 +1122,16 @@ export type File = {
 export type Agent = {
   name: string
   description?: string
-  mode: string
+  mode: "subagent" | "primary" | "all"
+  builtIn: boolean
   topP?: number
   temperature?: number
   permission: {
-    edit: string
+    edit: "ask" | "allow" | "deny"
     bash: {
-      [key: string]: string
+      [key: string]: "ask" | "allow" | "deny"
     }
-    webfetch?: string
+    webfetch?: "ask" | "allow" | "deny"
   }
   model?: {
     modelID: string
@@ -1097,6 +1144,35 @@ export type Agent = {
   options: {
     [key: string]: unknown
   }
+}
+
+export type Auth =
+  | ({
+      type: "oauth"
+    } & OAuth)
+  | ({
+      type: "api"
+    } & ApiAuth)
+  | ({
+      type: "wellknown"
+    } & WellKnownAuth)
+
+export type OAuth = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+}
+
+export type ApiAuth = {
+  type: "api"
+  key: string
+}
+
+export type WellKnownAuth = {
+  type: "wellknown"
+  key: string
+  token: string
 }
 
 export type EventSubscribeData = {
@@ -1180,7 +1256,10 @@ export type SessionListResponses = {
 export type SessionListResponse = SessionListResponses[keyof SessionListResponses]
 
 export type SessionCreateData = {
-  body?: never
+  body?: {
+    parentID?: string
+    title?: string
+  }
   path?: never
   query?: never
   url: "/session"
@@ -1259,6 +1338,24 @@ export type SessionUpdateResponses = {
 }
 
 export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
+
+export type SessionChildrenData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/session/{id}/children"
+}
+
+export type SessionChildrenResponses = {
+  /**
+   * List of children
+   */
+  200: Array<Session>
+}
+
+export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
 export type SessionInitData = {
   body?: {
@@ -1851,6 +1948,53 @@ export type TuiExecuteCommandResponses = {
 }
 
 export type TuiExecuteCommandResponse = TuiExecuteCommandResponses[keyof TuiExecuteCommandResponses]
+
+export type TuiShowToastData = {
+  body?: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+  }
+  path?: never
+  query?: never
+  url: "/tui/show-toast"
+}
+
+export type TuiShowToastResponses = {
+  /**
+   * Toast notification shown successfully
+   */
+  200: boolean
+}
+
+export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
+
+export type AuthSetData = {
+  body?: Auth
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/auth/{id}"
+}
+
+export type AuthSetErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
+
+export type AuthSetResponses = {
+  /**
+   * Successfully set authentication credentials
+   */
+  200: boolean
+}
+
+export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
 
 export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})

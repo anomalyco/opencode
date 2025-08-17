@@ -80,6 +80,8 @@ type Config struct {
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
 	Theme string `json:"theme"`
+	// TUI specific settings
+	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
 	Username string     `json:"username"`
 	JSON     configJSON `json:"-"`
@@ -108,6 +110,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	Tui               apijson.Field
 	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
@@ -1654,20 +1657,48 @@ func (r ConfigShare) IsKnown() bool {
 	return false
 }
 
+// TUI specific settings
+type ConfigTui struct {
+	// TUI scroll speed
+	ScrollSpeed float64       `json:"scroll_speed,required"`
+	JSON        configTuiJSON `json:"-"`
+}
+
+// configTuiJSON contains the JSON metadata for the struct [ConfigTui]
+type configTuiJSON struct {
+	ScrollSpeed apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configTuiJSON) RawJSON() string {
+	return r.raw
+}
+
 type KeybindsConfig struct {
+	// Next agent
+	AgentCycle string `json:"agent_cycle,required"`
+	// Previous agent
+	AgentCycleReverse string `json:"agent_cycle_reverse,required"`
+	// List agents
+	AgentList string `json:"agent_list,required"`
 	// Exit the application
 	AppExit string `json:"app_exit,required"`
 	// Show help dialog
 	AppHelp string `json:"app_help,required"`
 	// Open external editor
 	EditorOpen string `json:"editor_open,required"`
-	// Close file
+	// @deprecated Close file
 	FileClose string `json:"file_close,required"`
-	// Split/unified diff
+	// @deprecated Split/unified diff
 	FileDiffToggle string `json:"file_diff_toggle,required"`
-	// List files
+	// @deprecated Currently not available. List files
 	FileList string `json:"file_list,required"`
-	// Search file
+	// @deprecated Search file
 	FileSearch string `json:"file_search,required"`
 	// Clear input field
 	InputClear string `json:"input_clear,required"`
@@ -1689,15 +1720,15 @@ type KeybindsConfig struct {
 	MessagesHalfPageUp string `json:"messages_half_page_up,required"`
 	// Navigate to last message
 	MessagesLast string `json:"messages_last,required"`
-	// Toggle layout
+	// @deprecated Toggle layout
 	MessagesLayoutToggle string `json:"messages_layout_toggle,required"`
-	// Navigate to next message
+	// @deprecated Navigate to next message
 	MessagesNext string `json:"messages_next,required"`
 	// Scroll messages down by one page
 	MessagesPageDown string `json:"messages_page_down,required"`
 	// Scroll messages up by one page
 	MessagesPageUp string `json:"messages_page_up,required"`
-	// Navigate to previous message
+	// @deprecated Navigate to previous message
 	MessagesPrevious string `json:"messages_previous,required"`
 	// Redo message
 	MessagesRedo string `json:"messages_redo,required"`
@@ -1705,10 +1736,18 @@ type KeybindsConfig struct {
 	MessagesRevert string `json:"messages_revert,required"`
 	// Undo message
 	MessagesUndo string `json:"messages_undo,required"`
+	// Next recent model
+	ModelCycleRecent string `json:"model_cycle_recent,required"`
+	// Previous recent model
+	ModelCycleRecentReverse string `json:"model_cycle_recent_reverse,required"`
 	// List available models
 	ModelList string `json:"model_list,required"`
 	// Create/update AGENTS.md
 	ProjectInit string `json:"project_init,required"`
+	// Cycle to next child session
+	SessionChildCycle string `json:"session_child_cycle,required"`
+	// Cycle to previous child session
+	SessionChildCycleReverse string `json:"session_child_cycle_reverse,required"`
 	// Compact the session
 	SessionCompact string `json:"session_compact,required"`
 	// Export session to editor
@@ -1723,13 +1762,13 @@ type KeybindsConfig struct {
 	SessionShare string `json:"session_share,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
-	// Next agent
+	// @deprecated use agent_cycle. Next agent
 	SwitchAgent string `json:"switch_agent,required"`
-	// Previous agent
+	// @deprecated use agent_cycle_reverse. Previous agent
 	SwitchAgentReverse string `json:"switch_agent_reverse,required"`
-	// @deprecated use switch_agent. Next mode
+	// @deprecated use agent_cycle. Next mode
 	SwitchMode string `json:"switch_mode,required"`
-	// @deprecated use switch_agent_reverse. Previous mode
+	// @deprecated use agent_cycle_reverse. Previous mode
 	SwitchModeReverse string `json:"switch_mode_reverse,required"`
 	// List available themes
 	ThemeList string `json:"theme_list,required"`
@@ -1742,49 +1781,56 @@ type KeybindsConfig struct {
 
 // keybindsConfigJSON contains the JSON metadata for the struct [KeybindsConfig]
 type keybindsConfigJSON struct {
-	AppExit              apijson.Field
-	AppHelp              apijson.Field
-	EditorOpen           apijson.Field
-	FileClose            apijson.Field
-	FileDiffToggle       apijson.Field
-	FileList             apijson.Field
-	FileSearch           apijson.Field
-	InputClear           apijson.Field
-	InputNewline         apijson.Field
-	InputPaste           apijson.Field
-	InputSubmit          apijson.Field
-	Leader               apijson.Field
-	MessagesCopy         apijson.Field
-	MessagesFirst        apijson.Field
-	MessagesHalfPageDown apijson.Field
-	MessagesHalfPageUp   apijson.Field
-	MessagesLast         apijson.Field
-	MessagesLayoutToggle apijson.Field
-	MessagesNext         apijson.Field
-	MessagesPageDown     apijson.Field
-	MessagesPageUp       apijson.Field
-	MessagesPrevious     apijson.Field
-	MessagesRedo         apijson.Field
-	MessagesRevert       apijson.Field
-	MessagesUndo         apijson.Field
-	ModelList            apijson.Field
-	ProjectInit          apijson.Field
-	SessionCompact       apijson.Field
-	SessionExport        apijson.Field
-	SessionInterrupt     apijson.Field
-	SessionList          apijson.Field
-	SessionNew           apijson.Field
-	SessionShare         apijson.Field
-	SessionUnshare       apijson.Field
-	SwitchAgent          apijson.Field
-	SwitchAgentReverse   apijson.Field
-	SwitchMode           apijson.Field
-	SwitchModeReverse    apijson.Field
-	ThemeList            apijson.Field
-	ThinkingBlocks       apijson.Field
-	ToolDetails          apijson.Field
-	raw                  string
-	ExtraFields          map[string]apijson.Field
+	AgentCycle               apijson.Field
+	AgentCycleReverse        apijson.Field
+	AgentList                apijson.Field
+	AppExit                  apijson.Field
+	AppHelp                  apijson.Field
+	EditorOpen               apijson.Field
+	FileClose                apijson.Field
+	FileDiffToggle           apijson.Field
+	FileList                 apijson.Field
+	FileSearch               apijson.Field
+	InputClear               apijson.Field
+	InputNewline             apijson.Field
+	InputPaste               apijson.Field
+	InputSubmit              apijson.Field
+	Leader                   apijson.Field
+	MessagesCopy             apijson.Field
+	MessagesFirst            apijson.Field
+	MessagesHalfPageDown     apijson.Field
+	MessagesHalfPageUp       apijson.Field
+	MessagesLast             apijson.Field
+	MessagesLayoutToggle     apijson.Field
+	MessagesNext             apijson.Field
+	MessagesPageDown         apijson.Field
+	MessagesPageUp           apijson.Field
+	MessagesPrevious         apijson.Field
+	MessagesRedo             apijson.Field
+	MessagesRevert           apijson.Field
+	MessagesUndo             apijson.Field
+	ModelCycleRecent         apijson.Field
+	ModelCycleRecentReverse  apijson.Field
+	ModelList                apijson.Field
+	ProjectInit              apijson.Field
+	SessionChildCycle        apijson.Field
+	SessionChildCycleReverse apijson.Field
+	SessionCompact           apijson.Field
+	SessionExport            apijson.Field
+	SessionInterrupt         apijson.Field
+	SessionList              apijson.Field
+	SessionNew               apijson.Field
+	SessionShare             apijson.Field
+	SessionUnshare           apijson.Field
+	SwitchAgent              apijson.Field
+	SwitchAgentReverse       apijson.Field
+	SwitchMode               apijson.Field
+	SwitchModeReverse        apijson.Field
+	ThemeList                apijson.Field
+	ThinkingBlocks           apijson.Field
+	ToolDetails              apijson.Field
+	raw                      string
+	ExtraFields              map[string]apijson.Field
 }
 
 func (r *KeybindsConfig) UnmarshalJSON(data []byte) (err error) {

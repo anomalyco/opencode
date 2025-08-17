@@ -39,10 +39,10 @@ func NewSessionService(opts ...option.RequestOption) (r *SessionService) {
 }
 
 // Create a new session
-func (r *SessionService) New(ctx context.Context, opts ...option.RequestOption) (res *Session, err error) {
+func (r *SessionService) New(ctx context.Context, body SessionNewParams, opts ...option.RequestOption) (res *Session, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "session"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
 	return
 }
 
@@ -99,6 +99,30 @@ func (r *SessionService) Chat(ctx context.Context, id string, body SessionChatPa
 	}
 	path := fmt.Sprintf("session/%s/message", id)
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
+// Get a session's children
+func (r *SessionService) Children(ctx context.Context, id string, opts ...option.RequestOption) (res *[]Session, err error) {
+	opts = append(r.Options[:], opts...)
+	if id == "" {
+		err = errors.New("missing required id parameter")
+		return
+	}
+	path := fmt.Sprintf("session/%s/children", id)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	return
+}
+
+// Get session
+func (r *SessionService) Get(ctx context.Context, id string, opts ...option.RequestOption) (res *Session, err error) {
+	opts = append(r.Options[:], opts...)
+	if id == "" {
+		err = errors.New("missing required id parameter")
+		return
+	}
+	path := fmt.Sprintf("session/%s", id)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return
 }
 
@@ -2023,11 +2047,12 @@ func (r toolStateCompletedTimeJSON) RawJSON() string {
 }
 
 type ToolStateError struct {
-	Error  string                 `json:"error,required"`
-	Input  map[string]interface{} `json:"input,required"`
-	Status ToolStateErrorStatus   `json:"status,required"`
-	Time   ToolStateErrorTime     `json:"time,required"`
-	JSON   toolStateErrorJSON     `json:"-"`
+	Error    string                 `json:"error,required"`
+	Input    map[string]interface{} `json:"input,required"`
+	Status   ToolStateErrorStatus   `json:"status,required"`
+	Time     ToolStateErrorTime     `json:"time,required"`
+	Metadata map[string]interface{} `json:"metadata"`
+	JSON     toolStateErrorJSON     `json:"-"`
 }
 
 // toolStateErrorJSON contains the JSON metadata for the struct [ToolStateError]
@@ -2036,6 +2061,7 @@ type toolStateErrorJSON struct {
 	Input       apijson.Field
 	Status      apijson.Field
 	Time        apijson.Field
+	Metadata    apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -2296,6 +2322,15 @@ func (r *SessionMessagesResponse) UnmarshalJSON(data []byte) (err error) {
 
 func (r sessionMessagesResponseJSON) RawJSON() string {
 	return r.raw
+}
+
+type SessionNewParams struct {
+	ParentID param.Field[string] `json:"parentID"`
+	Title    param.Field[string] `json:"title"`
+}
+
+func (r SessionNewParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
 }
 
 type SessionUpdateParams struct {

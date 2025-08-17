@@ -1,0 +1,8 @@
+html {
+  color-scheme: dark;
+  line-height: 1;
+}
+
+body {
+  font-family: var(--font-sans);
+}
