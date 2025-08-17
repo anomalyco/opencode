@@ -650,6 +650,25 @@ func (a *App) IsBusy() bool {
 	return false
 }
 
+func (a *App) HasAnimatingWork() bool {
+	for _, msg := range a.Messages {
+		switch casted := msg.Info.(type) {
+		case opencode.AssistantMessage:
+			if casted.Time.Completed == 0 {
+				return true
+			}
+		}
+		for _, p := range msg.Parts {
+			if tp, ok := p.(opencode.ToolPart); ok {
+				if tp.State.Status == opencode.ToolPartStateStatusPending {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (a *App) SaveState() tea.Cmd {
 	return func() tea.Msg {
 		err := SaveState(a.StatePath, a.State)

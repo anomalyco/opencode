@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -59,6 +60,7 @@ type messagesComponent struct {
 	lineCount          int
 	selection          *selection
 	messagePositions   map[string]int // map message ID to line position
+	animating          bool
 }
 
 type selection struct {
@@ -99,6 +101,7 @@ func (s selection) coords(offset int) *selection {
 
 type ToggleToolDetailsMsg struct{}
 type ToggleThinkingBlocksMsg struct{}
+type shimmerTickMsg struct{}
 
 func (m *messagesComponent) Init() tea.Cmd {
 	return tea.Batch(m.viewport.Init())
@@ -107,6 +110,15 @@ func (m *messagesComponent) Init() tea.Cmd {
 func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case shimmerTickMsg:
+		if !m.app.HasAnimatingWork() {
+			m.animating = false
+			return m, nil
+		}
+		return m, tea.Sequence(
+			m.renderView(),
+			tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }),
+		)
 	case tea.MouseClickMsg:
 		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset)
 		y := msg.Y + m.viewport.YOffset
@@ -269,6 +281,12 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.header = msg.header
 		if m.dirty {
 			cmds = append(cmds, m.renderView())
+		}
+
+		// Start shimmer ticks if any assistant/tool is in-flight
+		if !m.animating && m.app.HasAnimatingWork() {
+			m.animating = true
+			cmds = append(cmds, tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }))
 		}
 	}
 

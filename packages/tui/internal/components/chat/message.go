@@ -234,7 +234,13 @@ func renderText(
 		}
 		content = util.ToMarkdown(text, width, backgroundColor)
 		if isThinking {
-			content = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking") + "\n\n" + content
+			label := util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label + "\n\n" + content
+		} else if strings.TrimSpace(text) == "Generating..." {
+			label := util.Shimmer(text, backgroundColor, t.TextMuted(), t.Text())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label
 		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
@@ -779,7 +785,9 @@ func renderToolTitle(
 ) string {
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolAction(toolCall.Tool)
-		return styles.NewStyle().Width(width - 6).Render(title)
+		t := theme.CurrentTheme()
+		shiny := util.Shimmer(title, t.BackgroundPanel(), t.TextMuted(), t.Accent())
+		return styles.NewStyle().Width(width - 6).Render(shiny)
 	}
 
 	toolArgs := ""

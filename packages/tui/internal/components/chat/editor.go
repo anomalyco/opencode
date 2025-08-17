@@ -339,6 +339,7 @@ func (m *editorComponent) Content() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+
 	promptStyle := styles.NewStyle().Foreground(t.Primary()).
 		Padding(0, 0, 0, 1).
 		Bold(true)
@@ -381,9 +382,11 @@ func (m *editorComponent) Content() string {
 			status = "waiting for permission"
 		}
 		if m.interruptKeyInDebounce && m.app.CurrentPermission.ID == "" {
-			hint = muted(
-				status,
-			) + m.spinner.View() + muted(
+			bright := t.Accent()
+			if status == "waiting for permission" {
+				bright = t.Warning()
+			}
+			hint = util.Shimmer(status, t.Background(), t.TextMuted(), bright) + m.spinner.View() + muted(
 				"  ",
 			) + base(
 				keyText+" again",
@@ -391,7 +394,11 @@ func (m *editorComponent) Content() string {
 				" interrupt",
 			)
 		} else {
-			hint = muted(status) + m.spinner.View()
+			bright := t.Accent()
+			if status == "waiting for permission" {
+				bright = t.Warning()
+			}
+			hint = util.Shimmer(status, t.Background(), t.TextMuted(), bright) + m.spinner.View()
 			if m.app.CurrentPermission.ID == "" {
 				hint += muted("  ") + base(keyText) + muted(" interrupt")
 			}
