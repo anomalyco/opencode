@@ -384,6 +384,7 @@ export namespace Config {
           webfetch: Permission.optional(),
         })
         .optional(),
+      tools: z.record(z.string(), z.boolean()).optional(),
       experimental: z
         .object({
           hook: z
