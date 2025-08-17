@@ -482,7 +482,7 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	attachments := m.textarea.GetAttachments()
 
-	prompt := app.Prompt{Text: value, Attachments: attachments}
+	prompt := app.NewChatPrompt(value, attachments)
 	m.app.State.AddPromptToHistory(prompt)
 	cmds = append(cmds, m.app.SaveState())
 
@@ -497,6 +497,11 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 func (m *editorComponent) SubmitBash() (tea.Model, tea.Cmd) {
 	command := m.textarea.Value()
 	var cmds []tea.Cmd
+
+	prompt := app.NewShellPrompt(command)
+	m.app.State.AddPromptToHistory(prompt)
+	cmds = append(cmds, m.app.SaveState())
+
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
@@ -732,6 +737,8 @@ func NewEditorComponent(app *app.App) EditorComponent {
 func (m *editorComponent) RestoreFromPrompt(prompt app.Prompt) {
 	m.textarea.Reset()
 	m.textarea.SetValue(prompt.Text)
+
+	m.app.IsBashMode = prompt.IsShell()
 
 	// Sort attachments by start index in reverse order (process from end to beginning)
 	// This prevents index shifting issues

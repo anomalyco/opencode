@@ -9,9 +9,31 @@ import (
 	"github.com/sst/opencode/internal/id"
 )
 
+const (
+	PromptTypeChat  = "chat"
+	PromptTypeShell = "shell"
+)
+
 type Prompt struct {
 	Text        string                   `toml:"text"`
 	Attachments []*attachment.Attachment `toml:"attachments"`
+	Type        string                   `toml:"type"`
+}
+
+func NewChatPrompt(text string, attachments []*attachment.Attachment) Prompt {
+	return Prompt{Text: text, Attachments: attachments, Type: PromptTypeChat}
+}
+
+func NewShellPrompt(command string) Prompt {
+	return Prompt{Text: command, Type: PromptTypeShell}
+}
+
+func (p Prompt) IsShell() bool {
+	return p.Type == PromptTypeShell
+}
+
+func (p Prompt) IsChat() bool {
+	return p.Type == PromptTypeChat
 }
 
 func (p Prompt) ToMessage(
