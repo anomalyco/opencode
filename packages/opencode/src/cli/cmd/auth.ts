@@ -19,6 +19,42 @@ export const AuthCommand = cmd({
   async handler() {},
 })
 
+/**
+ * Handle command parsing for helper auth allowing for quoted arguments, and spaces in arguments, example:
+ * `op read "op://<some-vault>/OpenAI API Key/credential"` will be parsed as `["op", "read", "op://<some-vault>/OpenAI API Key/credential"]`
+ */
+function parseCommand(commandStr: string): string[] {
+  const args: string[] = []
+  let current = ""
+  let inQuotes = false
+  let quoteChar = ""
+
+  for (let i = 0; i < commandStr.length; i++) {
+    const char = commandStr[i]
+
+    if (!inQuotes && (char === '"' || char === "'")) {
+      inQuotes = true
+      quoteChar = char
+    } else if (inQuotes && char === quoteChar) {
+      inQuotes = false
+      quoteChar = ""
+    } else if (!inQuotes && /\s/.test(char)) {
+      if (current) {
+        args.push(current)
+        current = ""
+      }
+    } else {
+      current += char
+    }
+  }
+
+  if (current) {
+    args.push(current)
+  }
+
+  return args
+}
+
 export const AuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
@@ -234,6 +270,66 @@ export const AuthLoginCommand = cmd({
 
       if (provider === "vercel") {
         prompts.log.info("You can create an api key in the dashboard")
+      }
+
+      const authMethod = await prompts.select({
+        message: "How would you like to authenticate?",
+        options: [
+          {
+            value: "api",
+            label: "API Key",
+            hint: "Enter a static API key",
+          },
+          {
+            value: "helper",
+            label: "Dynamic API Key (Helper Script)",
+            hint: "Use a script to generate API keys dynamically",
+          },
+        ],
+      })
+      if (prompts.isCancel(authMethod)) throw new UI.CancelledError()
+
+      if (authMethod === "helper") {
+        prompts.log.info("Configure a script that outputs an API key to stdout")
+
+        const command = await prompts.text({
+          message: "Enter the command to execute (space-separated)",
+          placeholder: "./get-token.sh or python get-token.py",
+          validate: (x) => (x && x.trim().length > 0 ? undefined : "Required"),
+        })
+        if (prompts.isCancel(command)) throw new UI.CancelledError()
+
+        const refreshInterval = await prompts.text({
+          message: "Refresh interval in seconds",
+          initialValue: "3600",
+          validate: (x) => {
+            if (!x) return "Required"
+            const num = parseInt(x)
+            return num > 0 ? undefined : "Must be a positive number"
+          },
+        })
+        if (prompts.isCancel(refreshInterval)) throw new UI.CancelledError()
+
+        const timeout = await prompts.text({
+          message: "Command timeout in milliseconds",
+          initialValue: "5000",
+          validate: (x) => {
+            if (!x) return "Required"
+            const num = parseInt(x)
+            return num >= 100 && num <= 30000 ? undefined : "Must be between 100 and 30000"
+          },
+        })
+        if (prompts.isCancel(timeout)) throw new UI.CancelledError()
+
+        await Auth.set(provider, {
+          type: "helper",
+          command: parseCommand(command as string),
+          refreshInterval: parseInt(refreshInterval as string),
+          timeout: parseInt(timeout as string),
+        })
+
+        prompts.outro("Helper authentication configured")
+        return
       }
 
       const key = await prompts.password({

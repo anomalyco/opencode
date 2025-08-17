@@ -22,7 +22,7 @@ export namespace Provider {
     options?: Record<string, any>
   }>
 
-  type Source = "env" | "config" | "custom" | "api"
+  type Source = "env" | "config" | "custom" | "api" | "helper"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -248,6 +248,14 @@ export namespace Provider {
       if (provider.type === "api") {
         mergeProvider(providerID, { apiKey: provider.key }, "api")
       }
+      if (provider.type === "helper") {
+        const apiKey = await Auth.executeHelper(providerID, provider)
+        if (apiKey) {
+          mergeProvider(providerID, { apiKey }, "helper")
+        } else {
+          log.warn("helper auth failed, skipping provider", { providerID })
+        }
+      }
     }
 
     // load custom
@@ -272,7 +280,38 @@ export namespace Provider {
 
     // load config
     for (const [providerID, provider] of configProviders) {
-      mergeProvider(providerID, provider.options ?? {}, "config")
+      const options = { ...provider.options }
+
+      if (isApiKeyHelper(options.apiKey)) {
+        const helperConfig = options.apiKey
+        try {
+          const helperAuth: z.infer<typeof Auth.Helper> = {
+            type: "helper",
+            command: helperConfig.command,
+            refreshInterval: helperConfig.refreshInterval ?? 3600,
+            timeout: helperConfig.timeout ?? 5000,
+          }
+
+          await Auth.set(providerID, helperAuth)
+
+          const apiKey = await Auth.executeHelper(providerID, helperAuth)
+          if (apiKey) {
+            options.apiKey = apiKey
+          } else {
+            log.warn("apiKey helper failed for provider, no API key available", { providerID })
+            delete options.apiKey
+          }
+        } catch (error) {
+          log.error("failed to process apiKey helper configuration", {
+            providerID,
+            error: error instanceof Error ? error.message : String(error),
+            command: helperConfig.command.join(" "),
+          })
+          delete options.apiKey
+        }
+      }
+
+      mergeProvider(providerID, options, "config")
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
@@ -289,6 +328,10 @@ export namespace Provider {
       sdk,
     }
   })
+
+  function isApiKeyHelper(apiKey: any): apiKey is Config.ApiKeyHelper {
+    return apiKey !== null && typeof apiKey === "object" && Array.isArray(apiKey.command) && apiKey.command.length > 0
+  }
 
   export async function list() {
     return state().then((state) => state.providers)

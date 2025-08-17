@@ -298,6 +298,28 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const ApiKeyHelper = z
+    .object({
+      command: z
+        .array(z.string())
+        .describe("Command to execute to retrieve the API key. Should output the key to stdout."),
+      refreshInterval: z
+        .number()
+        .min(1)
+        .default(3600)
+        .describe("How often to refresh the API key in seconds (default: 3600 = 1 hour)"),
+      timeout: z
+        .number()
+        .min(100)
+        .max(30000)
+        .default(5000)
+        .describe("Timeout for the helper command in milliseconds (default: 5000ms)"),
+    })
+    .describe(
+      "Configuration for dynamic API key generation via external script. The command should output the API key to stdout.",
+    )
+  export type ApiKeyHelper = z.infer<typeof ApiKeyHelper>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -351,7 +373,10 @@ export namespace Config {
               models: z.record(ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
-                  apiKey: z.string().optional(),
+                  apiKey: z
+                    .union([z.string().describe("Static API key"), ApiKeyHelper])
+                    .optional()
+                    .describe("API key configuration - either a static string or helper script configuration"),
                   baseURL: z.string().optional(),
                 })
                 .catchall(z.any())
