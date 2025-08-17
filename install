@@ -36,7 +36,7 @@ case "$filename" in
         [[ "$arch" == "x64" ]] || exit 1
     ;;
     *)
-        echo "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+        echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
         exit 1
     ;;
 esac
@@ -49,7 +49,7 @@ if [ -z "$requested_version" ]; then
     specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | awk -F'"' '/"tag_name": "/ {gsub(/^v/, "", $4); print $4}')
 
     if [[ $? -ne 0 || -z "$specific_version" ]]; then
-        echo "${RED}Failed to fetch version information${NC}"
+        echo -e "${RED}Failed to fetch version information${NC}"
         exit 1
     fi
 else
@@ -96,7 +96,7 @@ download_and_install() {
     curl -# -L -o "$filename" "$url"
     unzip -q "$filename"
     mv opencode "$INSTALL_DIR"
-    cd .. && rm -rf opencodetmp 
+    cd .. && rm -rf opencodetmp
 }
 
 check_version

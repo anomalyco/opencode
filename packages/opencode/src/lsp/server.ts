@@ -500,6 +500,24 @@ export namespace LSPServer {
     },
   }
 
+  export const RustAnalyzer: Info = {
+    id: "rust",
+    root: NearestRoot(["Cargo.toml", "Cargo.lock"]),
+    extensions: [".rs"],
+    async spawn(_, root) {
+      const bin = Bun.which("rust-analyzer")
+      if (!bin) {
+        log.info("rust-analyzer not found in path, please install it")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Clangd: Info = {
     id: "clangd",
     root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
