@@ -162,7 +162,7 @@ export const AuthLoginCommand = cmd({
             try {
               await open(authorize.url)
             } catch (e) {}
-            prompts.log.info("Go to: " + authorize.url)
+            prompts.log.info("Go to: butt" + authorize.url)
           }
 
           if (authorize.method === "auto") {
@@ -176,12 +176,20 @@ export const AuthLoginCommand = cmd({
               spinner.stop("Failed to authorize", 1)
             }
             if (result.type === "success") {
-              await Auth.set(provider, {
-                type: "oauth",
-                refresh: result.refresh,
-                access: result.access,
-                expires: result.expires,
-              })
+              if ("refresh" in result) {
+                await Auth.set(provider, {
+                  type: "oauth",
+                  refresh: result.refresh,
+                  access: result.access,
+                  expires: result.expires,
+                })
+              }
+              if ("key" in result) {
+                await Auth.set(provider, {
+                  type: "api",
+                  key: result.key,
+                })
+              }
               spinner.stop("Login successful")
             }
           }
@@ -197,12 +205,20 @@ export const AuthLoginCommand = cmd({
               prompts.log.error("Failed to authorize")
             }
             if (result.type === "success") {
-              await Auth.set(provider, {
-                type: "oauth",
-                refresh: result.refresh,
-                access: result.access,
-                expires: result.expires,
-              })
+              if ("refresh" in result) {
+                await Auth.set(provider, {
+                  type: "oauth",
+                  refresh: result.refresh,
+                  access: result.access,
+                  expires: result.expires,
+                })
+              }
+              if ("key" in result) {
+                await Auth.set(provider, {
+                  type: "api",
+                  key: result.key,
+                })
+              }
               prompts.log.success("Login successful")
             }
           }
