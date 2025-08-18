@@ -26,6 +26,10 @@ type SymbolRange struct {
 	End   Position `toml:"end"`
 }
 
+type AgentSource struct {
+	Name string `toml:"name"`
+}
+
 type Position struct {
 	Line int `toml:"line"`
 	Char int `toml:"char"`
@@ -74,6 +78,15 @@ func (a *Attachment) GetSymbolSource() (*SymbolSource, bool) {
 	}
 	ss, ok := a.Source.(*SymbolSource)
 	return ss, ok
+}
+
+// GetAgentSource returns the source as AgentSource if the attachment is an agent type
+func (a *Attachment) GetAgentSource() (*AgentSource, bool) {
+	if a.Type != "agent" {
+		return nil, false
+	}
+	as, ok := a.Source.(*AgentSource)
+	return as, ok
 }
 
 // FromMap creates a TextSource from a map[string]any
@@ -128,6 +141,13 @@ func (ss *SymbolSource) FromMap(sourceMap map[string]any) {
 	}
 }
 
+// FromMap creates an AgentSource from a map[string]any
+func (as *AgentSource) FromMap(sourceMap map[string]any) {
+	if name, ok := sourceMap["name"].(string); ok {
+		as.Name = name
+	}
+}
+
 // RestoreSourceType converts a map[string]any source back to the proper type
 func (a *Attachment) RestoreSourceType() {
 	if a.Source == nil {
@@ -149,6 +169,10 @@ func (a *Attachment) RestoreSourceType() {
 			ss := &SymbolSource{}
 			ss.FromMap(sourceMap)
 			a.Source = ss
+		case "agent":
+			as := &AgentSource{}
+			as.FromMap(sourceMap)
+			a.Source = as
 		}
 	}
 }

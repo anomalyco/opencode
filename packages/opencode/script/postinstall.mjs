@@ -20,7 +20,7 @@ function detectPlatformAndArch() {
       platform = "linux"
       break
     case "win32":
-      platform = "win32"
+      platform = "windows"
       break
     default:
       platform = os.platform()
@@ -50,7 +50,7 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "win32" ? "opencode.exe" : "opencode"
+  const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package

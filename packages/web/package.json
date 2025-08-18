@@ -1,7 +1,7 @@
 {
   "name": "@opencode/web",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.5.6",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "sst shell --stage=dev --target=Web astro dev",
@@ -11,7 +11,7 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.5.4",
+    "@astrojs/cloudflare": "12.6.3",
     "@astrojs/markdown-remark": "6.3.1",
     "@astrojs/solid-js": "5.1.0",
     "@astrojs/starlight": "0.34.3",
@@ -25,7 +25,7 @@
     "lang-map": "0.4.0",
     "luxon": "3.6.1",
     "marked": "15.0.12",
-    "marked-shiki": "1.2.0",
+    "marked-shiki": "1.2.1",
     "rehype-autolink-headings": "7.1.0",
     "remeda": "2.26.0",
     "sharp": "0.32.5",

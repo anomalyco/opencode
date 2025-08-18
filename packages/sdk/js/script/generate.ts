@@ -4,20 +4,18 @@ const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
 import { $ } from "bun"
-import fs from "fs/promises"
 import path from "path"
-
-console.log("=== Generating JS SDK ===")
-console.log()
 
 import { createClient } from "@hey-api/openapi-ts"
 
-await fs.rm(path.join(dir, "src/gen"), { recursive: true, force: true })
-await $`bun run ../../opencode/src/index.ts generate > openapi.json`
+await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
 
 await createClient({
   input: "./openapi.json",
-  output: "./src/gen",
+  output: {
+    path: "./src/gen",
+    tsConfigPath: path.join(dir, 'tsconfig.json')
+  },
   plugins: [
     {
       name: "@hey-api/typescript",
@@ -36,6 +34,4 @@ await createClient({
     },
   ],
 })
-
-await $`rm -rf dist`
-await $`bun tsc`
+await $`bun prettier --write src/gen`

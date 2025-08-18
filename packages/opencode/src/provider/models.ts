@@ -77,4 +77,4 @@ export namespace ModelsDev {
   }
 }
 
-setInterval(() => ModelsDev.refresh(), 60 * 1000).unref()
+setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()

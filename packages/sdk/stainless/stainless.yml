@@ -51,12 +51,12 @@ resources:
       logLevel: LogLevel
       provider: Provider
       model: Model
-      mode: Mode
+      agent: Agent
     methods:
       get: get /app
       init: post /app/init
       log: post /log
-      modes: get /mode
+      agents: get /agent
       providers: get /config/providers
 
   find:
@@ -99,6 +99,9 @@ resources:
       fileSource: FileSource
       symbolSource: SymbolSource
       toolPart: ToolPart
+      agentPart: AgentPart
+      agentPartInput: AgentPartInput
+      reasoningPart: ReasoningPart
       stepStartPart: StepStartPart
       stepFinishPart: StepFinishPart
       snapshotPart: SnapshotPart
@@ -110,7 +113,9 @@ resources:
       toolStateError: ToolStateError
 
     methods:
+      get: get /session/{id}
       list: get /session
+      children: get /session/{id}/children
       create: post /session
       delete: delete /session/{id}
       init: post /session/{id}/init
@@ -121,6 +126,8 @@ resources:
       message: get /session/{id}/message/{messageID}
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      shell: post /session/{id}/shell
+      update: patch /session/{id}
       revert: post /session/{id}/revert
       unrevert: post /session/{id}/unrevert
 
@@ -141,6 +148,7 @@ resources:
       openThemes: post /tui/open-themes
       openModels: post /tui/open-models
       executeCommand: post /tui/execute-command
+      showToast: post /tui/show-toast
 
 settings:
   disable_mock_tests: true

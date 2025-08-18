@@ -6,11 +6,15 @@ branding:
 
 inputs:
   model:
-    description: "Model to use"
+    description: "The model to use with opencode. Takes the format of `provider/model`."
     required: true
 
   share:
-    description: "Share the opencode session (defaults to true for public repos)"
+    description: "Whether to share the opencode session. Defaults to true for public repositories."
+    required: false
+
+  token:
+    description: "Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. Defaults to the installation access token from the opencode GitHub App."
     required: false
 
 runs:
@@ -20,10 +24,20 @@ runs:
       shell: bash
       run: curl -fsSL https://opencode.ai/install | bash
 
+    - name: Install bun
+      shell: bash
+      run: npm install -g bun
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        cd ${GITHUB_ACTION_PATH}
+        bun install
+
     - name: Run opencode
       shell: bash
-      id: run_opencode
-      run: opencode github run
+      run: bun ${GITHUB_ACTION_PATH}/index.ts
       env:
         MODEL: ${{ inputs.model }}
         SHARE: ${{ inputs.share }}
+        TOKEN: ${{ inputs.token }}

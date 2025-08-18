@@ -31,6 +31,14 @@ func NewAppService(opts ...option.RequestOption) (r *AppService) {
 	return
 }
 
+// List all agents
+func (r *AppService) Agents(ctx context.Context, opts ...option.RequestOption) (res *[]Agent, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "agent"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	return
+}
+
 // Get app info
 func (r *AppService) Get(ctx context.Context, opts ...option.RequestOption) (res *App, err error) {
 	opts = append(r.Options[:], opts...)
@@ -55,20 +63,162 @@ func (r *AppService) Log(ctx context.Context, body AppLogParams, opts ...option.
 	return
 }
 
-// List all modes
-func (r *AppService) Modes(ctx context.Context, opts ...option.RequestOption) (res *[]Mode, err error) {
-	opts = append(r.Options[:], opts...)
-	path := "mode"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
-	return
-}
-
 // List all providers
 func (r *AppService) Providers(ctx context.Context, opts ...option.RequestOption) (res *AppProvidersResponse, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "config/providers"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
 	return
+}
+
+type Agent struct {
+	BuiltIn     bool                   `json:"builtIn,required"`
+	Mode        AgentMode              `json:"mode,required"`
+	Name        string                 `json:"name,required"`
+	Options     map[string]interface{} `json:"options,required"`
+	Permission  AgentPermission        `json:"permission,required"`
+	Tools       map[string]bool        `json:"tools,required"`
+	Description string                 `json:"description"`
+	Model       AgentModel             `json:"model"`
+	Prompt      string                 `json:"prompt"`
+	Temperature float64                `json:"temperature"`
+	TopP        float64                `json:"topP"`
+	JSON        agentJSON              `json:"-"`
+}
+
+// agentJSON contains the JSON metadata for the struct [Agent]
+type agentJSON struct {
+	BuiltIn     apijson.Field
+	Mode        apijson.Field
+	Name        apijson.Field
+	Options     apijson.Field
+	Permission  apijson.Field
+	Tools       apijson.Field
+	Description apijson.Field
+	Model       apijson.Field
+	Prompt      apijson.Field
+	Temperature apijson.Field
+	TopP        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *Agent) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r agentJSON) RawJSON() string {
+	return r.raw
+}
+
+type AgentMode string
+
+const (
+	AgentModeSubagent AgentMode = "subagent"
+	AgentModePrimary  AgentMode = "primary"
+	AgentModeAll      AgentMode = "all"
+)
+
+func (r AgentMode) IsKnown() bool {
+	switch r {
+	case AgentModeSubagent, AgentModePrimary, AgentModeAll:
+		return true
+	}
+	return false
+}
+
+type AgentPermission struct {
+	Bash     map[string]AgentPermissionBash `json:"bash,required"`
+	Edit     AgentPermissionEdit            `json:"edit,required"`
+	Webfetch AgentPermissionWebfetch        `json:"webfetch"`
+	JSON     agentPermissionJSON            `json:"-"`
+}
+
+// agentPermissionJSON contains the JSON metadata for the struct [AgentPermission]
+type agentPermissionJSON struct {
+	Bash        apijson.Field
+	Edit        apijson.Field
+	Webfetch    apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *AgentPermission) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r agentPermissionJSON) RawJSON() string {
+	return r.raw
+}
+
+type AgentPermissionBash string
+
+const (
+	AgentPermissionBashAsk   AgentPermissionBash = "ask"
+	AgentPermissionBashAllow AgentPermissionBash = "allow"
+	AgentPermissionBashDeny  AgentPermissionBash = "deny"
+)
+
+func (r AgentPermissionBash) IsKnown() bool {
+	switch r {
+	case AgentPermissionBashAsk, AgentPermissionBashAllow, AgentPermissionBashDeny:
+		return true
+	}
+	return false
+}
+
+type AgentPermissionEdit string
+
+const (
+	AgentPermissionEditAsk   AgentPermissionEdit = "ask"
+	AgentPermissionEditAllow AgentPermissionEdit = "allow"
+	AgentPermissionEditDeny  AgentPermissionEdit = "deny"
+)
+
+func (r AgentPermissionEdit) IsKnown() bool {
+	switch r {
+	case AgentPermissionEditAsk, AgentPermissionEditAllow, AgentPermissionEditDeny:
+		return true
+	}
+	return false
+}
+
+type AgentPermissionWebfetch string
+
+const (
+	AgentPermissionWebfetchAsk   AgentPermissionWebfetch = "ask"
+	AgentPermissionWebfetchAllow AgentPermissionWebfetch = "allow"
+	AgentPermissionWebfetchDeny  AgentPermissionWebfetch = "deny"
+)
+
+func (r AgentPermissionWebfetch) IsKnown() bool {
+	switch r {
+	case AgentPermissionWebfetchAsk, AgentPermissionWebfetchAllow, AgentPermissionWebfetchDeny:
+		return true
+	}
+	return false
+}
+
+type AgentModel struct {
+	ModelID    string         `json:"modelID,required"`
+	ProviderID string         `json:"providerID,required"`
+	JSON       agentModelJSON `json:"-"`
+}
+
+// agentModelJSON contains the JSON metadata for the struct [AgentModel]
+type agentModelJSON struct {
+	ModelID     apijson.Field
+	ProviderID  apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *AgentModel) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r agentModelJSON) RawJSON() string {
+	return r.raw
 }
 
 type App struct {
@@ -142,56 +292,6 @@ func (r *AppTime) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r appTimeJSON) RawJSON() string {
-	return r.raw
-}
-
-type Mode struct {
-	Name        string          `json:"name,required"`
-	Tools       map[string]bool `json:"tools,required"`
-	Model       ModeModel       `json:"model"`
-	Prompt      string          `json:"prompt"`
-	Temperature float64         `json:"temperature"`
-	JSON        modeJSON        `json:"-"`
-}
-
-// modeJSON contains the JSON metadata for the struct [Mode]
-type modeJSON struct {
-	Name        apijson.Field
-	Tools       apijson.Field
-	Model       apijson.Field
-	Prompt      apijson.Field
-	Temperature apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *Mode) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r modeJSON) RawJSON() string {
-	return r.raw
-}
-
-type ModeModel struct {
-	ModelID    string        `json:"modelID,required"`
-	ProviderID string        `json:"providerID,required"`
-	JSON       modeModelJSON `json:"-"`
-}
-
-// modeModelJSON contains the JSON metadata for the struct [ModeModel]
-type modeModelJSON struct {
-	ModelID     apijson.Field
-	ProviderID  apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *ModeModel) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r modeModelJSON) RawJSON() string {
 	return r.raw
 }
 

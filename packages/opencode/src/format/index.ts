@@ -71,7 +71,7 @@ export namespace Format {
         const proc = Bun.spawn({
           cmd: item.command.map((x) => x.replace("$FILE", file)),
           cwd: App.info().path.cwd,
-          env: item.environment,
+          env: { ...process.env, ...item.environment },
           stdout: "ignore",
           stderr: "ignore",
         })

@@ -1,6 +1,5 @@
 ---
 import { Base64 } from "js-base64";
-import config from "virtual:starlight/user-config";
 
 import config from '../../../config.mjs'
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
@@ -71,7 +70,7 @@ const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=$
         tag: "meta",
         attrs: {
           name: "robots",
-          content: "noindex",
+          content: "noindex, nofollow, noarchive, nosnippet",
         }
       },
       {

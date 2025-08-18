@@ -3,27 +3,32 @@
   "name": "opencode",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.2.14",
+  "packageManager": "bun@1.2.19",
   "scripts": {
-    "dev": "bun run packages/opencode/src/index.ts",
+    "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
-    "stainless": "./scripts/stainless",
+    "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
     "postinstall": "./script/hooks"
   },
   "workspaces": {
     "packages": [
+      "cloud/*",
       "packages/*",
       "packages/sdk/js"
     ],
     "catalog": {
+      "@hono/zod-validator": "0.4.2",
       "@types/node": "22.13.9",
       "@tsconfig/node22": "22.0.2",
-      "ai": "5.0.0-beta.34",
+      "ai": "5.0.8",
       "hono": "4.7.10",
       "typescript": "5.8.2",
-      "zod": "3.25.49",
+      "zod": "3.25.76",
       "remeda": "2.26.0"
     }
+  },
+  "dependencies": {
+    "pulumi-stripe": "0.0.24"
   },
   "devDependencies": {
     "prettier": "3.5.3",
@@ -41,7 +46,10 @@
   "trustedDependencies": [
     "esbuild",
     "protobufjs",
-    "sharp"
+    "sharp",
+    "tree-sitter",
+    "tree-sitter-bash",
+    "web-tree-sitter"
   ],
   "patchedDependencies": {}
 }

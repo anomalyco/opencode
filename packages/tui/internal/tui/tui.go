@@ -23,7 +23,6 @@ import (
 	"github.com/sst/opencode/internal/components/chat"
 	cmdcomp "github.com/sst/opencode/internal/components/commands"
 	"github.com/sst/opencode/internal/components/dialog"
-	"github.com/sst/opencode/internal/components/fileviewer"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/components/status"
 	"github.com/sst/opencode/internal/components/toast"
@@ -59,6 +58,8 @@ const interruptDebounceTimeout = 1 * time.Second
 const exitDebounceTimeout = 1 * time.Second
 
 type Model struct {
+	tea.Model
+	tea.CursorModel
 	width, height        int
 	app                  *app.App
 	modal                layout.Modal
@@ -69,13 +70,13 @@ type Model struct {
 	commandProvider      completions.CompletionProvider
 	fileProvider         completions.CompletionProvider
 	symbolsProvider      completions.CompletionProvider
+	agentsProvider       completions.CompletionProvider
 	showCompletionDialog bool
 	leaderBinding        *key.Binding
 	toastManager         *toast.ToastManager
 	interruptKeyState    InterruptKeyState
 	exitKeyState         ExitKeyState
 	messagesRight        bool
-	fileViewer           fileviewer.Model
 }
 
 func (a Model) Init() tea.Cmd {
@@ -91,13 +92,6 @@ func (a Model) Init() tea.Cmd {
 	cmds = append(cmds, a.status.Init())
 	cmds = append(cmds, a.completions.Init())
 	cmds = append(cmds, a.toastManager.Init())
-	cmds = append(cmds, a.fileViewer.Init())
-
-	// Check if we should show the init dialog
-	cmds = append(cmds, func() tea.Msg {
-		shouldShow := a.app.Info.Git && a.app.Info.Time.Initialized > 0
-		return dialog.ShowInitDialogMsg{Show: shouldShow}
-	})
 
 	return tea.Batch(cmds...)
 }
@@ -148,6 +142,23 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		if a.app.IsBashMode {
+			if keyString == "backspace" && a.editor.Length() == 0 {
+				a.app.IsBashMode = false
+				return a, nil
+			}
+
+			if keyString == "enter" || keyString == "esc" || keyString == "ctrl+c" {
+				a.app.IsBashMode = false
+				if keyString == "enter" {
+					updated, cmd := a.editor.SubmitBash()
+					a.editor = updated.(chat.EditorComponent)
+					cmds = append(cmds, cmd)
+				}
+				return a, tea.Batch(cmds...)
+			}
+		}
+
 		// 1. Handle active modal
 		if a.modal != nil {
 			switch keyString {
@@ -186,7 +197,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 3. Handle completions trigger
 		if keyString == "/" &&
 			!a.showCompletionDialog &&
-			a.editor.Value() == "" {
+			a.editor.Value() == "" &&
+			!a.app.IsBashMode {
 			a.showCompletionDialog = true
 
 			updated, cmd := a.editor.Update(msg)
@@ -204,20 +216,26 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle file completions trigger
 		if keyString == "@" &&
-			!a.showCompletionDialog {
+			!a.showCompletionDialog &&
+			!a.app.IsBashMode {
 			a.showCompletionDialog = true
 
 			updated, cmd := a.editor.Update(msg)
 			a.editor = updated.(chat.EditorComponent)
 			cmds = append(cmds, cmd)
 
-			// Set both file and symbols providers for @ completion
-			a.completions = dialog.NewCompletionDialogComponent("@", a.fileProvider, a.symbolsProvider)
+			// Set file, symbols, and agents providers for @ completion
+			a.completions = dialog.NewCompletionDialogComponent("@", a.agentsProvider, a.fileProvider, a.symbolsProvider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
 
 			return a, tea.Sequence(cmds...)
+		}
+
+		if keyString == "!" && a.editor.Value() == "" {
+			a.app.IsBashMode = true
+			return a, nil
 		}
 
 		if a.showCompletionDialog {
@@ -354,6 +372,11 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.modal = nil
 		return a, cmd
+	case dialog.ReopenSessionModalMsg:
+		// Reopen the session modal (used when exiting rename mode)
+		sessionDialog := dialog.NewSessionDialog(a.app)
+		a.modal = sessionDialog
+		return a, nil
 	case commands.ExecuteCommandMsg:
 		updated, cmd := a.executeCommand(commands.Command(msg))
 		return updated, cmd
@@ -368,8 +391,41 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, toast.NewErrorToast(msg.Error())
 	case app.SendPrompt:
 		a.showCompletionDialog = false
-		a.app, cmd = a.app.SendPrompt(context.Background(), msg)
-		cmds = append(cmds, cmd)
+		// If we're in a child session, switch back to parent before sending prompt
+		if a.app.Session.ParentID != "" {
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			if err != nil {
+				slog.Error("Failed to get parent session", "error", err)
+				return a, toast.NewErrorToast("Failed to get parent session")
+			}
+			a.app.Session = parentSession
+			a.app, cmd = a.app.SendPrompt(context.Background(), msg)
+			cmds = append(cmds, tea.Sequence(
+				util.CmdHandler(app.SessionSelectedMsg(parentSession)),
+				cmd,
+			))
+		} else {
+			a.app, cmd = a.app.SendPrompt(context.Background(), msg)
+			cmds = append(cmds, cmd)
+		}
+	case app.SendShell:
+		// If we're in a child session, switch back to parent before sending prompt
+		if a.app.Session.ParentID != "" {
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			if err != nil {
+				slog.Error("Failed to get parent session", "error", err)
+				return a, toast.NewErrorToast("Failed to get parent session")
+			}
+			a.app.Session = parentSession
+			a.app, cmd = a.app.SendShell(context.Background(), msg.Command)
+			cmds = append(cmds, tea.Sequence(
+				util.CmdHandler(app.SessionSelectedMsg(parentSession)),
+				cmd,
+			))
+		} else {
+			a.app, cmd = a.app.SendShell(context.Background(), msg.Command)
+			cmds = append(cmds, cmd)
+		}
 	case app.SetEditorContentMsg:
 		// Set the editor content without sending
 		a.editor.SetValueWithAttachments(msg.Text)
@@ -419,6 +475,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					switch casted := p.(type) {
 					case opencode.TextPart:
 						return casted.ID == msg.Properties.Part.ID
+					case opencode.ReasoningPart:
+						return casted.ID == msg.Properties.Part.ID
 					case opencode.FilePart:
 						return casted.ID == msg.Properties.Part.ID
 					case opencode.ToolPart:
@@ -456,6 +514,8 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				partIndex := slices.IndexFunc(message.Parts, func(p opencode.PartUnion) bool {
 					switch casted := p.(type) {
 					case opencode.TextPart:
+						return casted.ID == msg.Properties.PartID
+					case opencode.ReasoningPart:
 						return casted.ID == msg.Properties.PartID
 					case opencode.FilePart:
 						return casted.ID == msg.Properties.PartID
@@ -547,12 +607,6 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
 			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
 		}
-	case opencode.EventListResponseEventFileWatcherUpdated:
-		if a.fileViewer.HasFile() {
-			if a.fileViewer.Filename() == msg.Properties.File {
-				return a.openFile(msg.Properties.File)
-			}
-		}
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
@@ -567,6 +621,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		}
 	case app.SessionSelectedMsg:
+		updated, cmd := a.messages.Update(msg)
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
+
 		messages, err := a.app.ListMessages(context.Background(), msg.ID)
 		if err != nil {
 			slog.Error("Failed to list messages", "error", err.Error())
@@ -574,10 +632,43 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.app.Session = msg
 		a.app.Messages = messages
-		return a, util.CmdHandler(app.SessionLoadedMsg{})
+		cmds = append(cmds, util.CmdHandler(app.SessionLoadedMsg{}))
+		return a, tea.Batch(cmds...)
 	case app.SessionCreatedMsg:
 		a.app.Session = msg.Session
-		return a, util.CmdHandler(app.SessionLoadedMsg{})
+	case dialog.ScrollToMessageMsg:
+		updated, cmd := a.messages.ScrollToMessage(msg.MessageID)
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
+	case dialog.RestoreToMessageMsg:
+		cmd := func() tea.Msg {
+			// Find next user message after target
+			var nextMessageID string
+			for i := msg.Index + 1; i < len(a.app.Messages); i++ {
+				if userMsg, ok := a.app.Messages[i].Info.(opencode.UserMessage); ok {
+					nextMessageID = userMsg.ID
+					break
+				}
+			}
+
+			var response *opencode.Session
+			var err error
+
+			if nextMessageID == "" {
+				// Last message - use unrevert to restore full conversation
+				response, err = a.app.Client.Session.Unrevert(context.Background(), a.app.Session.ID)
+			} else {
+				// Revert to next message to make target the last visible
+				response, err = a.app.Client.Session.Revert(context.Background(), a.app.Session.ID,
+					opencode.SessionRevertParams{MessageID: opencode.F(nextMessageID)})
+			}
+
+			if err != nil || response == nil {
+				return toast.NewErrorToast("Failed to restore to message")
+			}
+			return app.MessageRevertedMsg{Session: *response, Message: app.Message{}}
+		}
+		cmds = append(cmds, cmd)
 	case app.MessageRevertedMsg:
 		if msg.Session.ID == a.app.Session.ID {
 			a.app.Session = &msg.Session
@@ -585,12 +676,16 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.ModelSelectedMsg:
 		a.app.Provider = &msg.Provider
 		a.app.Model = &msg.Model
-		a.app.State.ModeModel[a.app.Mode.Name] = app.ModeModel{
+		a.app.State.AgentModel[a.app.Agent().Name] = app.AgentModel{
 			ProviderID: msg.Provider.ID,
 			ModelID:    msg.Model.ID,
 		}
 		a.app.State.UpdateModelUsage(msg.Provider.ID, msg.Model.ID)
 		cmds = append(cmds, a.app.SaveState())
+	case app.AgentSelectedMsg:
+		updated, cmd := a.app.SwitchToAgent(msg.AgentName)
+		a.app = updated
+		cmds = append(cmds, cmd)
 	case dialog.ThemeSelectedMsg:
 		a.app.State.Theme = msg.ThemeName
 		cmds = append(cmds, a.app.SaveState())
@@ -610,8 +705,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset exit key state after timeout
 		a.exitKeyState = ExitKeyIdle
 		a.editor.SetExitKeyInDebounce(false)
-	case dialog.FindSelectedMsg:
-		return a.openFile(msg.FilePath)
+	case tea.PasteMsg, tea.ClipboardMsg:
+		// Paste events: prioritize modal if active, otherwise editor
+		if a.modal != nil {
+			updatedModal, cmd := a.modal.Update(msg)
+			a.modal = updatedModal.(layout.Modal)
+			return a, cmd
+		} else {
+			updatedEditor, cmd := a.editor.Update(msg)
+			a.editor = updatedEditor.(chat.EditorComponent)
+			return a, cmd
+		}
 
 	// API
 	case api.Request:
@@ -624,6 +728,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "/tui/open-sessions":
 			sessionDialog := dialog.NewSessionDialog(a.app)
 			a.modal = sessionDialog
+		case "/tui/open-timeline":
+			navigationDialog := dialog.NewTimelineDialog(a.app)
+			a.modal = navigationDialog
 		case "/tui/open-themes":
 			themeDialog := dialog.NewThemeDialog()
 			a.modal = themeDialog
@@ -668,6 +775,45 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, cmd := a.executeCommand(commands.Command(command))
 			a = updated.(Model)
 			cmds = append(cmds, cmd)
+		case "/tui/show-toast":
+			var body struct {
+				Title   string `json:"title,omitempty"`
+				Message string `json:"message"`
+				Variant string `json:"variant"`
+			}
+			json.Unmarshal((msg.Body), &body)
+
+			var toastCmd tea.Cmd
+			switch body.Variant {
+			case "info":
+				if body.Title != "" {
+					toastCmd = toast.NewInfoToast(body.Message, toast.WithTitle(body.Title))
+				} else {
+					toastCmd = toast.NewInfoToast(body.Message)
+				}
+			case "success":
+				if body.Title != "" {
+					toastCmd = toast.NewSuccessToast(body.Message, toast.WithTitle(body.Title))
+				} else {
+					toastCmd = toast.NewSuccessToast(body.Message)
+				}
+			case "warning":
+				if body.Title != "" {
+					toastCmd = toast.NewErrorToast(body.Message, toast.WithTitle(body.Title))
+				} else {
+					toastCmd = toast.NewErrorToast(body.Message)
+				}
+			case "error":
+				if body.Title != "" {
+					toastCmd = toast.NewErrorToast(body.Message, toast.WithTitle(body.Title))
+				} else {
+					toastCmd = toast.NewErrorToast(body.Message)
+				}
+			default:
+				slog.Error("Invalid toast variant", "variant", body.Variant)
+				return a, nil
+			}
+			cmds = append(cmds, toastCmd)
 
 		default:
 			break
@@ -679,17 +825,17 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 	a.status = s.(status.StatusComponent)
 
-	u, cmd := a.editor.Update(msg)
-	a.editor = u.(chat.EditorComponent)
+	updatedEditor, cmd := a.editor.Update(msg)
+	a.editor = updatedEditor.(chat.EditorComponent)
 	cmds = append(cmds, cmd)
 
-	u, cmd = a.messages.Update(msg)
-	a.messages = u.(chat.MessagesComponent)
+	updatedMessages, cmd := a.messages.Update(msg)
+	a.messages = updatedMessages.(chat.MessagesComponent)
 	cmds = append(cmds, cmd)
 
 	if a.modal != nil {
-		u, cmd := a.modal.Update(msg)
-		a.modal = u.(layout.Modal)
+		updatedModal, cmd := a.modal.Update(msg)
+		a.modal = updatedModal.(layout.Modal)
 		cmds = append(cmds, cmd)
 	}
 
@@ -699,22 +845,20 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	fv, cmd := a.fileViewer.Update(msg)
-	a.fileViewer = fv
-	cmds = append(cmds, cmd)
-
 	return a, tea.Batch(cmds...)
 }
 
-func (a Model) View() string {
+func (a Model) View() (string, *tea.Cursor) {
 	t := theme.CurrentTheme()
 
 	var mainLayout string
 
+	var editorX int
+	var editorY int
 	if a.app.Session.ID == "" {
-		mainLayout = a.home()
+		mainLayout, editorX, editorY = a.home()
 	} else {
-		mainLayout = a.chat()
+		mainLayout, editorX, editorY = a.chat()
 	}
 	mainLayout = styles.NewStyle().
 		Background(t.Background()).
@@ -738,34 +882,19 @@ func (a Model) View() string {
 	if theme.CurrentThemeUsesAnsiColors() {
 		mainLayout = util.ConvertRGBToAnsi16Colors(mainLayout)
 	}
-	return mainLayout + "\n" + a.status.View()
+
+	cursor := a.editor.Cursor()
+	cursor.Position.X += editorX
+	cursor.Position.Y += editorY
+
+	return mainLayout + "\n" + a.status.View(), cursor
 }
 
 func (a Model) Cleanup() {
 	a.status.Cleanup()
 }
 
-func (a Model) openFile(filepath string) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	response, err := a.app.Client.File.Read(
-		context.Background(),
-		opencode.FileReadParams{
-			Path: opencode.F(filepath),
-		},
-	)
-	if err != nil {
-		slog.Error("Failed to read file", "error", err)
-		return a, toast.NewErrorToast("Failed to read file")
-	}
-	a.fileViewer, cmd = a.fileViewer.SetFile(
-		filepath,
-		response.Content,
-		response.Type == "patch",
-	)
-	return a, cmd
-}
-
-func (a Model) home() string {
+func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
 	baseStyle := styles.NewStyle().Background(t.Background())
@@ -857,14 +986,21 @@ func (a Model) home() string {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
-	editorX := (effectiveWidth - editorWidth) / 2
+	editorX := max(0, (effectiveWidth-editorWidth)/2)
 	editorY := (a.height / 2) + (mainHeight / 2) - 2
 
 	if editorLines > 1 {
+		content := a.editor.Content()
+		editorHeight := lipgloss.Height(content)
+
+		if editorY+editorHeight > a.height {
+			difference := (editorY + editorHeight) - a.height
+			editorY -= difference
+		}
 		mainLayout = layout.PlaceOverlay(
 			editorX,
 			editorY,
-			a.editor.Content(),
+			content,
 			mainLayout,
 		)
 	}
@@ -882,10 +1018,10 @@ func (a Model) home() string {
 		)
 	}
 
-	return mainLayout
+	return mainLayout, editorX + 5, editorY + 2
 }
 
-func (a Model) chat() string {
+func (a Model) chat() (string, int, int) {
 	effectiveWidth := a.width - 4
 	t := theme.CurrentTheme()
 	editorView := a.editor.View()
@@ -902,14 +1038,20 @@ func (a Model) chat() string {
 	)
 
 	mainLayout := messagesView + "\n" + editorView
-	editorX := (effectiveWidth - editorWidth) / 2
+	editorX := max(0, (effectiveWidth-editorWidth)/2)
+	editorY := a.height - editorHeight
 
 	if lines > 1 {
-		editorY := a.height - editorHeight
+		content := a.editor.Content()
+		editorHeight := lipgloss.Height(content)
+		if editorY+editorHeight > a.height {
+			difference := (editorY + editorHeight) - a.height
+			editorY -= difference
+		}
 		mainLayout = layout.PlaceOverlay(
 			editorX,
 			editorY,
-			a.editor.Content(),
+			content,
 			mainLayout,
 		)
 	}
@@ -928,7 +1070,7 @@ func (a Model) chat() string {
 		)
 	}
 
-	return mainLayout
+	return mainLayout, editorX + 5, editorY + 2
 }
 
 func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
@@ -940,12 +1082,12 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.AppHelpCommand:
 		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
-	case commands.SwitchModeCommand:
-		updated, cmd := a.app.SwitchMode()
+	case commands.AgentCycleCommand:
+		updated, cmd := a.app.SwitchAgent()
 		a.app = updated
 		cmds = append(cmds, cmd)
-	case commands.SwitchModeReverseCommand:
-		updated, cmd := a.app.SwitchModeReverse()
+	case commands.AgentCycleReverseCommand:
+		updated, cmd := a.app.SwitchAgentReverse()
 		a.app = updated
 		cmds = append(cmds, cmd)
 	case commands.EditorOpenCommand:
@@ -1004,6 +1146,12 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
 		a.modal = sessionDialog
+	case commands.SessionTimelineCommand:
+		if a.app.Session.ID == "" {
+			return a, toast.NewErrorToast("No active session")
+		}
+		navigationDialog := dialog.NewTimelineDialog(a.app)
+		a.modal = navigationDialog
 	case commands.SessionShareCommand:
 		if a.app.Session.ID == "" {
 			return a, nil
@@ -1039,6 +1187,122 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		}
 		// TODO: block until compaction is complete
 		a.app.CompactSession(context.Background())
+	case commands.SessionChildCycleCommand:
+		if a.app.Session.ID == "" {
+			return a, nil
+		}
+		cmds = append(cmds, func() tea.Msg {
+			parentSessionID := a.app.Session.ID
+			var parentSession *opencode.Session
+			if a.app.Session.ParentID != "" {
+				parentSessionID = a.app.Session.ParentID
+				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID)
+				if err != nil {
+					slog.Error("Failed to get parent session", "error", err)
+					return toast.NewErrorToast("Failed to get parent session")
+				}
+				parentSession = session
+			} else {
+				parentSession = a.app.Session
+			}
+
+			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID)
+			if err != nil {
+				slog.Error("Failed to get session children", "error", err)
+				return toast.NewErrorToast("Failed to get session children")
+			}
+
+			// Reverse sort the children (newest first)
+			slices.Reverse(*children)
+
+			// Create combined array: [parent, child1, child2, ...]
+			sessions := []*opencode.Session{parentSession}
+			for i := range *children {
+				sessions = append(sessions, &(*children)[i])
+			}
+
+			if len(sessions) == 1 {
+				return toast.NewInfoToast("No child sessions available")
+			}
+
+			// Find current session index in combined array
+			currentIndex := -1
+			for i, session := range sessions {
+				if session.ID == a.app.Session.ID {
+					currentIndex = i
+					break
+				}
+			}
+
+			// If session not found, default to parent (shouldn't happen)
+			if currentIndex == -1 {
+				currentIndex = 0
+			}
+
+			// Cycle to next session (parent or child)
+			nextIndex := (currentIndex + 1) % len(sessions)
+			nextSession := sessions[nextIndex]
+
+			return app.SessionSelectedMsg(nextSession)
+		})
+	case commands.SessionChildCycleReverseCommand:
+		if a.app.Session.ID == "" {
+			return a, nil
+		}
+		cmds = append(cmds, func() tea.Msg {
+			parentSessionID := a.app.Session.ID
+			var parentSession *opencode.Session
+			if a.app.Session.ParentID != "" {
+				parentSessionID = a.app.Session.ParentID
+				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID)
+				if err != nil {
+					slog.Error("Failed to get parent session", "error", err)
+					return toast.NewErrorToast("Failed to get parent session")
+				}
+				parentSession = session
+			} else {
+				parentSession = a.app.Session
+			}
+
+			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID)
+			if err != nil {
+				slog.Error("Failed to get session children", "error", err)
+				return toast.NewErrorToast("Failed to get session children")
+			}
+
+			// Reverse sort the children (newest first)
+			slices.Reverse(*children)
+
+			// Create combined array: [parent, child1, child2, ...]
+			sessions := []*opencode.Session{parentSession}
+			for i := range *children {
+				sessions = append(sessions, &(*children)[i])
+			}
+
+			if len(sessions) == 1 {
+				return toast.NewInfoToast("No child sessions available")
+			}
+
+			// Find current session index in combined array
+			currentIndex := -1
+			for i, session := range sessions {
+				if session.ID == a.app.Session.ID {
+					currentIndex = i
+					break
+				}
+			}
+
+			// If session not found, default to parent (shouldn't happen)
+			if currentIndex == -1 {
+				currentIndex = 0
+			}
+
+			// Cycle to previous session (parent or child)
+			nextIndex := (currentIndex - 1 + len(sessions)) % len(sessions)
+			nextSession := sessions[nextIndex]
+
+			return app.SessionSelectedMsg(nextSession)
+		})
 	case commands.SessionExportCommand:
 		if a.app.Session.ID == "" {
 			return a, toast.NewErrorToast("No active session to export.")
@@ -1097,27 +1361,32 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, util.CmdHandler(chat.ToggleToolDetailsMsg{}))
 		cmds = append(cmds, toast.NewInfoToast(message))
+	case commands.ThinkingBlocksCommand:
+		message := "Thinking blocks are now visible"
+		if a.messages.ThinkingBlocksVisible() {
+			message = "Thinking blocks are now hidden"
+		}
+		cmds = append(cmds, util.CmdHandler(chat.ToggleThinkingBlocksMsg{}))
+		cmds = append(cmds, toast.NewInfoToast(message))
 	case commands.ModelListCommand:
 		modelDialog := dialog.NewModelDialog(a.app)
 		a.modal = modelDialog
+
+	case commands.AgentListCommand:
+		agentDialog := dialog.NewAgentDialog(a.app)
+		a.modal = agentDialog
+	case commands.ModelCycleRecentCommand:
+		slog.Debug("ModelCycleRecentCommand triggered")
+		updated, cmd := a.app.CycleRecentModel()
+		a.app = updated
+		cmds = append(cmds, cmd)
+	case commands.ModelCycleRecentReverseCommand:
+		updated, cmd := a.app.CycleRecentModelReverse()
+		a.app = updated
+		cmds = append(cmds, cmd)
 	case commands.ThemeListCommand:
 		themeDialog := dialog.NewThemeDialog()
 		a.modal = themeDialog
-	// case commands.FileListCommand:
-	// 	a.editor.Blur()
-	// 	findDialog := dialog.NewFindDialog(a.fileProvider)
-	// 	cmds = append(cmds, findDialog.Init())
-	// 	a.modal = findDialog
-	case commands.FileCloseCommand:
-		a.fileViewer, cmd = a.fileViewer.Clear()
-		cmds = append(cmds, cmd)
-	case commands.FileDiffToggleCommand:
-		a.fileViewer, cmd = a.fileViewer.ToggleDiff()
-		cmds = append(cmds, cmd)
-		a.app.State.SplitDiff = a.fileViewer.DiffStyle() == fileviewer.DiffStyleSplit
-		cmds = append(cmds, a.app.SaveState())
-	case commands.FileSearchCommand:
-		return a, nil
 	case commands.ProjectInitCommand:
 		cmds = append(cmds, a.app.InitializeProject(context.Background()))
 	case commands.InputClearCommand:
@@ -1148,45 +1417,21 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		a.messages = updated.(chat.MessagesComponent)
 		cmds = append(cmds, cmd)
 	case commands.MessagesPageUpCommand:
-		if a.fileViewer.HasFile() {
-			a.fileViewer, cmd = a.fileViewer.PageUp()
-			cmds = append(cmds, cmd)
-		} else {
-			updated, cmd := a.messages.PageUp()
-			a.messages = updated.(chat.MessagesComponent)
-			cmds = append(cmds, cmd)
-		}
+		updated, cmd := a.messages.PageUp()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
 	case commands.MessagesPageDownCommand:
-		if a.fileViewer.HasFile() {
-			a.fileViewer, cmd = a.fileViewer.PageDown()
-			cmds = append(cmds, cmd)
-		} else {
-			updated, cmd := a.messages.PageDown()
-			a.messages = updated.(chat.MessagesComponent)
-			cmds = append(cmds, cmd)
-		}
+		updated, cmd := a.messages.PageDown()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
 	case commands.MessagesHalfPageUpCommand:
-		if a.fileViewer.HasFile() {
-			a.fileViewer, cmd = a.fileViewer.HalfPageUp()
-			cmds = append(cmds, cmd)
-		} else {
-			updated, cmd := a.messages.HalfPageUp()
-			a.messages = updated.(chat.MessagesComponent)
-			cmds = append(cmds, cmd)
-		}
+		updated, cmd := a.messages.HalfPageUp()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
 	case commands.MessagesHalfPageDownCommand:
-		if a.fileViewer.HasFile() {
-			a.fileViewer, cmd = a.fileViewer.HalfPageDown()
-			cmds = append(cmds, cmd)
-		} else {
-			updated, cmd := a.messages.HalfPageDown()
-			a.messages = updated.(chat.MessagesComponent)
-			cmds = append(cmds, cmd)
-		}
-	case commands.MessagesLayoutToggleCommand:
-		a.messagesRight = !a.messagesRight
-		a.app.State.MessagesRight = a.messagesRight
-		cmds = append(cmds, a.app.SaveState())
+		updated, cmd := a.messages.HalfPageDown()
+		a.messages = updated.(chat.MessagesComponent)
+		cmds = append(cmds, cmd)
 	case commands.MessagesCopyCommand:
 		updated, cmd := a.messages.CopyLastMessage()
 		a.messages = updated.(chat.MessagesComponent)
@@ -1209,6 +1454,7 @@ func NewModel(app *app.App) tea.Model {
 	commandProvider := completions.NewCommandCompletionProvider(app)
 	fileProvider := completions.NewFileContextGroup(app)
 	symbolsProvider := completions.NewSymbolsContextGroup(app)
+	agentsProvider := completions.NewAgentsContextGroup(app)
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
@@ -1229,13 +1475,12 @@ func NewModel(app *app.App) tea.Model {
 		commandProvider:      commandProvider,
 		fileProvider:         fileProvider,
 		symbolsProvider:      symbolsProvider,
+		agentsProvider:       agentsProvider,
 		leaderBinding:        leaderBinding,
 		showCompletionDialog: false,
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
 		exitKeyState:         ExitKeyIdle,
-		fileViewer:           fileviewer.New(app),
-		messagesRight:        app.State.MessagesRight,
 	}
 
 	return model

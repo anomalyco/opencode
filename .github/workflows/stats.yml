@@ -30,3 +30,5 @@ jobs:
           git add STATS.md
           git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
           git push
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}

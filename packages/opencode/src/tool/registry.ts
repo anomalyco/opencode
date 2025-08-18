@@ -10,9 +10,12 @@ import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
+import { InvalidTool } from "./invalid"
+import type { Agent } from "../agent/agent"
 
 export namespace ToolRegistry {
   const ALL = [
+    InvalidTool,
     BashTool,
     EditTool,
     WebFetchTool,
@@ -63,27 +66,32 @@ export namespace ToolRegistry {
     return result
   }
 
-  export function enabled(_providerID: string, modelID: string): Record<string, boolean> {
-    if (modelID.toLowerCase().includes("claude")) {
-      return {
-        patch: false,
-      }
+  export async function enabled(
+    _providerID: string,
+    modelID: string,
+    agent: Agent.Info,
+  ): Promise<Record<string, boolean>> {
+    const result: Record<string, boolean> = {}
+    result["patch"] = false
+
+    if (agent.permission.edit === "deny") {
+      result["edit"] = false
+      result["patch"] = false
+      result["write"] = false
+    }
+    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
+      result["bash"] = false
+    }
+    if (agent.permission.webfetch === "deny") {
+      result["webfetch"] = false
     }
 
-    if (
-      modelID.toLowerCase().includes("qwen") ||
-      modelID.includes("gpt-") ||
-      modelID.includes("o1") ||
-      modelID.includes("o3") ||
-      modelID.includes("codex")
-    ) {
-      return {
-        patch: false,
-        todowrite: false,
-        todoread: false,
-      }
+    if (modelID.includes("qwen")) {
+      result["todowrite"] = false
+      result["todoread"] = false
     }
-    return {}
+
+    return result
   }
 
   function sanitizeGeminiParameters(schema: z.ZodTypeAny, visited = new Set()): z.ZodTypeAny {

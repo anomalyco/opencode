@@ -14,6 +14,7 @@ import (
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/diff"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -23,17 +24,18 @@ import (
 )
 
 type blockRenderer struct {
-	textColor     compat.AdaptiveColor
-	border        bool
-	borderColor   *compat.AdaptiveColor
-	borderLeft    bool
-	borderRight   bool
-	paddingTop    int
-	paddingBottom int
-	paddingLeft   int
-	paddingRight  int
-	marginTop     int
-	marginBottom  int
+	textColor       compat.AdaptiveColor
+	backgroundColor compat.AdaptiveColor
+	border          bool
+	borderColor     *compat.AdaptiveColor
+	borderLeft      bool
+	borderRight     bool
+	paddingTop      int
+	paddingBottom   int
+	paddingLeft     int
+	paddingRight    int
+	marginTop       int
+	marginBottom    int
 }
 
 type renderingOption func(*blockRenderer)
@@ -41,6 +43,12 @@ type renderingOption func(*blockRenderer)
 func WithTextColor(color compat.AdaptiveColor) renderingOption {
 	return func(c *blockRenderer) {
 		c.textColor = color
+	}
+}
+
+func WithBackgroundColor(color compat.AdaptiveColor) renderingOption {
+	return func(c *blockRenderer) {
+		c.backgroundColor = color
 	}
 }
 
@@ -132,14 +140,15 @@ func renderContentBlock(
 ) string {
 	t := theme.CurrentTheme()
 	renderer := &blockRenderer{
-		textColor:     t.TextMuted(),
-		border:        true,
-		borderLeft:    true,
-		borderRight:   false,
-		paddingTop:    1,
-		paddingBottom: 1,
-		paddingLeft:   2,
-		paddingRight:  2,
+		textColor:       t.TextMuted(),
+		backgroundColor: t.BackgroundPanel(),
+		border:          true,
+		borderLeft:      true,
+		borderRight:     false,
+		paddingTop:      1,
+		paddingBottom:   1,
+		paddingLeft:     2,
+		paddingRight:    2,
 	}
 	for _, option := range options {
 		option(renderer)
@@ -152,7 +161,7 @@ func renderContentBlock(
 
 	style := styles.NewStyle().
 		Foreground(renderer.textColor).
-		Background(t.BackgroundPanel()).
+		Background(renderer.backgroundColor).
 		PaddingTop(renderer.paddingTop).
 		PaddingBottom(renderer.paddingBottom).
 		PaddingLeft(renderer.paddingLeft).
@@ -175,6 +184,8 @@ func renderContentBlock(
 		if renderer.borderRight {
 			style = style.BorderRightForeground(borderColor)
 		}
+	} else {
+		style = style.PaddingLeft(renderer.paddingLeft + 1).PaddingRight(renderer.paddingRight + 1)
 	}
 
 	content = style.Render(content)
@@ -200,7 +211,10 @@ func renderText(
 	showToolDetails bool,
 	width int,
 	extra string,
+	isThinking bool,
+	isQueued bool,
 	fileParts []opencode.FilePart,
+	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
 ) string {
 	t := theme.CurrentTheme()
@@ -210,48 +224,173 @@ func renderText(
 	var content string
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
+		backgroundColor = t.Background()
+		if isThinking {
+			backgroundColor = t.BackgroundPanel()
+		}
 		ts = time.UnixMilli(int64(casted.Time.Created))
+		if casted.Time.Completed > 0 {
+			ts = time.UnixMilli(int64(casted.Time.Completed))
+		}
 		content = util.ToMarkdown(text, width, backgroundColor)
+		if isThinking {
+			label := util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label + "\n\n" + content
+		} else if strings.TrimSpace(text) == "Generating..." {
+			label := util.Shimmer(text, backgroundColor, t.TextMuted(), t.Text())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label
+		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
-		text = ansi.WordwrapWc(text, width-6, " -")
 
 		var result strings.Builder
 		lastEnd := int64(0)
 
-		// Apply highlighting to filenames and base style to rest of text
+		// Apply highlighting to filenames and base style to rest of text BEFORE wrapping
+		textLen := int64(len(text))
+
+		// Collect all parts to highlight (both file and agent parts)
+		type highlightPart struct {
+			start int64
+			end   int64
+			color compat.AdaptiveColor
+		}
+		var highlights []highlightPart
+
+		// Add file parts with secondary color
 		for _, filePart := range fileParts {
-			highlight := base.Foreground(t.Secondary())
-			start, end := filePart.Source.Text.Start, filePart.Source.Text.End
+			highlights = append(highlights, highlightPart{
+				start: filePart.Source.Text.Start,
+				end:   filePart.Source.Text.End,
+				color: t.Secondary(),
+			})
+		}
+
+		// Add agent parts with secondary color (same as file parts)
+		for _, agentPart := range agentParts {
+			highlights = append(highlights, highlightPart{
+				start: agentPart.Source.Start,
+				end:   agentPart.Source.End,
+				color: t.Secondary(),
+			})
+		}
+
+		// Sort highlights by start position
+		slices.SortFunc(highlights, func(a, b highlightPart) int {
+			if a.start < b.start {
+				return -1
+			}
+			if a.start > b.start {
+				return 1
+			}
+			return 0
+		})
+
+		// Merge overlapping highlights to prevent duplication
+		merged := make([]highlightPart, 0)
+		for _, part := range highlights {
+			if len(merged) == 0 {
+				merged = append(merged, part)
+				continue
+			}
+
+			last := &merged[len(merged)-1]
+			// If current part overlaps with the last one, merge them
+			if part.start <= last.end {
+				if part.end > last.end {
+					last.end = part.end
+				}
+			} else {
+				merged = append(merged, part)
+			}
+		}
+
+		for _, part := range merged {
+			highlight := base.Foreground(part.color)
+			start, end := part.start, part.end
+
+			if end > textLen {
+				end = textLen
+			}
+			if start > textLen {
+				start = textLen
+			}
 
 			if start > lastEnd {
 				result.WriteString(base.Render(text[lastEnd:start]))
 			}
-			result.WriteString(highlight.Render(text[start:end]))
+			if start < end {
+				result.WriteString(highlight.Render(text[start:end]))
+			}
 
 			lastEnd = end
 		}
 
-		if lastEnd < int64(len(text)) {
+		if lastEnd < textLen {
 			result.WriteString(base.Render(text[lastEnd:]))
 		}
 
-		content = base.Width(width - 6).Render(result.String())
+		// wrap styled text
+		styledText := result.String()
+		styledText = strings.ReplaceAll(styledText, "-", "\u2011")
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " ")
+		wrappedText = strings.ReplaceAll(wrappedText, "\u2011", "-")
+		content = base.Width(width - 6).Render(wrappedText)
+		if isQueued {
+			queuedStyle := styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Bold(true).Padding(0, 1)
+			content = queuedStyle.Render("QUEUED") + "\n\n" + content
+		}
 	}
 
 	timestamp := ts.
 		Local().
 		Format("02 Jan 2006 03:04 PM")
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
-		// don't show the date if it's today
 		timestamp = timestamp[12:]
 	}
-	info := fmt.Sprintf("%s (%s)", author, timestamp)
-	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
+	timestamp = styles.NewStyle().
+		Background(backgroundColor).
+		Foreground(t.TextMuted()).
+		Render(" (" + timestamp + ")")
 
+	// Check if this is an assistant message with agent information
+	var modelAndAgentSuffix string
+	if assistantMsg, ok := message.(opencode.AssistantMessage); ok && assistantMsg.Mode != "" {
+		// Find the agent index by name to get the correct color
+		var agentIndex int
+		for i, agent := range app.Agents {
+			if agent.Name == assistantMsg.Mode {
+				agentIndex = i
+				break
+			}
+		}
+
+		// Get agent color based on the original agent index (same as status bar)
+		agentColor := util.GetAgentColor(agentIndex)
+
+		// Style the agent name with the same color as status bar
+		agentName := cases.Title(language.Und).String(assistantMsg.Mode)
+		styledAgentName := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(agentColor).
+			Render(agentName + " ")
+		styledModelID := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(t.TextMuted()).
+			Render(assistantMsg.ModelID)
+		modelAndAgentSuffix = styledAgentName + styledModelID
+	}
+
+	var info string
+	if modelAndAgentSuffix != "" {
+		info = modelAndAgentSuffix + timestamp
+	} else {
+		info = author + timestamp
+	}
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
-		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
 			title := renderToolTitle(toolCall, width-2)
 			style := styles.NewStyle()
@@ -259,33 +398,48 @@ func renderText(
 				style = style.Foreground(t.Error())
 			}
 			title = style.Render(title)
-			title = "∟ " + title + "\n"
+			title = "\n∟ " + title
 			content = content + title
 		}
 	}
 
-	sections := []string{content, info}
+	sections := []string{content}
 	if extra != "" {
-		sections = append(sections, "\n"+extra)
+		sections = append(sections, "\n"+extra+"\n")
 	}
+	sections = append(sections, info)
 	content = strings.Join(sections, "\n")
 
 	switch message.(type) {
 	case opencode.UserMessage:
+		borderColor := t.Secondary()
+		if isQueued {
+			borderColor = t.Accent()
+		}
 		return renderContentBlock(
 			app,
 			content,
 			width,
 			WithTextColor(t.Text()),
-			WithBorderColor(t.Secondary()),
-			WithBorderRight(),
+			WithBorderColor(borderColor),
 		)
 	case opencode.AssistantMessage:
+		if isThinking {
+			return renderContentBlock(
+				app,
+				content,
+				width,
+				WithTextColor(t.Text()),
+				WithBackgroundColor(t.BackgroundPanel()),
+				WithBorderColor(t.BackgroundPanel()),
+			)
+		}
 		return renderContentBlock(
 			app,
 			content,
 			width,
-			WithBorderColor(t.Accent()),
+			WithNoBorder(),
+			WithBackgroundColor(t.Background()),
 		)
 	}
 	return ""
@@ -332,6 +486,8 @@ func renderToolDetails(
 	backgroundColor := t.BackgroundPanel()
 	borderColor := t.BackgroundPanel()
 	defaultStyle := styles.NewStyle().Background(backgroundColor).Width(width - 6).Render
+	baseStyle := styles.NewStyle().Background(backgroundColor).Foreground(t.Text()).Render
+	mutedStyle := styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render
 
 	permissionContent := ""
 	if permission.ID != "" {
@@ -358,8 +514,8 @@ func renderToolDetails(
 	}
 
 	if permission.Metadata != nil {
-		metadata := toolCall.State.Metadata.(map[string]any)
-		if metadata == nil {
+		metadata, ok := toolCall.State.Metadata.(map[string]any)
+		if metadata == nil || !ok {
 			metadata = map[string]any{}
 		}
 		maps.Copy(metadata, permission.Metadata)
@@ -416,6 +572,17 @@ func renderToolDetails(
 					title := renderToolTitle(toolCall, width)
 					title = style.Render(title)
 					content := title + "\n" + body
+
+					if toolCall.State.Status == opencode.ToolPartStateStatusError {
+						errorStyle := styles.NewStyle().
+							Background(backgroundColor).
+							Foreground(t.Error()).
+							Padding(1, 2).
+							Width(width - 4)
+						errorContent := errorStyle.Render(toolCall.State.Error)
+						content += "\n" + errorContent
+					}
+
 					if permissionContent != "" {
 						permissionContent = styles.NewStyle().
 							Background(backgroundColor).
@@ -444,18 +611,15 @@ func renderToolDetails(
 				}
 			}
 		case "bash":
-			command := toolInputMap["command"].(string)
-			body = fmt.Sprintf("```console\n$ %s\n", command)
-			stdout := metadata["stdout"]
-			if stdout != nil {
-				body += ansi.Strip(fmt.Sprintf("%s", stdout))
+			if command, ok := toolInputMap["command"].(string); ok {
+				body = fmt.Sprintf("```console\n$ %s\n", command)
+				output := metadata["output"]
+				if output != nil {
+					body += ansi.Strip(fmt.Sprintf("%s", output))
+				}
+				body += "```"
+				body = util.ToMarkdown(body, width, backgroundColor)
 			}
-			stderr := metadata["stderr"]
-			if stderr != nil {
-				body += ansi.Strip(fmt.Sprintf("%s", stderr))
-			}
-			body += "```"
-			body = util.ToMarkdown(body, width, backgroundColor)
 		case "webfetch":
 			if format, ok := toolInputMap["format"].(string); ok && result != nil {
 				body = *result
@@ -499,6 +663,12 @@ func renderToolDetails(
 					steps = append(steps, step)
 				}
 				body = strings.Join(steps, "\n")
+
+				body += "\n\n"
+				body += baseStyle(app.Keybind(commands.SessionChildCycleCommand)) +
+					mutedStyle(", ") +
+					baseStyle(app.Keybind(commands.SessionChildCycleReverseCommand)) +
+					mutedStyle(" navigate child sessions")
 			}
 			body = defaultStyle(body)
 		default:
@@ -518,11 +688,17 @@ func renderToolDetails(
 	}
 
 	if error != "" {
-		body = styles.NewStyle().
+		errorContent := styles.NewStyle().
 			Width(width - 6).
 			Foreground(t.Error()).
 			Background(backgroundColor).
 			Render(error)
+
+		if body == "" {
+			body = errorContent
+		} else {
+			body += "\n\n" + errorContent
+		}
 	}
 
 	if body == "" && error == "" && result != nil {
@@ -553,8 +729,12 @@ func renderToolDetails(
 
 func renderToolName(name string) string {
 	switch name {
+	case "bash":
+		return "Shell"
 	case "webfetch":
 		return "Fetch"
+	case "invalid":
+		return "Invalid"
 	default:
 		normalizedName := name
 		if after, ok := strings.CutPrefix(name, "opencode_"); ok {
@@ -605,7 +785,9 @@ func renderToolTitle(
 ) string {
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolAction(toolCall.Tool)
-		return styles.NewStyle().Width(width - 6).Render(title)
+		t := theme.CurrentTheme()
+		shiny := util.Shimmer(title, t.BackgroundPanel(), t.TextMuted(), t.Accent())
+		return styles.NewStyle().Background(t.BackgroundPanel()).Width(width - 6).Render(shiny)
 	}
 
 	toolArgs := ""
@@ -657,6 +839,10 @@ func renderToolTitle(
 		title = getTodoTitle(toolCall)
 	case "todoread":
 		return "Plan"
+	case "invalid":
+		if actualTool, ok := toolArgsMap["tool"].(string); ok {
+			title = renderToolName(actualTool)
+		}
 	default:
 		toolName := renderToolName(toolCall.Tool)
 		title = fmt.Sprintf("%s %s", toolName, toolArgs)

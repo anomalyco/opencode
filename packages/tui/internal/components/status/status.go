@@ -121,58 +121,42 @@ func (m *statusComponent) View() string {
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
-	switch m.app.ModeIndex {
-	case 0:
+
+	agentColor := util.GetAgentColor(m.app.AgentIndex)
+
+	if m.app.AgentIndex == 0 {
 		modeBackground = t.BackgroundElement()
-		modeForeground = t.TextMuted()
-	case 1:
-		modeBackground = t.Secondary()
-		modeForeground = t.BackgroundPanel()
-	case 2:
-		modeBackground = t.Accent()
-		modeForeground = t.BackgroundPanel()
-	case 3:
-		modeBackground = t.Success()
-		modeForeground = t.BackgroundPanel()
-	case 4:
-		modeBackground = t.Warning()
-		modeForeground = t.BackgroundPanel()
-	case 5:
-		modeBackground = t.Primary()
-		modeForeground = t.BackgroundPanel()
-	case 6:
-		modeBackground = t.Error()
-		modeForeground = t.BackgroundPanel()
-	default:
-		modeBackground = t.Secondary()
+		modeForeground = agentColor
+	} else {
+		modeBackground = agentColor
 		modeForeground = t.BackgroundPanel()
 	}
 
-	command := m.app.Commands[commands.SwitchModeCommand]
+	command := m.app.Commands[commands.AgentCycleCommand]
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {
 		key = m.app.Config.Keybinds.Leader + " " + kb.Key
 	}
 
-	modeStyle := styles.NewStyle().Background(modeBackground).Foreground(modeForeground)
-	modeNameStyle := modeStyle.Bold(true).Render
-	modeDescStyle := modeStyle.Render
-	mode := modeNameStyle(strings.ToUpper(m.app.Mode.Name)) + modeDescStyle(" MODE")
-	mode = modeStyle.
+	agentStyle := styles.NewStyle().Background(modeBackground).Foreground(modeForeground)
+	agentNameStyle := agentStyle.Bold(true).Render
+	agentDescStyle := agentStyle.Render
+	agent := agentNameStyle(strings.ToUpper(m.app.Agent().Name)) + agentDescStyle(" AGENT")
+	agent = agentStyle.
 		Padding(0, 1).
 		BorderLeft(true).
 		BorderStyle(lipgloss.ThickBorder()).
 		BorderForeground(modeBackground).
 		BorderBackground(t.BackgroundPanel()).
-		Render(mode)
+		Render(agent)
 
 	faintStyle := styles.NewStyle().
 		Faint(true).
 		Background(t.BackgroundPanel()).
 		Foreground(t.TextMuted())
-	mode = faintStyle.Render(key+" ") + mode
-	modeWidth := lipgloss.Width(mode)
+	agent = faintStyle.Render(key+" ") + agent
+	modeWidth := lipgloss.Width(agent)
 
 	availableWidth := m.width - logoWidth - modeWidth
 	branchSuffix := ""
@@ -206,7 +190,7 @@ func (m *statusComponent) View() string {
 			View: logo + cwd,
 		},
 		layout.FlexItem{
-			View: mode,
+			View: agent,
 		},
 	)
 

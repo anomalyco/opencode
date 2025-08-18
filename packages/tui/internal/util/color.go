@@ -3,6 +3,9 @@ package util
 import (
 	"regexp"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss/v2/compat"
+	"github.com/sst/opencode/internal/theme"
 )
 
 var csiRE *regexp.Regexp
@@ -89,5 +92,24 @@ func ConvertRGBToAnsi16Colors(s string) string {
 
 // func looksLikeByte(tok string) bool {
 // 	v, err := strconv.Atoi(tok)
-// 	return err == nil && v >= 0 && v <= 255
+//   return err == nil && v >= 0 && v <= 255
 // }
+
+// GetAgentColor returns the color for a given agent index, matching the status bar colors
+func GetAgentColor(agentIndex int) compat.AdaptiveColor {
+	t := theme.CurrentTheme()
+	agentColors := []compat.AdaptiveColor{
+		t.TextMuted(),
+		t.Secondary(),
+		t.Accent(),
+		t.Success(),
+		t.Warning(),
+		t.Primary(),
+		t.Error(),
+	}
+
+	if agentIndex >= 0 && agentIndex < len(agentColors) {
+		return agentColors[agentIndex]
+	}
+	return t.Secondary() // default fallback
+}

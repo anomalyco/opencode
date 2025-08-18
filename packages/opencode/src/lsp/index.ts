@@ -57,16 +57,21 @@ export namespace LSP {
     "lsp",
     async () => {
       const clients: LSPClient.Info[] = []
-      const servers: Record<string, LSPServer.Info> = LSPServer
+      const servers: Record<string, LSPServer.Info> = {}
+      for (const server of Object.values(LSPServer)) {
+        servers[server.id] = server
+      }
       const cfg = await Config.get()
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
         const existing = servers[name]
         if (item.disabled) {
+          log.info(`LSP server ${name} is disabled`)
           delete servers[name]
           continue
         }
         servers[name] = {
           ...existing,
+          root: existing?.root ?? (async (_file, app) => app.path.root),
           extensions: item.extensions ?? existing.extensions,
           spawn: async (_app, root) => {
             return {
@@ -82,6 +87,13 @@ export namespace LSP {
           },
         }
       }
+
+      log.info("enabled LSP servers", {
+        serverIds: Object.values(servers)
+          .map((server) => server.id)
+          .join(", "),
+      })
+
       return {
         broken: new Set<string>(),
         servers,
@@ -103,7 +115,7 @@ export namespace LSP {
     const s = await state()
     const extension = path.parse(file).ext
     const result: LSPClient.Info[] = []
-    for (const server of Object.values(LSPServer)) {
+    for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file, App.info())
       if (!root) continue

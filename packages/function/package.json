@@ -1,13 +1,13 @@
 {
   "name": "@opencode/function",
-  "version": "0.0.1",
+  "version": "0.5.6",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
   "devDependencies": {
     "@cloudflare/workers-types": "4.20250522.0",
-    "typescript": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   },
   "dependencies": {
     "@octokit/auth-app": "8.0.1",

@@ -1,5 +1,33 @@
 #!/usr/bin/env bun
 
+async function sendToPostHog(event: string, properties: Record<string, any>) {
+  const key = process.env["POSTHOG_KEY"]
+
+  if (!key) {
+    console.warn("POSTHOG_API_KEY not set, skipping PostHog event")
+    return
+  }
+
+  const response = await fetch("https://us.i.posthog.com/i/v0/e/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      distinct_id: "download",
+      api_key: key,
+      event,
+      properties: {
+        ...properties,
+      },
+    }),
+  }).catch(() => null)
+
+  if (response && !response.ok) {
+    console.warn(`PostHog API error: ${response.status}`)
+  }
+}
+
 interface Asset {
   name: string
   download_count: number
@@ -173,6 +201,16 @@ console.log(`Fetched npm all-time downloads: ${npmDownloads.toLocaleString()}\n`
 
 await save(githubTotal, npmDownloads)
 
+await sendToPostHog("download", {
+  count: githubTotal,
+  source: "github",
+})
+
+await sendToPostHog("download", {
+  count: npmDownloads,
+  source: "npm",
+})
+
 const totalDownloads = githubTotal + npmDownloads
 
 console.log("=".repeat(60))
@@ -180,23 +218,6 @@ console.log(`TOTAL DOWNLOADS: ${totalDownloads.toLocaleString()}`)
 console.log(`  GitHub: ${githubTotal.toLocaleString()}`)
 console.log(`  npm: ${npmDownloads.toLocaleString()}`)
 console.log("=".repeat(60))
-
-console.log("\nDownloads by release:")
-console.log("-".repeat(60))
-
-stats
-  .sort((a, b) => b.downloads - a.downloads)
-  .forEach((release) => {
-    console.log(`${release.tag.padEnd(15)} ${release.downloads.toLocaleString().padStart(10)} downloads`)
-
-    if (release.assets.length > 1) {
-      release.assets
-        .sort((a, b) => b.downloads - a.downloads)
-        .forEach((asset) => {
-          console.log(`  └─ ${asset.name.padEnd(25)} ${asset.downloads.toLocaleString().padStart(8)}`)
-        })
-    }
-  })
 
 console.log("-".repeat(60))
 console.log(`GitHub Total: ${githubTotal.toLocaleString()} downloads across ${releases.length} releases`)

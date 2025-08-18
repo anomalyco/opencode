@@ -8,8 +8,8 @@ import { Flag } from "../../flag/flag"
 import { Config } from "../../config/config"
 import { bootstrap } from "../bootstrap"
 import { MessageV2 } from "../../session/message-v2"
-import { Mode } from "../../session/mode"
 import { Identifier } from "../../id/id"
+import { Agent } from "../../agent/agent"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -54,9 +54,9 @@ export const RunCommand = cmd({
         alias: ["m"],
         describe: "model to use in the format of provider/model",
       })
-      .option("mode", {
+      .option("agent", {
         type: "string",
-        describe: "mode to use",
+        describe: "agent to use",
       })
   },
   handler: async (args) => {
@@ -84,10 +84,6 @@ export const RunCommand = cmd({
         return
       }
 
-      UI.empty()
-      UI.println(UI.logo())
-      UI.empty()
-
       const cfg = await Config.get()
       if (cfg.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share) {
         try {
@@ -101,11 +97,19 @@ export const RunCommand = cmd({
           }
         }
       }
-      UI.empty()
 
-      const { providerID, modelID } = args.model ? Provider.parseModel(args.model) : await Provider.defaultModel()
-      UI.println(UI.Style.TEXT_NORMAL_BOLD + "@ ", UI.Style.TEXT_NORMAL + `${providerID}/${modelID}`)
-      UI.empty()
+      const agent = await (async () => {
+        if (args.agent) return Agent.get(args.agent)
+        const build = Agent.get("build")
+        if (build) return build
+        return Agent.list().then((x) => x[0])
+      })()
+
+      const { providerID, modelID } = await (async () => {
+        if (args.model) return Provider.parseModel(args.model)
+        if (agent.model) return agent.model
+        return await Provider.defaultModel()
+      })()
 
       function printEvent(color: string, type: string, title: string) {
         UI.println(
@@ -125,7 +129,8 @@ export const RunCommand = cmd({
         if (part.type === "tool" && part.state.status === "completed") {
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
-            part.state.title || Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown"
+            part.state.title ||
+            (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
           printEvent(color, tool, title)
         }
 
@@ -156,19 +161,17 @@ export const RunCommand = cmd({
         UI.error(err)
       })
 
-      const mode = args.mode ? await Mode.get(args.mode) : await Mode.list().then((x) => x[0])
-
       const messageID = Identifier.ascending("message")
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(mode.model
-          ? mode.model
+        ...(agent.model
+          ? agent.model
           : {
               providerID,
               modelID,
             }),
-        mode: mode.name,
+        agent: agent.name,
         parts: [
           {
             id: Identifier.ascending("part"),
