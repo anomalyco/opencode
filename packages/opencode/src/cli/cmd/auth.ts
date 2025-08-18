@@ -162,7 +162,7 @@ export const AuthLoginCommand = cmd({
             try {
               await open(authorize.url)
             } catch (e) {}
-            prompts.log.info("Go to: butt" + authorize.url)
+            prompts.log.info("Go to: " + authorize.url)
           }
 
           if (authorize.method === "auto") {
