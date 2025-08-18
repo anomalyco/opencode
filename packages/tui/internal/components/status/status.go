@@ -132,7 +132,7 @@ func (m *statusComponent) View() string {
 		modeForeground = t.BackgroundPanel()
 	}
 
-	command := m.app.Commands[commands.SwitchAgentCommand]
+	command := m.app.Commands[commands.AgentCycleCommand]
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {

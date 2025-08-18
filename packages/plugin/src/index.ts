@@ -1,4 +1,14 @@
-import type { Event, createOpencodeClient, App, Model, Provider, Permission, UserMessage, Part } from "@opencode-ai/sdk"
+import type {
+  Event,
+  createOpencodeClient,
+  App,
+  Model,
+  Provider,
+  Permission,
+  UserMessage,
+  Part,
+  Auth,
+} from "@opencode-ai/sdk"
 import type { BunShell } from "./shell"
 
 export type PluginInput = {
@@ -10,6 +20,49 @@ export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
+  auth?: {
+    provider: string
+    loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
+    methods: (
+      | {
+          type: "oauth"
+          label: string
+          authorize(): Promise<
+            { url: string; instructions: string } & (
+              | {
+                  method: "auto"
+                  callback(): Promise<
+                    | {
+                        type: "success"
+                        refresh: string
+                        access: string
+                        expires: number
+                      }
+                    | {
+                        type: "failed"
+                      }
+                  >
+                }
+              | {
+                  method: "code"
+                  callback(code: string): Promise<
+                    | {
+                        type: "success"
+                        refresh: string
+                        access: string
+                        expires: number
+                      }
+                    | {
+                        type: "failed"
+                      }
+                  >
+                }
+            )
+          >
+        }
+      | { type: "api"; label: string }
+    )[]
+  }
   /**
    * Called when a new message is received
    */

@@ -47,7 +47,7 @@ func (r *TuiService) ClearPrompt(ctx context.Context, opts ...option.RequestOpti
 	return
 }
 
-// Execute a TUI command (e.g. switch_agent)
+// Execute a TUI command (e.g. agent_cycle)
 func (r *TuiService) ExecuteCommand(ctx context.Context, body TuiExecuteCommandParams, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "tui/execute-command"
@@ -87,6 +87,14 @@ func (r *TuiService) OpenThemes(ctx context.Context, opts ...option.RequestOptio
 	return
 }
 
+// Show a toast notification in the TUI
+func (r *TuiService) ShowToast(ctx context.Context, body TuiShowToastParams, opts ...option.RequestOption) (res *bool, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "tui/show-toast"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	return
+}
+
 // Submit the prompt
 func (r *TuiService) SubmitPrompt(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
@@ -109,4 +117,31 @@ type TuiExecuteCommandParams struct {
 
 func (r TuiExecuteCommandParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
+}
+
+type TuiShowToastParams struct {
+	Message param.Field[string]                    `json:"message,required"`
+	Variant param.Field[TuiShowToastParamsVariant] `json:"variant,required"`
+	Title   param.Field[string]                    `json:"title"`
+}
+
+func (r TuiShowToastParams) MarshalJSON() (data []byte, err error) {
+	return apijson.MarshalRoot(r)
+}
+
+type TuiShowToastParamsVariant string
+
+const (
+	TuiShowToastParamsVariantInfo    TuiShowToastParamsVariant = "info"
+	TuiShowToastParamsVariantSuccess TuiShowToastParamsVariant = "success"
+	TuiShowToastParamsVariantWarning TuiShowToastParamsVariant = "warning"
+	TuiShowToastParamsVariantError   TuiShowToastParamsVariant = "error"
+)
+
+func (r TuiShowToastParamsVariant) IsKnown() bool {
+	switch r {
+	case TuiShowToastParamsVariantInfo, TuiShowToastParamsVariantSuccess, TuiShowToastParamsVariantWarning, TuiShowToastParamsVariantError:
+		return true
+	}
+	return false
 }

@@ -20,6 +20,7 @@ import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { lazy } from "../util/lazy"
 import { Agent } from "../agent/agent"
+import { Auth } from "../auth"
 
 const ERRORS = {
   400: {
@@ -88,7 +89,7 @@ export namespace Server {
               version: "0.0.3",
               description: "opencode api",
             },
-            openapi: "3.0.0",
+            openapi: "3.1.1",
           },
         }),
       )
@@ -247,6 +248,34 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .get(
+        "/session/:id/children",
+        describeRoute({
+          description: "Get a session's children",
+          operationId: "session.children",
+          responses: {
+            200: {
+              description: "List of children",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const session = await Session.children(sessionID)
+          return c.json(session)
+        },
+      )
       .post(
         "/session",
         describeRoute({
@@ -264,8 +293,18 @@ export namespace Server {
             },
           },
         }),
+        zValidator(
+          "json",
+          z
+            .object({
+              parentID: z.string().optional(),
+              title: z.string().optional(),
+            })
+            .optional(),
+        ),
         async (c) => {
-          const session = await Session.create()
+          const body = c.req.valid("json") ?? {}
+          const session = await Session.create(body.parentID, body.title)
           return c.json(session)
         },
       )
@@ -1098,7 +1137,7 @@ export namespace Server {
       .post(
         "/tui/execute-command",
         describeRoute({
-          description: "Execute a TUI command (e.g. switch_agent)",
+          description: "Execute a TUI command (e.g. agent_cycle)",
           operationId: "tui.executeCommand",
           responses: {
             200: {
@@ -1119,7 +1158,64 @@ export namespace Server {
         ),
         async (c) => c.json(await callTui(c)),
       )
+      .post(
+        "/tui/show-toast",
+        describeRoute({
+          description: "Show a toast notification in the TUI",
+          operationId: "tui.showToast",
+          responses: {
+            200: {
+              description: "Toast notification shown successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "json",
+          z.object({
+            title: z.string().optional(),
+            message: z.string(),
+            variant: z.enum(["info", "success", "warning", "error"]),
+          }),
+        ),
+        async (c) => c.json(await callTui(c)),
+      )
       .route("/tui/control", TuiRoute)
+      .put(
+        "/auth/:id",
+        describeRoute({
+          description: "Set authentication credentials",
+          operationId: "auth.set",
+          responses: {
+            200: {
+              description: "Successfully set authentication credentials",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        zValidator("json", Auth.Info),
+        async (c) => {
+          const id = c.req.valid("param").id
+          const info = c.req.valid("json")
+          await Auth.set(id, info)
+          return c.json(true)
+        },
+      )
 
     return result
   })
@@ -1133,7 +1229,7 @@ export namespace Server {
           version: "1.0.0",
           description: "opencode api",
         },
-        openapi: "3.0.0",
+        openapi: "3.1.1",
       },
     })
     return result

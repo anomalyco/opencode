@@ -64,6 +64,7 @@ export namespace MessageV2 {
       status: z.literal("error"),
       input: z.record(z.any()),
       error: z.string(),
+      metadata: z.record(z.any()).optional(),
       time: z.object({
         start: z.number(),
         end: z.number(),

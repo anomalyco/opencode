@@ -23,11 +23,11 @@ export const TaskTool = Tool.define("task", async () => {
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
     }),
     async execute(params, ctx) {
-      const session = await Session.create(ctx.sessionID)
-      const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      const session = await Session.create(ctx.sessionID, params.description + ` (@${agent.name} subagent)`)
+      const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
+      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {

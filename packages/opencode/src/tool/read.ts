@@ -53,7 +53,7 @@ export const ReadTool = Tool.define("read", {
     const offset = params.offset || 0
     const isImage = isImageFile(filepath)
     if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
-    const isBinary = await isBinaryFile(file)
+    const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
     const lines = await file.text().then((text) => text.split("\n"))
     const raw = lines.slice(offset, offset + limit).map((line) => {
@@ -105,13 +105,59 @@ function isImageFile(filePath: string): string | false {
   }
 }
 
-async function isBinaryFile(file: Bun.BunFile): Promise<boolean> {
-  const buffer = await file.arrayBuffer()
-  const bytes = new Uint8Array(buffer.slice(0, 512)) // Check first 512 bytes
-
-  for (let i = 0; i < bytes.length; i++) {
-    if (bytes[i] === 0) return true // Null byte indicates binary
+async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+  const ext = path.extname(filepath).toLowerCase()
+  // binary check for common non-text extensions
+  switch (ext) {
+    case ".zip":
+    case ".tar":
+    case ".gz":
+    case ".exe":
+    case ".dll":
+    case ".so":
+    case ".class":
+    case ".jar":
+    case ".war":
+    case ".7z":
+    case ".doc":
+    case ".docx":
+    case ".xls":
+    case ".xlsx":
+    case ".ppt":
+    case ".pptx":
+    case ".odt":
+    case ".ods":
+    case ".odp":
+    case ".bin":
+    case ".dat":
+    case ".obj":
+    case ".o":
+    case ".a":
+    case ".lib":
+    case ".wasm":
+    case ".pyc":
+    case ".pyo":
+      return true
+    default:
+      break
   }
 
-  return false
+  const stat = await file.stat()
+  const fileSize = stat.size
+  if (fileSize === 0) return false
+
+  const bufferSize = Math.min(4096, fileSize)
+  const buffer = await file.arrayBuffer()
+  if (buffer.byteLength === 0) return false
+  const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+
+  let nonPrintableCount = 0
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) return true
+    if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
+      nonPrintableCount++
+    }
+  }
+  // If >30% non-printable characters, consider it binary
+  return nonPrintableCount / bytes.length > 0.3
 }

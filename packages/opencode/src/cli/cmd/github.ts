@@ -188,13 +188,17 @@ export const GithubInstallCommand = cmd({
         const info = await $`git remote get-url origin`.quiet().nothrow().text()
         // match https or git pattern
         // ie. https://github.com/sst/opencode.git
+        // ie. https://github.com/sst/opencode
         // ie. git@github.com:sst/opencode.git
-        const parsed = info.match(/git@github\.com:(.*)\.git/) ?? info.match(/github\.com\/(.*)\.git/)
+        // ie. git@github.com:sst/opencode
+        // ie. ssh://git@github.com/sst/opencode.git
+        // ie. ssh://git@github.com/sst/opencode
+        const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
         if (!parsed) {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
-        const [owner, repo] = parsed[1].split("/")
+        const [, owner, repo] = parsed
         return { owner, repo, root: app.path.root }
       }
 
