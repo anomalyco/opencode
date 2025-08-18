@@ -138,6 +138,11 @@ export namespace Provider {
   const state = App.state("provider", async () => {
     const config = await Config.get()
     const database = await ModelsDev.get()
+    
+    // Add subpath for known providers that need it
+    if (database["google-vertex-anthropic"]) {
+      database["google-vertex-anthropic"].subpath = "anthropic"
+    }
 
     const providers: {
       [providerID: string]: {
@@ -183,6 +188,7 @@ export namespace Provider {
       const parsed: ModelsDev.Provider = {
         id: providerID,
         npm: provider.npm ?? existing?.npm,
+        subpath: provider.subpath ?? existing?.subpath,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
         api: provider.api ?? existing?.api,
@@ -303,7 +309,10 @@ export namespace Provider {
       const existing = s.sdk.get(provider.id)
       if (existing) return existing
       const pkg = provider.npm ?? provider.id
-      const mod = await import(await BunProc.install(pkg, "latest"))
+      const installPath = await BunProc.install(pkg, "latest")
+      const importPath = provider.subpath ? `${pkg}/${provider.subpath}` : installPath
+      log.info("importing", importPath)
+      const mod = await import(importPath)
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,

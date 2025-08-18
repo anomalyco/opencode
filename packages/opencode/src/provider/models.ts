@@ -42,6 +42,7 @@ export namespace ModelsDev {
       env: z.array(z.string()),
       id: z.string(),
       npm: z.string().optional(),
+      subpath: z.string().optional(),
       models: z.record(Model),
     })
     .openapi({
