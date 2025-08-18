@@ -595,6 +595,8 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString and newString must be different")
   }
 
+  let notFound = true
+
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
@@ -609,6 +611,7 @@ export function replace(content: string, oldString: string, newString: string, r
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
+      notFound = false
       if (replaceAll) {
         return content.replaceAll(search, newString)
       }
@@ -617,5 +620,9 @@ export function replace(content: string, oldString: string, newString: string, r
       return content.substring(0, index) + newString + content.substring(index + search.length)
     }
   }
-  throw new Error("oldString not found in content or was found multiple times")
+
+  if (notFound) {
+    throw new Error("oldString not found in content")
+  }
+  throw new Error("oldString found multiple times and requires more code context to uniquely identify the intended match")
 }
