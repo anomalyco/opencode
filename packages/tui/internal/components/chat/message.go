@@ -213,6 +213,7 @@ func renderText(
 	extra string,
 	isThinking bool,
 	isQueued bool,
+	shimmer bool,
 	fileParts []opencode.FilePart,
 	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
@@ -234,7 +235,12 @@ func renderText(
 		}
 		content = util.ToMarkdown(text, width, backgroundColor)
 		if isThinking {
-			label := util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			var label string
+			if shimmer {
+				label = util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			} else {
+				label = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking...")
+			}
 			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
 			content = label + "\n\n" + content
 		} else if strings.TrimSpace(text) == "Generating..." {

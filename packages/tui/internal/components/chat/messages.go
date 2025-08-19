@@ -336,6 +336,25 @@ func (m *messagesComponent) renderView() tea.Cmd {
 
 		width := m.width // always use full width
 
+		// Find the last streaming ReasoningPart to only shimmer that one
+		lastStreamingReasoningID := ""
+		if m.showThinkingBlocks {
+			for mi := len(m.app.Messages) - 1; mi >= 0 && lastStreamingReasoningID == ""; mi-- {
+				if _, ok := m.app.Messages[mi].Info.(opencode.AssistantMessage); !ok {
+					continue
+				}
+				parts := m.app.Messages[mi].Parts
+				for pi := len(parts) - 1; pi >= 0; pi-- {
+					if rp, ok := parts[pi].(opencode.ReasoningPart); ok {
+						if strings.TrimSpace(rp.Text) != "" && rp.Time.End == 0 {
+							lastStreamingReasoningID = rp.ID
+							break
+						}
+					}
+				}
+			}
+		}
+
 		reverted := false
 		revertedMessageCount := 0
 		revertedToolCount := 0
@@ -437,6 +456,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								files,
 								false,
 								isQueued,
+								false,
 								fileParts,
 								agentParts,
 							)
@@ -513,6 +533,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 									"",
 									false,
 									false,
+									false,
 									[]opencode.FilePart{},
 									[]opencode.AgentPart{},
 									toolCallParts...,
@@ -528,6 +549,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								"",
+								false,
 								false,
 								false,
 								[]opencode.FilePart{},
@@ -600,6 +622,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						}
 						if part.Text != "" {
 							text := part.Text
+							shimmer := part.Time.End == 0 && part.ID == lastStreamingReasoningID
 							content = renderText(
 								m.app,
 								message.Info,
@@ -610,6 +633,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								"",
 								true,
 								false,
+								shimmer,
 								[]opencode.FilePart{},
 								[]opencode.AgentPart{},
 							)
@@ -642,6 +666,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						m.showToolDetails,
 						width,
 						"",
+						false,
 						false,
 						false,
 						[]opencode.FilePart{},
