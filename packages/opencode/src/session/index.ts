@@ -1019,7 +1019,13 @@ export namespace Session {
           : undefined,
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      maxOutputTokens: outputLimit,
+      maxOutputTokens: Math.max(
+        1,
+        outputLimit -
+          (input.providerID === "anthropic"
+            ? ((params.options as { thinking?: { budgetTokens?: number } } | undefined)?.thinking?.budgetTokens ?? 0)
+            : 0),
+      ),
       abortSignal: abort.signal,
       stopWhen: async ({ steps }) => {
         if (steps.length >= 1000) {
