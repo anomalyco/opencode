@@ -9,7 +9,10 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import { Permission } from "../permission"
+// @ts-ignore
 import DESCRIPTION from "./edit.txt"
+// @ts-ignore  
+import MORPH_DESCRIPTION from "./edit-morph.txt"
 import { App } from "../app/app"
 import { File } from "../file"
 import { Bus } from "../bus"
@@ -17,65 +20,165 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Agent } from "../agent/agent"
 
-export const EditTool = Tool.define("edit", {
-  description: DESCRIPTION,
-  parameters: z.object({
-    filePath: z.string().describe("The absolute path to the file to modify"),
-    oldString: z.string().describe("The text to replace"),
-    newString: z.string().describe("The text to replace it with (must be different from oldString)"),
-    replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
-  }),
-  async execute(params, ctx) {
-    if (!params.filePath) {
-      throw new Error("filePath is required")
+// OpenAI-compatible client for Morph API
+class MorphClient {
+  private apiKey: string
+  private baseURL = "https://api.morphllm.com/v1"
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey
+  }
+
+  async apply(instruction: string, initialCode: string, codeEdit: string): Promise<string> {
+    const response = await fetch(`${this.baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "morph-v3-large",
+        messages: [
+          {
+            role: "user",
+            content: `<instruction>${instruction}</instruction>\n<code>${initialCode}</code>\n<update>${codeEdit}</update>`,
+          },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Morph API error: ${response.status} ${response.statusText}\n${errorText}`)
     }
 
-    if (params.oldString === params.newString) {
-      throw new Error("oldString and newString must be different")
+    const result = await response.json()
+    return result.choices[0].message.content
+  }
+}
+
+async function executeMorphEdit(
+  params: { target_file: string; instructions: string; code_edit: string },
+  ctx: any,
+  morphApiKey: string
+) {
+  if (!params.target_file) {
+    throw new Error("target_file is required")
+  }
+
+  if (!params.instructions) {
+    throw new Error("instructions is required")
+  }
+
+  if (!params.code_edit) {
+    throw new Error("code_edit is required")
+  }
+
+  const app = App.info()
+  const filePath = path.isAbsolute(params.target_file) ? params.target_file : path.join(app.path.cwd, params.target_file)
+  
+  if (!Filesystem.contains(app.path.cwd, filePath)) {
+    throw new Error(`File ${filePath} is not in the current working directory`)
+  }
+
+  const agent = await Agent.get(ctx.agent)
+  
+  // Read the existing file
+  const file = Bun.file(filePath)
+  const stats = await file.stat().catch(() => {})
+  if (!stats) throw new Error(`File ${filePath} not found`)
+  if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+  
+  await FileTime.assert(ctx.sessionID, filePath)
+  const initialCode = await file.text()
+
+  // Use Morph API to apply the edit
+  const morphClient = new MorphClient(morphApiKey)
+  let mergedCode: string
+  
+  try {
+    mergedCode = await morphClient.apply(params.instructions, initialCode, params.code_edit)
+  } catch (error) {
+    throw new Error(`Failed to apply edit with Morph: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  const diff = trimDiff(createTwoFilesPatch(filePath, filePath, initialCode, mergedCode))
+  
+  // Check permissions if needed
+  if (agent.permission.edit === "ask") {
+    await Permission.ask({
+      type: "edit",
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+      title: "🚀 Morph Fast Apply: " + filePath,
+      metadata: {
+        filePath,
+        diff,
+        morphApplied: true,
+      },
+    })
+  }
+
+  // Write the merged code to file
+  await Bun.write(filePath, mergedCode)
+  await Bus.publish(File.Event.Edited, {
+    file: filePath,
+  })
+
+  FileTime.read(ctx.sessionID, filePath)
+
+  let output = ""
+  await LSP.touchFile(filePath, true)
+  const diagnostics = await LSP.diagnostics()
+  for (const [file, issues] of Object.entries(diagnostics)) {
+    if (issues.length === 0) continue
+    if (file === filePath) {
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
+      continue
     }
+    output += `\n<project_diagnostics>\n${file}\n${issues
+      .filter((item) => item.severity === 1)
+      .map(LSP.Diagnostic.pretty)
+      .join("\n")}\n</project_diagnostics>\n`
+  }
 
-    const app = App.info()
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
-    if (!Filesystem.contains(app.path.cwd, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
-    }
+  return {
+    metadata: {
+      diagnostics,
+      diff,
+      morphApplied: true,
+    },
+    title: `🚀 ${path.relative(app.path.root, filePath)}`,
+    output: output || `Successfully applied edit using Morph Fast Apply:\n\n${diff}`,
+  }
+}
 
-    const agent = await Agent.get(ctx.agent)
-    let diff = ""
-    let contentOld = ""
-    let contentNew = ""
-    await (async () => {
-      if (params.oldString === "") {
-        contentNew = params.newString
-        diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-        if (agent.permission.edit === "ask") {
-          await Permission.ask({
-            type: "edit",
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            callID: ctx.callID,
-            title: "Edit this file: " + filePath,
-            metadata: {
-              filePath,
-              diff,
-            },
-          })
-        }
-        await Bun.write(filePath, params.newString)
-        await Bus.publish(File.Event.Edited, {
-          file: filePath,
-        })
-        return
-      }
+async function executeRegularEdit(
+  params: { filePath: string; oldString: string; newString: string; replaceAll?: boolean },
+  ctx: any
+) {
+  if (!params.filePath) {
+    throw new Error("filePath is required")
+  }
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
-      if (!stats) throw new Error(`File ${filePath} not found`)
-      if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
-      await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+  if (params.oldString === params.newString) {
+    throw new Error("oldString and newString must be different")
+  }
 
+  const app = App.info()
+  const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
+  if (!Filesystem.contains(app.path.cwd, filePath)) {
+    throw new Error(`File ${filePath} is not in the current working directory`)
+  }
+
+  const agent = await Agent.get(ctx.agent)
+  let diff = ""
+  let contentOld = ""
+  let contentNew = ""
+  await (async () => {
+    if (params.oldString === "") {
+      contentNew = params.newString
       diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
       if (agent.permission.edit === "ask") {
         await Permission.ask({
@@ -83,7 +186,6 @@ export const EditTool = Tool.define("edit", {
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
-          pattern: filePath,
           title: "Edit this file: " + filePath,
           metadata: {
             filePath,
@@ -91,43 +193,105 @@ export const EditTool = Tool.define("edit", {
           },
         })
       }
-
-      await file.write(contentNew)
+      await Bun.write(filePath, params.newString)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
-      contentNew = await file.text()
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-    })()
-
-    FileTime.read(ctx.sessionID, filePath)
-
-    let output = ""
-    await LSP.touchFile(filePath, true)
-    const diagnostics = await LSP.diagnostics()
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      if (issues.length === 0) continue
-      if (file === filePath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
-        continue
-      }
-      output += `\n<project_diagnostics>\n${file}\n${issues
-        // TODO: may want to make more leniant for eslint
-        .filter((item) => item.severity === 1)
-        .map(LSP.Diagnostic.pretty)
-        .join("\n")}\n</project_diagnostics>\n`
+      return
     }
 
+    const file = Bun.file(filePath)
+    const stats = await file.stat().catch(() => {})
+    if (!stats) throw new Error(`File ${filePath} not found`)
+    if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
+    await FileTime.assert(ctx.sessionID, filePath)
+    contentOld = await file.text()
+    contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+
+    diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+    if (agent.permission.edit === "ask") {
+      await Permission.ask({
+        type: "edit",
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        pattern: filePath,
+        title: "Edit this file: " + filePath,
+        metadata: {
+          filePath,
+          diff,
+        },
+      })
+    }
+
+    await file.write(contentNew)
+    await Bus.publish(File.Event.Edited, {
+      file: filePath,
+    })
+    contentNew = await file.text()
+    diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+  })()
+
+  FileTime.read(ctx.sessionID, filePath)
+
+  let output = ""
+  await LSP.touchFile(filePath, true)
+  const diagnostics = await LSP.diagnostics()
+  for (const [file, issues] of Object.entries(diagnostics)) {
+    if (issues.length === 0) continue
+    if (file === filePath) {
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
+      continue
+    }
+    output += `\n<project_diagnostics>\n${file}\n${issues
+      // TODO: may want to make more leniant for eslint
+      .filter((item) => item.severity === 1)
+      .map(LSP.Diagnostic.pretty)
+      .join("\n")}\n</project_diagnostics>\n`
+  }
+
+  return {
+    metadata: {
+      diagnostics,
+      diff,
+    },
+    title: `${path.relative(app.path.root, filePath)}`,
+    output,
+  }
+}
+
+export const EditTool = Tool.define("edit", (async () => {
+  const morphApiKey = process.env['MORPH_API_KEY']
+  
+  if (morphApiKey) {
+    // Morph Fast Apply mode
     return {
-      metadata: {
-        diagnostics,
-        diff,
-      },
-      title: `${path.relative(app.path.root, filePath)}`,
-      output,
+      description: MORPH_DESCRIPTION as string,
+      parameters: z.object({
+        target_file: z.string().describe("The target file to modify"),
+        instructions: z.string().describe("A single sentence written in the first person describing what you're changing. Used to help disambiguate uncertainty in the edit."),
+        code_edit: z.string().describe("Specify ONLY the precise lines of code that you wish to edit. Use `// ... existing code ...` for unchanged sections."),
+      }),
+      async execute(params: any, ctx: any) {
+        return executeMorphEdit(params, ctx, morphApiKey)
+      }
     }
-  },
-})
+  } else {
+    // Regular search-and-replace mode  
+    return {
+      description: DESCRIPTION as string,
+      parameters: z.object({
+        filePath: z.string().describe("The absolute path to the file to modify"),
+        oldString: z.string().describe("The text to replace"),
+        newString: z.string().describe("The text to replace it with (must be different from oldString)"),
+        replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+      }),
+      async execute(params: any, ctx: any) {
+        return executeRegularEdit(params, ctx)
+      }
+    }
+  }
+}) as any)
 
 export type Replacer = (content: string, find: string) => Generator<string, void, unknown>
 
@@ -606,7 +770,8 @@ export function replace(content: string, oldString: string, newString: string, r
     // ContextAwareReplacer,
     // MultiOccurrenceReplacer,
   ]) {
-    for (const search of replacer(content, oldString)) {
+    const searches = Array.from(replacer(content, oldString))
+    for (const search of searches) {
       const index = content.indexOf(search)
       if (index === -1) continue
       if (replaceAll) {

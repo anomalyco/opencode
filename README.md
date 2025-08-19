@@ -48,6 +48,17 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+### Morph Fast Apply (Optional)
+
+For faster, more accurate code edits, opencode can integrate with [Morph](https://morphllm.com) - an AI model specialized for code merging at 4500+ tokens/second with 98.8% accuracy.
+
+```bash
+# Enable Morph Fast Apply
+export MORPH_API_KEY=your_api_key
+```
+
+When enabled, opencode's edit tool automatically uses Morph's intelligent code merging instead of search-and-replace, supporting multiple edits and `// ... existing code ...` syntax.
+
 ### Documentation
 
 For more info on how to configure opencode [**head over to our docs**](https://opencode.ai/docs).
