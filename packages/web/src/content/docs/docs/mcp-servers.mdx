@@ -91,3 +91,39 @@ Local and remote servers can be used together within the same `mcp` config objec
     }
   }
 }
+```
+
+---
+
+## Granular access management
+
+If you have a large number of MCP servers you may want to disable them globally
+and manage access at the agent level instead. To achieve this:
+
+1. Configure the MCP server.
+2. Disable it as a tool globally.
+3. In your [Agent Configuration](/docs/agents#agent-configuration) enable
+the MCP server as a tool.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
