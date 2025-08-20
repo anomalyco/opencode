@@ -133,13 +133,7 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: {
-          typescript: {
-            preferences: {
-              includePackageJsonAutoImports: "on",
-            },
-          },
-        },
+        initialization: {},
       }
     },
   }
