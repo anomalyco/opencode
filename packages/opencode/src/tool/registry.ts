@@ -1,6 +1,7 @@
 import z from "zod"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
+import { MorphEditTool } from "./morphedit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
@@ -14,10 +15,13 @@ import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
 
 export namespace ToolRegistry {
+  // Use Morph Fast Apply as the default edit tool if MORPH_API_KEY is present
+  const DefaultEditTool = process.env['MORPH_API_KEY'] ? MorphEditTool : EditTool
+
   const ALL = [
     InvalidTool,
     BashTool,
-    EditTool,
+    DefaultEditTool,
     WebFetchTool,
     GlobTool,
     GrepTool,
