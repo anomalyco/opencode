@@ -8,6 +8,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { VueIntegration } from "./vue"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -44,10 +45,11 @@ export namespace LSPServer {
   export const Typescript: Info = {
     id: "typescript",
     root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       if (!tsserver) return
+
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
         env: {
@@ -55,13 +57,23 @@ export namespace LSPServer {
           BUN_BE_BUN: "1",
         },
       })
+
+      // Standard TypeScript server configuration
+      let initialization: Record<string, any> = {
+        tsserver: {
+          path: tsserver,
+        },
+      }
+
+      // Add Vue integration only if Vue files are detected in the project
+      const hasVueFiles = await VueIntegration.hasVueFiles(root)
+      if (hasVueFiles) {
+        initialization = await VueIntegration.createVueEnabledTypeScriptConfig(root)
+      }
+
       return {
         process: proc,
-        initialization: {
-          tsserver: {
-            path: tsserver,
-          },
-        },
+        initialization,
       }
     },
   }
@@ -122,7 +134,11 @@ export namespace LSPServer {
       return {
         process: proc,
         initialization: {
-          // Leave empty; the server will auto-detect workspace TypeScript.
+          typescript: {
+            preferences: {
+              includePackageJsonAutoImports: "on",
+            },
+          },
         },
       }
     },

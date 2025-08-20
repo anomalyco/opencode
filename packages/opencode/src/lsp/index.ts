@@ -6,6 +6,7 @@ import { z } from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
+import { VueIntegration } from "./vue"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -146,6 +147,12 @@ export namespace LSP {
       s.clients.push(client)
       result.push(client)
     }
+
+    // Set up Vue/TypeScript integration for .vue files
+    if (VueIntegration.shouldSetupVueIntegration(file)) {
+      await VueIntegration.setupVueTypeScriptBridge(s.clients, result, App.info(), state)
+    }
+
     return result
   }
 
