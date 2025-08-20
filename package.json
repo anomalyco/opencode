@@ -8,7 +8,7 @@
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
     "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
-    "postinstall": "./script/hooks"
+    "postinstall": "./script/hooks && bun run --filter='*' pre-build"
   },
   "workspaces": {
     "packages": [
