@@ -406,6 +406,7 @@ export namespace Session {
   ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
+    const cfg = await Config.get()
 
     const inputAgent = input.agent ?? "build"
 
@@ -964,7 +965,7 @@ export namespace Session {
               "x-opencode-request": userMsg.id,
             }
           : undefined,
-      maxRetries: 3,
+      maxRetries: cfg.chatMaxRetries,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
