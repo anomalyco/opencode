@@ -69,6 +69,10 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("unix", {
+        type: "string",
+        describe: "unix socket path to bind to (overrides port/hostname)",
       }),
   handler: async (args) => {
     while (true) {
@@ -108,6 +112,7 @@ export const TuiCommand = cmd({
         const server = Server.listen({
           port: args.port,
           hostname: args.hostname,
+          unix: args.unix,
         })
 
         let cmd = ["go", "run", "./main.go"]

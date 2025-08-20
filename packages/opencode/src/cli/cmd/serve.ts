@@ -18,6 +18,10 @@ export const ServeCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("unix", {
+        type: "string",
+        describe: "unix socket path to bind to (overrides port/hostname)",
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
@@ -34,9 +38,14 @@ export const ServeCommand = cmd({
       const server = Server.listen({
         port,
         hostname,
+        unix: args.unix,
       })
 
-      console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+      if (args.unix) {
+        console.log(`opencode server listening on unix socket: ${args.unix}`)
+      } else {
+        console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+      }
 
       await new Promise(() => {})
 

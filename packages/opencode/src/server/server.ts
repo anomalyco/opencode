@@ -1235,13 +1235,20 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
-      port: opts.port,
-      hostname: opts.hostname,
+  export function listen(opts: { port?: number; hostname?: string; unix?: string }) {
+    const serverOpts: any = {
       idleTimeout: 0,
       fetch: app().fetch,
-    })
+    }
+
+    if (opts.unix) {
+      serverOpts.unix = opts.unix
+    } else {
+      serverOpts.port = opts.port || 0
+      serverOpts.hostname = opts.hostname || "127.0.0.1"
+    }
+
+    const server = Bun.serve(serverOpts)
     return server
   }
 }
