@@ -17,6 +17,7 @@ import {
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
+import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -734,7 +735,7 @@ export namespace Session {
         messageID: userMsg.id,
         sessionID: input.sessionID,
         type: "text",
-        text: "You are now in build mode and are permitted to make edits",
+        text: BUILD_SWITCH,
         synthetic: true,
       })
     }
