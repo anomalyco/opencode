@@ -15,11 +15,19 @@ Permissions are configured in your `opencode.json` file under the `permission` k
 
 ### Tool Permission Support
 
-| Tool       | Description                     |
-| ---------- | ------------------------------- |
-| `edit`     | Control file editing operations |
-| `bash`     | Control bash command execution  |
-| `webfetch` | Control web content fetching    |
+| Tool        | Description                     |
+| ----------- | ------------------------------- |
+| `bash`      | Execute shell commands          |
+| `edit`      | Modify existing files           |
+| `write`     | Create new files                |
+| `read`      | Read file contents              |
+| `grep`      | Search file contents            |
+| `glob`      | Find files by pattern           |
+| `list`      | List directory contents         |
+| `patch`     | Apply patches to files          |
+| `todowrite` | Manage todo lists               |
+| `todoread`  | Read todo lists                 |
+| `webfetch`  | Fetch web content               |
 
 They can also be configured per agent, see [Agent Configuration](/docs/agents#agent-configuration) for more details.
 
