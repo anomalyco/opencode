@@ -51,7 +51,7 @@ export default function Home() {
             <a href="/docs">Get Started</a>
           </div>
           <div data-slot="right">
-            <button data-copy data-slot="command" data-command="curl -fsSL https://opencode.ai/install | bash">
+            <button data-copy data-slot="command">
               <span>
                 <span>curl -fsSL&nbsp;</span>
                 <span data-slot="protocol">https://</span>

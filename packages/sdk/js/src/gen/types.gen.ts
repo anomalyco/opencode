@@ -729,6 +729,9 @@ export type Config = {
         }
     webfetch?: "ask" | "allow" | "deny"
   }
+  tools?: {
+    [key: string]: boolean
+  }
   experimental?: {
     hook?: {
       file_edited?: {
@@ -794,6 +797,10 @@ export type KeybindsConfig = {
    * List all sessions
    */
   session_list: string
+  /**
+   * Show session timeline
+   */
+  session_timeline: string
   /**
    * Share current session
    */

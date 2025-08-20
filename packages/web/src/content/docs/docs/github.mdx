@@ -67,6 +67,7 @@ Or you can set it up manually.
            with:
              model: anthropic/claude-sonnet-4-20250514
              # share: true
+             # github_token: xxxx
    ```
 
 3. **Store the API keys in secrets**
@@ -77,8 +78,21 @@ Or you can set it up manually.
 
 ## Configuration
 
-- `model`: The model used by opencode. Takes the format of `provider/model`. This is **required**.
-- `share`: Share the session. Sessions are shared by default for public repos.
+- `model`: The model to use with opencode. Takes the format of `provider/model`. This is **required**.
+- `share`: Whether to share the opencode session. Defaults to **true** for public repositories.
+- `token`: Optional GitHub access token for performing operations such as creating comments, commiting changes, and opening pull requests. By default, opencode uses the installation access token from the opencode GitHub App, so commits, comments, and pull requests appear as coming from the app.
+
+  Alternatively, you can use the GitHub Action runner's [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) without installing the opencode GitHub App. Just make sure to grant the required permissions in your workflow:
+
+  ```yaml
+  permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
+    issues: write
+  ```
+
+  You can also use a [personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) if preferred.
 
 ---
 

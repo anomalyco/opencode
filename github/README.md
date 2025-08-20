@@ -96,22 +96,22 @@ To test locally:
    MODEL=anthropic/claude-sonnet-4-20250514 \
      ANTHROPIC_API_KEY=sk-ant-api03-1234567890 \
      GITHUB_RUN_ID=dummy \
-     bun /path/to/opencode/packages/opencode/src/index.ts github run \
-     --token 'github_pat_1234567890' \
-     --event '{"eventName":"issue_comment",...}'
+     MOCK_TOKEN=github_pat_1234567890 \
+     MOCK_EVENT='{"eventName":"issue_comment",...}' \
+     bun /path/to/opencode/github/index.ts
    ```
 
    - `MODEL`: The model used by opencode. Same as the `MODEL` defined in the GitHub workflow.
    - `ANTHROPIC_API_KEY`: Your model provider API key. Same as the keys defined in the GitHub workflow.
    - `GITHUB_RUN_ID`: Dummy value to emulate GitHub action environment.
-   - `/path/to/opencode`: Path to your cloned opencode repo. `bun /path/to/opencode/packages/opencode/src/index.ts` runs your local version of `opencode`.
-   - `--token`: A GitHub persontal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
-   - `--event`: Mock GitHub event payload (see templates below).
+   - `MOCK_TOKEN`: A GitHub persontal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
+   - `MOCK_EVENT`: Mock GitHub event payload (see templates below).
+   - `/path/to/opencode`: Path to your cloned opencode repo. `bun /path/to/opencode/github/index.ts` runs your local version of `opencode`.
 
 ### Issue comment event
 
 ```
---event '{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
 ```
 
 Replace:
@@ -125,7 +125,7 @@ Replace:
 ### Issue comment with image attachment.
 
 ```
---event '{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey opencode, what is in my image ![Image](https://github.com/user-attachments/assets/xxxxxxxx)"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey opencode, what is in my image ![Image](https://github.com/user-attachments/assets/xxxxxxxx)"}}}'
 ```
 
 Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with a valid GitHub attachment (you can generate one by commenting with an image in any issue).
@@ -133,5 +133,5 @@ Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with
 ### PR comment event
 
 ```
---event '{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
 ```

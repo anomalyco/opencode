@@ -46,7 +46,10 @@ const AgentCreateCommand = cmd({
       const spinner = prompts.spinner()
 
       spinner.start("Generating agent configuration...")
-      const generated = await Agent.generate({ description: query })
+      const generated = await Agent.generate({ description: query }).catch((error) => {
+        spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
+        throw new UI.CancelledError()
+      })
       spinner.stop(`Agent ${generated.identifier} generated`)
 
       const availableTools = [

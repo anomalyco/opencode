@@ -726,6 +726,18 @@ export namespace Session {
         synthetic: true,
       })
     }
+
+    const lastAssistantMsg = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    if (lastAssistantMsg?.mode === "plan" && agent.name === "build") {
+      msgs.at(-1)?.parts.push({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: "You are now in build mode and are permitted to make edits",
+        synthetic: true,
+      })
+    }
     let system = SystemPrompt.header(input.providerID)
     system.push(
       ...(() => {
@@ -945,6 +957,13 @@ export namespace Session {
           toolName: "invalid",
         }
       },
+      headers:
+        input.providerID === "opencode"
+          ? {
+              "x-opencode-session": input.sessionID,
+              "x-opencode-request": userMsg.id,
+            }
+          : undefined,
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,

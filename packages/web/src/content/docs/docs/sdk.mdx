@@ -1,0 +1,300 @@
+---
+title: SDK
+description: JS SDK for the opencode server.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+The opencode [JS/TS SDK](https://www.npmjs.com/package/@opencode-ai/sdk) provides a type-safe client for interacting with the opencode server. You can use it to build custom integrations and control opencode programmatically.
+
+---
+
+## Install
+
+Install the SDK from npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Create client
+
+Create a client instance to connect to your opencode server:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Options
+
+| Option    | Type       | Description                 | Default                 |
+| --------- | ---------- | --------------------------- | ----------------------- |
+| `baseUrl` | `string`   | URL of the opencode server  | `http://localhost:4096` |
+| `fetch`   | `function` | Custom fetch implementation | `globalThis.fetch`      |
+
+---
+
+## Start server
+
+You can also programmatically start an opencode server:
+
+```javascript
+import { createOpencodeServer } from "@opencode-ai/sdk"
+
+const server = await createOpencodeServer({
+  host: "127.0.0.1",
+  port: 4096,
+})
+
+console.log(`Server running at ${server.url}`)
+
+server.close()
+```
+
+---
+
+## Types
+
+The SDK includes TypeScript definitions for all API types. Import them directly:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
+
+---
+
+## APIs
+
+The SDK exposes all server APIs through a type-safe client interface.
+
+---
+
+### App
+
+| Method       | Description        | Response                                |
+| ------------ | ------------------ | --------------------------------------- |
+| `app.get()`  | Get app info       | <a href={typesUrl}><code>App</code></a> |
+| `app.init()` | Initialize the app | `boolean`                               |
+
+---
+
+#### Examples
+
+```javascript
+const app = await client.app.get()
+await client.app.init()
+```
+
+---
+
+### Config
+
+| Method               | Description                       | Response                                                                                              |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Examples
+
+```javascript
+const config = await client.config.get()
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessions
+
+| Method                                                        | Description                        | Notes                                                                                                                   |
+| ------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                              | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                   |
+| `session.get({ id })`                                         | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.children({ id })`                                    | List child sessions                | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                   |
+| `session.create({ parentID?, title? })`                       | Create session                     | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.delete({ id })`                                      | Delete session                     | Returns `boolean`                                                                                                       |
+| `session.update({ id, title? })`                              | Update session properties          | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.init({ id, messageID, providerID, modelID })`        | Analyze app and create `AGENTS.md` | Returns `boolean`                                                                                                       |
+| `session.abort({ id })`                                       | Abort a running session            | Returns `boolean`                                                                                                       |
+| `session.share({ id })`                                       | Share session                      | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.unshare({ id })`                                     | Unshare session                    | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.summarize({ id, providerID, modelID })`              | Summarize session                  | Returns `boolean`                                                                                                       |
+| `session.messages({ id })`                                    | List messages in a session         | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` |
+| `session.message({ id, messageID })`                          | Get message details                | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`   |
+| `session.chat({ id, ...chatInput })`                          | Send chat message                  | Returns <a href={typesUrl}><code>Message</code></a>                                                                     |
+| `session.shell({ id, agent, command })`                       | Run a shell command                | Returns <a href={typesUrl}><code>Message</code></a>                                                                     |
+| `session.revert({ id, messageID, partID? })`                  | Revert a message                   | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.unrevert({ id })`                                    | Restore reverted messages          | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
+| `session.permissions.respond({ id, permissionID, response })` | Respond to a permission request    | Returns `boolean`                                                                                                       |
+
+---
+
+#### Examples
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({ title: "My session" })
+const sessions = await client.session.list()
+
+// Send messages
+const message = await client.session.chat({
+  id: session.id,
+  providerID: "anthropic",
+  modelID: "claude-3-5-sonnet-20241022",
+  parts: [{ type: "text", text: "Hello!" }],
+})
+```
+
+---
+
+### Files
+
+| Method                    | Description                  | Response                                                                                    |
+| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ pattern })`  | Search for text in files     | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files by name           | `string[]` (file paths)                                                                     |
+| `find.symbols({ query })` | Find workspace symbols       | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ path })`     | Read a file                  | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status()`           | Get status for tracked files | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+---
+
+#### Examples
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({ pattern: "function.*opencode" })
+const files = await client.find.files({ query: "*.ts" })
+const content = await client.file.read({ path: "src/index.ts" })
+```
+
+---
+
+### Logging
+
+| Method                                           | Description     | Response  |
+| ------------------------------------------------ | --------------- | --------- |
+| `log.write({ service, level, message, extra? })` | Write log entry | `boolean` |
+
+---
+
+#### Examples
+
+```javascript
+await client.log.write({
+  service: "my-app",
+  level: "info",
+  message: "Operation completed",
+})
+```
+
+---
+
+### Agents
+
+| Method         | Description               | Response                                    |
+| -------------- | ------------------------- | ------------------------------------------- |
+| `agent.list()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Examples
+
+```javascript
+const agents = await client.agent.list()
+```
+
+---
+
+### TUI
+
+| Method                                        | Description                       | Response               |
+| --------------------------------------------- | --------------------------------- | ---------------------- |
+| `tui.appendPrompt({ text })`                  | Append text to the prompt         | `boolean`              |
+| `tui.openHelp()`                              | Open the help dialog              | `boolean`              |
+| `tui.openSessions()`                          | Open the session selector         | `boolean`              |
+| `tui.openThemes()`                            | Open the theme selector           | `boolean`              |
+| `tui.openModels()`                            | Open the model selector           | `boolean`              |
+| `tui.submitPrompt()`                          | Submit the current prompt         | `boolean`              |
+| `tui.clearPrompt()`                           | Clear the prompt                  | `boolean`              |
+| `tui.executeCommand({ command })`             | Execute a command                 | `boolean`              |
+| `tui.showToast({ title?, message, variant })` | Show toast notification           | `boolean`              |
+| `tui.control.next()`                          | Wait for the next control request | Control request object |
+| `tui.control.response({ body })`              | Respond to a control request      | `boolean`              |
+
+---
+
+#### Examples
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({ text: "Add this to prompt" })
+await client.tui.showToast({
+  message: "Task completed",
+  variant: "success",
+})
+```
+
+---
+
+### Auth
+
+| Method                          | Description                    | Response  |
+| ------------------------------- | ------------------------------ | --------- |
+| `auth.set({ id, ...authData })` | Set authentication credentials | `boolean` |
+
+---
+
+#### Examples
+
+```javascript
+await client.auth.set({
+  id: "anthropic",
+  type: "api",
+  key: "your-api-key",
+})
+```
+
+---
+
+### Events
+
+| Method              | Description               | Response                  |
+| ------------------- | ------------------------- | ------------------------- |
+| `event.subscribe()` | Server-sent events stream | Server-sent events stream |
+
+---
+
+#### Examples
+
+```javascript
+// Listen to real-time events
+const eventStream = await client.event.subscribe()
+for await (const event of eventStream) {
+  console.log("Event:", event.type, event.properties)
+}
+```
+
+---
+
+## Error handling
+
+The SDK throws typed errors that you can catch and handle:
+
+```typescript
+try {
+  const session = await client.session.get({ id: "invalid-id" })
+} catch (error) {
+  console.error("Failed to get session:", error.message)
+}
+```

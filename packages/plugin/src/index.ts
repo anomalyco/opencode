@@ -32,12 +32,16 @@ export interface Hooks {
               | {
                   method: "auto"
                   callback(): Promise<
-                    | {
+                    | ({
                         type: "success"
-                        refresh: string
-                        access: string
-                        expires: number
-                      }
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
                     | {
                         type: "failed"
                       }
@@ -46,12 +50,16 @@ export interface Hooks {
               | {
                   method: "code"
                   callback(code: string): Promise<
-                    | {
+                    | ({
                         type: "success"
-                        refresh: string
-                        access: string
-                        expires: number
-                      }
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
                     | {
                         type: "failed"
                       }

@@ -64,7 +64,7 @@ export namespace Config {
       if (agentFolderPath.includes("/")) {
         const relativePath = agentFolderPath.replace(".md", "")
         const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/").toUpperCase() + "/" + pathParts[pathParts.length - 1].toUpperCase()
+        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
       }
 
       const config = {
@@ -229,6 +229,7 @@ export namespace Config {
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
+      session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_share: z.string().optional().default("<leader>s").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
