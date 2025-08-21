@@ -5,9 +5,11 @@ description: Using the opencode JSON config.
 
 You can configure opencode using a JSON config file.
 
+---
+
 ## Format
 
-opencode supports both JSON and JSONC (JSON with Comments) formats. You can use comments in your configuration files:
+opencode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -19,7 +21,14 @@ opencode supports both JSON and JSONC (JSON with Comments) formats. You can use 
 }
 ```
 
-This can be used to configure opencode globally or for a specific project.
+With JSONC, you can use comments in your configuration files:
+
+---
+
+## Locations
+
+You can place your config in a couple of different locations and they have a
+different order of precedence.
 
 ---
 
@@ -31,7 +40,11 @@ Place your global opencode config in `~/.config/opencode/opencode.json`. You'll 
 
 ### Per project
 
-You can also add a `opencode.json` in your project. This is useful for configuring providers or modes specific to your project.
+You can also add a `opencode.json` in your project. It takes precedence over the global config. This is useful for configuring providers or modes specific to your project.
+
+:::tip
+Place project specific config in the root of your project.
+:::
 
 When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
@@ -39,9 +52,9 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ---
 
-### Custom config file
+### Custom path
 
-You can specify a custom config file using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
+You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
@@ -58,25 +71,6 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 ---
 
-### Modes
-
-opencode comes with two built-in modes: _build_, the default with all tools enabled. And _plan_, restricted mode with file modification tools disabled. You can override these built-in modes or define your own custom modes with the `mode` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mode": {
-    "build": {},
-    "plan": {},
-    "my-custom-mode": {}
-  }
-}
-```
-
-[Learn more here](/docs/modes).
-
----
-
 ### Models
 
 You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
@@ -90,7 +84,7 @@ You can configure the providers and models you want to use in your opencode conf
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like summarization and title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+The `small_model` option configures a separate model for lightweight tasks like title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -111,12 +105,29 @@ You can configure the theme you want to use in your opencode config through the 
 
 ---
 
-### Logging
+### Agents
 
-Logs are written to:
+You can configure specialized agents for specific tasks through the `agent` option.
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: `%APPDATA%\opencode\log\`
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -169,6 +180,50 @@ opencode will automatically download any new updates when it starts up. You can 
 
 ---
 
+### Formatters
+
+You can configure code formatters through the `formatter` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[Learn more about formatters here](/docs/formatters).
+
+---
+
+### Permissions
+
+You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+[Learn more about permissions here](/docs/permissions).
+
+---
+
 ### MCP servers
 
 You can configure MCP servers you want to use through the `mcp` option.
@@ -200,32 +255,6 @@ about rules here](/docs/rules).
 
 ---
 
-### Agents
-
-You can configure specialized agents for specific tasks through the `agent` option.
-
-```jsonc title="opencode.jsonc"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "agent": {
-    "code-reviewer": {
-      "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-20250514",
-      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
-      "tools": {
-        // Disable file modification tools for review-only agent
-        "write": false,
-        "edit": false,
-      },
-    },
-  },
-}
-```
-
-You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
-
----
-
 ### Disabled providers
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
@@ -241,46 +270,6 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
-}
-```
-
----
-
-### Formatters
-
-You can configure code formatters through the `formatter` option. See [Formatters documentation](/docs/formatters) for more details.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "formatter": {
-    "prettier": {
-      "disabled": true
-    },
-    "custom-prettier": {
-      "command": ["npx", "prettier", "--write", "$FILE"],
-      "environment": {
-        "NODE_ENV": "development"
-      },
-      "extensions": [".js", ".ts", ".jsx", ".tsx"]
-    }
-  }
-}
-```
-
----
-
-### Permissions
-
-You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "edit": "ask",
-    "bash": "ask"
-  }
 }
 ```
 
@@ -309,6 +298,7 @@ Use `{env:VARIABLE_NAME}` to substitute environment variables:
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
+      "models": {},
       "options": {
         "apiKey": "{env:ANTHROPIC_API_KEY}"
       }
@@ -328,7 +318,7 @@ Use `{file:path/to/file}` to substitute the contents of a file:
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["{file:./custom-instructions.md}"],
+  "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {
       "options": {

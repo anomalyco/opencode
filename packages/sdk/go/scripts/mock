@@ -21,7 +21,7 @@ echo "==> Starting mock server with URL ${URL}"
 
 # Run prism mock on the given spec
 if [ "$1" == "--daemon" ]; then
-  npm exec --package=@stainless-api/prism-cli@5.8.5 -- prism mock "$URL" &> .prism.log &
+  npm exec --package=@stainless-api/prism-cli@5.15.0 -- prism mock "$URL" &> .prism.log &
 
   # Wait for server to come online
   echo -n "Waiting for server"
@@ -37,5 +37,5 @@ if [ "$1" == "--daemon" ]; then
 
   echo
 else
-  npm exec --package=@stainless-api/prism-cli@5.8.5 -- prism mock "$URL"
+  npm exec --package=@stainless-api/prism-cli@5.15.0 -- prism mock "$URL"
 fi

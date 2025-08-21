@@ -131,10 +131,28 @@ func (s *SearchDialog) Init() tea.Cmd {
 	return textinput.Blink
 }
 
+func (s *SearchDialog) updateTextInput(msg tea.Msg) []tea.Cmd {
+	var cmds []tea.Cmd
+	oldValue := s.textInput.Value()
+	var cmd tea.Cmd
+	s.textInput, cmd = s.textInput.Update(msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if newValue := s.textInput.Value(); newValue != oldValue {
+		cmds = append(cmds, func() tea.Msg {
+			return SearchQueryChangedMsg{Query: newValue}
+		})
+	}
+	return cmds
+}
+
 func (s *SearchDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.PasteMsg, tea.ClipboardMsg:
+		cmds = append(cmds, s.updateTextInput(msg)...)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -183,17 +201,7 @@ func (s *SearchDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			oldValue := s.textInput.Value()
-			var cmd tea.Cmd
-			s.textInput, cmd = s.textInput.Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if newValue := s.textInput.Value(); newValue != oldValue {
-				cmds = append(cmds, func() tea.Msg {
-					return SearchQueryChangedMsg{Query: newValue}
-				})
-			}
+			cmds = append(cmds, s.updateTextInput(msg)...)
 		}
 	}
 

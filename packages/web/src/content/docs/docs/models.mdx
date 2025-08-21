@@ -64,6 +64,36 @@ If you've configured a [custom provider](/docs/providers#custom), the `provider_
 
 ---
 
+## Configure models
+
+You can globally configure a model's options through the config.
+
+```jsonc title="opencode.jsonc" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Here we are setting global options for the `gpt-5` model when used through the `openai` provider.
+
+You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
+
+---
+
 ## Loading models
 
 When opencode starts up, it checks for models in the following priority order:

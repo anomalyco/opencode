@@ -7,13 +7,20 @@ export default $config({
       removal: input?.stage === "production" ? "retain" : "remove",
       protect: ["production"].includes(input?.stage),
       home: "cloudflare",
+      providers: {
+        stripe: {
+          apiKey: process.env.STRIPE_SECRET_KEY,
+        },
+      },
     }
   },
   async run() {
-    const { api, gateway } = await import("./infra/app.js")
+    const { api } = await import("./infra/app.js")
+    const { auth, gateway } = await import("./infra/cloud.js")
     return {
       api: api.url,
       gateway: gateway.url,
+      auth: auth.url,
     }
   },
 })

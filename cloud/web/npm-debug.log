@@ -1,0 +1,29 @@
+0 info it worked if it ends with ok
+1 verbose cli [
+1 verbose cli   '/usr/local/bin/node',
+1 verbose cli   '/Users/frank/Sites/opencode/node_modules/.bin/npm',
+1 verbose cli   'run',
+1 verbose cli   'dev'
+1 verbose cli ]
+2 info using npm@2.15.12
+3 info using node@v20.18.1
+4 verbose stack Error: Invalid name: "@opencode/cloud/web"
+4 verbose stack     at ensureValidName (/Users/frank/Sites/opencode/node_modules/npm/node_modules/normalize-package-data/lib/fixer.js:336:15)
+4 verbose stack     at Object.fixNameField (/Users/frank/Sites/opencode/node_modules/npm/node_modules/normalize-package-data/lib/fixer.js:215:5)
+4 verbose stack     at /Users/frank/Sites/opencode/node_modules/npm/node_modules/normalize-package-data/lib/normalize.js:32:38
+4 verbose stack     at Array.forEach (<anonymous>)
+4 verbose stack     at normalize (/Users/frank/Sites/opencode/node_modules/npm/node_modules/normalize-package-data/lib/normalize.js:31:15)
+4 verbose stack     at final (/Users/frank/Sites/opencode/node_modules/npm/node_modules/read-package-json/read-json.js:349:5)
+4 verbose stack     at then (/Users/frank/Sites/opencode/node_modules/npm/node_modules/read-package-json/read-json.js:124:5)
+4 verbose stack     at ReadFileContext.<anonymous> (/Users/frank/Sites/opencode/node_modules/npm/node_modules/read-package-json/read-json.js:295:20)
+4 verbose stack     at ReadFileContext.callback (/Users/frank/Sites/opencode/node_modules/npm/node_modules/graceful-fs/graceful-fs.js:78:16)
+4 verbose stack     at FSReqCallback.readFileAfterOpen [as oncomplete] (node:fs:299:13)
+5 verbose cwd /Users/frank/Sites/opencode/cloud/web
+6 error Darwin 24.5.0
+7 error argv "/usr/local/bin/node" "/Users/frank/Sites/opencode/node_modules/.bin/npm" "run" "dev"
+8 error node v20.18.1
+9 error npm  v2.15.12
+10 error Invalid name: "@opencode/cloud/web"
+11 error If you need help, you may report this error at:
+11 error     <https://github.com/npm/npm/issues>
+12 verbose exit [ 1, true ]

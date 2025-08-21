@@ -1,0 +1,17 @@
+[data-component="label"] {
+  letter-spacing: -0.03125rem;
+  text-transform: uppercase;
+  color: var(--color-text-dimmed);
+  font-weight: 500;
+  font-size: var(--font-size-md);
+
+  &[data-size="sm"] {
+    font-size: var(--font-size-sm);
+  }
+  &[data-size="md"] {
+  }
+  &[data-size="lg"] {
+    font-size: var(--font-size-lg);
+  }
+}
+

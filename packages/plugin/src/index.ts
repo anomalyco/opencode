@@ -1,4 +1,14 @@
-import type { Event, createOpencodeClient, App, Model, Provider, Permission, UserMessage, Part } from "@opencode-ai/sdk"
+import type {
+  Event,
+  createOpencodeClient,
+  App,
+  Model,
+  Provider,
+  Permission,
+  UserMessage,
+  Part,
+  Auth,
+} from "@opencode-ai/sdk"
 import type { BunShell } from "./shell"
 
 export type PluginInput = {
@@ -10,6 +20,57 @@ export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
+  auth?: {
+    provider: string
+    loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
+    methods: (
+      | {
+          type: "oauth"
+          label: string
+          authorize(): Promise<
+            { url: string; instructions: string } & (
+              | {
+                  method: "auto"
+                  callback(): Promise<
+                    | ({
+                        type: "success"
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
+                    | {
+                        type: "failed"
+                      }
+                  >
+                }
+              | {
+                  method: "code"
+                  callback(code: string): Promise<
+                    | ({
+                        type: "success"
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
+                    | {
+                        type: "failed"
+                      }
+                  >
+                }
+            )
+          >
+        }
+      | { type: "api"; label: string }
+    )[]
+  }
   /**
    * Called when a new message is received
    */
@@ -19,7 +80,7 @@ export interface Hooks {
    */
   "chat.params"?: (
     input: { model: Model; provider: Provider; message: UserMessage },
-    output: { temperature: number; topP: number },
+    output: { temperature: number; topP: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "tool.execute.before"?: (

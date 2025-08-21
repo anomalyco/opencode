@@ -11,9 +11,10 @@ opencode integrates with your Language Server Protocol (LSP) to help the LLM int
 
 opencode comes with several built-in LSP servers for popular languages:
 
-| LSP Server | Extensions                         | Requirements                        |
+| LSP Server | Extensions                                   | Requirements                        |
 | ---------- | -------------------------------------------- | ----------------------------------- |
 | typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` dependency in project  |
+| eslint     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `eslint` dependency in project      |
 | gopls      | .go                                          | `go` command available              |
 | ruby-lsp   | .rb, .rake, .gemspec, .ru                    | `ruby` and `gem` commands available |
 | pyright    | .py, .pyi                                    | `pyright` dependency installed      |
@@ -41,7 +42,7 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "lsp": { }
+  "lsp": {}
 }
 ```
 
@@ -49,7 +50,7 @@ Each LSP server supports the following:
 
 | Property         | Type     | Description                                       |
 | ---------------- | -------- | ------------------------------------------------- |
-| `disabled`       | boolean  | Set this to `true` to disable the LSP server           |
+| `disabled`       | boolean  | Set this to `true` to disable the LSP server      |
 | `command`        | string[] | The command to start the LSP server               |
 | `extensions`     | string[] | File extensions this LSP server should handle     |
 | `env`            | object   | Environment variables to set when starting server |

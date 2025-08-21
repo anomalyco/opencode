@@ -5,6 +5,7 @@ import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
 import { z } from "zod"
+import { Config } from "../config/config"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -26,6 +27,8 @@ export namespace Snapshot {
   export async function track() {
     const app = App.info()
     if (!app.git) return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
     const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
       await $`git init`
@@ -40,6 +43,7 @@ export namespace Snapshot {
     }
     await $`git --git-dir ${git} add .`.quiet().cwd(app.path.cwd).nothrow()
     const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(app.path.cwd).nothrow().text()
+    log.info("tracking", { hash, cwd: app.path.cwd, git })
     return hash.trim()
   }
 
@@ -61,7 +65,7 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(app.path.cwd, x)),
+        .map((x) => path.join(app.path.root, x)),
     }
   }
 

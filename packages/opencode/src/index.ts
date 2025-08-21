@@ -18,11 +18,11 @@ import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
-import { Trace } from "./trace"
-
-Trace.init()
 
 const cancel = new AbortController()
+
+try {
+} catch (e) {}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -60,6 +60,8 @@ const cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
+
+    process.env["OPENCODE"] = "1"
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,

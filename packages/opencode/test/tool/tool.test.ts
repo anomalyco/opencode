@@ -8,6 +8,7 @@ const ctx = {
   sessionID: "test",
   messageID: "",
   toolCallID: "",
+  agent: "build",
   abort: AbortSignal.any([]),
   metadata: () => {},
 }

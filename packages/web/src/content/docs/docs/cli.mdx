@@ -1,19 +1,23 @@
 ---
 title: CLI
-description: The opencode CLI options and commands.
+description: opencode CLI options and commands.
 ---
 
-Running the opencode CLI starts it for the current directory.
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+The opencode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
 opencode
 ```
 
-Or you can start it for a specific working directory.
+But it also accepts commands as documented on this page. This allows you to interact with opencode programmatically.
 
 ```bash
-opencode /path/to/project
+opencode run "Explain how closures work in JavaScript"
 ```
+
+
 
 ---
 
@@ -23,28 +27,25 @@ The opencode CLI also has the following commands.
 
 ---
 
-### run
+### agent
 
-Run opencode in non-interactive mode by passing a prompt directly.
+Manage agents for opencode.
 
 ```bash
-opencode run [message..]
+opencode agent [command]
 ```
 
-This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
+---
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+#### create
+
+Create a new agent with custom configuration.
+
+```bash
+opencode agent create
 ```
 
-#### Flags
-
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--share`    |       | Share the session                          |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
+This command will guide you through creating a new agent with a custom system prompt and tool configuration.
 
 ---
 
@@ -96,6 +97,102 @@ opencode auth logout
 
 ---
 
+### github
+
+Manage the GitHub agent for repository automation.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+Install the GitHub agent in your repository.
+
+```bash
+opencode github install
+```
+
+This sets up the necessary GitHub Actions workflow and guides you through the configuration process. [Learn more](/docs/github).
+
+---
+
+#### run
+
+Run the GitHub agent. This is typically used in GitHub Actions.
+
+```bash
+opencode github run
+```
+
+##### Flags
+
+| Flag      | Description                            |
+| --------- | -------------------------------------- |
+| `--event` | GitHub mock event to run the agent for |
+| `--token` | GitHub personal access token           |
+
+---
+
+### models
+
+List all available models from configured providers.
+
+```bash
+opencode models
+```
+
+This command displays all models available across your configured providers in the format `provider/model`.
+
+---
+
+### run
+
+Run opencode in non-interactive mode by passing a prompt directly.
+
+```bash
+opencode run [message..]
+```
+
+This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+#### Flags
+
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--continue` | `-c`  | Continue the last session                  |
+| `--session`  | `-s`  | Session ID to continue                     |
+| `--share`    |       | Share the session                          |
+| `--model`    | `-m`  | Model to use in the form of provider/model |
+| `--agent`    |       | Agent to use                               |
+
+---
+
+### serve
+
+Start a headless opencode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
+
+```bash
+opencode serve
+```
+
+This starts an HTTP server that provides API access to opencode functionality without the TUI interface.
+
+#### Flags
+
+| Flag         | Short | Description           |
+| ------------ | ----- | --------------------- |
+| `--port`     | `-p`  | Port to listen on     |
+| `--hostname` | `-h`  | Hostname to listen on |
+
+---
+
 ### upgrade
 
 Updates opencode to the latest version or a specific version.
@@ -116,17 +213,26 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+#### Flags
+
+| Flag       | Short | Description                                                       |
+| ---------- | ----- | ----------------------------------------------------------------- |
+| `--method` | `-m`  | The installation method that was used; curl, npm, pnpm, bun, brew |
+
 ---
 
 ## Flags
 
-The opencode CLI takes the following flags.
+The opencode CLI takes the following global flags.
 
-| Flag           | Short | Description          |
-| -------------- | ----- | -------------------- |
-| `--help`       | `-h`  | Display help         |
-| `--version`    |       | Print version number |
-| `--print-logs` |       | Print logs to stderr |
-| `--prompt`     | `-p`  | Prompt to use        |
+| Flag           | Short | Description                                |
+| -------------- | ----- | ------------------------------------------ |
+| `--help`       | `-h`  | Display help                               |
+| `--version`    |       | Print version number                       |
+| `--print-logs` |       | Print logs to stderr                       |
+| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR)       |
+| `--prompt`     | `-p`  | Prompt to use                              |
 | `--model`      | `-m`  | Model to use in the form of provider/model |
-| `--mode`       |       | Mode to use          |
+| `--agent`      |       | Agent to use                               |
+| `--port`       |       | Port to listen on                          |
+| `--hostname`   |       | Hostname to listen on                      |

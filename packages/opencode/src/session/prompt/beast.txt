@@ -93,18 +93,6 @@ Carefully read the issue and think hard about a plan to solve it before coding.
 - To test hypotheses, you can also add test statements or functions
 - Revisit your assumptions if unexpected behavior occurs.
 
-# How to create a Todo List
-Use the following format to create a todo list:
-```markdown
-- [ ] Step 1: Description of the first step
-- [ ] Step 2: Description of the second step
-- [ ] Step 3: Description of the third step
-```
-
-Do not ever use HTML tags or any other formatting for the todo list, as it will not be rendered correctly. Always use the markdown format shown above. Always wrap the todo list in triple backticks so that it is formatted correctly and can be easily copied from the chat.
-
-Always show the completed todo list to the user as the last item in your message, so that they can see that you have addressed all of the steps.
-
 
 # Communication Guidelines
 Always communicate clearly and concisely in a casual, friendly yet professional tone. 

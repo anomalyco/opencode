@@ -65,6 +65,127 @@ export namespace LSPServer {
     },
   }
 
+  export const Vue: Info = {
+    id: "vue",
+    extensions: [".vue"],
+    root: NearestRoot([
+      "tsconfig.json",
+      "jsconfig.json",
+      "package.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "bun.lockb",
+      "bun.lock",
+      "vite.config.ts",
+      "vite.config.js",
+      "nuxt.config.ts",
+      "nuxt.config.js",
+      "vue.config.js",
+    ]),
+    async spawn(_, root) {
+      let binary = Bun.which("vue-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "@vue",
+          "language-server",
+          "bin",
+          "vue-language-server.js",
+        )
+        if (!(await Bun.file(js).exists())) {
+          await Bun.spawn([BunProc.which(), "install", "@vue/language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+        initialization: {
+          // Leave empty; the server will auto-detect workspace TypeScript.
+        },
+      }
+    },
+  }
+
+  export const ESLint: Info = {
+    id: "eslint",
+    root: NearestRoot([
+      "eslint.config.js",
+      "eslint.config.mjs",
+      "eslint.config.cjs",
+      "eslint.config.ts",
+      "eslint.config.mts",
+      "eslint.config.cts",
+      ".eslintrc.js",
+      ".eslintrc.cjs",
+      ".eslintrc.yaml",
+      ".eslintrc.yml",
+      ".eslintrc.json",
+      "package.json",
+    ]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
+    async spawn(app, root) {
+      const eslint = await Bun.resolve("eslint", app.path.cwd).catch(() => {})
+      if (!eslint) return
+      const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
+      if (!(await Bun.file(serverPath).exists())) {
+        log.info("downloading and building VS Code ESLint server")
+        const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
+        if (!response.ok) return
+
+        const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
+        await Bun.file(zipPath).write(response)
+
+        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        await fs.rm(zipPath, { force: true })
+
+        const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
+        const finalPath = path.join(Global.Path.bin, "vscode-eslint")
+
+        if (await Bun.file(finalPath).exists()) {
+          await fs.rm(finalPath, { force: true, recursive: true })
+        }
+        await fs.rename(extractedPath, finalPath)
+
+        await $`npm install`.cwd(finalPath).quiet()
+        await $`npm run compile`.cwd(finalPath).quiet()
+
+        log.info("installed VS Code ESLint server", { serverPath })
+      }
+
+      const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Gopls: Info = {
     id: "golang",
     root: async (file, app) => {
@@ -150,7 +271,24 @@ export namespace LSPServer {
     extensions: [".py", ".pyi"],
     root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
     async spawn(_, root) {
-      const proc = spawn(BunProc.which(), ["x", "pyright-langserver", "--stdio"], {
+      let binary = Bun.which("pyright-langserver")
+      const args = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
+        if (!(await Bun.file(js).exists())) {
+          await Bun.spawn([BunProc.which(), "install", "pyright"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push(...["run", js])
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
         cwd: root,
         env: {
           ...process.env,
@@ -192,7 +330,7 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await $`unzip -o -q ${zipPath}`.cwd(Global.Path.bin).nothrow()
+          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
 
           await fs.rm(zipPath, {
             force: true,
@@ -294,7 +432,7 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`unzip -o -q ${tempPath}`.quiet().cwd(Global.Path.bin).nothrow()
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
         }
@@ -356,6 +494,101 @@ export namespace LSPServer {
 
       return {
         process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const RustAnalyzer: Info = {
+    id: "rust",
+    root: NearestRoot(["Cargo.toml", "Cargo.lock"]),
+    extensions: [".rs"],
+    async spawn(_, root) {
+      const bin = Bun.which("rust-analyzer")
+      if (!bin) {
+        log.info("rust-analyzer not found in path, please install it")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Clangd: Info = {
+    id: "clangd",
+    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
+    extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
+    async spawn(_, root) {
+      let bin = Bun.which("clangd", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+      if (!bin) {
+        log.info("downloading clangd from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch clangd release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        let assetName = ""
+
+        if (platform === "darwin") {
+          assetName = "clangd-mac-"
+        } else if (platform === "linux") {
+          assetName = "clangd-linux-"
+        } else if (platform === "win32") {
+          assetName = "clangd-windows-"
+        } else {
+          log.error(`Platform ${platform} is not supported by clangd auto-download`)
+          return
+        }
+
+        assetName += release.tag_name + ".zip"
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest clangd release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download clangd")
+          return
+        }
+
+        const zipPath = path.join(Global.Path.bin, "clangd.zip")
+        await Bun.file(zipPath).write(downloadResponse)
+
+        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        await fs.rm(zipPath, { force: true })
+
+        const extractedDir = path.join(Global.Path.bin, assetName.replace(".zip", ""))
+        bin = path.join(extractedDir, "bin", "clangd" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract clangd binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed clangd`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["--background-index", "--clang-tidy"], {
           cwd: root,
         }),
       }
