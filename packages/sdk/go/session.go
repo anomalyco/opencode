@@ -91,7 +91,7 @@ func (r *SessionService) Abort(ctx context.Context, id string, opts ...option.Re
 }
 
 // Create and send a new message to a session
-func (r *SessionService) Chat(ctx context.Context, id string, body SessionChatParams, opts ...option.RequestOption) (res *AssistantMessage, err error) {
+func (r *SessionService) Chat(ctx context.Context, id string, body SessionChatParams, opts ...option.RequestOption) (res *SessionChatResponse, err error) {
 	opts = append(r.Options[:], opts...)
 	if id == "" {
 		err = errors.New("missing required id parameter")
@@ -2275,6 +2275,29 @@ func (r *UserMessageTime) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r userMessageTimeJSON) RawJSON() string {
+	return r.raw
+}
+
+type SessionChatResponse struct {
+	Info  AssistantMessage        `json:"info,required"`
+	Parts []Part                  `json:"parts,required"`
+	JSON  sessionChatResponseJSON `json:"-"`
+}
+
+// sessionChatResponseJSON contains the JSON metadata for the struct
+// [SessionChatResponse]
+type sessionChatResponseJSON struct {
+	Info        apijson.Field
+	Parts       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *SessionChatResponse) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r sessionChatResponseJSON) RawJSON() string {
 	return r.raw
 }
 
