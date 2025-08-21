@@ -17,6 +17,7 @@ import {
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
+import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 
 import { App } from "../app/app"
 import { Bus } from "../bus"
@@ -726,6 +727,18 @@ export namespace Session {
         synthetic: true,
       })
     }
+
+    const lastAssistantMsg = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    if (lastAssistantMsg?.mode === "plan" && agent.name === "build") {
+      msgs.at(-1)?.parts.push({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: BUILD_SWITCH,
+        synthetic: true,
+      })
+    }
     let system = SystemPrompt.header(input.providerID)
     system.push(
       ...(() => {
@@ -945,6 +958,13 @@ export namespace Session {
           toolName: "invalid",
         }
       },
+      headers:
+        input.providerID === "opencode"
+          ? {
+              "x-opencode-session": input.sessionID,
+              "x-opencode-request": userMsg.id,
+            }
+          : undefined,
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,

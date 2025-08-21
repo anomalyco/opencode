@@ -207,6 +207,9 @@ func New(
 
 func (a *App) Keybind(commandName commands.CommandName) string {
 	command := a.Commands[commandName]
+	if len(command.Keybindings) == 0 {
+		return ""
+	}
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {
@@ -646,6 +649,25 @@ func (a *App) IsBusy() bool {
 	lastMessage := a.Messages[len(a.Messages)-1]
 	if casted, ok := lastMessage.Info.(opencode.AssistantMessage); ok {
 		return casted.Time.Completed == 0
+	}
+	return false
+}
+
+func (a *App) HasAnimatingWork() bool {
+	for _, msg := range a.Messages {
+		switch casted := msg.Info.(type) {
+		case opencode.AssistantMessage:
+			if casted.Time.Completed == 0 {
+				return true
+			}
+		}
+		for _, p := range msg.Parts {
+			if tp, ok := p.(opencode.ToolPart); ok {
+				if tp.State.Status == opencode.ToolPartStateStatusPending {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }

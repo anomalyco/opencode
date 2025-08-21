@@ -18,8 +18,8 @@ import (
 	"github.com/sst/opencode/internal/util"
 )
 
-// NavigationDialog interface for the session navigation dialog
-type NavigationDialog interface {
+// TimelineDialog interface for the session timeline dialog
+type TimelineDialog interface {
 	layout.Modal
 }
 
@@ -34,8 +34,8 @@ type RestoreToMessageMsg struct {
 	Index     int
 }
 
-// navigationItem represents a user message in the navigation list
-type navigationItem struct {
+// timelineItem represents a user message in the timeline list
+type timelineItem struct {
 	messageID string
 	content   string
 	timestamp time.Time
@@ -43,25 +43,38 @@ type navigationItem struct {
 	toolCount int // Number of tools used in this message
 }
 
-func (n navigationItem) Render(
+func (n timelineItem) Render(
 	selected bool,
 	width int,
 	isFirstInViewport bool,
 	baseStyle styles.Style,
+	isCurrent bool,
 ) string {
 	t := theme.CurrentTheme()
 	infoStyle := baseStyle.Background(t.BackgroundPanel()).Foreground(t.Info()).Render
 	textStyle := baseStyle.Background(t.BackgroundPanel()).Foreground(t.Text()).Render
 
+	// Add dot after timestamp if this is the current message - only apply color when not selected
+	var dot string
+	var dotVisualLen int
+	if isCurrent {
+		if selected {
+			dot = "● "
+		} else {
+			dot = lipgloss.NewStyle().Foreground(t.Success()).Render("● ")
+		}
+		dotVisualLen = 2 // "● " is 2 characters wide
+	}
+
 	// Format timestamp - only apply color when not selected
 	var timeStr string
 	var timeVisualLen int
 	if selected {
-		timeStr = n.timestamp.Format("15:04") + " "
-		timeVisualLen = lipgloss.Width(timeStr)
+		timeStr = n.timestamp.Format("15:04") + " " + dot
+		timeVisualLen = lipgloss.Width(n.timestamp.Format("15:04")+" ") + dotVisualLen
 	} else {
-		timeStr = infoStyle(n.timestamp.Format("15:04") + " ")
-		timeVisualLen = lipgloss.Width(timeStr)
+		timeStr = infoStyle(n.timestamp.Format("15:04")+" ") + dot
+		timeVisualLen = lipgloss.Width(n.timestamp.Format("15:04")+" ") + dotVisualLen
 	}
 
 	// Tool count display (fixed width for alignment) - only apply color when not selected
@@ -78,7 +91,7 @@ func (n navigationItem) Render(
 	}
 
 	// Calculate available space for content
-	// Reserve space for: timestamp + space + toolInfo + padding + some buffer
+	// Reserve space for: timestamp + dot + space + toolInfo + padding + some buffer
 	reservedSpace := timeVisualLen + 1 + toolInfoVisualLen + 4
 	contentWidth := max(width-reservedSpace, 8)
 
@@ -135,23 +148,23 @@ func (n navigationItem) Render(
 	return itemStyle.Render(text)
 }
 
-func (n navigationItem) Selectable() bool {
+func (n timelineItem) Selectable() bool {
 	return true
 }
 
-type navigationDialog struct {
+type timelineDialog struct {
 	width  int
 	height int
 	modal  *modal.Modal
-	list   list.List[navigationItem]
+	list   list.List[timelineItem]
 	app    *app.App
 }
 
-func (n *navigationDialog) Init() tea.Cmd {
+func (n *timelineDialog) Init() tea.Cmd {
 	return nil
 }
 
-func (n *navigationDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (n *timelineDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		n.width = msg.Width
@@ -163,7 +176,7 @@ func (n *navigationDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Handle navigation and immediately scroll to selected message
 			var cmd tea.Cmd
 			listModel, cmd := n.list.Update(msg)
-			n.list = listModel.(list.List[navigationItem])
+			n.list = listModel.(list.List[timelineItem])
 
 			// Get the newly selected item and scroll to it immediately
 			if item, idx := n.list.GetSelectedItem(); idx >= 0 {
@@ -191,11 +204,11 @@ func (n *navigationDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	listModel, cmd := n.list.Update(msg)
-	n.list = listModel.(list.List[navigationItem])
+	n.list = listModel.(list.List[timelineItem])
 	return n, cmd
 }
 
-func (n *navigationDialog) Render(background string) string {
+func (n *timelineDialog) Render(background string) string {
 	listView := n.list.View()
 
 	t := theme.CurrentTheme()
@@ -229,7 +242,7 @@ func (n *navigationDialog) Render(background string) string {
 	return n.modal.Render(content, background)
 }
 
-func (n *navigationDialog) Close() tea.Cmd {
+func (n *timelineDialog) Close() tea.Cmd {
 	return nil
 }
 
@@ -268,9 +281,9 @@ func countToolsInResponse(messages []app.Message, userMessageIndex int) int {
 	return count
 }
 
-// NewNavigationDialog creates a new session navigation dialog
-func NewNavigationDialog(app *app.App) NavigationDialog {
-	var items []navigationItem
+// NewTimelineDialog creates a new session timeline dialog
+func NewTimelineDialog(app *app.App) TimelineDialog { // renamed from NewNavigationDialog
+	var items []timelineItem
 
 	// Filter to only user messages and extract relevant info
 	for i, message := range app.Messages {
@@ -278,7 +291,7 @@ func NewNavigationDialog(app *app.App) NavigationDialog {
 			preview := extractMessagePreview(message.Parts)
 			toolCount := countToolsInResponse(app.Messages, i)
 
-			items = append(items, navigationItem{
+			items = append(items, timelineItem{
 				messageID: userMsg.ID,
 				content:   preview,
 				timestamp: time.UnixMilli(int64(userMsg.Time.Created)),
@@ -290,25 +303,50 @@ func NewNavigationDialog(app *app.App) NavigationDialog {
 
 	listComponent := list.NewListComponent(
 		list.WithItems(items),
-		list.WithMaxVisibleHeight[navigationItem](12),
-		list.WithFallbackMessage[navigationItem]("No user messages in this session"),
-		list.WithAlphaNumericKeys[navigationItem](true),
+		list.WithMaxVisibleHeight[timelineItem](12),
+		list.WithFallbackMessage[timelineItem]("No user messages in this session"),
+		list.WithAlphaNumericKeys[timelineItem](true),
 		list.WithRenderFunc(
-			func(item navigationItem, selected bool, width int, baseStyle styles.Style) string {
-				return item.Render(selected, width, false, baseStyle)
+			func(item timelineItem, selected bool, width int, baseStyle styles.Style) string {
+				// Determine if this item is the current message for the session
+				isCurrent := false
+				if app.Session.Revert.MessageID != "" {
+					// When reverted, Session.Revert.MessageID contains the NEXT user message ID
+					// So we need to find the previous user message to highlight the correct one
+					for i, navItem := range items {
+						if navItem.messageID == app.Session.Revert.MessageID && i > 0 {
+							// Found the next message, so the previous one is current
+							isCurrent = item.messageID == items[i-1].messageID
+							break
+						}
+					}
+				} else if len(app.Messages) > 0 {
+					// If not reverted, highlight the last user message
+					lastUserMsgID := ""
+					for i := len(app.Messages) - 1; i >= 0; i-- {
+						if userMsg, ok := app.Messages[i].Info.(opencode.UserMessage); ok {
+							lastUserMsgID = userMsg.ID
+							break
+						}
+					}
+					isCurrent = item.messageID == lastUserMsgID
+				}
+				// Only show the dot if undo/redo/restore is available
+				showDot := app.Session.Revert.MessageID != ""
+				return item.Render(selected, width, false, baseStyle, isCurrent && showDot)
 			},
 		),
-		list.WithSelectableFunc(func(item navigationItem) bool {
+		list.WithSelectableFunc(func(item timelineItem) bool {
 			return true
 		}),
 	)
 	listComponent.SetMaxWidth(layout.Current.Container.Width - 12)
 
-	return &navigationDialog{
+	return &timelineDialog{
 		list: listComponent,
 		app:  app,
 		modal: modal.New(
-			modal.WithTitle("Jump to Message"),
+			modal.WithTitle("Session Timeline"),
 			modal.WithMaxWidth(layout.Current.Container.Width-8),
 		),
 	}

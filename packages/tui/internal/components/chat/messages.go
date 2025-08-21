@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
@@ -59,6 +60,7 @@ type messagesComponent struct {
 	lineCount          int
 	selection          *selection
 	messagePositions   map[string]int // map message ID to line position
+	animating          bool
 }
 
 type selection struct {
@@ -99,6 +101,7 @@ func (s selection) coords(offset int) *selection {
 
 type ToggleToolDetailsMsg struct{}
 type ToggleThinkingBlocksMsg struct{}
+type shimmerTickMsg struct{}
 
 func (m *messagesComponent) Init() tea.Cmd {
 	return tea.Batch(m.viewport.Init())
@@ -107,6 +110,15 @@ func (m *messagesComponent) Init() tea.Cmd {
 func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case shimmerTickMsg:
+		if !m.app.HasAnimatingWork() {
+			m.animating = false
+			return m, nil
+		}
+		return m, tea.Sequence(
+			m.renderView(),
+			tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }),
+		)
 	case tea.MouseClickMsg:
 		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset)
 		y := msg.Y + m.viewport.YOffset
@@ -270,6 +282,12 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dirty {
 			cmds = append(cmds, m.renderView())
 		}
+
+		// Start shimmer ticks if any assistant/tool is in-flight
+		if !m.animating && m.app.HasAnimatingWork() {
+			m.animating = true
+			cmds = append(cmds, tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }))
+		}
 	}
 
 	m.tail = m.viewport.AtBottom()
@@ -317,6 +335,25 @@ func (m *messagesComponent) renderView() tea.Cmd {
 		orphanedToolCalls := make([]opencode.ToolPart, 0)
 
 		width := m.width // always use full width
+
+		// Find the last streaming ReasoningPart to only shimmer that one
+		lastStreamingReasoningID := ""
+		if m.showThinkingBlocks {
+			for mi := len(m.app.Messages) - 1; mi >= 0 && lastStreamingReasoningID == ""; mi-- {
+				if _, ok := m.app.Messages[mi].Info.(opencode.AssistantMessage); !ok {
+					continue
+				}
+				parts := m.app.Messages[mi].Parts
+				for pi := len(parts) - 1; pi >= 0; pi-- {
+					if rp, ok := parts[pi].(opencode.ReasoningPart); ok {
+						if strings.TrimSpace(rp.Text) != "" && rp.Time.End == 0 {
+							lastStreamingReasoningID = rp.ID
+							break
+						}
+					}
+				}
+			}
+		}
 
 		reverted := false
 		revertedMessageCount := 0
@@ -419,6 +456,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								files,
 								false,
 								isQueued,
+								false,
 								fileParts,
 								agentParts,
 							)
@@ -495,6 +533,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 									"",
 									false,
 									false,
+									false,
 									[]opencode.FilePart{},
 									[]opencode.AgentPart{},
 									toolCallParts...,
@@ -510,6 +549,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								m.showToolDetails,
 								width,
 								"",
+								false,
 								false,
 								false,
 								[]opencode.FilePart{},
@@ -582,6 +622,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						}
 						if part.Text != "" {
 							text := part.Text
+							shimmer := part.Time.End == 0 && part.ID == lastStreamingReasoningID
 							content = renderText(
 								m.app,
 								message.Info,
@@ -592,6 +633,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 								"",
 								true,
 								false,
+								shimmer,
 								[]opencode.FilePart{},
 								[]opencode.AgentPart{},
 							)
@@ -624,6 +666,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						m.showToolDetails,
 						width,
 						"",
+						false,
 						false,
 						false,
 						[]opencode.FilePart{},
@@ -728,16 +771,18 @@ func (m *messagesComponent) renderView() tea.Cmd {
 			} else {
 				for _, part := range response.Parts {
 					if part.CallID == m.app.CurrentPermission.CallID {
-						content := renderToolDetails(
-							m.app,
-							part.AsUnion().(opencode.ToolPart),
-							m.app.CurrentPermission,
-							width,
-						)
-						if content != "" {
-							partCount++
-							lineCount += lipgloss.Height(content) + 1
-							blocks = append(blocks, content)
+						if toolPart, ok := part.AsUnion().(opencode.ToolPart); ok {
+							content := renderToolDetails(
+								m.app,
+								toolPart,
+								m.app.CurrentPermission,
+								width,
+							)
+							if content != "" {
+								partCount++
+								lineCount += lipgloss.Height(content) + 1
+								blocks = append(blocks, content)
+							}
 						}
 					}
 				}

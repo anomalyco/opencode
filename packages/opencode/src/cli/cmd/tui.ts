@@ -82,11 +82,17 @@ export const TuiCommand = cmd({
       const result = await bootstrap({ cwd }, async (app) => {
         const sessionID = await (async () => {
           if (args.continue) {
-            const list = Session.list()
-            const first = await list.next()
-            await list.return()
-            if (first.done) return
-            return first.value.id
+            const it = Session.list()
+            try {
+              for await (const s of it) {
+                if (s.parentID === undefined) {
+                  return s.id
+                }
+              }
+              return
+            } finally {
+              await it.return()
+            }
           }
           if (args.session) {
             return args.session

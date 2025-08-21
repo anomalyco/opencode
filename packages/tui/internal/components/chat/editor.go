@@ -339,6 +339,7 @@ func (m *editorComponent) Content() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+
 	promptStyle := styles.NewStyle().Foreground(t.Primary()).
 		Padding(0, 0, 0, 1).
 		Bold(true)

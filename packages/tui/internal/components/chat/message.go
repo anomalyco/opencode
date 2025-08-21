@@ -213,6 +213,7 @@ func renderText(
 	extra string,
 	isThinking bool,
 	isQueued bool,
+	shimmer bool,
 	fileParts []opencode.FilePart,
 	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
@@ -234,7 +235,18 @@ func renderText(
 		}
 		content = util.ToMarkdown(text, width, backgroundColor)
 		if isThinking {
-			content = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking") + "\n\n" + content
+			var label string
+			if shimmer {
+				label = util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			} else {
+				label = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking...")
+			}
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label + "\n\n" + content
+		} else if strings.TrimSpace(text) == "Generating..." {
+			label := util.Shimmer(text, backgroundColor, t.TextMuted(), t.Text())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label
 		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
@@ -659,10 +671,22 @@ func renderToolDetails(
 				body = strings.Join(steps, "\n")
 
 				body += "\n\n"
-				body += baseStyle(app.Keybind(commands.SessionChildCycleCommand)) +
-					mutedStyle(", ") +
-					baseStyle(app.Keybind(commands.SessionChildCycleReverseCommand)) +
-					mutedStyle(" navigate child sessions")
+
+				// Build navigation hint with proper spacing
+				cycleKeybind := app.Keybind(commands.SessionChildCycleCommand)
+				cycleReverseKeybind := app.Keybind(commands.SessionChildCycleReverseCommand)
+
+				var navParts []string
+				if cycleKeybind != "" {
+					navParts = append(navParts, baseStyle(cycleKeybind))
+				}
+				if cycleReverseKeybind != "" {
+					navParts = append(navParts, baseStyle(cycleReverseKeybind))
+				}
+
+				if len(navParts) > 0 {
+					body += strings.Join(navParts, mutedStyle(", ")) + mutedStyle(" navigate child sessions")
+				}
 			}
 			body = defaultStyle(body)
 		default:
@@ -779,7 +803,9 @@ func renderToolTitle(
 ) string {
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolAction(toolCall.Tool)
-		return styles.NewStyle().Width(width - 6).Render(title)
+		t := theme.CurrentTheme()
+		shiny := util.Shimmer(title, t.BackgroundPanel(), t.TextMuted(), t.Accent())
+		return styles.NewStyle().Background(t.BackgroundPanel()).Width(width - 6).Render(shiny)
 	}
 
 	toolArgs := ""
@@ -895,7 +921,9 @@ func renderArgs(args *map[string]any, titleKey string) string {
 			continue
 		}
 		if key == "filePath" || key == "path" {
-			value = util.Relative(value.(string))
+			if strValue, ok := value.(string); ok {
+				value = util.Relative(strValue)
+			}
 		}
 		if key == titleKey {
 			title = fmt.Sprintf("%s", value)

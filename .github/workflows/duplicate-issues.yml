@@ -36,10 +36,8 @@ jobs:
 
           Issue number:
           ${{ github.event.issue.number }}
-          Issue body:
-          ${{ github.event.issue.body }}
 
-          Please search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
+          Lookup this issue and search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
           Consider:
           1. Similar titles or descriptions
           2. Same error messages or symptoms

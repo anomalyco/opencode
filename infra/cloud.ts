@@ -10,7 +10,7 @@ const DATABASE_USERNAME = new sst.Secret("DATABASE_USERNAME")
 const DATABASE_PASSWORD = new sst.Secret("DATABASE_PASSWORD")
 export const database = new sst.Linkable("Database", {
   properties: {
-    host: "aws-us-east-2-1.pg.psdb.cloud",
+    host: `aws-us-east-2-${$app.stage === "thdxr" ? "2" : "1"}.pg.psdb.cloud`,
     database: "postgres",
     username: DATABASE_USERNAME.value,
     password: DATABASE_PASSWORD.value,
@@ -106,6 +106,7 @@ export const gateway = new sst.cloudflare.Worker("GatewayApi", {
 // CONSOLE
 ////////////////
 
+/*
 export const console = new sst.cloudflare.x.StaticSite("Console", {
   domain: `console.${domain}`,
   path: "cloud/web",
@@ -116,6 +117,18 @@ export const console = new sst.cloudflare.x.StaticSite("Console", {
   environment: {
     VITE_DOCS_URL: web.url.apply((url) => url!),
     VITE_API_URL: gateway.url.apply((url) => url!),
+    VITE_AUTH_URL: auth.url.apply((url) => url!),
+  },
+})
+*/
+
+new sst.x.DevCommand("Solid", {
+  link: [database],
+  dev: {
+    directory: "cloud/app",
+    command: "bun dev",
+  },
+  environment: {
     VITE_AUTH_URL: auth.url.apply((url) => url!),
   },
 })

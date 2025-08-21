@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.5.5",
+  "version": "0.5.12",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -27,13 +27,9 @@
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
-    "@actions/core": "1.11.1",
-    "@actions/github": "6.0.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
-    "@octokit/graphql": "9.0.1",
-    "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "0.4.3",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
