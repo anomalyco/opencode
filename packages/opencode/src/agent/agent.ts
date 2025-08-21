@@ -100,7 +100,7 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
+      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -120,6 +120,8 @@ export namespace Agent {
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
+      // just here for consistency & to prevent it from being added as an option
+      if (name) item.name = name
 
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})

@@ -8,6 +8,7 @@ import type {
   UserMessage,
   Part,
   Auth,
+  Config,
 } from "@opencode-ai/sdk"
 import type { BunShell } from "./shell"
 
@@ -20,6 +21,7 @@ export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
+  config?: (input: Config) => Promise<void>
   auth?: {
     provider: string
     loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -32,12 +34,16 @@ export interface Hooks {
               | {
                   method: "auto"
                   callback(): Promise<
-                    | {
+                    | ({
                         type: "success"
-                        refresh: string
-                        access: string
-                        expires: number
-                      }
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
                     | {
                         type: "failed"
                       }
@@ -46,12 +52,16 @@ export interface Hooks {
               | {
                   method: "code"
                   callback(code: string): Promise<
-                    | {
+                    | ({
                         type: "success"
-                        refresh: string
-                        access: string
-                        expires: number
-                      }
+                      } & (
+                        | {
+                            refresh: string
+                            access: string
+                            expires: number
+                          }
+                        | { key: string }
+                      ))
                     | {
                         type: "failed"
                       }

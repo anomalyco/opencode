@@ -1527,7 +1527,10 @@ export type SessionChatResponses = {
   /**
    * Created message
    */
-  200: AssistantMessage
+  200: {
+    info: AssistantMessage
+    parts: Array<Part>
+  }
 }
 
 export type SessionChatResponse = SessionChatResponses[keyof SessionChatResponses]

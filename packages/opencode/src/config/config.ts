@@ -64,7 +64,7 @@ export namespace Config {
       if (agentFolderPath.includes("/")) {
         const relativePath = agentFolderPath.replace(".md", "")
         const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/").toUpperCase() + "/" + pathParts[pathParts.length - 1].toUpperCase()
+        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
       }
 
       const config = {

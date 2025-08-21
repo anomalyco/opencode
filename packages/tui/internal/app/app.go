@@ -207,6 +207,9 @@ func New(
 
 func (a *App) Keybind(commandName commands.CommandName) string {
 	command := a.Commands[commandName]
+	if len(command.Keybindings) == 0 {
+		return ""
+	}
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {

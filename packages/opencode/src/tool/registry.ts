@@ -86,7 +86,7 @@ export namespace ToolRegistry {
       result["webfetch"] = false
     }
 
-    if (modelID.includes("qwen")) {
+    if (modelID.toLowerCase().includes("qwen")) {
       result["todowrite"] = false
       result["todoread"] = false
     }

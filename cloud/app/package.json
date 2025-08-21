@@ -5,15 +5,17 @@
     "dev": "vinxi dev --host 0.0.0.0",
     "build": "vinxi build",
     "start": "vinxi start",
-    "version": "0.5.6"
+    "version": "0.5.13"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
+    "@openauthjs/openauth": "0.0.0-20250322224806",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",
     "solid-js": "^1.9.5",
-    "vinxi": "^0.5.7"
+    "vinxi": "^0.5.7",
+    "@opencode/cloud-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

@@ -36,6 +36,12 @@ export namespace Provider {
         },
       }
     },
+    async opencode() {
+      return {
+        autoload: true,
+        options: {},
+      }
+    },
     openai: async () => {
       return {
         autoload: false,
@@ -276,6 +282,15 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      // Filter out blacklisted models
+      const filteredModels = Object.fromEntries(
+        Object.entries(provider.info.models).filter(
+          ([modelID]) =>
+            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+        ),
+      )
+      provider.info.models = filteredModels
+
       if (Object.keys(provider.info.models).length === 0) {
         delete providers[providerID]
         continue

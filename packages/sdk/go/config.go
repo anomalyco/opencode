@@ -79,7 +79,8 @@ type Config struct {
 	SmallModel string `json:"small_model"`
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
-	Theme string `json:"theme"`
+	Theme string          `json:"theme"`
+	Tools map[string]bool `json:"tools"`
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
@@ -110,6 +111,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	Tools             apijson.Field
 	Tui               apijson.Field
 	Username          apijson.Field
 	raw               string
@@ -1760,6 +1762,8 @@ type KeybindsConfig struct {
 	SessionNew string `json:"session_new,required"`
 	// Share current session
 	SessionShare string `json:"session_share,required"`
+	// Show session timeline
+	SessionTimeline string `json:"session_timeline,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
 	// @deprecated use agent_cycle. Next agent
@@ -1821,6 +1825,7 @@ type keybindsConfigJSON struct {
 	SessionList              apijson.Field
 	SessionNew               apijson.Field
 	SessionShare             apijson.Field
+	SessionTimeline          apijson.Field
 	SessionUnshare           apijson.Field
 	SwitchAgent              apijson.Field
 	SwitchAgentReverse       apijson.Field
