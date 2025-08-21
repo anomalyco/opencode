@@ -40,11 +40,11 @@ export namespace Agent {
     const cfg = await Config.get()
     const defaultTools = cfg.tools ?? {}
     const defaultPermission: Info["permission"] = {
-      edit: "allow",
+      edit: "ask",
       bash: {
-        "*": "allow",
+        "*": "ask",
       },
-      webfetch: "allow",
+      webfetch: "ask",
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
