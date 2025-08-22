@@ -965,7 +965,7 @@ export namespace Session {
               "x-opencode-request": userMsg.id,
             }
           : undefined,
-      maxRetries: cfg.chatMaxRetries,
+      maxRetries: cfg.experimental?.chatMaxRetries ?? 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       maxOutputTokens: outputLimit,
       abortSignal: abort.signal,
