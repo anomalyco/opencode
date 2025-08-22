@@ -36,10 +36,13 @@ const client = createOpencodeClient({
 
 #### Options
 
-| Option    | Type       | Description                 | Default                 |
-| --------- | ---------- | --------------------------- | ----------------------- |
-| `baseUrl` | `string`   | URL of the opencode server  | `http://localhost:4096` |
-| `fetch`   | `function` | Custom fetch implementation | `globalThis.fetch`      |
+| Option          | Type       | Description                       | Default                 |
+| --------------- | ---------- | --------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL of the opencode server        | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation       | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method           | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields`  | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of returning | `false`                 |
 
 ---
 
@@ -47,18 +50,27 @@ const client = createOpencodeClient({
 
 You can also programmatically start an opencode server:
 
-```javascript
+````javascript
 import { createOpencodeServer } from "@opencode-ai/sdk"
 
 const server = await createOpencodeServer({
-  host: "127.0.0.1",
+  hostname: "127.0.0.1",
   port: 4096,
 })
 
 console.log(`Server running at ${server.url}`)
 
 server.close()
-```
+}
+
+#### Options
+
+| Option     | Type           | Description                    | Default       |
+| ---------- | -------------- | ------------------------------ | ------------- |
+| `hostname` | `string`       | Server hostname                | `127.0.0.1`   |
+| `port`     | `number`       | Server port                    | `4096`        |
+| `signal`   | `AbortSignal`  | Abort signal for cancellation  | `undefined`   |
+| `timeout`  | `number`       | Timeout in ms for server start | `5000`        |
 
 ---
 
@@ -68,7 +80,7 @@ The SDK includes TypeScript definitions for all API types. Import them directly:
 
 ```typescript
 import type { Session, Message, Part } from "@opencode-ai/sdk"
-```
+````
 
 All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
 
@@ -167,7 +179,7 @@ const message = await client.session.chat({
   id: session.id,
   providerID: "anthropic",
   modelID: "claude-3-5-sonnet-20241022",
-  parts: [{ type: "text", text: "Hello!" }]
+  parts: [{ type: "text", text: "Hello!" }],
 })
 ```
 
@@ -210,7 +222,7 @@ const content = await client.file.read({ path: "src/index.ts" })
 await client.log.write({
   service: "my-app",
   level: "info",
-  message: "Operation completed"
+  message: "Operation completed",
 })
 ```
 
@@ -257,7 +269,7 @@ const agents = await client.agent.list()
 await client.tui.appendPrompt({ text: "Add this to prompt" })
 await client.tui.showToast({
   message: "Task completed",
-  variant: "success"
+  variant: "success",
 })
 ```
 
@@ -277,7 +289,7 @@ await client.tui.showToast({
 await client.auth.set({
   id: "anthropic",
   type: "api",
-  key: "your-api-key"
+  key: "your-api-key",
 })
 ```
 
