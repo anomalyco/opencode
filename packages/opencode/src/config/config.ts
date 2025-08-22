@@ -294,6 +294,18 @@ export namespace Config {
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
   })
 
+  export const ShellConfig = z.object({
+    defaultMode: z.enum(["Shell", "Agent", "Auto"]).optional().default("Auto").describe("Default execution mode"),
+    persistMode: z.boolean().optional().default(true).describe("Persist mode selection across sessions"),
+    shellBinary: z.string().optional().describe("Shell binary to use (defaults to $SHELL or /bin/sh)"),
+    shellArgs: z.string().array().optional().describe("Arguments to pass to shell binary"),
+    workingDirectory: z.string().optional().describe("Initial working directory"),
+    blockedCommands: z.string().array().optional().describe("Commands to block from execution"),
+    environment: z.record(z.string(), z.string()).optional().describe("Additional environment variables")
+  }).strict().openapi({
+    ref: "ShellConfig"
+  })
+
   export const Layout = z.enum(["auto", "stretch"]).openapi({
     ref: "LayoutConfig",
   })
@@ -305,6 +317,7 @@ export namespace Config {
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       tui: TUI.optional().describe("TUI specific settings"),
+      shell: ShellConfig.optional().describe("Shell integration settings"),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z

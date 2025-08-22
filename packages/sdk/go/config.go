@@ -82,6 +82,8 @@ type Config struct {
 	Theme string `json:"theme"`
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
+	// Shell integration settings
+	Shell *ConfigShell `json:"shell,omitempty"`
 	// Custom username to display in conversations instead of system username
 	Username string     `json:"username"`
 	JSON     configJSON `json:"-"`
@@ -111,6 +113,7 @@ type configJSON struct {
 	Snapshot          apijson.Field
 	Theme             apijson.Field
 	Tui               apijson.Field
+	Shell             apijson.Field
 	Username          apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
@@ -1933,4 +1936,44 @@ func (r McpRemoteConfigType) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+// ConfigShell contains shell integration settings
+type ConfigShell struct {
+	// Default execution mode
+	DefaultMode string `json:"defaultMode,omitempty"`
+	// Persist mode selection across sessions
+	PersistMode bool `json:"persistMode,omitempty"`
+	// Shell binary to use (defaults to $SHELL or /bin/sh)
+	ShellBinary string `json:"shellBinary,omitempty"`
+	// Arguments to pass to shell binary
+	ShellArgs []string `json:"shellArgs,omitempty"`
+	// Initial working directory
+	WorkingDirectory string `json:"workingDirectory,omitempty"`
+	// Commands to block from execution
+	BlockedCommands []string `json:"blockedCommands,omitempty"`
+	// Additional environment variables
+	Environment map[string]string `json:"environment,omitempty"`
+	JSON        configShellJSON   `json:"-"`
+}
+
+// configShellJSON contains the JSON metadata for the struct [ConfigShell]
+type configShellJSON struct {
+	DefaultMode      apijson.Field
+	PersistMode      apijson.Field
+	ShellBinary      apijson.Field
+	ShellArgs        apijson.Field
+	WorkingDirectory apijson.Field
+	BlockedCommands  apijson.Field
+	Environment      apijson.Field
+	raw              string
+	ExtraFields      map[string]apijson.Field
+}
+
+func (r *ConfigShell) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configShellJSON) RawJSON() string {
+	return r.raw
 }

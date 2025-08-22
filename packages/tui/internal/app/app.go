@@ -51,6 +51,7 @@ type App struct {
 	IsLeaderSequence  bool
 	IsBashMode        bool
 	ScrollSpeed       int
+	ExecutionMode     string // "Shell", "Agent", or "Auto"
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -183,6 +184,12 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
+	// Initialize execution mode from config or default to Auto
+	executionMode := "Auto"
+	if configInfo.Shell != nil && configInfo.Shell.DefaultMode != "" {
+		executionMode = configInfo.Shell.DefaultMode
+	}
+
 	app := &App{
 		Info:           appInfo,
 		Agents:         agents,
@@ -196,6 +203,7 @@ func New(
 		Messages:       []Message{},
 		Commands:       commands.LoadFromConfig(configInfo),
 		InitialModel:   initialModel,
+		ExecutionMode:  executionMode,
 		InitialPrompt:  initialPrompt,
 		InitialAgent:   initialAgent,
 		InitialSession: initialSession,

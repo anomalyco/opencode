@@ -119,6 +119,47 @@ func (m *statusComponent) View() string {
 	logo := m.logo()
 	logoWidth := lipgloss.Width(logo)
 
+	// Execution mode indicator
+	var executionModeStr string
+	var executionModeColor compat.AdaptiveColor
+	executionMode := m.app.ExecutionMode
+	if executionMode == "" {
+		executionMode = "Auto" // Default
+	}
+	
+	switch executionMode {
+	case "Shell":
+		executionModeStr = "▌ Shell"
+		executionModeColor = compat.AdaptiveColor{
+			Dark:  lipgloss.Color("4"), // blue
+			Light: lipgloss.Color("4"),
+		}
+	case "Agent":
+		executionModeStr = "▌ Agent"
+		executionModeColor = compat.AdaptiveColor{
+			Dark:  lipgloss.Color("5"), // magenta/purple
+			Light: lipgloss.Color("5"),
+		}
+	case "Auto":
+		executionModeStr = "▌ Auto"
+		executionModeColor = compat.AdaptiveColor{
+			Dark:  lipgloss.Color("2"), // green
+			Light: lipgloss.Color("2"),
+		}
+	default:
+		executionModeStr = "▌ Auto"
+		executionModeColor = compat.AdaptiveColor{
+			Dark:  lipgloss.Color("2"), // green
+			Light: lipgloss.Color("2"),
+		}
+	}
+	
+	executionModeIndicator := styles.NewStyle().
+		Foreground(executionModeColor).
+		Background(t.BackgroundElement()).
+		Padding(0, 1).
+		Render(executionModeStr)
+
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
 
@@ -187,7 +228,7 @@ func (m *statusComponent) View() string {
 			Width:      m.width,
 		},
 		layout.FlexItem{
-			View: logo + cwd,
+			View: logo + executionModeIndicator + cwd,
 		},
 		layout.FlexItem{
 			View: agent,

@@ -328,6 +328,28 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
+		// Handle execution mode toggle with Ctrl+Space
+		if keyString == "ctrl+ " {
+			// Cycle through modes: Shell -> Agent -> Auto -> Shell
+			switch a.app.ExecutionMode {
+			case "Shell":
+				a.app.ExecutionMode = "Agent"
+			case "Agent":
+				a.app.ExecutionMode = "Auto"
+			case "Auto":
+				a.app.ExecutionMode = "Shell"
+			default:
+				a.app.ExecutionMode = "Auto"
+			}
+			
+			// Show toast notification
+			modeMsg := fmt.Sprintf("Mode: %s", a.app.ExecutionMode)
+			cmds = append(cmds, func() tea.Msg {
+				return toast.NewInfoToast(modeMsg)
+			})
+			return a, tea.Batch(cmds...)
+		}
+
 		// Fallback: suspend if ctrl+z is pressed and no user keybind matched
 		if keyString == "ctrl+z" {
 			return a, tea.Suspend
