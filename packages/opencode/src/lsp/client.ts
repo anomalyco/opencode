@@ -59,8 +59,16 @@ export namespace LSPClient {
       l.info("window/workDoneProgress/create", params)
       return null
     })
-    connection.onRequest("workspace/configuration", async () => {
-      return [input.server.initialization ?? {}]
+    connection.onRequest("workspace/configuration", async (params) => {
+      l.info("workspace configuration requested", { params })
+
+      // If we have Python environment settings from initialization, return them
+      if (input.server.initialization && Object.keys(input.server.initialization).length > 0) {
+        l.info("returning Python configuration", input.server.initialization)
+        return [input.server.initialization]
+      }
+
+      return [{}]
     })
     connection.listen()
 

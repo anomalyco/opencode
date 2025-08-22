@@ -8,6 +8,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../flag/flag"
+import { PythonEnv } from "../util/python-env"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -298,6 +299,23 @@ export namespace LSPServer {
         args.push(...["run", js])
       }
       args.push("--stdio")
+
+      // Detect Python virtual environment
+      const pythonEnv = await PythonEnv.detectPythonEnvironment(root)
+      const initializationOptions = pythonEnv ? await PythonEnv.generateInitializationOptions(pythonEnv) : {}
+
+      if (pythonEnv) {
+        log.info("detected Python environment", {
+          pythonPath: pythonEnv.pythonPath,
+          venvPath: pythonEnv.venvPath,
+          venv: pythonEnv.venv,
+          extraPaths: pythonEnv.extraPaths,
+        })
+        log.info("initialization options", initializationOptions)
+      } else {
+        log.info("no Python virtual environment detected, using system Python")
+      }
+
       const proc = spawn(binary, args, {
         cwd: root,
         env: {
@@ -307,6 +325,7 @@ export namespace LSPServer {
       })
       return {
         process: proc,
+        initialization: initializationOptions,
       }
     },
   }
