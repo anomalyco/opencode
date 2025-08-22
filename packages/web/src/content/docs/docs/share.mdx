@@ -27,9 +27,17 @@ opencode supports three sharing modes that control how conversations are shared:
 
 ---
 
-### Manual (default)
+### Disabled (default)
 
-By default, opencode uses manual sharing mode. Sessions are not shared automatically, but you can manually share them using the `/share` command:
+By default, opencode disables sharing for security. No sessions are shared automatically.
+
+To enable sharing, explicitly configure the `share` option to either `"manual"` or `"auto"` in your [config file](/docs/config#sharing).
+
+---
+
+### Manual
+
+In manual sharing mode, you can manually share sessions using the `/share` command:
 
 ```
 /share

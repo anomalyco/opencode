@@ -133,6 +133,12 @@ export namespace Config {
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
+
+    // Set default share behavior to disabled if not explicitly configured
+    if (result.share === undefined) {
+      result.share = "disabled"
+    }
+
     if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
       result.keybinds.messages_undo = result.keybinds.messages_revert
     }
