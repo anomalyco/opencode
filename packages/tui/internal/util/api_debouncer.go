@@ -11,7 +11,7 @@ type APIDebouncer struct {
 	delay     time.Duration
 	mu        sync.Mutex
 	lastQuery string
-	cache     map[string]interface{}
+	cache     map[string]any
 	cacheTTL  time.Duration
 	cacheTime map[string]time.Time
 }
@@ -20,23 +20,24 @@ type APIDebouncer struct {
 func NewAPIDebouncer(delay time.Duration, cacheTTL time.Duration) *APIDebouncer {
 	return &APIDebouncer{
 		delay:     delay,
-		cache:     make(map[string]interface{}),
+		cache:     make(map[string]any),
 		cacheTTL:  cacheTTL,
 		cacheTime: make(map[string]time.Time),
 	}
 }
 
 // Debounce executes the function after delay, with caching and deduplication
-func (d *APIDebouncer) Debounce(query string, fn func() interface{}) <-chan interface{} {
+func (d *APIDebouncer) Debounce(query string, fn func() any) <-chan any {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 
-	result := make(chan interface{}, 1)
+	// Create result channel with buffer to prevent blocking
+	result := make(chan any, 1)
 
 	// Check cache first (with TTL)
 	if cached, exists := d.cache[query]; exists {
 		if cacheTime, timeExists := d.cacheTime[query]; timeExists {
 			if time.Since(cacheTime) < d.cacheTTL {
+				d.mu.Unlock()
 				result <- cached
 				return result
 			}
@@ -46,39 +47,42 @@ func (d *APIDebouncer) Debounce(query string, fn func() interface{}) <-chan inte
 		}
 	}
 
-	// Request deduplication: if same query as last request, skip
+	// Request deduplication: if same query as last request and timer is active
 	if d.lastQuery == query && d.timer != nil {
-		// Same query, just wait for existing timer
+		d.mu.Unlock()
+		// Wait for existing operation
 		go func() {
-			time.Sleep(d.delay + 50*time.Millisecond) // Wait a bit longer than the timer
+			time.Sleep(d.delay + 50*time.Millisecond)
 			d.mu.Lock()
 			if cached, exists := d.cache[query]; exists {
 				result <- cached
 			} else {
-				result <- nil // Cache miss, request may have failed
+				result <- fn() // Execute if cache miss
 			}
 			d.mu.Unlock()
 		}()
 		return result
 	}
 
-	// Cancel existing timer
+	// Cancel existing timer if any
 	if d.timer != nil {
 		d.timer.Stop()
 	}
 
 	d.lastQuery = query
 
-	// Start new timer
+	// Execute after delay
 	d.timer = time.AfterFunc(d.delay, func() {
 		data := fn()
 		d.mu.Lock()
 		d.cache[query] = data
 		d.cacheTime[query] = time.Now()
+		d.timer = nil // Clear timer reference
 		d.mu.Unlock()
 		result <- data
 	})
 
+	d.mu.Unlock()
 	return result
 }
 
@@ -86,6 +90,6 @@ func (d *APIDebouncer) Debounce(query string, fn func() interface{}) <-chan inte
 func (d *APIDebouncer) ClearCache() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.cache = make(map[string]interface{})
+	d.cache = make(map[string]any)
 	d.cacheTime = make(map[string]time.Time)
 }
