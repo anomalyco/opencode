@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../flag/flag"
 import { PythonEnv } from "../util/python-env"
+import { detectPythonEnvironment, generatePythonSettings } from "./python"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -300,20 +301,17 @@ export namespace LSPServer {
       }
       args.push("--stdio")
 
-      // Detect Python virtual environment
-      const pythonEnv = await PythonEnv.detectPythonEnvironment(root)
-      const initializationOptions = pythonEnv ? await PythonEnv.generateInitializationOptions(pythonEnv) : {}
+      // Detect Python environment
+      const pythonEnv = await detectPythonEnvironment(root)
+      const initializationOptions = pythonEnv ? generatePythonSettings(pythonEnv) : {}
 
       if (pythonEnv) {
         log.info("detected Python environment", {
           pythonPath: pythonEnv.pythonPath,
-          venvPath: pythonEnv.venvPath,
-          venv: pythonEnv.venv,
           extraPaths: pythonEnv.extraPaths,
         })
-        log.info("initialization options", initializationOptions)
       } else {
-        log.info("no Python virtual environment detected, using system Python")
+        log.info("no Python environment detected")
       }
 
       const proc = spawn(binary, args, {
