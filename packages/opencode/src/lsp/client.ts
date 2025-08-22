@@ -60,7 +60,7 @@ export namespace LSPClient {
       return null
     })
     connection.onRequest("workspace/configuration", async () => {
-      // Return Python configuration if available
+      // Return server initialization options
       return input.server.initialization ? [input.server.initialization] : [{}]
     })
     connection.listen()
