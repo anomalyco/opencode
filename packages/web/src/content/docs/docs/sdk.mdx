@@ -8,6 +8,8 @@ export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types
 
 The opencode [JS/TS SDK](https://www.npmjs.com/package/@opencode-ai/sdk) provides a type-safe client for interacting with the opencode server. You can use it to build custom integrations and control opencode programmatically.
 
+[Learn more](/docs/server) about how the opencode server works.
+
 ---
 
 ## Install
@@ -69,6 +71,20 @@ import type { Session, Message, Part } from "@opencode-ai/sdk"
 ```
 
 All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
+
+---
+
+## Errors
+
+The SDK throws typed errors that you can catch and handle:
+
+```typescript
+try {
+  const session = await client.session.get({ id: "invalid-id" })
+} catch (error) {
+  console.error("Failed to get session:", error.message)
+}
+```
 
 ---
 
@@ -151,7 +167,7 @@ const message = await client.session.chat({
   id: session.id,
   providerID: "anthropic",
   modelID: "claude-3-5-sonnet-20241022",
-  parts: [{ type: "text", text: "Hello!" }],
+  parts: [{ type: "text", text: "Hello!" }]
 })
 ```
 
@@ -194,7 +210,7 @@ const content = await client.file.read({ path: "src/index.ts" })
 await client.log.write({
   service: "my-app",
   level: "info",
-  message: "Operation completed",
+  message: "Operation completed"
 })
 ```
 
@@ -241,7 +257,7 @@ const agents = await client.agent.list()
 await client.tui.appendPrompt({ text: "Add this to prompt" })
 await client.tui.showToast({
   message: "Task completed",
-  variant: "success",
+  variant: "success"
 })
 ```
 
@@ -261,7 +277,7 @@ await client.tui.showToast({
 await client.auth.set({
   id: "anthropic",
   type: "api",
-  key: "your-api-key",
+  key: "your-api-key"
 })
 ```
 
@@ -282,19 +298,5 @@ await client.auth.set({
 const eventStream = await client.event.subscribe()
 for await (const event of eventStream) {
   console.log("Event:", event.type, event.properties)
-}
-```
-
----
-
-## Error handling
-
-The SDK throws typed errors that you can catch and handle:
-
-```typescript
-try {
-  const session = await client.session.get({ id: "invalid-id" })
-} catch (error) {
-  console.error("Failed to get session:", error.message)
 }
 ```

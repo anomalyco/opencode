@@ -5,11 +5,6 @@ export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
   const code = url.searchParams.get("code")
   if (!code) throw new Error("No code found")
-  const redirectURI = `${url.origin}${url.pathname}`
-  console.log({
-    redirectURI,
-    code,
-  })
   const result = await AuthClient.exchange(code, `${url.origin}${url.pathname}`)
   if (result.err) {
     throw new Error(result.err.message)

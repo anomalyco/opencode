@@ -25,7 +25,7 @@ export namespace Plugin {
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth")
+      plugins.push("opencode-copilot-auth@0.0.2")
       plugins.push("opencode-anthropic-auth@0.0.2")
     }
     for (let plugin of plugins) {
@@ -68,7 +68,12 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
-  export function init() {
+  export async function init() {
+    const hooks = await state().then((x) => x.hooks)
+    const config = await Config.get()
+    for (const hook of hooks) {
+      hook.config?.(config)
+    }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {

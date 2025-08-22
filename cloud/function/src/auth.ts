@@ -2,11 +2,12 @@ import { Resource } from "sst"
 import { z } from "zod"
 import { issuer } from "@openauthjs/openauth"
 import { createSubjects } from "@openauthjs/openauth/subject"
-import { CodeProvider } from "@openauthjs/openauth/provider/code"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
 import { Account } from "@opencode/cloud-core/account.js"
+import { Workspace } from "@opencode/cloud-core/workspace.js"
+import { Actor } from "@opencode/cloud-core/actor.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -117,6 +118,12 @@ export default {
             email: email!,
           })
         }
+        await Actor.provide("account", { accountID, email }, async () => {
+          const workspaces = await Account.workspaces()
+          if (workspaces.length === 0) {
+            await Workspace.create()
+          }
+        })
         return ctx.subject("account", accountID, { accountID, email })
       },
     }).fetch(request, env, ctx)

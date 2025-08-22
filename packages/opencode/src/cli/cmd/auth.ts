@@ -1,7 +1,6 @@
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
-import open from "open"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
@@ -159,9 +158,6 @@ export const AuthLoginCommand = cmd({
           const authorize = await method.authorize()
 
           if (authorize.url) {
-            try {
-              await open(authorize.url)
-            } catch (e) {}
             prompts.log.info("Go to: " + authorize.url)
           }
 

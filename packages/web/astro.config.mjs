@@ -67,7 +67,14 @@ export default defineConfig({
 
         {
           label: "Usage",
-          items: ["docs/tui", "docs/cli", "docs/ide", "docs/share", "docs/github"],
+          items: [
+            "docs/tui",
+            "docs/cli",
+            "docs/ide",
+            "docs/share",
+            "docs/github",
+            "docs/gitlab"
+          ],
         },
 
         {
