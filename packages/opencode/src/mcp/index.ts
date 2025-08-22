@@ -20,19 +20,103 @@ export namespace MCP {
     }),
   )
 
+  interface MCPClientInfo {
+    client: Awaited<ReturnType<typeof experimental_createMCPClient>>
+    type: "local" | "remote"
+    createdAt: number
+    lastUsed: number
+    config: any
+    restartCount: number
+  }
+
   const state = App.state(
     "mcp",
     async () => {
       const cfg = await Config.get()
-      const clients: {
-        [name: string]: Awaited<ReturnType<typeof experimental_createMCPClient>>
-      } = {}
+      const clients: Record<string, MCPClientInfo> = {}
+      const maxRestarts = 3
+      const restartDelay = 5000 // 5 seconds
+
+      // Health check interval for monitoring client status
+      const healthCheckInterval = setInterval(async () => {
+        for (const [key, clientInfo] of Object.entries(clients)) {
+          try {
+            // Try to ping the client to check if it's alive
+            await clientInfo.client.tools()
+            clientInfo.lastUsed = Date.now()
+          } catch (error) {
+            log.warn(`MCP client ${key} health check failed`, {
+              error: error instanceof Error ? error.message : String(error),
+              restartCount: clientInfo.restartCount,
+            })
+
+            // If it's a local client and hasn't exceeded restart limit, try to restart
+            if (clientInfo.type === "local" && clientInfo.restartCount < maxRestarts) {
+              log.info(`Attempting to restart MCP client ${key}`, {
+                attempt: clientInfo.restartCount + 1,
+                maxAttempts: maxRestarts,
+              })
+
+              setTimeout(async () => {
+                try {
+                  await restartLocalClient(key, clientInfo.config, clients)
+                } catch (restartError) {
+                  log.error(`Failed to restart MCP client ${key}`, {
+                    error: restartError instanceof Error ? restartError.message : String(restartError),
+                  })
+                }
+              }, restartDelay)
+            }
+          }
+        }
+      }, 30000) // Check every 30 seconds
+
+      async function restartLocalClient(key: string, mcp: any, clientsMap: Record<string, MCPClientInfo>) {
+        const existingClient = clientsMap[key]
+        if (existingClient) {
+          try {
+            existingClient.client.close()
+          } catch (error) {
+            log.debug(`Error closing existing MCP client ${key}`, { error })
+          }
+        }
+
+        const [cmd, ...args] = mcp.command
+        const client = await experimental_createMCPClient({
+          name: key,
+          transport: new StdioClientTransport({
+            stderr: "ignore",
+            command: cmd,
+            args,
+            env: {
+              ...process.env,
+              ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+              ...mcp.environment,
+            },
+          }),
+        })
+
+        clientsMap[key] = {
+          client,
+          type: "local",
+          createdAt: Date.now(),
+          lastUsed: Date.now(),
+          config: mcp,
+          restartCount: existingClient ? existingClient.restartCount + 1 : 0,
+        }
+
+        log.info(`Successfully restarted MCP client ${key}`, {
+          restartCount: clientsMap[key].restartCount,
+        })
+      }
+
       for (const [key, mcp] of Object.entries(cfg.mcp ?? {})) {
         if (mcp.enabled === false) {
           log.info("mcp server disabled", { key })
           continue
         }
         log.info("found", { key, type: mcp.type })
+
         if (mcp.type === "remote") {
           const transports = [
             {
@@ -69,7 +153,14 @@ export namespace MCP {
             })
             if (client) {
               log.debug("transport connection succeeded", { key, transport: name })
-              clients[key] = client
+              clients[key] = {
+                client,
+                type: "remote",
+                createdAt: Date.now(),
+                lastUsed: Date.now(),
+                config: mcp,
+                restartCount: 0,
+              }
               break
             }
           }
@@ -90,20 +181,9 @@ export namespace MCP {
         }
 
         if (mcp.type === "local") {
-          const [cmd, ...args] = mcp.command
-          const client = await experimental_createMCPClient({
-            name: key,
-            transport: new StdioClientTransport({
-              stderr: "ignore",
-              command: cmd,
-              args,
-              env: {
-                ...process.env,
-                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-                ...mcp.environment,
-              },
-            }),
-          }).catch((error) => {
+          try {
+            await restartLocalClient(key, mcp, clients)
+          } catch (error) {
             const errorMessage =
               error instanceof Error
                 ? `MCP server ${key} failed to start: ${error.message}`
@@ -121,38 +201,147 @@ export namespace MCP {
                 },
               },
             })
-            return null
-          })
-          if (client) {
-            clients[key] = client
           }
         }
       }
 
+      log.info("MCP service initialized", {
+        clientCount: Object.keys(clients).length,
+        clients: Object.keys(clients).join(", "),
+      })
+
       return {
         clients,
+        healthCheckInterval,
       }
     },
     async (state) => {
-      for (const client of Object.values(state.clients)) {
-        client.close()
+      log.info("Shutting down MCP service", {
+        clientCount: Object.keys(state.clients).length,
+      })
+
+      // Clear health check interval
+      if (state.healthCheckInterval) {
+        clearInterval(state.healthCheckInterval)
       }
+
+      // Close all clients gracefully
+      for (const [key, clientInfo] of Object.entries(state.clients)) {
+        try {
+          log.debug(`Closing MCP client ${key}`)
+          clientInfo.client.close()
+        } catch (error) {
+          log.warn(`Error closing MCP client ${key}`, {
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
+      log.info("MCP service shutdown complete")
     },
   )
 
   export async function clients() {
-    return state().then((state) => state.clients)
+    const s = await state()
+    const result: Record<string, Awaited<ReturnType<typeof experimental_createMCPClient>>> = {}
+
+    for (const [key, clientInfo] of Object.entries(s.clients)) {
+      result[key] = clientInfo.client
+    }
+
+    return result
   }
 
   export async function tools() {
     const result: Record<string, Tool> = {}
-    for (const [clientName, client] of Object.entries(await clients())) {
-      for (const [toolName, tool] of Object.entries(await client.tools())) {
-        const sanitizedClientName = clientName.replace(/\s+/g, "_")
-        const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = tool
+    const clientsMap = await clients()
+
+    for (const [clientName, client] of Object.entries(clientsMap)) {
+      try {
+        const clientTools = await client.tools()
+        for (const [toolName, tool] of Object.entries(clientTools)) {
+          const sanitizedClientName = clientName.replace(/\s+/g, "_")
+          const sanitizedToolName = toolName.replace(/[-\s]+/g, "_")
+          result[sanitizedClientName + "_" + sanitizedToolName] = tool
+        }
+
+        // Update last used timestamp
+        const s = await state()
+        if (s.clients[clientName]) {
+          s.clients[clientName].lastUsed = Date.now()
+        }
+      } catch (error) {
+        log.warn(`Failed to get tools from MCP client ${clientName}`, {
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
     return result
+  }
+
+  // Utility functions for monitoring and debugging
+  export async function getClientStats() {
+    const s = await state()
+    const stats = {
+      totalClients: Object.keys(s.clients).length,
+      clientsByType: { local: 0, remote: 0 },
+      clients: Object.entries(s.clients).map(([key, info]) => ({
+        name: key,
+        type: info.type,
+        ageMinutes: Math.round((Date.now() - info.createdAt) / 60000),
+        idleMinutes: Math.round((Date.now() - info.lastUsed) / 60000),
+        restartCount: info.restartCount,
+      })),
+    }
+
+    for (const info of Object.values(s.clients)) {
+      stats.clientsByType[info.type]++
+    }
+
+    return stats
+  }
+
+  export async function restartAllClients() {
+    const s = await state()
+    log.info("Manually restarting all MCP clients")
+
+    const localClients = Object.entries(s.clients).filter(([, info]) => info.type === "local")
+
+    for (const [key, clientInfo] of localClients) {
+      try {
+        log.info(`Restarting MCP client ${key}`)
+        clientInfo.client.close()
+
+        // Restart the client
+        const [cmd, ...args] = clientInfo.config.command
+        const newClient = await experimental_createMCPClient({
+          name: key,
+          transport: new StdioClientTransport({
+            stderr: "ignore",
+            command: cmd,
+            args,
+            env: {
+              ...process.env,
+              ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+              ...clientInfo.config.environment,
+            },
+          }),
+        })
+
+        s.clients[key] = {
+          ...clientInfo,
+          client: newClient,
+          createdAt: Date.now(),
+          lastUsed: Date.now(),
+          restartCount: clientInfo.restartCount + 1,
+        }
+
+        log.info(`Successfully restarted MCP client ${key}`)
+      } catch (error) {
+        log.error(`Failed to restart MCP client ${key}`, {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
   }
 }

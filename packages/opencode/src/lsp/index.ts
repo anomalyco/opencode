@@ -61,6 +61,7 @@ export namespace LSP {
     refCount: number
     serverID: string
     root: string
+    pid: number
   }
 
   const state = App.state(
@@ -68,8 +69,8 @@ export namespace LSP {
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
-      const processPool: Map<string, ProcessInfo> = new Map()
-      const maxProcessesPerServer = 3 // Limit processes per server type
+      const processPool = new Map<string, ProcessInfo>()
+      const maxProcessesPerServer = 2 // Limit processes per server type
       const processTimeout = 300000 // 5 minutes timeout for unused processes
 
       // Cleanup timer for unused processes
@@ -77,16 +78,21 @@ export namespace LSP {
         const now = Date.now()
         for (const [key, info] of processPool.entries()) {
           if (info.refCount === 0 && now - info.lastUsed > processTimeout) {
-            log.info(`Cleaning up unused LSP process ${info.serverID}`, { key, pid: info.process.pid })
+            log.info(`Cleaning up unused LSP process ${info.serverID}`, {
+              key,
+              pid: info.pid,
+              ageMinutes: Math.round((now - info.createdAt) / 60000),
+            })
             try {
               info.process.kill("SIGTERM")
               setTimeout(() => {
                 if (!info.process.killed) {
+                  log.warn(`Force killing LSP process ${info.serverID}`, { pid: info.pid })
                   info.process.kill("SIGKILL")
                 }
               }, 5000)
-            } catch (err) {
-              log.error("Failed to kill LSP process", { key, error: err })
+            } catch (err: any) {
+              log.error("Failed to kill LSP process", { key, error: err.message })
             }
             processPool.delete(key)
           }
@@ -116,8 +122,8 @@ export namespace LSP {
             if (existingProcess && !existingProcess.process.killed) {
               existingProcess.refCount++
               existingProcess.lastUsed = Date.now()
-              log.info(`Reusing existing LSP process ${name}`, {
-                pid: existingProcess.process.pid,
+              log.debug(`Reusing existing LSP process ${name}`, {
+                pid: existingProcess.pid,
                 refCount: existingProcess.refCount,
               })
               return {
@@ -129,28 +135,61 @@ export namespace LSP {
             // Check if we've hit the process limit for this server type
             const serverProcesses = Array.from(processPool.values()).filter((p) => p.serverID === name)
             if (serverProcesses.length >= maxProcessesPerServer) {
-              // Find the least recently used process and reuse it
-              const lruProcess = serverProcesses.sort((a, b) => a.lastUsed - b.lastUsed)[0]
+              // Find the least recently used process that can be reused
+              const lruProcess = serverProcesses
+                .filter((p) => p.refCount === 0) // Only consider unused processes
+                .sort((a, b) => a.lastUsed - b.lastUsed)[0]
+
               if (lruProcess) {
                 const lruKey = Array.from(processPool.entries()).find(([, info]) => info === lruProcess)?.[0]
                 if (lruKey) {
                   processPool.delete(lruKey)
-                  log.info(`Killing LRU LSP process ${name} due to limit`, {
-                    pid: lruProcess.process.pid,
+                  log.info(`Replacing LRU LSP process ${name} due to limit`, {
+                    oldPid: lruProcess.pid,
                     maxProcesses: maxProcessesPerServer,
                   })
                   try {
                     lruProcess.process.kill("SIGTERM")
-                  } catch (err) {
-                    log.error("Failed to kill LRU LSP process", { error: err })
+                    setTimeout(() => {
+                      if (!lruProcess.process.killed) {
+                        lruProcess.process.kill("SIGKILL")
+                      }
+                    }, 3000)
+                  } catch (err: any) {
+                    log.error("Failed to kill LRU LSP process", { error: err.message })
+                  }
+                }
+              } else {
+                // All processes are in use, this indicates we need the limit or there's a leak
+                log.warn(`All ${maxProcessesPerServer} LSP processes for ${name} are in use`, {
+                  activePids: serverProcesses.map((p) => p.pid),
+                  refCounts: serverProcesses.map((p) => p.refCount),
+                })
+                // Reuse the oldest process anyway
+                const oldestProcess = serverProcesses.sort((a, b) => a.createdAt - b.createdAt)[0]
+                if (oldestProcess) {
+                  oldestProcess.refCount++
+                  oldestProcess.lastUsed = Date.now()
+                  log.info(`Force reusing oldest LSP process ${name}`, {
+                    pid: oldestProcess.pid,
+                    refCount: oldestProcess.refCount,
+                  })
+                  return {
+                    process: oldestProcess.process,
+                    initialization: item.initialization,
                   }
                 }
               }
             }
 
             // Spawn new process
-            log.info(`Spawning new LSP process ${name}`, { root, command: item.command })
-            const process = spawn(item.command[0], item.command.slice(1), {
+            log.info(`Spawning new LSP process ${name}`, {
+              root,
+              command: item.command.join(" "),
+              existingCount: serverProcesses.length,
+            })
+
+            const newProcess = spawn(item.command[0], item.command.slice(1), {
               cwd: root,
               env: {
                 ...process.env,
@@ -158,34 +197,38 @@ export namespace LSP {
               },
             })
 
-            // Handle process errors and cleanup
-            process.on("error", (err) => {
-              log.error(`LSP process ${name} error`, { pid: process.pid, error: err })
-              processPool.delete(processKey)
-            })
-
-            process.on("exit", (code, signal) => {
-              log.info(`LSP process ${name} exited`, {
-                pid: process.pid,
-                code,
-                signal,
-                root,
-              })
-              processPool.delete(processKey)
-            })
-
-            // Add to process pool
-            processPool.set(processKey, {
-              process,
+            const processInfo: ProcessInfo = {
+              process: newProcess,
               createdAt: Date.now(),
               lastUsed: Date.now(),
               refCount: 1,
               serverID: name,
               root,
+              pid: newProcess.pid!,
+            }
+
+            // Handle process errors and cleanup
+            newProcess.on("error", (err: Error) => {
+              log.error(`LSP process ${name} error`, { pid: newProcess.pid, error: err.message })
+              processPool.delete(processKey)
             })
 
+            newProcess.on("exit", (code: number | null, signal: string | null) => {
+              log.info(`LSP process ${name} exited`, {
+                pid: newProcess.pid,
+                code,
+                signal,
+                root,
+                uptime: Math.round((Date.now() - processInfo.createdAt) / 1000),
+              })
+              processPool.delete(processKey)
+            })
+
+            // Add to process pool
+            processPool.set(processKey, processInfo)
+
             return {
-              process,
+              process: newProcess,
               initialization: item.initialization,
             }
           },
@@ -212,7 +255,12 @@ export namespace LSP {
         clearInterval(state.cleanupInterval)
       }
 
-      // Shutdown all clients
+      log.info("Shutting down LSP service", {
+        clientCount: state.clients.length,
+        processCount: state.processPool.size,
+      })
+
+      // Shutdown all clients first
       for (const client of state.clients) {
         await client.shutdown()
       }
@@ -221,7 +269,7 @@ export namespace LSP {
       for (const [key, info] of state.processPool.entries()) {
         log.info(`Killing LSP process ${info.serverID} on shutdown`, {
           key,
-          pid: info.process.pid,
+          pid: info.pid,
         })
         try {
           info.process.kill("SIGTERM")
@@ -230,8 +278,8 @@ export namespace LSP {
               info.process.kill("SIGKILL")
             }
           }, 2000)
-        } catch (err) {
-          log.error("Failed to kill LSP process on shutdown", { key, error: err })
+        } catch (err: any) {
+          log.error("Failed to kill LSP process on shutdown", { key, error: err.message })
         }
       }
       state.processPool.clear()
@@ -270,15 +318,6 @@ export namespace LSP {
         serverID: server.id,
         server: handle,
         root,
-        onShutdown: () => {
-          // Decrease reference count when client shuts down
-          const processKey = `${server.id}:${root}`
-          const processInfo = s.processPool.get(processKey)
-          if (processInfo) {
-            processInfo.refCount = Math.max(0, processInfo.refCount - 1)
-            processInfo.lastUsed = Date.now()
-          }
-        },
       }).catch((err) => {
         s.broken.add(root + server.id)
         handle.process.kill()
@@ -424,6 +463,14 @@ export namespace LSP {
       processByServer: {} as Record<string, number>,
       clients: s.clients.length,
       brokenServers: s.broken.size,
+      processes: Array.from(s.processPool.entries()).map(([key, info]) => ({
+        key,
+        serverID: info.serverID,
+        pid: info.pid,
+        refCount: info.refCount,
+        ageMinutes: Math.round((Date.now() - info.createdAt) / 60000),
+        idleMinutes: Math.round((Date.now() - info.lastUsed) / 60000),
+      })),
     }
 
     for (const info of s.processPool.values()) {
@@ -435,7 +482,7 @@ export namespace LSP {
 
   export async function killAllProcesses() {
     const s = await state()
-    log.info("Manually killing all LSP processes")
+    log.info("Manually killing all LSP processes", { count: s.processPool.size })
 
     for (const [key, info] of s.processPool.entries()) {
       try {
@@ -445,8 +492,8 @@ export namespace LSP {
             info.process.kill("SIGKILL")
           }
         }, 2000)
-      } catch (err) {
-        log.error("Failed to kill LSP process", { key, error: err })
+      } catch (err: any) {
+        log.error("Failed to kill LSP process", { key, error: err.message })
       }
     }
 
@@ -458,5 +505,7 @@ export namespace LSP {
       await client.shutdown()
     }
     s.clients.length = 0
+
+    log.info("All LSP processes killed and clients cleared")
   }
 }

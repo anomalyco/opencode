@@ -186,7 +186,8 @@ export namespace LSPClient {
         l.info("shutting down")
         connection.end()
         connection.dispose()
-        input.server.process.kill()
+        // Don't kill the process directly - let the LSP manager handle process lifecycle
+        // The process may be shared with other clients
         l.info("shutdown")
       },
     }
