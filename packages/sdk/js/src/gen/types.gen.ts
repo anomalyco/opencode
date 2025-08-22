@@ -890,6 +890,10 @@ export type KeybindsConfig = {
    */
   input_clear: string
   /**
+   * Copy input to clipboard
+   */
+  input_copy: string
+  /**
    * Paste from clipboard
    */
   input_paste: string

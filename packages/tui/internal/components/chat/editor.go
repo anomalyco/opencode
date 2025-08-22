@@ -41,6 +41,7 @@ type EditorComponent interface {
 	Submit() (tea.Model, tea.Cmd)
 	SubmitBash() (tea.Model, tea.Cmd)
 	Clear() (tea.Model, tea.Cmd)
+	Copy() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
 	SetValue(value string)
@@ -551,6 +552,18 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 
 	// fallback to reading the clipboard using OSC52
 	return m, tea.ReadClipboard
+}
+
+func (m *editorComponent) Copy() (tea.Model, tea.Cmd) {
+	content := m.textarea.Value()
+	if content == "" {
+		return m, nil
+	}
+
+	var cmds []tea.Cmd
+	cmds = append(cmds, app.SetClipboard(content))
+	cmds = append(cmds, toast.NewSuccessToast("Input copied to clipboard"))
+	return m, tea.Batch(cmds...)
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {

@@ -1702,6 +1702,8 @@ type KeybindsConfig struct {
 	FileSearch string `json:"file_search,required"`
 	// Clear input field
 	InputClear string `json:"input_clear,required"`
+	// Copy input to clipboard
+	InputCopy string `json:"input_copy,required"`
 	// Insert newline in input
 	InputNewline string `json:"input_newline,required"`
 	// Paste from clipboard
@@ -1792,6 +1794,7 @@ type keybindsConfigJSON struct {
 	FileList                 apijson.Field
 	FileSearch               apijson.Field
 	InputClear               apijson.Field
+	InputCopy                apijson.Field
 	InputNewline             apijson.Field
 	InputPaste               apijson.Field
 	InputSubmit              apijson.Field

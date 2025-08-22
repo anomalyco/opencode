@@ -136,6 +136,7 @@ const (
 	FileDiffToggleCommand           CommandName = "file_diff_toggle"
 	ProjectInitCommand              CommandName = "project_init"
 	InputClearCommand               CommandName = "input_clear"
+	InputCopyCommand                CommandName = "input_copy"
 	InputPasteCommand               CommandName = "input_paste"
 	InputSubmitCommand              CommandName = "input_submit"
 	InputNewlineCommand             CommandName = "input_newline"
@@ -312,6 +313,11 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Name:        InputClearCommand,
 			Description: "clear input",
 			Keybindings: parseBindings("ctrl+c"),
+		},
+		{
+			Name:        InputCopyCommand,
+			Description: "copy input",
+			Keybindings: parseBindings("ctrl+shift+c"),
 		},
 		{
 			Name:        InputPasteCommand,

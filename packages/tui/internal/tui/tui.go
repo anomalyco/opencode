@@ -1396,6 +1396,10 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		updated, cmd := a.editor.Clear()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)
+	case commands.InputCopyCommand:
+		updated, cmd := a.editor.Copy()
+		a.editor = updated.(chat.EditorComponent)
+		cmds = append(cmds, cmd)
 	case commands.InputPasteCommand:
 		updated, cmd := a.editor.Paste()
 		a.editor = updated.(chat.EditorComponent)
