@@ -301,17 +301,21 @@ export namespace LSPServer {
       }
       args.push("--stdio")
 
-      // Detect Python environment
-      const pythonEnv = await detectPythonEnvironment(root)
-      const initializationOptions = pythonEnv ? generatePythonSettings(pythonEnv) : {}
+      // Detect Python environment for Pyright
+      let pythonPath: string | undefined
+      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+        Boolean,
+      ) as string[]
 
-      if (pythonEnv) {
-        log.info("detected Python environment", {
-          pythonPath: pythonEnv.pythonPath,
-          extraPaths: pythonEnv.extraPaths,
-        })
-      } else {
-        log.info("no Python environment detected")
+      for (const venvPath of potentialVenvPaths) {
+        const isWindows = process.platform === "win32"
+        const potentialPythonPath = isWindows
+          ? path.join(venvPath, "Scripts", "python.exe")
+          : path.join(venvPath, "bin", "python")
+        if (await Bun.file(potentialPythonPath).exists()) {
+          pythonPath = potentialPythonPath
+          break
+        }
       }
 
       const proc = spawn(binary, args, {
@@ -323,7 +327,11 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: initializationOptions,
+        initialization: pythonPath
+          ? {
+              pythonPath,
+            }
+          : {},
       }
     },
   }
