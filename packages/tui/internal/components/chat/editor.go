@@ -51,20 +51,24 @@ type EditorComponent interface {
 
 type editorComponent struct {
 	app                    *app.App
-	width                  int
 	textarea               textarea.Model
 	spinner                spinner.Model
+	spinnerActive          bool
+	textareaFocused        bool
+	width                  int
+	height                 int
+	dialogStack            []string
 	interruptKeyInDebounce bool
 	exitKeyInDebounce      bool
-	historyIndex           int    // -1 means current (not in history)
-	currentText            string // Store current text when navigating history
-	pasteCounter           int
+	historyIndex           int
+	currentText            string
 	reverted               bool
+	pasteCounter           int
 	safeClipboard          *util.SafeClipboard
 }
 
 func (m *editorComponent) Init() tea.Cmd {
-	return tea.Batch(m.textarea.Focus(), m.spinner.Tick, tea.EnableReportFocus)
+	return tea.Batch(m.textarea.Focus(), tea.EnableReportFocus)
 }
 
 func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -74,10 +78,18 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width - 4
+		// Update textarea width immediately to prevent text overflow
+		m.textarea.SetWidth(m.width - 6)
 		return m, nil
 	case spinner.TickMsg:
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		// Power optimization: only process spinner updates when busy and visible
+		if m.app.IsBusy() {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		// Stop spinner when not busy
+		m.spinnerActive = false
+		return m, nil
 	case tea.KeyPressMsg:
 		// Handle up/down arrows and ctrl+p/ctrl+n for history navigation
 		switch msg.String() {
@@ -322,7 +334,15 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.spinner, cmd = m.spinner.Update(msg)
-	cmds = append(cmds, cmd)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	// Start spinner when app becomes busy
+	if m.app.IsBusy() && !m.spinnerActive {
+		m.spinnerActive = true
+		cmds = append(cmds, m.spinner.Tick)
+	}
 
 	m.textarea, cmd = m.textarea.Update(msg)
 	cmds = append(cmds, cmd)

@@ -40,7 +40,7 @@ by others and the previously written data is lost. For instance:
 
 	select {
 	case <-changed:
-		println(`"text data" is no longer available from clipboard.`)
+		slog.Debug("text data is no longer available from clipboard")
 	}
 
 You can ignore the returning channel if you don't need this type of
@@ -50,7 +50,7 @@ clipboard data is changed, use the watcher API:
 	ch := clipboard.Watch(context.TODO(), clipboard.FmtText)
 	for data := range ch {
 		// print out clipboard data whenever it is changed
-		println(string(data))
+		slog.Debug("clipboard data", "content", string(data))
 	}
 */
 package clipboard

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -14,8 +15,13 @@ import (
 )
 
 type filesContextGroup struct {
-	app      *app.App
-	gitFiles []CompletionSuggestion
+	app          *app.App
+	gitFiles     []CompletionSuggestion
+	// Power optimization: Simple caching to reduce API calls
+	lastQuery      string
+	lastResults    []CompletionSuggestion
+	lastQueryTime  time.Time
+	cacheTimeout   time.Duration
 }
 
 func (cg *filesContextGroup) GetId() string {
@@ -69,6 +75,12 @@ func (cg *filesContextGroup) GetChildEntries(
 	items := make([]CompletionSuggestion, 0)
 
 	query = strings.TrimSpace(query)
+	
+	// Power optimization: check cache first to reduce API calls
+	if query == cg.lastQuery && time.Since(cg.lastQueryTime) < cg.cacheTimeout {
+		return cg.lastResults, nil
+	}
+	
 	if query == "" {
 		items = append(items, cg.gitFiles...)
 	}
@@ -82,6 +94,10 @@ func (cg *filesContextGroup) GetChildEntries(
 		return items, err
 	}
 	if files == nil {
+		// Cache empty result
+		cg.lastQuery = query
+		cg.lastResults = items
+		cg.lastQueryTime = time.Now()
 		return items, nil
 	}
 
@@ -112,12 +128,19 @@ func (cg *filesContextGroup) GetChildEntries(
 		}
 	}
 
+	// Power optimization: cache the result
+	cg.lastQuery = query
+	cg.lastResults = items
+	cg.lastQueryTime = time.Now()
+
 	return items, nil
 }
 
 func NewFileContextGroup(app *app.App) CompletionProvider {
 	cg := &filesContextGroup{
 		app: app,
+		// Power optimization: cache timeout to reduce API calls
+		cacheTimeout: 300 * time.Millisecond, // Don't make new API calls for 300ms
 	}
 	go func() {
 		cg.gitFiles = cg.getGitFiles()

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -23,6 +24,28 @@ import (
 
 var Version = "dev"
 
+// setupFileLogging configures slog to write to both stderr and a file
+func setupFileLogging(filePath string) {
+	// Open log file with append mode
+	logFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		slog.Error("Failed to open log file", "path", filePath, "error", err)
+		return
+	}
+
+	// Create a multi-writer that writes to both stderr and the file
+	multiWriter := io.MultiWriter(os.Stderr, logFile)
+	
+	// Create new text handler with the multi-writer
+	handler := slog.NewTextHandler(multiWriter, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		AddSource: true,
+	})
+	
+	// Set as default logger
+	slog.SetDefault(slog.New(handler))
+}
+
 func main() {
 	version := Version
 	if version != "dev" && !strings.HasPrefix(Version, "v") {
@@ -33,6 +56,7 @@ func main() {
 	var prompt *string = flag.String("prompt", "", "prompt to begin with")
 	var agent *string = flag.String("agent", "", "agent to begin with")
 	var sessionID *string = flag.String("session", "", "session ID")
+	var logFile *string = flag.String("log-file", "", "path to log file (e.g., opencode.log)")
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
@@ -43,6 +67,12 @@ func main() {
 	if err != nil {
 		slog.Error("Failed to unmarshal app info", "error", err)
 		os.Exit(1)
+	}
+
+	// Setup file logging if requested
+	if logFile != nil && *logFile != "" {
+		setupFileLogging(*logFile)
+		slog.Info("File logging enabled", "path", *logFile)
 	}
 
 	stat, err := os.Stdin.Stat()
@@ -118,17 +148,51 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 
 	go func() {
+		// Send connecting status
+		program.Send(app.ConnectionStatusMsg{
+			Status:  "connecting",
+			Message: "Connecting to OpenCode server...",
+		})
+		
 		stream := httpClient.Event.ListStreaming(ctx)
+		
+		// Send connected status when stream starts
+		program.Send(app.ConnectionStatusMsg{
+			Status:  "connected", 
+			Message: "Connected to OpenCode server - ready for AI responses",
+		})
+		
+		eventCount := 0
 		for stream.Next() {
 			evt := stream.Current().AsUnion()
 			if _, ok := evt.(opencode.EventListResponseEventStorageWrite); ok {
 				continue
 			}
+			
+			eventCount++
+			// Send periodic status to show stream is active
+			if eventCount == 1 {
+				program.Send(app.ConnectionStatusMsg{
+					Status:  "active",
+					Message: "Receiving events from server...",
+				})
+			}
+			
 			program.Send(evt)
 		}
+		
 		if err := stream.Err(); err != nil {
 			slog.Error("Error streaming events", "error", err)
+			program.Send(app.ConnectionStatusMsg{
+				Status:  "error",
+				Message: fmt.Sprintf("Connection error: %v", err),
+			})
 			program.Send(err)
+		} else {
+			program.Send(app.ConnectionStatusMsg{
+				Status:  "disconnected",
+				Message: "Disconnected from OpenCode server",
+			})
 		}
 	}()
 

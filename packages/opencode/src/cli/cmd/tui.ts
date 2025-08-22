@@ -69,6 +69,10 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("log-file", {
+        type: "string",
+        describe: "path to log file (e.g., opencode.log)",
       }),
   handler: async (args) => {
     while (true) {
@@ -137,6 +141,7 @@ export const TuiCommand = cmd({
             ...(args.prompt ? ["--prompt", args.prompt] : []),
             ...(args.agent ? ["--agent", args.agent] : []),
             ...(sessionID ? ["--session", sessionID] : []),
+            ...(args["log-file"] ? ["--log-file", args["log-file"]] : []),
           ],
           cwd,
           stdout: "inherit",

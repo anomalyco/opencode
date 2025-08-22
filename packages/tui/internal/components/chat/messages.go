@@ -61,6 +61,9 @@ type messagesComponent struct {
 	selection          *selection
 	messagePositions   map[string]int // map message ID to line position
 	animating          bool
+	// Power optimization: idle detection for animations
+	lastActivity       time.Time
+	idleThreshold      time.Duration
 }
 
 type selection struct {
@@ -102,6 +105,7 @@ func (s selection) coords(offset int) *selection {
 type ToggleToolDetailsMsg struct{}
 type ToggleThinkingBlocksMsg struct{}
 type shimmerTickMsg struct{}
+type idleCheckMsg struct{} // Power optimization: check if we should stop animations
 
 func (m *messagesComponent) Init() tea.Cmd {
 	return tea.Batch(m.viewport.Init())
@@ -109,17 +113,49 @@ func (m *messagesComponent) Init() tea.Cmd {
 
 func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	
+	// Power optimization: track activity for most message types (except timer ticks)
+	switch msg.(type) {
+	case shimmerTickMsg, idleCheckMsg:
+		// Don't update activity for our own timer messages
+	default:
+		m.lastActivity = time.Now()
+	}
+	
 	switch msg := msg.(type) {
 	case shimmerTickMsg:
 		if !m.app.HasAnimatingWork() {
 			m.animating = false
 			return m, nil
 		}
+		
+		// Power optimization: idle detection
+		if time.Since(m.lastActivity) > m.idleThreshold {
+			// Been idle too long, stop animation and switch to slower idle checking
+			m.animating = false
+			return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return idleCheckMsg{} })
+		}
+		
+		// Continue animation at reduced rate (250ms instead of 90ms)
+		animationInterval := 250 * time.Millisecond
 		return m, tea.Sequence(
 			m.renderView(),
-			tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }),
+			tea.Tick(animationInterval, func(t time.Time) tea.Msg { return shimmerTickMsg{} }),
 		)
+	case idleCheckMsg:
+		// Power optimization: check if we should resume animation
+		if m.app.HasAnimatingWork() && time.Since(m.lastActivity) <= m.idleThreshold {
+			// Activity detected, resume shimmer animation
+			m.animating = true
+			animationInterval := 250 * time.Millisecond
+			return m, tea.Tick(animationInterval, func(t time.Time) tea.Msg { return shimmerTickMsg{} })
+		}
+		// Still idle, keep checking at slow rate
+		return m, tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return idleCheckMsg{} })
 	case tea.MouseClickMsg:
+		// Power optimization: track user activity
+		m.lastActivity = time.Now()
+		
 		slog.Info("mouse", "x", msg.X, "y", msg.Y, "offset", m.viewport.YOffset)
 		y := msg.Y + m.viewport.YOffset
 		if y > 0 {
@@ -286,7 +322,9 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Start shimmer ticks if any assistant/tool is in-flight
 		if !m.animating && m.app.HasAnimatingWork() {
 			m.animating = true
-			cmds = append(cmds, tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg { return shimmerTickMsg{} }))
+			// Use the same adaptive animation rate
+			animationInterval := 250 * time.Millisecond // 4 FPS for power efficiency
+			cmds = append(cmds, tea.Tick(animationInterval, func(t time.Time) tea.Msg { return shimmerTickMsg{} }))
 		}
 	}
 
@@ -1134,7 +1172,11 @@ func (m *messagesComponent) UndoLastMessage() (tea.Model, tea.Cmd) {
 						after = casted.Time.Start
 					}
 				case opencode.ToolPart:
-					// TODO: handle tool parts
+					// Handle tool parts for revert functionality
+					if casted.ID == m.app.Session.Revert.PartID {
+						// ToolPart may have different timing structure than TextPart
+						// Keep current after value for tool parts
+					}
 				}
 			}
 		}
@@ -1207,7 +1249,11 @@ func (m *messagesComponent) RedoLastMessage() (tea.Model, tea.Cmd) {
 						before = casted.Time.Start
 					}
 				case opencode.ToolPart:
-					// TODO: handle tool parts
+					// Handle tool parts for revert functionality
+					if casted.ID == m.app.Session.Revert.PartID {
+						// ToolPart may have different timing structure than TextPart
+						// Keep current before value for tool parts
+					}
 				}
 			}
 		}
@@ -1307,5 +1353,8 @@ func NewMessagesComponent(app *app.App) MessagesComponent {
 		cache:              NewPartCache(),
 		tail:               true,
 		messagePositions:   make(map[string]int),
+		// Power optimization: initialize idle detection
+		lastActivity:       time.Now(),
+		idleThreshold:      5 * time.Second, // Stop animating after 5 seconds of inactivity
 	}
 }

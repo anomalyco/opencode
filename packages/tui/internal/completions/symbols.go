@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
@@ -14,6 +15,11 @@ import (
 
 type symbolsContextGroup struct {
 	app *app.App
+	// Power optimization: Simple caching to reduce API calls
+	lastQuery      string
+	lastResults    []CompletionSuggestion
+	lastQueryTime  time.Time
+	cacheTimeout   time.Duration
 }
 
 func (cg *symbolsContextGroup) GetId() string {
@@ -65,6 +71,11 @@ func (cg *symbolsContextGroup) GetChildEntries(
 		return items, nil
 	}
 
+	// Power optimization: check cache first to reduce API calls
+	if query == cg.lastQuery && time.Since(cg.lastQueryTime) < cg.cacheTimeout {
+		return cg.lastResults, nil
+	}
+
 	symbols, err := cg.app.Client.Find.Symbols(
 		context.Background(),
 		opencode.FindSymbolsParams{Query: opencode.F(query)},
@@ -74,6 +85,10 @@ func (cg *symbolsContextGroup) GetChildEntries(
 		return items, err
 	}
 	if symbols == nil {
+		// Cache empty result
+		cg.lastQuery = query
+		cg.lastResults = items
+		cg.lastQueryTime = time.Now()
 		return items, nil
 	}
 
@@ -109,11 +124,18 @@ func (cg *symbolsContextGroup) GetChildEntries(
 		items = append(items, item)
 	}
 
+	// Power optimization: cache the result
+	cg.lastQuery = query
+	cg.lastResults = items
+	cg.lastQueryTime = time.Now()
+
 	return items, nil
 }
 
 func NewSymbolsContextGroup(app *app.App) CompletionProvider {
 	return &symbolsContextGroup{
 		app: app,
+		// Power optimization: cache timeout to reduce API calls
+		cacheTimeout: 300 * time.Millisecond, // Don't make new API calls for 300ms
 	}
 }

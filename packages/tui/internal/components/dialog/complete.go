@@ -95,9 +95,6 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 
 		// If there's a query, fuzzy-rank within each provider, then concatenate by provider order
 		if query != "" && providersWithResults > 0 {
-			t := theme.CurrentTheme()
-			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
-
 			// Ensure stable provider order just in case
 			sort.SliceStable(
 				itemsByProvider,
@@ -106,13 +103,14 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 
 			final := make([]completions.CompletionSuggestion, 0)
 			for _, entry := range itemsByProvider {
-				// Build display values for fuzzy matching within this provider
-				displayValues := make([]string, len(entry.items))
+				// Build search values for fuzzy matching within this provider
+				// Use Value field instead of Display for better fuzzy matching
+				searchValues := make([]string, len(entry.items))
 				for i, item := range entry.items {
-					displayValues[i] = item.Display(baseStyle)
+					searchValues[i] = item.Value
 				}
 
-				matches := fuzzy.RankFindFold(query, displayValues)
+				matches := fuzzy.RankFindFold(query, searchValues)
 				sort.Sort(matches)
 
 				// Reorder items for this provider based on fuzzy ranking

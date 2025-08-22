@@ -81,7 +81,7 @@ func (aam *AsyncAPIManager) StartAPIOperation(opID, opType string, operation fun
 
 	// Start input buffering for long operations
 	if opType == "send_prompt" || opType == "send_shell" {
-		aam.inputBuffer.StartResponse()
+		// aam.inputBuffer.StartResponse() // Disabled - start when streaming begins
 	}
 
 	// Return tea.Cmd that runs the operation
@@ -94,7 +94,86 @@ func (aam *AsyncAPIManager) StartAPIOperation(opID, opType string, operation fun
 
 			// Stop input buffering
 			if opType == "send_prompt" || opType == "send_shell" {
-				aam.inputBuffer.EndResponse()
+				// aam.inputBuffer.EndResponse() // Disabled - will be handled by SSE events
+			}
+
+			// Cancel context
+			cancel()
+		}()
+
+		// Execute operation with panic recovery
+		result, success := SafeExecuteWithResult(func() APIResult {
+			data, err := operation(ctx)
+			return APIResult{
+				Success: err == nil,
+				Error:   err,
+				Data:    data,
+				OpID:    opID,
+			}
+		}, aam.errorHandler)
+
+		if !success {
+			result = APIResult{
+				Success: false,
+				Error:   fmt.Errorf("operation %s panicked", opID),
+				OpID:    opID,
+			}
+		}
+
+		// Check for context cancellation
+		if ctx.Err() != nil {
+			result.Success = false
+			if result.Error == nil {
+				result.Error = ctx.Err()
+			}
+		}
+
+		return APIOperationMsg{Result: result}
+	}
+}
+
+// StartAPIOperationWithContext starts a new non-blocking API operation with provided context
+func (aam *AsyncAPIManager) StartAPIOperationWithContext(opID, opType string, userCtx context.Context, operation func(context.Context) (interface{}, error)) tea.Cmd {
+	aam.mutex.Lock()
+	defer aam.mutex.Unlock()
+
+	// Cancel existing operation with same ID if any
+	if existing, exists := aam.activeOperations[opID]; exists {
+		existing.Cancel()
+		delete(aam.activeOperations, opID)
+	}
+
+	// Use the provided context directly instead of creating our own
+	ctx, cancel := context.WithCancel(userCtx)
+
+	// Create operation
+	op := &APIOperation{
+		ID:        opID,
+		Type:      opType,
+		StartTime: time.Now(),
+		Context:   ctx,
+		Cancel:    cancel,
+		Done:      make(chan APIResult, 1),
+	}
+
+	aam.activeOperations[opID] = op
+
+	// Start input buffering for long operations
+	if opType == "send_prompt" || opType == "send_shell" {
+		// aam.inputBuffer.StartResponse() // Disabled - start when streaming begins
+	}
+
+	// Return tea.Cmd that runs the operation
+	return func() tea.Msg {
+		defer func() {
+			// Cleanup on completion
+			aam.mutex.Lock()
+			delete(aam.activeOperations, opID)
+			aam.mutex.Unlock()
+
+			// Stop input buffering
+			if opType == "send_prompt" || opType == "send_shell" {
+				// aam.inputBuffer.EndResponse() // Disabled - will be handled by SSE events
 			}
 
 			// Cancel context
@@ -194,9 +273,23 @@ func (aam *AsyncAPIManager) SendPromptAsync(client *opencode.Client, sessionID, 
 	})
 }
 
+// SendPromptAsyncWithContext creates an async version of SendPrompt using provided context
+func (aam *AsyncAPIManager) SendPromptAsyncWithContext(client *opencode.Client, userCtx context.Context, sessionID, messageID string, params opencode.SessionChatParams) tea.Cmd {
+	return aam.StartAPIOperationWithContext("send_prompt", "send_prompt", userCtx, func(ctx context.Context) (interface{}, error) {
+		return client.Session.Chat(ctx, sessionID, params)
+	})
+}
+
 // SendShellAsync creates an async version of SendShell
 func (aam *AsyncAPIManager) SendShellAsync(client *opencode.Client, sessionID string, params opencode.SessionShellParams) tea.Cmd {
 	return aam.StartAPIOperation("send_shell", "send_shell", func(ctx context.Context) (interface{}, error) {
+		return client.Session.Shell(ctx, sessionID, params)
+	})
+}
+
+// SendShellAsyncWithContext creates an async version of SendShell using provided context
+func (aam *AsyncAPIManager) SendShellAsyncWithContext(client *opencode.Client, userCtx context.Context, sessionID string, params opencode.SessionShellParams) tea.Cmd {
+	return aam.StartAPIOperationWithContext("send_shell", "send_shell", userCtx, func(ctx context.Context) (interface{}, error) {
 		return client.Session.Shell(ctx, sessionID, params)
 	})
 }

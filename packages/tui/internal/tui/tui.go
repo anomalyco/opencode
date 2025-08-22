@@ -104,10 +104,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
-		// Check if input should be buffered due to ongoing async operations
-		if a.app.AsyncAPI.HandleBufferedInput(msg) {
-			// Key was buffered, don't process it now
-			return a, nil
+		// During AI response, block message submission but allow typing
+		if a.app.IsBusy() {
+			if keyString == "enter" || keyString == "ctrl+enter" {
+				// Block message submission during AI response
+				return a, nil
+			}
+			// Allow all other keys (typing, navigation, etc.) to pass through
 		}
 
 		if a.app.CurrentPermission.ID != "" {
@@ -132,8 +135,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				return a, func() tea.Msg {
+					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
 					resp, err := a.app.Client.Session.Permissions.Respond(
-						context.Background(),
+						ctx,
 						sessionID,
 						permissionID,
 						opencode.SessionPermissionRespondParams{Response: opencode.F(response)},
@@ -399,7 +404,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCompletionDialog = false
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
-			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			ctx, cancel := util.WithMediumTimeout()
+			defer cancel()
+			parentSession, err := a.app.Client.Session.Get(ctx, a.app.Session.ParentID)
 			if err != nil {
 				slog.Error("Failed to get parent session", "error", err)
 				return a, toast.NewErrorToast("Failed to get parent session")
@@ -417,7 +424,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.SendShell:
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
-			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			ctx, cancel := util.WithMediumTimeout()
+			defer cancel()
+			parentSession, err := a.app.Client.Session.Get(ctx, a.app.Session.ParentID)
 			if err != nil {
 				slog.Error("Failed to get parent session", "error", err)
 				return a, toast.NewErrorToast("Failed to get parent session")
@@ -441,6 +450,11 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case app.SessionClearedMsg:
 		a.app.Session = &opencode.Session{}
 		a.app.Messages = []app.Message{}
+	case app.ConnectionStatusMsg:
+		// Update app connection status for display in status bar
+		a.app.ConnectionStatus = msg.Status
+		// Log connection status as well for debugging
+		slog.Info("Connection status", "status", msg.Status, "message", msg.Message)
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
 	case opencode.EventListResponseEventInstallationUpdated:
@@ -466,6 +480,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventMessagePartUpdated:
 		slog.Debug("message part updated", "message", msg.Properties.Part.MessageID, "part", msg.Properties.Part.ID)
 		if msg.Properties.Part.SessionID == a.app.Session.ID {
+			// Start input buffering when AI response begins
+			if textPart, ok := msg.Properties.Part.AsUnion().(opencode.TextPart); ok {
+				if len(textPart.Text) > 0 {
+					// AI response started - note: we no longer block all input, just submissions
+				}
+			}
+			
 			messageIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
 				case opencode.UserMessage:
@@ -559,6 +580,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case opencode.EventListResponseEventMessageUpdated:
 		if msg.Properties.Info.SessionID == a.app.Session.ID {
+			// Check if this is an assistant message completion
+			if assistantMsg, ok := msg.Properties.Info.AsUnion().(opencode.AssistantMessage); ok {
+				if assistantMsg.Time.Completed > 0 {
+					// AI response completed - no longer need to track this for input blocking
+				}
+			}
+			
 			matchIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
 				case opencode.UserMessage:
@@ -607,10 +635,21 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch err := msg.Properties.Error.AsUnion().(type) {
 		case nil:
 		case opencode.ProviderAuthError:
-			slog.Error("Failed to authenticate with provider", "error", err.Data.Message)
+			slog.Error("Provider auth error", "error", err.Data.Message, "provider", err.Data)
 			return a, toast.NewErrorToast("Provider error: " + err.Data.Message)
 		case opencode.UnknownError:
-			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
+			errorMsg := fmt.Sprintf("Server error (%s): %s", err.Name, err.Data.Message)
+			slog.Error("Server error", "name", err.Name, "message", err.Data.Message, "full_error", errorMsg)
+			
+			// Check for context length errors specifically
+			if strings.Contains(strings.ToLower(err.Data.Message), "context") && 
+			   (strings.Contains(strings.ToLower(err.Data.Message), "length") || 
+			    strings.Contains(strings.ToLower(err.Data.Message), "limit") ||
+			    strings.Contains(strings.ToLower(err.Data.Message), "token")) {
+				slog.Warn("Context length limit reached", "session", a.app.Session.ID, "error", errorMsg)
+				return a, toast.NewErrorToast("Context length limit reached. Consider starting a new session.", toast.WithTitle("Context Limit"))
+			}
+			
 			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
 		}
 	case tea.WindowSizeMsg:
@@ -625,6 +664,51 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Container: layout.Dimensions{
 				Width: container,
 			},
+		}
+
+		// Propagate resize to all components
+		var resizeCmds []tea.Cmd
+
+		// Update messages component
+		updatedMessages, cmd := a.messages.Update(msg)
+		a.messages = updatedMessages.(chat.MessagesComponent)
+		if cmd != nil {
+			resizeCmds = append(resizeCmds, cmd)
+		}
+
+		// Update editor component  
+		updatedEditor, cmd := a.editor.Update(msg)
+		a.editor = updatedEditor.(chat.EditorComponent)
+		if cmd != nil {
+			resizeCmds = append(resizeCmds, cmd)
+		}
+
+		// Update status component
+		updatedStatus, cmd := a.status.Update(msg)
+		a.status = updatedStatus.(status.StatusComponent)
+		if cmd != nil {
+			resizeCmds = append(resizeCmds, cmd)
+		}
+
+		// Update modal if it exists
+		if a.modal != nil {
+			updatedModal, cmd := a.modal.Update(msg)
+			a.modal = updatedModal.(layout.Modal)
+			if cmd != nil {
+				resizeCmds = append(resizeCmds, cmd)
+			}
+		}
+
+		// Update completion dialog if open
+		if a.showCompletionDialog {
+			a.completions.SetWidth(container)
+		}
+
+		// Return batch of all resize commands plus a forced refresh
+		if len(resizeCmds) > 0 {
+			return a, tea.Batch(append(resizeCmds, tea.ClearScreen)...)
+		} else {
+			return a, tea.ClearScreen
 		}
 	case app.SessionSelectedMsg:
 		updated, cmd := a.messages.Update(msg)
@@ -722,32 +806,6 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor = updatedEditor.(chat.EditorComponent)
 			return a, cmd
 		}
-
-	// Handle async API operation completion
-	case util.APIOperationMsg:
-		// API operation completed, handle result and flush buffered input
-		if !msg.Result.Success && msg.Result.Error != nil {
-			slog.Error("Async API operation failed", "op", msg.Result.OpID, "error", msg.Result.Error)
-			cmds = append(cmds, toast.NewErrorToast(fmt.Sprintf("Operation failed: %v", msg.Result.Error)))
-		}
-		
-		// Check if we have buffered input to flush
-		inputBuffer := a.app.AsyncAPI.GetInputBuffer().GetKeyBuffer()
-		select {
-		case bufferedKeys := <-inputBuffer.FlushChannel():
-			// Process all buffered keys
-			for _, key := range bufferedKeys {
-				updatedModel, cmd := a.Update(key)
-				a = updatedModel.(Model)
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-			}
-		default:
-			// No buffered keys
-		}
-		
-		return a, tea.Batch(cmds...)
 
 	// API
 	case api.Request:
@@ -1061,7 +1119,10 @@ func (a Model) chat() (string, int, int) {
 	messagesView := a.messages.View()
 
 	editorWidth := lipgloss.Width(editorView)
-	editorHeight := max(lines, 5)
+	
+	// Calculate messages height to properly position editor
+	messagesHeight := lipgloss.Height(messagesView)
+	
 	editorView = lipgloss.PlaceHorizontal(
 		effectiveWidth,
 		lipgloss.Center,
@@ -1071,7 +1132,9 @@ func (a Model) chat() (string, int, int) {
 
 	mainLayout := messagesView + "\n" + editorView
 	editorX := max(0, (effectiveWidth-editorWidth)/2)
-	editorY := a.height - editorHeight
+	
+	// Position editor after messages, leaving space for both
+	editorY := messagesHeight + 1
 
 	if lines > 1 {
 		content := a.editor.Content()
@@ -1092,7 +1155,6 @@ func (a Model) chat() (string, int, int) {
 		a.completions.SetWidth(editorWidth)
 		overlay := a.completions.View()
 		overlayHeight := lipgloss.Height(overlay)
-		editorY := a.height - editorHeight + 1
 
 		mainLayout = layout.PlaceOverlay(
 			editorX,
@@ -1102,7 +1164,7 @@ func (a Model) chat() (string, int, int) {
 		)
 	}
 
-	return mainLayout, editorX + 5, editorY + 2
+	return mainLayout, editorX + 5, editorY + 1
 }
 
 func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {

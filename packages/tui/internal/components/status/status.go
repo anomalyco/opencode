@@ -1,6 +1,7 @@
 package status
 
 import (
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +59,36 @@ func (m *statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *statusComponent) connectionStatus() string {
+	t := theme.CurrentTheme()
+	
+	var indicator string
+	var color compat.AdaptiveColor
+	
+	switch m.app.ConnectionStatus {
+	case "connected", "active":
+		indicator = "●"
+		color = t.Success()
+	case "connecting":
+		indicator = "◐"
+		color = t.TextMuted()
+	case "disconnected":
+		indicator = "○"
+		color = t.TextMuted()
+	case "error":
+		indicator = "●"
+		color = t.Error()
+	default:
+		indicator = "○"
+		color = t.TextMuted()
+	}
+	
+	return styles.NewStyle().
+		Foreground(color).
+		Background(t.BackgroundElement()).
+		Render(indicator)
+}
+
 func (m *statusComponent) logo() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
@@ -67,11 +98,12 @@ func (m *statusComponent) logo() string {
 		Bold(true).
 		Render
 
+	connectionIndicator := m.connectionStatus()
 	open := base("open")
 	code := emphasis("code")
 	version := base(" " + m.app.Version)
 
-	content := open + code
+	content := connectionIndicator + " " + open + code
 	if m.width > 40 {
 		content += version
 	}
@@ -244,13 +276,21 @@ func (m *statusComponent) watchForGitChanges() tea.Cmd {
 	}
 
 	return tea.Cmd(func() tea.Msg {
+		defer func() {
+			// Ensure proper cleanup on panic or exit
+			if r := recover(); r != nil {
+				slog.Error("Git watcher panicked", "error", r)
+			}
+		}()
+
 		for {
 			select {
 			case event, ok := <-m.watcher.Events:
-				branch := getCurrentGitBranch(m.app.Info.Path.Root)
 				if !ok {
-					return GitBranchUpdatedMsg{Branch: branch}
+					// Watcher was closed
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Root)}
 				}
+				
 				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 					// Debounce updates to prevent excessive refreshes
 					now := time.Now()
@@ -261,11 +301,18 @@ func (m *statusComponent) watchForGitChanges() tea.Cmd {
 					if strings.HasSuffix(event.Name, "HEAD") {
 						m.updateWatchedFiles()
 					}
-					return GitBranchUpdatedMsg{Branch: branch}
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Root)}
 				}
-			case <-m.watcher.Errors:
-				// Continue watching even on errors
+			case err, ok := <-m.watcher.Errors:
+				if !ok {
+					// Error channel was closed
+					return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Root)}
+				}
+				slog.Error("Git watcher error", "error", err)
+				// Continue watching even on errors, but return current state
+				return GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Root)}
 			case <-m.done:
+				// Cleanup requested
 				return GitBranchUpdatedMsg{Branch: ""}
 			}
 		}
