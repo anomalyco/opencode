@@ -66,29 +66,31 @@ If you've configured a [custom provider](/docs/providers#custom), the `provider_
 
 ## Configure models
 
-You can globally configure a model's options through the config.
+You can globally configure a model's options (and pin important models) through the config.
 
-```jsonc title="opencode.jsonc" {7-11}
+```jsonc title="opencode.jsonc" {7-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
     "openai": {
       "models": {
         "gpt-5": {
+          // Pin this model so it appears at the top of the selector
+          "pinned": true,
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
             "reasoningSummary": "auto",
-            "include": ["reasoning.encrypted_content"]
-          }
-        }
-      }
-    }
-  }
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
-Here we are setting global options for the `gpt-5` model when used through the `openai` provider.
+Here we are pinning the `gpt-5` model and setting global options for it when used through the `openai` provider. Pinned models appear first in the model selector (before Recent and provider groups).
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
 

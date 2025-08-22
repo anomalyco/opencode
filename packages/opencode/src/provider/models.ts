@@ -29,6 +29,7 @@ export namespace ModelsDev {
         output: z.number(),
       }),
       options: z.record(z.any()),
+      pinned: z.boolean().optional(),
     })
     .openapi({
       ref: "Model",

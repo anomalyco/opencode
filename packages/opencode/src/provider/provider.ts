@@ -228,6 +228,7 @@ export namespace Provider {
               context: 0,
               output: 0,
             },
+          pinned: model.pinned ?? existing?.pinned ?? false,
         }
         parsed.models[modelID] = parsedModel
       }
@@ -397,6 +398,7 @@ export namespace Provider {
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,
+      [(model) => ((model as any).pinned ? 0 : 1), "asc"],
       [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],

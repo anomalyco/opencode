@@ -268,7 +268,7 @@ func (m *modelDialog) buildDisplayList(query string) []list.Item {
 		// Search mode: use fuzzy matching
 		return m.buildSearchResults(query)
 	} else {
-		// Grouped mode: show Recent section and provider groups
+		// Grouped mode: show Pinned, Recent section and provider groups
 		return m.buildGroupedResults()
 	}
 }
@@ -314,9 +314,18 @@ func (m *modelDialog) buildSearchResults(query string) []list.Item {
 	return items
 }
 
-// buildGroupedResults creates a grouped list with Recent section and provider groups
+// buildGroupedResults creates a grouped list with Pinned, Recent section and provider groups
 func (m *modelDialog) buildGroupedResults() []list.Item {
 	var items []list.Item
+
+	// Add Pinned section
+	pinnedModels := m.getPinnedModels()
+	if len(pinnedModels) > 0 {
+		items = append(items, list.HeaderItem("Pinned"))
+		for _, model := range pinnedModels {
+			items = append(items, modelItem{model: model})
+		}
+	}
 
 	// Add Recent section
 	recentModels := m.getRecentModels(maxRecentModels)
@@ -327,9 +336,20 @@ func (m *modelDialog) buildGroupedResults() []list.Item {
 		}
 	}
 
+	// Group models by provider (exclude pinned duplicates from groups)
+	pinnedSet := map[string]bool{}
+	for _, pm := range pinnedModels {
+		pinnedSet[pm.Provider.ID+":"+pm.Model.ID] = true
+	}
+
 	// Group models by provider
 	providerGroups := make(map[string][]ModelWithProvider)
 	for _, model := range m.allModels {
+		key := model.Provider.ID + ":" + model.Model.ID
+		if pinnedSet[key] { // still allow in provider group; comment out to hide duplicates entirely
+			// Skip adding pinned models again in provider groups to avoid duplication
+			continue
+		}
 		providerName := model.Provider.Name
 		providerGroups[providerName] = append(providerGroups[providerName], model)
 	}
@@ -376,6 +396,10 @@ func (m *modelDialog) buildGroupedResults() []list.Item {
 			return modelA.Model.Name < modelB.Model.Name
 		})
 
+		// Add provider header (skip empty group which can happen if all provider models are pinned)
+		if len(models) == 0 {
+			continue
+		}
 		// Add provider header
 		items = append(items, list.HeaderItem(providerName))
 
@@ -386,6 +410,16 @@ func (m *modelDialog) buildGroupedResults() []list.Item {
 	}
 
 	return items
+}
+
+func (m *modelDialog) getPinnedModels() []ModelWithProvider {
+	var pinned []ModelWithProvider
+	for _, model := range m.allModels {
+		if model.Model.Pinned != nil && *model.Model.Pinned {
+			pinned = append(pinned, model)
+		}
+	}
+	return pinned
 }
 
 // getRecentModels returns the most recently used models
