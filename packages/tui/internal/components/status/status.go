@@ -197,9 +197,10 @@ func (m *statusComponent) View() string {
 		Background(t.BackgroundPanel()).
 		Foreground(t.TextMuted())
 	agent = faintStyle.Render(key+" ") + agent
-	modeWidth := lipgloss.Width(agent)
+	agentWidth := lipgloss.Width(agent)
+	executionModeWidth := lipgloss.Width(executionModeIndicator)
 
-	availableWidth := m.width - logoWidth - modeWidth
+	availableWidth := m.width - logoWidth - agentWidth - executionModeWidth
 	branchSuffix := ""
 	if m.branch != "" {
 		branchSuffix = ":" + m.branch

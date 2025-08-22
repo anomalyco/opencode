@@ -103,6 +103,11 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
+		
+		// Debug: Log key press for Ctrl combinations
+		if strings.Contains(keyString, "ctrl") {
+			slog.Debug("Key pressed", "key", keyString)
+		}
 
 		if a.app.CurrentPermission.ID != "" {
 			if keyString == "enter" || keyString == "esc" || keyString == "a" {
@@ -318,36 +323,56 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
-		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
+		// 9. Check for all commands (both with and without leader)
+		// First check commands without leader requirement
+		matches := a.app.Commands.Matches(msg, false)
+		if len(matches) == 0 && a.app.IsLeaderSequence {
+			// If no matches without leader, check with leader
+			matches = a.app.Commands.Matches(msg, true)
+		}
+		
 		if len(matches) > 0 {
 			// Skip interrupt key if we're in debounce mode and app is busy
 			if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
 				return a, nil
 			}
-			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
-		}
-
-		// Handle execution mode toggle with Ctrl+Space
-		if keyString == "ctrl+ " {
-			// Cycle through modes: Shell -> Agent -> Auto -> Shell
-			switch a.app.ExecutionMode {
-			case "Shell":
-				a.app.ExecutionMode = "Agent"
-			case "Agent":
-				a.app.ExecutionMode = "Auto"
-			case "Auto":
-				a.app.ExecutionMode = "Shell"
-			default:
-				a.app.ExecutionMode = "Auto"
-			}
 			
-			// Show toast notification
-			modeMsg := fmt.Sprintf("Mode: %s", a.app.ExecutionMode)
-			cmds = append(cmds, func() tea.Msg {
-				return toast.NewInfoToast(modeMsg)
-			})
-			return a, tea.Batch(cmds...)
+			// Handle execution mode toggle specially
+			for _, match := range matches {
+				if match.Name == commands.ExecutionModeToggleCommand {
+					slog.Info("ExecutionModeToggleCommand triggered", "currentMode", a.app.ExecutionMode)
+					// Initialize ExecutionMode if empty
+					if a.app.ExecutionMode == "" {
+						a.app.ExecutionMode = "Auto"
+					}
+					
+					// Cycle through modes: Shell -> Agent -> Auto -> Shell
+					switch a.app.ExecutionMode {
+					case "Shell":
+						a.app.ExecutionMode = "Agent"
+					case "Agent":
+						a.app.ExecutionMode = "Auto"
+					case "Auto":
+						a.app.ExecutionMode = "Shell"
+					default:
+						a.app.ExecutionMode = "Auto"
+					}
+					
+					// Show toast notification
+					modeMsg := fmt.Sprintf("Mode: %s", a.app.ExecutionMode)
+					cmds = append(cmds, func() tea.Msg {
+						return toast.NewInfoToast(modeMsg)
+					})
+					
+					// Force status bar update
+					s, cmd := a.status.Update(msg)
+					a.status = s.(status.StatusComponent)
+					cmds = append(cmds, cmd)
+					
+					return a, tea.Batch(cmds...)
+				}
+			}
+			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
 		// Fallback: suspend if ctrl+z is pressed and no user keybind matched

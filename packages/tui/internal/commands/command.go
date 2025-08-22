@@ -152,6 +152,7 @@ const (
 	MessagesUndoCommand             CommandName = "messages_undo"
 	MessagesRedoCommand             CommandName = "messages_redo"
 	AppExitCommand                  CommandName = "app_exit"
+	ExecutionModeToggleCommand      CommandName = "execution_mode_toggle"
 )
 
 func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
@@ -382,6 +383,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "exit the app",
 			Keybindings: parseBindings("ctrl+c", "<leader>q"),
 			Trigger:     []string{"exit", "quit", "q"},
+		},
+		{
+			Name:        ExecutionModeToggleCommand,
+			Description: "toggle execution mode (Shell/Agent/Auto)",
+			Keybindings: parseBindings("ctrl+@", "ctrl+space", "ctrl+ "),  // Try multiple representations
+			Trigger:     []string{"mode"},  // Also allow /mode command
 		},
 	}
 	registry := make(CommandRegistry)
