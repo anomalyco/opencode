@@ -13,7 +13,24 @@ import {
   type ProviderMetadata,
   type ModelMessage,
   type StreamTextResult,
+  type JSONValue,
 } from "ai"
+
+type GatewayOptions = {
+  order?: string[]
+  only?: string[]
+}
+
+function extractGateway(
+  id: string,
+  prov?: { options?: Record<string, JSONValue> },
+  mdl?: { info: { options?: Record<string, JSONValue> } },
+): Record<string, JSONValue> | undefined {
+  if (id !== "vercel") return
+  const base = prov?.options?.["gateway"] as (GatewayOptions & Record<string, JSONValue>) | undefined
+  const mod = mdl?.info.options?.["gateway"] as (GatewayOptions & Record<string, JSONValue>) | undefined
+  return base || mod ? { ...(base ?? {}), ...(mod ?? {}) } : undefined
+}
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
@@ -674,9 +691,12 @@ export namespace Session {
 
     if (msgs.filter((m) => m.info.role === "user").length === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(input.providerID)) ?? model
+      const prov = await Provider.getProvider(input.providerID)
+      const gw = extractGateway(input.providerID, prov, small)
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
         providerOptions: {
+          ...(gw && input.providerID === "vercel" ? { ["gateway"]: gw } : {}),
           [input.providerID]: {
             ...small.info.options,
             ...ProviderTransform.options(input.providerID, small.info.id, input.sessionID),
@@ -896,6 +916,8 @@ export namespace Session {
         },
       },
     )
+    const provOpts = await Provider.getProvider(input.providerID)
+    const gw = extractGateway(input.providerID, provOpts, model)
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
@@ -982,6 +1004,7 @@ export namespace Session {
         return false
       },
       providerOptions: {
+        ...(gw && input.providerID === "vercel" ? { ["gateway"]: gw } : {}),
         [input.providerID]: params.options,
       },
       temperature: params.temperature,
@@ -1515,6 +1538,8 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
+    const prov = await Provider.getProvider(input.providerID)
+    const gw = extractGateway(input.providerID, prov, model)
     const app = App.info()
     const system = [
       ...SystemPrompt.summarize(input.providerID),
@@ -1552,6 +1577,12 @@ export namespace Session {
     const stream = streamText({
       maxRetries: 10,
       abortSignal: abort.signal,
+      providerOptions: {
+        ...(gw && input.providerID === "vercel" ? { ["gateway"]: gw as Record<string, JSONValue> } : {}),
+        [input.providerID]: {
+          ...ProviderTransform.options(input.providerID, input.modelID, input.sessionID),
+        },
+      },
       model: model.language,
       messages: [
         ...system.map(
