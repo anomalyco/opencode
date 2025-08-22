@@ -104,6 +104,12 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		keyString := msg.String()
 
+		// Check if input should be buffered due to ongoing async operations
+		if a.app.AsyncAPI.HandleBufferedInput(msg) {
+			// Key was buffered, don't process it now
+			return a, nil
+		}
+
 		if a.app.CurrentPermission.ID != "" {
 			if keyString == "enter" || keyString == "esc" || keyString == "a" {
 				sessionID := a.app.CurrentPermission.SessionID
@@ -716,6 +722,32 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.editor = updatedEditor.(chat.EditorComponent)
 			return a, cmd
 		}
+
+	// Handle async API operation completion
+	case util.APIOperationMsg:
+		// API operation completed, handle result and flush buffered input
+		if !msg.Result.Success && msg.Result.Error != nil {
+			slog.Error("Async API operation failed", "op", msg.Result.OpID, "error", msg.Result.Error)
+			cmds = append(cmds, toast.NewErrorToast(fmt.Sprintf("Operation failed: %v", msg.Result.Error)))
+		}
+		
+		// Check if we have buffered input to flush
+		inputBuffer := a.app.AsyncAPI.GetInputBuffer().GetKeyBuffer()
+		select {
+		case bufferedKeys := <-inputBuffer.FlushChannel():
+			// Process all buffered keys
+			for _, key := range bufferedKeys {
+				updatedModel, cmd := a.Update(key)
+				a = updatedModel.(Model)
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
+		default:
+			// No buffered keys
+		}
+		
+		return a, tea.Batch(cmds...)
 
 	// API
 	case api.Request:

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 if [ ! -d ".git" ]; then
     exit 0

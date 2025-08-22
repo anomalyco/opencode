@@ -51,6 +51,7 @@ type App struct {
 	IsLeaderSequence  bool
 	IsBashMode        bool
 	ScrollSpeed       int
+	AsyncAPI          *util.AsyncAPIManager
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -200,6 +201,7 @@ func New(
 		InitialAgent:   initialAgent,
 		InitialSession: initialSession,
 		ScrollSpeed:    int(configInfo.Tui.ScrollSpeed),
+		AsyncAPI:       util.NewAsyncAPIManager(func(err error) { slog.Error("AsyncAPI error", "error", err) }),
 	}
 
 	return app, nil
@@ -772,21 +774,17 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 
 	a.Messages = append(a.Messages, message)
 
-	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			ProviderID: opencode.F(a.Provider.ID),
-			ModelID:    opencode.F(a.Model.ID),
-			Agent:      opencode.F(a.Agent().Name),
-			MessageID:  opencode.F(messageID),
-			Parts:      opencode.F(message.ToSessionChatParams()),
-		})
-		if err != nil {
-			errormsg := fmt.Sprintf("failed to send message: %v", err)
-			slog.Error(errormsg)
-			return toast.NewErrorToast(errormsg)()
-		}
-		return nil
-	})
+	// Use async API for non-blocking operation
+	params := opencode.SessionChatParams{
+		ProviderID: opencode.F(a.Provider.ID),
+		ModelID:    opencode.F(a.Model.ID),
+		Agent:      opencode.F(a.Agent().Name),
+		MessageID:  opencode.F(messageID),
+		Parts:      opencode.F(message.ToSessionChatParams()),
+	}
+
+	asyncCmd := a.AsyncAPI.SendPromptAsync(a.Client, a.Session.ID, messageID, params)
+	cmds = append(cmds, asyncCmd)
 
 	// The actual response will come through SSE
 	// For now, just return success
@@ -804,21 +802,14 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 	}
 
-	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Shell(
-			context.Background(),
-			a.Session.ID,
-			opencode.SessionShellParams{
-				Agent:   opencode.F(a.Agent().Name),
-				Command: opencode.F(command),
-			},
-		)
-		if err != nil {
-			slog.Error("Failed to submit shell command", "error", err)
-			return toast.NewErrorToast("Failed to submit shell command")()
-		}
-		return nil
-	})
+	// Use async API for non-blocking operation
+	params := opencode.SessionShellParams{
+		Agent:   opencode.F(a.Agent().Name),
+		Command: opencode.F(command),
+	}
+
+	asyncCmd := a.AsyncAPI.SendShellAsync(a.Client, a.Session.ID, params)
+	cmds = append(cmds, asyncCmd)
 
 	// The actual response will come through SSE
 	// For now, just return success

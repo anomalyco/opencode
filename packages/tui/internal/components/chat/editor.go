@@ -17,7 +17,6 @@ import (
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/attachment"
-	"github.com/sst/opencode/internal/clipboard"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
@@ -61,6 +60,7 @@ type editorComponent struct {
 	currentText            string // Store current text when navigating history
 	pasteCounter           int
 	reverted               bool
+	safeClipboard          *util.SafeClipboard
 }
 
 func (m *editorComponent) Init() tea.Cmd {
@@ -514,7 +514,7 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 }
 
 func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
-	imageBytes := clipboard.Read(clipboard.FmtImage)
+	imageBytes := m.safeClipboard.ReadImage()
 	if imageBytes != nil {
 		attachmentCount := len(m.textarea.GetAttachments())
 		attachmentIndex := attachmentCount + 1
@@ -537,7 +537,7 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	textBytes := clipboard.Read(clipboard.FmtText)
+	textBytes := m.safeClipboard.ReadText()
 	if textBytes != nil {
 		text := string(textBytes)
 		// Check if the pasted text is long and should be summarized
@@ -549,8 +549,7 @@ func (m *editorComponent) Paste() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// fallback to reading the clipboard using OSC52
-	return m, tea.ReadClipboard
+	return m, nil
 }
 
 func (m *editorComponent) Newline() (tea.Model, tea.Cmd) {
@@ -718,6 +717,12 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta.VirtualCursor = false
 	ta = updateTextareaStyles(ta)
 
+	// Create safe clipboard with error handler
+	errorHandler := func(err error) {
+		slog.Error("Clipboard operation failed", "error", err)
+	}
+	safeClipboard := util.NewSafeClipboard(errorHandler)
+
 	m := &editorComponent{
 		app:                    app,
 		textarea:               ta,
@@ -725,6 +730,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 		interruptKeyInDebounce: false,
 		historyIndex:           -1,
 		pasteCounter:           0,
+		safeClipboard:          safeClipboard,
 	}
 
 	return m
