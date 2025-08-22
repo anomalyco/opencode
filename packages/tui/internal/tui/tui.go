@@ -408,6 +408,24 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.app, cmd = a.app.SendPrompt(context.Background(), msg)
 			cmds = append(cmds, cmd)
 		}
+	case app.SendCommand:
+		// If we're in a child session, switch back to parent before sending prompt
+		if a.app.Session.ParentID != "" {
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			if err != nil {
+				slog.Error("Failed to get parent session", "error", err)
+				return a, toast.NewErrorToast("Failed to get parent session")
+			}
+			a.app.Session = parentSession
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, tea.Sequence(
+				util.CmdHandler(app.SessionSelectedMsg(parentSession)),
+				cmd,
+			))
+		} else {
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, cmd)
+		}
 	case app.SendShell:
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {

@@ -84,6 +84,10 @@ type SendPrompt = Prompt
 type SendShell = struct {
 	Command string
 }
+type SendCommand = struct {
+	Command string
+	Args    string
+}
 type SetEditorContentMsg struct {
 	Text string
 }
@@ -183,6 +187,11 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
+	customCommands, err := httpClient.Command.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	app := &App{
 		Info:           appInfo,
 		Agents:         agents,
@@ -194,7 +203,7 @@ func New(
 		AgentIndex:     agentIndex,
 		Session:        &opencode.Session{},
 		Messages:       []Message{},
-		Commands:       commands.LoadFromConfig(configInfo),
+		Commands:       commands.LoadFromConfig(configInfo, *customCommands),
 		InitialModel:   initialModel,
 		InitialPrompt:  initialPrompt,
 		InitialAgent:   initialAgent,
@@ -784,6 +793,38 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
 			slog.Error(errormsg)
 			return toast.NewErrorToast(errormsg)()
+		}
+		return nil
+	})
+
+	// The actual response will come through SSE
+	// For now, just return success
+	return a, tea.Batch(cmds...)
+}
+
+func (a *App) SendCommand(ctx context.Context, command string, args string) (*App, tea.Cmd) {
+	var cmds []tea.Cmd
+	if a.Session.ID == "" {
+		session, err := a.CreateSession(ctx)
+		if err != nil {
+			return a, toast.NewErrorToast(err.Error())
+		}
+		a.Session = session
+		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
+	}
+
+	cmds = append(cmds, func() tea.Msg {
+		_, err := a.Client.Session.Command(
+			context.Background(),
+			a.Session.ID,
+			opencode.SessionCommandParams{
+				Command:   opencode.F(command),
+				Arguments: opencode.F(args),
+			},
+		)
+		if err != nil {
+			slog.Error("Failed to execute command", "error", err)
+			return toast.NewErrorToast("Failed to execute command")
 		}
 		return nil
 	})
