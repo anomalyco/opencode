@@ -173,8 +173,8 @@ export const BashTool = Tool.define("bash", {
     })
 
     if (output.length > MAX_OUTPUT_LENGTH) {
-      output = output.slice(0, MAX_OUTPUT_LENGTH)
-      output += "\n\n(Output was truncated due to length limit)"
+      const truncated = output.slice(output.length - MAX_OUTPUT_LENGTH)
+      output = "(Output was truncated due to length limit)\n\n" + truncated
     }
 
     return {
