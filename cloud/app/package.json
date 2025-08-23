@@ -5,7 +5,7 @@
     "dev": "vinxi dev --host 0.0.0.0",
     "build": "vinxi build",
     "start": "vinxi start",
-    "version": "0.5.13"
+    "version": "0.5.15"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",

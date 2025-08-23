@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.5.13",
+  "version": "0.5.15",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -10,6 +10,14 @@
     ".": {
       "development": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./client": {
+      "development": "./src/client.ts",
+      "import": "./dist/client.js"
+    },
+    "./server": {
+      "development": "./src/server.ts",
+      "import": "./dist/server.js"
     }
   },
   "files": [

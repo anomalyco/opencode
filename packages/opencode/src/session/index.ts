@@ -47,6 +47,8 @@ import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { ulid } from "ulid"
 import { defer } from "../util/defer"
+import { Command } from "../command"
+import { $ } from "bun"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -1025,13 +1027,13 @@ export namespace Session {
     return result
   }
 
-  export const CommandInput = z.object({
+  export const ShellInput = z.object({
     sessionID: Identifier.schema("session"),
     agent: z.string(),
     command: z.string(),
   })
-  export type CommandInput = z.infer<typeof CommandInput>
-  export async function shell(input: CommandInput) {
+  export type ShellInput = z.infer<typeof ShellInput>
+  export async function shell(input: ShellInput) {
     using abort = lock(input.sessionID)
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
@@ -1153,6 +1155,72 @@ export namespace Session {
       await updatePart(part)
     }
     return { info: msg, parts: [part] }
+  }
+
+  export const CommandInput = z.object({
+    messageID: Identifier.schema("message").optional(),
+    sessionID: Identifier.schema("session"),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    arguments: z.string(),
+    command: z.string(),
+  })
+  export type CommandInput = z.infer<typeof CommandInput>
+  const bashRegex = /!`([^`]+)`/g
+  const fileRegex = /@([^\s]+)/g
+
+  export async function command(input: CommandInput) {
+    const command = await Command.get(input.command)
+    const agent = input.agent ?? command.agent ?? "build"
+    const model =
+      input.model ??
+      command.model ??
+      (await Agent.get(agent).then((x) => (x.model ? `${x.model.providerID}/${x.model.modelID}` : undefined))) ??
+      (await Provider.defaultModel().then((x) => `${x.providerID}/${x.modelID}`))
+    let template = command.template.replace("$ARGUMENTS", input.arguments)
+
+    const bash = Array.from(template.matchAll(bashRegex))
+    if (bash.length > 0) {
+      const results = await Promise.all(
+        bash.map(async ([, cmd]) => {
+          try {
+            return await $`${{ raw: cmd }}`.nothrow().text()
+          } catch (error) {
+            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+          }
+        }),
+      )
+      let index = 0
+      template = template.replace(bashRegex, () => results[index++])
+    }
+
+    const parts = [
+      {
+        type: "text",
+        text: template,
+      },
+    ] as ChatInput["parts"]
+
+    const matches = template.matchAll(fileRegex)
+    const app = App.info()
+
+    for (const match of matches) {
+      const file = path.join(app.path.cwd, match[1])
+      parts.push({
+        type: "file",
+        url: `file://${file}`,
+        filename: match[1],
+        mime: "text/plain",
+      })
+    }
+
+    return chat({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      ...Provider.parseModel(model!),
+      agent,
+      parts,
+    })
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {

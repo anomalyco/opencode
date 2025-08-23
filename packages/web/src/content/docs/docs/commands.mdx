@@ -1,0 +1,167 @@
+---
+title: Commands
+description: Create custom commands for repetitive tasks.
+---
+
+Define custom commands to automate repetitive coding tasks.
+
+---
+
+## Create command files
+
+Create markdown files in the `command/` directory to define custom commands.
+
+Create `.opencode/command/test.md`:
+
+```md
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+The frontmatter defines command properties. The content becomes the template.
+
+Use the command by typing `/` followed by the command name.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Create command files
+
+For complex commands, create markdown files in the `command/` directory.
+
+Create `.opencode/command/test.md`:
+
+```md
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+The frontmatter defines command properties. The content becomes the template.
+
+---
+
+## Use arguments
+
+Pass arguments to commands using the `$ARGUMENTS` placeholder.
+
+```md
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Run the command with arguments:
+
+```bash frame="none"
+"/component Button"
+```
+
+---
+
+## Inject shell output
+
+Use `!`command`` to inject shell command output into your prompt.
+
+```md
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+`!npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+```md
+---
+description: Review recent changes
+---
+
+Recent git commits:
+`!git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Commands run in your project's root directory and their output becomes part of the prompt.
+
+---
+
+## Reference files
+
+Include files in your command using `@` followed by the filename.
+
+```md
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+The file content gets included in the prompt automatically.
+
+---
+
+## Command properties
+
+Configure commands with these optional frontmatter properties:
+
+- **description**: Brief explanation of what the command does
+- **agent**: Agent to use (defaults to "build")
+- **model**: Specific model to use for this command
+
+```md
+---
+description: Code review assistant
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Review the code for best practices and suggest improvements.
+```
+
+---
+
+## Command directory
+
+Store command files in these locations:
+
+- `.opencode/command/` - Project-specific commands
+- `command/` - Global commands in config directory
+
+Project commands take precedence over global ones.
+
+---
+
+## Built-in commands
+
+opencode includes several built-in commands:
+
+- `/init` - Initialize project and create AGENTS.md
+- `/undo` - Revert the last changes
+- `/redo` - Restore reverted changes
+- `/share` - Share the current conversation
+- `/help` - Show available commands and keybinds
+
+Use `/help` to see all available commands in your setup.

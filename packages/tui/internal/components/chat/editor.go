@@ -224,10 +224,17 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
-			commandName := strings.TrimPrefix(msg.Item.Value, "/")
+			command := msg.Item.RawData.(commands.Command)
+			if command.Custom {
+				m.SetValue("/" + command.PrimaryTrigger() + " ")
+				return m, nil
+			}
+
 			updated, cmd := m.Clear()
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
+
+			commandName := strings.TrimPrefix(msg.Item.Value, "/")
 			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
 			return m, tea.Batch(cmds...)
 		case "files":
@@ -481,6 +488,25 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	}
 
 	var cmds []tea.Cmd
+	if strings.HasPrefix(value, "/") {
+		value = value[1:]
+		commandName := strings.Split(value, " ")[0]
+		command := m.app.Commands[commands.CommandName(commandName)]
+		if command.Custom {
+			args := strings.TrimPrefix(value, command.PrimaryTrigger()+" ")
+			cmds = append(
+				cmds,
+				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
+			)
+
+			updated, cmd := m.Clear()
+			m = updated.(*editorComponent)
+			cmds = append(cmds, cmd)
+
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	attachments := m.textarea.GetAttachments()
 
 	prompt := app.Prompt{Text: value, Attachments: attachments}

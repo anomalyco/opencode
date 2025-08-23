@@ -5,6 +5,7 @@ import { Config } from "../src/config/config"
 import { zodToJsonSchema } from "zod-to-json-schema"
 
 const file = process.argv[2]
+console.log(file)
 
 const result = zodToJsonSchema(Config.Info, {
   /**

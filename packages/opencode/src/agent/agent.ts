@@ -48,6 +48,15 @@ export namespace Agent {
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
+    const planPermission = mergeAgentPermissions(
+      {
+        edit: "ask",
+        bash: "ask",
+        webfetch: "allow",
+      },
+      cfg.permission ?? {},
+    )
+
     const result: Record<string, Info> = {
       general: {
         name: "general",
@@ -74,11 +83,8 @@ export namespace Agent {
       plan: {
         name: "plan",
         options: {},
-        permission: agentPermission,
+        permission: planPermission,
         tools: {
-          write: false,
-          edit: false,
-          patch: false,
           ...defaultTools,
         },
         mode: "primary",
