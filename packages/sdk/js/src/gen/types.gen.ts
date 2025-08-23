@@ -703,7 +703,6 @@ export type Config = {
       extensions?: Array<string>
     }
   }
-  lsp_server_autoinstall?: boolean
   lsp?: {
     [key: string]:
       | {

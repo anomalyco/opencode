@@ -7,7 +7,6 @@ import { BunProc } from "../bun"
 import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
-import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 
 export namespace LSPServer {
@@ -32,15 +31,6 @@ export namespace LSPServer {
       if (!first.value) return app.path.root
       return path.dirname(first.value)
     }
-  }
-
-  async function mayAutoinstall(lsp: string) {
-    const cfg = await Config.get()
-    if (cfg.lsp_server_autoinstall === false || Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) {
-      log.info(`Skipping LSP server ${lsp} autoinstallation`)
-      return false
-    }
-    return true
   }
 
   export interface Info {
@@ -106,6 +96,7 @@ export namespace LSPServer {
           "vue-language-server.js",
         )
         if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "@vue/language-server"], {
             cwd: Global.Path.bin,
             env: {
@@ -159,7 +150,7 @@ export namespace LSPServer {
       if (!eslint) return
       const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
       if (!(await Bun.file(serverPath).exists())) {
-        if (!mayAutoinstall("VS Code ESLint")) return
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading and building VS Code ESLint server")
         const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
         if (!response.ok) return
@@ -212,6 +203,8 @@ export namespace LSPServer {
       })
       if (!bin) {
         if (!Bun.which("go")) return
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+
         log.info("installing gopls")
         const proc = Bun.spawn({
           cmd: ["go", "install", "golang.org/x/tools/gopls@latest"],
@@ -253,6 +246,7 @@ export namespace LSPServer {
           log.info("Ruby not found, please install Ruby first")
           return
         }
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("installing ruby-lsp")
         const proc = Bun.spawn({
           cmd: ["gem", "install", "ruby-lsp", "--bindir", Global.Path.bin],
@@ -288,6 +282,7 @@ export namespace LSPServer {
       if (!binary) {
         const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
         if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "pyright"], {
             cwd: Global.Path.bin,
             env: {
@@ -335,7 +330,7 @@ export namespace LSPServer {
             return
           }
 
-          if (!mayAutoinstall("elixir-ls")) return
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           log.info("downloading elixir-ls from GitHub releases")
 
           const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
@@ -385,7 +380,7 @@ export namespace LSPServer {
           return
         }
 
-        if (!mayAutoinstall("zls")) return
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading zls from GitHub releases")
 
         const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
@@ -489,6 +484,7 @@ export namespace LSPServer {
           return
         }
 
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("installing csharp-ls via dotnet tool")
         const proc = Bun.spawn({
           cmd: ["dotnet", "tool", "install", "csharp-ls", "--tool-path", Global.Path.bin],
@@ -541,7 +537,7 @@ export namespace LSPServer {
         PATH: process.env["PATH"] + ":" + Global.Path.bin,
       })
       if (!bin) {
-        if (!mayAutoinstall("clangd")) return
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading clangd from GitHub releases")
 
         const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
