@@ -364,6 +364,11 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ThemeName: theme.CurrentThemeName(),
 			}
 		}
+	case tea.FocusMsg:
+		if theme.CurrentThemeName() == "system" && !util.IsWsl() {
+			return a, tea.RequestBackgroundColor
+		}
+		return a, nil
 	case modal.CloseModalMsg:
 		a.editor.Focus()
 		var cmd tea.Cmd

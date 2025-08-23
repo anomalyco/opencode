@@ -50,10 +50,16 @@ func (t *themeDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return t, nil
 					}
 					t.themeApplied = true
-					return t, tea.Sequence(
+
+					var cmds []tea.Cmd
+					if selectedTheme == "system" && !util.IsWsl() {
+						cmds = append(cmds, tea.RequestBackgroundColor)
+					}
+					cmds = append(cmds, 
 						util.CmdHandler(modal.CloseModalMsg{}),
 						util.CmdHandler(ThemeSelectedMsg{ThemeName: selectedTheme}),
 					)
+					return t, tea.Sequence(cmds...)
 				}
 			}
 
