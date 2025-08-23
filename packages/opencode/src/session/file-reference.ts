@@ -3,8 +3,10 @@ import path from "path"
 
 /**
  * Regular expression to match @ file references in text
+ * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
+ * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
  */
-export const fileRegex = /@([^\s]+)/g
+export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
 /**
  * File part type for chat input
@@ -32,7 +34,7 @@ export function processFileReferences(template: string, basePath: string): FileP
     const filename = match[1]
     const filepath = filename.startsWith("~/")
       ? path.join(os.homedir(), filename.slice(2))
-      : path.join(basePath, filename)
+      : path.resolve(basePath, filename)
 
     parts.push({
       type: "file",
