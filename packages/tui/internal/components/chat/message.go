@@ -235,18 +235,10 @@ func renderText(
 		}
 		content = util.ToMarkdown(text, width, backgroundColor)
 		if isThinking {
-			var label string
-			if shimmer {
-				label = util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
-			} else {
-				label = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking...")
-			}
-			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			label := util.RenderTextWithAnimation("Thinking...", backgroundColor, t.TextMuted(), t.Accent(), width-6, shimmer && app.Animation)
 			content = label + "\n\n" + content
 		} else if strings.TrimSpace(text) == "Generating..." {
-			label := util.Shimmer(text, backgroundColor, t.TextMuted(), t.Text())
-			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
-			content = label
+			content = util.RenderTextWithAnimation(text, backgroundColor, t.TextMuted(), t.Accent(), width-6, shimmer && app.Animation)
 		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
@@ -398,7 +390,7 @@ func renderText(
 	}
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
 		for _, toolCall := range toolCalls {
-			title := renderToolTitle(toolCall, width-2)
+			title := renderToolTitle(app.Animation, toolCall, width-2)
 			style := styles.NewStyle()
 			if toolCall.State.Status == opencode.ToolPartStateStatusError {
 				style = style.Foreground(t.Error())
@@ -465,7 +457,7 @@ func renderToolDetails(
 	}
 
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
-		title := renderToolTitle(toolCall, width)
+		title := renderToolTitle(app.Animation, toolCall, width)
 		return renderContentBlock(app, title, width)
 	}
 
@@ -575,7 +567,7 @@ func renderToolDetails(
 						body += "\n" + diagnostics
 					}
 
-					title := renderToolTitle(toolCall, width)
+					title := renderToolTitle(app.Animation, toolCall, width)
 					title = style.Render(title)
 					content := title + "\n" + body
 
@@ -664,7 +656,7 @@ func renderToolDetails(
 					data, _ := json.Marshal(item)
 					var toolCall opencode.ToolPart
 					_ = json.Unmarshal(data, &toolCall)
-					step := renderToolTitle(toolCall, width-2)
+					step := renderToolTitle(app.Animation, toolCall, width-2)
 					step = "∟ " + step
 					steps = append(steps, step)
 				}
@@ -729,7 +721,7 @@ func renderToolDetails(
 		body = defaultStyle("")
 	}
 
-	title := renderToolTitle(toolCall, width)
+	title := renderToolTitle(app.Animation, toolCall, width)
 	content := title + "\n\n" + body
 
 	if permissionContent != "" {
@@ -798,14 +790,14 @@ func getTodoTitle(toolCall opencode.ToolPart) string {
 }
 
 func renderToolTitle(
+	animationEnabled bool,
 	toolCall opencode.ToolPart,
 	width int,
 ) string {
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolAction(toolCall.Tool)
 		t := theme.CurrentTheme()
-		shiny := util.Shimmer(title, t.BackgroundPanel(), t.TextMuted(), t.Accent())
-		return styles.NewStyle().Background(t.BackgroundPanel()).Width(width - 6).Render(shiny)
+		return util.RenderTextWithAnimation(title, t.BackgroundPanel(), t.TextMuted(), t.Accent(), width-6, animationEnabled)
 	}
 
 	toolArgs := ""

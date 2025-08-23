@@ -141,3 +141,14 @@ func hex2(v int) string {
 	const digits = "0123456789abcdef"
 	return string([]byte{digits[(v>>4)&0xF], digits[v&0xF]})
 }
+
+// RenderTextWithAnimation renders text with shimmer animation if enabled, otherwise static
+func RenderTextWithAnimation(text string, bg compat.AdaptiveColor, dim compat.AdaptiveColor, bright compat.AdaptiveColor, width int, animationEnabled bool) string {
+	var rendered string
+	if animationEnabled {
+		rendered = Shimmer(text, bg, dim, bright)
+	} else {
+		rendered = styles.NewStyle().Background(bg).Foreground(dim).Render(text)
+	}
+	return styles.NewStyle().Background(bg).Width(width).Render(rendered)
+}

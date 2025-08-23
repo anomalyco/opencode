@@ -1690,13 +1690,16 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed,required"`
-	JSON        configTuiJSON `json:"-"`
+	ScrollSpeed float64 `json:"scroll_speed,required"`
+	// Enable shimmer animations
+	Animation bool          `json:"animation,required"`
+	JSON      configTuiJSON `json:"-"`
 }
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
 	ScrollSpeed apijson.Field
+	Animation   apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

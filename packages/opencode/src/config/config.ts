@@ -326,6 +326,7 @@ export namespace Config {
 
   export const TUI = z.object({
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    animation: z.boolean().optional().describe("Enable shimmer animations"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).openapi({

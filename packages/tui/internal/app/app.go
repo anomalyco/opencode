@@ -51,6 +51,7 @@ type App struct {
 	IsLeaderSequence  bool
 	IsBashMode        bool
 	ScrollSpeed       int
+	Animation         bool
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -209,6 +210,7 @@ func New(
 		InitialAgent:   initialAgent,
 		InitialSession: initialSession,
 		ScrollSpeed:    int(configInfo.Tui.ScrollSpeed),
+		Animation:      configInfo.Tui.Animation,
 	}
 
 	return app, nil
@@ -663,6 +665,10 @@ func (a *App) IsBusy() bool {
 }
 
 func (a *App) HasAnimatingWork() bool {
+	if !a.Animation {
+		return false
+	}
+
 	for _, msg := range a.Messages {
 		switch casted := msg.Info.(type) {
 		case opencode.AssistantMessage:
