@@ -9,6 +9,7 @@ import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
+import { AuthGithubCopilot } from "../auth/github-copilot"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -34,6 +35,19 @@ export namespace Provider {
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
+      }
+    },
+    async "github-copilot"() {
+      try {
+        const accessToken = await AuthGithubCopilot.access()
+        if (!accessToken) return { autoload: false }
+
+        return {
+          autoload: true,
+          options: { apiKey: accessToken },
+        }
+      } catch (error) {
+        return { autoload: false }
       }
     },
     async opencode(input) {

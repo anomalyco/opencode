@@ -95,6 +95,30 @@ export namespace AuthGithubCopilot {
     const info = await Auth.get("github-copilot")
     if (!info || info.type !== "oauth") return
     if (info.access && info.expires > Date.now()) return info.access
+    const githubToken = process.env["GITHUB_TOKEN"]
+    if (githubToken) {
+      const response = await fetch(COPILOT_API_KEY_URL, {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${githubToken}`,
+          "User-Agent": "GitHubCopilotChat/0.26.7",
+          "Editor-Version": "vscode/1.99.3",
+          "Editor-Plugin-Version": "copilot-chat/0.26.7",
+        },
+      })
+
+      if (response.ok) {
+        const tokenData: CopilotTokenResponse = await response.json()
+        await Auth.set("github-copilot", {
+          type: "oauth",
+          refresh: githubToken,
+          access: tokenData.token,
+          expires: tokenData.expires_at * 1000,
+        })
+
+        return tokenData.token
+      }
+    }
 
     // Get new Copilot API token
     const response = await fetch(COPILOT_API_KEY_URL, {
