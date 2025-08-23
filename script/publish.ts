@@ -33,6 +33,9 @@ console.log("\n====== build stage ======\n")
 console.log("\n=== build opencode ===\n")
 await import(`../packages/opencode/script/build.ts`)
 
+console.log("\n=== build sdk ===\n")
+await import(`../packages/sdk/js/script/build.ts`)
+
 console.log("\n====== publish stage ======\n")
 
 console.log("\n=== publish opencode ===\n")
