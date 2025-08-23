@@ -301,5 +301,5 @@ Popular editor options include:
 - `subl` - Sublime Text
 
 :::tip
-If you’re using one of the popular GUI Editors (Cursor, VSCodium, Windsurf, Zed, etc.), always include the `--wait` flag. Without it, OpenCode won’t pause while you edit and will read the file too early.
+Some editors need command-line arguments to run in blocking mode. The --wait flag makes the editor process block until closed, which is necessary for opencode to function correctly.
 :::
