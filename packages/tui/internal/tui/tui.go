@@ -1359,7 +1359,18 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 
 		// Open in editor
 		parts := strings.Fields(editor)
-		c := exec.Command(parts[0], append(parts[1:], tmpfile.Name())...) //nolint:gosec
+		args := append(parts[1:], tmpfile.Name())
+
+		// These immediately exit otherwise, resulting in premature file cleanup and a blank export
+		editorsNeedingWait := []string{"code", "cursor", "windsurf", "codium", "subl"}
+		if slices.Contains(editorsNeedingWait, parts[0]) {
+			existingArgs := strings.Join(parts[1:], " ")
+			if !strings.Contains(existingArgs, "--wait") && !strings.Contains(existingArgs, "-w") {
+				args = append([]string{"--wait"}, args...)
+			}
+		}
+
+		c := exec.Command(parts[0], args...) //nolint:gosec
 		c.Stdin = os.Stdin
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
