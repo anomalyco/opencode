@@ -83,7 +83,9 @@ export namespace LSPServer {
       "nuxt.config.js",
       "vue.config.js",
     ]),
-    async spawn(_, root) {
+    async spawn(app, root) {
+      const vue = await Bun.resolve("vue", app.path.cwd).catch(() => {})
+      if (!vue) return
       let binary = Bun.which("vue-language-server")
       const args: string[] = []
       if (!binary) {
