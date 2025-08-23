@@ -29,13 +29,19 @@ for (const file of pkgjsons) {
 }
 await $`bun install`
 
-console.log("\n=== opencode ===\n")
+console.log("\n====== build stage ======\n")
+console.log("\n=== build opencode ===\n")
+await import(`../packages/opencode/script/build.ts`)
+
+console.log("\n====== publish stage ======\n")
+
+console.log("\n=== publish opencode ===\n")
 await import(`../packages/opencode/script/publish.ts`)
 
-console.log("\n=== sdk ===\n")
+console.log("\n=== publish sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
 
-console.log("\n=== plugin ===\n")
+console.log("\n=== publish plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
 
 const dir = new URL("..", import.meta.url).pathname
