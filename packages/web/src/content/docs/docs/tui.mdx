@@ -254,37 +254,52 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    export EDITOR=nano # or vim, code, etc.
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For VS Code and forks (must include --wait)
+    export EDITOR="code --wait"
     ```
 
     To make it permanent, add this to your shell profile;
     `~/.bashrc`, `~/.zshrc`, etc.
-
   </TabItem>
+
   <TabItem label="Windows (CMD)">
     ```bash
-    set EDITOR=notepad # or code, vim, etc.
+    set EDITOR=notepad
+
+    # For VS Code and forks (must include --wait)
+    set EDITOR=code --wait
     ```
 
     To make it permanent, use **System Properties** > **Environment
     Variables**.
-
   </TabItem>
+
   <TabItem label="Windows (PowerShell)">
-    ```bash
-    $env:EDITOR = "notepad" # or "code", "vim", etc.
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For VS Code and forks (must include --wait)
+    $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell
-    profile.
-
+    To make it permanent, add this to your PowerShell profile.
   </TabItem>
 </Tabs>
 
 Popular editor options include:
 
 - `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
 - `vim` - Vim editor
 - `nano` - Nano editor
 - `notepad` - Windows Notepad
 - `subl` - Sublime Text
+
+:::tip
+If you’re using VS Code or a VS Code–based editor (Cursor, VSCodium, Windsurf, Zed, etc.), always include the `--wait` flag. Without it, OpenCode won’t pause while you edit and will read the file too early.
+:::
