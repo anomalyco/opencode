@@ -258,7 +258,7 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     export EDITOR=nano
     export EDITOR=vim
 
-    # For VS Code and forks (must include --wait)
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
     export EDITOR="code --wait"
     ```
 
@@ -270,7 +270,7 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```bash
     set EDITOR=notepad
 
-    # For VS Code and forks (must include --wait)
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
     set EDITOR=code --wait
     ```
 
@@ -282,7 +282,7 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For VS Code and forks (must include --wait)
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
     $env:EDITOR = "code --wait"
     ```
 
@@ -301,5 +301,5 @@ Popular editor options include:
 - `subl` - Sublime Text
 
 :::tip
-If you’re using VS Code or a VS Code–based editor (Cursor, VSCodium, Windsurf, Zed, etc.), always include the `--wait` flag. Without it, OpenCode won’t pause while you edit and will read the file too early.
+If you’re using one of the popular GUI Editors (Cursor, VSCodium, Windsurf, Zed, etc.), always include the `--wait` flag. Without it, OpenCode won’t pause while you edit and will read the file too early.
 :::
