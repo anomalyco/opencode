@@ -10,6 +10,7 @@ import { Filesystem } from "../util/filesystem"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
+const MAX_OUTPUT_SIZE = 200 * 1024 // 200KB in bytes
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -47,6 +48,14 @@ export const ReadTool = Tool.define("read", {
       }
 
       throw new Error(`File not found: ${filepath}`)
+    }
+
+    // Check file size before reading
+    const stat = await file.stat()
+    const fileSize = stat.size
+    // If file is too large and no offset/limit provided
+    if (fileSize > MAX_OUTPUT_SIZE && !params.offset && !params.limit) {
+      throw new Error(`File content (${Math.round(fileSize / 1024)}KB) exceeds maximum allowed size (${Math.round(MAX_OUTPUT_SIZE / 1024)}KB). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.`)
     }
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
