@@ -171,17 +171,8 @@ export const RunCommand = cmd({
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(args.model
-          ? {
-              providerID,
-              modelID,
-            }
-          : agent.model
-            ? agent.model
-            : {
-                providerID,
-                modelID,
-              }),
+        providerID,
+        modelID,
         agent: agent.name,
         parts: [
           {
