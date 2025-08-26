@@ -78,6 +78,7 @@ export default defineConfig({
             "docs/models",
             "docs/themes",
             "docs/keybinds",
+            "docs/commands",
             "docs/formatters",
             "docs/permissions",
             "docs/lsp",

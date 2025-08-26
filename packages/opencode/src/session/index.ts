@@ -1171,12 +1171,16 @@ export namespace Session {
 
   export async function command(input: CommandInput) {
     const command = await Command.get(input.command)
-    const agent = input.agent ?? command.agent ?? "build"
+    const agent = command.agent ?? input.agent ?? "build"
+    const fmtModel = (model: { providerID: string; modelID: string }) => `${model.providerID}/${model.modelID}`
+
     const model =
-      input.model ??
       command.model ??
-      (await Agent.get(agent).then((x) => (x.model ? `${x.model.providerID}/${x.model.modelID}` : undefined))) ??
-      (await Provider.defaultModel().then((x) => `${x.providerID}/${x.modelID}`))
+      (command.agent && (await Agent.get(command.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      input.model ??
+      (input.agent && (await Agent.get(input.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      fmtModel(await Provider.defaultModel())
+
     let template = command.template.replace("$ARGUMENTS", input.arguments)
 
     const bash = Array.from(template.matchAll(bashRegex))
@@ -1680,7 +1684,7 @@ export namespace Session {
     const tokens = {
       input: usage.inputTokens ?? 0,
       output: usage.outputTokens ?? 0,
-      reasoning: 0,
+      reasoning: usage?.reasoningTokens ?? 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error

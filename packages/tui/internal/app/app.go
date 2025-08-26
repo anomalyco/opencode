@@ -820,6 +820,8 @@ func (a *App) SendCommand(ctx context.Context, command string, args string) (*Ap
 			opencode.SessionCommandParams{
 				Command:   opencode.F(command),
 				Arguments: opencode.F(args),
+				Agent:     opencode.F(a.Agents[a.AgentIndex].Name),
+				Model:     opencode.F(a.State.Provider + "/" + a.State.Model),
 			},
 		)
 		if err != nil {

@@ -97,11 +97,11 @@ if (!snapshot) {
   const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
-  const pkgbuild = [
+  const binaryPkgbuild = [
     "# Maintainer: dax",
     "# Maintainer: adam",
     "",
-    "pkgname='${pkg}'",
+    "pkgname='opencode-bin'",
     `pkgver=${version.split("-")[0]}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
@@ -125,11 +125,58 @@ if (!snapshot) {
     "",
   ].join("\n")
 
-  for (const pkg of ["opencode-bin"]) {
+  // Source-based PKGBUILD for opencode
+  const sourcePkgbuild = [
+    "# Maintainer: dax",
+    "# Maintainer: adam",
+    "",
+    "pkgname='opencode'",
+    `pkgver=${version.split("-")[0]}`,
+    "options=('!debug' '!strip')",
+    "pkgrel=1",
+    "pkgdesc='The AI coding agent built for the terminal.'",
+    "url='https://github.com/sst/opencode'",
+    "arch=('aarch64' 'x86_64')",
+    "license=('MIT')",
+    "provides=('opencode')",
+    "conflicts=('opencode-bin')",
+    "depends=('fzf' 'ripgrep')",
+    "makedepends=('git' 'bun-bin' 'go')",
+    "",
+    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v${version}.tar.gz")`,
+    `sha256sums=('SKIP')`,
+    "",
+    "build() {",
+    `  cd "opencode-\${pkgver}"`,
+    `  bun install`,
+    "  cd packages/tui",
+    `  CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=\${pkgver}" -o tui cmd/opencode/main.go`,
+    "  cd ../opencode",
+    `  bun build --define OPENCODE_TUI_PATH="'$(realpath ../tui/tui)'" --define OPENCODE_VERSION="'\${pkgver}'" --compile --target=bun-linux-x64 --outfile=opencode ./src/index.ts`,
+    "}",
+    "",
+    "package() {",
+    `  cd "opencode-\${pkgver}/packages/opencode"`,
+    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    "}",
+    "",
+  ].join("\n")
+
+  for (const [pkg, pkgbuild] of [
+    ["opencode-bin", binaryPkgbuild],
+    ["opencode", sourcePkgbuild],
+  ]) {
     await $`rm -rf ./dist/aur-${pkg}`
-    await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+    while (true) {
+      try {
+        await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+        break
+      } catch (e) {
+        continue
+      }
+    }
     await $`cd ./dist/aur-${pkg} && git checkout master`
-    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
+    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
     await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`

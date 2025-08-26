@@ -32,5 +32,13 @@ const result = zodToJsonSchema(Config.Info, {
 
     return jsonSchema
   },
-})
+}) as Record<string, unknown> & {
+  allowComments?: boolean
+  allowTrailingCommas?: boolean
+}
+
+// used for json lsps since config supports jsonc
+result.allowComments = true
+result.allowTrailingCommas = true
+
 await Bun.write(file, JSON.stringify(result, null, 2))

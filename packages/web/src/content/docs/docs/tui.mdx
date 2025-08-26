@@ -254,37 +254,52 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    export EDITOR=nano # or vim, code, etc.
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    export EDITOR="code --wait"
     ```
 
     To make it permanent, add this to your shell profile;
     `~/.bashrc`, `~/.zshrc`, etc.
-
   </TabItem>
+
   <TabItem label="Windows (CMD)">
     ```bash
-    set EDITOR=notepad # or code, vim, etc.
+    set EDITOR=notepad
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    set EDITOR=code --wait
     ```
 
     To make it permanent, use **System Properties** > **Environment
     Variables**.
-
   </TabItem>
+
   <TabItem label="Windows (PowerShell)">
-    ```bash
-    $env:EDITOR = "notepad" # or "code", "vim", etc.
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell
-    profile.
-
+    To make it permanent, add this to your PowerShell profile.
   </TabItem>
 </Tabs>
 
 Popular editor options include:
 
 - `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
 - `vim` - Vim editor
 - `nano` - Nano editor
 - `notepad` - Windows Notepad
 - `subl` - Sublime Text
+
+:::tip
+Some editors need command-line arguments to run in blocking mode. The --wait flag makes the editor process block until closed, which is necessary for opencode to function correctly.
+:::

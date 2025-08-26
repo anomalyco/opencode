@@ -103,7 +103,7 @@ export namespace Server {
             200: {
               description: "Event stream",
               content: {
-                "application/json": {
+                "text/event-stream": {
                   schema: resolver(
                     Bus.payloads().openapi({
                       ref: "Event",

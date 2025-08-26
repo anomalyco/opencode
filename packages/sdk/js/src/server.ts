@@ -17,7 +17,7 @@ export async function createOpencodeServer(config?: ServerConfig) {
     config ?? {},
   )
 
-  const proc = spawn(`opencode`, [`servel`, `--hostname=${config.hostname}`, `--port=${config.port}`], {
+  const proc = spawn(`opencode`, [`serve`, `--hostname=${config.hostname}`, `--port=${config.port}`], {
     signal: config.signal,
   })
 

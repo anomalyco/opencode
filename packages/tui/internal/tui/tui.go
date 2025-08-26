@@ -915,9 +915,10 @@ func (a Model) Cleanup() {
 func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
-	baseStyle := styles.NewStyle().Background(t.Background())
+	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	highlight := styles.NewStyle().Foreground(t.Accent()).Background(t.Background()).Render
 
 	open := `
 █▀▀█ █▀▀█ █▀▀ █▀▀▄ 
@@ -971,11 +972,17 @@ func (a Model) home() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
+	grok := highlight("Grok Code is free for a limited time")
+	grok = lipgloss.PlaceHorizontal(
+		effectiveWidth,
+		lipgloss.Center,
+		grok,
+		styles.WhitespaceStyle(t.Background()),
+	)
+
 	lines := []string{}
 	lines = append(lines, "")
-	lines = append(lines, "")
 	lines = append(lines, logoAndVersion)
-	lines = append(lines, "")
 	lines = append(lines, "")
 	lines = append(lines, cmds)
 	lines = append(lines, "")

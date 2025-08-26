@@ -26,7 +26,7 @@
     },
     "cloud/core": {
       "name": "@opencode/cloud-core",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "drizzle-orm": "0.41.0",
@@ -40,7 +40,7 @@
     },
     "cloud/function": {
       "name": "@opencode/cloud-function",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -60,7 +60,7 @@
     },
     "cloud/web": {
       "name": "@opencode/cloud-web",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@kobalte/core": "0.13.9",
         "@openauthjs/solid": "0.0.0-20250322224806",
@@ -79,7 +79,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "22.0.0",
@@ -94,7 +94,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -144,19 +144,22 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
       },
       "devDependencies": {
-        "@hey-api/openapi-ts": "0.80.1",
+        "@hey-api/openapi-ts": "0.81.0",
         "@tsconfig/node22": "catalog:",
         "typescript": "catalog:",
       },
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "0.5.13",
+      "version": "0.5.15",
+      "dependencies": {
+        "@hey-api/openapi-ts": "0.80.1",
+      },
       "devDependencies": {
         "@hey-api/openapi-ts": "0.80.1",
         "@tsconfig/node22": "catalog:",
@@ -165,7 +168,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "0.5.13",
+      "version": "0.5.15",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -187,7 +190,7 @@
         "sharp": "0.32.5",
         "shiki": "3.4.2",
         "solid-js": "1.9.7",
-        "toolbeam-docs-theme": "0.4.5",
+        "toolbeam-docs-theme": "0.4.6",
       },
       "devDependencies": {
         "@types/node": "catalog:",
@@ -492,7 +495,7 @@
 
     "@hey-api/json-schema-ref-parser": ["@hey-api/json-schema-ref-parser@1.0.6", "", { "dependencies": { "@jsdevtools/ono": "^7.1.3", "@types/json-schema": "^7.0.15", "js-yaml": "^4.1.0", "lodash": "^4.17.21" } }, "sha512-yktiFZoWPtEW8QKS65eqKwA5MTKp88CyiL8q72WynrBs/73SAaxlSWlA2zW/DZlywZ5hX1OYzrCC0wFdvO9c2w=="],
 
-    "@hey-api/openapi-ts": ["@hey-api/openapi-ts@0.80.1", "", { "dependencies": { "@hey-api/json-schema-ref-parser": "1.0.6", "ansi-colors": "4.1.3", "c12": "2.0.1", "color-support": "1.1.3", "commander": "13.0.0", "handlebars": "4.7.8", "open": "10.1.2", "semver": "7.7.2" }, "peerDependencies": { "typescript": "^5.5.3" }, "bin": { "openapi-ts": "bin/index.cjs" } }, "sha512-AC478kg36vmmrseLZNFonZ/cmXXmDzW5yWz4PVg1S8ebJsRtVRJ/QU+mtnXfzf9avN2P0pz/AO4WAe4jyFY2gA=="],
+    "@hey-api/openapi-ts": ["@hey-api/openapi-ts@0.81.0", "", { "dependencies": { "@hey-api/json-schema-ref-parser": "1.0.6", "ansi-colors": "4.1.3", "c12": "2.0.1", "color-support": "1.1.3", "commander": "13.0.0", "handlebars": "4.7.8", "js-yaml": "4.1.0", "open": "10.1.2", "semver": "7.7.2" }, "peerDependencies": { "typescript": "^5.5.3" }, "bin": { "openapi-ts": "bin/index.cjs" } }, "sha512-PoJukNBkUfHOoMDpN33bBETX49TUhy7Hu8Sa0jslOvFndvZ5VjQr4Nl/Dzjb9LG1Lp5HjybyTJMA6a1zYk/q6A=="],
 
     "@hono/zod-validator": ["@hono/zod-validator@0.4.2", "", { "peerDependencies": { "hono": ">=3.9.0", "zod": "^3.19.1" } }, "sha512-1rrlBg+EpDPhzOV4hT9pxr5+xDVmKuz6YJl+la7VCwK6ass5ldyKm5fD+umJdV2zhHD6jROoCCv8NbTwyfhT0g=="],
 
@@ -2808,7 +2811,7 @@
 
     "toml": ["toml@3.0.0", "", {}, "sha512-y/mWCZinnvxjTKYhJ+pYxwD0mRLVvOtdS2Awbgxln6iEnt4rk0yBxeSBHkGJcPucRiG0e55mwWp+g/05rsrd6w=="],
 
-    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.5", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-8yu1Q57pYujy1EnQuZ5JzrV6uzTWwUAcTkBkkujtFNNUBC8jTASWp5WypiViVMd59oFqzedy1PR0G9nBBhZvRQ=="],
+    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.6", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-s4yKn3PYnmPCl6MHPkQ2MedSgVh7FMAP64DiXnAfCls/H/RR6iTe0/SFgPTprz+HXXaKvv2iPo3XuvmDRY6cxQ=="],
 
     "tr46": ["tr46@0.0.3", "", {}, "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="],
 
@@ -3207,6 +3210,8 @@
     "@openauthjs/openauth/jose": ["jose@5.9.6", "", {}, "sha512-AMlnetc9+CV9asI19zHmrgS/WYsWUwCn2R7RzlbJWD7F9eWYUTGyBmU9o6PxngtLGOiDGPRu+Uc4fhKzbpteZQ=="],
 
     "@openauthjs/solid/@openauthjs/openauth": ["@openauthjs/openauth@0.4.2", "", { "dependencies": { "@standard-schema/spec": "1.0.0-beta.3", "aws4fetch": "1.0.20", "jose": "5.9.6" }, "peerDependencies": { "arctic": "^2.2.2", "hono": "^4.0.0" } }, "sha512-8+Bia559iffrZXfQ0LWXrVVVriochS88pDtB8indyQ1S+40MQgDBu8aBzKt+fgSrTmoQGCTT+wlOXgbjc9qIcw=="],
+
+    "@opencode-ai/sdk/@hey-api/openapi-ts": ["@hey-api/openapi-ts@0.80.1", "", { "dependencies": { "@hey-api/json-schema-ref-parser": "1.0.6", "ansi-colors": "4.1.3", "c12": "2.0.1", "color-support": "1.1.3", "commander": "13.0.0", "handlebars": "4.7.8", "open": "10.1.2", "semver": "7.7.2" }, "peerDependencies": { "typescript": "^5.5.3" }, "bin": { "openapi-ts": "bin/index.cjs" } }, "sha512-AC478kg36vmmrseLZNFonZ/cmXXmDzW5yWz4PVg1S8ebJsRtVRJ/QU+mtnXfzf9avN2P0pz/AO4WAe4jyFY2gA=="],
 
     "@opencode/cloud-web/solid-js": ["solid-js@1.9.5", "", { "dependencies": { "csstype": "^3.1.0", "seroval": "^1.1.0", "seroval-plugins": "^1.1.0" } }, "sha512-ogI3DaFcyn6UhYhrgcyRAMbu/buBJitYQASZz5WzfQVPP10RD2AbCoRZ517psnezrasyCbWzIxZ6kVqet768xw=="],
 

@@ -13,7 +13,7 @@ Create markdown files in the `command/` directory to define custom commands.
 
 Create `.opencode/command/test.md`:
 
-```md
+```md title=".opencode/command/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -34,32 +34,13 @@ Use the command by typing `/` followed by the command name.
 
 ---
 
-## Create command files
-
-For complex commands, create markdown files in the `command/` directory.
-
-Create `.opencode/command/test.md`:
-
-```md
----
-description: Run tests with coverage
-agent: build
-model: anthropic/claude-3-5-sonnet-20241022
----
-
-Run the full test suite with coverage report and show any failures.
-Focus on the failing tests and suggest fixes.
-```
-
-The frontmatter defines command properties. The content becomes the template.
-
----
-
 ## Use arguments
 
 Pass arguments to commands using the `$ARGUMENTS` placeholder.
 
-```md
+Create `.opencode/command/component.md`:
+
+```md title=".opencode/command/component.md"
 ---
 description: Create a new component
 ---
@@ -78,26 +59,30 @@ Run the command with arguments:
 
 ## Inject shell output
 
-Use `!`command`` to inject shell command output into your prompt.
+Use !`command` to inject shell command output into your prompt.
 
-```md
+Create `.opencode/command/analyze-coverage.md`:
+
+```md title=".opencode/command/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
 
 Here are the current test results:
-`!npm test`
+!`npm test`
 
 Based on these results, suggest improvements to increase coverage.
 ```
 
-```md
+Create `.opencode/command/review-changes.md`:
+
+```md title=".opencode/command/review-changes.md"
 ---
 description: Review recent changes
 ---
 
 Recent git commits:
-`!git log --oneline -10`
+!`git log --oneline -10`
 
 Review these changes and suggest any improvements.
 ```
@@ -110,7 +95,9 @@ Commands run in your project's root directory and their output becomes part of t
 
 Include files in your command using `@` followed by the filename.
 
-```md
+Create `.opencode/command/review-component.md`:
+
+```md title=".opencode/command/review-component.md"
 ---
 description: Review component
 ---
@@ -131,7 +118,9 @@ Configure commands with these optional frontmatter properties:
 - **agent**: Agent to use (defaults to "build")
 - **model**: Specific model to use for this command
 
-```md
+Create `.opencode/command/code-review.md`:
+
+```md title=".opencode/command/code-review.md"
 ---
 description: Code review assistant
 agent: build

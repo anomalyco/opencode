@@ -58,12 +58,11 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 _Mode_: `primary`
 
-A restricted agent designed for planning and analysis. In the plan agent, the following tools are disabled by default:
+A restricted agent designed for planning and analysis. We use a permission system to give you more control and prevent unintended changes.
+By default, all of the following are set to `ask`:
 
-- `write` - Cannot create new files
-- `edit` - Cannot modify existing files
-- `patch` - Cannot apply patches
-- `bash` - Cannot execute shell commands
+- `file edits`: All writes, patches, and edits
+- `bash`: All bash commands
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
 
