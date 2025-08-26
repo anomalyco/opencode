@@ -78,7 +78,7 @@ export interface Hooks {
   /**
    * Called when a new message is received
    */
-  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[] }) => Promise<void>
+  "chat.message"?: (input: {}, output: { message: UserMessage; parts: Part[], agent?: string }) => Promise<void>
   /**
    * Modify parameters sent to LLM
    */

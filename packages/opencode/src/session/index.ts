@@ -636,6 +636,7 @@ export namespace Session {
       "chat.message",
       {},
       {
+        agent: input.agent,
         message: userMsg,
         parts: userParts,
       },
