@@ -155,7 +155,7 @@ func (m *statusComponent) View() string {
 			Light: lipgloss.Color("2"),
 		}
 	default:
-		executionModeStr = "▌ Auto"
+		executionModeStr = "▌ Auto "
 		executionModeColor = compat.AdaptiveColor{
 			Dark:  lipgloss.Color("2"), // green
 			Light: lipgloss.Color("2"),

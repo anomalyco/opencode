@@ -881,7 +881,8 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 					SessionID: a.Session.ID,
 					Role:      opencode.AssistantMessageRoleAssistant,
 					Time: opencode.AssistantMessageTime{
-						Created: float64(time.Now().UnixMilli()),
+						Created:   float64(time.Now().UnixMilli()),
+						Completed: float64(time.Now().UnixMilli()),
 					},
 				},
 				Parts: []opencode.PartUnion{

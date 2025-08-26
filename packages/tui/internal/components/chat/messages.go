@@ -201,6 +201,10 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tail = true
 			return m, m.renderView()
 		}
+	case app.ShellExecutedMsg:
+		// New shell command output received - trigger re-render
+		m.tail = true
+		return m, m.renderView()
 	case app.SessionSelectedMsg:
 		currentParent := m.app.Session.ParentID
 		if currentParent == "" {
