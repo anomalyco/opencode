@@ -14,6 +14,7 @@ import (
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/layout"
+	"github.com/sst/opencode/internal/shell"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -119,6 +120,13 @@ func (m *statusComponent) View() string {
 	logo := m.logo()
 	logoWidth := lipgloss.Width(logo)
 
+	// Get current working directory from shared shell
+	sharedShell := shell.GetSharedShell()
+	currentCwd := sharedShell.GetWorkingDir()
+	if currentCwd != "" {
+		m.cwd = currentCwd
+	}
+
 	// Execution mode indicator
 	var executionModeStr string
 	var executionModeColor compat.AdaptiveColor
@@ -126,7 +134,7 @@ func (m *statusComponent) View() string {
 	if executionMode == "" {
 		executionMode = "Auto" // Default
 	}
-	
+
 	switch executionMode {
 	case "Shell":
 		executionModeStr = "▌ Shell"
@@ -141,7 +149,7 @@ func (m *statusComponent) View() string {
 			Light: lipgloss.Color("5"),
 		}
 	case "Auto":
-		executionModeStr = "▌ Auto"
+		executionModeStr = "▌ Auto "
 		executionModeColor = compat.AdaptiveColor{
 			Dark:  lipgloss.Color("2"), // green
 			Light: lipgloss.Color("2"),
@@ -153,7 +161,7 @@ func (m *statusComponent) View() string {
 			Light: lipgloss.Color("2"),
 		}
 	}
-	
+
 	executionModeIndicator := styles.NewStyle().
 		Foreground(executionModeColor).
 		Background(t.BackgroundElement()).

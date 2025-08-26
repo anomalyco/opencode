@@ -22,6 +22,7 @@ import (
 	"github.com/sst/opencode/internal/components/dialog"
 	"github.com/sst/opencode/internal/components/textarea"
 	"github.com/sst/opencode/internal/components/toast"
+	"github.com/sst/opencode/internal/shell"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -483,6 +484,19 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	attachments := m.textarea.GetAttachments()
 
+	// Check if we should execute as shell command based on mode
+	executeAsShell := false
+	if m.app.ExecutionMode == "Shell" {
+		executeAsShell = true
+	} else if m.app.ExecutionMode == "Auto" && len(attachments) == 0 {
+		// In Auto mode, check if it's a valid shell command (no attachments)
+		sharedShell := shell.GetSharedShell()
+		if sharedShell.IsCommand(value) {
+			executeAsShell = true
+		}
+	}
+
+	// Add to history
 	prompt := app.Prompt{Text: value, Attachments: attachments}
 	m.app.State.AddPromptToHistory(prompt)
 	cmds = append(cmds, m.app.SaveState())
@@ -491,7 +505,13 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
 
-	cmds = append(cmds, util.CmdHandler(app.SendPrompt(prompt)))
+	// Send as shell command or AI prompt
+	if executeAsShell {
+		cmds = append(cmds, util.CmdHandler(app.SendShell{Command: value}))
+	} else {
+		cmds = append(cmds, util.CmdHandler(app.SendPrompt(prompt)))
+	}
+	
 	return m, tea.Batch(cmds...)
 }
 

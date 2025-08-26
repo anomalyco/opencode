@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"log/slog"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/id"
+	"github.com/sst/opencode/internal/shell"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
 	"github.com/sst/opencode/internal/util"
@@ -93,6 +95,10 @@ type FileRenderedMsg struct {
 }
 type PermissionRespondedToMsg struct {
 	Response opencode.SessionPermissionRespondParamsResponse
+}
+
+type ShellExecutedMsg struct {
+	Message Message
 }
 
 func New(
@@ -803,30 +809,122 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 
 func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 	var cmds []tea.Cmd
-	if a.Session.ID == "" {
-		session, err := a.CreateSession(ctx)
-		if err != nil {
-			return a, toast.NewErrorToast(err.Error())
-		}
-		a.Session = session
-		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
+
+	// Check if we should execute locally based on mode
+	sharedShell := shell.GetSharedShell()
+	executeLocally := false
+
+	if a.ExecutionMode == "Shell" {
+		executeLocally = true
+	} else if a.ExecutionMode == "Auto" && sharedShell.IsCommand(command) {
+		executeLocally = true
 	}
 
-	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Shell(
-			context.Background(),
-			a.Session.ID,
-			opencode.SessionShellParams{
-				Agent:   opencode.F(a.Agent().Name),
-				Command: opencode.F(command),
-			},
-		)
-		if err != nil {
-			slog.Error("Failed to submit shell command", "error", err)
-			return toast.NewErrorToast("Failed to submit shell command")()
+	if executeLocally {
+		// Execute the command locally without involving the API
+		if a.Session.ID == "" {
+			session, err := a.CreateSession(ctx)
+			if err != nil {
+				return a, toast.NewErrorToast(err.Error())
+			}
+			a.Session = session
+			cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 		}
-		return nil
-	})
+
+		// Create user message for the command
+		userMessageID := id.Ascending(id.Message)
+		userMessage := Message{
+			Info: opencode.UserMessage{
+				ID:        userMessageID,
+				SessionID: a.Session.ID,
+				Role:      opencode.UserMessageRoleUser,
+				Time: opencode.UserMessageTime{
+					Created: float64(time.Now().UnixMilli()),
+				},
+			},
+			Parts: []opencode.PartUnion{
+				opencode.TextPart{
+					ID:        id.Ascending(id.Part),
+					MessageID: userMessageID,
+					SessionID: a.Session.ID,
+					Type:      opencode.TextPartTypeText,
+					Text:      command,
+				},
+			},
+		}
+		a.Messages = append(a.Messages, userMessage)
+
+		// Execute and create response
+		cmds = append(cmds, func() tea.Msg {
+			// Execute the shell command
+			stdout, stderr, err := sharedShell.Execute(ctx, command)
+
+			var output string
+			if stdout != "" {
+				output = stdout
+			}
+			if stderr != "" {
+				if output != "" {
+					output += "\n"
+				}
+				output += stderr
+			}
+			if err != nil && output == "" {
+				output = fmt.Sprintf("Error: %v", err)
+			}
+
+			// Create assistant message for the response
+			assistantMessageID := id.Ascending(id.Message)
+			assistantMessage := Message{
+				Info: opencode.AssistantMessage{
+					ID:        assistantMessageID,
+					SessionID: a.Session.ID,
+					Role:      opencode.AssistantMessageRoleAssistant,
+					Time: opencode.AssistantMessageTime{
+						Created: float64(time.Now().UnixMilli()),
+					},
+				},
+				Parts: []opencode.PartUnion{
+					opencode.TextPart{
+						ID:        id.Ascending(id.Part),
+						MessageID: assistantMessageID,
+						SessionID: a.Session.ID,
+						Type:      opencode.TextPartTypeText,
+						Text:      "```\n" + output + "\n```",
+					},
+				},
+			}
+
+			// Return a ShellExecutedMsg to update the messages
+			return ShellExecutedMsg{Message: assistantMessage}
+		})
+	} else {
+		// Send to AI agent as before
+		if a.Session.ID == "" {
+			session, err := a.CreateSession(ctx)
+			if err != nil {
+				return a, toast.NewErrorToast(err.Error())
+			}
+			a.Session = session
+			cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
+		}
+
+		cmds = append(cmds, func() tea.Msg {
+			_, err := a.Client.Session.Shell(
+				context.Background(),
+				a.Session.ID,
+				opencode.SessionShellParams{
+					Agent:   opencode.F(a.Agent().Name),
+					Command: opencode.F(command),
+				},
+			)
+			if err != nil {
+				slog.Error("Failed to submit shell command", "error", err)
+				return toast.NewErrorToast("Failed to submit shell command")()
+			}
+			return nil
+		})
+	}
 
 	// The actual response will come through SSE
 	// For now, just return success
