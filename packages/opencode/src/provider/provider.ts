@@ -349,8 +349,8 @@ export namespace Provider {
     })
   }
 
-  export async function getProvider(providerID: string) {
-    return state().then((s) => s.providers[providerID])
+  export async function getProvider(providerID: string): Promise<ModelsDev.Provider> {
+    return state().then((s) => s.providers[providerID].info)
   }
 
   export async function getModel(providerID: string, modelID: string) {

@@ -9,6 +9,30 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { ToolRegistry } from "../tool/registry"
 
+type HasExactlyTwoParams<T> = T extends (...args: infer P) => any
+  ? P extends [any, any]
+    ? P['length'] extends 2
+      ? true
+      : false
+    : false
+  : false
+
+type HooksWithOutput = {
+  [K in keyof Hooks]: NonNullable<Hooks[K]> extends (...args: any[]) => any
+    ? HasExactlyTwoParams<NonNullable<Hooks[K]>> extends true
+      ? K
+      : never
+    : never
+}[keyof Hooks]
+
+type HooksWithoutOutput = {
+  [K in keyof Hooks]: NonNullable<Hooks[K]> extends (...args: any[]) => any
+    ? HasExactlyTwoParams<NonNullable<Hooks[K]>> extends false
+      ? K
+      : never
+    : never
+}[keyof Hooks]
+
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
@@ -52,18 +76,24 @@ export namespace Plugin {
     }
   })
 
+  export async function trigger<Name extends HooksWithoutOutput>(
+    name: Exclude<Name, "auth" | "event">,
+    input: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[0] : never
+  ): Promise<void>
+
+  export async function trigger<Name extends HooksWithOutput>(
+    name: Exclude<Name, "auth" | "event">,
+    input: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[0] : never,
+    output: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[1] : never
+  ): Promise<Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[1] : never>
+
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">,
-    Input = Parameters<Required<Hooks>[Name]>[0],
-    Output = Parameters<Required<Hooks>[Name]>[1],
-  >(name: Name, input: Input, output: Output): Promise<Output> {
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">
+  >(name: Name, input: any, output?: any): Promise<any> {
     if (!name) return output
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
       await fn(input, output)
     }
     return output
