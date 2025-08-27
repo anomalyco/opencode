@@ -36,9 +36,9 @@ export namespace Provider {
         },
       }
     },
-    async opencode() {
+    async opencode(input) {
       return {
-        autoload: true,
+        autoload: Object.keys(input.models).length > 0,
         options: {},
       }
     },

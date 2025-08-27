@@ -8,6 +8,7 @@ import type {
   UserMessage,
   Part,
   Auth,
+  Config,
 } from "@opencode-ai/sdk"
 import type { BunShell } from "./shell"
 
@@ -20,6 +21,7 @@ export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
+  config?: (input: Config) => Promise<void>
   auth?: {
     provider: string
     loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>

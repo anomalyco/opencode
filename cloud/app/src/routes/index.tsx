@@ -6,6 +6,9 @@ import IMG_SPLASH from "../asset/screenshot-splash.webp"
 import IMG_VSCODE from "../asset/screenshot-vscode.webp"
 import IMG_GITHUB from "../asset/screenshot-github.webp"
 import { IconCopy, IconCheck } from "../component/icon"
+import { createAsync, query, redirect, RouteDefinition } from "@solidjs/router"
+import { getActor, withActor } from "~/context/auth"
+import { Account } from "@opencode/cloud-core/account.js"
 
 function CopyStatus() {
   return (
@@ -16,7 +19,22 @@ function CopyStatus() {
   )
 }
 
+const isLoggedIn = query(async () => {
+  "use server"
+  const actor = await getActor()
+  if (actor.type === "account") {
+    const workspaces = await withActor(() => Account.workspaces())
+    throw redirect("/" + workspaces[0].id)
+  }
+  return
+}, "isLoggedIn")
+
+
+
 export default function Home() {
+  createAsync(() => isLoggedIn(), {
+    deferStream: true,
+  })
   onMount(() => {
     const commands = document.querySelectorAll("[data-copy]")
     for (const button of commands) {

@@ -174,6 +174,10 @@ func (m *messagesComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 		m.tail = true
 		return m, nil
+	case app.SendCommand:
+		m.viewport.GotoBottom()
+		m.tail = true
+		return m, nil
 	case dialog.ThemeSelectedMsg:
 		m.cache.Clear()
 		m.loading = true

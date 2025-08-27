@@ -68,7 +68,12 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
-  export function init() {
+  export async function init() {
+    const hooks = await state().then((x) => x.hooks)
+    const config = await Config.get()
+    for (const hook of hooks) {
+      await hook.config?.(config)
+    }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {

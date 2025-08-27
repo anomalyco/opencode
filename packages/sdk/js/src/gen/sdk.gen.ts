@@ -39,6 +39,8 @@ import type {
   SessionChatResponses,
   SessionMessageData,
   SessionMessageResponses,
+  SessionCommandData,
+  SessionCommandResponses,
   SessionShellData,
   SessionShellResponses,
   SessionRevertData,
@@ -47,6 +49,8 @@ import type {
   SessionUnrevertResponses,
   PostSessionByIdPermissionsByPermissionIdData,
   PostSessionByIdPermissionsByPermissionIdResponses,
+  CommandListData,
+  CommandListResponses,
   ConfigProvidersData,
   ConfigProvidersResponses,
   FindTextData,
@@ -356,6 +360,20 @@ class Session extends _HeyApiClient {
   }
 
   /**
+   * Send a new command to a session
+   */
+  public command<ThrowOnError extends boolean = false>(options: Options<SessionCommandData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionCommandResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/command",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
    * Run a shell command
    */
   public shell<ThrowOnError extends boolean = false>(options: Options<SessionShellData, ThrowOnError>) {
@@ -389,6 +407,18 @@ class Session extends _HeyApiClient {
   public unrevert<ThrowOnError extends boolean = false>(options: Options<SessionUnrevertData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionUnrevertResponses, unknown, ThrowOnError>({
       url: "/session/{id}/unrevert",
+      ...options,
+    })
+  }
+}
+
+class Command extends _HeyApiClient {
+  /**
+   * List all commands
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<CommandListData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<CommandListResponses, unknown, ThrowOnError>({
+      url: "/command",
       ...options,
     })
   }
@@ -592,6 +622,7 @@ export class OpencodeClient extends _HeyApiClient {
   app = new App({ client: this._client })
   config = new Config({ client: this._client })
   session = new Session({ client: this._client })
+  command = new Command({ client: this._client })
   find = new Find({ client: this._client })
   file = new File({ client: this._client })
   tui = new Tui({ client: this._client })

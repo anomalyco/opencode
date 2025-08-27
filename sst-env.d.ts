@@ -27,10 +27,6 @@ declare module "sst" {
     "Bucket": {
       "type": "sst.cloudflare.Bucket"
     }
-    "Console": {
-      "type": "sst.cloudflare.StaticSite"
-      "url": string
-    }
     "DATABASE_PASSWORD": {
       "type": "sst.sst.Secret"
       "value": string

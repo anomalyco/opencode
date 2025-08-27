@@ -3,7 +3,7 @@ import { Resource } from "sst"
 export * from "drizzle-orm"
 import postgres from "postgres"
 
-function createClient() {
+const createClient = memo(() => {
   const client = postgres({
     idle_timeout: 30000,
     connect_timeout: 30000,
@@ -19,12 +19,13 @@ function createClient() {
   })
 
   return drizzle(client, {})
-}
+})
 
 import { PgTransaction, type PgTransactionConfig } from "drizzle-orm/pg-core"
 import type { ExtractTablesWithRelations } from "drizzle-orm"
 import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js"
 import { Context } from "../context"
+import { memo } from "../util/memo"
 
 export namespace Database {
   export type Transaction = PgTransaction<

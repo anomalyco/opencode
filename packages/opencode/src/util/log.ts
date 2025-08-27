@@ -101,7 +101,12 @@ export namespace Log {
         ...extra,
       })
         .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => `${key}=${typeof value === "object" ? JSON.stringify(value) : value}`)
+        .map(([key, value]) => {
+          const prefix = `${key}=`
+          if (value instanceof Error) return prefix + value.message
+          if (typeof value === "object") return prefix + JSON.stringify(value)
+          return prefix + value
+        })
         .join(" ")
       const next = new Date()
       const diff = next.getTime() - last

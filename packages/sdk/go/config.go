@@ -49,7 +49,8 @@ type Config struct {
 	// automatically
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
-	Autoupdate bool `json:"autoupdate"`
+	Autoupdate bool                     `json:"autoupdate"`
+	Command    map[string]ConfigCommand `json:"command"`
 	// Disable providers that are loaded automatically
 	DisabledProviders []string                   `json:"disabled_providers"`
 	Experimental      ConfigExperimental         `json:"experimental"`
@@ -79,7 +80,8 @@ type Config struct {
 	SmallModel string `json:"small_model"`
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
-	Theme string `json:"theme"`
+	Theme string          `json:"theme"`
+	Tools map[string]bool `json:"tools"`
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Shell integration settings
@@ -95,6 +97,7 @@ type configJSON struct {
 	Agent             apijson.Field
 	Autoshare         apijson.Field
 	Autoupdate        apijson.Field
+	Command           apijson.Field
 	DisabledProviders apijson.Field
 	Experimental      apijson.Field
 	Formatter         apijson.Field
@@ -112,6 +115,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	Tools             apijson.Field
 	Tui               apijson.Field
 	Shell             apijson.Field
 	Username          apijson.Field
@@ -663,6 +667,32 @@ func (r ConfigAgentPlanPermissionWebfetch) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type ConfigCommand struct {
+	Template    string            `json:"template,required"`
+	Agent       string            `json:"agent"`
+	Description string            `json:"description"`
+	Model       string            `json:"model"`
+	JSON        configCommandJSON `json:"-"`
+}
+
+// configCommandJSON contains the JSON metadata for the struct [ConfigCommand]
+type configCommandJSON struct {
+	Template    apijson.Field
+	Agent       apijson.Field
+	Description apijson.Field
+	Model       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigCommand) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configCommandJSON) RawJSON() string {
+	return r.raw
 }
 
 type ConfigExperimental struct {
@@ -1763,6 +1793,8 @@ type KeybindsConfig struct {
 	SessionNew string `json:"session_new,required"`
 	// Share current session
 	SessionShare string `json:"session_share,required"`
+	// Show session timeline
+	SessionTimeline string `json:"session_timeline,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
 	// @deprecated use agent_cycle. Next agent
@@ -1824,6 +1856,7 @@ type keybindsConfigJSON struct {
 	SessionList              apijson.Field
 	SessionNew               apijson.Field
 	SessionShare             apijson.Field
+	SessionTimeline          apijson.Field
 	SessionUnshare           apijson.Field
 	SwitchAgent              apijson.Field
 	SwitchAgentReverse       apijson.Field

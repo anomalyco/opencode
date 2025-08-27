@@ -14,10 +14,6 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
-    "Console": {
-      "type": "sst.cloudflare.StaticSite"
-      "url": string
-    }
     "DATABASE_PASSWORD": {
       "type": "sst.sst.Secret"
       "value": string
