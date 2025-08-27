@@ -60,7 +60,7 @@ for (const [os, arch] of targets) {
       2,
     ),
   )
-  if (!dry) await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${npmTag}`
+  if (!dry) await $`cd dist/${name} && chmod -R 777 . && bun publish --access public --tag ${npmTag}`
   optionalDependencies[name] = version
 }
 
@@ -70,9 +70,9 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: "lash-cli",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        lash: `./bin/opencode`,
       },
       scripts: {
         postinstall: "node ./postinstall.mjs",
@@ -92,10 +92,10 @@ if (!snapshot) {
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/lash-cli-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/lash-cli-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/lash-cli-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/lash-cli-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
   const binaryPkgbuild = [
     "# Maintainer: dax",

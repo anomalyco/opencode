@@ -1,18 +1,28 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.5.28",
-  "name": "opencode",
+  "version": "0.1.0",
+  "name": "lash-cli",
   "type": "module",
-  "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bun run --conditions=development ./src/index.ts"
+    "dev": "bun run --conditions=development ./src/index.ts",
+    "publish:lash": "bun run ./script/publish-lash.ts",
+    "publish:lash:dry": "DRY_RUN=true bun run ./script/publish-lash.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "lash": "./bin/opencode"
   },
   "exports": {
     "./*": "./src/*.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lacymorrow/opencode"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/lacymorrow/opencode",
+  "bugs": {
+    "url": "https://github.com/lacymorrow/opencode/issues"
   },
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
@@ -31,8 +41,8 @@
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@lash/plugin": "workspace:*",
+    "@lash/sdk": "workspace:*",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",

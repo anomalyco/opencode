@@ -1,7 +1,7 @@
 {
   "name": "@opencode/web",
   "type": "module",
-  "version": "0.5.28",
+  "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "sst shell --stage=dev --target=Web astro dev",
@@ -34,7 +34,7 @@
     "toolbeam-docs-theme": "0.4.6"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "lash-cli": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

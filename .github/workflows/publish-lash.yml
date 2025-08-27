@@ -1,0 +1,81 @@
+name: Publish Lash CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: bun install
+      
+      - name: Set version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "LASH_VERSION=${VERSION}" >> $GITHUB_ENV
+      
+      - name: Build and publish
+        run: |
+          cd packages/opencode
+          bun run publish:lash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LASH_VERSION: ${{ env.LASH_VERSION }}
+      
+      - name: Upload artifacts
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lash-binaries
+          path: packages/opencode/dist/lash-cli-*.zip
+  
+  publish-release-assets:
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.event_name == 'release'
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lash-binaries
+      
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: lash-cli-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

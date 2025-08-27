@@ -57,15 +57,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "lash@lacymorrow.com"
+          git config --global user.name "lash"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
       - name: Install dependencies
         run: bun install
 
       - name: Publish
         run: |
-          OPENCODE_VERSION=${{ inputs.version }} ./script/publish.ts
+          LASH_VERSION=${{ inputs.version }} OPENCODE_VERSION=${{ inputs.version }} ./script/publish.ts
         env:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}

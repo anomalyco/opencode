@@ -48,7 +48,7 @@ if (!snapshot) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force`
 
-  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+  const previous = await fetch("https://api.github.com/repos/lacymorrow/opencode/releases/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
@@ -56,7 +56,7 @@ if (!snapshot) {
     .then((data) => data.tag_name)
 
   console.log("finding commits between", previous, "and", "HEAD")
-  const commits = await fetch(`https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`)
+  const commits = await fetch(`https://api.github.com/repos/lacymorrow/opencode/compare/${previous}...HEAD`)
     .then((res) => res.json())
     .then((data) => data.commits || [])
 
