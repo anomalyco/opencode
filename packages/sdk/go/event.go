@@ -130,91 +130,91 @@ type EventListResponseUnion interface {
 
 func init() {
 	apijson.RegisterUnion(
-		reflect.TypeOf((*EventListResponseUnion)(nil)).Elem(),
+		reflect.TypeFor[EventListResponseUnion](),
 		"type",
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventInstallationUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventInstallationUpdated](),
 			DiscriminatorValue: "installation.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventLspClientDiagnostics{}),
+			Type:               reflect.TypeFor[EventListResponseEventLspClientDiagnostics](),
 			DiscriminatorValue: "lsp.client.diagnostics",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventMessageUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventMessageUpdated](),
 			DiscriminatorValue: "message.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventMessageRemoved{}),
+			Type:               reflect.TypeFor[EventListResponseEventMessageRemoved](),
 			DiscriminatorValue: "message.removed",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventMessagePartUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventMessagePartUpdated](),
 			DiscriminatorValue: "message.part.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventMessagePartRemoved{}),
+			Type:               reflect.TypeFor[EventListResponseEventMessagePartRemoved](),
 			DiscriminatorValue: "message.part.removed",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventStorageWrite{}),
+			Type:               reflect.TypeFor[EventListResponseEventStorageWrite](),
 			DiscriminatorValue: "storage.write",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventPermissionUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventPermissionUpdated](),
 			DiscriminatorValue: "permission.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventPermissionReplied{}),
+			Type:               reflect.TypeFor[EventListResponseEventPermissionReplied](),
 			DiscriminatorValue: "permission.replied",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventFileEdited{}),
+			Type:               reflect.TypeFor[EventListResponseEventFileEdited](),
 			DiscriminatorValue: "file.edited",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventSessionUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventSessionUpdated](),
 			DiscriminatorValue: "session.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventSessionDeleted{}),
+			Type:               reflect.TypeFor[EventListResponseEventSessionDeleted](),
 			DiscriminatorValue: "session.deleted",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventSessionIdle{}),
+			Type:               reflect.TypeFor[EventListResponseEventSessionIdle](),
 			DiscriminatorValue: "session.idle",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventSessionError{}),
+			Type:               reflect.TypeFor[EventListResponseEventSessionError](),
 			DiscriminatorValue: "session.error",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventServerConnected{}),
+			Type:               reflect.TypeFor[EventListResponseEventServerConnected](),
 			DiscriminatorValue: "server.connected",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventFileWatcherUpdated{}),
+			Type:               reflect.TypeFor[EventListResponseEventFileWatcherUpdated](),
 			DiscriminatorValue: "file.watcher.updated",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventIdeInstalled{}),
+			Type:               reflect.TypeFor[EventListResponseEventIdeInstalled](),
 			DiscriminatorValue: "ide.installed",
 		},
 	)
@@ -1092,26 +1092,26 @@ type EventListResponseEventSessionErrorPropertiesErrorUnion interface {
 
 func init() {
 	apijson.RegisterUnion(
-		reflect.TypeOf((*EventListResponseEventSessionErrorPropertiesErrorUnion)(nil)).Elem(),
+		reflect.TypeFor[EventListResponseEventSessionErrorPropertiesErrorUnion](),
 		"name",
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.ProviderAuthError{}),
+			Type:               reflect.TypeFor[shared.ProviderAuthError](),
 			DiscriminatorValue: "ProviderAuthError",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.UnknownError{}),
+			Type:               reflect.TypeFor[shared.UnknownError](),
 			DiscriminatorValue: "UnknownError",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(EventListResponseEventSessionErrorPropertiesErrorMessageOutputLengthError{}),
+			Type:               reflect.TypeFor[EventListResponseEventSessionErrorPropertiesErrorMessageOutputLengthError](),
 			DiscriminatorValue: "MessageOutputLengthError",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.MessageAbortedError{}),
+			Type:               reflect.TypeFor[shared.MessageAbortedError](),
 			DiscriminatorValue: "MessageAbortedError",
 		},
 	)
