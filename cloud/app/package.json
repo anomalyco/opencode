@@ -3,6 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vinxi dev --host 0.0.0.0",
+    "dev:remote": "bun sst shell --target=Solid --stage=dev bun dev",
     "build": "vinxi build",
     "start": "vinxi start",
     "version": "0.5.28"
