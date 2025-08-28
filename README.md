@@ -26,7 +26,7 @@ curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-brew install sst/tap/opencode      # macOS
+brew install sst/tap/opencode      # macOS and Linux
 paru -S opencode-bin               # Arch Linux
 ```
 
@@ -107,4 +107,4 @@ The other confusingly named repo has no relation to this one. You can [read the 
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/SST_dev)
+**Join our community** [Discord](https://discord.gg/opencode) | [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/anomaly_inv)

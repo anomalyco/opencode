@@ -1,0 +1,58 @@
+name: Duplicate Issue Detection
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  check-duplicates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Check for duplicate issues
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_PERMISSION: |
+            {
+              "bash": {
+                "gh issue*": "allow",
+                "*": "deny" 
+              }, 
+              "webfetch": "deny"
+            }
+        run: |
+          opencode run -m anthropic/claude-sonnet-4-20250514 "A new issue has been created:'
+
+          Issue number:
+          ${{ github.event.issue.number }}
+
+          Lookup this issue and search through existing issues (excluding #${{ github.event.issue.number }}) in this repository to find any potential duplicates of this new issue.
+          Consider:
+          1. Similar titles or descriptions
+          2. Same error messages or symptoms
+          3. Related functionality or components
+          4. Similar feature requests
+
+          If you find any potential duplicates, please comment on the new issue with:
+          - A brief explanation of why it might be a duplicate
+          - Links to the potentially duplicate issues
+          - A suggestion to check those issues first
+
+          Use this format for the comment:
+          'This issue might be a duplicate of existing issues. Please check:
+          - #[issue_number]: [brief description of similarity]
+
+          Feel free to ignore if none of these address your specific case.'
+
+          If no clear duplicates are found, do not comment."

@@ -29,8 +29,25 @@ const FileStatusCommand = cmd({
   },
 })
 
+const FileListCommand = cmd({
+  command: "list <path>",
+  builder: (yargs) =>
+    yargs.positional("path", {
+      type: "string",
+      demandOption: true,
+      description: "File path to list",
+    }),
+  async handler(args) {
+    await bootstrap({ cwd: process.cwd() }, async () => {
+      const files = await File.list(args.path)
+      console.log(JSON.stringify(files, null, 2))
+    })
+  },
+})
+
 export const FileCommand = cmd({
   command: "file",
-  builder: (yargs) => yargs.command(FileReadCommand).command(FileStatusCommand).demandCommand(),
+  builder: (yargs) =>
+    yargs.command(FileReadCommand).command(FileStatusCommand).command(FileListCommand).demandCommand(),
   async handler() {},
 })

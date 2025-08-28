@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: Configure and use specialized agents in opencode.
+description: Configure and use specialized agents.
 ---
 
 Agents are specialized AI assistants that can be configured for specific tasks and workflows. They allow you to create focused tools with custom prompts, models, and tool access.
@@ -58,12 +58,11 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 _Mode_: `primary`
 
-A restricted agent designed for planning and analysis. In the plan agent, the following tools are disabled by default:
+A restricted agent designed for planning and analysis. We use a permission system to give you more control and prevent unintended changes.
+By default, all of the following are set to `ask`:
 
-- `write` - Cannot create new files
-- `edit` - Cannot modify existing files
-- `patch` - Cannot apply patches
-- `bash` - Cannot execute shell commands
+- `file edits`: All writes, patches, and edits
+- `bash`: All bash commands
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
 
@@ -89,6 +88,13 @@ A general-purpose agent for researching complex questions, searching for code, a
      ```txt frame="none"
      @general help me search for this function
      ```
+
+3. **Navigation between sessions**: When subagents create their own child sessions, you can navigate between the parent session and all child sessions using:
+
+   - **Ctrl+Right** (or your configured `session_child_cycle` keybind) to cycle forward through parent → child1 → child2 → ... → parent
+   - **Ctrl+Left** (or your configured `session_child_cycle_reverse` keybind) to cycle backward through parent ← child1 ← child2 ← ... ← parent
+
+   This allows you to seamlessly switch between the main conversation and specialized subagent work.
 
 ---
 
@@ -171,8 +177,6 @@ Provide constructive feedback without making direct changes.
 ```
 
 The markdown file name becomes the agent name. For example, `review.md` creates a `review` agent.
-
-Let's look at these configuration options in detail.
 
 ---
 
@@ -318,6 +322,22 @@ Control which tools are available in this agent with the `tools` config. You can
 }
 ```
 
+You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
+
+```json title="opencode.json"
+{
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
 If no tools are specified, all tools are enabled by default.
 
 ---
@@ -342,6 +362,147 @@ Here are all the tools can be controlled through the agent config.
 
 ---
 
+### Permissions
+
+Permissions control what actions an agent can take.
+
+- edit, bash, webfetch
+
+Each permission can be set to allow, ask, or deny.
+
+- allow, ask, deny
+
+Configure permissions globally in opencode.json.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "allow",
+    "webfetch": "deny"
+  }
+}
+```
+
+You can override permissions per agent in JSON.
+
+```json title="opencode.json" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "*": "allow",
+          "git push": "ask",
+          "terraform *": "deny"
+        },
+        "webfetch": "ask"
+      }
+    }
+  }
+}
+```
+
+You can also set permissions in Markdown agents.
+
+```markdown title="~/.config/opencode/agent/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+Bash permissions support granular patterns for fine-grained control.
+
+```json title="Allow most, ask for risky, deny terraform"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "git push": "ask",
+      "terraform *": "deny"
+    }
+  }
+}
+```
+
+If you provide a granular bash map, the default becomes ask unless you set \* explicitly.
+
+```json title="Granular defaults to ask"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "git status": "allow"
+    }
+  }
+}
+```
+
+Agent-level permissions merge over global settings.
+
+- Global sets defaults; agent overrides when specified
+
+Specific bash rules can override a global default.
+
+```json title="Global ask, agent allows safe commands"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": { "bash": "ask" },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": { "git status": "allow", "*": "ask" }
+      }
+    }
+  }
+}
+```
+
+Permissions affect tool availability and prompts differently.
+
+- deny hides tools (edit also hides write/patch); ask prompts; allow runs
+
+For quick reference, here are common setups.
+
+```json title="Read-only reviewer"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "review": {
+      "permission": { "edit": "deny", "bash": "deny", "webfetch": "allow" }
+    }
+  }
+}
+```
+
+```json title="Planning agent that can browse but cannot change code"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "plan": {
+      "permission": { "edit": "deny", "bash": "deny", "webfetch": "ask" }
+    }
+  }
+}
+```
+
+See the full permissions guide for more patterns.
+
+- /docs/permissions
+
+---
+
 ### Mode
 
 Control the agent's mode with the `mode` config. The `mode` option is used to determine how the agent can be used.
@@ -357,6 +518,29 @@ Control the agent's mode with the `mode` config. The `mode` option is used to de
 ```
 
 The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is specified, it defaults to `all`.
+
+---
+
+### Additional
+
+Any other options you specify in your agent configuration will be **passed through directly** to the provider as model options. This allows you to use provider-specific features and parameters.
+
+For example, with OpenAI's reasoning models, you can control the reasoning effort:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agent that uses high reasoning effort for complex problems",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+These additional options are model and provider-specific. Check your provider's documentation for available parameters.
 
 ---
 

@@ -64,6 +64,7 @@ export namespace MessageV2 {
       status: z.literal("error"),
       input: z.record(z.any()),
       error: z.string(),
+      metadata: z.record(z.any()).optional(),
       time: z.object({
         start: z.number(),
         end: z.number(),
@@ -117,6 +118,19 @@ export namespace MessageV2 {
     ref: "TextPart",
   })
   export type TextPart = z.infer<typeof TextPart>
+
+  export const ReasoningPart = PartBase.extend({
+    type: z.literal("reasoning"),
+    text: z.string(),
+    metadata: z.record(z.any()).optional(),
+    time: z.object({
+      start: z.number(),
+      end: z.number().optional(),
+    }),
+  }).openapi({
+    ref: "ReasoningPart",
+  })
+  export type ReasoningPart = z.infer<typeof ReasoningPart>
 
   export const ToolPart = PartBase.extend({
     type: z.literal("tool"),
@@ -229,6 +243,7 @@ export namespace MessageV2 {
   export const Part = z
     .discriminatedUnion("type", [
       TextPart,
+      ReasoningPart,
       FilePart,
       ToolPart,
       StepStartPart,

@@ -1,6 +1,4 @@
 import "zod-openapi/extend"
-import { Trace } from "./trace"
-Trace.init()
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -22,6 +20,9 @@ import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 
 const cancel = new AbortController()
+
+try {
+} catch (e) {}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -59,6 +60,8 @@ const cli = yargs(hideBin(process.argv))
         return "INFO"
       })(),
     })
+
+    process.env["OPENCODE"] = "1"
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,

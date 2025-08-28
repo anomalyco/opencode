@@ -31,6 +31,7 @@ type Command struct {
 	Description string
 	Keybindings []Keybinding
 	Trigger     []string
+	Custom      bool
 }
 
 func (c Command) Keys() []string {
@@ -64,12 +65,13 @@ func (r CommandRegistry) Sorted() []Command {
 		commands = append(commands, command)
 	}
 	slices.SortFunc(commands, func(a, b Command) int {
-		// Priority order: session_new, session_share, model_list, app_help first, app_exit last
+		// Priority order: session_new, session_share, model_list, agent_list, app_help first, app_exit last
 		priorityOrder := map[CommandName]int{
 			SessionNewCommand:   0,
 			AppHelpCommand:      1,
 			SessionShareCommand: 2,
 			ModelListCommand:    3,
+			AgentListCommand:    4,
 		}
 
 		aPriority, aHasPriority := priorityOrder[a.Name]
@@ -90,11 +92,18 @@ func (r CommandRegistry) Sorted() []Command {
 		if b.Name == AppExitCommand {
 			return -1
 		}
+		if a.Custom && !b.Custom {
+			return 1
+		}
+		if !a.Custom && b.Custom {
+			return -1
+		}
 
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
 	return commands
 }
+
 func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 	var matched []Command
 	for _, command := range r.Sorted() {
@@ -106,42 +115,51 @@ func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 }
 
 const (
-	AppHelpCommand              CommandName = "app_help"
-	SwitchAgentCommand          CommandName = "switch_agent"
-	SwitchAgentReverseCommand   CommandName = "switch_agent_reverse"
-	EditorOpenCommand           CommandName = "editor_open"
-	SessionNewCommand           CommandName = "session_new"
-	SessionListCommand          CommandName = "session_list"
-	SessionShareCommand         CommandName = "session_share"
-	SessionUnshareCommand       CommandName = "session_unshare"
-	SessionInterruptCommand     CommandName = "session_interrupt"
-	SessionCompactCommand       CommandName = "session_compact"
-	SessionExportCommand        CommandName = "session_export"
-	ToolDetailsCommand          CommandName = "tool_details"
-	ModelListCommand            CommandName = "model_list"
-	ThemeListCommand            CommandName = "theme_list"
-	FileListCommand             CommandName = "file_list"
-	FileCloseCommand            CommandName = "file_close"
-	FileSearchCommand           CommandName = "file_search"
-	FileDiffToggleCommand       CommandName = "file_diff_toggle"
-	ProjectInitCommand          CommandName = "project_init"
-	InputClearCommand           CommandName = "input_clear"
-	InputPasteCommand           CommandName = "input_paste"
-	InputSubmitCommand          CommandName = "input_submit"
-	InputNewlineCommand         CommandName = "input_newline"
-	MessagesPageUpCommand       CommandName = "messages_page_up"
-	MessagesPageDownCommand     CommandName = "messages_page_down"
-	MessagesHalfPageUpCommand   CommandName = "messages_half_page_up"
-	MessagesHalfPageDownCommand CommandName = "messages_half_page_down"
-	MessagesPreviousCommand     CommandName = "messages_previous"
-	MessagesNextCommand         CommandName = "messages_next"
-	MessagesFirstCommand        CommandName = "messages_first"
-	MessagesLastCommand         CommandName = "messages_last"
-	MessagesLayoutToggleCommand CommandName = "messages_layout_toggle"
-	MessagesCopyCommand         CommandName = "messages_copy"
-	MessagesUndoCommand         CommandName = "messages_undo"
-	MessagesRedoCommand         CommandName = "messages_redo"
-	AppExitCommand              CommandName = "app_exit"
+	SessionChildCycleCommand        CommandName = "session_child_cycle"
+	SessionChildCycleReverseCommand CommandName = "session_child_cycle_reverse"
+	ModelCycleRecentReverseCommand  CommandName = "model_cycle_recent_reverse"
+	AgentCycleCommand               CommandName = "agent_cycle"
+	AgentCycleReverseCommand        CommandName = "agent_cycle_reverse"
+	AppHelpCommand                  CommandName = "app_help"
+	SwitchAgentCommand              CommandName = "switch_agent"
+	SwitchAgentReverseCommand       CommandName = "switch_agent_reverse"
+	EditorOpenCommand               CommandName = "editor_open"
+	SessionNewCommand               CommandName = "session_new"
+	SessionListCommand              CommandName = "session_list"
+	SessionTimelineCommand          CommandName = "session_timeline"
+	SessionShareCommand             CommandName = "session_share"
+	SessionUnshareCommand           CommandName = "session_unshare"
+	SessionInterruptCommand         CommandName = "session_interrupt"
+	SessionCompactCommand           CommandName = "session_compact"
+	SessionExportCommand            CommandName = "session_export"
+	ToolDetailsCommand              CommandName = "tool_details"
+	ThinkingBlocksCommand           CommandName = "thinking_blocks"
+	ModelListCommand                CommandName = "model_list"
+	AgentListCommand                CommandName = "agent_list"
+	ModelCycleRecentCommand         CommandName = "model_cycle_recent"
+	ThemeListCommand                CommandName = "theme_list"
+	FileListCommand                 CommandName = "file_list"
+	FileCloseCommand                CommandName = "file_close"
+	FileSearchCommand               CommandName = "file_search"
+	FileDiffToggleCommand           CommandName = "file_diff_toggle"
+	ProjectInitCommand              CommandName = "project_init"
+	InputClearCommand               CommandName = "input_clear"
+	InputPasteCommand               CommandName = "input_paste"
+	InputSubmitCommand              CommandName = "input_submit"
+	InputNewlineCommand             CommandName = "input_newline"
+	MessagesPageUpCommand           CommandName = "messages_page_up"
+	MessagesPageDownCommand         CommandName = "messages_page_down"
+	MessagesHalfPageUpCommand       CommandName = "messages_half_page_up"
+	MessagesHalfPageDownCommand     CommandName = "messages_half_page_down"
+	MessagesPreviousCommand         CommandName = "messages_previous"
+	MessagesNextCommand             CommandName = "messages_next"
+	MessagesFirstCommand            CommandName = "messages_first"
+	MessagesLastCommand             CommandName = "messages_last"
+	MessagesLayoutToggleCommand     CommandName = "messages_layout_toggle"
+	MessagesCopyCommand             CommandName = "messages_copy"
+	MessagesUndoCommand             CommandName = "messages_undo"
+	MessagesRedoCommand             CommandName = "messages_redo"
+	AppExitCommand                  CommandName = "app_exit"
 )
 
 func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
@@ -172,23 +190,13 @@ func parseBindings(bindings ...string) []Keybinding {
 	return parsedBindings
 }
 
-func LoadFromConfig(config *opencode.Config) CommandRegistry {
+func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) CommandRegistry {
 	defaults := []Command{
 		{
 			Name:        AppHelpCommand,
 			Description: "show help",
 			Keybindings: parseBindings("<leader>h"),
 			Trigger:     []string{"help"},
-		},
-		{
-			Name:        SwitchAgentCommand,
-			Description: "next agent",
-			Keybindings: parseBindings("tab"),
-		},
-		{
-			Name:        SwitchAgentReverseCommand,
-			Description: "previous agent",
-			Keybindings: parseBindings("shift+tab"),
 		},
 		{
 			Name:        EditorOpenCommand,
@@ -215,6 +223,12 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Trigger:     []string{"sessions", "resume", "continue"},
 		},
 		{
+			Name:        SessionTimelineCommand,
+			Description: "show session timeline",
+			Keybindings: parseBindings("<leader>g"),
+			Trigger:     []string{"timeline", "history", "goto"},
+		},
+		{
 			Name:        SessionShareCommand,
 			Description: "share session",
 			Keybindings: parseBindings("<leader>s"),
@@ -237,10 +251,26 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Trigger:     []string{"compact", "summarize"},
 		},
 		{
+			Name:        SessionChildCycleCommand,
+			Description: "cycle to next child session",
+			Keybindings: parseBindings("ctrl+right"),
+		},
+		{
+			Name:        SessionChildCycleReverseCommand,
+			Description: "cycle to previous child session",
+			Keybindings: parseBindings("ctrl+left"),
+		},
+		{
 			Name:        ToolDetailsCommand,
 			Description: "toggle tool details",
 			Keybindings: parseBindings("<leader>d"),
 			Trigger:     []string{"details"},
+		},
+		{
+			Name:        ThinkingBlocksCommand,
+			Description: "toggle thinking blocks",
+			Keybindings: parseBindings("<leader>b"),
+			Trigger:     []string{"thinking"},
 		},
 		{
 			Name:        ModelListCommand,
@@ -249,31 +279,36 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Trigger:     []string{"models"},
 		},
 		{
+			Name:        ModelCycleRecentCommand,
+			Description: "next recent model",
+			Keybindings: parseBindings("f2"),
+		},
+		{
+			Name:        ModelCycleRecentReverseCommand,
+			Description: "previous recent model",
+			Keybindings: parseBindings("shift+f2"),
+		},
+		{
+			Name:        AgentListCommand,
+			Description: "list agents",
+			Keybindings: parseBindings("<leader>a"),
+			Trigger:     []string{"agents"},
+		},
+		{
+			Name:        AgentCycleCommand,
+			Description: "next agent",
+			Keybindings: parseBindings("tab"),
+		},
+		{
+			Name:        AgentCycleReverseCommand,
+			Description: "previous agent",
+			Keybindings: parseBindings("shift+tab"),
+		},
+		{
 			Name:        ThemeListCommand,
 			Description: "list themes",
 			Keybindings: parseBindings("<leader>t"),
 			Trigger:     []string{"themes"},
-		},
-		// {
-		// 	Name:        FileListCommand,
-		// 	Description: "list files",
-		// 	Keybindings: parseBindings("<leader>f"),
-		// 	Trigger:     []string{"files"},
-		// },
-		{
-			Name:        FileCloseCommand,
-			Description: "close file",
-			Keybindings: parseBindings("esc"),
-		},
-		{
-			Name:        FileSearchCommand,
-			Description: "search file",
-			Keybindings: parseBindings("<leader>/"),
-		},
-		{
-			Name:        FileDiffToggleCommand,
-			Description: "split/unified diff",
-			Keybindings: parseBindings("<leader>v"),
 		},
 		{
 			Name:        ProjectInitCommand,
@@ -321,16 +356,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "half page down",
 			Keybindings: parseBindings("ctrl+alt+d"),
 		},
-		{
-			Name:        MessagesPreviousCommand,
-			Description: "previous message",
-			Keybindings: parseBindings("ctrl+up"),
-		},
-		{
-			Name:        MessagesNextCommand,
-			Description: "next message",
-			Keybindings: parseBindings("ctrl+down"),
-		},
+
 		{
 			Name:        MessagesFirstCommand,
 			Description: "first message",
@@ -341,11 +367,7 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 			Description: "last message",
 			Keybindings: parseBindings("ctrl+alt+g"),
 		},
-		{
-			Name:        MessagesLayoutToggleCommand,
-			Description: "toggle layout",
-			Keybindings: parseBindings("<leader>p"),
-		},
+
 		{
 			Name:        MessagesCopyCommand,
 			Description: "copy message",
@@ -386,6 +408,16 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		}
 		registry[command.Name] = command
 	}
+	for _, command := range customCommands {
+		registry[CommandName(command.Name)] = Command{
+			Name:        CommandName(command.Name),
+			Description: command.Description,
+			Trigger:     []string{command.Name},
+			Keybindings: []Keybinding{},
+			Custom:      true,
+		}
+	}
+
 	slog.Info("Loaded commands", "commands", registry)
 	return registry
 }

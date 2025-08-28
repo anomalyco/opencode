@@ -6,3 +6,4 @@ node_modules
 .vscode
 openapi.json
 playground
+tmp

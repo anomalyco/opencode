@@ -7,8 +7,10 @@ export namespace Tool {
   export type Context<M extends Metadata = Metadata> = {
     sessionID: string
     messageID: string
+    agent: string
     callID?: string
     abort: AbortSignal
+    extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
   }
   export interface Info<Parameters extends StandardSchemaV1 = StandardSchemaV1, M extends Metadata = Metadata> {

@@ -38,10 +38,48 @@ await import(`../packages/sdk/js/script/publish.ts`)
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
 
+const dir = new URL("..", import.meta.url).pathname
+process.chdir(dir)
+
 if (!snapshot) {
   await $`git commit -am "release: v${version}"`
   await $`git tag v${version}`
-  await $`git push origin HEAD --tags --no-verify`
+  await $`git fetch origin`
+  await $`git cherry-pick HEAD..origin/dev`.nothrow()
+  await $`git push origin HEAD --tags --no-verify --force`
+
+  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
+    .then((data) => data.tag_name)
+
+  console.log("finding commits between", previous, "and", "HEAD")
+  const commits = await fetch(`https://api.github.com/repos/sst/opencode/compare/${previous}...HEAD`)
+    .then((res) => res.json())
+    .then((data) => data.commits || [])
+
+  const raw = commits.map((commit: any) => `- ${commit.commit.message.split("\n").join(" ")}`)
+  console.log(raw)
+
+  const notes =
+    raw
+      .filter((x: string) => {
+        const lower = x.toLowerCase()
+        return (
+          !lower.includes("release:") &&
+          !lower.includes("ignore:") &&
+          !lower.includes("chore:") &&
+          !lower.includes("ci:") &&
+          !lower.includes("wip:") &&
+          !lower.includes("docs:") &&
+          !lower.includes("doc:")
+        )
+      })
+      .join("\n") || "No notable changes"
+
+  await $`gh release create v${version} --title "v${version}" --notes ${notes} ./packages/opencode/dist/*.zip`
 }
 if (snapshot) {
   await $`git checkout -b snapshot-${version}`

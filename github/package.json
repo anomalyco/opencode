@@ -1,0 +1,19 @@
+{
+  "name": "github",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
+    "@octokit/graphql": "9.0.1",
+    "@octokit/rest": "22.0.0",
+    "@opencode-ai/sdk": "0.5.4"
+  }
+}

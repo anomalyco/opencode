@@ -67,11 +67,17 @@ export const RunCommand = cmd({
     await bootstrap({ cwd: process.cwd() }, async () => {
       const session = await (async () => {
         if (args.continue) {
-          const list = Session.list()
-          const first = await list.next()
-          await list.return()
-          if (first.done) return
-          return first.value
+          const it = Session.list()
+          try {
+            for await (const s of it) {
+              if (s.parentID === undefined) {
+                return s
+              }
+            }
+            return
+          } finally {
+            await it.return()
+          }
         }
 
         if (args.session) return Session.get(args.session)
@@ -83,10 +89,6 @@ export const RunCommand = cmd({
         UI.error("Session not found")
         return
       }
-
-      UI.empty()
-      UI.println(UI.logo())
-      UI.empty()
 
       const cfg = await Config.get()
       if (cfg.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share) {
@@ -101,7 +103,6 @@ export const RunCommand = cmd({
           }
         }
       }
-      UI.empty()
 
       const agent = await (async () => {
         if (args.agent) return Agent.get(args.agent)
@@ -110,14 +111,11 @@ export const RunCommand = cmd({
         return Agent.list().then((x) => x[0])
       })()
 
-      const { providerID, modelID } = await (() => {
+      const { providerID, modelID } = await (async () => {
         if (args.model) return Provider.parseModel(args.model)
         if (agent.model) return agent.model
-        return Provider.defaultModel()
+        return await Provider.defaultModel()
       })()
-
-      UI.println(UI.Style.TEXT_NORMAL_BOLD + "@ ", UI.Style.TEXT_NORMAL + `${providerID}/${modelID}`)
-      UI.empty()
 
       function printEvent(color: string, type: string, title: string) {
         UI.println(
@@ -137,7 +135,8 @@ export const RunCommand = cmd({
         if (part.type === "tool" && part.state.status === "completed") {
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
-            part.state.title || Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown"
+            part.state.title ||
+            (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
           printEvent(color, tool, title)
         }
 
@@ -172,12 +171,8 @@ export const RunCommand = cmd({
       const result = await Session.chat({
         sessionID: session.id,
         messageID,
-        ...(agent.model
-          ? agent.model
-          : {
-              providerID,
-              modelID,
-            }),
+        providerID,
+        modelID,
         agent: agent.name,
         parts: [
           {

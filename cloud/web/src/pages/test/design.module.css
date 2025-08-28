@@ -1,0 +1,204 @@
+.pageContainer {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.componentTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 2px solid var(--color-border);
+}
+
+.componentCell {
+  padding: 1rem;
+  border: 2px solid var(--color-border);
+  vertical-align: top;
+}
+
+.componentLabel {
+  text-transform: uppercase;
+  letter-spacing: -0.03125rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  color: var(--color-text-dimmed);
+}
+
+.sectionTitle {
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: -0.03125rem;
+  font-size: 1.2rem;
+}
+
+.divider {
+  height: 2px;
+  background: var(--color-border);
+  margin: 3rem 0;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.buttonSection {
+  margin-bottom: 4rem;
+}
+
+.colorSection {
+  margin-bottom: 4rem;
+}
+
+.labelSection {
+  margin-bottom: 4rem;
+}
+
+.inputSection {
+  margin-bottom: 4rem;
+}
+
+.dialogSection {
+  margin-bottom: 4rem;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dialogContent {
+  padding: 2rem;
+}
+
+.dialogContentFooter {
+  margin-top: 1rem;
+}
+
+.pageTitle {
+  font-size: var(--heading-font-size, 2rem);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.colorBox {
+  width: 100%;
+  height: 80px;
+  margin-bottom: 0.5rem;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 0.5rem;
+}
+
+.colorOrange {
+  background-color: var(--color-orange);
+}
+
+.colorOrangeLow {
+  background-color: var(--color-orange-low);
+}
+
+.colorOrangeHigh {
+  background-color: var(--color-orange-high);
+}
+
+.colorGreen {
+  background-color: var(--color-green);
+}
+
+.colorGreenLow {
+  background-color: var(--color-green-low);
+}
+
+.colorGreenHigh {
+  background-color: var(--color-green-high);
+}
+
+.colorBlue {
+  background-color: var(--color-blue);
+}
+
+.colorBlueLow {
+  background-color: var(--color-blue-low);
+}
+
+.colorBlueHigh {
+  background-color: var(--color-blue-high);
+}
+
+.colorPurple {
+  background-color: var(--color-purple);
+}
+
+.colorPurpleLow {
+  background-color: var(--color-purple-low);
+}
+
+.colorPurpleHigh {
+  background-color: var(--color-purple-high);
+}
+
+.colorRed {
+  background-color: var(--color-red);
+}
+
+.colorRedLow {
+  background-color: var(--color-red-low);
+}
+
+.colorRedHigh {
+  background-color: var(--color-red-high);
+}
+
+.colorAccent {
+  background-color: var(--color-accent);
+}
+
+.colorAccentLow {
+  background-color: var(--color-accent-low);
+}
+
+.colorAccentHigh {
+  background-color: var(--color-accent-high);
+}
+
+.colorCode {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+
+.colorVariants {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.colorVariant {
+  flex: 1;
+  height: 40px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.colorVariantCode {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-family: monospace;
+  white-space: nowrap;
+}

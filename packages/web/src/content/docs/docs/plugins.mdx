@@ -18,7 +18,7 @@ functions. Each function receives a context object and returns a hooks object.
 
 Plugins are loaded from:
 
-1. `.opencode/plugin` directory either in your proejct
+1. `.opencode/plugin` directory either in your project
 2. Or, globally in `~/.config/opencode/plugin`
 
 ---
@@ -90,16 +90,12 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 
 Prevent opencode from reading `.env` files:
 
-```javascript title=".opencode/plugin/slack.js"
+```javascript title=".opencode/plugin/env-protection.js"
 export const EnvProtection = async ({ client, $ }) => {
   return {
-    tool: {
-      execute: {
-        before: async (input, output) => {
-          if (input.tool === "read" && output.args.filePath.includes(".env")) {
-            throw new Error("Do not read .env files")
-          }
-        }
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
       }
     }
   }

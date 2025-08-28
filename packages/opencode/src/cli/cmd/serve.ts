@@ -11,7 +11,7 @@ export const ServeCommand = cmd({
         alias: ["p"],
         type: "number",
         describe: "port to listen on",
-        default: 4096,
+        default: 0,
       })
       .option("hostname", {
         alias: ["h"],

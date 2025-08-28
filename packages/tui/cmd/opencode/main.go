@@ -32,6 +32,7 @@ func main() {
 	var model *string = flag.String("model", "", "model to begin with")
 	var prompt *string = flag.String("prompt", "", "prompt to begin with")
 	var agent *string = flag.String("agent", "", "agent to begin with")
+	var sessionID *string = flag.String("session", "", "session ID")
 	flag.Parse()
 
 	url := os.Getenv("OPENCODE_SERVER")
@@ -41,14 +42,6 @@ func main() {
 	err := json.Unmarshal([]byte(appInfoStr), &appInfo)
 	if err != nil {
 		slog.Error("Failed to unmarshal app info", "error", err)
-		os.Exit(1)
-	}
-
-	agentsStr := os.Getenv("OPENCODE_AGENTS")
-	var agents []opencode.Agent
-	err = json.Unmarshal([]byte(agentsStr), &agents)
-	if err != nil {
-		slog.Error("Failed to unmarshal modes", "error", err)
 		os.Exit(1)
 	}
 
@@ -80,13 +73,25 @@ func main() {
 		option.WithBaseURL(url),
 	)
 
+	// Fetch agents from the /agent endpoint
+	agentsPtr, err := httpClient.App.Agents(context.Background())
+	if err != nil {
+		slog.Error("Failed to fetch agents", "error", err)
+		os.Exit(1)
+	}
+	if agentsPtr == nil {
+		slog.Error("No agents returned from server")
+		os.Exit(1)
+	}
+	agents := *agentsPtr
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	apiHandler := util.NewAPILogHandler(ctx, httpClient, "tui", slog.LevelDebug)
 	logger := slog.New(apiHandler)
 	slog.SetDefault(logger)
 
-	slog.Debug("TUI launched", "app", appInfoStr, "modes", agentsStr, "url", url)
+	slog.Debug("TUI launched", "app", appInfoStr, "agents_count", len(agents), "url", url)
 
 	go func() {
 		err = clipboard.Init()
@@ -96,7 +101,7 @@ func main() {
 	}()
 
 	// Create main context for the application
-	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent)
+	app_, err := app.New(ctx, version, appInfo, agents, httpClient, model, prompt, agent, sessionID)
 	if err != nil {
 		panic(err)
 	}
