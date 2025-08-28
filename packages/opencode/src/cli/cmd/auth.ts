@@ -245,7 +245,7 @@ export const AuthLoginCommand = cmd({
       }
 
       if (provider === "vercel") {
-        prompts.log.info("Create an API key at https://vercel.link/ai-gateway-token")
+        prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
       }
 
       const key = await prompts.password({
