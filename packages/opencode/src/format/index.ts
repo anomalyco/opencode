@@ -68,19 +68,29 @@ export namespace Format {
 
       for (const item of await getFormatter(ext)) {
         log.info("running", { command: item.command })
-        const proc = Bun.spawn({
-          cmd: item.command.map((x) => x.replace("$FILE", file)),
-          cwd: App.info().path.cwd,
-          env: { ...process.env, ...item.environment },
-          stdout: "ignore",
-          stderr: "ignore",
-        })
-        const exit = await proc.exited
-        if (exit !== 0)
+        try {
+          const proc = Bun.spawn({
+            cmd: item.command.map((x) => x.replace("$FILE", file)),
+            cwd: App.info().path.cwd,
+            env: { ...process.env, ...item.environment },
+            stdout: "ignore",
+            stderr: "ignore",
+          })
+          const exit = await proc.exited
+          if (exit !== 0)
+            log.error("failed", {
+              command: item.command,
+              ...item.environment,
+            })
+        } catch (error) {
           log.error("failed", {
+            error,
             command: item.command,
             ...item.environment,
           })
+          // re-raising
+          throw error
+        }
       }
     })
   }

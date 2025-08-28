@@ -24,6 +24,17 @@ export namespace File {
 
   export type Info = z.infer<typeof Info>
 
+  export const Node = z
+    .object({
+      name: z.string(),
+      path: z.string(),
+      type: z.enum(["file", "directory"]),
+    })
+    .openapi({
+      ref: "FileNode",
+    })
+  export type Node = z.infer<typeof Node>
+
   export const Event = {
     Edited: Bus.event(
       "file.edited",
@@ -119,5 +130,28 @@ export namespace File {
       }
     }
     return { type: "raw", content }
+  }
+
+  export async function list(dir?: string) {
+    const ignore = [".git", ".DS_Store"]
+    const app = App.info()
+    const resolved = dir ? path.join(app.path.cwd, dir) : app.path.cwd
+    const nodes: Node[] = []
+    for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
+      if (ignore.includes(entry.name)) continue
+      const fullPath = path.join(resolved, entry.name)
+      const relativePath = path.relative(app.path.cwd, fullPath)
+      nodes.push({
+        name: entry.name,
+        path: relativePath,
+        type: entry.isDirectory() ? "directory" : "file",
+      })
+    }
+    return nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
   }
 }

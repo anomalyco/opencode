@@ -68,7 +68,7 @@ If you've configured a [custom provider](/docs/providers#custom), the `provider_
 
 You can globally configure a model's options through the config.
 
-```jsonc title="opencode.jsonc" {7-11}
+```jsonc title="opencode.jsonc" {7-12,19-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -79,16 +79,28 @@ You can globally configure a model's options through the config.
             "reasoningEffort": "high",
             "textVerbosity": "low",
             "reasoningSummary": "auto",
-            "include": ["reasoning.encrypted_content"]
-          }
-        }
-      }
-    }
-  }
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-20250514": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
-Here we are setting global options for the `gpt-5` model when used through the `openai` provider.
+Here we're configuring global settings for two models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
 

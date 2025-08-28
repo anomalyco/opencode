@@ -21,6 +21,7 @@ type Client struct {
 	Find    *FindService
 	File    *FileService
 	Config  *ConfigService
+	Command *CommandService
 	Session *SessionService
 	Tui     *TuiService
 }
@@ -49,6 +50,7 @@ func NewClient(opts ...option.RequestOption) (r *Client) {
 	r.Find = NewFindService(opts...)
 	r.File = NewFileService(opts...)
 	r.Config = NewConfigService(opts...)
+	r.Command = NewCommandService(opts...)
 	r.Session = NewSessionService(opts...)
 	r.Tui = NewTuiService(opts...)
 

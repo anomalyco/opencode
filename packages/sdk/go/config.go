@@ -49,7 +49,8 @@ type Config struct {
 	// automatically
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
-	Autoupdate bool `json:"autoupdate"`
+	Autoupdate bool                     `json:"autoupdate"`
+	Command    map[string]ConfigCommand `json:"command"`
 	// Disable providers that are loaded automatically
 	DisabledProviders []string                   `json:"disabled_providers"`
 	Experimental      ConfigExperimental         `json:"experimental"`
@@ -94,6 +95,7 @@ type configJSON struct {
 	Agent             apijson.Field
 	Autoshare         apijson.Field
 	Autoupdate        apijson.Field
+	Command           apijson.Field
 	DisabledProviders apijson.Field
 	Experimental      apijson.Field
 	Formatter         apijson.Field
@@ -662,6 +664,32 @@ func (r ConfigAgentPlanPermissionWebfetch) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type ConfigCommand struct {
+	Template    string            `json:"template,required"`
+	Agent       string            `json:"agent"`
+	Description string            `json:"description"`
+	Model       string            `json:"model"`
+	JSON        configCommandJSON `json:"-"`
+}
+
+// configCommandJSON contains the JSON metadata for the struct [ConfigCommand]
+type configCommandJSON struct {
+	Template    apijson.Field
+	Agent       apijson.Field
+	Description apijson.Field
+	Model       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigCommand) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configCommandJSON) RawJSON() string {
+	return r.raw
 }
 
 type ConfigExperimental struct {

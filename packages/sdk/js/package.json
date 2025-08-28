@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.5.13",
+  "version": "0.5.28",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -27,5 +27,8 @@
     "typescript": "catalog:",
     "@hey-api/openapi-ts": "0.80.1",
     "@tsconfig/node22": "catalog:"
+  },
+  "dependencies": {
+    "@hey-api/openapi-ts": "0.81.0"
   }
 }

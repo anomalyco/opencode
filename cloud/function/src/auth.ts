@@ -1,7 +1,9 @@
 import { Resource } from "sst"
 import { z } from "zod"
 import { issuer } from "@openauthjs/openauth"
+import type { Theme } from "@openauthjs/openauth/ui/theme"
 import { createSubjects } from "@openauthjs/openauth/subject"
+import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
@@ -24,9 +26,15 @@ export const subjects = createSubjects({
   }),
 })
 
+const MY_THEME: Theme = {
+  ...THEME_OPENAUTH,
+  logo: "https://opencode.ai/favicon.svg"
+};
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return issuer({
+      theme: MY_THEME,
       providers: {
         github: GithubProvider({
           clientID: Resource.GITHUB_CLIENT_ID_CONSOLE.value,

@@ -408,6 +408,24 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.app, cmd = a.app.SendPrompt(context.Background(), msg)
 			cmds = append(cmds, cmd)
 		}
+	case app.SendCommand:
+		// If we're in a child session, switch back to parent before sending prompt
+		if a.app.Session.ParentID != "" {
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			if err != nil {
+				slog.Error("Failed to get parent session", "error", err)
+				return a, toast.NewErrorToast("Failed to get parent session")
+			}
+			a.app.Session = parentSession
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, tea.Sequence(
+				util.CmdHandler(app.SessionSelectedMsg(parentSession)),
+				cmd,
+			))
+		} else {
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, cmd)
+		}
 	case app.SendShell:
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
@@ -897,9 +915,10 @@ func (a Model) Cleanup() {
 func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
-	baseStyle := styles.NewStyle().Background(t.Background())
+	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	highlight := styles.NewStyle().Foreground(t.Accent()).Background(t.Background()).Render
 
 	open := `
 █▀▀█ █▀▀█ █▀▀ █▀▀▄ 
@@ -934,9 +953,9 @@ func (a Model) home() (string, int, int) {
 	)
 
 	// Use limit of 4 for vscode, 6 for others
-	limit := 6
+	limit := 4
 	if util.IsVSCode() {
-		limit = 4
+		limit = 2
 	}
 
 	showVscode := util.IsVSCode()
@@ -953,14 +972,22 @@ func (a Model) home() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
+	grok := highlight("Grok Code is free for a limited time")
+	grok = lipgloss.PlaceHorizontal(
+		effectiveWidth,
+		lipgloss.Center,
+		grok,
+		styles.WhitespaceStyle(t.Background()),
+	)
+
 	lines := []string{}
-	lines = append(lines, "")
 	lines = append(lines, "")
 	lines = append(lines, logoAndVersion)
 	lines = append(lines, "")
-	lines = append(lines, "")
 	lines = append(lines, cmds)
 	lines = append(lines, "")
+	lines = append(lines, "")
+	lines = append(lines, grok)
 	lines = append(lines, "")
 
 	mainHeight := lipgloss.Height(strings.Join(lines, "\n"))

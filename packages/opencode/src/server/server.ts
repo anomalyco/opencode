@@ -21,6 +21,7 @@ import { Permission } from "../permission"
 import { lazy } from "../util/lazy"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
+import { Command } from "../command"
 
 const ERRORS = {
   400: {
@@ -102,7 +103,7 @@ export namespace Server {
             200: {
               description: "Event stream",
               content: {
-                "application/json": {
+                "text/event-stream": {
                   schema: resolver(
                     Bus.payloads().openapi({
                       ref: "Event",
@@ -611,10 +612,12 @@ export namespace Server {
               description: "Created message",
               content: {
                 "application/json": {
-                  schema: resolver(z.object({
+                  schema: resolver(
+                    z.object({
                       info: MessageV2.Assistant,
                       parts: MessageV2.Part.array(),
-                    })),
+                    }),
+                  ),
                 },
               },
             },
@@ -631,6 +634,41 @@ export namespace Server {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
           const msg = await Session.chat({ ...body, sessionID })
+          return c.json(msg)
+        },
+      )
+      .post(
+        "/session/:id/command",
+        describeRoute({
+          description: "Send a new command to a session",
+          operationId: "session.command",
+          responses: {
+            200: {
+              description: "Created message",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      info: MessageV2.Assistant,
+                      parts: MessageV2.Part.array(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "param",
+          z.object({
+            id: z.string().openapi({ description: "Session ID" }),
+          }),
+        ),
+        zValidator("json", Session.CommandInput.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const msg = await Session.command({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -656,7 +694,7 @@ export namespace Server {
             id: z.string().openapi({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.CommandInput.omit({ sessionID: true })),
+        zValidator("json", Session.ShellInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
@@ -751,6 +789,27 @@ export namespace Server {
           const permissionID = params.permissionID
           Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
           return c.json(true)
+        },
+      )
+      .get(
+        "/command",
+        describeRoute({
+          description: "List all commands",
+          operationId: "command.list",
+          responses: {
+            200: {
+              description: "List of commands",
+              content: {
+                "application/json": {
+                  schema: resolver(Command.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const commands = await Command.list()
+          return c.json(commands)
         },
       )
       .get(
@@ -879,6 +938,34 @@ export namespace Server {
       .get(
         "/file",
         describeRoute({
+          description: "List files and directories",
+          operationId: "file.list",
+          responses: {
+            200: {
+              description: "Files and directories",
+              content: {
+                "application/json": {
+                  schema: resolver(File.Node.array()),
+                },
+              },
+            },
+          },
+        }),
+        zValidator(
+          "query",
+          z.object({
+            path: z.string(),
+          }),
+        ),
+        async (c) => {
+          const path = c.req.valid("query").path
+          const content = await File.list(path)
+          return c.json(content)
+        },
+      )
+      .get(
+        "/file/content",
+        describeRoute({
           description: "Read a file",
           operationId: "file.read",
           responses: {
@@ -906,10 +993,6 @@ export namespace Server {
         async (c) => {
           const path = c.req.valid("query").path
           const content = await File.read(path)
-          log.info("read file", {
-            path,
-            content: content.content,
-          })
           return c.json(content)
         },
       )

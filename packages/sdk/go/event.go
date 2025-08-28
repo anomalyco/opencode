@@ -41,6 +41,7 @@ func (r *EventService) ListStreaming(ctx context.Context, opts ...option.Request
 		err error
 	)
 	opts = append(r.Options[:], opts...)
+	opts = append([]option.RequestOption{option.WithHeader("Accept", "text/event-stream")}, opts...)
 	path := "event"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &raw, opts...)
 	return ssestream.NewStream[EventListResponse](ssestream.NewDecoder(raw), err)

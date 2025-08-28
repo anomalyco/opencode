@@ -1,3 +1,4 @@
+import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
 import { AuthClient, useAuthSession } from "~/context/auth"
 
@@ -25,7 +26,5 @@ export async function GET(input: APIEvent) {
       current: id,
     }
   })
-  return {
-    result,
-  }
+  return redirect("/")
 }
