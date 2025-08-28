@@ -11,18 +11,25 @@ opencode integrates with your Language Server Protocol (LSP) to help the LLM int
 
 opencode comes with several built-in LSP servers for popular languages:
 
-| LSP Server | Extensions                                   | Requirements                        |
-| ---------- | -------------------------------------------- | ----------------------------------- |
-| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `typescript` dependency in project  |
-| eslint     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | `eslint` dependency in project      |
-| gopls      | .go                                          | `go` command available              |
-| ruby-lsp   | .rb, .rake, .gemspec, .ru                    | `ruby` and `gem` commands available |
-| pyright    | .py, .pyi                                    | `pyright` dependency installed      |
-| elixir-ls  | .ex, .exs                                    | `elixir` command available          |
-| zls        | .zig, .zon                                   | `zig` command available             |
-| csharp     | .cs                                          | `.NET SDK` installed                |
+| LSP Server | Extensions                                           | Requirements                        |
+| ---------- | ---------------------------------------------------- | ----------------------------------- |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project  |
+| eslint     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project      |
+| gopls      | .go                                                  | `go` command available              |
+| ruby-lsp   | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available |
+| pyright    | .py, .pyi                                            | `pyright` dependency installed      |
+| elixir-ls  | .ex, .exs                                            | `elixir` command available          |
+| zls        | .zig, .zon                                           | `zig` command available             |
+| csharp     | .cs                                                  | `.NET SDK` installed                |
+| vue        | .vue                                                 | Auto-installs for Vue projects      |
+| rust       | .rs                                                  | `rust-analyzer` command available   |
+| clangd     | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects    |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
+
+:::note
+You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
+:::
 
 ---
 

@@ -10,7 +10,7 @@ export default function App() {
     <Router
       root={props => (
         <MetaProvider>
-          <Title>SolidStart - Basic</Title>
+          <Title>opencode</Title>
           <ErrorBoundary fallback={<div>Something went wrong</div>}>
             <Suspense>{props.children}</Suspense>
           </ErrorBoundary>

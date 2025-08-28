@@ -25,6 +25,12 @@ Once you're in the TUI, you can prompt it with a message.
 Give me a quick summary of the codebase.
 ```
 
+---
+
+## File references
+
+You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
+
 :::tip
 You can also use `@` to reference files in your messages.
 :::
@@ -32,6 +38,20 @@ You can also use `@` to reference files in your messages.
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
+
+The content of the file is added to the conversation automatically.
+
+---
+
+## Bash commands
+
+Start a message with `!` to run a shell command.
+
+```bash frame="none"
+!ls -la
+```
+
+The output of the command is added to the conversation as a tool result.
 
 ---
 
@@ -235,18 +255,6 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ---
 
-## Bash commands
-
-Start a message with `!` to run a shell command.
-
-```bash frame="none"
-!ls -la
-```
-
-The output of the command is added to the conversation as a tool result.
-
----
-
 ## Editor setup
 
 Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
@@ -254,37 +262,54 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    export EDITOR=nano # or vim, code, etc.
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    export EDITOR="code --wait"
     ```
 
     To make it permanent, add this to your shell profile;
     `~/.bashrc`, `~/.zshrc`, etc.
-
   </TabItem>
+
   <TabItem label="Windows (CMD)">
     ```bash
-    set EDITOR=notepad # or code, vim, etc.
+    set EDITOR=notepad
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    set EDITOR=code --wait
     ```
 
     To make it permanent, use **System Properties** > **Environment
     Variables**.
-
   </TabItem>
+
   <TabItem label="Windows (PowerShell)">
-    ```bash
-    $env:EDITOR = "notepad" # or "code", "vim", etc.
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell
-    profile.
-
+    To make it permanent, add this to your PowerShell profile.
   </TabItem>
 </Tabs>
 
 Popular editor options include:
 
 - `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
 - `vim` - Vim editor
 - `nano` - Nano editor
 - `notepad` - Windows Notepad
 - `subl` - Sublime Text
+
+:::note
+Some editors like VS Code need to be started with the `--wait` flag.
+:::
+
+Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.

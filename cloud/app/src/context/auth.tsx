@@ -32,7 +32,7 @@ export const getActor = query(async (): Promise<Actor.Info> => {
         },
       }
     }
-    if (Object.keys(auth.data.account).length > 0) {
+    if (Object.keys(auth.data.account ?? {}).length > 0) {
       const current = Object.values(auth.data.account)[0]
       await auth.update(val => ({
         ...val,
@@ -96,10 +96,13 @@ export interface AuthSession {
 }
 
 export function useAuthSession() {
-
   return useSession<AuthSession>({
     password: "0".repeat(32),
-    name: "auth"
+    name: "auth",
+    cookie: {
+      secure: false,
+      httpOnly: true,
+    },
   })
 }
 

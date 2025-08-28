@@ -39,6 +39,8 @@ import type {
   SessionChatResponses,
   SessionMessageData,
   SessionMessageResponses,
+  SessionCommandData,
+  SessionCommandResponses,
   SessionShellData,
   SessionShellResponses,
   SessionRevertData,
@@ -47,6 +49,8 @@ import type {
   SessionUnrevertResponses,
   PostSessionByIdPermissionsByPermissionIdData,
   PostSessionByIdPermissionsByPermissionIdResponses,
+  CommandListData,
+  CommandListResponses,
   ConfigProvidersData,
   ConfigProvidersResponses,
   FindTextData,
@@ -55,6 +59,8 @@ import type {
   FindFilesResponses,
   FindSymbolsData,
   FindSymbolsResponses,
+  FileListData,
+  FileListResponses,
   FileReadData,
   FileReadResponses,
   FileStatusData,
@@ -119,7 +125,7 @@ class Event extends _HeyApiClient {
    * Get events
    */
   public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
-    return (options?.client ?? this._client).get<EventSubscribeResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
       url: "/event",
       ...options,
     })
@@ -356,6 +362,20 @@ class Session extends _HeyApiClient {
   }
 
   /**
+   * Send a new command to a session
+   */
+  public command<ThrowOnError extends boolean = false>(options: Options<SessionCommandData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionCommandResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/command",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
    * Run a shell command
    */
   public shell<ThrowOnError extends boolean = false>(options: Options<SessionShellData, ThrowOnError>) {
@@ -389,6 +409,18 @@ class Session extends _HeyApiClient {
   public unrevert<ThrowOnError extends boolean = false>(options: Options<SessionUnrevertData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionUnrevertResponses, unknown, ThrowOnError>({
       url: "/session/{id}/unrevert",
+      ...options,
+    })
+  }
+}
+
+class Command extends _HeyApiClient {
+  /**
+   * List all commands
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<CommandListData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<CommandListResponses, unknown, ThrowOnError>({
+      url: "/command",
       ...options,
     })
   }
@@ -428,11 +460,21 @@ class Find extends _HeyApiClient {
 
 class File extends _HeyApiClient {
   /**
+   * List files and directories
+   */
+  public list<ThrowOnError extends boolean = false>(options: Options<FileListData, ThrowOnError>) {
+    return (options.client ?? this._client).get<FileListResponses, unknown, ThrowOnError>({
+      url: "/file",
+      ...options,
+    })
+  }
+
+  /**
    * Read a file
    */
   public read<ThrowOnError extends boolean = false>(options: Options<FileReadData, ThrowOnError>) {
     return (options.client ?? this._client).get<FileReadResponses, unknown, ThrowOnError>({
-      url: "/file",
+      url: "/file/content",
       ...options,
     })
   }
@@ -592,6 +634,7 @@ export class OpencodeClient extends _HeyApiClient {
   app = new App({ client: this._client })
   config = new Config({ client: this._client })
   session = new Session({ client: this._client })
+  command = new Command({ client: this._client })
   find = new Find({ client: this._client })
   file = new File({ client: this._client })
   tui = new Tui({ client: this._client })

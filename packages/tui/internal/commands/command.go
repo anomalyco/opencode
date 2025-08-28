@@ -31,6 +31,7 @@ type Command struct {
 	Description string
 	Keybindings []Keybinding
 	Trigger     []string
+	Custom      bool
 }
 
 func (c Command) Keys() []string {
@@ -91,11 +92,18 @@ func (r CommandRegistry) Sorted() []Command {
 		if b.Name == AppExitCommand {
 			return -1
 		}
+		if a.Custom && !b.Custom {
+			return 1
+		}
+		if !a.Custom && b.Custom {
+			return -1
+		}
 
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
 	return commands
 }
+
 func (r CommandRegistry) Matches(msg tea.KeyPressMsg, leader bool) []Command {
 	var matched []Command
 	for _, command := range r.Sorted() {
@@ -182,7 +190,7 @@ func parseBindings(bindings ...string) []Keybinding {
 	return parsedBindings
 }
 
-func LoadFromConfig(config *opencode.Config) CommandRegistry {
+func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) CommandRegistry {
 	defaults := []Command{
 		{
 			Name:        AppHelpCommand,
@@ -400,6 +408,16 @@ func LoadFromConfig(config *opencode.Config) CommandRegistry {
 		}
 		registry[command.Name] = command
 	}
+	for _, command := range customCommands {
+		registry[CommandName(command.Name)] = Command{
+			Name:        CommandName(command.Name),
+			Description: command.Description,
+			Trigger:     []string{command.Name},
+			Keybindings: []Keybinding{},
+			Custom:      true,
+		}
+	}
+
 	slog.Info("Loaded commands", "commands", registry)
 	return registry
 }

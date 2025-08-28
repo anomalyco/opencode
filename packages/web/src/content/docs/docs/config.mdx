@@ -152,6 +152,32 @@ By default, sharing is set to manual mode where you need to explicitly share con
 
 ---
 
+### Commands
+
+You can configure custom commands for repetitive tasks through the `command` option.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component"
+    }
+  }
+}
+```
+
+You can also define commands using markdown files in `~/.config/opencode/command/` or `.opencode/command/`. [Learn more here](/docs/commands).
+
+---
+
 ### Keybinds
 
 You can customize your keybinds through the `keybinds` option.
@@ -220,6 +246,11 @@ You can configure permissions to control what AI agents can do in your codebase 
 }
 ```
 
+This allows you to configure explicit approval requirements for sensitive operations:
+
+- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
+- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
+
 [Learn more about permissions here](/docs/permissions).
 
 ---
@@ -259,13 +290,6 @@ about rules here](/docs/rules).
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
 
-The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
-
-- It won't be loaded even if environment variables are set
-- It won't be loaded even if API keys are configured through `opencode auth login`
-- The provider's models won't appear in the model selection list
-
-
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
@@ -273,12 +297,11 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 }
 ```
 
-The permissions system allows you to configure explicit approval requirements for sensitive operations:
+The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
 
-- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
-- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
-
-[Learn more about permissions here](/docs/permissions).
+- It won't be loaded even if environment variables are set.
+- It won't be loaded even if API keys are configured through `opencode auth login`.
+- The provider's models won't appear in the model selection list.
 
 ---
 

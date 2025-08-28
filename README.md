@@ -107,4 +107,4 @@ The other confusingly named repo has no relation to this one. You can [read the 
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/SST_dev)
+**Join our community** [Discord](https://discord.gg/opencode) | [YouTube](https://www.youtube.com/c/sst-dev) | [X.com](https://x.com/anomaly_inv)

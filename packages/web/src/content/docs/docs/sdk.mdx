@@ -307,8 +307,8 @@ await client.auth.set({
 
 ```javascript
 // Listen to real-time events
-const eventStream = await client.event.subscribe()
-for await (const event of eventStream) {
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
   console.log("Event:", event.type, event.properties)
 }
 ```

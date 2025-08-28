@@ -51,5 +51,8 @@
     "tree-sitter-bash",
     "web-tree-sitter"
   ],
+  "overrides": {
+    "zod": "3.25.76"
+  },
   "patchedDependencies": {}
 }

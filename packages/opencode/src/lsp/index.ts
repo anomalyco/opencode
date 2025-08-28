@@ -140,6 +140,7 @@ export namespace LSP {
         s.broken.add(root + server.id)
         handle.process.kill()
         log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
+        return undefined
       })
       if (!client) continue
       s.clients.push(client)

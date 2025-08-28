@@ -47,6 +47,8 @@ import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { ulid } from "ulid"
 import { defer } from "../util/defer"
+import { Command } from "../command"
+import { $ } from "bun"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -1025,14 +1027,33 @@ export namespace Session {
     return result
   }
 
-  export const CommandInput = z.object({
+  export const ShellInput = z.object({
     sessionID: Identifier.schema("session"),
     agent: z.string(),
     command: z.string(),
   })
-  export type CommandInput = z.infer<typeof CommandInput>
-  export async function shell(input: CommandInput) {
+  export type ShellInput = z.infer<typeof ShellInput>
+  export async function shell(input: ShellInput) {
     using abort = lock(input.sessionID)
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      role: "user",
+    }
+    await updateMessage(userMsg)
+    const userPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      text: "The following tool was executed by the user",
+      synthetic: true,
+    }
+    await updatePart(userPart)
+
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
@@ -1153,6 +1174,79 @@ export namespace Session {
       await updatePart(part)
     }
     return { info: msg, parts: [part] }
+  }
+
+  export const CommandInput = z.object({
+    messageID: Identifier.schema("message").optional(),
+    sessionID: Identifier.schema("session"),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    arguments: z.string(),
+    command: z.string(),
+  })
+  export type CommandInput = z.infer<typeof CommandInput>
+  const bashRegex = /!`([^`]+)`/g
+  const fileRegex = /@([^\s]+)/g
+
+  export async function command(input: CommandInput) {
+    const command = await Command.get(input.command)
+    const agent = command.agent ?? input.agent ?? "build"
+    const fmtModel = (model: { providerID: string; modelID: string }) => `${model.providerID}/${model.modelID}`
+
+    const model =
+      command.model ??
+      (command.agent && (await Agent.get(command.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      input.model ??
+      (input.agent && (await Agent.get(input.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
+      fmtModel(await Provider.defaultModel())
+
+    let template = command.template.replace("$ARGUMENTS", input.arguments)
+
+    // intentionally doing match regex doing bash regex replacements
+    // this is because bash commands can output "@" references
+    const fileMatches = template.matchAll(fileRegex)
+
+    const bash = Array.from(template.matchAll(bashRegex))
+    if (bash.length > 0) {
+      const results = await Promise.all(
+        bash.map(async ([, cmd]) => {
+          try {
+            return await $`${{ raw: cmd }}`.nothrow().text()
+          } catch (error) {
+            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+          }
+        }),
+      )
+      let index = 0
+      template = template.replace(bashRegex, () => results[index++])
+    }
+
+    const parts = [
+      {
+        type: "text",
+        text: template,
+      },
+    ] as ChatInput["parts"]
+
+    const app = App.info()
+
+    for (const match of fileMatches) {
+      const file = path.join(app.path.cwd, match[1])
+      parts.push({
+        type: "file",
+        url: `file://${file}`,
+        filename: match[1],
+        mime: "text/plain",
+      })
+    }
+
+    return chat({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      ...Provider.parseModel(model!),
+      agent,
+      parts,
+    })
   }
 
   function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
@@ -1612,7 +1706,7 @@ export namespace Session {
     const tokens = {
       input: usage.inputTokens ?? 0,
       output: usage.outputTokens ?? 0,
-      reasoning: 0,
+      reasoning: usage?.reasoningTokens ?? 0,
       cache: {
         write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
           // @ts-expect-error

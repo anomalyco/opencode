@@ -55,7 +55,7 @@ export namespace MCP {
           let lastError: Error | undefined
           for (const { name, transport } of transports) {
             const client = await experimental_createMCPClient({
-              name: key,
+              name: "opencode",
               transport,
             }).catch((error) => {
               lastError = error instanceof Error ? error : new Error(String(error))
@@ -92,7 +92,7 @@ export namespace MCP {
         if (mcp.type === "local") {
           const [cmd, ...args] = mcp.command
           const client = await experimental_createMCPClient({
-            name: key,
+            name: "opencode",
             transport: new StdioClientTransport({
               stderr: "ignore",
               command: cmd,

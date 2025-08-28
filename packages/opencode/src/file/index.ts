@@ -6,6 +6,7 @@ import path from "path"
 import * as git from "isomorphic-git"
 import { App } from "../app/app"
 import fs from "fs"
+import ignore from "ignore"
 import { Log } from "../util/log"
 
 export namespace File {
@@ -23,6 +24,18 @@ export namespace File {
     })
 
   export type Info = z.infer<typeof Info>
+
+  export const Node = z
+    .object({
+      name: z.string(),
+      path: z.string(),
+      type: z.enum(["file", "directory"]),
+      ignored: z.boolean(),
+    })
+    .openapi({
+      ref: "FileNode",
+    })
+  export type Node = z.infer<typeof Node>
 
   export const Event = {
     Edited: Bus.event(
@@ -119,5 +132,39 @@ export namespace File {
       }
     }
     return { type: "raw", content }
+  }
+
+  export async function list(dir?: string) {
+    const exclude = [".git", ".DS_Store"]
+    const app = App.info()
+    let ignored = (_: string) => false
+    if (app.git) {
+      const gitignore = Bun.file(path.join(app.path.root, ".gitignore"))
+      if (await gitignore.exists()) {
+        const ig = ignore().add(await gitignore.text())
+        ignored = ig.ignores.bind(ig)
+      }
+    }
+    const resolved = dir ? path.join(app.path.cwd, dir) : app.path.cwd
+    const nodes: Node[] = []
+    for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
+      if (exclude.includes(entry.name)) continue
+      const fullPath = path.join(resolved, entry.name)
+      const relativePath = path.relative(app.path.cwd, fullPath)
+      const relativeToRoot = path.relative(app.path.root, fullPath)
+      const type = entry.isDirectory() ? "directory" : "file"
+      nodes.push({
+        name: entry.name,
+        path: relativePath,
+        type,
+        ignored: ignored(type === "directory" ? relativeToRoot + "/" : relativeToRoot),
+      })
+    }
+    return nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
   }
 }

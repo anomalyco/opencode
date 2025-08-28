@@ -1,6 +1,6 @@
 html {
-  color-scheme: dark;
   line-height: 1;
+  background-color: var(--color-bg);
 }
 
 body {
