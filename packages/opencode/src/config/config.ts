@@ -326,6 +326,7 @@ export namespace Config {
 
   export const TUI = z.object({
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    render_user_markdown: z.boolean().optional().default(false).describe("Render user messages as markdown"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).openapi({

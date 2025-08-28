@@ -339,12 +339,19 @@ func renderText(
 			result.WriteString(base.Render(text[lastEnd:]))
 		}
 
-		// wrap styled text
-		styledText := result.String()
-		styledText = strings.ReplaceAll(styledText, "-", "\u2011")
-		wrappedText := ansi.WordwrapWc(styledText, width-6, " ")
-		wrappedText = strings.ReplaceAll(wrappedText, "\u2011", "-")
-		content = base.Width(width - 6).Render(wrappedText)
+		// Check if user markdown rendering is enabled
+		if app.Config.Tui.RenderUserMarkdown {
+			// Use markdown rendering for the messages (no highlights)
+			content = util.ToMarkdown(text, width, backgroundColor)
+		} else {
+			// Wrap styled text
+			styledText := result.String()
+			styledText = strings.ReplaceAll(styledText, "-", "\u2011")
+			wrappedText := ansi.WordwrapWc(styledText, width-6, " ")
+			wrappedText = strings.ReplaceAll(wrappedText, "\u2011", "-")
+			content = base.Width(width - 6).Render(wrappedText)
+		}
+
 		if isQueued {
 			queuedStyle := styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Bold(true).Padding(0, 1)
 			content = queuedStyle.Render("QUEUED") + "\n\n" + content

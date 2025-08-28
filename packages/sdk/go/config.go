@@ -1689,6 +1689,8 @@ func (r ConfigShare) IsKnown() bool {
 
 // TUI specific settings
 type ConfigTui struct {
+	// Render user messages as markdown
+	RenderUserMarkdown bool `json:"render_user_markdown"`
 	// TUI scroll speed
 	ScrollSpeed float64       `json:"scroll_speed,required"`
 	JSON        configTuiJSON `json:"-"`
@@ -1696,9 +1698,10 @@ type ConfigTui struct {
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
-	ScrollSpeed apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	RenderUserMarkdown apijson.Field
+	ScrollSpeed        apijson.Field
+	raw                string
+	ExtraFields        map[string]apijson.Field
 }
 
 func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
