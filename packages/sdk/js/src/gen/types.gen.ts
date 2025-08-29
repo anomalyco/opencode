@@ -552,6 +552,7 @@ export type App = {
   hostname: string
   git: boolean
   path: {
+    home: string
     config: string
     data: string
     root: string
@@ -1142,6 +1143,7 @@ export type FileNode = {
   name: string
   path: string
   type: "file" | "directory"
+  ignored: boolean
 }
 
 export type File = {

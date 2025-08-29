@@ -3,9 +3,9 @@ import { Bus } from "../bus"
 import { $ } from "bun"
 import { createPatch } from "diff"
 import path from "path"
-import * as git from "isomorphic-git"
 import { App } from "../app/app"
 import fs from "fs"
+import ignore from "ignore"
 import { Log } from "../util/log"
 
 export namespace File {
@@ -29,6 +29,7 @@ export namespace File {
       name: z.string(),
       path: z.string(),
       type: z.enum(["file", "directory"]),
+      ignored: z.boolean(),
     })
     .openapi({
       ref: "FileNode",
@@ -116,12 +117,8 @@ export namespace File {
       .then((x) => x.trim())
     if (app.git) {
       const rel = path.relative(app.path.root, full)
-      const diff = await git.status({
-        fs,
-        dir: app.path.root,
-        filepath: rel,
-      })
-      if (diff !== "unmodified") {
+      const diff = await $`git diff ${rel}`.cwd(app.path.root).quiet().nothrow().text()
+      if (diff.trim()) {
         const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
@@ -133,18 +130,29 @@ export namespace File {
   }
 
   export async function list(dir?: string) {
-    const ignore = [".git", ".DS_Store"]
+    const exclude = [".git", ".DS_Store"]
     const app = App.info()
+    let ignored = (_: string) => false
+    if (app.git) {
+      const gitignore = Bun.file(path.join(app.path.root, ".gitignore"))
+      if (await gitignore.exists()) {
+        const ig = ignore().add(await gitignore.text())
+        ignored = ig.ignores.bind(ig)
+      }
+    }
     const resolved = dir ? path.join(app.path.cwd, dir) : app.path.cwd
     const nodes: Node[] = []
     for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
-      if (ignore.includes(entry.name)) continue
+      if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(app.path.cwd, fullPath)
+      const relativeToRoot = path.relative(app.path.root, fullPath)
+      const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({
         name: entry.name,
         path: relativePath,
-        type: entry.isDirectory() ? "directory" : "file",
+        type,
+        ignored: ignored(type === "directory" ? relativeToRoot + "/" : relativeToRoot),
       })
     }
     return nodes.sort((a, b) => {

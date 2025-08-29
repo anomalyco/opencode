@@ -1173,10 +1173,10 @@ func (m *messagesComponent) UndoLastMessage() (tea.Model, tea.Cmd) {
 		)
 		if err != nil {
 			slog.Error("Failed to undo message", "error", err)
-			return toast.NewErrorToast("Failed to undo message")
+			return toast.NewErrorToast("Failed to undo message")()
 		}
 		if response == nil {
-			return toast.NewErrorToast("Failed to undo message")
+			return toast.NewErrorToast("Failed to undo message")()
 		}
 		return app.MessageRevertedMsg{Session: *response, Message: revertedMessage}
 	}
@@ -1241,10 +1241,10 @@ func (m *messagesComponent) RedoLastMessage() (tea.Model, tea.Cmd) {
 			)
 			if err != nil {
 				slog.Error("Failed to unrevert session", "error", err)
-				return toast.NewErrorToast("Failed to redo message")
+				return toast.NewErrorToast("Failed to redo message")()
 			}
 			if response == nil {
-				return toast.NewErrorToast("Failed to redo message")
+				return toast.NewErrorToast("Failed to redo message")()
 			}
 			return app.SessionUnrevertedMsg{Session: *response}
 		}
@@ -1261,10 +1261,10 @@ func (m *messagesComponent) RedoLastMessage() (tea.Model, tea.Cmd) {
 		)
 		if err != nil {
 			slog.Error("Failed to redo message", "error", err)
-			return toast.NewErrorToast("Failed to redo message")
+			return toast.NewErrorToast("Failed to redo message")()
 		}
 		if response == nil {
-			return toast.NewErrorToast("Failed to redo message")
+			return toast.NewErrorToast("Failed to redo message")()
 		}
 		return app.MessageRevertedMsg{Session: *response, Message: revertedMessage}
 	}

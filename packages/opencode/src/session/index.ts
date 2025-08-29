@@ -1,4 +1,5 @@
 import path from "path"
+import os from "os"
 import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
@@ -1231,11 +1232,15 @@ export namespace Session {
     const app = App.info()
 
     for (const match of fileMatches) {
-      const file = path.join(app.path.cwd, match[1])
+      const filename = match[1]
+      const filepath = filename.startsWith("~/")
+        ? path.join(os.homedir(), filename.slice(2))
+        : path.join(app.path.cwd, filename)
+
       parts.push({
         type: "file",
-        url: `file://${file}`,
-        filename: match[1],
+        url: `file://${filepath}`,
+        filename,
         mime: "text/plain",
       })
     }

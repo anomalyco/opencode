@@ -8,6 +8,7 @@
   --color-bg-elevated: #ffffff;
 
   --color-text: #1d1d1f;
+  --color-text-secondary: #424245;
   --color-text-muted: #6e6e73;
   --color-text-disabled: #86868b;
 
@@ -52,6 +53,7 @@
     --color-bg-elevated: #1c1c1f;
 
     --color-text: #ffffff;
+    --color-text-secondary: #c7c7cc;
     --color-text-muted: #a1a1a6;
     --color-text-disabled: #68686f;
 

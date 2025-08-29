@@ -826,7 +826,7 @@ func (a *App) SendCommand(ctx context.Context, command string, args string) (*Ap
 		)
 		if err != nil {
 			slog.Error("Failed to execute command", "error", err)
-			return toast.NewErrorToast("Failed to execute command")
+			return toast.NewErrorToast(fmt.Sprintf("Failed to execute command: %v", err))()
 		}
 		return nil
 	})
@@ -858,7 +858,7 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 		)
 		if err != nil {
 			slog.Error("Failed to submit shell command", "error", err)
-			return toast.NewErrorToast("Failed to submit shell command")()
+			return toast.NewErrorToast(fmt.Sprintf("Failed to submit shell command: %v", err))()
 		}
 		return nil
 	})

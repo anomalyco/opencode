@@ -134,7 +134,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					)
 					if err != nil {
 						slog.Error("Failed to respond to permission request", "error", err)
-						return toast.NewErrorToast("Failed to respond to permission request")
+						return toast.NewErrorToast("Failed to respond to permission request")()
 					}
 					slog.Debug("Responded to permission request", "response", resp)
 					return nil

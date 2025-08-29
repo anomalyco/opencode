@@ -123,7 +123,15 @@ export const console = new sst.cloudflare.x.StaticSite("Console", {
 */
 
 new sst.x.DevCommand("Solid", {
-  link: [database],
+  link: [
+    database,
+    AUTH_API_URL,
+    STRIPE_WEBHOOK_SECRET,
+    STRIPE_SECRET_KEY,
+    ANTHROPIC_API_KEY,
+    OPENAI_API_KEY,
+    ZHIPU_API_KEY,
+  ],
   dev: {
     directory: "cloud/app",
     command: "bun dev",

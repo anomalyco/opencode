@@ -1,5 +1,3 @@
-
-
 import { useSession } from "vinxi/http"
 import { createClient } from "@openauthjs/openauth/client"
 import { getRequestEvent } from "solid-js/web"
@@ -20,7 +18,7 @@ export const getActor = query(async (): Promise<Actor.Info> => {
   const evt = getRequestEvent()
   const url = new URL(evt!.request.headers.get("referer") ?? evt!.request.url)
   const auth = await useAuthSession()
-  const [workspaceHint] = url.pathname.split("/").filter((x) => x.length > 0)
+  const [, workspaceHint] = url.pathname.split("/").filter((x) => x.length > 0)
   if (!workspaceHint) {
     if (auth.data.current) {
       const current = auth.data.account[auth.data.current]
@@ -32,9 +30,9 @@ export const getActor = query(async (): Promise<Actor.Info> => {
         },
       }
     }
-    if (Object.keys(auth.data.account).length > 0) {
+    if (Object.keys(auth.data.account ?? {}).length > 0) {
       const current = Object.values(auth.data.account)[0]
-      await auth.update(val => ({
+      await auth.update((val) => ({
         ...val,
         current: current.id,
       }))
@@ -53,18 +51,14 @@ export const getActor = query(async (): Promise<Actor.Info> => {
   }
   const accounts = Object.keys(auth.data.account)
   const result = await Database.transaction(async (tx) => {
-    return await tx.select({
-      user: UserTable
-    })
+    return await tx
+      .select({
+        user: UserTable,
+      })
       .from(AccountTable)
       .innerJoin(UserTable, and(eq(UserTable.email, AccountTable.email)))
       .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
-      .where(
-        and(
-          inArray(AccountTable.id, accounts),
-          eq(WorkspaceTable.id, workspaceHint),
-        )
-      )
+      .where(and(inArray(AccountTable.id, accounts), eq(WorkspaceTable.id, workspaceHint)))
       .limit(1)
       .execute()
       .then((x) => x[0])
@@ -81,29 +75,31 @@ export const getActor = query(async (): Promise<Actor.Info> => {
   throw redirect("/auth/authorize")
 }, "actor")
 
-
 export const AuthClient = createClient({
   clientID: "app",
   issuer: import.meta.env.VITE_AUTH_URL,
 })
 
 export interface AuthSession {
-  account: Record<string, {
-    id: string
-    email: string
-  }>
+  account: Record<
+    string,
+    {
+      id: string
+      email: string
+    }
+  >
   current?: string
 }
 
 export function useAuthSession() {
-
   return useSession<AuthSession>({
     password: "0".repeat(32),
-    name: "auth"
+    name: "auth",
+    cookie: {
+      secure: false,
+      httpOnly: true,
+    },
   })
 }
 
-
-export function AuthProvider() {
-}
-
+export function AuthProvider() { }
