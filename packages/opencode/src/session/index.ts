@@ -40,6 +40,7 @@ import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
+import { ListTool } from "../tool/ls"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
@@ -558,6 +559,45 @@ export namespace Session {
                     id: part.id ?? Identifier.ascending("part"),
                     messageID: userMsg.id,
                     sessionID: input.sessionID,
+                  },
+                ]
+              }
+
+              // Check if it's a directory
+              const fileInfo = await Bun.file(filePath)
+                .stat()
+                .catch(() => null)
+              if (fileInfo?.isDirectory()) {
+                // For directories, use the LS tool instead
+                const result = await ListTool.init().then((t) =>
+                  t.execute(
+                    { path: filePath },
+                    {
+                      sessionID: input.sessionID,
+                      abort: new AbortController().signal,
+                      agent: input.agent!,
+                      messageID: userMsg.id,
+                      extra: {},
+                      metadata: async () => {},
+                    },
+                  ),
+                )
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Called the LS tool with the following input: ${JSON.stringify({ path: filePath })}`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: result.output,
                   },
                 ]
               }

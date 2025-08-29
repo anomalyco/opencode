@@ -162,7 +162,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !filepath.IsAbs(filePath) {
 				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
 			}
-			if _, err := os.Stat(statPath); err == nil {
+			if fileInfo, err := os.Stat(statPath); err == nil && !fileInfo.IsDir() {
 				attachment := m.createAttachmentFromPath(filePath)
 				if attachment != nil {
 					m.textarea.InsertAttachment(attachment)
@@ -184,8 +184,20 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if _, err := os.Stat(text); err != nil {
+		fileInfo, err := os.Stat(text)
+		if err != nil {
 			slog.Error("Failed to paste file", "error", err)
+			text := string(msg)
+			if m.shouldSummarizePastedText(text) {
+				m.handleLongPaste(text)
+			} else {
+				m.textarea.InsertRunesFromUserInput([]rune(msg))
+			}
+			return m, nil
+		}
+
+		// Check if it's a directory and skip attachment creation
+		if fileInfo.IsDir() {
 			text := string(msg)
 			if m.shouldSummarizePastedText(text) {
 				m.handleLongPaste(text)
