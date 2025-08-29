@@ -92,7 +92,41 @@ func (c *CommandCompletionProvider) GetChildEntries(
 	}
 
 	matches := fuzzy.RankFindFold(query, commandNames)
-	sort.Sort(matches)
+
+	// Custom sort to prioritize exact matches
+	sort.Slice(matches, func(i, j int) bool {
+		// Check for exact match (case-insensitive)
+		iExact := strings.EqualFold(matches[i].Target, query)
+		jExact := strings.EqualFold(matches[j].Target, query)
+
+		// Exact matches come first
+		if iExact && !jExact {
+			return true
+		}
+		if !iExact && jExact {
+			return false
+		}
+
+		// Check for prefix match (case-insensitive)
+		iPrefix := strings.HasPrefix(strings.ToLower(matches[i].Target), strings.ToLower(query))
+		jPrefix := strings.HasPrefix(strings.ToLower(matches[j].Target), strings.ToLower(query))
+
+		// Prefix matches come before fuzzy matches
+		if iPrefix && !jPrefix {
+			return true
+		}
+		if !iPrefix && jPrefix {
+			return false
+		}
+
+		// Otherwise, sort by fuzzy match score (lower distance is better)
+		if matches[i].Distance != matches[j].Distance {
+			return matches[i].Distance < matches[j].Distance
+		}
+
+		// If distances are equal, sort by original index (stable sort)
+		return matches[i].OriginalIndex < matches[j].OriginalIndex
+	})
 
 	// Convert matches to completion items, deduplicating by command name
 	items := []CompletionSuggestion{}
