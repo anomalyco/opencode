@@ -8,8 +8,8 @@ import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
-import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
+import { Agent } from "../agent/agent"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -28,8 +28,8 @@ export const WriteTool = Tool.define("write", {
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    const cfg = await Config.get()
-    if (cfg.permission?.edit === "ask")
+    const agent = await Agent.get(ctx.agent)
+    if (agent.permission.edit === "ask")
       await Permission.ask({
         type: "write",
         sessionID: ctx.sessionID,

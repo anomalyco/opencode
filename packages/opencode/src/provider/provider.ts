@@ -5,8 +5,7 @@ import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { AuthAnthropic } from "../auth/anthropic"
-import { AuthCopilot } from "../auth/copilot"
+import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
@@ -26,95 +25,21 @@ export namespace Provider {
   type Source = "env" | "config" | "custom" | "api"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic(provider) {
-      const access = await AuthAnthropic.access()
-      if (!access) return { autoload: false }
-      for (const model of Object.values(provider.models)) {
-        model.cost = {
-          input: 0,
-          output: 0,
-        }
-      }
+    async anthropic() {
       return {
-        autoload: true,
+        autoload: false,
         options: {
-          apiKey: "",
-          async fetch(input: any, init: any) {
-            const access = await AuthAnthropic.access()
-            const headers = {
-              ...init.headers,
-              authorization: `Bearer ${access}`,
-              "anthropic-beta": "oauth-2025-04-20",
-            }
-            delete headers["x-api-key"]
-            return fetch(input, {
-              ...init,
-              headers,
-            })
+          headers: {
+            "anthropic-beta":
+              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
       }
     },
-    "github-copilot": async (provider) => {
-      const copilot = await AuthCopilot()
-      if (!copilot) return { autoload: false }
-      let info = await Auth.get("github-copilot")
-      if (!info || info.type !== "oauth") return { autoload: false }
-
-      if (provider && provider.models) {
-        for (const model of Object.values(provider.models)) {
-          model.cost = {
-            input: 0,
-            output: 0,
-          }
-        }
-      }
-
+    async opencode(input) {
       return {
-        autoload: true,
-        options: {
-          apiKey: "",
-          async fetch(input: any, init: any) {
-            const info = await Auth.get("github-copilot")
-            if (!info || info.type !== "oauth") return
-            if (!info.access || info.expires < Date.now()) {
-              const tokens = await copilot.access(info.refresh)
-              if (!tokens) throw new Error("GitHub Copilot authentication expired")
-              await Auth.set("github-copilot", {
-                type: "oauth",
-                ...tokens,
-              })
-              info.access = tokens.access
-            }
-            let isAgentCall = false
-            let isVisionRequest = false
-            try {
-              const body = typeof init.body === "string" ? JSON.parse(init.body) : init.body
-              if (body?.messages) {
-                isAgentCall = body.messages.some((msg: any) => msg.role && ["tool", "assistant"].includes(msg.role))
-                isVisionRequest = body.messages.some(
-                  (msg: any) =>
-                    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
-                )
-              }
-            } catch { }
-            const headers: Record<string, string> = {
-              ...init.headers,
-              ...copilot.HEADERS,
-              Authorization: `Bearer ${info.access}`,
-              "Openai-Intent": "conversation-edits",
-              "X-Initiator": isAgentCall ? "agent" : "user",
-            }
-            if (isVisionRequest) {
-              headers["Copilot-Vision-Request"] = "true"
-            }
-            delete headers["x-api-key"]
-            return fetch(input, {
-              ...init,
-              headers,
-            })
-          },
-        },
+        autoload: Object.keys(input.models).length > 0,
+        options: {},
       }
     },
     openai: async () => {
@@ -283,26 +208,26 @@ export namespace Provider {
           cost:
             !model.cost && !existing?.cost
               ? {
-                input: 0,
-                output: 0,
-                cache_read: 0,
-                cache_write: 0,
-              }
+                  input: 0,
+                  output: 0,
+                  cache_read: 0,
+                  cache_write: 0,
+                }
               : {
-                cache_read: 0,
-                cache_write: 0,
-                ...existing?.cost,
-                ...model.cost,
-              },
+                  cache_read: 0,
+                  cache_write: 0,
+                  ...existing?.cost,
+                  ...model.cost,
+                },
           options: {
             ...existing?.options,
             ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {
-            context: 0,
-            output: 0,
-          },
+              context: 0,
+              output: 0,
+            },
         }
         parsed.models[modelID] = parsedModel
       }
@@ -340,12 +265,32 @@ export namespace Provider {
       }
     }
 
+    for (const plugin of await Plugin.list()) {
+      if (!plugin.auth) continue
+      const providerID = plugin.auth.provider
+      if (disabled.has(providerID)) continue
+      const auth = await Auth.get(providerID)
+      if (!auth) continue
+      if (!plugin.auth.loader) continue
+      const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+      mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+    }
+
     // load config
     for (const [providerID, provider] of configProviders) {
       mergeProvider(providerID, provider.options ?? {}, "config")
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      // Filter out blacklisted models
+      const filteredModels = Object.fromEntries(
+        Object.entries(provider.info.models).filter(
+          ([modelID]) =>
+            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+        ),
+      )
+      provider.info.models = filteredModels
+
       if (Object.keys(provider.info.models).length === 0) {
         delete providers[providerID]
         continue
@@ -373,7 +318,7 @@ export namespace Provider {
       const existing = s.sdk.get(provider.id)
       if (existing) return existing
       const pkg = provider.npm ?? provider.id
-      const mod = await import(await BunProc.install(pkg, "beta"))
+      const mod = await import(await BunProc.install(pkg, "latest"))
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
@@ -440,7 +385,7 @@ export namespace Provider {
 
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
-    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash"]
+    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)
@@ -448,7 +393,7 @@ export namespace Provider {
     }
   }
 
-  const priority = ["gemini-2.5-pro-preview", "codex-mini", "claude-sonnet-4"]
+  const priority = ["gemini-2.5-pro-preview", "gpt-5", "claude-sonnet-4"]
   export function sort(models: ModelsDev.Model[]) {
     return sortBy(
       models,

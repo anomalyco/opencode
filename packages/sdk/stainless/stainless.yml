@@ -48,7 +48,6 @@ resources:
   app:
     models:
       app: App
-      logLevel: LogLevel
       provider: Provider
       model: Model
       agent: Agent
@@ -61,7 +60,6 @@ resources:
 
   find:
     models:
-      match: Match
       symbol: Symbol
     methods:
       text: get /find
@@ -71,8 +69,11 @@ resources:
   file:
     models:
       file: File
+      fileNode: FileNode
+
     methods:
-      read: get /file
+      list: get /file
+      read: get /file/content
       status: get /file/status
 
   config:
@@ -84,6 +85,12 @@ resources:
       modeConfig: ModeConfig
     methods:
       get: get /config
+
+  command:
+    models:
+      command: Command
+    methods:
+      list: get /command
 
   session:
     models:
@@ -101,6 +108,7 @@ resources:
       toolPart: ToolPart
       agentPart: AgentPart
       agentPartInput: AgentPartInput
+      reasoningPart: ReasoningPart
       stepStartPart: StepStartPart
       stepFinishPart: StepFinishPart
       snapshotPart: SnapshotPart
@@ -112,7 +120,9 @@ resources:
       toolStateError: ToolStateError
 
     methods:
+      get: get /session/{id}
       list: get /session
+      children: get /session/{id}/children
       create: post /session
       delete: delete /session/{id}
       init: post /session/{id}/init
@@ -123,6 +133,9 @@ resources:
       message: get /session/{id}/message/{messageID}
       messages: get /session/{id}/message
       chat: post /session/{id}/message
+      command: post /session/{id}/command
+      shell: post /session/{id}/shell
+      update: patch /session/{id}
       revert: post /session/{id}/revert
       unrevert: post /session/{id}/unrevert
 
@@ -143,6 +156,7 @@ resources:
       openThemes: post /tui/open-themes
       openModels: post /tui/open-models
       executeCommand: post /tui/execute-command
+      showToast: post /tui/show-toast
 
 settings:
   disable_mock_tests: true

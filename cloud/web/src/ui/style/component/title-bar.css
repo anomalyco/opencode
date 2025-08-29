@@ -1,0 +1,32 @@
+[data-component="title-bar"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  padding: 0 var(--space-4);
+  border-bottom: 2px solid var(--color-border);
+
+  [data-slot="left"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1-5);
+
+    h1 {
+      letter-spacing: -0.03125rem;
+      font-size: var(--font-size-xl);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    p {
+      color: var(--color-text-dimmed);
+    }
+  }
+  
+}
+
+@media (max-width: 40rem) {
+  [data-component="title-bar"] {
+    display: none;
+  }
+}

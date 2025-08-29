@@ -31,6 +31,7 @@ type EditorComponent interface {
 	tea.Model
 	tea.ViewModel
 	Content() string
+	Cursor() *tea.Cursor
 	Lines() int
 	Value() string
 	Length() int
@@ -38,6 +39,7 @@ type EditorComponent interface {
 	Focus() (tea.Model, tea.Cmd)
 	Blur()
 	Submit() (tea.Model, tea.Cmd)
+	SubmitBash() (tea.Model, tea.Cmd)
 	Clear() (tea.Model, tea.Cmd)
 	Paste() (tea.Model, tea.Cmd)
 	Newline() (tea.Model, tea.Cmd)
@@ -222,10 +224,17 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dialog.CompletionSelectedMsg:
 		switch msg.Item.ProviderID {
 		case "commands":
-			commandName := strings.TrimPrefix(msg.Item.Value, "/")
+			command := msg.Item.RawData.(commands.Command)
+			if command.Custom {
+				m.SetValue("/" + command.PrimaryTrigger() + " ")
+				return m, nil
+			}
+
 			updated, cmd := m.Clear()
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
+
+			commandName := strings.TrimPrefix(msg.Item.Value, "/")
 			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
 			return m, tea.Batch(cmds...)
 		case "files":
@@ -337,10 +346,19 @@ func (m *editorComponent) Content() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.Text()).Background(t.Background()).Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+
 	promptStyle := styles.NewStyle().Foreground(t.Primary()).
 		Padding(0, 0, 0, 1).
 		Bold(true)
 	prompt := promptStyle.Render(">")
+	borderForeground := t.Border()
+	if m.app.IsLeaderSequence {
+		borderForeground = t.Accent()
+	}
+	if m.app.IsBashMode {
+		borderForeground = t.Secondary()
+		prompt = promptStyle.Render("!")
+	}
 
 	m.textarea.SetWidth(width - 6)
 	textarea := lipgloss.JoinHorizontal(
@@ -348,10 +366,6 @@ func (m *editorComponent) Content() string {
 		prompt,
 		m.textarea.View(),
 	)
-	borderForeground := t.Border()
-	if m.app.IsLeaderSequence {
-		borderForeground = t.Accent()
-	}
 	textarea = styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Width(width).
@@ -405,6 +419,10 @@ func (m *editorComponent) Content() string {
 
 	content := strings.Join([]string{"", textarea, info}, "\n")
 	return content
+}
+
+func (m *editorComponent) Cursor() *tea.Cursor {
+	return m.textarea.Cursor()
 }
 
 func (m *editorComponent) View() string {
@@ -470,6 +488,25 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	}
 
 	var cmds []tea.Cmd
+	if strings.HasPrefix(value, "/") {
+		value = value[1:]
+		commandName := strings.Split(value, " ")[0]
+		command := m.app.Commands[commands.CommandName(commandName)]
+		if command.Custom {
+			args := strings.TrimPrefix(value, command.PrimaryTrigger()+" ")
+			cmds = append(
+				cmds,
+				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
+			)
+
+			updated, cmd := m.Clear()
+			m = updated.(*editorComponent)
+			cmds = append(cmds, cmd)
+
+			return m, tea.Batch(cmds...)
+		}
+	}
+
 	attachments := m.textarea.GetAttachments()
 
 	prompt := app.Prompt{Text: value, Attachments: attachments}
@@ -481,6 +518,16 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	cmds = append(cmds, util.CmdHandler(app.SendPrompt(prompt)))
+	return m, tea.Batch(cmds...)
+}
+
+func (m *editorComponent) SubmitBash() (tea.Model, tea.Cmd) {
+	command := m.textarea.Value()
+	var cmds []tea.Cmd
+	updated, cmd := m.Clear()
+	m = updated.(*editorComponent)
+	cmds = append(cmds, cmd)
+	cmds = append(cmds, util.CmdHandler(app.SendShell{Command: command}))
 	return m, tea.Batch(cmds...)
 }
 
@@ -694,6 +741,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 	ta.Prompt = " "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
+	ta.VirtualCursor = false
 	ta = updateTextareaStyles(ta)
 
 	m := &editorComponent{

@@ -11,7 +11,7 @@ set "script_dir=%~dp0"
 set "script_dir=%script_dir:~0,-1%"
 
 rem Detect platform and architecture
-set "platform=win32"
+set "platform=windows"
 
 rem Detect architecture
 if "%PROCESSOR_ARCHITECTURE%"=="AMD64" (

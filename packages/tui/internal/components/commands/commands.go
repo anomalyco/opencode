@@ -83,10 +83,10 @@ func (c *commandsComponent) View() string {
 		}
 		commandsToShow = append(commandsToShow,
 			// empty line
-			commands.Command{
-				Name:        "",
-				Description: "",
-			},
+			// commands.Command{
+			// 	Name:        "",
+			// 	Description: "",
+			// },
 			commands.Command{
 				Name:        commands.CommandName(util.Ide()),
 				Description: "open opencode",

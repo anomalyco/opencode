@@ -2,11 +2,30 @@ package util
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"reflect"
 	"sync"
 
 	opencode "github.com/sst/opencode-sdk-go"
 )
+
+func sanitizeValue(val any) any {
+	if val == nil {
+		return nil
+	}
+
+	if err, ok := val.(error); ok {
+		return err.Error()
+	}
+
+	v := reflect.ValueOf(val)
+	if v.Kind() == reflect.Interface && !v.IsNil() {
+		return fmt.Sprintf("%T", val)
+	}
+
+	return val
+}
 
 type APILogHandler struct {
 	client  *opencode.Client
@@ -67,21 +86,13 @@ func (h *APILogHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.mu.Lock()
 	for _, attr := range h.attrs {
 		val := attr.Value.Any()
-		if err, ok := val.(error); ok {
-			extra[attr.Key] = err.Error()
-		} else {
-			extra[attr.Key] = val
-		}
+		extra[attr.Key] = sanitizeValue(val)
 	}
 	h.mu.Unlock()
 
 	r.Attrs(func(attr slog.Attr) bool {
 		val := attr.Value.Any()
-		if err, ok := val.(error); ok {
-			extra[attr.Key] = err.Error()
-		} else {
-			extra[attr.Key] = val
-		}
+		extra[attr.Key] = sanitizeValue(val)
 		return true
 	})
 

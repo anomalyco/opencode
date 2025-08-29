@@ -14,6 +14,7 @@ import (
 	"github.com/muesli/reflow/truncate"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/commands"
 	"github.com/sst/opencode/internal/components/diff"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -183,6 +184,8 @@ func renderContentBlock(
 		if renderer.borderRight {
 			style = style.BorderRightForeground(borderColor)
 		}
+	} else {
+		style = style.PaddingLeft(renderer.paddingLeft + 1).PaddingRight(renderer.paddingRight + 1)
 	}
 
 	content = style.Render(content)
@@ -208,6 +211,9 @@ func renderText(
 	showToolDetails bool,
 	width int,
 	extra string,
+	isThinking bool,
+	isQueued bool,
+	shimmer bool,
 	fileParts []opencode.FilePart,
 	agentParts []opencode.AgentPart,
 	toolCalls ...opencode.ToolPart,
@@ -219,8 +225,29 @@ func renderText(
 	var content string
 	switch casted := message.(type) {
 	case opencode.AssistantMessage:
+		backgroundColor = t.Background()
+		if isThinking {
+			backgroundColor = t.BackgroundPanel()
+		}
 		ts = time.UnixMilli(int64(casted.Time.Created))
-		content = util.ToMarkdown(text, width, t.Background())
+		if casted.Time.Completed > 0 {
+			ts = time.UnixMilli(int64(casted.Time.Completed))
+		}
+		content = util.ToMarkdown(text, width, backgroundColor)
+		if isThinking {
+			var label string
+			if shimmer {
+				label = util.Shimmer("Thinking...", backgroundColor, t.TextMuted(), t.Accent())
+			} else {
+				label = styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render("Thinking...")
+			}
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label + "\n\n" + content
+		} else if strings.TrimSpace(text) == "Generating..." {
+			label := util.Shimmer(text, backgroundColor, t.TextMuted(), t.Text())
+			label = styles.NewStyle().Background(backgroundColor).Width(width - 6).Render(label)
+			content = label
+		}
 	case opencode.UserMessage:
 		ts = time.UnixMilli(int64(casted.Time.Created))
 		base := styles.NewStyle().Foreground(t.Text()).Background(backgroundColor)
@@ -268,7 +295,26 @@ func renderText(
 			return 0
 		})
 
+		// Merge overlapping highlights to prevent duplication
+		merged := make([]highlightPart, 0)
 		for _, part := range highlights {
+			if len(merged) == 0 {
+				merged = append(merged, part)
+				continue
+			}
+
+			last := &merged[len(merged)-1]
+			// If current part overlaps with the last one, merge them
+			if part.start <= last.end {
+				if part.end > last.end {
+					last.end = part.end
+				}
+			} else {
+				merged = append(merged, part)
+			}
+		}
+
+		for _, part := range merged {
 			highlight := base.Foreground(part.color)
 			start, end := part.start, part.end
 
@@ -295,8 +341,14 @@ func renderText(
 
 		// wrap styled text
 		styledText := result.String()
-		wrappedText := ansi.WordwrapWc(styledText, width-6, " -")
+		styledText = strings.ReplaceAll(styledText, "-", "\u2011")
+		wrappedText := ansi.WordwrapWc(styledText, width-6, " ")
+		wrappedText = strings.ReplaceAll(wrappedText, "\u2011", "-")
 		content = base.Width(width - 6).Render(wrappedText)
+		if isQueued {
+			queuedStyle := styles.NewStyle().Background(t.Accent()).Foreground(t.BackgroundPanel()).Bold(true).Padding(0, 1)
+			content = queuedStyle.Render("QUEUED") + "\n\n" + content
+		}
 	}
 
 	timestamp := ts.
@@ -305,11 +357,46 @@ func renderText(
 	if time.Now().Format("02 Jan 2006") == timestamp[:11] {
 		timestamp = timestamp[12:]
 	}
-	info := fmt.Sprintf("%s (%s)", author, timestamp)
-	info = styles.NewStyle().Foreground(t.TextMuted()).Render(info)
+	timestamp = styles.NewStyle().
+		Background(backgroundColor).
+		Foreground(t.TextMuted()).
+		Render(" (" + timestamp + ")")
 
+	// Check if this is an assistant message with agent information
+	var modelAndAgentSuffix string
+	if assistantMsg, ok := message.(opencode.AssistantMessage); ok && assistantMsg.Mode != "" {
+		// Find the agent index by name to get the correct color
+		var agentIndex int
+		for i, agent := range app.Agents {
+			if agent.Name == assistantMsg.Mode {
+				agentIndex = i
+				break
+			}
+		}
+
+		// Get agent color based on the original agent index (same as status bar)
+		agentColor := util.GetAgentColor(agentIndex)
+
+		// Style the agent name with the same color as status bar
+		agentName := cases.Title(language.Und).String(assistantMsg.Mode)
+		styledAgentName := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(agentColor).
+			Render(agentName + " ")
+		styledModelID := styles.NewStyle().
+			Background(backgroundColor).
+			Foreground(t.TextMuted()).
+			Render(assistantMsg.ModelID)
+		modelAndAgentSuffix = styledAgentName + styledModelID
+	}
+
+	var info string
+	if modelAndAgentSuffix != "" {
+		info = modelAndAgentSuffix + timestamp
+	} else {
+		info = author + timestamp
+	}
 	if !showToolDetails && toolCalls != nil && len(toolCalls) > 0 {
-		content = content + "\n\n"
 		for _, toolCall := range toolCalls {
 			title := renderToolTitle(toolCall, width-2)
 			style := styles.NewStyle()
@@ -317,27 +404,42 @@ func renderText(
 				style = style.Foreground(t.Error())
 			}
 			title = style.Render(title)
-			title = "∟ " + title + "\n"
+			title = "\n∟ " + title
 			content = content + title
 		}
 	}
 
-	sections := []string{content, info}
+	sections := []string{content}
 	if extra != "" {
-		sections = append(sections, "\n"+extra)
+		sections = append(sections, "\n"+extra+"\n")
 	}
+	sections = append(sections, info)
 	content = strings.Join(sections, "\n")
 
 	switch message.(type) {
 	case opencode.UserMessage:
+		borderColor := t.Secondary()
+		if isQueued {
+			borderColor = t.Accent()
+		}
 		return renderContentBlock(
 			app,
 			content,
 			width,
 			WithTextColor(t.Text()),
-			WithBorderColor(t.Secondary()),
+			WithBorderColor(borderColor),
 		)
 	case opencode.AssistantMessage:
+		if isThinking {
+			return renderContentBlock(
+				app,
+				content,
+				width,
+				WithTextColor(t.Text()),
+				WithBackgroundColor(t.BackgroundPanel()),
+				WithBorderColor(t.BackgroundPanel()),
+			)
+		}
 		return renderContentBlock(
 			app,
 			content,
@@ -390,6 +492,8 @@ func renderToolDetails(
 	backgroundColor := t.BackgroundPanel()
 	borderColor := t.BackgroundPanel()
 	defaultStyle := styles.NewStyle().Background(backgroundColor).Width(width - 6).Render
+	baseStyle := styles.NewStyle().Background(backgroundColor).Foreground(t.Text()).Render
+	mutedStyle := styles.NewStyle().Background(backgroundColor).Foreground(t.TextMuted()).Render
 
 	permissionContent := ""
 	if permission.ID != "" {
@@ -474,6 +578,17 @@ func renderToolDetails(
 					title := renderToolTitle(toolCall, width)
 					title = style.Render(title)
 					content := title + "\n" + body
+
+					if toolCall.State.Status == opencode.ToolPartStateStatusError {
+						errorStyle := styles.NewStyle().
+							Background(backgroundColor).
+							Foreground(t.Error()).
+							Padding(1, 2).
+							Width(width - 4)
+						errorContent := errorStyle.Render(toolCall.State.Error)
+						content += "\n" + errorContent
+					}
+
 					if permissionContent != "" {
 						permissionContent = styles.NewStyle().
 							Background(backgroundColor).
@@ -502,18 +617,15 @@ func renderToolDetails(
 				}
 			}
 		case "bash":
-			command := toolInputMap["command"].(string)
-			body = fmt.Sprintf("```console\n$ %s\n", command)
-			stdout := metadata["stdout"]
-			if stdout != nil {
-				body += ansi.Strip(fmt.Sprintf("%s", stdout))
+			if command, ok := toolInputMap["command"].(string); ok {
+				body = fmt.Sprintf("```console\n$ %s\n", command)
+				output := metadata["output"]
+				if output != nil {
+					body += ansi.Strip(fmt.Sprintf("%s", output))
+				}
+				body += "```"
+				body = util.ToMarkdown(body, width, backgroundColor)
 			}
-			stderr := metadata["stderr"]
-			if stderr != nil {
-				body += ansi.Strip(fmt.Sprintf("%s", stderr))
-			}
-			body += "```"
-			body = util.ToMarkdown(body, width, backgroundColor)
 		case "webfetch":
 			if format, ok := toolInputMap["format"].(string); ok && result != nil {
 				body = *result
@@ -557,6 +669,24 @@ func renderToolDetails(
 					steps = append(steps, step)
 				}
 				body = strings.Join(steps, "\n")
+
+				body += "\n\n"
+
+				// Build navigation hint with proper spacing
+				cycleKeybind := app.Keybind(commands.SessionChildCycleCommand)
+				cycleReverseKeybind := app.Keybind(commands.SessionChildCycleReverseCommand)
+
+				var navParts []string
+				if cycleKeybind != "" {
+					navParts = append(navParts, baseStyle(cycleKeybind))
+				}
+				if cycleReverseKeybind != "" {
+					navParts = append(navParts, baseStyle(cycleReverseKeybind))
+				}
+
+				if len(navParts) > 0 {
+					body += strings.Join(navParts, mutedStyle(", ")) + mutedStyle(" navigate child sessions")
+				}
 			}
 			body = defaultStyle(body)
 		default:
@@ -576,11 +706,17 @@ func renderToolDetails(
 	}
 
 	if error != "" {
-		body = styles.NewStyle().
+		errorContent := styles.NewStyle().
 			Width(width - 6).
 			Foreground(t.Error()).
 			Background(backgroundColor).
 			Render(error)
+
+		if body == "" {
+			body = errorContent
+		} else {
+			body += "\n\n" + errorContent
+		}
 	}
 
 	if body == "" && error == "" && result != nil {
@@ -611,6 +747,8 @@ func renderToolDetails(
 
 func renderToolName(name string) string {
 	switch name {
+	case "bash":
+		return "Shell"
 	case "webfetch":
 		return "Fetch"
 	case "invalid":
@@ -665,7 +803,9 @@ func renderToolTitle(
 ) string {
 	if toolCall.State.Status == opencode.ToolPartStateStatusPending {
 		title := renderToolAction(toolCall.Tool)
-		return styles.NewStyle().Width(width - 6).Render(title)
+		t := theme.CurrentTheme()
+		shiny := util.Shimmer(title, t.BackgroundPanel(), t.TextMuted(), t.Accent())
+		return styles.NewStyle().Background(t.BackgroundPanel()).Width(width - 6).Render(shiny)
 	}
 
 	toolArgs := ""
@@ -781,7 +921,9 @@ func renderArgs(args *map[string]any, titleKey string) string {
 			continue
 		}
 		if key == "filePath" || key == "path" {
-			value = util.Relative(value.(string))
+			if strValue, ok := value.(string); ok {
+				value = util.Relative(strValue)
+			}
 		}
 		if key == titleKey {
 			title = fmt.Sprintf("%s", value)

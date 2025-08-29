@@ -57,11 +57,15 @@ export namespace LSP {
     "lsp",
     async () => {
       const clients: LSPClient.Info[] = []
-      const servers: Record<string, LSPServer.Info> = LSPServer
+      const servers: Record<string, LSPServer.Info> = {}
+      for (const server of Object.values(LSPServer)) {
+        servers[server.id] = server
+      }
       const cfg = await Config.get()
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
         const existing = servers[name]
         if (item.disabled) {
+          log.info(`LSP server ${name} is disabled`)
           delete servers[name]
           continue
         }
@@ -83,6 +87,13 @@ export namespace LSP {
           },
         }
       }
+
+      log.info("enabled LSP servers", {
+        serverIds: Object.values(servers)
+          .map((server) => server.id)
+          .join(", "),
+      })
+
       return {
         broken: new Set<string>(),
         servers,
@@ -104,7 +115,7 @@ export namespace LSP {
     const s = await state()
     const extension = path.parse(file).ext
     const result: LSPClient.Info[] = []
-    for (const server of Object.values(LSPServer)) {
+    for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
       const root = await server.root(file, App.info())
       if (!root) continue
@@ -115,7 +126,11 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(App.info(), root)
+      const handle = await server.spawn(App.info(), root).catch((err) => {
+        s.broken.add(root + server.id)
+        log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+        return undefined
+      })
       if (!handle) continue
       const client = await LSPClient.create({
         serverID: server.id,
@@ -124,7 +139,8 @@ export namespace LSP {
       }).catch((err) => {
         s.broken.add(root + server.id)
         handle.process.kill()
-        log.error("", { error: err })
+        log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
+        return undefined
       })
       if (!client) continue
       s.clients.push(client)

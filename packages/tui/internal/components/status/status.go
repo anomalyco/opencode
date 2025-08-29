@@ -121,34 +121,18 @@ func (m *statusComponent) View() string {
 
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
-	switch m.app.AgentIndex {
-	case 0:
+
+	agentColor := util.GetAgentColor(m.app.AgentIndex)
+
+	if m.app.AgentIndex == 0 {
 		modeBackground = t.BackgroundElement()
-		modeForeground = t.TextMuted()
-	case 1:
-		modeBackground = t.Secondary()
-		modeForeground = t.BackgroundPanel()
-	case 2:
-		modeBackground = t.Accent()
-		modeForeground = t.BackgroundPanel()
-	case 3:
-		modeBackground = t.Success()
-		modeForeground = t.BackgroundPanel()
-	case 4:
-		modeBackground = t.Warning()
-		modeForeground = t.BackgroundPanel()
-	case 5:
-		modeBackground = t.Primary()
-		modeForeground = t.BackgroundPanel()
-	case 6:
-		modeBackground = t.Error()
-		modeForeground = t.BackgroundPanel()
-	default:
-		modeBackground = t.Secondary()
+		modeForeground = agentColor
+	} else {
+		modeBackground = agentColor
 		modeForeground = t.BackgroundPanel()
 	}
 
-	command := m.app.Commands[commands.SwitchAgentCommand]
+	command := m.app.Commands[commands.AgentCycleCommand]
 	kb := command.Keybindings[0]
 	key := kb.Key
 	if kb.RequiresLeader {

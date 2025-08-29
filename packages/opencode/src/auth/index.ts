@@ -5,25 +5,31 @@ import { z } from "zod"
 import { Keychain } from "./keychain"
 
 export namespace Auth {
-  export const Oauth = z.object({
-    type: z.literal("oauth"),
-    refresh: z.string(),
-    access: z.string(),
-    expires: z.number(),
-  })
+  export const Oauth = z
+    .object({
+      type: z.literal("oauth"),
+      refresh: z.string(),
+      access: z.string(),
+      expires: z.number(),
+    })
+    .openapi({ ref: "OAuth" })
 
-  export const Api = z.object({
-    type: z.literal("api"),
-    key: z.string(),
-  })
+  export const Api = z
+    .object({
+      type: z.literal("api"),
+      key: z.string(),
+    })
+    .openapi({ ref: "ApiAuth" })
 
-  export const WellKnown = z.object({
-    type: z.literal("wellknown"),
-    key: z.string(),
-    token: z.string(),
-  })
+  export const WellKnown = z
+    .object({
+      type: z.literal("wellknown"),
+      key: z.string(),
+      token: z.string(),
+    })
+    .openapi({ ref: "WellKnownAuth" })
 
-  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown])
+  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).openapi({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
   const filepath = path.join(Global.Path.data, "auth.json")

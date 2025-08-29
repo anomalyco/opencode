@@ -9,8 +9,6 @@ import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
 
-const github = "https://github.com/sst/opencode"
-
 // https://astro.build/config
 export default defineConfig({
   site: config.url,
@@ -49,7 +47,7 @@ export default defineConfig({
         },
       ],
       editLink: {
-        baseUrl: `${github}/edit/dev/packages/web/`,
+        baseUrl: `${config.github}/edit/dev/packages/web/`,
       },
       markdown: {
         headingLinks: false,
@@ -69,7 +67,7 @@ export default defineConfig({
 
         {
           label: "Usage",
-          items: ["docs/cli", "docs/ide", "docs/share", "docs/github"],
+          items: ["docs/tui", "docs/cli", "docs/ide", "docs/share", "docs/github", "docs/gitlab"],
         },
 
         {
@@ -79,13 +77,18 @@ export default defineConfig({
             "docs/agents",
             "docs/models",
             "docs/themes",
-            "docs/plugins",
             "docs/keybinds",
+            "docs/commands",
             "docs/formatters",
             "docs/permissions",
             "docs/lsp",
             "docs/mcp-servers",
           ],
+        },
+
+        {
+          label: "Develop",
+          items: ["docs/sdk", "docs/server", "docs/plugins"],
         },
       ],
       components: {

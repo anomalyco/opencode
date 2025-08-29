@@ -1,0 +1,50 @@
+/* tokens */
+@import "./token/color.css";
+@import "./token/reset.css";
+@import "./token/animation.css";
+@import "./token/font.css";
+@import "./token/space.css";
+
+/* components */
+@import "./component/label.css";
+@import "./component/input.css";
+@import "./component/button.css";
+@import "./component/dialog.css";
+@import "./component/title-bar.css";
+
+body {
+  font-family: var(--font-mono);
+  line-height: 1;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  cursor: default;
+  user-select: none;
+  text-underline-offset: 0.1875rem;
+}
+
+a {
+  text-decoration: underline;
+  &:active {
+    color: var(--color-text-accent);
+  }
+}
+
+::selection {
+  background-color: var(--color-text-accent-invert);
+}
+
+/* Responsive utilities */
+[data-max-width] {
+  width: 100%;
+
+  & > * {
+    max-width: 90rem;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  &[data-max-width-64] > * {
+    max-width: 64rem;
+  }
+}

@@ -19,7 +19,7 @@ import {
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
 } from "../icons"
-import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic } from "../icons/custom"
+import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "../icons/custom"
 import { ContentCode } from "./content-code"
 import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
@@ -82,6 +82,9 @@ export function Part(props: PartProps) {
                 when={props.part.type === "step-start" && props.message.role === "assistant" && props.message.modelID}
               >
                 {(model) => <ProviderIcon model={model()} size={18} />}
+              </Match>
+              <Match when={props.part.type === "reasoning" && props.message.role === "assistant"}>
+                <IconBrain width={18} height={18} />
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "todowrite"}>
                 <IconQueueList width={18} height={18} />
@@ -149,25 +152,48 @@ export function Part(props: PartProps) {
             )}
           </div>
         )}
-        {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
-            <div data-slot="filename">{props.part.filename}</div>
+        {props.message.role === "assistant" && props.part.type === "reasoning" && (
+          <div data-component="tool">
+            <div data-component="tool-title">
+              <span data-slot="name">Thinking</span>
+            </div>
+            <Show when={props.part.text}>
+              <div data-component="assistant-reasoning">
+                <ResultsButton showCopy="Show details" hideCopy="Hide details">
+                  <div data-component="assistant-reasoning-markdown">
+                    <ContentMarkdown expand text={props.part.text || "Thinking..."} />
+                  </div>
+                </ResultsButton>
+              </div>
+            </Show>
           </div>
         )}
-        {props.part.type === "step-start" && props.message.role === "assistant" && (
-          <div data-component="step-start">
-            <div data-slot="provider">{props.message.providerID}</div>
-            <div data-slot="model">{props.message.modelID}</div>
-          </div>
-        )}
-        {props.part.type === "tool" && props.part.state.status === "error" && (
-          <div data-component="tool" data-tool="error">
-            <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
-            <Spacer />
-          </div>
-        )}
-        {props.part.type === "tool" &&
+        {
+          props.message.role === "user" && props.part.type === "file" && (
+            <div data-component="attachment">
+              <div data-slot="copy">Attachment</div>
+              <div data-slot="filename">{props.part.filename}</div>
+            </div>
+          )
+        }
+        {
+          props.part.type === "step-start" && props.message.role === "assistant" && (
+            <div data-component="step-start">
+              <div data-slot="provider">{props.message.providerID}</div>
+              <div data-slot="model">{props.message.modelID}</div>
+            </div>
+          )
+        }
+        {
+          props.part.type === "tool" && props.part.state.status === "error" && (
+            <div data-component="tool" data-tool="error">
+              <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
+              <Spacer />
+            </div>
+          )
+        }
+        {
+          props.part.type === "tool" &&
           props.part.state.status === "completed" &&
           props.message.role === "assistant" && (
             <>
@@ -269,9 +295,10 @@ export function Part(props: PartProps) {
                   .toMillis()}
               />
             </>
-          )}
-      </div>
-    </div>
+          )
+        }
+      </div >
+    </div >
   )
 }
 
@@ -577,7 +604,7 @@ export function BashTool(props: ToolProps) {
   return (
     <ContentBash
       command={props.state.input.command}
-      output={props.state.metadata?.stdout || ""}
+      output={props.state.metadata.output ?? props.state.metadata?.stdout}
       description={props.state.metadata.description}
     />
   )
@@ -653,9 +680,7 @@ function TaskTool(props: ToolProps) {
         <span data-slot="name">Task</span>
         <span data-slot="target">{props.state.input.description}</span>
       </div>
-      <div data-component="tool-input">
-        &ldquo;{props.state.input.prompt}&rdquo;
-      </div>
+      <div data-component="tool-input">&ldquo;{props.state.input.prompt}&rdquo;</div>
       <ResultsButton showCopy="Show output" hideCopy="Hide output">
         <div data-component="tool-output">
           <ContentMarkdown expand text={props.state.output} />

@@ -99,7 +99,10 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
 
 			// Ensure stable provider order just in case
-			sort.SliceStable(itemsByProvider, func(i, j int) bool { return itemsByProvider[i].idx < itemsByProvider[j].idx })
+			sort.SliceStable(
+				itemsByProvider,
+				func(i, j int) bool { return itemsByProvider[i].idx < itemsByProvider[j].idx },
+			)
 
 			final := make([]completions.CompletionSuggestion, 0)
 			for _, entry := range itemsByProvider {
@@ -167,6 +170,16 @@ func (c *completionDialogComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				value := c.pseudoSearchTextArea.Value()
 				width := lipgloss.Width(value)
 				triggerWidth := lipgloss.Width(c.trigger)
+
+				if msg.String() == "space" || msg.String() == " " {
+					item, i := c.list.GetSelectedItem()
+					if i > -1 {
+						return c, c.complete(item)
+					}
+					// If no exact match, close the dialog
+					return c, c.close()
+				}
+
 				// Only close on backspace when there are no characters left, unless we're back to just the trigger
 				if (msg.String() != "backspace" && msg.String() != "ctrl+h") || (width <= triggerWidth && value != c.trigger) {
 					return c, c.close()

@@ -11,27 +11,21 @@ opencode has a list of keybinds that you can customize through the opencode conf
   "keybinds": {
     "leader": "ctrl+x",
     "app_help": "<leader>h",
-    "switch_agent": "tab",
-
+    "app_exit": "ctrl+c,<leader>q",
     "editor_open": "<leader>e",
-
+    "theme_list": "<leader>t",
+    "project_init": "<leader>i",
+    "tool_details": "<leader>d",
+    "thinking_blocks": "<leader>b",
+    "session_export": "<leader>x",
     "session_new": "<leader>n",
     "session_list": "<leader>l",
     "session_share": "<leader>s",
-    "session_unshare": "<leader>u",
+    "session_unshare": "none",
     "session_interrupt": "esc",
     "session_compact": "<leader>c",
-
-    "tool_details": "<leader>d",
-    "model_list": "<leader>m",
-    "theme_list": "<leader>t",
-    "project_init": "<leader>i",
-
-    "input_clear": "ctrl+c",
-    "input_paste": "ctrl+v",
-    "input_submit": "enter",
-    "input_newline": "shift+enter,ctrl+j",
-
+    "session_child_cycle": "ctrl+right",
+    "session_child_cycle_reverse": "ctrl+left",
     "messages_page_up": "pgup",
     "messages_page_down": "pgdown",
     "messages_half_page_up": "ctrl+alt+u",
@@ -39,8 +33,18 @@ opencode has a list of keybinds that you can customize through the opencode conf
     "messages_first": "ctrl+g",
     "messages_last": "ctrl+alt+g",
     "messages_copy": "<leader>y",
-
-    "app_exit": "ctrl+c,<leader>q"
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "input_clear": "ctrl+c",
+    "input_paste": "ctrl+v",
+    "input_submit": "enter",
+    "input_newline": "shift+enter,ctrl+j"
   }
 }
 ```
@@ -65,7 +69,7 @@ You can disable a keybind by adding the key to your config with a value of "none
 {
   "$schema": "https://opencode.ai/config.json",
   "keybinds": {
-    "session_compact": "none",
+    "session_compact": "none"
   }
 }
 ```

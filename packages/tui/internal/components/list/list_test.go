@@ -138,14 +138,17 @@ func TestCtrlNavigation(t *testing.T) {
 func TestNavigationBoundaries(t *testing.T) {
 	list := createTestList()
 
-	// Test up arrow at first item (should stay at 0)
+	// Test up arrow at first item (should wrap to last item)
 	upKey := tea.KeyPressMsg{Code: tea.KeyUp}
 	updatedModel, _ := list.Update(upKey)
 	list = updatedModel.(*listComponent[testItem])
 	_, idx := list.GetSelectedItem()
-	if idx != 0 {
-		t.Errorf("Expected to stay at index 0 when pressing up at first item, got %d", idx)
+	if idx != 2 {
+		t.Errorf("Expected to wrap to index 2 when pressing up at first item, got %d", idx)
 	}
+
+	// Move to first item
+	list.SetSelectedIndex(0)
 
 	// Move to last item
 	downKey := tea.KeyPressMsg{Code: tea.KeyDown}
@@ -158,12 +161,12 @@ func TestNavigationBoundaries(t *testing.T) {
 		t.Errorf("Expected to be at index 2, got %d", idx)
 	}
 
-	// Test down arrow at last item (should stay at 2)
+	// Test down arrow at last item (should wrap to first item)
 	updatedModel, _ = list.Update(downKey)
 	list = updatedModel.(*listComponent[testItem])
 	_, idx = list.GetSelectedItem()
-	if idx != 2 {
-		t.Errorf("Expected to stay at index 2 when pressing down at last item, got %d", idx)
+	if idx != 0 {
+		t.Errorf("Expected to wrap to index 0 when pressing down at last item, got %d", idx)
 	}
 }
 
@@ -206,5 +209,41 @@ func TestEmptyList(t *testing.T) {
 
 	if !emptyList.IsEmpty() {
 		t.Error("Expected IsEmpty() to return true for empty list")
+	}
+}
+
+func TestWrapAroundNavigation(t *testing.T) {
+	list := createTestList()
+
+	// Start at first item (index 0)
+	_, idx := list.GetSelectedItem()
+	if idx != 0 {
+		t.Errorf("Expected to start at index 0, got %d", idx)
+	}
+
+	// Press up arrow - should wrap to last item (index 2)
+	upKey := tea.KeyPressMsg{Code: tea.KeyUp}
+	updatedModel, _ := list.Update(upKey)
+	list = updatedModel.(*listComponent[testItem])
+	_, idx = list.GetSelectedItem()
+	if idx != 2 {
+		t.Errorf("Expected to wrap to index 2 when pressing up from first item, got %d", idx)
+	}
+
+	// Press down arrow - should wrap to first item (index 0)
+	downKey := tea.KeyPressMsg{Code: tea.KeyDown}
+	updatedModel, _ = list.Update(downKey)
+	list = updatedModel.(*listComponent[testItem])
+	_, idx = list.GetSelectedItem()
+	if idx != 0 {
+		t.Errorf("Expected to wrap to index 0 when pressing down from last item, got %d", idx)
+	}
+
+	// Navigate to middle and verify normal navigation still works
+	updatedModel, _ = list.Update(downKey)
+	list = updatedModel.(*listComponent[testItem])
+	_, idx = list.GetSelectedItem()
+	if idx != 1 {
+		t.Errorf("Expected to move to index 1, got %d", idx)
 	}
 }
