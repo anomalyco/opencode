@@ -798,62 +798,71 @@ export namespace Session {
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
+
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: item.parameters as ZodSchema,
         async execute(args, options) {
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
+          try {
+            await Plugin.trigger(
+              "tool.execute.before",
+              {
+                tool: item.id,
+                sessionID: input.sessionID,
+                callID: options.toolCallId,
+              },
+              { args },
+            )
+
+            const result = await item.execute(args, {
               sessionID: input.sessionID,
+              abort: options.abortSignal!,
+              messageID: assistantMsg.id,
               callID: options.toolCallId,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: options.abortSignal!,
-            messageID: assistantMsg.id,
-            callID: options.toolCallId,
-            agent: agent.name,
-            metadata: async (val) => {
-              const match = processor.partFromToolCall(options.toolCallId)
-              if (match && match.state.status === "running") {
-                await updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
+              agent: agent.name,
+              metadata: async (val) => {
+                const match = processor.partFromToolCall(options.toolCallId)
+                if (match && match.state.status === "running") {
+                  await updatePart({
+                    ...match,
+                    state: {
+                      title: val.title,
+                      metadata: val.metadata,
+                      status: "running",
+                      input: args,
+                      time: { start: Date.now() },
                     },
-                  },
-                })
-              }
-            },
-          })
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
-            },
-            result,
-          )
-          return result
+                  })
+                }
+              },
+            })
+
+            await Plugin.trigger(
+              "tool.execute.after",
+              {
+                tool: item.id,
+                sessionID: input.sessionID,
+                callID: options.toolCallId,
+              },
+              result,
+            )
+
+            return result
+          } catch (err) {
+            // Always return structured error result
+            return {
+              title: "ToolError",
+              metadata: {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              },
+              output: "",
+            }
+          }
         },
         toModelOutput(result) {
-          return {
-            type: "text",
-            value: result.output,
-          }
+          return { type: "text", value: result.output }
         },
       })
     }
@@ -863,31 +872,11 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
           .map((x: any) => x.text)
           .join("\n\n")
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: input.sessionID,
-            callID: opts.toolCallId,
-          },
-          result,
-        )
 
         return {
           output,
