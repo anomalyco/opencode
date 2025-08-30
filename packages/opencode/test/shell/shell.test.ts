@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "bun:test"
 import { PersistentShell } from "../../src/shell/persistent"
 import { ModeController, ExecutionMode } from "../../src/shell/mode"
 import { Shell } from "../../src/shell/shell"
-import path from "path"
 
 describe("PersistentShell", () => {
   let shell: PersistentShell
@@ -43,13 +42,13 @@ describe("PersistentShell", () => {
     it("should handle cd to home directory", async () => {
       const result = await shell.execute("cd")
       expect(result.success).toBe(true)
-      expect(shell.getWorkingDir()).toBe(process.env.HOME || "/")
+      expect(shell.getWorkingDir()).toBe(process.env['HOME'] || "/")
     })
 
     it("should handle cd with ~ expansion", async () => {
       const result = await shell.execute("cd ~/")
       expect(result.success).toBe(true)
-      expect(shell.getWorkingDir()).toBe(process.env.HOME || "/")
+      expect(shell.getWorkingDir()).toBe(process.env['HOME'] || "/")
     })
 
     it("should handle cd to non-existent directory", async () => {

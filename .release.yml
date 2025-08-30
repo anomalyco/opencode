@@ -1,0 +1,102 @@
+# Release configuration for lash/opencode
+# This file documents the release process and configuration
+
+project_name: lash
+
+# Build targets
+builds:
+  - platform: linux
+    architectures:
+      - x64
+      - arm64
+  - platform: darwin
+    architectures:
+      - x64
+      - arm64
+  - platform: windows
+    architectures:
+      - x64
+
+# Archive configuration
+archives:
+  - format: tar.gz
+    platforms:
+      - linux
+      - darwin
+    files:
+      - README.md
+      - LICENSE
+  - format: zip
+    platforms:
+      - windows
+    files:
+      - README.md
+      - LICENSE
+
+# Checksum configuration
+checksum:
+  algorithm: sha256
+  name_template: checksums.txt
+
+# NPM publishing
+npm:
+  registry: https://registry.npmjs.org
+  package: lash-cli
+  access: public
+
+# Homebrew tap (future)
+brew:
+  enabled: false
+  repository:
+    owner: lacymorrow
+    name: homebrew-tap
+  homepage: https://github.com/lacymorrow/opencode
+  description: Terminal-based AI assistant for software developers
+  license: MIT
+
+# Changelog configuration
+changelog:
+  sort: asc
+  use: git
+  groups:
+    - title: "🚀 New Features"
+      regexp: '^feat(\(.+\))??!?:'
+    - title: "🐛 Bug Fixes"
+      regexp: '^fix(\(.+\))??!?:'
+    - title: "⚡ Performance"
+      regexp: '^perf(\(.+\))??!?:'
+    - title: "📝 Documentation"
+      regexp: '^docs(\(.+\))??!?:'
+    - title: "🔧 Other Changes"
+  filters:
+    exclude:
+      - '^chore:'
+      - '^build:'
+      - '^ci:'
+      - '^test:'
+      - '^wip:'
+      - 'Merge pull request'
+      - 'Merge branch'
+
+# Release notes template
+release:
+  prerelease: auto
+  draft: false
+  name_template: "v{{ .Version }}"
+  header: |
+    ## What's Changed
+  footer: |
+    ## Installation
+    
+    ### macOS/Linux
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/lacymorrow/opencode/main/install | bash
+    ```
+    
+    ### npm
+    ```bash
+    npm install -g lash-cli
+    ```
+    
+    ### Manual Download
+    Download the appropriate binary for your platform from the assets below.

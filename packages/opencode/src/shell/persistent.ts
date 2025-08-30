@@ -1,4 +1,4 @@
-import { exec, spawn } from "child_process"
+import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import { Log } from "../util/log"
@@ -26,7 +26,6 @@ export class PersistentShell {
   private workingDir: string
   private environment: Map<string, string>
   private shellBinary: string
-  private shellArgs: string[]
   
   constructor() {
     const app = App.info()
@@ -34,8 +33,7 @@ export class PersistentShell {
     this.environment = new Map(Object.entries(process.env as ShellEnvironment))
     
     // Detect user's shell
-    this.shellBinary = process.env.SHELL || "/bin/sh"
-    this.shellArgs = ["-c"]
+    this.shellBinary = process.env['SHELL'] || "/bin/sh"
     
     log.info("initialized", {
       workingDir: this.workingDir,
@@ -96,7 +94,7 @@ export class PersistentShell {
     const match = command.match(/^cd\s+(.+)/)
     if (!match) {
       // cd with no args goes to home
-      this.workingDir = process.env.HOME || "/"
+      this.workingDir = process.env['HOME'] || "/"
       return {
         stdout: "",
         stderr: "",
@@ -115,7 +113,7 @@ export class PersistentShell {
     
     // Handle ~ expansion
     if (targetDir.startsWith("~")) {
-      targetDir = targetDir.replace(/^~/, process.env.HOME || "/")
+      targetDir = targetDir.replace(/^~/, process.env['HOME'] || "/")
     }
     
     // Resolve relative paths

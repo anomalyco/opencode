@@ -3,7 +3,6 @@ import { Tool } from "../tool/tool"
 import { getPersistentShell } from "./persistent"
 import { getModeController, ExecutionMode } from "./mode"
 import { Log } from "../util/log"
-import { App } from "../app/app"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { Agent } from "../agent/agent"
@@ -46,16 +45,30 @@ export const ShellTool = Tool.define("shell", {
         // In the actual implementation, this would trigger the agent
         // For now, we'll just return a placeholder
         return {
-          type: "text" as const,
-          text: `[Would route to agent: ${params.command}]`
+          title: params.description,
+          metadata: {
+            command: params.command,
+            workingDir: shell.getWorkingDir(),
+            exitCode: 0,
+            description: params.description,
+            output: `[Would route to agent: ${params.command}]`
+          },
+          output: `[Would route to agent: ${params.command}]`
         }
       }
     } else if (effectiveMode === ExecutionMode.Agent) {
       // Force route to agent
       log.info("forced agent mode", { command: params.command })
       return {
-        type: "text" as const,
-        text: `[Agent mode: ${params.command}]`
+        title: params.description,
+        metadata: {
+          command: params.command,
+          workingDir: shell.getWorkingDir(),
+          exitCode: 0,
+          description: params.description,
+          output: `[Agent mode: ${params.command}]`
+        },
+        output: `[Agent mode: ${params.command}]`
       }
     }
     
@@ -66,7 +79,6 @@ export const ShellTool = Tool.define("shell", {
     })
     
     // Check permissions
-    const app = App.info()
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
     const action = Wildcard.all(params.command, permissions)
     
@@ -97,16 +109,6 @@ export const ShellTool = Tool.define("shell", {
       signal: ctx.abort
     })
     
-    // Update metadata with output
-    ctx.metadata({
-      metadata: {
-        output: result.stdout + (result.stderr ? `\nstderr:\n${result.stderr}` : ""),
-        description: params.description,
-        workingDir: shell.getWorkingDir(),
-        exitCode: result.exitCode
-      }
-    })
-    
     // Format output
     let output = result.stdout
     if (result.stderr) {
@@ -131,8 +133,15 @@ export const ShellTool = Tool.define("shell", {
     }
     
     return {
-      type: "text" as const,
-      text: output
+      title: params.description,
+      metadata: {
+        command: params.command,
+        workingDir: shell.getWorkingDir(),
+        exitCode: result.exitCode,
+        description: params.description,
+        output: result.stdout + (result.stderr ? `\nstderr:\n${result.stderr}` : "")
+      },
+      output: output
     }
   }
 })

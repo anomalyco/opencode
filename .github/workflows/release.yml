@@ -1,0 +1,236 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Release
+
+on:
+  push:
+    tags:
+      - v*.*.*
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  build-binaries:
+    name: Build binaries
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            bun_target: bun-linux-x64
+          - os: ubuntu-latest
+            target: linux-arm64
+            bun_target: bun-linux-arm64
+          - os: macos-latest
+            target: darwin-x64
+            bun_target: bun-darwin-x64
+          - os: macos-latest
+            target: darwin-arm64
+            bun_target: bun-darwin-arm64
+          - os: windows-latest
+            target: windows-x64
+            bun_target: bun-windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build binary
+        run: |
+          cd packages/opencode
+          bun build ./src/index.ts --compile --target=${{ matrix.bun_target }} --outfile=lash-${{ matrix.target }}
+
+      - name: Create archive
+        shell: bash
+        run: |
+          cd packages/opencode
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            7z a -tzip lash-${{ matrix.target }}.zip lash-${{ matrix.target }}.exe README.md LICENSE
+          else
+            tar -czf lash-${{ matrix.target }}.tar.gz lash-${{ matrix.target }} README.md LICENSE
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            packages/opencode/lash-${{ matrix.target }}.tar.gz
+            packages/opencode/lash-${{ matrix.target }}.zip
+
+  release:
+    name: Create release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          # Generate changelog
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s" HEAD)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s" ${PREV_TAG}..HEAD)
+          fi
+          
+          # Filter out noise
+          CHANGELOG=$(echo "$CHANGELOG" | grep -v -E "^- (Merge pull request|Merge branch|merge:|wip:|WIP:)")
+          
+          # Group by type
+          FEATURES=$(echo "$CHANGELOG" | grep -E "^- feat(\(|:)" || true)
+          FIXES=$(echo "$CHANGELOG" | grep -E "^- fix(\(|:)" || true)
+          OTHERS=$(echo "$CHANGELOG" | grep -v -E "^- (feat|fix)(\(|:)" || true)
+          
+          # Build the final changelog
+          {
+            echo "CHANGELOG<<EOF"
+            if [ -n "$FEATURES" ]; then
+              echo "### 🚀 New Features"
+              echo "$FEATURES"
+              echo ""
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+            if [ -n "$OTHERS" ]; then
+              echo "### 📝 Other Changes"
+              echo "$OTHERS"
+              echo ""
+            fi
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create checksums
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## What's Changed
+            
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ## Installation
+            
+            ### macOS/Linux
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/lacymorrow/opencode/main/install | bash
+            ```
+            
+            ### npm
+            ```bash
+            npm install -g lash-cli
+            ```
+            
+            ### Manual Download
+            Download the appropriate binary for your platform from the assets below.
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/checksums.txt
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+
+  publish-npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Update version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd packages/opencode
+          npm version $VERSION --no-git-tag-version
+
+      - name: Build package
+        run: |
+          cd packages/opencode
+          bun run build || echo "No build script, skipping"
+
+      - name: Publish to npm
+        run: |
+          cd packages/opencode
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  build-go-tools:
+    name: Build Go tools
+    if: false # Enable this if you want to build Go components
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build TUI component
+        run: |
+          cd packages/tui
+          go build -o lash-tui
+
+      - name: Upload TUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-tui
+          path: packages/tui/lash-tui

@@ -6,6 +6,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bun run --conditions=development ./src/index.ts",
+    "build": "bun run ./script/build-binaries.ts",
+    "release": "bun run ./script/release.ts",
+    "release:major": "bun run ./script/release.ts major",
+    "release:minor": "bun run ./script/release.ts minor",
+    "release:patch": "bun run ./script/release.ts patch",
     "publish:lash": "bun run ./script/publish-lash.ts",
     "publish:lash:dry": "DRY_RUN=true bun run ./script/publish-lash.ts"
   },
