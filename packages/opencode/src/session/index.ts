@@ -21,20 +21,10 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 
 import { App } from "../app/app"
-import { Bus } from "../bus"
-import { Config } from "../config/config"
-import { Flag } from "../flag/flag"
+import { Agent } from "../agent/agent"
 import { Identifier } from "../id/id"
-import { Installation } from "../installation"
-import { MCP } from "../mcp"
-import { Provider } from "../provider/provider"
-import { ProviderTransform } from "../provider/transform"
-import type { ModelsDev } from "../provider/models"
-import { Share } from "../share/share"
-import { Snapshot } from "../snapshot"
-import { Storage } from "../storage/storage"
-import { Log } from "../util/log"
 import { NamedError } from "../util/error"
+import { TokenEstimator } from "../util/token"
 import { SystemPrompt } from "./system"
 import { FileTime } from "../file/time"
 import { MessageV2 } from "./message-v2"
@@ -43,13 +33,24 @@ import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
-import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { ulid } from "ulid"
 import { defer } from "../util/defer"
 import { Command } from "../command"
 import { $ } from "bun"
+import { Log } from "../util/log"
+import { Bus } from "../bus"
+import { Storage } from "../storage/storage"
+import { Provider } from "../provider/provider"
+import { ProviderTransform } from "../provider/transform"
+import { Config } from "../config/config"
+import { Flag } from "../flag/flag"
+import { Share } from "../share/share"
+import { Installation } from "../installation"
+import { Snapshot } from "../snapshot"
+import { MCP } from "../mcp"
+import { ModelsDev } from "../provider/models"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -442,6 +443,13 @@ export namespace Session {
         draft.revert = undefined
       })
     }
+    // Load model early to get context limits for file processing
+    const modelForLimits = await Provider.getModel(input.providerID, input.modelID)
+    const modelOutputLimit = Math.min(modelForLimits.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+    const contextLimit = modelForLimits.info.limit.context || 200_000 // fallback to 200k if not specified
+    // Use 75% of context limit for file content, leaving room for system prompts and conversation
+    const maxFileTokens = Math.floor((contextLimit - modelOutputLimit) * 0.75)
+
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -532,7 +540,7 @@ export namespace Session {
                     abort: new AbortController().signal,
                     agent: input.agent!,
                     messageID: userMsg.id,
-                    extra: { bypassCwdCheck: true },
+                    extra: { bypassCwdCheck: true, maxFileTokens },
                     metadata: async () => {},
                   }),
                 )
@@ -564,6 +572,34 @@ export namespace Session {
 
               let file = Bun.file(filePath)
               FileTime.read(input.sessionID, filePath)
+
+              // Check file size and estimate tokens
+              const fileContent = await file.text()
+              const estimatedTokens = TokenEstimator.estimateTokens(fileContent)
+
+              if (estimatedTokens > maxFileTokens) {
+                // File is too large, use the Read tool instead with truncation
+                const truncatedContent = TokenEstimator.truncateToTokenLimit(fileContent, maxFileTokens)
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `File ${filePath} is too large (${estimatedTokens} estimated tokens, limit: ${maxFileTokens} for model ${modelForLimits.info.id}). Showing truncated content.`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    text: truncatedContent,
+                    synthetic: false,
+                  },
+                ]
+              }
+
               return [
                 {
                   id: Identifier.ascending("part"),
@@ -649,11 +685,12 @@ export namespace Session {
       })
     }
 
-    const model = await Provider.getModel(input.providerID, input.modelID)
+    // Model already loaded earlier as modelForLimits
+    const model = modelForLimits
     let msgs = await messages(input.sessionID)
 
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+    const outputLimit = modelOutputLimit
 
     // auto summarize if too long
     if (previous && previous.tokens) {

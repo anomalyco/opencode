@@ -7,9 +7,11 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { App } from "../app/app"
 import { Filesystem } from "../util/filesystem"
+import { TokenEstimator } from "../util/token"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
+const DEFAULT_MAX_FILE_TOKENS = 150_000 // Conservative default limit for file content
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -55,7 +57,25 @@ export const ReadTool = Tool.define("read", {
     if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
     const isBinary = await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
-    const lines = await file.text().then((text) => text.split("\n"))
+
+    const fullText = await file.text()
+    const estimatedTokens = TokenEstimator.estimateTokens(fullText)
+
+    // Get max tokens from context or use default
+    const maxFileTokens = ctx.extra?.["maxFileTokens"] || DEFAULT_MAX_FILE_TOKENS
+
+    // If file is extremely large and no specific range requested, suggest using offset/limit
+    if (estimatedTokens > maxFileTokens && !params.offset && !params.limit) {
+      const lines = fullText.split("\n")
+      const suggestedLimit = Math.min(2000, Math.floor((maxFileTokens / estimatedTokens) * lines.length))
+      throw new Error(
+        `File is too large (${lines.length} lines, ~${estimatedTokens} tokens).\n` +
+          `Please use offset and limit parameters to read specific sections.\n` +
+          `Suggested: limit=${suggestedLimit} to stay within token limits.`,
+      )
+    }
+
+    const lines = fullText.split("\n")
     const raw = lines.slice(offset, offset + limit).map((line) => {
       return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
     })

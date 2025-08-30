@@ -20,9 +20,6 @@ export type Event =
       type: "message.part.removed"
     } & EventMessagePartRemoved)
   | ({
-      type: "storage.write"
-    } & EventStorageWrite)
-  | ({
       type: "permission.updated"
     } & EventPermissionUpdated)
   | ({
@@ -31,6 +28,9 @@ export type Event =
   | ({
       type: "file.edited"
     } & EventFileEdited)
+  | ({
+      type: "storage.write"
+    } & EventStorageWrite)
   | ({
       type: "session.updated"
     } & EventSessionUpdated)
@@ -420,14 +420,6 @@ export type EventMessagePartRemoved = {
   }
 }
 
-export type EventStorageWrite = {
-  type: "storage.write"
-  properties: {
-    key: string
-    content?: unknown
-  }
-}
-
 export type EventPermissionUpdated = {
   type: "permission.updated"
   properties: Permission
@@ -462,6 +454,14 @@ export type EventFileEdited = {
   type: "file.edited"
   properties: {
     file: string
+  }
+}
+
+export type EventStorageWrite = {
+  type: "storage.write"
+  properties: {
+    key: string
+    content?: unknown
   }
 }
 
