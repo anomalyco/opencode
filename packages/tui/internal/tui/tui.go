@@ -71,6 +71,7 @@ type Model struct {
 	fileProvider         completions.CompletionProvider
 	symbolsProvider      completions.CompletionProvider
 	agentsProvider       completions.CompletionProvider
+	historyProvider      completions.CompletionProvider
 	showCompletionDialog bool
 	leaderBinding        *key.Binding
 	toastManager         *toast.ToastManager
@@ -207,6 +208,33 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Set command provider for command completion
 			a.completions = dialog.NewCompletionDialogComponent("/", a.commandProvider)
+			updated, cmd = a.completions.Update(msg)
+			a.completions = updated.(dialog.CompletionDialog)
+			cmds = append(cmds, cmd)
+
+			return a, tea.Sequence(cmds...)
+		}
+
+		// Handle history search trigger
+		if historyCommand := a.app.Commands[commands.HistorySearchCommand]; historyCommand.Matches(msg, a.app.IsLeaderSequence) && !a.showCompletionDialog {
+			a.showCompletionDialog = true
+
+			updated, cmd := a.editor.Update(msg)
+			a.editor = updated.(chat.EditorComponent)
+			cmds = append(cmds, cmd)
+
+			// Set history provider for history completion
+			// Use the first keybinding as the trigger display
+			triggerKey := "ctrl+r" // fallback
+			if len(historyCommand.Keybindings) > 0 {
+				triggerKey = historyCommand.Keybindings[0].Key
+			}
+
+			// Create a filtered history provider based on mode
+			var provider completions.CompletionProvider
+			// Use the regular history provider for both bash and regular modes
+			provider = a.historyProvider
+			a.completions = dialog.NewCompletionDialogComponent(triggerKey, provider)
 			updated, cmd = a.completions.Update(msg)
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
@@ -455,6 +483,21 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.app.Messages = []app.Message{}
 	case dialog.CompletionDialogCloseMsg:
 		a.showCompletionDialog = false
+	case dialog.CompletionSelectedMsg:
+		// If this was a history search, set the editor value
+		if msg.Item.ProviderID == "history" {
+			value := msg.Item.Value
+			if strings.HasPrefix(value, "! ") {
+				// Switch to bash mode and strip the prefix
+				a.app.IsBashMode = true
+				value = strings.TrimPrefix(value, "! ")
+			}
+			a.editor.SetValueWithAttachments(value)
+			updated, cmd := a.editor.Focus()
+			a.editor = updated.(chat.EditorComponent)
+			a.showCompletionDialog = false
+			return a, cmd
+		}
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
@@ -1482,6 +1525,7 @@ func NewModel(app *app.App) tea.Model {
 	fileProvider := completions.NewFileContextGroup(app)
 	symbolsProvider := completions.NewSymbolsContextGroup(app)
 	agentsProvider := completions.NewAgentsContextGroup(app)
+	historyProvider := completions.NewHistoryCompletionProvider(app)
 
 	messages := chat.NewMessagesComponent(app)
 	editor := chat.NewEditorComponent(app)
@@ -1503,6 +1547,7 @@ func NewModel(app *app.App) tea.Model {
 		fileProvider:         fileProvider,
 		symbolsProvider:      symbolsProvider,
 		agentsProvider:       agentsProvider,
+		historyProvider:      historyProvider,
 		leaderBinding:        leaderBinding,
 		showCompletionDialog: false,
 		toastManager:         toast.NewToastManager(),

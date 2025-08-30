@@ -132,6 +132,7 @@ const (
 	SessionInterruptCommand         CommandName = "session_interrupt"
 	SessionCompactCommand           CommandName = "session_compact"
 	SessionExportCommand            CommandName = "session_export"
+	HistorySearchCommand            CommandName = "history_search"
 	ToolDetailsCommand              CommandName = "tool_details"
 	ThinkingBlocksCommand           CommandName = "thinking_blocks"
 	ModelListCommand                CommandName = "model_list"
@@ -209,6 +210,11 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 			Description: "export conversation",
 			Keybindings: parseBindings("<leader>x"),
 			Trigger:     []string{"export"},
+		},
+		{
+			Name:        HistorySearchCommand,
+			Description: "search history",
+			Keybindings: parseBindings("ctrl+r"),
 		},
 		{
 			Name:        SessionNewCommand,

@@ -321,7 +321,16 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.textarea.InsertAttachment(attachment)
 			m.textarea.InsertString(" ")
 			return m, nil
-
+		case "history":
+			// For history items, check if it's a shell command
+			value := msg.Item.Value
+			if strings.HasPrefix(value, "! ") {
+				// Switch to bash mode and strip the prefix
+				m.app.IsBashMode = true
+				value = strings.TrimPrefix(value, "! ")
+			}
+			m.SetValue(value)
+			return m, nil
 		default:
 			slog.Debug("Unknown provider", "provider", msg.Item.ProviderID)
 			return m, nil
@@ -523,10 +532,21 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) SubmitBash() (tea.Model, tea.Cmd) {
 	command := m.textarea.Value()
+
+	// Don't submit empty commands
+	if command == "" {
+		return m, nil
+	}
+
+	// Add the shell command to message history
+	prompt := app.Prompt{Text: "! " + command}
+	m.app.State.AddPromptToHistory(prompt)
+
 	var cmds []tea.Cmd
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
 	cmds = append(cmds, cmd)
+	cmds = append(cmds, m.app.SaveState())
 	cmds = append(cmds, util.CmdHandler(app.SendShell{Command: command}))
 	return m, tea.Batch(cmds...)
 }
