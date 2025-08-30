@@ -101,7 +101,7 @@ async function main() {
 // Check for uncommitted changes
 try {
   const gitStatus = await $`git status --porcelain`.text()
-  if (gitStatus.trim() && !process.env.FORCE) {
+  if (gitStatus.trim() && !process.env['FORCE']) {
     console.error("Error: You have uncommitted changes. Commit or stash them first.")
     console.error("Use FORCE=true to override this check.")
     process.exit(1)

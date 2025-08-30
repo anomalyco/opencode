@@ -17,7 +17,7 @@ const targets = [
   { platform: "windows", arch: "x64", bunTarget: "bun-windows-x64" },
 ]
 
-const version = process.env.VERSION || "dev"
+const version = process.env['VERSION'] || "dev"
 const outDir = join(process.cwd(), "dist")
 
 // Create output directory
