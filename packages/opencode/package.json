@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.1.1",
+  "version": "0.1.197",
   "name": "lash-cli",
   "type": "module",
   "scripts": {

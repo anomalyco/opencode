@@ -68,9 +68,20 @@ async function main() {
     await $`git commit -m "chore: release v${newVersion}"`
     console.log("✓ Committed changes")
     
-    // Create tag
-    await $`git tag -a v${newVersion} -m "Release v${newVersion}"`
-    console.log(`✓ Created tag v${newVersion}`)
+    // Check if tag already exists
+    try {
+      await $`git rev-parse v${newVersion}`.quiet()
+      console.error(`✗ Tag v${newVersion} already exists`)
+      console.log("Rolling back version change...")
+      await updateVersion(packagePath, currentVersion)
+      await $`git add -A`
+      await $`git commit --amend --no-edit`
+      process.exit(1)
+    } catch {
+      // Tag doesn't exist, create it
+      await $`git tag -a v${newVersion} -m "Release v${newVersion}"`
+      console.log(`✓ Created tag v${newVersion}`)
+    }
     
     console.log("\n✨ Release prepared!")
     console.log("\nTo publish the release:")
