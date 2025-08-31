@@ -23,8 +23,7 @@
     "lash": "./bin/lash"
   },
   "files": [
-    "bin/",
-    "dist/",
+    "bin/lash",
     "src/",
     "README.md",
     "LICENSE"
@@ -49,30 +48,28 @@
     "@types/bun": "latest",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
-    "typescript": "catalog:",
+    "typescript": "^5.8.2",
     "vscode-languageserver-types": "3.17.5",
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
-    "@hono/zod-validator": "catalog:",
+    "@hono/zod-validator": "0.4.2",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
-    "@lash/plugin": "workspace:*",
-    "@lash/sdk": "workspace:*",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
-    "ai": "catalog:",
+    "ai": "5.0.8",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
     "gray-matter": "4.0.3",
-    "hono": "catalog:",
+    "hono": "4.7.10",
     "hono-openapi": "0.4.8",
     "isomorphic-git": "1.32.1",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",
-    "remeda": "catalog:",
+    "remeda": "2.26.0",
     "tree-sitter": "0.22.4",
     "tree-sitter-bash": "0.23.3",
     "turndown": "7.2.0",
@@ -81,7 +78,7 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:",
+    "zod": "3.25.76",
     "zod-openapi": "4.1.0"
   }
 }

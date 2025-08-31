@@ -16,9 +16,22 @@ if ! command -v bun >/dev/null 2>&1; then
     exit 1
 fi
 
-# Get the directory of this script
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+# Get the directory of this script (resolving symlinks)
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+    SCRIPT="$(readlink "$SCRIPT")"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
 
-# Run with Bun
-exec bun run "$ROOT_DIR/src/index.ts" "$@"
+# Find the package root (parent of bin directory)
+PKG_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Check if we're in development (local) or production (npm installed)
+if [ -f "$PKG_ROOT/src/index.ts" ]; then
+    # Run with Bun using the TypeScript source
+    exec bun run "$PKG_ROOT/src/index.ts" "$@"
+else
+    echo "Error: Could not find src/index.ts in $PKG_ROOT" >&2
+    echo "Package may be incorrectly installed." >&2
+    exit 1
+fi
