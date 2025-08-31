@@ -299,19 +299,18 @@ export namespace LSPServer {
       }
       args.push("--stdio")
 
-      // Detect Python environment for Pyright
-      let pythonPath: string | undefined
-      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
-        Boolean,
-      ) as string[]
+      const initialization: Record<string, string> = {}
 
+      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+        (p): p is string => p !== undefined,
+      )
       for (const venvPath of potentialVenvPaths) {
         const isWindows = process.platform === "win32"
         const potentialPythonPath = isWindows
           ? path.join(venvPath, "Scripts", "python.exe")
           : path.join(venvPath, "bin", "python")
         if (await Bun.file(potentialPythonPath).exists()) {
-          pythonPath = potentialPythonPath
+          initialization["pythonPath"] = potentialPythonPath
           break
         }
       }
@@ -325,11 +324,7 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: pythonPath
-          ? {
-              pythonPath,
-            }
-          : {},
+        initialization,
       }
     },
   }
