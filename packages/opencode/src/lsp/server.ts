@@ -8,8 +8,6 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Flag } from "../flag/flag"
-import { PythonEnv } from "../util/python-env"
-import { detectPythonEnvironment, generatePythonSettings } from "./python"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
