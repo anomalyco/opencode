@@ -2,11 +2,16 @@
   "$schema": "https://json.schemastore.org/package.json",
   "version": "0.1.199",
   "name": "lash-cli",
+  "description": "Terminal-based AI assistant for software developers (requires Bun runtime)",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bun run --conditions=development ./src/index.ts",
     "build": "bun run ./script/build-binaries.ts",
+    "prepublishOnly": "bun run ./script/prepare-npm.ts",
     "release": "bun run ./script/release.ts",
     "release:major": "bun run ./script/release.ts major",
     "release:minor": "bun run ./script/release.ts minor",
@@ -15,8 +20,15 @@
     "publish:lash:dry": "DRY_RUN=true bun run ./script/publish-lash.ts"
   },
   "bin": {
-    "lash": "./bin/opencode"
+    "lash": "./bin/lash"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     "./*": "./src/*.ts"
   },

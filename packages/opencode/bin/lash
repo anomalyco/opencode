@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+
+# This is the npm entry point for lash-cli
+# It requires Bun to be installed
+
+# Check if Bun is available
+if ! command -v bun >/dev/null 2>&1; then
+    echo "Error: Bun is required to run lash-cli" >&2
+    echo "" >&2
+    echo "Please install Bun first:" >&2
+    echo "  curl -fsSL https://bun.sh/install | bash" >&2
+    echo "" >&2
+    echo "Or on macOS with Homebrew:" >&2
+    echo "  brew install oven-sh/bun/bun" >&2
+    exit 1
+fi
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Run with Bun
+exec bun run "$ROOT_DIR/src/index.ts" "$@"
