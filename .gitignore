@@ -7,3 +7,5 @@ node_modules
 openapi.json
 playground
 tmp
+
+*.bun-build
