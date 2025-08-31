@@ -16,14 +16,21 @@ if ! command -v bun >/dev/null 2>&1; then
     exit 1
 fi
 
-# Get the directory of this script (resolving symlinks)
-SCRIPT="$0"
-while [ -L "$SCRIPT" ]; do
-    SCRIPT="$(readlink "$SCRIPT")"
-done
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+# Find the real location of this script
+if [ -L "$0" ]; then
+    # It's a symlink, find the real file
+    REAL_SCRIPT="$(readlink "$0")"
+    if [ "${REAL_SCRIPT#/}" = "$REAL_SCRIPT" ]; then
+        # Relative path, resolve from symlink directory
+        REAL_DIR="$(dirname "$0")"
+        REAL_SCRIPT="$REAL_DIR/$REAL_SCRIPT"
+    fi
+else
+    REAL_SCRIPT="$0"
+fi
 
-# Find the package root (parent of bin directory)
+# Get the package root directory
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 PKG_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Check if we're in development (local) or production (npm installed)

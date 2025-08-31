@@ -1,15 +1,42 @@
-# js
+# lash-cli
 
-To install dependencies:
+AI-powered terminal assistant for software developers.
 
+## Installation
+
+### From Source (Recommended)
 ```bash
+git clone https://github.com/lacymorrow/opencode
+cd opencode/packages/opencode
 bun install
+bun run dev
 ```
 
-To run:
+### Pre-built Binaries
+Download the latest release for your platform from the [GitHub Releases](https://github.com/lacymorrow/opencode/releases) page.
+
+### NPM Package
+**Note:** The npm package requires Bun runtime to be installed.
 
 ```bash
-bun run index.ts
+# Install Bun first
+curl -fsSL https://bun.sh/install | bash
+
+# Then install lash-cli
+npm install -g lash-cli
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+## Usage
+
+```bash
+lash --help
+```
+
+## Requirements
+
+- Bun runtime (v1.0.0 or higher)
+- Node.js 18+ (for npm installation)
+
+## License
+
+MIT
