@@ -193,7 +193,7 @@ export namespace LSPServer {
   }
 
   export const Gopls: Info = {
-    id: "golang",
+    id: "gopls",
     root: async (file, app) => {
       const work = await NearestRoot(["go.work"])(file, app)
       if (work) return work
