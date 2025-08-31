@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "version": "0.1.199",
   "name": "lash-cli",
-  "description": "Terminal-based AI assistant for software developers (requires Bun runtime)",
+  "description": "lash - The AI coding agent built for the terminal",
   "type": "module",
   "engines": {
     "node": ">=18.0.0"

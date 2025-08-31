@@ -5,7 +5,7 @@ import pkg from "../package.json"
 const version = process.env["LASH_VERSION"] || process.env["OPENCODE_VERSION"] || pkg.version
 const dry = process.env["DRY_RUN"] === "true"
 
-console.log(`🚀 Publishing lash-cli v${version}`)
+console.log(`🚀 Publishing lash v${version}`)
 if (dry) console.log("(DRY RUN - no actual publishing)")
 
 const GOARCH: Record<string, string> = {
@@ -165,27 +165,36 @@ await Bun.file(`./dist/lash-cli/bin/lash.cmd`).write(windowsWrapper)
 
 // Create postinstall script
 const postinstallScript = `#!/usr/bin/env node
-const { execSync } = require('child_process');
 const { existsSync } = require('fs');
 const { join } = require('path');
 
-const platform = process.platform === 'win32' ? 'windows' : process.platform;
-const arch = process.arch === 'x64' ? 'x64' : process.arch;
+const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux';
+const arch = process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'arm64' : process.arch;
 const packageName = \`lash-cli-\${platform}-\${arch}\`;
 
-console.log(\`Installing \${packageName}...\`);
+console.log(\`Checking for platform-specific package: \${packageName}\`);
 
-try {
-  // Check if the platform-specific package exists
-  const binPath = join(__dirname, 'node_modules', packageName, 'bin', platform === 'windows' ? 'lash.exe' : 'lash');
-  if (!existsSync(binPath)) {
-    console.error(\`Platform package \${packageName} not found. You may need to install it manually.\`);
-    process.exit(1);
+// The platform-specific package should be installed as an optional dependency
+// We just need to verify it exists
+const searchPaths = [
+  join(__dirname, '..', packageName, 'bin', platform === 'windows' ? 'lash.exe' : 'lash'),
+  join(__dirname, '..', '..', packageName, 'bin', platform === 'windows' ? 'lash.exe' : 'lash'),
+  join(__dirname, 'node_modules', packageName, 'bin', platform === 'windows' ? 'lash.exe' : 'lash')
+];
+
+let found = false;
+for (const path of searchPaths) {
+  if (existsSync(path)) {
+    console.log(\`✓ Found platform binary at: \${path}\`);
+    found = true;
+    break;
   }
-  console.log('✓ Lash CLI installed successfully');
-} catch (error) {
-  console.error('Failed to install platform-specific binary:', error);
-  process.exit(1);
+}
+
+if (!found) {
+  console.log(\`Platform package \${packageName} will be installed as an optional dependency.\`);
+  console.log('If installation fails, you can manually install it with:');
+  console.log(\`  npm install \${packageName}\`);
 }
 `
 
@@ -197,7 +206,7 @@ await Bun.file(`./dist/lash-cli/package.json`).write(
     {
       name: "lash-cli",
       version,
-      description: "The AI coding agent built for the terminal",
+      description: "lash - The AI coding agent built for the terminal",
       bin: {
         lash: "./bin/lash"
       },
@@ -226,7 +235,7 @@ if (!dry) {
   await $`cd ./dist/lash-cli && npm publish --access public`
 }
 
-console.log(`✨ Lash CLI v${version} published successfully!`)
+console.log(`✨ lash v${version} published successfully!`)
 
 // Create zip files for GitHub releases
 if (!dry) {
