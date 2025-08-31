@@ -83,6 +83,11 @@ export namespace Log {
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
+  function formatError(error: Error): string {
+    const result = error.message
+    return error.cause instanceof Error ? result + " Caused by: " + formatError(error.cause) : result
+  }
+
   let last = Date.now()
   export function create(tags?: Record<string, any>) {
     tags = tags || {}
@@ -103,7 +108,7 @@ export namespace Log {
         .filter(([_, value]) => value !== undefined && value !== null)
         .map(([key, value]) => {
           const prefix = `${key}=`
-          if (value instanceof Error) return prefix + value.message
+          if (value instanceof Error) return prefix + formatError(value)
           if (typeof value === "object") return prefix + JSON.stringify(value)
           return prefix + value
         })
