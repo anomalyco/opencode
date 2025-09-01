@@ -216,11 +216,21 @@ export const TuiCommand = cmd({
           }
 
           const url = new URL("http://" + host + ":" + String(port))
-          const until = Date.now() + 20_000
+          const until = Date.now() + 30_000
+          let ready = false
           while (Date.now() < until) {
             const ok = await fetch(new URL("/doc", url)).then((r) => r.ok).catch(() => false)
-            if (ok) break
-            await Bun.sleep(200)
+            if (ok) {
+              ready = true
+              break
+            }
+            await Bun.sleep(250)
+          }
+          if (!ready) {
+            UI.error("docker server failed to become ready, starting locally")
+            const stop = Bun.spawn({ cmd: [dockerBin, "stop", id], stdout: "ignore", stderr: "inherit" })
+            await stop.exited
+            return Server.listen({ port: args.port, hostname: args.hostname })
           }
 
           return {
