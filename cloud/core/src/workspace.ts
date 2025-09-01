@@ -7,6 +7,7 @@ import { Identifier } from "./identifier"
 import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
+import { Key } from "./key"
 
 export namespace Workspace {
   export const create = fn(z.void(), async () => {
@@ -28,6 +29,15 @@ export namespace Workspace {
         balance: centsToMicroCents(100),
       })
     })
+    await Actor.provide(
+      "system",
+      {
+        workspaceID,
+      },
+      async () => {
+        await Key.create({ name: "Default API Key" })
+      },
+    )
     return workspaceID
   })
 

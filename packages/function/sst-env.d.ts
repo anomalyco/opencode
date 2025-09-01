@@ -14,6 +14,10 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "Console": {
+      "type": "sst.cloudflare.SolidStart"
+      "url": string
+    }
     "DATABASE_PASSWORD": {
       "type": "sst.sst.Secret"
       "value": string

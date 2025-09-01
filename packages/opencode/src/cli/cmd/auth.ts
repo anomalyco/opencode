@@ -8,7 +8,7 @@ import path from "path"
 import os from "os"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
-import { App } from "../../app/app"
+import { Instance } from "../../project/instance"
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -74,7 +74,7 @@ export const AuthLoginCommand = cmd({
       type: "string",
     }),
   async handler(args) {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await Instance.provide(process.cwd(), async () => {
       UI.empty()
       prompts.intro("Add credential")
       if (args.url) {

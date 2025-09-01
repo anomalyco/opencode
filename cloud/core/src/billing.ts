@@ -1,4 +1,3 @@
-import { Resource } from "sst"
 import { Stripe } from "stripe"
 import { Database, eq, sql } from "./drizzle"
 import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
@@ -8,6 +7,7 @@ import { z } from "zod"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
+import { Resource } from "@opencode/cloud-resource"
 
 export namespace Billing {
   export const stripe = () =>

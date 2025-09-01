@@ -200,7 +200,7 @@ func (m *statusComponent) View() string {
 
 func (m *statusComponent) startGitWatcher() tea.Cmd {
 	cmd := util.CmdHandler(
-		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Info.Path.Root)},
+		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Project.Worktree)},
 	)
 	if err := m.initWatcher(); err != nil {
 		return cmd
@@ -209,7 +209,7 @@ func (m *statusComponent) startGitWatcher() tea.Cmd {
 }
 
 func (m *statusComponent) initWatcher() error {
-	gitDir := filepath.Join(m.app.Info.Path.Root, ".git")
+	gitDir := filepath.Join(m.app.Project.Worktree, ".git")
 	headFile := filepath.Join(gitDir, "HEAD")
 	if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
 		return err
@@ -226,7 +226,7 @@ func (m *statusComponent) initWatcher() error {
 	}
 
 	// Also watch the ref file if HEAD points to a ref
-	refFile := getGitRefFile(m.app.Info.Path.Cwd)
+	refFile := getGitRefFile(util.CwdPath)
 	if refFile != headFile && refFile != "" {
 		if _, err := os.Stat(refFile); err == nil {
 			watcher.Add(refFile) // Ignore error, HEAD watching is sufficient
@@ -247,7 +247,7 @@ func (m *statusComponent) watchForGitChanges() tea.Cmd {
 		for {
 			select {
 			case event, ok := <-m.watcher.Events:
-				branch := getCurrentGitBranch(m.app.Info.Path.Root)
+				branch := getCurrentGitBranch(m.app.Project.Worktree)
 				if !ok {
 					return GitBranchUpdatedMsg{Branch: branch}
 				}
@@ -276,8 +276,8 @@ func (m *statusComponent) updateWatchedFiles() {
 	if m.watcher == nil {
 		return
 	}
-	refFile := getGitRefFile(m.app.Info.Path.Root)
-	headFile := filepath.Join(m.app.Info.Path.Root, ".git", "HEAD")
+	refFile := getGitRefFile(m.app.Project.Worktree)
+	headFile := filepath.Join(m.app.Project.Worktree, ".git", "HEAD")
 	if refFile != headFile && refFile != "" {
 		if _, err := os.Stat(refFile); err == nil {
 			// Try to add the new ref file (ignore error if already watching)
@@ -330,7 +330,7 @@ func NewStatusCmp(app *app.App) StatusComponent {
 	}
 
 	homePath, err := os.UserHomeDir()
-	cwdPath := app.Info.Path.Cwd
+	cwdPath := util.CwdPath
 	if err == nil && homePath != "" && strings.HasPrefix(cwdPath, homePath) {
 		cwdPath = "~" + cwdPath[len(homePath):]
 	}

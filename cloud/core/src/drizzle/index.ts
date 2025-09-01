@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js"
-import { Resource } from "sst"
+import { Resource } from "@opencode/cloud-resource"
 export * from "drizzle-orm"
 import postgres from "postgres"
 
@@ -15,12 +15,12 @@ const init = () => {
     ssl: {
       rejectUnauthorized: false,
     },
-    max: 1,
+    max: 6,
   })
   return drizzle(client, {})
 }
 
-const createClient = "NODE_ENV" in process.env ? memo(init) : init
+const createClient = init
 
 import { PgTransaction, type PgTransactionConfig } from "drizzle-orm/pg-core"
 import type { ExtractTablesWithRelations } from "drizzle-orm"

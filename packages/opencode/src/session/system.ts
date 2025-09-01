@@ -1,8 +1,9 @@
-import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+
+import { Instance } from "../project/instance"
 import path from "path"
 import os from "os"
 
@@ -30,21 +31,21 @@ export namespace SystemPrompt {
   }
 
   export async function environment() {
-    const app = App.info()
+    const project = Instance.project
     return [
       [
         `Here is some useful information about the environment you are running in:`,
         `<env>`,
-        `  Working directory: ${app.path.cwd}`,
-        `  Is directory a git repo: ${app.git ? "yes" : "no"}`,
+        `  Working directory: ${Instance.directory}`,
+        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<project>`,
         `  ${
-          app.git
+          project.vcs === "git"
             ? await Ripgrep.tree({
-                cwd: app.path.cwd,
+                cwd: Instance.directory,
                 limit: 200,
               })
             : ""
@@ -65,12 +66,11 @@ export namespace SystemPrompt {
   ]
 
   export async function custom() {
-    const { cwd, root } = App.info().path
     const config = await Config.get()
     const paths = new Set<string>()
 
     for (const localRuleFile of LOCAL_RULE_FILES) {
-      const matches = await Filesystem.findUp(localRuleFile, cwd, root)
+      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
       if (matches.length > 0) {
         matches.forEach((path) => paths.add(path))
         break
@@ -99,7 +99,7 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, cwd, root).catch(() => [])
+          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
         }
         matches.forEach((path) => paths.add(path))
       }

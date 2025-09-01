@@ -26,7 +26,7 @@ Plugins are loaded from:
 ### Basic structure
 
 ```js title=".opencode/plugin/example.js"
-export const MyPlugin = async ({ app, client, $ }) => {
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
   return {
@@ -37,7 +37,9 @@ export const MyPlugin = async ({ app, client, $ }) => {
 
 The plugin function receives:
 
-- `app`: The opencode application instance.
+- `project`: The current project information.
+- `directory`: The current working directory.
+- `worktree`: The git worktree path.
 - `client`: An opencode SDK client for interacting with the AI.
 - `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
 
@@ -50,7 +52,7 @@ For TypeScript plugins, you can import types from the plugin package:
 ```ts title="my-plugin.ts" {1}
 import type { Plugin } from "@opencode-ai/plugin"
 
-export const MyPlugin: Plugin = async ({ app, client, $ }) => {
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
     // Type-safe hook implementations
   }
@@ -70,7 +72,7 @@ Here are some examples of plugins you can use to extend opencode.
 Send notifications when certain events occur:
 
 ```js title=".opencode/plugin/notification.js"
-export const NotificationPlugin = async ({ client, $ }) => {
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
@@ -91,13 +93,13 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 Prevent opencode from reading `.env` files:
 
 ```javascript title=".opencode/plugin/env-protection.js"
-export const EnvProtection = async ({ client, $ }) => {
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
       if (input.tool === "read" && output.args.filePath.includes(".env")) {
         throw new Error("Do not read .env files")
       }
-    }
+    },
   }
 }
 ```

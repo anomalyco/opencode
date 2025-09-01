@@ -1,11 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cloud-core",
-  "version": "0.5.28",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-sts": "3.782.0",
+    "@opencode/cloud-resource": "workspace:*",
     "drizzle-orm": "0.41.0",
     "postgres": "3.4.7",
     "stripe": "18.0.0",

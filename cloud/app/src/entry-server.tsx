@@ -20,4 +20,6 @@ export default createHandler(() => (
       </html>
     )}
   />
-))
+), {
+  mode: "sync",
+})

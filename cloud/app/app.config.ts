@@ -5,5 +5,18 @@ export default defineConfig({
     server: {
       allowedHosts: true,
     },
+    build: {
+      rollupOptions: {
+        external: ["cloudflare:workers"],
+      },
+      minify: false,
+    },
+  },
+  server: {
+    compatibilityDate: "2024-09-19",
+    preset: "cloudflare_module",
+    cloudflare: {
+      nodeCompat: true,
+    },
   },
 })

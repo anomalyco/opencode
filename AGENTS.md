@@ -10,3 +10,7 @@
 - AVOID `let` statements
 - PREFER single word variable names where possible
 - Use as many bun apis as possible like Bun.file()
+
+## Debugging
+
+- To test opencode in the `packages/opencode` directory you can run `bun dev`

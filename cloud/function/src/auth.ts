@@ -1,4 +1,3 @@
-import { Resource } from "sst"
 import { z } from "zod"
 import { issuer } from "@openauthjs/openauth"
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -10,6 +9,7 @@ import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
 import { Account } from "@opencode/cloud-core/account.js"
 import { Workspace } from "@opencode/cloud-core/workspace.js"
 import { Actor } from "@opencode/cloud-core/actor.js"
+import { Resource } from "@opencode/cloud-resource"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -28,8 +28,8 @@ export const subjects = createSubjects({
 
 const MY_THEME: Theme = {
   ...THEME_OPENAUTH,
-  logo: "https://opencode.ai/favicon.svg"
-};
+  logo: "https://opencode.ai/favicon.svg",
+}
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {

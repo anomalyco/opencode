@@ -24,7 +24,8 @@
       "hono": "4.7.10",
       "typescript": "5.8.2",
       "zod": "3.25.76",
-      "remeda": "2.26.0"
+      "remeda": "2.26.0",
+      "solid-js": "1.9.9"
     }
   },
   "dependencies": {
@@ -32,7 +33,7 @@
   },
   "devDependencies": {
     "prettier": "3.5.3",
-    "sst": "3.17.8"
+    "sst": "3.17.12"
   },
   "repository": {
     "type": "git",

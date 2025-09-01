@@ -10,6 +10,8 @@ The opencode [JS/TS SDK](https://www.npmjs.com/package/@opencode-ai/sdk) provide
 
 [Learn more](/docs/server) about how the opencode server works.
 
+> **Note**: Many API endpoints now require a `directory` query parameter to specify the working directory context.
+
 ---
 
 ## Install
@@ -50,7 +52,7 @@ const client = createOpencodeClient({
 
 You can also programmatically start an opencode server:
 
-````javascript
+```javascript
 import { createOpencodeServer } from "@opencode-ai/sdk"
 
 const server = await createOpencodeServer({
@@ -61,16 +63,16 @@ const server = await createOpencodeServer({
 console.log(`Server running at ${server.url}`)
 
 server.close()
-}
+```
 
 #### Options
 
-| Option     | Type           | Description                    | Default       |
-| ---------- | -------------- | ------------------------------ | ------------- |
-| `hostname` | `string`       | Server hostname                | `127.0.0.1`   |
-| `port`     | `number`       | Server port                    | `4096`        |
-| `signal`   | `AbortSignal`  | Abort signal for cancellation  | `undefined`   |
-| `timeout`  | `number`       | Timeout in ms for server start | `5000`        |
+| Option     | Type          | Description                    | Default     |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
 
 ---
 
@@ -80,7 +82,7 @@ The SDK includes TypeScript definitions for all API types. Import them directly:
 
 ```typescript
 import type { Session, Message, Part } from "@opencode-ai/sdk"
-````
+```
 
 All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
 
@@ -108,18 +110,63 @@ The SDK exposes all server APIs through a type-safe client interface.
 
 ### App
 
-| Method       | Description        | Response                                |
-| ------------ | ------------------ | --------------------------------------- |
-| `app.get()`  | Get app info       | <a href={typesUrl}><code>App</code></a> |
-| `app.init()` | Initialize the app | `boolean`                               |
+| Method         | Description               | Response                                    |
+| -------------- | ------------------------- | ------------------------------------------- |
+| `app.log()`    | Write a log entry         | `boolean`                                   |
+| `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
 #### Examples
 
 ```javascript
-const app = await client.app.get()
-await client.app.init()
+// Log an entry
+await client.app.log({
+  service: "my-app",
+  level: "info",
+  message: "Operation completed",
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Method              | Description         | Response                                      |
+| ------------------- | ------------------- | --------------------------------------------- |
+| `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+#### Examples
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Method       | Description      | Response                                 |
+| ------------ | ---------------- | ---------------------------------------- |
+| `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Examples
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
 ```
 
 ---
@@ -159,7 +206,7 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.summarize({ id, providerID, modelID })`              | Summarize session                  | Returns `boolean`                                                                                                       |
 | `session.messages({ id })`                                    | List messages in a session         | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` |
 | `session.message({ id, messageID })`                          | Get message details                | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`   |
-| `session.chat({ id, ...chatInput })`                          | Send chat message                  | Returns <a href={typesUrl}><code>Message</code></a>                                                                     |
+| `session.prompt({ id, ...promptInput })`                      | Send prompt message                | Returns <a href={typesUrl}><code>Message</code></a>                                                                     |
 | `session.shell({ id, agent, command })`                       | Run a shell command                | Returns <a href={typesUrl}><code>Message</code></a>                                                                     |
 | `session.revert({ id, messageID, partID? })`                  | Revert a message                   | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
 | `session.unrevert({ id })`                                    | Restore reverted messages          | Returns <a href={typesUrl}><code>Session</code></a>                                                                     |
@@ -175,10 +222,12 @@ const session = await client.session.create({ title: "My session" })
 const sessions = await client.session.list()
 
 // Send messages
-const message = await client.session.chat({
+const message = await client.session.prompt({
   id: session.id,
-  providerID: "anthropic",
-  modelID: "claude-3-5-sonnet-20241022",
+  model: {
+    providerID: "anthropic",
+    modelID: "claude-3-5-sonnet-20241022",
+  },
   parts: [{ type: "text", text: "Hello!" }],
 })
 ```

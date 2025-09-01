@@ -160,7 +160,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
 			statPath := filePath
 			if !filepath.IsAbs(filePath) {
-				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+				statPath = filepath.Join(util.CwdPath, filePath)
 			}
 			if _, err := os.Stat(statPath); err == nil {
 				attachment := m.createAttachmentFromPath(filePath)
@@ -489,11 +489,22 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 	var cmds []tea.Cmd
 	if strings.HasPrefix(value, "/") {
-		value = value[1:]
-		commandName := strings.Split(value, " ")[0]
+		// Expand attachments in the value to get actual content
+		expandedValue := value
+		attachments := m.textarea.GetAttachments()
+		for _, att := range attachments {
+			if att.Type == "text" && att.Source != nil {
+				if textSource, ok := att.Source.(*attachment.TextSource); ok {
+					expandedValue = strings.Replace(expandedValue, att.Display, textSource.Value, 1)
+				}
+			}
+		}
+
+		expandedValue = expandedValue[1:] // Remove the "/"
+		commandName := strings.Split(expandedValue, " ")[0]
 		command := m.app.Commands[commands.CommandName(commandName)]
 		if command.Custom {
-			args := strings.TrimPrefix(value, command.PrimaryTrigger()+" ")
+			args := strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
 			cmds = append(
 				cmds,
 				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
@@ -612,7 +623,7 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 			if end > start {
 				filePath := value[start:end]
 				slog.Debug("test", "filePath", filePath)
-				if _, err := os.Stat(filepath.Join(m.app.Info.Path.Cwd, filePath)); err == nil {
+				if _, err := os.Stat(filepath.Join(util.CwdPath, filePath)); err == nil {
 					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
@@ -807,7 +818,7 @@ func (m *editorComponent) createAttachmentFromFile(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(ext)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+		absolutePath = filepath.Join(util.CwdPath, filePath)
 	}
 
 	// For text files, create a simple file reference
@@ -861,7 +872,7 @@ func (m *editorComponent) createAttachmentFromPath(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(extension)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+		absolutePath = filepath.Join(util.CwdPath, filePath)
 	}
 	return &attachment.Attachment{
 		ID:        uuid.NewString(),

@@ -1,5 +1,5 @@
+import { Resource } from "@opencode/cloud-resource"
 import { defineConfig } from "drizzle-kit"
-import { Resource } from "sst"
 
 export default defineConfig({
   out: "./migrations/",

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/apiquery"
 	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
@@ -34,7 +36,7 @@ func NewSessionPermissionService(opts ...option.RequestOption) (r *SessionPermis
 }
 
 // Respond to a permission request
-func (r *SessionPermissionService) Respond(ctx context.Context, id string, permissionID string, body SessionPermissionRespondParams, opts ...option.RequestOption) (res *bool, err error) {
+func (r *SessionPermissionService) Respond(ctx context.Context, id string, permissionID string, params SessionPermissionRespondParams, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
 	if id == "" {
 		err = errors.New("missing required id parameter")
@@ -45,7 +47,7 @@ func (r *SessionPermissionService) Respond(ctx context.Context, id string, permi
 		return
 	}
 	path := fmt.Sprintf("session/%s/permissions/%s", id, permissionID)
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return
 }
 
@@ -106,11 +108,21 @@ func (r permissionTimeJSON) RawJSON() string {
 }
 
 type SessionPermissionRespondParams struct {
-	Response param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
+	Response  param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`
+	Directory param.Field[string]                                 `query:"directory"`
 }
 
 func (r SessionPermissionRespondParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
+}
+
+// URLQuery serializes [SessionPermissionRespondParams]'s query parameters as
+// `url.Values`.
+func (r SessionPermissionRespondParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
 }
 
 type SessionPermissionRespondParamsResponse string

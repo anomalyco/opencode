@@ -25,7 +25,12 @@ declare module "sst" {
       "type": "sst.cloudflare.Kv"
     }
     "Bucket": {
+      "name": string
       "type": "sst.cloudflare.Bucket"
+    }
+    "Console": {
+      "type": "sst.cloudflare.SolidStart"
+      "url": string
     }
     "DATABASE_PASSWORD": {
       "type": "sst.sst.Secret"
