@@ -17,6 +17,7 @@ import { Auth } from "../../auth"
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
 import { Instance } from "../../project/instance"
+import { ModelsDev } from "../../provider/models"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -130,13 +131,16 @@ export const TuiCommand = cmd({
         if (Object.keys(providers).length === 0) {
           return "needs_provider"
         }
+        const cfg = await Config.get()
+        const useDocker = (args.docker ?? (cfg.server?.docker === true)) === true
+
         const server = await (async () => {
-          if (!args.docker) {
+          if (!useDocker) {
             return Server.listen({ port: args.port, hostname: args.hostname })
           }
 
-          const docker = Bun.which("docker")
-          if (!docker) {
+          const dockerBin = Bun.which("docker")
+          if (!dockerBin) {
             UI.error("docker not found, starting server locally")
             return Server.listen({ port: args.port, hostname: args.hostname })
           }
@@ -145,12 +149,13 @@ export const TuiCommand = cmd({
           const needBuild = !!df || (args as { dockerBuild?: boolean }).dockerBuild === true
           const img = await (async () => {
             const defaultImg = "opencodeai/opencode:server"
-            if (!needBuild) return (args as { dockerImage?: string }).dockerImage ?? defaultImg
+            const configured = cfg.server?.image
+            if (!needBuild) return (args as { dockerImage?: string }).dockerImage ?? configured ?? defaultImg
             const f = df ?? "Dockerfile"
             const ctx = (args as { dockerContext?: string }).dockerContext ?? path.dirname(path.resolve(f))
-            const base = (args as { dockerImage?: string }).dockerImage ?? defaultImg
+            const base = (args as { dockerImage?: string }).dockerImage ?? configured ?? defaultImg
             const tag = base === defaultImg ? "opencode:local" : base
-            const b = Bun.spawn({ cmd: [docker, "build", "-t", tag, "-f", f, ctx], stdout: "inherit", stderr: "inherit" })
+            const b = Bun.spawn({ cmd: [dockerBin, "build", "-t", tag, "-f", f, ctx], stdout: "inherit", stderr: "inherit" })
             const code = await b.exited
             if (code !== 0) {
               UI.error("docker build failed, starting server locally")
@@ -170,9 +175,17 @@ export const TuiCommand = cmd({
           const host = "127.0.0.1"
           const cport = 8080
           const vol = process.cwd() + ":/workspace"
+          const db = await ModelsDev.get()
+          const envlist: string[] = []
+          for (const p of Object.values(db)) {
+            for (const k of p.env) {
+              const v = process.env[k]
+              if (v) envlist.push(`${k}=${v}`)
+            }
+          }
 
           const cmd = [
-            docker,
+            dockerBin,
             "run",
             "--rm",
             "-d",
@@ -182,6 +195,7 @@ export const TuiCommand = cmd({
             vol,
             "-w",
             "/workspace",
+            ...envlist.flatMap((e) => ["-e", e]),
             img,
             "bun",
             "run",
@@ -214,7 +228,7 @@ export const TuiCommand = cmd({
             port,
             url,
             stop: async () => {
-              const stop = Bun.spawn({ cmd: [docker, "stop", id], stdout: "ignore", stderr: "inherit" })
+              const stop = Bun.spawn({ cmd: [dockerBin, "stop", id], stdout: "ignore", stderr: "inherit" })
               await stop.exited
             },
           }
@@ -240,7 +254,7 @@ export const TuiCommand = cmd({
         Log.Default.info("tui", {
           cmd,
         })
-        if (args.docker) {
+        if (useDocker) {
           const auth = await Auth.all()
           await Promise.all(
             Object.entries(auth).map(([id, info]) =>
