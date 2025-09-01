@@ -34,7 +34,7 @@ export namespace ConfigHooks {
     Bus.subscribe(Session.Event.Idle, async (payload) => {
       const cfg = await Config.get()
       if (cfg.experimental?.hook?.session_completed) {
-        const session = await Session.get(payload.properties.sessionID)
+        const session = payload.properties.info
         // Only fire hook for top-level sessions (not subagent sessions)
         if (session.parentID) return
 
