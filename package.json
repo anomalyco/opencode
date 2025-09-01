@@ -6,6 +6,7 @@
   "packageManager": "bun@1.2.19",
   "scripts": {
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
+    "docker:build": "./script/docker-build",
     "typecheck": "bun run --filter='*' typecheck",
     "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
     "postinstall": "./script/hooks"
