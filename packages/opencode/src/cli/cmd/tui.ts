@@ -12,6 +12,7 @@ import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watch"
 import { Ide } from "../../ide"
+import { Auth } from "../../auth"
 
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
@@ -35,6 +36,30 @@ export const TuiCommand = cmd({
       .positional("project", {
         type: "string",
         describe: "path to start opencode in",
+      })
+      .option("docker", {
+        type: "boolean",
+        describe: "run server in docker with current dir mounted",
+      })
+      .option("docker-image", {
+        type: "string",
+        describe: "docker image for server",
+        default: "opencodeai/opencode:server",
+        alias: ["dockerImage"],
+      })
+      .option("dockerfile", {
+        type: "string",
+        describe: "path to a local Dockerfile to build before running",
+      })
+      .option("docker-context", {
+        type: "string",
+        describe: "docker build context directory (defaults to Dockerfile's dir)",
+        alias: ["dockerContext"],
+      })
+      .option("docker-build", {
+        type: "boolean",
+        describe: "force build the docker image before running",
+        alias: ["dockerBuild"],
       })
       .option("model", {
         type: "string",
@@ -105,11 +130,95 @@ export const TuiCommand = cmd({
         if (Object.keys(providers).length === 0) {
           return "needs_provider"
         }
+        const server = await (async () => {
+          if (!args.docker) {
+            return Server.listen({ port: args.port, hostname: args.hostname })
+          }
 
-        const server = Server.listen({
-          port: args.port,
-          hostname: args.hostname,
-        })
+          const docker = Bun.which("docker")
+          if (!docker) {
+            UI.error("docker not found, starting server locally")
+            return Server.listen({ port: args.port, hostname: args.hostname })
+          }
+
+          const df = (args as { dockerfile?: string }).dockerfile
+          const needBuild = !!df || (args as { dockerBuild?: boolean }).dockerBuild === true
+          const img = await (async () => {
+            const defaultImg = "opencodeai/opencode:server"
+            if (!needBuild) return (args as { dockerImage?: string }).dockerImage ?? defaultImg
+            const f = df ?? "Dockerfile"
+            const ctx = (args as { dockerContext?: string }).dockerContext ?? path.dirname(path.resolve(f))
+            const base = (args as { dockerImage?: string }).dockerImage ?? defaultImg
+            const tag = base === defaultImg ? "opencode:local" : base
+            const b = Bun.spawn({ cmd: [docker, "build", "-t", tag, "-f", f, ctx], stdout: "inherit", stderr: "inherit" })
+            const code = await b.exited
+            if (code !== 0) {
+              UI.error("docker build failed, starting server locally")
+              return base
+            }
+            return tag
+          })()
+
+          const alloc = () => {
+            const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("ok") })
+            const p = s.port
+            s.stop()
+            return p
+          }
+
+          const port = args.port && args.port > 0 ? args.port : alloc()
+          const host = "127.0.0.1"
+          const cport = 8080
+          const vol = process.cwd() + ":/workspace"
+
+          const cmd = [
+            docker,
+            "run",
+            "--rm",
+            "-d",
+            "-p",
+            `${port}:${cport}`,
+            "-v",
+            vol,
+            "-w",
+            "/workspace",
+            img,
+            "bun",
+            "run",
+            "/app/src/index.ts",
+            "serve",
+            "--hostname",
+            "0.0.0.0",
+            "--port",
+            String(cport),
+          ]
+
+          const proc = Bun.spawn({ cmd, stdout: "pipe", stderr: "pipe" })
+          const code = await proc.exited
+          const id = await new Response(proc.stdout).text().then((x) => x.trim())
+          if (code !== 0 || !id) {
+            UI.error("failed to start docker server, starting locally")
+            return Server.listen({ port: args.port, hostname: args.hostname })
+          }
+
+          const url = new URL("http://" + host + ":" + String(port))
+          const until = Date.now() + 20_000
+          while (Date.now() < until) {
+            const ok = await fetch(new URL("/doc", url)).then((r) => r.ok).catch(() => false)
+            if (ok) break
+            await Bun.sleep(200)
+          }
+
+          return {
+            hostname: host,
+            port,
+            url,
+            stop: async () => {
+              const stop = Bun.spawn({ cmd: [docker, "stop", id], stdout: "ignore", stderr: "inherit" })
+              await stop.exited
+            },
+          }
+        })()
 
         let cmd = ["go", "run", "./main.go"]
         let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
@@ -131,6 +240,19 @@ export const TuiCommand = cmd({
         Log.Default.info("tui", {
           cmd,
         })
+        if (args.docker) {
+          const auth = await Auth.all()
+          await Promise.all(
+            Object.entries(auth).map(([id, info]) =>
+              fetch(new URL("/auth/" + encodeURIComponent(id), server.url), {
+                method: "PUT",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(info),
+              }).catch(() => {}),
+            ),
+          )
+        }
+
         const proc = Bun.spawn({
           cmd: [
             ...cmd,

@@ -1,0 +1,26 @@
+#!/bin/sh
+set -euo pipefail
+
+# Usage: script/docker-build [Dockerfile] [context]
+# - Builds the opencode server image and tags it twice:
+#   - opencodeai/opencode:server (default hub tag)
+#   - opencode:local (local convenience tag)
+
+DF=${1:-Dockerfile}
+CTX=${2:-$(dirname "${DF}")}
+IMG1=${IMG1:-opencodeai/opencode:server}
+IMG2=${IMG2:-opencode:local}
+
+DOCKER=${DOCKER:-}
+if [ -z "${DOCKER}" ]; then
+  if command -v docker >/dev/null 2>&1; then
+    DOCKER=$(command -v docker)
+  else
+    echo "docker not found in PATH" >&2
+    exit 1
+  fi
+fi
+
+echo "Building ${IMG1} and ${IMG2} from ${DF} (context ${CTX})..."
+exec "${DOCKER}" build -t "${IMG1}" -t "${IMG2}" -f "${DF}" "${CTX}"
+

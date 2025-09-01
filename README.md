@@ -86,6 +86,46 @@ $ bun install
 $ bun dev
 ```
 
+#### Docker Server Mode
+
+You can optionally run the opencode server in a Docker container with the current directory mounted for isolation. When started with `--docker`, opencode securely syncs only its own provider credentials (from `auth.json`) into the container; no other local credentials or home directories are mounted.
+
+```bash
+# TUI with server in Docker (mounts $PWD to /workspace)
+# Uses Docker Hub image by default: opencodeai/opencode:server
+opencode --docker
+
+# Headless server in Docker
+opencode serve --docker --port 8080 --docker-image opencode:latest
+```
+
+This maps a host port to the container’s server and mounts your current directory at `/workspace`.
+
+Build from a local Dockerfile (handy for dev):
+
+```bash
+# Build with the repo Dockerfile, then run
+opencode --docker --docker-build --dockerfile ./Dockerfile
+
+# Or headless
+opencode serve --docker --docker-build --dockerfile ./Dockerfile --port 8080
+```
+
+The default Docker image is `opencodeai/opencode:server`. The provided Dockerfile uses the `oven/bun` base image, adds essential tools (`curl`, `unzip`, `tar`, `git`, `nodejs`, `npm`) and Go (for optional `gopls`), installs the opencode server, and exposes port `8080`.
+
+If you prefer to build the image manually:
+
+```bash
+docker build -t opencode:latest .
+```
+
+Or use the helper:
+
+```bash
+# Tags both opencodeai/opencode:server and opencode:local
+./script/docker-build [Dockerfile] [context]
+```
+
 #### Development Notes
 
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.
