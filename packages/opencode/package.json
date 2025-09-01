@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
+    "@ai-sdk/google-vertex": "3.0.16",
     "@octokit/webhooks-types": "7.6.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
