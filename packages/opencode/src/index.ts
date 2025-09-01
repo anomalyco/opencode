@@ -39,6 +39,10 @@ const cli = yargs(hideBin(process.argv))
   .help("help", "show help")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
+  .option("acp", {
+    describe: "run ACP stdio server (also enabled by ZED_ACP env)",
+    type: "boolean",
+  })
   .option("print-logs", {
     describe: "print logs to stderr",
     type: "boolean",
@@ -65,6 +69,12 @@ const cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    if (opts.acp || process.env["ZED_ACP"]) {
+      const { ACPServer } = await import("./acp/server")
+      await ACPServer.start()
+      await new Promise(() => {})
+    }
   })
   .usage("\n" + UI.logo())
   .command(McpCommand)
