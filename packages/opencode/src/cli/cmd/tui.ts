@@ -132,10 +132,17 @@ export const TuiCommand = cmd({
           return "needs_provider"
         }
         const cfg = await Config.get()
+<<<<<<< HEAD
         const useDocker = (args.docker ?? (cfg.server?.docker === true)) === true
 
         const server = await (async () => {
           if (!useDocker) {
+=======
+        const docker = (args.docker ?? (cfg.server?.docker === true)) === true
+
+        const server = await (async () => {
+          if (!docker) {
+>>>>>>> 31983999 (feat(config): add server.docker (and image) to auto-use Docker server for TUI when enabled; update TUI to honor config)
             return Server.listen({ port: args.port, hostname: args.hostname })
           }
 
@@ -228,9 +235,15 @@ export const TuiCommand = cmd({
             port,
             url,
             stop: async () => {
+<<<<<<< HEAD
               const stop = Bun.spawn({ cmd: [dockerBin, "stop", id], stdout: "ignore", stderr: "inherit" })
               await stop.exited
             },
+=======
+            const stop = Bun.spawn({ cmd: [dockerBin, "stop", id], stdout: "ignore", stderr: "inherit" })
+            await stop.exited
+          },
+>>>>>>> 31983999 (feat(config): add server.docker (and image) to auto-use Docker server for TUI when enabled; update TUI to honor config)
           }
         })()
 
@@ -254,7 +267,11 @@ export const TuiCommand = cmd({
         Log.Default.info("tui", {
           cmd,
         })
+<<<<<<< HEAD
         if (useDocker) {
+=======
+        if (docker) {
+>>>>>>> 31983999 (feat(config): add server.docker (and image) to auto-use Docker server for TUI when enabled; update TUI to honor config)
           const auth = await Auth.all()
           await Promise.all(
             Object.entries(auth).map(([id, info]) =>

@@ -126,6 +126,18 @@ Or use the helper:
 ./script/docker-build [Dockerfile] [context]
 ```
 
+Auto-enable Docker mode via config:
+
+```jsonc
+// ~/.config/opencode/config.json
+{
+  "server": {
+    "docker": true,
+    "image": "opencodeai/opencode:server"
+  }
+}
+```
+
 #### Development Notes
 
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.

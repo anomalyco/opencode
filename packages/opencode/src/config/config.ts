@@ -485,6 +485,13 @@ export namespace Config {
             .optional(),
         })
         .optional(),
+      server: z
+        .object({
+          docker: z.boolean().optional().describe("Run the server in Docker by default for the TUI"),
+          image: z.string().optional().describe("Default Docker image to use for the server"),
+        })
+        .optional()
+        .describe("Server runtime preferences"),
     })
     .strict()
     .openapi({
