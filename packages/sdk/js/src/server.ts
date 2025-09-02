@@ -1,30 +1,36 @@
 import { spawn } from "node:child_process"
+import { type Config } from "./gen/types.gen.js"
 
-export type ServerConfig = {
+export type ServerOptions = {
   hostname?: string
   port?: number
   signal?: AbortSignal
   timeout?: number
+  config?: Config
 }
 
-export async function createOpencodeServer(config?: ServerConfig) {
-  config = Object.assign(
+export async function createOpencodeServer(options?: ServerOptions) {
+  options = Object.assign(
     {
       hostname: "127.0.0.1",
       port: 4096,
       timeout: 5000,
     },
-    config ?? {},
+    options ?? {},
   )
 
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${config.hostname}`, `--port=${config.port}`], {
-    signal: config.signal,
+  const proc = spawn(`opencode`, [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`], {
+    signal: options.signal,
+    env: {
+      ...process.env,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+    },
   })
 
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {
-      reject(new Error(`Timeout waiting for server to start after ${config.timeout}ms`))
-    }, config.timeout)
+      reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
+    }, options.timeout)
     let output = ""
     proc.stdout?.on("data", (chunk) => {
       output += chunk.toString()
@@ -56,8 +62,8 @@ export async function createOpencodeServer(config?: ServerConfig) {
       clearTimeout(id)
       reject(error)
     })
-    if (config.signal) {
-      config.signal.addEventListener("abort", () => {
+    if (options.signal) {
+      options.signal.addEventListener("abort", () => {
         clearTimeout(id)
         reject(new Error("Aborted"))
       })

@@ -26,13 +26,13 @@ const isLoggedIn = query(async () => {
   const actor = await getActor()
   if (actor.type === "account") {
     const workspaces = await withActor(() => Account.workspaces())
-    throw redirect(`/workspace/${workspaces[0].id}`)
+    return workspaces[0].id
+    // throw redirect(`/workspace/${workspaces[0].id}`)
   }
-  return false
 }, "isLoggedIn")
 
 export default function Home() {
-  createAsync(() => isLoggedIn(), {
+  const workspaceId = createAsync(() => isLoggedIn(), {
     deferStream: true,
   })
   onMount(() => {
@@ -69,7 +69,7 @@ export default function Home() {
           <div data-slot="left">
             <a href="/docs">Get Started</a>
           </div>
-          <div data-slot="center">
+          <div data-slot="right">
             <button data-copy data-slot="command">
               <span>
                 <span>curl -fsSL&nbsp;</span>
@@ -80,11 +80,20 @@ export default function Home() {
               <CopyStatus />
             </button>
           </div>
-          <div data-slot="right">
-            <a href="/auth/authorize" target="_self">
-              Login
-            </a>
-          </div>
+        </section>
+
+        <section data-component="zen">
+          <a href="/docs/zen">opencode zen</a>
+          <span data-slot="description">
+            , a curated list of models provided by opencode
+          </span>
+          <span data-slot="divider">&nbsp;/&nbsp;</span>
+          <a
+            href="/auth"
+            target="_self"
+          >
+            Sign in
+          </a>
         </section>
 
         <section data-component="features">
@@ -151,7 +160,7 @@ export default function Home() {
         </section>
 
         <section data-component="screenshots">
-          <div class="left">
+          <div data-slot="left">
             <figure>
               <figcaption>opencode TUI with the tokyonight theme</figcaption>
               <a href="/docs/cli">
@@ -159,8 +168,8 @@ export default function Home() {
               </a>
             </figure>
           </div>
-          <div class="right">
-            <div class="row1">
+          <div data-slot="right">
+            <div data-slot="row1">
               <figure>
                 <figcaption>opencode in VS Code</figcaption>
                 <a href="/docs/ide">
@@ -168,7 +177,7 @@ export default function Home() {
                 </a>
               </figure>
             </div>
-            <div class="row2">
+            <div data-slot="row2">
               <figure>
                 <figcaption>opencode in GitHub</figcaption>
                 <a href="/docs/github">

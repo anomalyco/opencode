@@ -27,5 +27,5 @@ export async function GET(input: APIEvent) {
       current: id,
     }
   })
-  return redirect("/")
+  return redirect("/auth")
 }

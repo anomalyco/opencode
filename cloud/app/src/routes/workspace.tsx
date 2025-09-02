@@ -23,10 +23,10 @@ const logout = action(async () => {
   if (current)
     await auth.update((val) => {
       delete val.account[current]
+      const first = Object.keys(val.account)[0]
+      val.current = first
       return val
     })
-
-  return redirect("/")
 })
 
 export default function WorkspaceLayout(props: RouteSectionProps) {
@@ -43,7 +43,7 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
         </div>
         <div data-slot="header-actions">
           <span>{userInfo()?.user.email}</span>
-          <form action={logout} method="post">
+          <form onSubmit={() => location.href = "/"} action={logout} method="post">
             <button type="submit" formaction={logout}>Logout</button>
           </form>
         </div>

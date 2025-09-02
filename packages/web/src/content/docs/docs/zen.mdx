@@ -1,0 +1,95 @@
+---
+title: Zen
+description: Curated list of models provided by opencode.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+opencode zen is a list of tested and verified models provided by the opencode team.
+
+:::note
+opencode zen is currently in beta.
+:::
+
+Zen works like any other provider in opencode. You login to opencode zen and get
+your API key. It's **completely optional** and you don't need to use it to use
+opencode.
+
+---
+
+## Background
+
+There are a large number of models out there but only a few of
+these models work well as coding agents. Additionally, most providers are
+configured very differently; so you get very different performance and quality.
+
+:::tip
+We tested a select group of models and providers that work well with opencode.
+:::
+
+So if you are using a model through something like OpenRouter, you can never be
+sure if you are getting the best version of the model you want.
+
+To fix this, we did a couple of things:
+
+1. We tested a select group of models and talked to their teams about how to
+   best run them.
+2. We then worked with a few providers to make sure these were being served
+   correctly.
+3. Finally, we benchmarked the combination of the model/provider and came up
+   with a list that we feel good recommending.
+
+opencode zen is an AI gateway that gives you access to these models.
+
+---
+
+## Motivation
+
+We created opencode zen to:
+
+1. **Benchmark** the best models/providers for coding agents.
+2. Access to **highest quality**; we don't downgrade performance or route to cheaper providers.
+3. **Sell at cost**; the only markup is to cover our processing fees and any price
+   drops will be passed along.
+4. **No lock-in**; you can use opencode zen with any other coding agent and you
+   can use any other provider with opencode.
+
+---
+
+## How it works
+
+opencode zen works like any other provider in opencode.
+
+1. You sign in to **<a href={console}>opencode zen</a>** and get your API key.
+2. You run `opencode auth login` and select opencode zen and add your API key.
+3. Run `/models` in the TUI to see the list of models we recommend.
+
+You are charged per request and you can add credits to your account.
+
+---
+
+## Pricing
+
+Below are the models that we currently support and their prices **per 1M
+tokens**.
+
+| Model | Input | Output |
+| ----- | ----- | ------ |
+| Qwen3 Coder 480B | $0.38 | $0.50 |
+| Grok Code Fast 1 | Free | Free |
+| Sonnet 4 | Soon | Soon |
+
+:::note
+We add a small markup to cover our costs.
+:::
+
+A couple of notes:
+
+- These are the raw prices based on the provider we are using internally. We
+charge a small markup on top of this to cover our processing fees.
+- Grok Code Fast 1 is currently free on opencode till Sep 10th. The xAI team is
+  using this time to collect feedback and improve Grok Code.
+
+<a href={email}>Contact us</a> if you have any questions.

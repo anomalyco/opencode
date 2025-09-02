@@ -4,6 +4,10 @@ export default {
   url: stage === "production"
     ? "https://opencode.ai"
     : `https://${stage}.opencode.ai`,
+  console: stage === "production"
+    ? "https://console.opencode.ai"
+    : `https://console.${stage}.opencode.ai`,
+  email: "contact@anoma.ly",
   socialCard: "https://social-cards.sst.dev",
   github: "https://github.com/sst/opencode",
   discord: "https://opencode.ai/discord",

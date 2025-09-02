@@ -3,6 +3,9 @@ title: Providers
 description: Using any LLM provider in opencode.
 ---
 
+import config from "../../../../config.mjs"
+export const console = config.console
+
 opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
@@ -45,123 +48,21 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## Custom provider
+## opencode zen
 
-To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:
+opencode zen is a list of models provided by the opencode team that have been
+tested and verified to work well with opencode. [Learn more](/docs/zen).
 
 :::tip
-You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+If you are new, we recommend starting with opencode zen.
 :::
 
-1. Run `opencode auth login` and scroll down to **Other**.
+1. You sign in to **<a href={console}>opencode zen</a>** and get your API key.
+2. You run `opencode auth login` and select opencode zen and add your API key.
+3. Run `/models` in the TUI to see the list of models we recommend.
 
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ◆  Select provider
-   │  ...
-   │  ● Other
-   └
-   ```
-
-2. Enter a unique ID for the provider.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ◇  Enter provider id
-   │  myprovider
-   └
-   ```
-
-   :::note
-   Choose a memorable ID, you'll use this in your config file.
-   :::
-
-3. Enter your API key for the provider.
-
-   ```bash
-   $ opencode auth login
-
-   ┌  Add credential
-   │
-   ▲  This only stores a credential for myprovider - you will need configure it in opencode.json, check the docs for examples.
-   │
-   ◇  Enter your API key
-   │  sk-...
-   └
-   ```
-
-4. Create or update your `opencode.json` file in your project directory:
-
-   ```json title="opencode.json" ""myprovider"" {5-15}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "myprovider": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
-         "options": {
-           "baseURL": "https://api.myprovider.com/v1"
-         },
-         "models": {
-           "my-model-name": {
-             "name": "My Model Display Name"
-           }
-         }
-       }
-     }
-   }
-   ```
-
-   Here are the configuration options:
-
-   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers
-   - **name**: Display name in UI.
-   - **models**: Available models.
-   - **options.baseURL**: API endpoint URL.
-   - **options.apiKey**: Optionally set the API key, if not using auth.
-   - **options.headers**: Optionally set custom headers.
-
-   More on the advanced options in the example below.
-
-5. Run the `/models` command and your custom provider and models will appear in the selection list.
-
----
-
-##### Example
-
-Here's an example setting the `apiKey` and `headers` options.
-
-```json title="opencode.json" {9,11}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "myprovider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "My AI ProviderDisplay Name",
-      "options": {
-        "baseURL": "https://api.myprovider.com/v1",
-        "apiKey": "{env:ANTHROPIC_API_KEY}",
-        "headers": {
-          "Authorization": "Bearer custom-token"
-        }
-      },
-      "models": {
-        "my-model-name": {
-          "name": "My Model Display Name"
-        }
-      }
-    }
-  }
-}
-```
-
-We are setting the `apiKey` using the `env` variable syntax, [learn more](/docs/config#env-vars).
+It works like any other provider in opencode. And is completely optional to use
+it.
 
 ---
 
@@ -648,6 +549,44 @@ In this example:
 
 ---
 
+### opencode zen
+
+opencode zen is a list of tested and verified models provided by the opencode team. [Learn more](/docs/zen).
+
+1. Sign in to **<a href={console}>opencode zen</a>** and click **Create API Key**.
+
+2. Run `opencode auth login` and select **opencode zen**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● opencode zen
+   │  ...
+   └
+   ```
+
+3. Enter your opencode API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  opencode zen
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Qwen 3 Coder 480B_.
+
+---
+
 ### OpenRouter
 
 1. Head over to the [OpenRouter dashboard](https://openrouter.ai/settings/keys), click **Create API Key**, and copy the key.
@@ -809,6 +748,126 @@ monitor and improve Grok Code.
    ```
 
 4. Run the `/models` command to select a model like _GLM-4.5_.
+
+---
+
+## Custom provider
+
+To add any **OpenAI-compatible** provider that's not listed in `opencode auth login`:
+
+:::tip
+You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+:::
+
+1. Run `opencode auth login` and scroll down to **Other**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ...
+   │  ● Other
+   └
+   ```
+
+2. Enter a unique ID for the provider.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Enter provider id
+   │  myprovider
+   └
+   ```
+
+   :::note
+   Choose a memorable ID, you'll use this in your config file.
+   :::
+
+3. Enter your API key for the provider.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ▲  This only stores a credential for myprovider - you will need configure it in opencode.json, check the docs for examples.
+   │
+   ◇  Enter your API key
+   │  sk-...
+   └
+   ```
+
+4. Create or update your `opencode.json` file in your project directory:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "myprovider": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "My AI ProviderDisplay Name",
+         "options": {
+           "baseURL": "https://api.myprovider.com/v1"
+         },
+         "models": {
+           "my-model-name": {
+             "name": "My Model Display Name"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Here are the configuration options:
+
+   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers
+   - **name**: Display name in UI.
+   - **models**: Available models.
+   - **options.baseURL**: API endpoint URL.
+   - **options.apiKey**: Optionally set the API key, if not using auth.
+   - **options.headers**: Optionally set custom headers.
+
+   More on the advanced options in the example below.
+
+5. Run the `/models` command and your custom provider and models will appear in the selection list.
+
+---
+
+##### Example
+
+Here's an example setting the `apiKey` and `headers` options.
+
+```json title="opencode.json" {9,11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1",
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+        "headers": {
+          "Authorization": "Bearer custom-token"
+        }
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name"
+        }
+      }
+    }
+  }
+}
+```
+
+We are setting the `apiKey` using the `env` variable syntax, [learn more](/docs/config#env-vars).
 
 ---
 
