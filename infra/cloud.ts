@@ -5,15 +5,40 @@ import { domain } from "./stage"
 // DATABASE
 ////////////////
 
-const DATABASE_USERNAME = new sst.Secret("DATABASE_USERNAME")
-const DATABASE_PASSWORD = new sst.Secret("DATABASE_PASSWORD")
+const cluster = planetscale.getDatabaseOutput({
+  name: "opencode",
+  organization: "sst",
+})
+
+const branch =
+  $app.stage === "production"
+    ? planetscale.getBranchOutput({
+        name: "production",
+        organization: cluster.organization,
+        database: cluster.name,
+      })
+    : new planetscale.Branch("DatabaseBranch", {
+        database: cluster.name,
+        organization: cluster.organization,
+        name: $app.stage,
+        parentBranch: "production",
+      })
+const password = new planetscale.Password("DatabasePassword", {
+  name: $app.stage,
+  database: cluster.name,
+  organization: cluster.organization,
+  branch: branch.name,
+})
+
+password.accessHostUrl.apply(console.log)
+
 export const database = new sst.Linkable("Database", {
   properties: {
-    host: `aws-us-east-2-${$app.stage === "thdxr" ? "2" : "1"}.pg.psdb.cloud`,
-    database: "postgres",
-    username: DATABASE_USERNAME.value,
-    password: DATABASE_PASSWORD.value,
-    port: 6432,
+    host: password.accessHostUrl,
+    database: cluster.name,
+    username: password.username,
+    password: password.plaintext,
+    port: 3306,
   },
 })
 
@@ -105,7 +130,7 @@ export const gateway = new sst.cloudflare.Worker("GatewayApi", {
 // CONSOLE
 ////////////////
 
-export const console = new sst.cloudflare.x.SolidStart("Console", {
+new sst.cloudflare.x.SolidStart("Console", {
   domain: `console.${domain}`,
   path: "cloud/app",
   link: [

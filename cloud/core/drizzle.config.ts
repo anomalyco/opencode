@@ -1,4 +1,4 @@
-import { Resource } from "@opencode/cloud-resource"
+import { Resource } from "sst"
 import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
@@ -6,7 +6,7 @@ export default defineConfig({
   strict: true,
   schema: ["./src/**/*.sql.ts"],
   verbose: true,
-  dialect: "postgresql",
+  dialect: "mysql",
   dbCredentials: {
     database: Resource.Database.database,
     host: Resource.Database.host,

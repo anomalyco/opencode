@@ -1,41 +1,33 @@
-import { drizzle } from "drizzle-orm/postgres-js"
+import { drizzle } from "drizzle-orm/planetscale-serverless"
 import { Resource } from "@opencode/cloud-resource"
 export * from "drizzle-orm"
-import postgres from "postgres"
+import { Client } from "@planetscale/database"
 
-const init = () => {
-  const client = postgres({
-    idle_timeout: 30000,
-    connect_timeout: 30000,
-    host: Resource.Database.host,
-    database: Resource.Database.database,
-    user: Resource.Database.username,
-    password: Resource.Database.password,
-    port: Resource.Database.port,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-    max: 6,
-  })
-  return drizzle(client, {})
-}
-
-const createClient = init
-
-import { PgTransaction, type PgTransactionConfig } from "drizzle-orm/pg-core"
+import { MySqlTransaction, type MySqlTransactionConfig } from "drizzle-orm/mysql-core"
 import type { ExtractTablesWithRelations } from "drizzle-orm"
-import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js"
+import type { PlanetScalePreparedQueryHKT, PlanetscaleQueryResultHKT } from "drizzle-orm/planetscale-serverless"
 import { Context } from "../context"
 import { memo } from "../util/memo"
 
 export namespace Database {
-  export type Transaction = PgTransaction<
-    PostgresJsQueryResultHKT,
-    Record<string, unknown>,
-    ExtractTablesWithRelations<Record<string, unknown>>
+  export type Transaction = MySqlTransaction<
+    PlanetscaleQueryResultHKT,
+    PlanetScalePreparedQueryHKT,
+    Record<string, never>,
+    ExtractTablesWithRelations<Record<string, never>>
   >
 
-  export type TxOrDb = Transaction | ReturnType<typeof createClient>
+  const client = memo(() => {
+    const result = new Client({
+      host: Resource.Database.host,
+      username: Resource.Database.username,
+      password: Resource.Database.password,
+    })
+    const db = drizzle(result, {})
+    return db
+  })
+
+  export type TxOrDb = Transaction | ReturnType<typeof client>
 
   const TransactionContext = Context.create<{
     tx: TxOrDb
@@ -48,14 +40,13 @@ export namespace Database {
       return tx.transaction(callback)
     } catch (err) {
       if (err instanceof Context.NotFound) {
-        const client = createClient()
         const effects: (() => void | Promise<void>)[] = []
         const result = await TransactionContext.provide(
           {
             effects,
-            tx: client,
+            tx: client(),
           },
-          () => callback(client),
+          () => callback(client()),
         )
         await Promise.all(effects.map((x) => x()))
         return result
@@ -76,15 +67,14 @@ export namespace Database {
     }
   }
 
-  export async function transaction<T>(callback: (tx: TxOrDb) => Promise<T>, config?: PgTransactionConfig) {
+  export async function transaction<T>(callback: (tx: TxOrDb) => Promise<T>, config?: MySqlTransactionConfig) {
     try {
       const { tx } = TransactionContext.use()
       return callback(tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
-        const client = createClient()
         const effects: (() => void | Promise<void>)[] = []
-        const result = await client.transaction(async (tx) => {
+        const result = await client().transaction(async (tx) => {
           return TransactionContext.provide({ tx, effects }, () => callback(tx))
         }, config)
         await Promise.all(effects.map((x) => x()))

@@ -36,44 +36,26 @@ export namespace Key {
       randomPart += chars.charAt(Math.floor(Math.random() * chars.length))
     }
     const secretKey = `sk-${randomPart}`
+    const keyID = Identifier.create("key")
 
-    const keyRecord = await Database.use((tx) =>
-      tx
-        .insert(KeyTable)
-        .values({
-          id: Identifier.create("key"),
-          workspaceID: user.properties.workspaceID,
-          userID: user.properties.userID,
-          name,
-          key: secretKey,
-          timeUsed: null,
-        })
-        .returning(),
+    await Database.use((tx) =>
+      tx.insert(KeyTable).values({
+        id: keyID,
+        workspaceID: user.properties.workspaceID,
+        userID: user.properties.userID,
+        name,
+        key: secretKey,
+        timeUsed: null,
+      }),
     )
 
-    return {
-      key: secretKey,
-      id: keyRecord[0].id,
-      name: keyRecord[0].name,
-      created: keyRecord[0].timeCreated,
-    }
+    return keyID
   })
 
   export const remove = fn(z.object({ id: z.string() }), async (input) => {
     const user = Actor.assert("user")
-    const { id } = input
-
-    const result = await Database.use((tx) =>
-      tx
-        .delete(KeyTable)
-        .where(and(eq(KeyTable.id, id), eq(KeyTable.workspaceID, user.properties.workspaceID)))
-        .returning({ id: KeyTable.id }),
+    await Database.use((tx) =>
+      tx.delete(KeyTable).where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, user.properties.workspaceID))),
     )
-
-    if (result.length === 0) {
-      throw new Error("Key not found")
-    }
-
-    return { id: result[0].id }
   })
 }

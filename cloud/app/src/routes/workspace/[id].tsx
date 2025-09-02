@@ -14,7 +14,7 @@ import { Actor } from "@opencode/cloud-core/actor.js"
 /////////////////////////////////////
 
 
-const listKeys = query(() => {
+const listKeys = query(async () => {
   "use server"
   return withActor(() => Key.list())
 }, "key.list")

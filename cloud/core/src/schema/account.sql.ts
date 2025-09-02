@@ -1,7 +1,7 @@
-import { pgTable, uniqueIndex, varchar } from "drizzle-orm/pg-core"
+import { mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { id, timestamps } from "../drizzle/types"
 
-export const AccountTable = pgTable(
+export const AccountTable = mysqlTable(
   "account",
   {
     id: id(),

@@ -154,13 +154,12 @@ export namespace File {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
-      const relativeToRoot = path.relative(Instance.worktree, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({
         name: entry.name,
         path: relativePath,
         type,
-        ignored: ignored(type === "directory" ? relativeToRoot + "/" : relativeToRoot),
+        ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
       })
     }
     return nodes.sort((a, b) => {

@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
+import { Ripgrep } from "../file/ripgrep"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -42,15 +43,8 @@ export const ListTool = Tool.define("list", {
   async execute(params) {
     const searchPath = path.resolve(Instance.directory, params.path || ".")
 
-    const glob = new Bun.Glob("**/*")
-    const files = []
-
-    for await (const file of glob.scan({ cwd: searchPath, dot: true })) {
-      if (IGNORE_PATTERNS.some((p) => file.includes(p))) continue
-      if (params.ignore?.some((pattern) => new Bun.Glob(pattern).match(file))) continue
-      files.push(file)
-      if (files.length >= LIMIT) break
-    }
+    const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
+    const files = await Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, limit: LIMIT })
 
     // Build directory structure
     const dirs = new Set<string>()

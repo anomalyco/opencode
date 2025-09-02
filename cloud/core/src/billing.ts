@@ -71,7 +71,6 @@ export namespace Billing {
         await tx.insert(UsageTable).values({
           workspaceID,
           id: Identifier.create("usage"),
-          requestID: input.requestID,
           model: input.model,
           inputTokens: input.inputTokens,
           outputTokens: input.outputTokens,
@@ -80,14 +79,12 @@ export namespace Billing {
           cacheWriteTokens: input.cacheWriteTokens,
           cost,
         })
-        const [updated] = await tx
+        await tx
           .update(BillingTable)
           .set({
             balance: sql`${BillingTable.balance} - ${cost}`,
           })
           .where(eq(BillingTable.workspaceID, workspaceID))
-          .returning()
-        return updated.balance
       })
     },
   )

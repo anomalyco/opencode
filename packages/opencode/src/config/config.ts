@@ -45,7 +45,7 @@ export namespace Config {
     result.agent = result.agent || {}
     const markdownAgents = [
       ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/agent/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, Instance.worktree)),
     ]
     for (const item of markdownAgents) {
       const content = await Bun.file(item).text()

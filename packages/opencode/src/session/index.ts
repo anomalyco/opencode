@@ -1,5 +1,4 @@
 import path from "path"
-import os from "os"
 import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
@@ -51,6 +50,7 @@ import { ulid } from "ulid"
 import { defer } from "../util/defer"
 import { Command } from "../command"
 import { $ } from "bun"
+import { processFileReferences } from "./file-reference"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -1229,7 +1229,6 @@ export namespace Session {
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const fileRegex = /@([^\s]+)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
@@ -1237,10 +1236,6 @@ export namespace Session {
     const agent = command.agent ?? input.agent ?? "build"
 
     let template = command.template.replace("$ARGUMENTS", input.arguments)
-
-    // intentionally doing match regex doing bash regex replacements
-    // this is because bash commands can output "@" references
-    const fileMatches = template.matchAll(fileRegex)
 
     const bash = Array.from(template.matchAll(bashRegex))
     if (bash.length > 0) {
@@ -1264,19 +1259,8 @@ export namespace Session {
       },
     ] as ChatInput["parts"]
 
-    for (const match of fileMatches) {
-      const filename = match[1]
-      const filepath = filename.startsWith("~/")
-        ? path.join(os.homedir(), filename.slice(2))
-        : path.join(Instance.worktree, filename)
-
-      parts.push({
-        type: "file",
-        url: `file://${filepath}`,
-        filename,
-        mime: "text/plain",
-      })
-    }
+    const fileReferenceParts = processFileReferences(template, Instance.worktree)
+    parts.push(...fileReferenceParts)
 
     return prompt({
       sessionID: input.sessionID,

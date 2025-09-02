@@ -10,6 +10,7 @@ import { Account } from "@opencode/cloud-core/account.js"
 import { Workspace } from "@opencode/cloud-core/workspace.js"
 import { Actor } from "@opencode/cloud-core/actor.js"
 import { Resource } from "@opencode/cloud-resource"
+import { Database } from "@opencode/cloud-core/drizzle/index.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -33,7 +34,7 @@ const MY_THEME: Theme = {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    return issuer({
+    const result = await issuer({
       theme: MY_THEME,
       providers: {
         github: GithubProvider({
@@ -135,5 +136,6 @@ export default {
         return ctx.subject("account", accountID, { accountID, email })
       },
     }).fetch(request, env, ctx)
+    return result
   },
 }

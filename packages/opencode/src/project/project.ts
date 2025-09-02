@@ -53,6 +53,17 @@ export namespace Project {
             .map((x) => x.trim())
             .toSorted(),
         )
+      if (!id) {
+        const project: Info = {
+          id: "global",
+          worktree: "/",
+          time: {
+            created: Date.now(),
+          },
+        }
+        await Storage.write<Info>(["project", "global"], project)
+        return project
+      }
       worktree = path.dirname(
         await $`git rev-parse --path-format=absolute --git-common-dir`
           .quiet()
