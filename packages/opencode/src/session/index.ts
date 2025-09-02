@@ -1259,8 +1259,7 @@ export namespace Session {
       },
     ] as ChatInput["parts"]
 
-    const app = App.info()
-    const fileReferenceParts = processFileReferences(template, app.path.cwd)
+    const fileReferenceParts = processFileReferences(template, Instance.worktree)
     parts.push(...fileReferenceParts)
 
     return prompt({
