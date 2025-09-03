@@ -1,6 +1,5 @@
 import { LSPClient } from "./client"
 import { LSPServer } from "./server"
-import type { App } from "../app/app"
 import { Log } from "../util/log"
 import path from "path"
 import { Global } from "../global"
@@ -56,7 +55,6 @@ export namespace VueIntegration {
   export async function setupVueTypeScriptBridge(
     allClients: LSPClient.Info[],
     currentClients: LSPClient.Info[],
-    app: App.Info,
     getState: () => Promise<{ broken: Set<string>, clients: LSPClient.Info[] }>
   ): Promise<void> {
     const vueClient = currentClients.find(c => c.serverID === "vue")
@@ -71,7 +69,7 @@ export namespace VueIntegration {
       const root = vueClient.root
       const s = await getState()
       if (!s.broken.has(root + tsServer.id)) {
-        const handle = await tsServer.spawn(app, root)
+        const handle = await tsServer.spawn(root)
         if (handle) {
           tsClient = await LSPClient.create({
             serverID: "typescript",
