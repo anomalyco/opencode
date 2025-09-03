@@ -20,7 +20,7 @@ export const GrepTool = Tool.define("grep", {
     const searchPath = params.path || Instance.directory
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-n", params.pattern]
+    const args = ["--json", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }
@@ -48,36 +48,54 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const lines = output.trim().split("\n")
-    const matches = []
+    const fileGroups = new Map()
 
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
-      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
+      let json
+      try {
+        json = JSON.parse(line)
+      } catch {
+        continue
+      }
 
-      const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join(":")
+      if (json.type !== "match") continue
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
-      if (!stats) continue
+      const data = json.data
+      const filePath = data.path.text
+      const lineNum = data.line_number
+      const lineText = data.lines.text.trim()
 
-      matches.push({
-        path: filePath,
-        modTime: stats.mtime.getTime(),
+      if (!fileGroups.has(filePath)) {
+        const file = Bun.file(filePath)
+        const stats = await file.stat().catch(() => null)
+        if (!stats) continue
+
+        fileGroups.set(filePath, {
+          modTime: stats.mtime.getTime(),
+          matches: [],
+        })
+      }
+
+      fileGroups.get(filePath).matches.push({
         lineNum,
         lineText,
       })
     }
 
-    matches.sort((a, b) => b.modTime - a.modTime)
+    const sortedFiles = Array.from(fileGroups.entries()).sort(([, a], [, b]) => b.modTime - a.modTime)
+
+    // Count total matches for limit and truncation
+    let totalMatches = 0
+    for (const [, fileData] of sortedFiles) {
+      totalMatches += fileData.matches.length
+    }
 
     const limit = 100
-    const truncated = matches.length > limit
-    const finalMatches = truncated ? matches.slice(0, limit) : matches
+    const truncated = totalMatches > limit
 
-    if (finalMatches.length === 0) {
+    if (totalMatches === 0) {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
@@ -85,18 +103,20 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const outputLines = [`Found ${totalMatches} matches`]
+    let matchesOutput = 0
 
-    let currentFile = ""
-    for (const match of finalMatches) {
-      if (currentFile !== match.path) {
-        if (currentFile !== "") {
-          outputLines.push("")
-        }
-        currentFile = match.path
-        outputLines.push(`${match.path}:`)
+    for (const [filePath, fileData] of sortedFiles) {
+      if (matchesOutput >= limit) break
+
+      outputLines.push("")
+      outputLines.push(`${filePath}:`)
+
+      for (const match of fileData.matches) {
+        if (matchesOutput >= limit) break
+        outputLines.push(`  Line ${match.lineNum}: ${match.lineText}`)
+        matchesOutput++
       }
-      outputLines.push(`  Line ${match.lineNum}: ${match.lineText}`)
     }
 
     if (truncated) {
@@ -107,7 +127,7 @@ export const GrepTool = Tool.define("grep", {
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
+        matches: totalMatches,
         truncated,
       },
       output: outputLines.join("\n"),
