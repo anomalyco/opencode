@@ -1,7 +1,7 @@
 import { useSession } from "vinxi/http"
 
 export interface AuthSession {
-  account: Record<
+  account?: Record<
     string,
     {
       id: string

@@ -1,13 +1,13 @@
-import { Title } from "@solidjs/meta"
-import { onCleanup, onMount } from "solid-js"
 import "./index.css"
+import { Title } from "@solidjs/meta"
+import { Match, onCleanup, onMount, Switch } from "solid-js"
 import logoLight from "../asset/logo-ornate-light.svg"
 import logoDark from "../asset/logo-ornate-dark.svg"
 import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
 import IMG_VSCODE from "../asset/lander/screenshot-vscode.png"
 import IMG_GITHUB from "../asset/lander/screenshot-github.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { createAsync, query, redirect } from "@solidjs/router"
+import { createAsync, query, redirect, A } from "@solidjs/router"
 import { getActor } from "~/context/auth"
 import { withActor } from "~/context/auth.withActor"
 import { Account } from "@opencode/cloud-core/account.js"
@@ -21,20 +21,17 @@ function CopyStatus() {
   )
 }
 
-const isLoggedIn = query(async () => {
+const defaultWorkspace = query(async () => {
   "use server"
   const actor = await getActor()
   if (actor.type === "account") {
     const workspaces = await withActor(() => Account.workspaces())
     return workspaces[0].id
-    // throw redirect(`/workspace/${workspaces[0].id}`)
   }
-}, "isLoggedIn")
+}, "defaultWorkspace")
 
 export default function Home() {
-  const auth = createAsync(() => isLoggedIn(), {
-    deferStream: true,
-  })
+  const workspace = createAsync(() => defaultWorkspace())
   onMount(() => {
     const commands = document.querySelectorAll("[data-copy]")
     for (const button of commands) {
@@ -67,7 +64,9 @@ export default function Home() {
 
         <section data-component="cta">
           <div data-slot="left">
-            <a target="_self" href="/docs">Get Started</a>
+            <a href="/docs">
+              Get Started
+            </a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
@@ -83,17 +82,21 @@ export default function Home() {
         </section>
 
         <section data-component="zen">
-          <a href="/docs/zen">opencode zen</a>
-          <span data-slot="description">
-            , a curated list of models provided by opencode
-          </span>
-          <span data-slot="divider">&nbsp;/&nbsp;</span>
-          <a
-            href="/auth"
-            target="_self"
-          >
-            {auth() ? "Dashboard" : "Sign in"}
+          <a href="/docs/zen">
+            opencode zen
           </a>
+          <span data-slot="description">, a curated list of models provided by opencode</span>
+          <span data-slot="divider">&nbsp;/&nbsp;</span>
+          <Switch>
+            <Match when={workspace()}>
+              <A href={"/workspace/" + workspace()}>
+                Dashboard
+              </A>
+            </Match>
+            <Match when={true}>
+              <a href="/auth/authorize">Sign in</a>
+            </Match>
+          </Switch>
         </section>
 
         <section data-component="features">

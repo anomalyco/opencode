@@ -103,12 +103,13 @@ export const AuthLoginCommand = cmd({
       await ModelsDev.refresh().catch(() => {})
       const providers = await ModelsDev.get()
       const priority: Record<string, number> = {
-        anthropic: 0,
-        "github-copilot": 1,
-        openai: 2,
-        google: 3,
-        openrouter: 4,
-        vercel: 5,
+        opencode: 0,
+        anthropic: 1,
+        "github-copilot": 2,
+        openai: 3,
+        google: 4,
+        openrouter: 5,
+        vercel: 6,
       }
       let provider = await prompts.autocomplete({
         message: "Select provider",
@@ -124,7 +125,7 @@ export const AuthLoginCommand = cmd({
             map((x) => ({
               label: x.name,
               value: x.id,
-              hint: priority[x.id] === 0 ? "recommended" : undefined,
+              hint: priority[x.id] <= 1 ? "recommended" : undefined,
             })),
           ),
           {
@@ -242,6 +243,10 @@ export const AuthLoginCommand = cmd({
         )
         prompts.outro("Done")
         return
+      }
+
+      if (provider === "opencode") {
+        prompts.log.info("Create an api key at https://opencode.ai/auth")
       }
 
       if (provider === "vercel") {

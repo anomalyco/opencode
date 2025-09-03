@@ -1,6 +1,3 @@
-/**
- * @deprecated Use zen/v1/chat/completions instead
- */
 import { Resource } from "@opencode/cloud-resource"
 import type { APIEvent } from "@solidjs/start/server"
 import { Database, eq, sql } from "@opencode/cloud-core/drizzle/index.js"
@@ -59,6 +56,10 @@ const MODELS = {
   },
 }
 
+const FREE_WORKSPACES = [
+  "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
+]
+
 class AuthError extends Error {}
 class CreditsError extends Error {}
 class ModelError extends Error {}
@@ -69,10 +70,11 @@ export async function POST(input: APIEvent) {
     const body = await input.request.json()
     const MODEL = validateModel()
     const apiKey = await authenticate()
+    const isFree = FREE_WORKSPACES.includes(apiKey?.workspaceID ?? "")
     await checkCredits()
 
     // Request to model provider
-    const res = await fetch(new URL(url.pathname.replace(/^\/gateway/, "") + url.search, MODEL.api), {
+    const res = await fetch(new URL(url.pathname.replace(/^\/zen/, "") + url.search, MODEL.api), {
       method: "POST",
       headers: (() => {
         const headers = input.request.headers
@@ -198,7 +200,7 @@ export async function POST(input: APIEvent) {
     }
 
     async function checkCredits() {
-      if (!apiKey || !MODEL.auth) return
+      if (!apiKey || !MODEL.auth || isFree) return
 
       const billing = await Database.use((tx) =>
         tx
@@ -232,7 +234,7 @@ export async function POST(input: APIEvent) {
       const cacheReadCost = MODEL.cost.cacheRead * cacheReadTokens
       const cacheWriteCost = MODEL.cost.cacheWrite * cacheWriteTokens
       const costInCents = (inputCost + outputCost + reasoningCost + cacheReadCost + cacheWriteCost) * 100
-      const cost = centsToMicroCents(costInCents)
+      const cost = isFree ? 0 : centsToMicroCents(costInCents)
 
       await Database.transaction(async (tx) => {
         await tx.insert(UsageTable).values({

@@ -100,15 +100,14 @@ export default {
         let email: string | undefined
 
         if (response.provider === "github") {
-          const userResponse = await fetch("https://api.github.com/user", {
+          const emails = (await fetch("https://api.github.com/user/emails", {
             headers: {
               Authorization: `Bearer ${response.tokenset.access}`,
               "User-Agent": "opencode",
               Accept: "application/vnd.github+json",
             },
-          })
-          const user = (await userResponse.json()) as { email: string }
-          email = user.email
+          }).then((x) => x.json())) as any
+          email = emails.find((x: any) => x.primary && x.verified)?.email
         } else if (response.provider === "google") {
           if (!response.id.email_verified) throw new Error("Google email not verified")
           email = response.id.email as string

@@ -165,7 +165,7 @@
       padding-right: 1rem;
     }
 
-    a[target="_self"] {
+    a[data-slot="cta"] {
       text-transform: uppercase;
     }
 
