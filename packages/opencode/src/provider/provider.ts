@@ -261,7 +261,43 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, { apiKey: provider.key }, "api")
+        continue
       }
+      if (provider.type !== "cmd") continue
+
+      // Basic security validation
+      const command = provider.command[0]
+      if (!command || typeof command !== "string") {
+        log.error("invalid command", { providerID, command })
+        continue
+      }
+
+      // Prevent potentially dangerous commands
+      const dangerousCommands = ["rm", "del", "format", "fdisk", "mkfs", "dd", "shred"]
+      if (dangerousCommands.some((cmd) => command.includes(cmd))) {
+        log.error("command contains potentially dangerous operation", { providerID, command })
+        continue
+      }
+
+      log.info("executing command for", { providerID, command: provider.command.join(" ") })
+      const proc = Bun.spawn({
+        cmd: provider.command,
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const exit = await proc.exited
+      if (exit !== 0) {
+        const stderr = await new Response(proc.stderr).text()
+        log.error("command failed", { providerID, exit, stderr })
+        continue
+      }
+      const apiKey = (await new Response(proc.stdout).text()).trim()
+      if (!apiKey) {
+        log.error("command produced empty output", { providerID })
+        continue
+      }
+      mergeProvider(providerID, { apiKey }, "api")
+      log.info("command executed successfully", { providerID })
     }
 
     // load custom

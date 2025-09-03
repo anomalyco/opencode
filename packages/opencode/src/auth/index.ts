@@ -20,6 +20,13 @@ export namespace Auth {
     })
     .meta({ ref: "ApiAuth" })
 
+  export const Cmd = z
+    .object({
+      type: z.literal("cmd"),
+      command: z.array(z.string()),
+    })
+    .meta({ ref: "CmdAuth" })
+
   export const WellKnown = z
     .object({
       type: z.literal("wellknown"),
@@ -28,7 +35,7 @@ export namespace Auth {
     })
     .meta({ ref: "WellKnownAuth" })
 
-  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
+  export const Info = z.discriminatedUnion("type", [Oauth, Api, Cmd, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
   const filepath = path.join(Global.Path.data, "auth.json")

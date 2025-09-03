@@ -10,6 +10,39 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 
+// Simple command parser that handles quoted strings
+function parseCommand(input: string): string[] {
+  const args: string[] = []
+  let current = ""
+  let inQuotes = false
+  let quoteChar = ""
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i]
+
+    if (!inQuotes && (char === '"' || char === "'")) {
+      inQuotes = true
+      quoteChar = char
+    } else if (inQuotes && char === quoteChar) {
+      inQuotes = false
+      quoteChar = ""
+    } else if (!inQuotes && char === " ") {
+      if (current) {
+        args.push(current)
+        current = ""
+      }
+    } else {
+      current += char
+    }
+  }
+
+  if (current) {
+    args.push(current)
+  }
+
+  return args.filter((arg) => arg.length > 0)
+}
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
@@ -253,16 +286,46 @@ export const AuthLoginCommand = cmd({
         prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
       }
 
-      const key = await prompts.password({
-        message: "Enter your API key",
+      const authMethod = await prompts.select({
+        message: "How would you like to provide the API key?",
+        options: [
+          { label: "Enter API key directly", value: "direct" },
+          { label: "Run a command to get the API key", value: "command" },
+        ],
+      })
+      if (prompts.isCancel(authMethod)) throw new UI.CancelledError()
+
+      if (authMethod === "direct") {
+        const key = await prompts.password({
+          message: "Enter your API key",
+          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+        })
+        if (prompts.isCancel(key)) throw new UI.CancelledError()
+        await Auth.set(provider, {
+          type: "api",
+          key,
+        })
+        prompts.outro("Done")
+        return
+      }
+
+      const commandInput = await prompts.text({
+        message: "Enter the command to run (e.g., 'op read op://vault/item')",
         validate: (x) => (x && x.length > 0 ? undefined : "Required"),
       })
-      if (prompts.isCancel(key)) throw new UI.CancelledError()
-      await Auth.set(provider, {
-        type: "api",
-        key,
-      })
+      if (prompts.isCancel(commandInput)) throw new UI.CancelledError()
 
+      // Parse command string into array with proper quote handling
+      const command = parseCommand(commandInput)
+      if (command.length === 0) {
+        prompts.log.error("Invalid command")
+        return
+      }
+
+      await Auth.set(provider, {
+        type: "cmd",
+        command,
+      })
       prompts.outro("Done")
     })
   },
