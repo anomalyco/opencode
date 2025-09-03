@@ -4,8 +4,6 @@ import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { Identifier } from "./identifier"
-import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
 import { Resource } from "@opencode/cloud-resource"
 
@@ -72,7 +70,7 @@ export namespace Billing {
               product_data: {
                 name: "opencode credits",
               },
-              unit_amount: 2118, // $20 minimum + Stripe fee 4.4% + $0.30
+              unit_amount: 2123, // $20 minimum + Stripe fee 4.4% + $0.30
             },
             quantity: 1,
           },

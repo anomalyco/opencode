@@ -12,6 +12,7 @@ import { spawnSync } from "child_process"
 // https://astro.build/config
 export default defineConfig({
   site: config.url,
+  base: "/docs",
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
@@ -59,44 +60,36 @@ export default defineConfig({
         replacesTitle: true,
       },
       sidebar: [
-        "docs",
-        "docs/config",
-        "docs/providers",
-        "docs/enterprise",
-        "docs/troubleshooting",
+        "",
+        "config",
+        "providers",
+        "enterprise",
+        "troubleshooting",
 
         {
           label: "Usage",
-          items: [
-            "docs/tui",
-            "docs/cli",
-            "docs/ide",
-            "docs/zen",
-            "docs/share",
-            "docs/github",
-            "docs/gitlab"
-          ],
+          items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
         },
 
         {
           label: "Configure",
           items: [
-            "docs/rules",
-            "docs/agents",
-            "docs/models",
-            "docs/themes",
-            "docs/keybinds",
-            "docs/commands",
-            "docs/formatters",
-            "docs/permissions",
-            "docs/lsp",
-            "docs/mcp-servers",
+            "rules",
+            "agents",
+            "models",
+            "themes",
+            "keybinds",
+            "commands",
+            "formatters",
+            "permissions",
+            "lsp",
+            "mcp-servers",
           ],
         },
 
         {
           label: "Develop",
-          items: ["docs/sdk", "docs/server", "docs/plugins"],
+          items: ["sdk", "server", "plugins"],
         },
       ],
       components: {

@@ -32,7 +32,7 @@ const isLoggedIn = query(async () => {
 }, "isLoggedIn")
 
 export default function Home() {
-  const workspaceId = createAsync(() => isLoggedIn(), {
+  const auth = createAsync(() => isLoggedIn(), {
     deferStream: true,
   })
   onMount(() => {
@@ -67,7 +67,7 @@ export default function Home() {
 
         <section data-component="cta">
           <div data-slot="left">
-            <a href="/docs">Get Started</a>
+            <a target="_self" href="/docs">Get Started</a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
@@ -92,7 +92,7 @@ export default function Home() {
             href="/auth"
             target="_self"
           >
-            Sign in
+            {auth() ? "Dashboard" : "Sign in"}
           </a>
         </section>
 

@@ -7,26 +7,19 @@ import { KeyTable } from "./schema/key.sql"
 
 export namespace Key {
   export const list = async () => {
-    const user = Actor.assert("user")
+    const workspace = Actor.workspace()
     const keys = await Database.use((tx) =>
       tx
-        .select({
-          id: KeyTable.id,
-          name: KeyTable.name,
-          key: KeyTable.key,
-          userID: KeyTable.userID,
-          timeCreated: KeyTable.timeCreated,
-          timeUsed: KeyTable.timeUsed,
-        })
+        .select()
         .from(KeyTable)
-        .where(eq(KeyTable.workspaceID, user.properties.workspaceID))
+        .where(eq(KeyTable.workspaceID, workspace))
         .orderBy(sql`${KeyTable.timeCreated} DESC`),
     )
     return keys
   }
 
   export const create = fn(z.object({ name: z.string().min(1).max(255) }), async (input) => {
-    const user = Actor.assert("user")
+    const workspaceID = Actor.workspace()
     const { name } = input
 
     // Generate secret key: sk- + 64 random characters (upper, lower, numbers)
@@ -42,8 +35,8 @@ export namespace Key {
     await Database.use((tx) =>
       tx.insert(KeyTable).values({
         id: keyID,
-        workspaceID: user.properties.workspaceID,
-        userID: user.properties.userID,
+        workspaceID,
+        actor: Actor.use(),
         name,
         key: secretKey,
         timeUsed: null,
@@ -54,9 +47,9 @@ export namespace Key {
   })
 
   export const remove = fn(z.object({ id: z.string() }), async (input) => {
-    const user = Actor.assert("user")
+    const workspace = Actor.workspace()
     await Database.use((tx) =>
-      tx.delete(KeyTable).where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, user.properties.workspaceID))),
+      tx.delete(KeyTable).where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace))),
     )
   })
 }

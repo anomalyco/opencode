@@ -1,11 +1,10 @@
+import "./[id].css"
 import { Billing } from "@opencode/cloud-core/billing.js"
 import { Key } from "@opencode/cloud-core/key.js"
 import { action, createAsync, query, useAction, useSubmission, json } from "@solidjs/router"
-import { createSignal, For, onMount, Show } from "solid-js"
-import { getActor } from "~/context/auth"
+import { createSignal, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCopy, IconCheck } from "~/component/icon"
-import "./[id].css"
 import { User } from "@opencode/cloud-core/user.js"
 import { Actor } from "@opencode/cloud-core/actor.js"
 
@@ -63,7 +62,7 @@ const createPortalUrl = action(async (returnUrl: string) => {
   return withActor(() => Billing.generatePortalUrl({ returnUrl }))
 }, "portalUrl")
 
-export default function() {
+export default function () {
 
   /////////////////
   // Keys section

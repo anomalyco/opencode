@@ -24,7 +24,6 @@ export async function POST(input: APIEvent) {
     if (!workspaceID) throw new Error("Workspace ID not found")
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
-    if (amount !== 2118) throw new Error("Amount mismatch")
     if (!paymentID) throw new Error("Payment ID not found")
 
     const chargedAmount = 2000

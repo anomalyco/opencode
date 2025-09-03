@@ -55,5 +55,7 @@
   "overrides": {
     "zod": "3.25.76"
   },
-  "patchedDependencies": {}
+  "patchedDependencies": {
+  "@solidjs/start@1.1.7": "patches/@solidjs%2Fstart@1.1.7.patch"
+}
 }

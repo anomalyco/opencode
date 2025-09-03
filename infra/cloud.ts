@@ -30,8 +30,6 @@ const password = new planetscale.Password("DatabasePassword", {
   branch: branch.name,
 })
 
-password.accessHostUrl.apply(console.log)
-
 export const database = new sst.Linkable("Database", {
   properties: {
     host: password.accessHostUrl,
@@ -117,7 +115,7 @@ const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
 ////////////////
 
 new sst.cloudflare.x.SolidStart("Console", {
-  domain: `console.${domain}`,
+  domain,
   path: "cloud/app",
   link: [
     database,
