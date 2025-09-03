@@ -26,7 +26,7 @@ export namespace Workspace {
       await tx.insert(BillingTable).values({
         workspaceID,
         id: Identifier.create("billing"),
-        balance: centsToMicroCents(100),
+        balance: 0,
       })
     })
     await Actor.provide(

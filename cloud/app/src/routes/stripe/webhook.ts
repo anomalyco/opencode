@@ -24,7 +24,10 @@ export async function POST(input: APIEvent) {
     if (!workspaceID) throw new Error("Workspace ID not found")
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
+    if (amount !== 2118) throw new Error("Amount mismatch")
     if (!paymentID) throw new Error("Payment ID not found")
+
+    const chargedAmount = 2000
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
@@ -50,7 +53,7 @@ export async function POST(input: APIEvent) {
         await tx
           .update(BillingTable)
           .set({
-            balance: sql`${BillingTable.balance} + ${centsToMicroCents(amount)}`,
+            balance: sql`${BillingTable.balance} + ${centsToMicroCents(chargedAmount)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
             paymentMethodLast4: paymentMethod.card!.last4,
@@ -59,7 +62,7 @@ export async function POST(input: APIEvent) {
         await tx.insert(PaymentTable).values({
           workspaceID,
           id: Identifier.create("payment"),
-          amount: centsToMicroCents(amount),
+          amount: centsToMicroCents(chargedAmount),
           paymentID,
           customerID,
         })

@@ -1,6 +1,23 @@
 {
   "$schema": "https://opencode.ai/config.json",
-
+  "provider": {
+    "frank": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "env": ["OPENCODE_API_KEY"],
+      "options": {
+        "baseURL": "https://console.frank.dev.opencode.ai/gateway/v1"
+      },
+      "models": {
+        "x-ai/grok-code-fast-1": {
+          "name": "Grok Code Fast 1"
+        },
+        "qwen/qwen3-coder": {
+          "name": "Qwen 3 Coder"
+        }
+      }
+    }
+  },
   "mcp": {
     "weather": {
       "type": "local",

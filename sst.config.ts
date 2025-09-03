@@ -12,15 +12,14 @@ export default $config({
         },
         planetscale: "0.4.1",
       },
-    };
+    }
   },
   async run() {
-    const { api } = await import("./infra/app.js");
-    const { auth, gateway } = await import("./infra/cloud.js");
+    const { api } = await import("./infra/app.js")
+    const { auth } = await import("./infra/cloud.js")
     return {
       api: api.url,
-      gateway: gateway.url,
       auth: auth.url,
-    };
+    }
   },
-});
+})

@@ -102,28 +102,14 @@ export const stripeWebhook = new WebhookEndpoint("StripeWebhook", {
 })
 
 const ANTHROPIC_API_KEY = new sst.Secret("ANTHROPIC_API_KEY")
-const OPENAI_API_KEY = new sst.Secret("OPENAI_API_KEY")
-const ZHIPU_API_KEY = new sst.Secret("ZHIPU_API_KEY")
+const XAI_API_KEY = new sst.Secret("XAI_API_KEY")
+const BASETEN_API_KEY = new sst.Secret("BASETEN_API_KEY")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
 })
 const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
-})
-export const gateway = new sst.cloudflare.Worker("GatewayApi", {
-  domain: `api.gateway.${domain}`,
-  handler: "cloud/function/src/gateway.ts",
-  url: true,
-  link: [
-    database,
-    AUTH_API_URL,
-    STRIPE_WEBHOOK_SECRET,
-    STRIPE_SECRET_KEY,
-    ANTHROPIC_API_KEY,
-    OPENAI_API_KEY,
-    ZHIPU_API_KEY,
-  ],
 })
 
 ////////////////
@@ -139,8 +125,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     STRIPE_WEBHOOK_SECRET,
     STRIPE_SECRET_KEY,
     ANTHROPIC_API_KEY,
-    OPENAI_API_KEY,
-    ZHIPU_API_KEY,
+    XAI_API_KEY,
+    BASETEN_API_KEY,
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),

@@ -31,11 +31,12 @@ export namespace Key {
 
     // Generate secret key: sk- + 64 random characters (upper, lower, numbers)
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    let randomPart = ""
-    for (let i = 0; i < 64; i++) {
-      randomPart += chars.charAt(Math.floor(Math.random() * chars.length))
+    let secretKey = "sk-"
+    const array = new Uint32Array(64)
+    crypto.getRandomValues(array)
+    for (let i = 0, l = array.length; i < l; i++) {
+      secretKey += chars[array[i] % chars.length]
     }
-    const secretKey = `sk-${randomPart}`
     const keyID = Identifier.create("key")
 
     await Database.use((tx) =>
