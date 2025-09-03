@@ -1,4 +1,6 @@
+import os from "os"
 import path from "path"
+import fs from "fs/promises"
 import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
@@ -50,7 +52,6 @@ import { ulid } from "ulid"
 import { defer } from "../util/defer"
 import { Command } from "../command"
 import { $ } from "bun"
-import { processFileReferences } from "./file-reference"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -1229,6 +1230,12 @@ export namespace Session {
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
+  /**
+   * Regular expression to match @ file references in text
+   * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
+   * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
+   */
+  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
@@ -1259,8 +1266,36 @@ export namespace Session {
       },
     ] as ChatInput["parts"]
 
-    const fileReferenceParts = processFileReferences(template, Instance.worktree)
-    parts.push(...fileReferenceParts)
+    const matches = Array.from(template.matchAll(fileRegex))
+    await Promise.all(
+      matches.map(async (match) => {
+        const name = match[1]
+        const filepath = name.startsWith("~/")
+          ? path.join(os.homedir(), name.slice(2))
+          : path.resolve(Instance.worktree, name)
+
+        const stats = await fs.stat(filepath).catch(() => undefined)
+        if (!stats) {
+          const agent = await Agent.get(name)
+          if (agent) {
+            parts.push({
+              type: "agent",
+              name: agent.name,
+            })
+          }
+          return
+        }
+
+        if (stats.isDirectory()) return
+
+        parts.push({
+          type: "file",
+          url: `file://${filepath}`,
+          filename: name,
+          mime: "text/plain",
+        })
+      }),
+    )
 
     return prompt({
       sessionID: input.sessionID,

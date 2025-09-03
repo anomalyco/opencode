@@ -71,7 +71,7 @@ export default defineConfig({
             "docs/tui",
             "docs/cli",
             "docs/ide",
-            // "docs/zen",
+            "docs/zen",
             "docs/share",
             "docs/github",
             "docs/gitlab"
