@@ -156,18 +156,4 @@ export namespace VueIntegration {
 
     return initialization
   }
-
-  /**
-   * Check if file should trigger Vue integration setup
-   */
-  export function shouldSetupVueIntegration(file: string): boolean {
-    return path.parse(file).ext === ".vue"
-  }
-
-  /**
-   * Clear the Vue project detection cache (useful for testing or when project structure changes)
-   */
-  export function clearVueProjectCache(): void {
-    vueProjectCache.clear()
-  }
 }

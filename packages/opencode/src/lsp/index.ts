@@ -149,7 +149,7 @@ export namespace LSP {
     }
 
     // Set up Vue/TypeScript integration for .vue files
-    if (VueIntegration.shouldSetupVueIntegration(file)) {
+    if (path.parse(file).ext === ".vue") {
       await VueIntegration.setupVueTypeScriptBridge(s.clients, result, App.info(), state)
     }
 
