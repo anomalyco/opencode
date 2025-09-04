@@ -6,8 +6,8 @@ import { ToolRegistry } from "../tool/registry"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { z } from "zod"
+import { MessageV2 } from "../session/message-v2"
 
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 
 export namespace ACPServer {
   const log = Log.create({ service: "acp" })
@@ -21,19 +21,19 @@ export namespace ACPServer {
 
   let sid: string | undefined
 
-  function write(obj: Json) {
+  function write(obj: unknown) {
     const out = JSON.stringify(obj)
     process.stdout.write(out + "\n")
   }
 
-  async function ensureSession() {
-    if (sid) return sid
+  async function ensureSession(): Promise<string> {
+    if (sid) return sid!
     const s = await Session.create(undefined, "Zed ACP Session")
     sid = s.id
-    return sid
+    return sid!
   }
 
-  async function handle(method: string, params: any) {
+  async function handle(method: string, params: unknown) {
     if (method === "initialize") {
       const info = {
         name: "opencode",
@@ -76,7 +76,7 @@ export namespace ACPServer {
 
     if (method === "diagnostics/log") {
       const input = z
-        .object({ level: z.string().optional(), message: z.string(), data: z.record(z.any()).optional() })
+        .object({ level: z.string().optional(), message: z.string(), data: z.record(z.unknown()).optional() })
         .parse(params ?? {})
       const lvl = (input.level ?? "info").toUpperCase()
       if (lvl === "DEBUG") log.debug(input.message, input.data ?? {})
@@ -127,7 +127,7 @@ export namespace ACPServer {
 
     if (method === "tool/run") {
       const input = z
-        .object({ name: z.string(), args: z.any().optional(), sessionId: z.string().optional() })
+        .object({ name: z.string(), args: z.unknown().optional(), sessionId: z.string().optional() })
         .parse(params ?? {})
       const def = await Provider.defaultModel()
       const tools = await ToolRegistry.tools(def.providerID, def.modelID)
@@ -159,8 +159,8 @@ export namespace ACPServer {
         ],
       })
       const text = res.parts
-        .filter((p) => p.type === "text")
-        .map((p) => (p as any).text as string)
+        .filter((p): p is MessageV2.TextPart => p.type === "text")
+        .map((p) => p.text)
         .join("\n")
       return { text }
     }
@@ -200,4 +200,3 @@ export namespace ACPServer {
     })
   }
 }
-
