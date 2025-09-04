@@ -2,6 +2,7 @@
   --color-text: hsl(224, 10%, 10%);
   --color-text-secondary: hsl(224, 7%, 46%);
   --color-text-dimmed: hsl(224, 6%, 63%);
+  --color-text-inverted: hsl(0, 0%, 100%);
 
   --color-border: hsl(224, 6%, 77%);
 }
@@ -11,6 +12,7 @@
     --color-text: hsl(0, 0%, 100%);
     --color-text-secondary: hsl(224, 6%, 66%);
     --color-text-dimmed: hsl(224, 7%, 46%);
+    --color-text-inverted: hsl(224, 10%, 10%);
 
     --color-border: hsl(224, 6%, 36%);
   }
@@ -19,12 +21,12 @@
 [data-page="home"] {
   --padding: 3rem;
   --vertical-padding: 1.5rem;
-  --heading-font-size: 1.5625rem;
+  --heading-font-size: 1.375rem;
 
   @media (max-width: 30rem) {
     --padding: 1rem;
     --vertical-padding: 0.75rem;
-    --heading-font-size: 1.375rem;
+    --heading-font-size: 1rem;
   }
 
   font-family: var(--font-mono);
@@ -41,19 +43,19 @@
   [data-component="content"] {
     max-width: 67.5rem;
     margin: 0 auto;
-    border: 2px solid var(--color-border);
+    border: 1px solid var(--color-border);
   }
 
   [data-component="top"] {
     padding: var(--padding);
     display: flex;
     flex-direction: column;
-    align-items: start;
+    align-items: center;
     gap: calc(var(--vertical-padding) / 2);
 
     img {
       height: auto;
-      width: clamp(200px, 70vw, 400px);
+      width: clamp(200px, 85vw, 552px);
     }
 
     [data-slot="logo dark"] {
@@ -71,17 +73,20 @@
 
     [data-slot="title"] {
       line-height: 1.25;
+      font-weight: 500;
+      text-align: center;
       font-size: var(--heading-font-size);
+      color: var(--color-text-secondary);
       text-transform: uppercase;
     }
   }
 
   [data-component="cta"] {
-    border-top: 2px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
     display: flex;
 
     & > div + div {
-      border-left: 2px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
     }
 
     [data-slot="left"] {
@@ -113,7 +118,7 @@
 
       [data-slot="right"] {
         border-left: none;
-        border-top: 2px solid var(--color-border);
+        border-top: 1px solid var(--color-border);
       }
     }
 
@@ -153,34 +158,8 @@
     }
   }
 
-  [data-component="zen"] {
-    border-top: 2px solid var(--color-border);
-    text-align: center;
-    font-size: 1.125rem;
-    padding: var(--vertical-padding) 2rem;
-
-    @media (max-width: 30rem) {
-      font-size: 1rem;
-      padding-left: 1rem;
-      padding-right: 1rem;
-    }
-
-    a[data-slot="cta"] {
-      text-transform: uppercase;
-    }
-
-    [data-slot="description"] {
-      color: var(--color-text-secondary);
-    }
-
-    [data-slot="divider"] {
-      font-weight: bold;
-      color: var(--color-border);
-    }
-  }
-
   [data-component="features"] {
-    border-top: 2px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
     padding: var(--padding);
 
     [data-slot="list"] {
@@ -190,10 +169,21 @@
 
       li {
         margin-bottom: var(--space-4);
+        line-height: 1.6;
 
         strong {
           text-transform: uppercase;
-          font-weight: 700;
+          font-weight: 600;
+        }
+
+        label {
+          line-height: 1;
+          text-transform: uppercase;
+          font-size: 0.75rem;
+          letter-spacing: 0.03125rem;
+          background: var(--color-border);
+          padding: 0.125rem 0.375rem;
+          color: var(--color-text-inverted);
         }
       }
 
@@ -204,7 +194,7 @@
   }
 
   [data-component="install"] {
-    border-top: 2px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
@@ -231,21 +221,21 @@
     }
 
     &:nth-child(2) {
-      border-left: 2px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
 
       @media (max-width: 40rem) {
         border-left: none;
-        border-top: 2px solid var(--color-border);
+        border-top: 1px solid var(--color-border);
       }
     }
 
     &:nth-child(3) {
-      border-top: 2px solid var(--color-border);
+      border-top: 1px solid var(--color-border);
     }
 
     &:nth-child(4) {
-      border-top: 2px solid var(--color-border);
-      border-left: 2px solid var(--color-border);
+      border-top: 1px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
 
       @media (max-width: 40rem) {
         border-left: none;
@@ -294,38 +284,7 @@
   }
 
   [data-component="screenshots"] {
-    --images-height: 600px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: var(--images-height);
-    border-top: 2px solid var(--color-border);
-
-    & > [data-slot="left"] {
-      display: flex;
-      grid-row: 1;
-      grid-column: 1;
-    }
-
-    & > [data-slot="right"] {
-      display: grid;
-      grid-template-rows: 1fr 1fr;
-      grid-row: 1;
-      grid-column: 2;
-      border-left: 2px solid var(--color-border);
-
-      & > [data-slot="row1"] {
-        display: flex;
-        grid-row: 1;
-        border-bottom: 2px solid var(--color-border);
-        height: calc(var(--images-height) / 2);
-      }
-
-      & > [data-slot="row2"] {
-        display: flex;
-        grid-row: 2;
-        height: calc(var(--images-height) / 2);
-      }
-    }
+    border-top: 1px solid var(--color-border);
 
     figure {
       flex: 1;
@@ -415,7 +374,7 @@
         grid-row: 2;
         grid-column: 1;
         border-left: none;
-        border-top: 2px solid var(--color-border);
+        border-top: 1px solid var(--color-border);
 
         & > [data-slot="row1"],
         & > [data-slot="row2"] {
@@ -466,7 +425,7 @@
   }
 
   [data-component="footer"] {
-    border-top: 2px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
     display: flex;
     flex-direction: row;
 
@@ -478,7 +437,7 @@
     }
 
     [data-slot="cell"] + [data-slot="cell"] {
-      border-left: 2px solid var(--color-border);
+      border-left: 1px solid var(--color-border);
     }
 
     /* Small desktop: first two columns shrink to content, third expands */
@@ -507,7 +466,7 @@
       [data-slot="cell"]:nth-child(3) {
         flex: 1 0 100%;
         border-left: none;
-        border-top: 2px solid var(--color-border);
+        border-top: 1px solid var(--color-border);
       }
     }
   }

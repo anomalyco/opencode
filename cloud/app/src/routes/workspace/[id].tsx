@@ -64,7 +64,7 @@ const createPortalUrl = action(async (workspaceID: string, returnUrl: string) =>
   return withActor(() => Billing.generatePortalUrl({ returnUrl }), workspaceID)
 }, "portalUrl")
 
-export default function () {
+export default function() {
   const params = useParams()
 
   /////////////////
@@ -178,7 +178,7 @@ export default function () {
     <div data-slot="root">
       {/* Title */}
       <section data-slot="title-section">
-        <h1>opencode zen</h1>
+        <h1>Zen</h1>
         <p>
           Curated list of models provided by opencode. <a href="/docs/zen">Learn more</a>.
         </p>

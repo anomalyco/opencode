@@ -44,7 +44,7 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
           </A>
         </div>
         <div data-slot="header-actions">
-          <span>{userInfo()?.user.email}</span>
+          <span data-slot="user">{userInfo()?.user.email}</span>
           <form action={logout} method="post">
             <button type="submit" formaction={logout}>
               Logout

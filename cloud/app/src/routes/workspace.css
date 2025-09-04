@@ -1,11 +1,6 @@
 [data-page="workspace"] {
   line-height: 1;
 
-  @media (max-width: 30rem) {
-    padding: var(--space-4);
-    gap: var(--space-5);
-  }
-
   /* Workspace Header */
   [data-component="workspace-header"] {
     position: sticky;
@@ -19,9 +14,7 @@
     background-color: var(--color-bg);
 
     @media (max-width: 30rem) {
-      padding: 0 var(--space-4);
-      margin: calc(-1 * var(--space-4));
-      margin-bottom: var(--space-5);
+      padding: var(--space-4) var(--space-4);
     }
   }
 
@@ -48,8 +41,14 @@
     align-items: center;
     font-size: var(--font-size-sm);
 
-    span {
+    [data-slot="user"] {
       color: var(--color-text-muted);
+    }
+
+    @media (max-width: 30rem) {
+      [data-slot="user"] {
+        display: none;
+      }
     }
 
     a,

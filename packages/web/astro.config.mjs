@@ -96,6 +96,7 @@ export default defineConfig({
         Hero: "./src/components/Hero.astro",
         Head: "./src/components/Head.astro",
         Header: "./src/components/Header.astro",
+        SiteTitle: "./src/components/SiteTitle.astro",
       },
       plugins: [
         theme({
