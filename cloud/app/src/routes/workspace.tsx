@@ -11,8 +11,7 @@ const getUserInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const actor = Actor.assert("user")
-    const user = await User.fromID(actor.properties.userID)
-    return { user }
+    return await User.fromID(actor.properties.userID)
   }, workspaceID)
 }, "userInfo")
 
@@ -44,7 +43,7 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
           </A>
         </div>
         <div data-slot="header-actions">
-          <span data-slot="user">{userInfo()?.user.email}</span>
+          <span data-slot="user">{userInfo()?.email}</span>
           <form action={logout} method="post">
             <button type="submit" formaction={logout}>
               Logout
@@ -52,7 +51,7 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
           </form>
         </div>
       </header>
-      <div data-slot="content">{props.children}</div>
+      <div>{props.children}</div>
     </main>
   )
 }
