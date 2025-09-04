@@ -124,10 +124,9 @@ export namespace File {
       .catch(() => "")
       .then((x) => x.trim())
     if (project.vcs === "git") {
-      const rel = path.relative(Instance.worktree, full)
-      const diff = await $`git diff ${rel}`.cwd(Instance.worktree).quiet().nothrow().text()
+      const diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (diff.trim()) {
-        const original = await $`git show HEAD:${rel}`.cwd(Instance.worktree).quiet().nothrow().text()
+        const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
         const patch = createPatch(file, original, content, "old", "new", {
           context: Infinity,
         })
