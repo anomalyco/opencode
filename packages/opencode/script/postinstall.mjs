@@ -70,6 +70,11 @@ function findBinary() {
 
 function main() {
   try {
+    if (os.platform() === "win32") {
+      console.log("Windows detected, skipping postinstall")
+      return
+    }
+
     const binaryPath = findBinary()
     const binScript = path.join(__dirname, "bin", "opencode")
 
