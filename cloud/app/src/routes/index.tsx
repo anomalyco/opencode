@@ -103,7 +103,7 @@ export default function Home() {
             </li>
             <li>
               <strong>Use any model</strong> Supports 75+ LLM providers through{" "}
-              <a href="https//models.dev">Models.dev</a>, including local models
+              <a href="https://models.dev">Models.dev</a>, including local models
             </li>
           </ul>
         </section>
