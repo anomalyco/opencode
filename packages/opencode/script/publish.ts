@@ -73,7 +73,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}${process.platform === "win32" ? ".cmd" : ""}`,
+        [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
         preinstall: "node ./preinstall.mjs",
