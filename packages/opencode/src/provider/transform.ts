@@ -61,12 +61,37 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function fixMistralMessageSequence(msgs: ModelMessage[]): ModelMessage[] {
+    const result: ModelMessage[] = []
+    
+    for (let i = 0; i < msgs.length; i++) {
+      const currentMsg = msgs[i]
+      const nextMsg = msgs[i + 1]
+      
+      result.push(currentMsg)
+      
+      // Check if tool message is followed by user message (invalid for Mistral)
+      if (currentMsg.role === "tool" && nextMsg?.role === "user") {
+        // Insert an assistant message to process the tool result
+        result.push({
+          role: "assistant",
+          content: "I'll continue with your request based on the tool results.",
+        })
+      }
+    }
+    
+    return result
+  }
+
   export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
     if (modelID.includes("claude")) {
       msgs = normalizeToolCallIds(msgs)
     }
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
+    }
+    if (modelID.toLowerCase().includes("mistral") || modelID.toLowerCase().includes("devstral")) {
+      msgs = fixMistralMessageSequence(msgs)
     }
 
     return msgs
