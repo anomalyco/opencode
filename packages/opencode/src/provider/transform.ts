@@ -76,6 +76,7 @@ export namespace ProviderTransform {
         result.push({
           role: "assistant",
           content: "I'll continue with your request based on the tool results.",
+          toolInvocations: [],
         })
       }
     }
