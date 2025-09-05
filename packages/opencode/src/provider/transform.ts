@@ -114,7 +114,7 @@ export namespace ProviderTransform {
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
     }
-    if (modelID.toLowerCase().includes("mistral") || modelID.toLowerCase().includes("devstral")) {
+    if (providerID === "mistral" || providerID.toLowerCase().includes("mistral")) {
       msgs = normalizeMistralToolCallIds(msgs)
       msgs = fixMistralMessageSequence(msgs)
     }
