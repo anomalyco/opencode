@@ -88,9 +88,12 @@ export const BashTool = Tool.define("bash", {
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
           if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
-            throw new Error(
-              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
-            )
+            const action = Wildcard.all(resolved, permissions)
+            if (action !== "ask") {
+              throw new Error(
+                `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
+              )
+            }
           }
         }
       }
