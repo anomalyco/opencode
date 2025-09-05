@@ -61,6 +61,29 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function normalizeMistralToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
+    return msgs.map((msg) => {
+      if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+        msg.content = msg.content.map((part) => {
+          if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+            // Mistral requires alphanumeric tool call IDs with exactly 9 characters
+            const normalizedId = part.toolCallId
+              .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
+              .substring(0, 9) // Take first 9 characters
+              .padEnd(9, "0") // Pad with zeros if less than 9 characters
+            
+            return {
+              ...part,
+              toolCallId: normalizedId,
+            }
+          }
+          return part
+        })
+      }
+      return msg
+    })
+  }
+
   function fixMistralMessageSequence(msgs: ModelMessage[]): ModelMessage[] {
     const result: ModelMessage[] = []
     
@@ -92,6 +115,7 @@ export namespace ProviderTransform {
       msgs = applyCaching(msgs, providerID)
     }
     if (modelID.toLowerCase().includes("mistral") || modelID.toLowerCase().includes("devstral")) {
+      msgs = normalizeMistralToolCallIds(msgs)
       msgs = fixMistralMessageSequence(msgs)
     }
 
