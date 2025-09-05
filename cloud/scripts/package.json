@@ -1,0 +1,19 @@
+{
+  "name": "@opencode/cloud-scripts",
+  "version": "0.6.4",
+  "$schema": "https://json.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx",
+    "shell": "sst shell"
+  },
+  "dependencies": {
+    "@opencode/cloud-core": "workspace:*",
+    "tsx": "4.20.5"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

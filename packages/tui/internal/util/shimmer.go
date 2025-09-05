@@ -11,7 +11,10 @@ import (
 	"github.com/sst/opencode/internal/styles"
 )
 
-var shimmerStart = time.Now()
+var (
+	shimmerStart     = time.Now()
+	trueColorSupport = hasTrueColor()
+)
 
 // Shimmer renders text with a moving foreground highlight.
 // bg is the background color, dim is the base text color, bright is the highlight color.
@@ -32,7 +35,7 @@ func Shimmer(s string, bg compat.AdaptiveColor, _ compat.AdaptiveColor, _ compat
 	elapsed := time.Since(shimmerStart).Seconds()
 	pos := (math.Mod(elapsed, sweep) / sweep) * period
 
-	half := 4.0
+	half := 2.0
 
 	type seg struct {
 		useHex bool
@@ -41,60 +44,52 @@ func Shimmer(s string, bg compat.AdaptiveColor, _ compat.AdaptiveColor, _ compat
 		faint  bool
 		text   string
 	}
-	var segs []seg
+	segs := make([]seg, 0, n/4)
 
-	useHex := hasTrueColor()
+	useHex := trueColorSupport
 	for i, r := range runes {
 		ip := float64(i + pad)
 		dist := math.Abs(ip - pos)
-		t := 0.0
-		if dist <= half {
-			x := math.Pi * (dist / half)
-			t = 0.5 * (1.0 + math.Cos(x))
-		}
-		// Cosine brightness: base + amp*t (quantized for grouping)
-		base := 0.55
-		amp := 0.45
-		brightness := base
-		if t > 0 {
-			brightness = base + amp*t
-		}
-		lvl := int(math.Round(brightness * 255.0))
-		if !useHex {
-			step := 24 // ~11 steps across range for non-truecolor
-			lvl = int(math.Round(float64(lvl)/float64(step))) * step
-		}
 
-		bold := lvl >= 208
-		faint := lvl <= 128
-
-		// truecolor if possible; else fallback to modifiers only
+		bold := false
+		faint := true
 		hex := ""
-		if useHex {
-			if lvl < 0 {
-				lvl = 0
+
+		if dist <= half {
+			// Simple 3-level brightness based on distance
+			if dist <= half/3 {
+				// Center: brightest
+				bold = true
+				faint = false
+				if useHex {
+					hex = "#ffffff"
+				}
+			} else {
+				// Edge: medium bright
+				bold = false
+				faint = false
+				if useHex {
+					hex = "#cccccc"
+				}
 			}
-			if lvl > 255 {
-				lvl = 255
-			}
-			hex = rgbHex(lvl, lvl, lvl)
 		}
 
-		if len(segs) == 0 {
+		if len(segs) == 0 ||
+			segs[len(segs)-1].useHex != useHex ||
+			segs[len(segs)-1].hex != hex ||
+			segs[len(segs)-1].bold != bold ||
+			segs[len(segs)-1].faint != faint {
 			segs = append(segs, seg{useHex: useHex, hex: hex, bold: bold, faint: faint, text: string(r)})
 		} else {
-			last := &segs[len(segs)-1]
-			if last.useHex == useHex && last.hex == hex && last.bold == bold && last.faint == faint {
-				last.text += string(r)
-			} else {
-				segs = append(segs, seg{useHex: useHex, hex: hex, bold: bold, faint: faint, text: string(r)})
-			}
+			segs[len(segs)-1].text += string(r)
 		}
 	}
 
+	baseStyle := styles.NewStyle().Background(bg)
 	var b strings.Builder
+	b.Grow(len(s) * 2)
 	for _, g := range segs {
-		st := styles.NewStyle().Background(bg)
+		st := baseStyle
 		if g.useHex && g.hex != "" {
 			c := compat.AdaptiveColor{Dark: lipgloss.Color(g.hex), Light: lipgloss.Color(g.hex)}
 			st = st.Foreground(c)

@@ -1,6 +1,7 @@
 import style from "./content-text.module.css"
 import { createSignal } from "solid-js"
 import { createOverflow } from "./common"
+import { CopyButton } from "./copy-button"
 
 interface Props {
   text: string
@@ -30,6 +31,7 @@ export function ContentText(props: Props) {
           {expanded() ? "Show less" : "Show more"}
         </button>
       )}
+      <CopyButton text={props.text} />
     </div>
   )
 }

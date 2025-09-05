@@ -4,6 +4,8 @@ import type { Props } from '@astrojs/starlight/props'
 import Default from '@astrojs/starlight/components/Head.astro'
 import config from '../../config.mjs'
 
+const base = import.meta.env.BASE_URL.slice(1)
+
 const slug = Astro.url.pathname.replace(/^\//, "").replace(/\/$/, "");
 const {
   entry: {
@@ -42,7 +44,7 @@ if (isDocs) {
 
 <Default {...Astro.props}><slot /></Default>
 
-{ (isDocs || !slug.startsWith("s")) && (
+{ (!slug.startsWith(`${base}/s`)) && (
   <meta property="og:image" content={ogImage} />
   <meta property="twitter:image" content={ogImage} />
 )}

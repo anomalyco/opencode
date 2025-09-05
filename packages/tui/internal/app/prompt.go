@@ -43,6 +43,9 @@ func (p Prompt) ToMessage(
 	}
 	for _, att := range textAttachments {
 		if source, ok := att.GetTextSource(); ok {
+			if att.StartIndex > att.EndIndex || att.EndIndex > len(text) {
+				continue
+			}
 			text = text[:att.StartIndex] + source.Value + text[att.EndIndex:]
 		}
 	}
@@ -204,8 +207,8 @@ func (m Message) ToPrompt() (*Prompt, error) {
 	return nil, errors.New("unknown message type")
 }
 
-func (m Message) ToSessionChatParams() []opencode.SessionChatParamsPartUnion {
-	parts := []opencode.SessionChatParamsPartUnion{}
+func (m Message) ToSessionChatParams() []opencode.SessionPromptParamsPartUnion {
+	parts := []opencode.SessionPromptParamsPartUnion{}
 	for _, part := range m.Parts {
 		switch p := part.(type) {
 		case opencode.TextPart:

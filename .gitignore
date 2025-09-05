@@ -1,5 +1,6 @@
 .DS_Store
 node_modules
+.worktrees
 .sst
 .env
 .idea

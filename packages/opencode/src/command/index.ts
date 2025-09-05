@@ -1,6 +1,6 @@
 import z from "zod"
-import { App } from "../app/app"
 import { Config } from "../config/config"
+import { Instance } from "../project/instance"
 
 export namespace Command {
   export const Info = z
@@ -16,7 +16,7 @@ export namespace Command {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = App.state("command", async () => {
+  const state = Instance.state(async () => {
     const cfg = await Config.get()
 
     const result: Record<string, Info> = {}

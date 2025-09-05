@@ -1,12 +1,12 @@
 import { z, type ZodType } from "zod"
-import { App } from "../app/app"
 import { Log } from "../util/log"
+import { Instance } from "../project/instance"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
 
-  const state = App.state("bus", () => {
+  const state = Instance.state(() => {
     const subscriptions = new Map<any, Subscription[]>()
 
     return {

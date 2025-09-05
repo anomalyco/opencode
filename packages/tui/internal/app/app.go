@@ -27,7 +27,7 @@ type Message struct {
 }
 
 type App struct {
-	Info              opencode.App
+	Project           opencode.Project
 	Agents            []opencode.Agent
 	Providers         []opencode.Provider
 	Version           string
@@ -101,7 +101,8 @@ type PermissionRespondedToMsg struct {
 func New(
 	ctx context.Context,
 	version string,
-	appInfo opencode.App,
+	project *opencode.Project,
+	path *opencode.Path,
 	agents []opencode.Agent,
 	httpClient *opencode.Client,
 	initialModel *string,
@@ -109,10 +110,10 @@ func New(
 	initialAgent *string,
 	initialSession *string,
 ) (*App, error) {
-	util.RootPath = appInfo.Path.Root
-	util.CwdPath = appInfo.Path.Cwd
+	util.RootPath = project.Worktree
+	util.CwdPath, _ = os.Getwd()
 
-	configInfo, err := httpClient.Config.Get(ctx)
+	configInfo, err := httpClient.Config.Get(ctx, opencode.ConfigGetParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +122,7 @@ func New(
 		configInfo.Keybinds.Leader = "ctrl+x"
 	}
 
-	appStatePath := filepath.Join(appInfo.Path.State, "tui")
+	appStatePath := filepath.Join(path.State, "tui")
 	appState, err := LoadState(appStatePath)
 	if err != nil {
 		appState = NewState()
@@ -168,9 +169,9 @@ func New(
 	}
 
 	if err := theme.LoadThemesFromDirectories(
-		appInfo.Path.Config,
-		appInfo.Path.Root,
-		appInfo.Path.Cwd,
+		path.Config,
+		util.RootPath,
+		util.CwdPath,
 	); err != nil {
 		slog.Warn("Failed to load themes from directories", "error", err)
 	}
@@ -187,13 +188,13 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
-	customCommands, err := httpClient.Command.List(ctx)
+	customCommands, err := httpClient.Command.List(ctx, opencode.CommandListParams{})
 	if err != nil {
 		return nil, err
 	}
 
 	app := &App{
-		Info:           appInfo,
+		Project:        *project,
 		Agents:         agents,
 		Version:        version,
 		StatePath:      appStatePath,
@@ -459,7 +460,7 @@ func findProviderByID(providers []opencode.Provider, providerID string) *opencod
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
-	providersResponse, err := a.Client.App.Providers(context.Background())
+	providersResponse, err := a.Client.App.Providers(context.Background(), opencode.AppProvidersParams{})
 	if err != nil {
 		slog.Error("Failed to list providers", "error", err)
 		// TODO: notify user
@@ -749,12 +750,15 @@ func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) MarkProjectInitialized(ctx context.Context) error {
-	_, err := a.Client.App.Init(ctx)
-	if err != nil {
-		slog.Error("Failed to mark project as initialized", "error", err)
-		return err
-	}
 	return nil
+	/*
+		_, err := a.Client.App.Init(ctx)
+		if err != nil {
+			slog.Error("Failed to mark project as initialized", "error", err)
+			return err
+		}
+		return nil
+	*/
 }
 
 func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
@@ -782,12 +786,14 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 	a.Messages = append(a.Messages, message)
 
 	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			ProviderID: opencode.F(a.Provider.ID),
-			ModelID:    opencode.F(a.Model.ID),
-			Agent:      opencode.F(a.Agent().Name),
-			MessageID:  opencode.F(messageID),
-			Parts:      opencode.F(message.ToSessionChatParams()),
+		_, err := a.Client.Session.Prompt(ctx, a.Session.ID, opencode.SessionPromptParams{
+			Model: opencode.F(opencode.SessionPromptParamsModel{
+				ProviderID: opencode.F(a.Provider.ID),
+				ModelID:    opencode.F(a.Model.ID),
+			}),
+			Agent:     opencode.F(a.Agent().Name),
+			MessageID: opencode.F(messageID),
+			Parts:     opencode.F(message.ToSessionChatParams()),
 		})
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
@@ -814,19 +820,22 @@ func (a *App) SendCommand(ctx context.Context, command string, args string) (*Ap
 	}
 
 	cmds = append(cmds, func() tea.Msg {
+		params := opencode.SessionCommandParams{
+			Command:   opencode.F(command),
+			Arguments: opencode.F(args),
+			Agent:     opencode.F(a.Agents[a.AgentIndex].Name),
+		}
+		if a.Provider != nil && a.Model != nil {
+			params.Model = opencode.F(a.Provider.ID + "/" + a.Model.ID)
+		}
 		_, err := a.Client.Session.Command(
 			context.Background(),
 			a.Session.ID,
-			opencode.SessionCommandParams{
-				Command:   opencode.F(command),
-				Arguments: opencode.F(args),
-				Agent:     opencode.F(a.Agents[a.AgentIndex].Name),
-				Model:     opencode.F(a.State.Provider + "/" + a.State.Model),
-			},
+			params,
 		)
 		if err != nil {
 			slog.Error("Failed to execute command", "error", err)
-			return toast.NewErrorToast("Failed to execute command")
+			return toast.NewErrorToast(fmt.Sprintf("Failed to execute command: %v", err))()
 		}
 		return nil
 	})
@@ -858,7 +867,7 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 		)
 		if err != nil {
 			slog.Error("Failed to submit shell command", "error", err)
-			return toast.NewErrorToast("Failed to submit shell command")()
+			return toast.NewErrorToast(fmt.Sprintf("Failed to submit shell command: %v", err))()
 		}
 		return nil
 	})
@@ -875,7 +884,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 		a.compactCancel = nil
 	}
 
-	_, err := a.Client.Session.Abort(ctx, sessionID)
+	_, err := a.Client.Session.Abort(ctx, sessionID, opencode.SessionAbortParams{})
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
 		return err
@@ -884,7 +893,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 }
 
 func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
-	response, err := a.Client.Session.List(ctx)
+	response, err := a.Client.Session.List(ctx, opencode.SessionListParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -896,7 +905,7 @@ func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
 }
 
 func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
-	_, err := a.Client.Session.Delete(ctx, sessionID)
+	_, err := a.Client.Session.Delete(ctx, sessionID, opencode.SessionDeleteParams{})
 	if err != nil {
 		slog.Error("Failed to delete session", "error", err)
 		return err
@@ -916,7 +925,7 @@ func (a *App) UpdateSession(ctx context.Context, sessionID string, title string)
 }
 
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
-	response, err := a.Client.Session.Messages(ctx, sessionId)
+	response, err := a.Client.Session.Messages(ctx, sessionId, opencode.SessionMessagesParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -938,7 +947,7 @@ func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, er
 }
 
 func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
-	response, err := a.Client.App.Providers(ctx)
+	response, err := a.Client.App.Providers(ctx, opencode.AppProvidersParams{})
 	if err != nil {
 		return nil, err
 	}

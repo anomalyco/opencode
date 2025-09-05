@@ -1,4 +1,6 @@
+import os from "os"
 import path from "path"
+import fs from "fs/promises"
 import { spawn } from "child_process"
 import { Decimal } from "decimal.js"
 import { z, ZodSchema } from "zod"
@@ -19,7 +21,6 @@ import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 
-import { App } from "../app/app"
 import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
@@ -42,6 +43,8 @@ import { ReadTool } from "../tool/read"
 import { mergeDeep, pipe, splitWhen } from "remeda"
 import { ToolRegistry } from "../tool/registry"
 import { Plugin } from "../plugin"
+import { Project } from "../project/project"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
@@ -69,6 +72,8 @@ export namespace Session {
   export const Info = z
     .object({
       id: Identifier.schema("session"),
+      projectID: z.string(),
+      directory: z.string(),
       parentID: Identifier.schema("session").optional(),
       share: z
         .object({
@@ -133,11 +138,8 @@ export namespace Session {
     ),
   }
 
-  const state = App.state(
-    "session",
+  const state = Instance.state(
     () => {
-      const sessions = new Map<string, Info>()
-      const messages = new Map<string, MessageV2.Info[]>()
       const pending = new Map<string, AbortController>()
       const autoCompacting = new Map<string, boolean>()
       const queued = new Map<
@@ -152,8 +154,6 @@ export namespace Session {
       >()
 
       return {
-        sessions,
-        messages,
         pending,
         autoCompacting,
         queued,
@@ -167,19 +167,28 @@ export namespace Session {
   )
 
   export async function create(parentID?: string, title?: string) {
-    const result: Info = {
-      id: Identifier.descending("session"),
-      version: Installation.VERSION,
+    return createNext({
       parentID,
-      title: title ?? createDefaultTitle(!!parentID),
+      directory: Instance.directory,
+      title,
+    })
+  }
+
+  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+    const result: Info = {
+      id: Identifier.descending("session", input.id),
+      version: Installation.VERSION,
+      projectID: Instance.project.id,
+      directory: input.directory,
+      parentID: input.parentID,
+      title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),
         updated: Date.now(),
       },
     }
     log.info("created", result)
-    state().sessions.set(result.id, result)
-    await Storage.writeJSON("session/info/" + result.id, result)
+    await Storage.write(["session", Instance.project.id, result.id], result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -198,17 +207,12 @@ export namespace Session {
   }
 
   export async function get(id: string) {
-    const result = state().sessions.get(id)
-    if (result) {
-      return result
-    }
-    const read = await Storage.readJSON<Info>("session/info/" + id)
-    state().sessions.set(id, read)
+    const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
   }
 
   export async function getShare(id: string) {
-    return Storage.readJSON<ShareInfo>("session/share/" + id)
+    return Storage.read<ShareInfo>(["share", id])
   }
 
   export async function share(id: string) {
@@ -225,7 +229,7 @@ export namespace Session {
         url: share.url,
       }
     })
-    await Storage.writeJSON<ShareInfo>("session/share/" + id, share)
+    await Storage.write(["share", id], share)
     await Share.sync("session/info/" + id, session)
     for (const msg of await messages(id)) {
       await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
@@ -239,7 +243,7 @@ export namespace Session {
   export async function unshare(id: string) {
     const share = await getShare(id)
     if (!share) return
-    await Storage.remove("session/share/" + id)
+    await Storage.remove(["share", id])
     await update(id, (draft) => {
       draft.share = undefined
     })
@@ -247,17 +251,15 @@ export namespace Session {
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const { sessions } = state()
-    const session = await get(id)
-    if (!session) return
-    editor(session)
-    session.time.updated = Date.now()
-    sessions.set(id, session)
-    await Storage.writeJSON("session/info/" + id, session)
-    Bus.publish(Event.Updated, {
-      info: session,
+    const project = Instance.project
+    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
+      editor(draft)
+      draft.time.updated = Date.now()
     })
-    return session
+    Bus.publish(Event.Updated, {
+      info: result,
+    })
+    return result
   }
 
   export async function messages(sessionID: string) {
@@ -265,11 +267,11 @@ export namespace Session {
       info: MessageV2.Info
       parts: MessageV2.Part[]
     }[]
-    for (const p of await Storage.list("session/message/" + sessionID)) {
-      const read = await Storage.readJSON<MessageV2.Info>(p)
+    for (const p of await Storage.list(["message", sessionID])) {
+      const read = await Storage.read<MessageV2.Info>(p)
       result.push({
         info: read,
-        parts: await getParts(sessionID, read.id),
+        parts: await getParts(read.id),
       })
     }
     result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
@@ -278,15 +280,15 @@ export namespace Session {
 
   export async function getMessage(sessionID: string, messageID: string) {
     return {
-      info: await Storage.readJSON<MessageV2.Info>("session/message/" + sessionID + "/" + messageID),
-      parts: await getParts(sessionID, messageID),
+      info: await Storage.read<MessageV2.Info>(["message", sessionID, messageID]),
+      parts: await getParts(messageID),
     }
   }
 
-  export async function getParts(sessionID: string, messageID: string) {
+  export async function getParts(messageID: string) {
     const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list("session/part/" + sessionID + "/" + messageID)) {
-      const read = await Storage.readJSON<MessageV2.Part>(item)
+    for (const item of await Storage.list(["part", messageID])) {
+      const read = await Storage.read<MessageV2.Part>(item)
       result.push(read)
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
@@ -294,17 +296,17 @@ export namespace Session {
   }
 
   export async function* list() {
-    for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json")
-      yield get(sessionID)
+    const project = Instance.project
+    for (const item of await Storage.list(["session", project.id])) {
+      yield Storage.read<Info>(item)
     }
   }
 
   export async function children(parentID: string) {
+    const project = Instance.project
     const result = [] as Session.Info[]
-    for (const item of await Storage.list("session/info")) {
-      const sessionID = path.basename(item, ".json")
-      const session = await get(sessionID)
+    for (const item of await Storage.list(["session", project.id])) {
+      const session = await Storage.read<Info>(item)
       if (session.parentID !== parentID) continue
       result.push(session)
     }
@@ -323,6 +325,7 @@ export namespace Session {
   }
 
   export async function remove(sessionID: string, emitEvent = true) {
+    const project = Instance.project
     try {
       abort(sessionID)
       const session = await get(sessionID)
@@ -330,10 +333,13 @@ export namespace Session {
         await remove(child.id, false)
       }
       await unshare(sessionID).catch(() => {})
-      await Storage.remove(`session/info/${sessionID}`).catch(() => {})
-      await Storage.removeDir(`session/message/${sessionID}/`).catch(() => {})
-      state().sessions.delete(sessionID)
-      state().messages.delete(sessionID)
+      for (const msg of await Storage.list(["message", sessionID])) {
+        for (const part of await Storage.list(["part", msg.at(-1)!])) {
+          await Storage.remove(part)
+        }
+        await Storage.remove(msg)
+      }
+      await Storage.remove(["session", project.id, sessionID])
       if (emitEvent) {
         Bus.publish(Event.Deleted, {
           info: session,
@@ -345,25 +351,29 @@ export namespace Session {
   }
 
   async function updateMessage(msg: MessageV2.Info) {
-    await Storage.writeJSON("session/message/" + msg.sessionID + "/" + msg.id, msg)
+    await Storage.write(["message", msg.sessionID, msg.id], msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
   }
 
   async function updatePart(part: MessageV2.Part) {
-    await Storage.writeJSON(["session", "part", part.sessionID, part.messageID, part.id].join("/"), part)
+    await Storage.write(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
     })
     return part
   }
 
-  export const ChatInput = z.object({
+  export const PromptInput = z.object({
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message").optional(),
-    providerID: z.string(),
-    modelID: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     agent: z.string().optional(),
     system: z.string().optional(),
     tools: z.record(z.boolean()).optional(),
@@ -402,10 +412,10 @@ export namespace Session {
       ]),
     ),
   })
-  export type ChatInput = z.infer<typeof ChatInput>
+  export type ChatInput = z.infer<typeof PromptInput>
 
-  export async function chat(
-    input: z.infer<typeof ChatInput>,
+  export async function prompt(
+    input: z.infer<typeof PromptInput>,
   ): Promise<{ info: MessageV2.Assistant; parts: MessageV2.Part[] }> {
     const l = log.clone().tag("session", input.sessionID)
     l.info("chatting")
@@ -420,7 +430,7 @@ export namespace Session {
       const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
       msgs = preserve
       for (const msg of remove) {
-        await Storage.remove(`session/message/${input.sessionID}/${msg.info.id}`)
+        await Storage.remove(["message", input.sessionID, msg.info.id])
         await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
       }
       const last = preserve.at(-1)
@@ -429,7 +439,7 @@ export namespace Session {
         const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
         last.parts = preserveParts
         for (const part of removeParts) {
-          await Storage.remove(`session/part/${input.sessionID}/${last.info.id}/${part.id}`)
+          await Storage.remove(["part", last.info.id, part.id])
           await Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
             messageID: last.info.id,
@@ -450,7 +460,6 @@ export namespace Session {
       },
     }
 
-    const app = App.info()
     const userParts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
@@ -518,10 +527,10 @@ export namespace Session {
                         break
                       }
                     }
-                    offset = Math.max(start - 2, 0)
-                    if (end) {
-                      limit = end - offset + 2
-                    }
+                  }
+                  offset = Math.max(start - 1, 0)
+                  if (end) {
+                    limit = end - offset
                   }
                 }
                 const args = { filePath, offset, limit }
@@ -648,7 +657,16 @@ export namespace Session {
       })
     }
 
-    const model = await Provider.getModel(input.providerID, input.modelID)
+    const agent = await Agent.get(inputAgent)
+    const model = await (async () => {
+      if (input.model) {
+        return input.model
+      }
+      if (agent.model) {
+        return agent.model
+      }
+      return Provider.defaultModel()
+    })().then((x) => Provider.getModel(x.providerID, x.modelID))
     let msgs = await messages(input.sessionID)
 
     const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
@@ -663,10 +681,10 @@ export namespace Session {
 
         await summarize({
           sessionID: input.sessionID,
-          providerID: input.providerID,
-          modelID: input.modelID,
+          providerID: model.providerID,
+          modelID: model.info.id,
         })
-        return chat(input)
+        return prompt(input)
       }
     }
     using abort = lock(input.sessionID)
@@ -675,17 +693,17 @@ export namespace Session {
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
 
     if (msgs.filter((m) => m.info.role === "user").length === 1 && !session.parentID && isDefaultTitle(session.title)) {
-      const small = (await Provider.getSmallModel(input.providerID)) ?? model
+      const small = (await Provider.getSmallModel(model.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
         providerOptions: {
-          [input.providerID]: {
+          [model.providerID]: {
             ...small.info.options,
-            ...ProviderTransform.options(input.providerID, small.info.id, input.sessionID),
+            ...ProviderTransform.options(small.providerID, small.modelID, input.sessionID),
           },
         },
         messages: [
-          ...SystemPrompt.title(input.providerID).map(
+          ...SystemPrompt.title(model.providerID).map(
             (x): ModelMessage => ({
               role: "system",
               content: x,
@@ -715,10 +733,11 @@ export namespace Session {
               draft.title = title.trim()
             })
         })
-        .catch(() => {})
+        .catch((error) => {
+          log.error("failed to generate title", { error, model: small.info.id })
+        })
     }
 
-    const agent = await Agent.get(inputAgent)
     if (agent.name === "plan") {
       msgs.at(-1)?.parts.push({
         id: Identifier.ascending("part"),
@@ -741,12 +760,12 @@ export namespace Session {
         synthetic: true,
       })
     }
-    let system = SystemPrompt.header(input.providerID)
+    let system = SystemPrompt.header(model.providerID)
     system.push(
       ...(() => {
         if (input.system) return [input.system]
         if (agent.prompt) return [agent.prompt]
-        return SystemPrompt.provider(input.modelID)
+        return SystemPrompt.provider(model.modelID)
       })(),
     )
     system.push(...(await SystemPrompt.environment()))
@@ -761,8 +780,8 @@ export namespace Session {
       system,
       mode: inputAgent,
       path: {
-        cwd: app.path.cwd,
-        root: app.path.root,
+        cwd: Instance.directory,
+        root: Instance.worktree,
       },
       cost: 0,
       tokens: {
@@ -771,8 +790,8 @@ export namespace Session {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
-      modelID: input.modelID,
-      providerID: input.providerID,
+      modelID: model.modelID,
+      providerID: model.providerID,
       time: {
         created: Date.now(),
       },
@@ -781,7 +800,7 @@ export namespace Session {
     await updateMessage(assistantMsg)
     await using _ = defer(async () => {
       if (assistantMsg.time.completed) return
-      await Storage.remove(`session/message/${input.sessionID}/${assistantMsg.id}`)
+      await Storage.remove(["session", "message", input.sessionID, assistantMsg.id])
       await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: assistantMsg.id })
     })
     const tools: Record<string, AITool> = {}
@@ -790,10 +809,10 @@ export namespace Session {
 
     const enabledTools = pipe(
       agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.providerID, input.modelID, agent)),
+      mergeDeep(await ToolRegistry.enabled(model.providerID, model.modelID, agent)),
       mergeDeep(input.tools ?? {}),
     )
-    for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
+    for (const item of await ToolRegistry.tools(model.providerID, model.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
       tools[item.id] = tool({
         id: item.id as any,
@@ -860,11 +879,31 @@ export namespace Session {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          {
+            args,
+          },
+        )
         const result = await execute(args, opts)
         const output = result.content
           .filter((x: any) => x.type === "text")
           .map((x: any) => x.text)
           .join("\n\n")
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: key,
+            sessionID: input.sessionID,
+            callID: opts.toolCallId,
+          },
+          result,
+        )
 
         return {
           output,
@@ -883,16 +922,16 @@ export namespace Session {
       "chat.params",
       {
         model: model.info,
-        provider: await Provider.getProvider(input.providerID),
+        provider: await Provider.getProvider(model.providerID),
         message: userMsg,
       },
       {
         temperature: model.info.temperature
-          ? (agent.temperature ?? ProviderTransform.temperature(input.providerID, input.modelID))
+          ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
           : undefined,
-        topP: agent.topP ?? ProviderTransform.topP(input.providerID, input.modelID),
+        topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
         options: {
-          ...ProviderTransform.options(input.providerID, input.modelID, input.sessionID),
+          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
           ...model.info.options,
           ...agent.options,
         },
@@ -926,8 +965,8 @@ export namespace Session {
             role: "assistant",
             system,
             path: {
-              cwd: app.path.cwd,
-              root: app.path.root,
+              cwd: Instance.directory,
+              root: Instance.worktree,
             },
             cost: 0,
             tokens: {
@@ -936,8 +975,8 @@ export namespace Session {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: input.modelID,
-            providerID: input.providerID,
+            modelID: model.modelID,
+            providerID: model.providerID,
             mode: inputAgent,
             time: {
               created: Date.now(),
@@ -961,7 +1000,7 @@ export namespace Session {
         }
       },
       headers:
-        input.providerID === "opencode"
+        model.providerID === "opencode"
           ? {
               "x-opencode-session": input.sessionID,
               "x-opencode-request": userMsg.id,
@@ -984,7 +1023,7 @@ export namespace Session {
         return false
       },
       providerOptions: {
-        [input.providerID]: params.options,
+        [model.providerID]: params.options,
       },
       temperature: params.temperature,
       topP: params.topP,
@@ -1005,7 +1044,7 @@ export namespace Session {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.providerID, input.modelID)
+                args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
               }
               return args.params
             },
@@ -1018,7 +1057,7 @@ export namespace Session {
     const unprocessed = queued.find((x) => !x.processed)
     if (unprocessed) {
       unprocessed.processed = true
-      return chat(unprocessed.input)
+      return prompt(unprocessed.input)
     }
     for (const item of queued) {
       item.callback(result)
@@ -1035,6 +1074,25 @@ export namespace Session {
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
     using abort = lock(input.sessionID)
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      role: "user",
+    }
+    await updateMessage(userMsg)
+    const userPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      text: "The following tool was executed by the user",
+      synthetic: true,
+    }
+    await updatePart(userPart)
+
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
@@ -1042,8 +1100,8 @@ export namespace Session {
       mode: input.agent,
       cost: 0,
       path: {
-        cwd: App.info().path.cwd,
-        root: App.info().path.root,
+        cwd: Instance.directory,
+        root: Instance.worktree,
       },
       time: {
         created: Date.now(),
@@ -1077,7 +1135,6 @@ export namespace Session {
       },
     }
     await updatePart(part)
-    const app = App.info()
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
@@ -1097,13 +1154,19 @@ export namespace Session {
     const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
 
     const proc = spawn(shell, args, {
-      cwd: app.path.cwd,
+      cwd: Instance.directory,
       signal: abort.signal,
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
         TERM: "dumb",
       },
+    })
+
+    abort.signal.addEventListener("abort", () => {
+      if (!proc.pid) return
+      process.kill(-proc.pid)
     })
 
     let output = ""
@@ -1167,19 +1230,17 @@ export namespace Session {
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const fileRegex = /@([^\s]+)/g
+  /**
+   * Regular expression to match @ file references in text
+   * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
+   * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
+   */
+  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
+    log.info("command", input)
     const command = await Command.get(input.command)
     const agent = command.agent ?? input.agent ?? "build"
-    const fmtModel = (model: { providerID: string; modelID: string }) => `${model.providerID}/${model.modelID}`
-
-    const model =
-      command.model ??
-      (command.agent && (await Agent.get(command.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
-      input.model ??
-      (input.agent && (await Agent.get(input.agent).then((x) => (x.model ? fmtModel(x.model) : undefined)))) ??
-      fmtModel(await Provider.defaultModel())
 
     let template = command.template.replace("$ARGUMENTS", input.arguments)
 
@@ -1205,23 +1266,49 @@ export namespace Session {
       },
     ] as ChatInput["parts"]
 
-    const matches = template.matchAll(fileRegex)
-    const app = App.info()
+    const matches = Array.from(template.matchAll(fileRegex))
+    await Promise.all(
+      matches.map(async (match) => {
+        const name = match[1]
+        const filepath = name.startsWith("~/")
+          ? path.join(os.homedir(), name.slice(2))
+          : path.resolve(Instance.worktree, name)
 
-    for (const match of matches) {
-      const file = path.join(app.path.cwd, match[1])
-      parts.push({
-        type: "file",
-        url: `file://${file}`,
-        filename: match[1],
-        mime: "text/plain",
-      })
-    }
+        const stats = await fs.stat(filepath).catch(() => undefined)
+        if (!stats) {
+          const agent = await Agent.get(name)
+          if (agent) {
+            parts.push({
+              type: "agent",
+              name: agent.name,
+            })
+          }
+          return
+        }
 
-    return chat({
+        if (stats.isDirectory()) return
+
+        parts.push({
+          type: "file",
+          url: `file://${filepath}`,
+          filename: name,
+          mime: "text/plain",
+        })
+      }),
+    )
+
+    return prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
-      ...Provider.parseModel(model!),
+      model: (() => {
+        if (input.model) {
+          return Provider.parseModel(input.model)
+        }
+        if (command.model) {
+          return Provider.parseModel(command.model)
+        }
+        return undefined
+      })(),
       agent,
       parts,
     })
@@ -1495,7 +1582,7 @@ export namespace Session {
             error: assistantMsg.error,
           })
         }
-        const p = await getParts(assistantMsg.sessionID, assistantMsg.id)
+        const p = await getParts(assistantMsg.id)
         for (const part of p) {
           if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
             updatePart({
@@ -1587,9 +1674,8 @@ export namespace Session {
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
     const model = await Provider.getModel(input.providerID, input.modelID)
-    const app = App.info()
     const system = [
-      ...SystemPrompt.summarize(input.providerID),
+      ...SystemPrompt.summarize(model.providerID),
       ...(await SystemPrompt.environment()),
       ...(await SystemPrompt.custom()),
     ]
@@ -1601,13 +1687,13 @@ export namespace Session {
       system,
       mode: "build",
       path: {
-        cwd: app.path.cwd,
-        root: app.path.root,
+        cwd: Instance.directory,
+        root: Instance.worktree,
       },
       summary: true,
       cost: 0,
       modelID: input.modelID,
-      providerID: input.providerID,
+      providerID: model.providerID,
       tokens: {
         input: 0,
         output: 0,
@@ -1716,20 +1802,21 @@ export namespace Session {
     providerID: string
     messageID: string
   }) {
-    const app = App.info()
-    await Session.chat({
+    await Session.prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
-      providerID: input.providerID,
-      modelID: input.modelID,
+      model: {
+        providerID: input.providerID,
+        modelID: input.modelID,
+      },
       parts: [
         {
           id: Identifier.ascending("part"),
           type: "text",
-          text: PROMPT_INITIALIZE.replace("${path}", app.path.root),
+          text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
         },
       ],
     })
-    await App.initialize()
+    await Project.setInitialized(Instance.project.id)
   }
 }

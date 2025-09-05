@@ -6,7 +6,7 @@ import { map, pipe, sortBy, values } from "remeda"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
-import { App } from "../../app/app"
+import { Instance } from "../../project/instance"
 
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
@@ -21,7 +21,7 @@ export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await Instance.provide(process.cwd(), async () => {
       UI.empty()
       prompts.intro("Install GitHub agent")
       const app = await getAppInfo()
@@ -63,8 +63,8 @@ export const GithubInstallCommand = cmd({
       }
 
       async function getAppInfo() {
-        const app = App.info()
-        if (!app.git) {
+        const project = Instance.project
+        if (project.vcs !== "git") {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
@@ -88,15 +88,18 @@ export const GithubInstallCommand = cmd({
           throw new UI.CancelledError()
         }
         const [, owner, repo] = parsed
-        return { owner, repo, root: app.path.root }
+        return { owner, repo, root: Instance.worktree }
       }
 
       async function promptProvider() {
         const priority: Record<string, number> = {
-          anthropic: 0,
-          "github-copilot": 1,
-          openai: 2,
-          google: 3,
+          opencode: 0,
+          anthropic: 1,
+          "github-copilot": 2,
+          openai: 3,
+          google: 4,
+          openrouter: 5,
+          vercel: 6,
         }
         let provider = await prompts.select({
           message: "Select provider",
@@ -111,7 +114,7 @@ export const GithubInstallCommand = cmd({
             map((x) => ({
               label: x.name,
               value: x.id,
-              hint: priority[x.id] === 0 ? "recommended" : undefined,
+              hint: priority[x.id] <= 1 ? "recommended" : undefined,
             })),
           ),
         })

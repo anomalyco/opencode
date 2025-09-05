@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-
   "mcp": {
     "weather": {
       "type": "local",
