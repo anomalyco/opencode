@@ -4,6 +4,7 @@ import pkg from "../package.json"
 
 const version = process.env["LASH_VERSION"] || process.env["OPENCODE_VERSION"] || pkg.version
 const dry = process.env["DRY_RUN"] === "true"
+const otp = process.env["NPM_OTP"] || ""
 
 console.log(`🚀 Publishing lash v${version}`)
 if (dry) console.log("(DRY RUN - no actual publishing)")
@@ -75,7 +76,11 @@ for (const [os, arch] of targets) {
   
   // Publish platform-specific package
   if (!dry) {
-    await $`cd dist/${name} && chmod -R 755 . && npm publish --access public`
+    if (otp) {
+      await $`cd dist/${name} && chmod -R 755 . && npm publish --access public --otp=${otp}`
+    } else {
+      await $`cd dist/${name} && chmod -R 755 . && npm publish --access public`
+    }
   }
   
   optionalDependencies[name] = version
@@ -232,7 +237,11 @@ await Bun.file(`./dist/lash-cli/package.json`).write(
 
 // Publish main package
 if (!dry) {
-  await $`cd ./dist/lash-cli && npm publish --access public`
+  if (otp) {
+    await $`cd ./dist/lash-cli && npm publish --access public --otp=${otp}`
+  } else {
+    await $`cd ./dist/lash-cli && npm publish --access public`
+  }
 }
 
 console.log(`✨ lash v${version} published successfully!`)
