@@ -33,12 +33,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/lacymorrow/opencode"
+    "url": "https://github.com/lacymorrow/lash"
   },
   "license": "MIT",
-  "homepage": "https://github.com/lacymorrow/opencode",
+  "homepage": "https://github.com/lacymorrow/lash",
   "bugs": {
-    "url": "https://github.com/lacymorrow/opencode/issues"
+    "url": "https://github.com/lacymorrow/lash/issues"
   },
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
