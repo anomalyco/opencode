@@ -1117,8 +1117,28 @@ export type Symbol = {
 export type FileNode = {
   name: string
   path: string
+  absolute: string
   type: "file" | "directory"
   ignored: boolean
+}
+
+export type FileContent = {
+  content: string
+  diff?: string
+  patch?: {
+    oldFileName: string
+    newFileName: string
+    oldHeader?: string
+    newHeader?: string
+    hunks: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: Array<string>
+    }>
+    index?: string
+  }
 }
 
 export type File = {
@@ -1893,10 +1913,7 @@ export type FileReadResponses = {
   /**
    * File content
    */
-  200: {
-    type: "raw" | "patch"
-    content: string
-  }
+  200: FileContent
 }
 
 export type FileReadResponse = FileReadResponses[keyof FileReadResponses]

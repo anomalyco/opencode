@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { Bus } from "../bus"
 import { $ } from "bun"
-import { createPatch } from "diff"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
 import ignore from "ignore"
@@ -28,6 +28,7 @@ export namespace File {
     .object({
       name: z.string(),
       path: z.string(),
+      absolute: z.string(),
       type: z.enum(["file", "directory"]),
       ignored: z.boolean(),
     })
@@ -35,6 +36,34 @@ export namespace File {
       ref: "FileNode",
     })
   export type Node = z.infer<typeof Node>
+
+  export const Content = z
+    .object({
+      content: z.string(),
+      diff: z.string().optional(),
+      patch: z
+        .object({
+          oldFileName: z.string(),
+          newFileName: z.string(),
+          oldHeader: z.string().optional(),
+          newHeader: z.string().optional(),
+          hunks: z.array(
+            z.object({
+              oldStart: z.number(),
+              oldLines: z.number(),
+              newStart: z.number(),
+              newLines: z.number(),
+              lines: z.array(z.string()),
+            }),
+          ),
+          index: z.string().optional(),
+        })
+        .optional(),
+    })
+    .openapi({
+      ref: "FileContent",
+    })
+  export type Content = z.infer<typeof Content>
 
   export const Event = {
     Edited: Bus.event(
@@ -127,13 +156,14 @@ export namespace File {
       const diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (diff.trim()) {
         const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
-        const patch = createPatch(file, original, content, "old", "new", {
+        const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
         })
-        return { type: "patch", content: patch }
+        const diff = formatPatch(patch)
+        return { content, patch, diff }
       }
     }
-    return { type: "raw", content }
+    return { content }
   }
 
   export async function list(dir?: string) {
@@ -157,6 +187,7 @@ export namespace File {
       nodes.push({
         name: entry.name,
         path: relativePath,
+        absolute: fullPath,
         type,
         ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
       })

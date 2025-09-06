@@ -1,4 +1,5 @@
 import z from "zod"
+import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -9,6 +10,7 @@ import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
+import { Global } from "../global"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -420,6 +422,43 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
+
+    // this will be adjusted when migration to opentui is complete,
+    // for now we just read the tui state toml file directly
+    //
+    // NOTE: cannot just import file as toml without cleaning due to lack of
+    // support for date/time references in Bun toml parser: https://github.com/oven-sh/bun/issues/22426
+    const lastused = await Bun.file(path.join(Global.Path.state, "tui"))
+      .text()
+      .then((text) => {
+        // remove the date/time references since Bun toml parser doesn't support yet
+        const cleaned = text
+          .split("\n")
+          .filter((line) => !line.trim().startsWith("last_used ="))
+          .join("\n")
+        const state = Bun.TOML.parse(cleaned) as {
+          recently_used_models?: {
+            provider_id: string
+            model_id: string
+          }[]
+        }
+        const models = state?.recently_used_models ?? []
+        if (models.length > 0) {
+          return {
+            providerID: models[0].provider_id,
+            modelID: models[0].model_id,
+          }
+        }
+      })
+      .catch((error) => {
+        log.error("failed to find last used model", {
+          error,
+        })
+        return undefined
+      })
+
+    if (lastused) return lastused
+
     const provider = await list()
       .then((val) => Object.values(val))
       .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))

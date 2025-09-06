@@ -974,12 +974,7 @@ export namespace Server {
             description: "File content",
             content: {
               "application/json": {
-                schema: resolver(
-                  z.object({
-                    type: z.enum(["raw", "patch"]),
-                    content: z.string(),
-                  }),
-                ),
+                schema: resolver(File.Content),
               },
             },
           },
