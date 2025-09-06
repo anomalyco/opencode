@@ -1,12 +1,12 @@
-import { defineConfig } from "drizzle-kit"
 import { Resource } from "sst"
+import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
   out: "./migrations/",
   strict: true,
   schema: ["./src/**/*.sql.ts"],
   verbose: true,
-  dialect: "postgresql",
+  dialect: "mysql",
   dbCredentials: {
     database: Resource.Database.database,
     host: Resource.Database.host,

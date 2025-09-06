@@ -11,7 +11,7 @@ const FileReadCommand = cmd({
       description: "File path to read",
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       const content = await File.read(args.path)
       console.log(content)
     })
@@ -22,7 +22,7 @@ const FileStatusCommand = cmd({
   command: "status",
   builder: (yargs) => yargs,
   async handler() {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       const status = await File.status()
       console.log(JSON.stringify(status, null, 2))
     })
@@ -38,7 +38,7 @@ const FileListCommand = cmd({
       description: "File path to list",
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       const files = await File.list(args.path)
       console.log(JSON.stringify(files, null, 2))
     })

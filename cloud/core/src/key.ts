@@ -7,73 +7,49 @@ import { KeyTable } from "./schema/key.sql"
 
 export namespace Key {
   export const list = async () => {
-    const user = Actor.assert("user")
+    const workspace = Actor.workspace()
     const keys = await Database.use((tx) =>
       tx
-        .select({
-          id: KeyTable.id,
-          name: KeyTable.name,
-          key: KeyTable.key,
-          userID: KeyTable.userID,
-          timeCreated: KeyTable.timeCreated,
-          timeUsed: KeyTable.timeUsed,
-        })
+        .select()
         .from(KeyTable)
-        .where(eq(KeyTable.workspaceID, user.properties.workspaceID))
+        .where(eq(KeyTable.workspaceID, workspace))
         .orderBy(sql`${KeyTable.timeCreated} DESC`),
     )
     return keys
   }
 
   export const create = fn(z.object({ name: z.string().min(1).max(255) }), async (input) => {
-    const user = Actor.assert("user")
+    const workspaceID = Actor.workspace()
     const { name } = input
 
     // Generate secret key: sk- + 64 random characters (upper, lower, numbers)
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    let randomPart = ""
-    for (let i = 0; i < 64; i++) {
-      randomPart += chars.charAt(Math.floor(Math.random() * chars.length))
+    let secretKey = "sk-"
+    const array = new Uint32Array(64)
+    crypto.getRandomValues(array)
+    for (let i = 0, l = array.length; i < l; i++) {
+      secretKey += chars[array[i] % chars.length]
     }
-    const secretKey = `sk-${randomPart}`
+    const keyID = Identifier.create("key")
 
-    const keyRecord = await Database.use((tx) =>
-      tx
-        .insert(KeyTable)
-        .values({
-          id: Identifier.create("key"),
-          workspaceID: user.properties.workspaceID,
-          userID: user.properties.userID,
-          name,
-          key: secretKey,
-          timeUsed: null,
-        })
-        .returning(),
+    await Database.use((tx) =>
+      tx.insert(KeyTable).values({
+        id: keyID,
+        workspaceID,
+        actor: Actor.use(),
+        name,
+        key: secretKey,
+        timeUsed: null,
+      }),
     )
 
-    return {
-      key: secretKey,
-      id: keyRecord[0].id,
-      name: keyRecord[0].name,
-      created: keyRecord[0].timeCreated,
-    }
+    return keyID
   })
 
   export const remove = fn(z.object({ id: z.string() }), async (input) => {
-    const user = Actor.assert("user")
-    const { id } = input
-
-    const result = await Database.use((tx) =>
-      tx
-        .delete(KeyTable)
-        .where(and(eq(KeyTable.id, id), eq(KeyTable.workspaceID, user.properties.workspaceID)))
-        .returning({ id: KeyTable.id }),
+    const workspace = Actor.workspace()
+    await Database.use((tx) =>
+      tx.delete(KeyTable).where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace))),
     )
-
-    if (result.length === 0) {
-      throw new Error("Key not found")
-    }
-
-    return { id: result[0].id }
   })
 }

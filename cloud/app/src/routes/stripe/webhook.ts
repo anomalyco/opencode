@@ -1,4 +1,3 @@
-import { Resource } from "sst"
 import { Billing } from "@opencode/cloud-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
 import { Database, eq, sql } from "@opencode/cloud-core/drizzle/index.js"
@@ -6,6 +5,7 @@ import { BillingTable, PaymentTable } from "@opencode/cloud-core/schema/billing.
 import { Identifier } from "@opencode/cloud-core/identifier.js"
 import { centsToMicroCents } from "@opencode/cloud-core/util/price.js"
 import { Actor } from "@opencode/cloud-core/actor.js"
+import { Resource } from "@opencode/cloud-resource"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -25,6 +25,8 @@ export async function POST(input: APIEvent) {
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
     if (!paymentID) throw new Error("Payment ID not found")
+
+    const chargedAmount = 2000
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
@@ -50,7 +52,7 @@ export async function POST(input: APIEvent) {
         await tx
           .update(BillingTable)
           .set({
-            balance: sql`${BillingTable.balance} + ${centsToMicroCents(amount)}`,
+            balance: sql`${BillingTable.balance} + ${centsToMicroCents(chargedAmount)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
             paymentMethodLast4: paymentMethod.card!.last4,
@@ -59,7 +61,7 @@ export async function POST(input: APIEvent) {
         await tx.insert(PaymentTable).values({
           workspaceID,
           id: Identifier.create("payment"),
-          amount: centsToMicroCents(amount),
+          amount: centsToMicroCents(chargedAmount),
           paymentID,
           customerID,
         })

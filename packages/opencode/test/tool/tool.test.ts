@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { App } from "../../src/app/app"
 import { GlobTool } from "../../src/tool/glob"
 import { ListTool } from "../../src/tool/ls"
 import path from "path"
+import { Instance } from "../../src/project/instance"
 
 const ctx = {
   sessionID: "test",
@@ -20,7 +20,7 @@ const fixturePath = path.join(__dirname, "../fixtures/example")
 
 describe("tool.glob", () => {
   test("truncate", async () => {
-    await App.provide({ cwd: projectRoot }, async () => {
+    await Instance.provide(projectRoot, async () => {
       let result = await glob.execute(
         {
           pattern: "**/*",
@@ -32,7 +32,7 @@ describe("tool.glob", () => {
     })
   })
   test("basic", async () => {
-    await App.provide({ cwd: projectRoot }, async () => {
+    await Instance.provide(projectRoot, async () => {
       let result = await glob.execute(
         {
           pattern: "*.json",
@@ -50,7 +50,7 @@ describe("tool.glob", () => {
 
 describe("tool.ls", () => {
   test("basic", async () => {
-    const result = await App.provide({ cwd: projectRoot }, async () => {
+    const result = await Instance.provide(projectRoot, async () => {
       return await list.execute({ path: fixturePath, ignore: [".git"] }, ctx)
     })
 

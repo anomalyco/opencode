@@ -1,9 +1,12 @@
 {
   "name": "@opencode/cloud-function",
-  "version": "0.5.28",
+  "version": "0.6.4",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20250522.0",
     "@types/node": "catalog:",

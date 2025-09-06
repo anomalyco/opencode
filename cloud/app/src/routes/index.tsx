@@ -1,14 +1,15 @@
-import { Title } from "@solidjs/meta"
-import { onCleanup, onMount } from "solid-js"
 import "./index.css"
+import { Title } from "@solidjs/meta"
+import { Match, onCleanup, onMount, Switch } from "solid-js"
 import logoLight from "../asset/logo-ornate-light.svg"
 import logoDark from "../asset/logo-ornate-dark.svg"
 import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
 import IMG_VSCODE from "../asset/lander/screenshot-vscode.png"
 import IMG_GITHUB from "../asset/lander/screenshot-github.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { createAsync, query, redirect } from "@solidjs/router"
-import { getActor, withActor } from "~/context/auth"
+import { createAsync, query, redirect, A } from "@solidjs/router"
+import { getActor } from "~/context/auth"
+import { withActor } from "~/context/auth.withActor"
 import { Account } from "@opencode/cloud-core/account.js"
 
 function CopyStatus() {
@@ -20,22 +21,17 @@ function CopyStatus() {
   )
 }
 
-const isLoggedIn = query(async () => {
+const defaultWorkspace = query(async () => {
   "use server"
   const actor = await getActor()
   if (actor.type === "account") {
     const workspaces = await withActor(() => Account.workspaces())
-    throw redirect(`/workspace/${workspaces[0].id}`)
+    return workspaces[0].id
   }
-  return false
-}, "isLoggedIn")
-
-
+}, "defaultWorkspace")
 
 export default function Home() {
-  createAsync(() => isLoggedIn(), {
-    deferStream: true,
-  })
+  const workspace = createAsync(() => defaultWorkspace())
   onMount(() => {
     const commands = document.querySelectorAll("[data-copy]")
     for (const button of commands) {
@@ -63,49 +59,51 @@ export default function Home() {
         <section data-component="top">
           <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
           <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
-          <h1 data-slot="title">The AI coding agent built for the terminal.</h1>
+          <h1 data-slot="title">The AI coding agent built for the terminal</h1>
         </section>
 
         <section data-component="cta">
           <div data-slot="left">
-            <a href="/docs">Get Started</a>
+            <a href="/docs">
+              Get Started
+            </a>
           </div>
-          <div data-slot="center">
+          <div data-slot="right">
             <button data-copy data-slot="command">
               <span>
-                <span>curl -fsSL&nbsp;</span>
+                <span>curl -fsSL </span>
                 <span data-slot="protocol">https://</span>
                 <span data-slot="highlight">opencode.ai/install</span>
-                &nbsp;| bash
+                <span> | bash</span>
               </span>
               <CopyStatus />
             </button>
-          </div>
-          <div data-slot="right">
-            <a href="/auth/authorize" target="_self">Login</a>
           </div>
         </section>
 
         <section data-component="features">
           <ul data-slot="list">
             <li>
-              <strong>Native TUI</strong>: A responsive, native, themeable terminal UI.
+              <strong>Native TUI</strong> A responsive, native, themeable terminal UI
             </li>
             <li>
-              <strong>LSP enabled</strong>: Automatically loads the right LSPs for the LLM.
+              <strong>LSP enabled</strong> Automatically loads the right LSPs for the LLM
             </li>
             <li>
-              <strong>Multi-session</strong>: Start multiple agents in parallel on the same project.
+              <strong>opencode zen</strong> A <a href="/docs/zen">curated list of models</a> provided by opencode <label>New</label>
             </li>
             <li>
-              <strong>Shareable links</strong>: Share a link to any sessions for reference or to debug.
+              <strong>Multi-session</strong> Start multiple agents in parallel on the same project
             </li>
             <li>
-              <strong>Claude Pro</strong>: Log in with Anthropic to use your Claude Pro or Max account.
+              <strong>Shareable links</strong> Share a link to any sessions for reference or to debug
             </li>
             <li>
-              <strong>Use any model</strong>: Supports 75+ LLM providers through{" "}
-              <a href="https://models.dev">Models.dev</a>, including local models.
+              <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
+            </li>
+            <li>
+              <strong>Use any model</strong> Supports 75+ LLM providers through{" "}
+              <a href="https://models.dev">Models.dev</a>, including local models
             </li>
           </ul>
         </section>
@@ -150,32 +148,12 @@ export default function Home() {
         </section>
 
         <section data-component="screenshots">
-          <div class="left">
-            <figure>
-              <figcaption>opencode TUI with the tokyonight theme</figcaption>
-              <a href="/docs/cli">
-                <img src={IMG_SPLASH} alt="opencode TUI with tokyonight theme" />
-              </a>
-            </figure>
-          </div>
-          <div class="right">
-            <div class="row1">
-              <figure>
-                <figcaption>opencode in VS Code</figcaption>
-                <a href="/docs/ide">
-                  <img src={IMG_VSCODE} alt="opencode in VS Code" />
-                </a>
-              </figure>
-            </div>
-            <div class="row2">
-              <figure>
-                <figcaption>opencode in GitHub</figcaption>
-                <a href="/docs/github">
-                  <img src={IMG_GITHUB} alt="opencode in GitHub" />
-                </a>
-              </figure>
-            </div>
-          </div>
+          <figure>
+            <figcaption>opencode TUI with the tokyonight theme</figcaption>
+            <a href="/docs/cli">
+              <img src={IMG_SPLASH} alt="opencode TUI with tokyonight theme" />
+            </a>
+          </figure>
         </section>
 
         <footer data-component="footer">

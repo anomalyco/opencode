@@ -1,7 +1,7 @@
-import { primaryKey, foreignKey, pgTable, uniqueIndex, varchar } from "drizzle-orm/pg-core"
+import { primaryKey, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { timestamps, ulid } from "../drizzle/types"
 
-export const WorkspaceTable = pgTable(
+export const WorkspaceTable = mysqlTable(
   "workspace",
   {
     id: ulid("id").notNull().primaryKey(),
@@ -16,10 +16,6 @@ export function workspaceIndexes(table: any) {
   return [
     primaryKey({
       columns: [table.workspaceID, table.id],
-    }),
-    foreignKey({
-      foreignColumns: [WorkspaceTable.id],
-      columns: [table.workspaceID],
     }),
   ]
 }

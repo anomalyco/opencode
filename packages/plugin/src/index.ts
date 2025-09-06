@@ -1,7 +1,7 @@
 import type {
   Event,
   createOpencodeClient,
-  App,
+  Project,
   Model,
   Provider,
   Permission,
@@ -14,7 +14,9 @@ import type { BunShell } from "./shell"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
-  app: App
+  project: Project
+  directory: string
+  worktree: string
   $: BunShell
 }
 export type Plugin = (input: PluginInput) => Promise<Hooks>

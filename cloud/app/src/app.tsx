@@ -8,6 +8,7 @@ import "./app.css";
 export default function App() {
   return (
     <Router
+      explicitLinks={true}
       root={props => (
         <MetaProvider>
           <Title>opencode</Title>
