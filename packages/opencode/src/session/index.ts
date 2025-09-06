@@ -691,8 +691,10 @@ export namespace Session {
 
     const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
     if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
-
-    if (msgs.filter((m) => m.info.role === "user").length === 1 && !session.parentID && isDefaultTitle(session.title)) {
+    const numRealUserMsgs = msgs.filter(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    ).length
+    if (numRealUserMsgs === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(model.providerID)) ?? model
       generateText({
         maxOutputTokens: small.info.reasoning ? 1024 : 20,
