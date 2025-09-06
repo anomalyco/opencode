@@ -1,5 +1,4 @@
 import { Global } from "../global"
-import "zod-openapi/extend"
 import { z } from "zod"
 import { secrets } from "bun"
 
