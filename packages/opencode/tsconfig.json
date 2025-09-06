@@ -10,5 +10,8 @@
     "customConditions": [
       "development"
     ]
-  }
+  },
+  "exclude": [
+    "script"
+  ]
 }
