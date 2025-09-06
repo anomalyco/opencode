@@ -10,6 +10,7 @@ const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
 export namespace Global {
+  export const keychainService = "sst.opencode"
   export const Path = {
     data,
     bin: path.join(data, "bin"),
