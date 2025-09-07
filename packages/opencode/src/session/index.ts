@@ -1019,7 +1019,7 @@ export namespace Session {
           : undefined,
       maxRetries: 3,
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      maxOutputTokens: outputLimit,
+      maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
       abortSignal: abort.signal,
       stopWhen: async ({ steps }) => {
         if (steps.length >= 1000) {
