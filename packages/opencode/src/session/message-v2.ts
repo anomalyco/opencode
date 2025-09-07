@@ -553,7 +553,7 @@ export namespace MessageV2 {
               }
             }
             if (part.type === "reasoning") {
-              const itemId = part.metadata?.openai?.itemId
+              const itemId = part.metadata?.["openai"]?.itemId
               if (itemId && seenReasoningIds.has(itemId)) {
                 return []
               }
