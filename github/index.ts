@@ -250,7 +250,7 @@ async function assertOpencodeConnected() {
   let connected = false
   do {
     try {
-      await client.app.get<true>()
+      await client.session.list<true>()
       connected = true
       break
     } catch (e) {}
@@ -542,11 +542,13 @@ async function chat(text: string, files: PromptFiles = []) {
   console.log("Sending message to opencode...")
   const { providerID, modelID } = useEnvModel()
 
-  const chat = await client.session.chat<true>({
+  const chat = await client.session.prompt<true>({
     path: session,
     body: {
-      providerID,
-      modelID,
+      model: {
+        providerID,
+        modelID,
+      },
       agent: "build",
       parts: [
         {
