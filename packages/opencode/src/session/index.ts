@@ -696,13 +696,22 @@ export namespace Session {
     ).length
     if (numRealUserMsgs === 1 && !session.parentID && isDefaultTitle(session.title)) {
       const small = (await Provider.getSmallModel(model.providerID)) ?? model
+      const options = {
+        ...ProviderTransform.options(small.providerID, small.modelID, input.sessionID),
+        ...small.info.options,
+      }
+      if (small.providerID === "openai") {
+        options["reasoningEffort"] = "minimal"
+      }
+      if (small.providerID === "google") {
+        options["thinkingConfig"] = {
+          thinkingBudget: 0,
+        }
+      }
       generateText({
-        maxOutputTokens: small.info.reasoning ? 1024 : 20,
+        maxOutputTokens: small.info.reasoning ? 1500 : 20,
         providerOptions: {
-          [model.providerID]: {
-            ...small.info.options,
-            ...ProviderTransform.options(small.providerID, small.modelID, input.sessionID),
-          },
+          [model.providerID]: options,
         },
         messages: [
           ...SystemPrompt.title(model.providerID).map(
