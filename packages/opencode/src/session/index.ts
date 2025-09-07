@@ -1422,6 +1422,7 @@ export namespace Session {
                   const part = await updatePart({
                     ...match,
                     tool: value.toolName,
+                    metadata:value.providerMetadata,
                     state: {
                       status: "running",
                       input: value.input,
@@ -1439,6 +1440,7 @@ export namespace Session {
                 if (match && match.state.status === "running") {
                   await updatePart({
                     ...match,
+                    metadata:value.providerMetadata,
                     state: {
                       status: "completed",
                       input: value.input,
@@ -1526,6 +1528,7 @@ export namespace Session {
                   id: Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
+                  metadata:value.providerMetadata,
                   type: "text",
                   text: "",
                   time: {

@@ -108,6 +108,7 @@ export namespace MessageV2 {
     type: z.literal("text"),
     text: z.string(),
     synthetic: z.boolean().optional(),
+    metadata: z.record(z.any()).optional(),
     time: z
       .object({
         start: z.number(),
@@ -135,6 +136,7 @@ export namespace MessageV2 {
   export const ToolPart = PartBase.extend({
     type: z.literal("tool"),
     callID: z.string(),
+    metadata: z.record(z.any()).optional(),
     tool: z.string(),
     state: ToolState,
   }).openapi({
@@ -503,44 +505,68 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        const seenReasoningIds = new Set<string>()
         result.push({
           id: msg.info.id,
           role: "assistant",
           parts: msg.parts.flatMap((part): UIMessage["parts"] => {
-            if (part.type === "text")
+            if (part.type === "text") {
               return [
                 {
                   type: "text",
+                  providerMetadata: part.metadata,
                   text: part.text,
                 },
               ]
-            if (part.type === "step-start")
+            }
+            if (part.type === "step-start") {
               return [
                 {
                   type: "step-start",
                 },
               ]
+            }
             if (part.type === "tool") {
-              if (part.state.status === "completed")
+              if (part.state.status === "completed") {
                 return [
                   {
                     type: ("tool-" + part.tool) as `tool-${string}`,
                     state: "output-available",
+                    callProviderMetadata: part.metadata,
                     toolCallId: part.callID,
                     input: part.state.input,
                     output: part.state.output,
                   },
                 ]
-              if (part.state.status === "error")
+              }
+              if (part.state.status === "error") {
                 return [
                   {
                     type: ("tool-" + part.tool) as `tool-${string}`,
                     state: "output-error",
+                    callProviderMetadata: part.metadata,
                     toolCallId: part.callID,
                     input: part.state.input,
                     errorText: part.state.error,
                   },
                 ]
+              }
+            }
+            if (part.type === "reasoning") {
+              const itemId = part.metadata?.openai?.itemId
+              if (itemId && seenReasoningIds.has(itemId)) {
+                return []
+              }
+              if (itemId) {
+                seenReasoningIds.add(itemId)
+              }
+              return [
+                {
+                  type: "reasoning",
+                  text: part.text,
+                  providerMetadata: part.metadata
+                },
+              ]
             }
 
             return []
