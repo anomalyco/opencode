@@ -1440,7 +1440,6 @@ export namespace Session {
                 if (match && match.state.status === "running") {
                   await updatePart({
                     ...match,
-                    // metadata:value.providerMetadata,
                     state: {
                       status: "completed",
                       input: value.input,
