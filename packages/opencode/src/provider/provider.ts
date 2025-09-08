@@ -81,7 +81,8 @@ export namespace Provider {
           switch (regionPrefix) {
             case "us": {
               const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
-              if (modelRequiresPrefix) {
+              const isGovCloud = region.startsWith("us-gov")
+              if (modelRequiresPrefix && !isGovCloud) {
                 modelID = `${regionPrefix}.${modelID}`
               }
               break
