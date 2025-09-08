@@ -98,4 +98,18 @@ export namespace ProviderTransform {
     }
     return result
   }
+
+  export function maxOutputTokens(providerID: string, outputLimit: number, options: Record<string, any>): number {
+    if (providerID === "anthropic") {
+      const thinking = options["thinking"]
+      if (typeof thinking === "object" && thinking !== null) {
+        const type = thinking["type"]
+        const budgetTokens = thinking["budgetTokens"]
+        if (type === "enabled" && typeof budgetTokens === "number" && budgetTokens > 0) {
+          return outputLimit - budgetTokens
+        }
+      }
+    }
+    return outputLimit
+  }
 }
