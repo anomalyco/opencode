@@ -1,10 +1,10 @@
-import { App } from "../app/app"
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
+import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
 
 export namespace Agent {
@@ -36,7 +36,7 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
 
-  const state = App.state("agent", async () => {
+  const state = Instance.state(async () => {
     const cfg = await Config.get()
     const defaultTools = cfg.tools ?? {}
     const defaultPermission: Info["permission"] = {

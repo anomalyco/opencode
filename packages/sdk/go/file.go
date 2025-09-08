@@ -33,19 +33,27 @@ func NewFileService(opts ...option.RequestOption) (r *FileService) {
 	return
 }
 
-// Read a file
-func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...option.RequestOption) (res *FileReadResponse, err error) {
+// List files and directories
+func (r *FileService) List(ctx context.Context, query FileListParams, opts ...option.RequestOption) (res *[]FileNode, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "file"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
 }
 
+// Read a file
+func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...option.RequestOption) (res *FileReadResponse, err error) {
+	opts = append(r.Options[:], opts...)
+	path := "file/content"
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
+	return
+}
+
 // Get file status
-func (r *FileService) Status(ctx context.Context, opts ...option.RequestOption) (res *[]File, err error) {
+func (r *FileService) Status(ctx context.Context, query FileStatusParams, opts ...option.RequestOption) (res *[]File, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "file/status"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
 }
 
@@ -91,6 +99,47 @@ func (r FileStatus) IsKnown() bool {
 	return false
 }
 
+type FileNode struct {
+	Ignored bool         `json:"ignored,required"`
+	Name    string       `json:"name,required"`
+	Path    string       `json:"path,required"`
+	Type    FileNodeType `json:"type,required"`
+	JSON    fileNodeJSON `json:"-"`
+}
+
+// fileNodeJSON contains the JSON metadata for the struct [FileNode]
+type fileNodeJSON struct {
+	Ignored     apijson.Field
+	Name        apijson.Field
+	Path        apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *FileNode) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r fileNodeJSON) RawJSON() string {
+	return r.raw
+}
+
+type FileNodeType string
+
+const (
+	FileNodeTypeFile      FileNodeType = "file"
+	FileNodeTypeDirectory FileNodeType = "directory"
+)
+
+func (r FileNodeType) IsKnown() bool {
+	switch r {
+	case FileNodeTypeFile, FileNodeTypeDirectory:
+		return true
+	}
+	return false
+}
+
 type FileReadResponse struct {
 	Content string               `json:"content,required"`
 	Type    FileReadResponseType `json:"type,required"`
@@ -129,12 +178,38 @@ func (r FileReadResponseType) IsKnown() bool {
 	return false
 }
 
+type FileListParams struct {
+	Path      param.Field[string] `query:"path,required"`
+	Directory param.Field[string] `query:"directory"`
+}
+
+// URLQuery serializes [FileListParams]'s query parameters as `url.Values`.
+func (r FileListParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
+}
+
 type FileReadParams struct {
-	Path param.Field[string] `query:"path,required"`
+	Path      param.Field[string] `query:"path,required"`
+	Directory param.Field[string] `query:"directory"`
 }
 
 // URLQuery serializes [FileReadParams]'s query parameters as `url.Values`.
 func (r FileReadParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
+}
+
+type FileStatusParams struct {
+	Directory param.Field[string] `query:"directory"`
+}
+
+// URLQuery serializes [FileStatusParams]'s query parameters as `url.Values`.
+func (r FileStatusParams) URLQuery() (v url.Values) {
 	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
 		ArrayFormat:  apiquery.ArrayQueryFormatComma,
 		NestedFormat: apiquery.NestedQueryFormatBrackets,

@@ -1,7 +1,6 @@
 import path from "path"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
-import { App } from "../app/app"
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import { Bus } from "../bus"
@@ -9,6 +8,7 @@ import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
 import { withTimeout } from "../util/timeout"
+import { Instance } from "../project/instance"
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -35,7 +35,6 @@ export namespace LSPClient {
   }
 
   export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
-    const app = App.info()
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
@@ -60,7 +59,8 @@ export namespace LSPClient {
       return null
     })
     connection.onRequest("workspace/configuration", async () => {
-      return [{}]
+      // Return server initialization options
+      return [input.server.initialization ?? {}]
     })
     connection.listen()
 
@@ -109,6 +109,12 @@ export namespace LSPClient {
 
     await connection.sendNotification("initialized", {})
 
+    if (input.server.initialization) {
+      await connection.sendNotification("workspace/didChangeConfiguration", {
+        settings: input.server.initialization,
+      })
+    }
+
     const files: {
       [path: string]: number
     } = {}
@@ -123,7 +129,7 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const file = Bun.file(input.path)
           const text = await file.text()
           const extension = path.extname(input.path)
@@ -162,7 +168,7 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(app.path.cwd, input.path)
+        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
         log.info("waiting for diagnostics", input)
         let unsub: () => void
         return await withTimeout(

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@lash/plugin",
-  "version": "0.1.0",
+  "version": "0.6.5",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -19,7 +19,6 @@
     "@lash/sdk": "workspace:*"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.81.0",
     "@tsconfig/node22": "catalog:",
     "typescript": "catalog:"
   }

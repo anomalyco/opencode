@@ -8,7 +8,7 @@ console.log(process.cwd())
 
 await $`rm -rf go`
 await $`bun run --conditions=development ../../opencode/src/index.ts generate > openapi.json`
-await $`stl builds create --branch dev --pull --allow-empty --+target go`
+await $`stl builds create --branch main --pull --allow-empty --+target go`
 
 await $`rm -rf ../go`
 await $`mv opencode-go/ ../go`

@@ -18,6 +18,7 @@ import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
+import { ExportCommand } from "./cli/cmd/export"
 
 const cancel = new AbortController()
 
@@ -80,9 +81,14 @@ const cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
+  .command(ExportCommand)
   .command(GithubCommand)
   .fail((msg) => {
-    if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
+    if (
+      msg.startsWith("Unknown argument") ||
+      msg.startsWith("Not enough non-option arguments") ||
+      msg.startsWith("Invalid values:")
+    ) {
       cli.showHelp("log")
     }
     process.exit(1)
@@ -105,6 +111,7 @@ try {
       name: e.name,
       message: e.message,
       cause: e.cause?.toString(),
+      stack: e.stack,
     })
   }
 

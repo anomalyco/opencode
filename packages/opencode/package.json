@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.1.200",
+  "version": "0.6.5",
   "name": "lash-cli",
   "description": "lash - The AI coding agent built for the terminal",
   "type": "module",
@@ -65,7 +65,7 @@
     "gray-matter": "4.0.3",
     "hono": "4.7.10",
     "hono-openapi": "0.4.8",
-    "isomorphic-git": "1.32.1",
+    "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",

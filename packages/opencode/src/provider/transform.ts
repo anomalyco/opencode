@@ -91,11 +91,25 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      result["reasoningEffort"] = "minimal"
+      result["reasoningEffort"] = "high"
       if (providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
     }
     return result
+  }
+
+  export function maxOutputTokens(providerID: string, outputLimit: number, options: Record<string, any>): number {
+    if (providerID === "anthropic") {
+      const thinking = options["thinking"]
+      if (typeof thinking === "object" && thinking !== null) {
+        const type = thinking["type"]
+        const budgetTokens = thinking["budgetTokens"]
+        if (type === "enabled" && typeof budgetTokens === "number" && budgetTokens > 0) {
+          return outputLimit - budgetTokens
+        }
+      }
+    }
+    return outputLimit
   }
 }
