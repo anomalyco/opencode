@@ -551,6 +551,10 @@ export type Config = {
     scroll_speed: number
   }
   /**
+   * Shell integration settings
+   */
+  shell?: ShellConfig
+  /**
    * Command configuration, see https://opencode.ai/docs/commands
    */
   command?: {
@@ -929,6 +933,39 @@ export type KeybindsConfig = {
    * @deprecated use messages_undo. Revert message
    */
   messages_revert: string
+}
+
+export type ShellConfig = {
+  /**
+   * Default execution mode
+   */
+  defaultMode: "Shell" | "Agent" | "Auto"
+  /**
+   * Persist mode selection across sessions
+   */
+  persistMode: boolean
+  /**
+   * Shell binary to use (defaults to $SHELL or /bin/sh)
+   */
+  shellBinary?: string
+  /**
+   * Arguments to pass to shell binary
+   */
+  shellArgs?: Array<string>
+  /**
+   * Initial working directory
+   */
+  workingDirectory?: string
+  /**
+   * Commands to block from execution
+   */
+  blockedCommands?: Array<string>
+  /**
+   * Additional environment variables
+   */
+  environment?: {
+    [key: string]: string
+  }
 }
 
 export type AgentConfig = {
