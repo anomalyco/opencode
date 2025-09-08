@@ -365,6 +365,36 @@ export namespace Session {
     return part
   }
 
+  async function cleanupRevert(session: Info) {
+    if (!session.revert) return
+    const sessionID = session.id
+    let msgs = await messages(sessionID)
+    const messageID = session.revert.messageID
+    const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
+    msgs = preserve
+    for (const msg of remove) {
+      await Storage.remove(["message", sessionID, msg.info.id])
+      await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
+    }
+    const last = preserve.at(-1)
+    if (session.revert.partID && last) {
+      const partID = session.revert.partID
+      const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
+      last.parts = preserveParts
+      for (const part of removeParts) {
+        await Storage.remove(["part", last.info.id, part.id])
+        await Bus.publish(MessageV2.Event.PartRemoved, {
+          sessionID: sessionID,
+          messageID: last.info.id,
+          partID: part.id,
+        })
+      }
+    }
+    await update(sessionID, (draft) => {
+      draft.revert = undefined
+    })
+  }
+
   export const PromptInput = z.object({
     sessionID: Identifier.schema("session"),
     messageID: Identifier.schema("message").optional(),
@@ -425,31 +455,7 @@ export namespace Session {
     // Process revert cleanup first, before creating new messages
     const session = await get(input.sessionID)
     if (session.revert) {
-      let msgs = await messages(input.sessionID)
-      const messageID = session.revert.messageID
-      const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-      msgs = preserve
-      for (const msg of remove) {
-        await Storage.remove(["message", input.sessionID, msg.info.id])
-        await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: msg.info.id })
-      }
-      const last = preserve.at(-1)
-      if (session.revert.partID && last) {
-        const partID = session.revert.partID
-        const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
-        last.parts = preserveParts
-        for (const part of removeParts) {
-          await Storage.remove(["part", last.info.id, part.id])
-          await Bus.publish(MessageV2.Event.PartRemoved, {
-            sessionID: input.sessionID,
-            messageID: last.info.id,
-            partID: part.id,
-          })
-        }
-      }
-      await update(input.sessionID, (draft) => {
-        draft.revert = undefined
-      })
+      cleanupRevert(session)
     }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
@@ -1085,6 +1091,10 @@ export namespace Session {
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
     using abort = lock(input.sessionID)
+    const session = await get(input.sessionID)
+    if (session.revert) {
+      cleanupRevert(session)
+    }
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
