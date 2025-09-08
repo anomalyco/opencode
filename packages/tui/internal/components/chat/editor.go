@@ -659,6 +659,9 @@ func (m *editorComponent) getExitKeyText() string {
 
 // shouldSummarizePastedText determines if pasted text should be summarized
 func (m *editorComponent) shouldSummarizePastedText(text string) bool {
+	if m.app.IsBashMode {
+		return false
+	}
 	lines := strings.Split(text, "\n")
 	lineCount := len(lines)
 	charCount := len(text)
