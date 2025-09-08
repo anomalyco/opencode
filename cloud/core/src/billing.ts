@@ -1,12 +1,11 @@
-import { Resource } from "sst"
 import { Stripe } from "stripe"
 import { Database, eq, sql } from "./drizzle"
-import { BillingTable, UsageTable } from "./schema/billing.sql"
+import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { Identifier } from "./identifier"
-import { centsToMicroCents } from "./util/price"
+import { User } from "./user"
+import { Resource } from "@opencode/cloud-resource"
 
 export namespace Billing {
   export const stripe = () =>
@@ -29,43 +28,93 @@ export namespace Billing {
     )
   }
 
-  export const consume = fn(
+  export const payments = async () => {
+    return await Database.use((tx) =>
+      tx
+        .select()
+        .from(PaymentTable)
+        .where(eq(PaymentTable.workspaceID, Actor.workspace()))
+        .orderBy(sql`${PaymentTable.timeCreated} DESC`)
+        .limit(100),
+    )
+  }
+
+  export const usages = async () => {
+    return await Database.use((tx) =>
+      tx
+        .select()
+        .from(UsageTable)
+        .where(eq(UsageTable.workspaceID, Actor.workspace()))
+        .orderBy(sql`${UsageTable.timeCreated} DESC`)
+        .limit(100),
+    )
+  }
+
+  export const generateCheckoutUrl = fn(
     z.object({
-      requestID: z.string().optional(),
-      model: z.string(),
-      inputTokens: z.number(),
-      outputTokens: z.number(),
-      reasoningTokens: z.number().optional(),
-      cacheReadTokens: z.number().optional(),
-      cacheWriteTokens: z.number().optional(),
-      costInCents: z.number(),
+      successUrl: z.string(),
+      cancelUrl: z.string(),
     }),
     async (input) => {
-      const workspaceID = Actor.workspace()
-      const cost = centsToMicroCents(input.costInCents)
+      const account = Actor.assert("user")
+      const { successUrl, cancelUrl } = input
 
-      return await Database.transaction(async (tx) => {
-        await tx.insert(UsageTable).values({
-          workspaceID,
-          id: Identifier.create("usage"),
-          requestID: input.requestID,
-          model: input.model,
-          inputTokens: input.inputTokens,
-          outputTokens: input.outputTokens,
-          reasoningTokens: input.reasoningTokens,
-          cacheReadTokens: input.cacheReadTokens,
-          cacheWriteTokens: input.cacheWriteTokens,
-          cost,
-        })
-        const [updated] = await tx
-          .update(BillingTable)
-          .set({
-            balance: sql`${BillingTable.balance} - ${cost}`,
-          })
-          .where(eq(BillingTable.workspaceID, workspaceID))
-          .returning()
-        return updated.balance
+      const user = await User.fromID(account.properties.userID)
+      const customer = await Billing.get()
+      const session = await Billing.stripe().checkout.sessions.create({
+        mode: "payment",
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "opencode credits",
+              },
+              unit_amount: 2123, // $20 minimum + Stripe fee 4.4% + $0.30
+            },
+            quantity: 1,
+          },
+        ],
+        payment_intent_data: {
+          setup_future_usage: "on_session",
+        },
+        ...(customer.customerID
+          ? { customer: customer.customerID }
+          : {
+              customer_email: user.email,
+              customer_creation: "always",
+            }),
+        metadata: {
+          workspaceID: Actor.workspace(),
+        },
+        currency: "usd",
+        payment_method_types: ["card"],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
       })
+
+      return session.url
+    },
+  )
+
+  export const generatePortalUrl = fn(
+    z.object({
+      returnUrl: z.string(),
+    }),
+    async (input) => {
+      const { returnUrl } = input
+
+      const customer = await Billing.get()
+      if (!customer?.customerID) {
+        throw new Error("No stripe customer ID")
+      }
+
+      const session = await Billing.stripe().billingPortal.sessions.create({
+        customer: customer.customerID,
+        return_url: returnUrl,
+      })
+
+      return session.url
     },
   )
 }

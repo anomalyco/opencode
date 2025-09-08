@@ -5,11 +5,15 @@ package opencode
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"reflect"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/apiquery"
+	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode-sdk-go/shared"
 	"github.com/tidwall/gjson"
 )
 
@@ -33,10 +37,10 @@ func NewConfigService(opts ...option.RequestOption) (r *ConfigService) {
 }
 
 // Get config info
-func (r *ConfigService) Get(ctx context.Context, opts ...option.RequestOption) (res *Config, err error) {
+func (r *ConfigService) Get(ctx context.Context, query ConfigGetParams, opts ...option.RequestOption) (res *Config, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "config"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
 }
 
@@ -50,6 +54,8 @@ type Config struct {
 	Autoshare bool `json:"autoshare"`
 	// Automatically update to the latest version
 	Autoupdate bool `json:"autoupdate"`
+	// Command configuration, see https://opencode.ai/docs/commands
+	Command map[string]ConfigCommand `json:"command"`
 	// Disable providers that are loaded automatically
 	DisabledProviders []string                   `json:"disabled_providers"`
 	Experimental      ConfigExperimental         `json:"experimental"`
@@ -79,7 +85,8 @@ type Config struct {
 	SmallModel string `json:"small_model"`
 	Snapshot   bool   `json:"snapshot"`
 	// Theme name to use for the interface
-	Theme string `json:"theme"`
+	Theme string          `json:"theme"`
+	Tools map[string]bool `json:"tools"`
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
@@ -93,6 +100,7 @@ type configJSON struct {
 	Agent             apijson.Field
 	Autoshare         apijson.Field
 	Autoupdate        apijson.Field
+	Command           apijson.Field
 	DisabledProviders apijson.Field
 	Experimental      apijson.Field
 	Formatter         apijson.Field
@@ -110,6 +118,7 @@ type configJSON struct {
 	SmallModel        apijson.Field
 	Snapshot          apijson.Field
 	Theme             apijson.Field
+	Tools             apijson.Field
 	Tui               apijson.Field
 	Username          apijson.Field
 	raw               string
@@ -660,6 +669,32 @@ func (r ConfigAgentPlanPermissionWebfetch) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type ConfigCommand struct {
+	Template    string            `json:"template,required"`
+	Agent       string            `json:"agent"`
+	Description string            `json:"description"`
+	Model       string            `json:"model"`
+	JSON        configCommandJSON `json:"-"`
+}
+
+// configCommandJSON contains the JSON metadata for the struct [ConfigCommand]
+type configCommandJSON struct {
+	Template    apijson.Field
+	Agent       apijson.Field
+	Description apijson.Field
+	Model       apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigCommand) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configCommandJSON) RawJSON() string {
+	return r.raw
 }
 
 type ConfigExperimental struct {
@@ -1616,10 +1651,13 @@ func (r configProviderModelsLimitJSON) RawJSON() string {
 }
 
 type ConfigProviderOptions struct {
-	APIKey      string                    `json:"apiKey"`
-	BaseURL     string                    `json:"baseURL"`
-	ExtraFields map[string]interface{}    `json:"-,extras"`
-	JSON        configProviderOptionsJSON `json:"-"`
+	APIKey  string `json:"apiKey"`
+	BaseURL string `json:"baseURL"`
+	// Timeout in milliseconds for requests to this provider. Default is 300000 (5
+	// minutes). Set to false to disable timeout.
+	Timeout     ConfigProviderOptionsTimeoutUnion `json:"timeout"`
+	ExtraFields map[string]interface{}            `json:"-,extras"`
+	JSON        configProviderOptionsJSON         `json:"-"`
 }
 
 // configProviderOptionsJSON contains the JSON metadata for the struct
@@ -1627,6 +1665,7 @@ type ConfigProviderOptions struct {
 type configProviderOptionsJSON struct {
 	APIKey      apijson.Field
 	BaseURL     apijson.Field
+	Timeout     apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -1637,6 +1676,33 @@ func (r *ConfigProviderOptions) UnmarshalJSON(data []byte) (err error) {
 
 func (r configProviderOptionsJSON) RawJSON() string {
 	return r.raw
+}
+
+// Timeout in milliseconds for requests to this provider. Default is 300000 (5
+// minutes). Set to false to disable timeout.
+//
+// Union satisfied by [shared.UnionInt] or [shared.UnionBool].
+type ConfigProviderOptionsTimeoutUnion interface {
+	ImplementsConfigProviderOptionsTimeoutUnion()
+}
+
+func init() {
+	apijson.RegisterUnion(
+		reflect.TypeOf((*ConfigProviderOptionsTimeoutUnion)(nil)).Elem(),
+		"",
+		apijson.UnionVariant{
+			TypeFilter: gjson.Number,
+			Type:       reflect.TypeOf(shared.UnionInt(0)),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.True,
+			Type:       reflect.TypeOf(shared.UnionBool(false)),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.False,
+			Type:       reflect.TypeOf(shared.UnionBool(false)),
+		},
+	)
 }
 
 // Control sharing behavior:'manual' allows manual sharing via commands, 'auto'
@@ -1760,6 +1826,8 @@ type KeybindsConfig struct {
 	SessionNew string `json:"session_new,required"`
 	// Share current session
 	SessionShare string `json:"session_share,required"`
+	// Show session timeline
+	SessionTimeline string `json:"session_timeline,required"`
 	// Unshare current session
 	SessionUnshare string `json:"session_unshare,required"`
 	// @deprecated use agent_cycle. Next agent
@@ -1821,6 +1889,7 @@ type keybindsConfigJSON struct {
 	SessionList              apijson.Field
 	SessionNew               apijson.Field
 	SessionShare             apijson.Field
+	SessionTimeline          apijson.Field
 	SessionUnshare           apijson.Field
 	SwitchAgent              apijson.Field
 	SwitchAgentReverse       apijson.Field
@@ -1933,4 +2002,16 @@ func (r McpRemoteConfigType) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type ConfigGetParams struct {
+	Directory param.Field[string] `query:"directory"`
+}
+
+// URLQuery serializes [ConfigGetParams]'s query parameters as `url.Values`.
+func (r ConfigGetParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
 }

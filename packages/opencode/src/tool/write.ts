@@ -4,11 +4,11 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { Permission } from "../permission"
 import DESCRIPTION from "./write.txt"
-import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 
 export const WriteTool = Tool.define("write", {
@@ -18,9 +18,8 @@ export const WriteTool = Tool.define("write", {
     content: z.string().describe("The content to write to the file"),
   }),
   async execute(params, ctx) {
-    const app = App.info()
-    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
-    if (!Filesystem.contains(app.path.cwd, filepath)) {
+    const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    if (!Filesystem.contains(Instance.directory, filepath)) {
       throw new Error(`File ${filepath} is not in the current working directory`)
     }
 
@@ -62,7 +61,7 @@ export const WriteTool = Tool.define("write", {
     }
 
     return {
-      title: path.relative(app.path.root, filepath),
+      title: path.relative(Instance.worktree, filepath),
       metadata: {
         diagnostics,
         filepath,

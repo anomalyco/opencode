@@ -109,6 +109,9 @@ IMPORTANT: When the user asks you to create a pull request, follow these steps c
 gh pr create --title "the pr title" --body "$(cat <<'EOF'
 ## Summary
 <1-3 bullet points>
+EOF
+)"
+</example>
 
 Important:
 - NEVER update the git config

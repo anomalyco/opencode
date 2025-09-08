@@ -51,11 +51,13 @@ export const TaskTool = Tool.define("task", async () => {
       ctx.abort.addEventListener("abort", () => {
         Session.abort(session.id)
       })
-      const result = await Session.chat({
+      const result = await Session.prompt({
         messageID,
         sessionID: session.id,
-        modelID: model.modelID,
-        providerID: model.providerID,
+        model: {
+          modelID: model.modelID,
+          providerID: model.providerID,
+        },
         agent: agent.name,
         tools: {
           todowrite: false,
@@ -75,9 +77,9 @@ export const TaskTool = Tool.define("task", async () => {
       return {
         title: params.description,
         metadata: {
-          summary: result.parts.filter((x) => x.type === "tool"),
+          summary: result.parts.filter((x: any) => x.type === "tool"),
         },
-        output: result.parts.findLast((x) => x.type === "text")?.text ?? "",
+        output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }
     },
   }

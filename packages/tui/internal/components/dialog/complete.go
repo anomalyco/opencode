@@ -94,7 +94,7 @@ func (c *completionDialogComponent) getAllCompletions(query string) tea.Cmd {
 		}
 
 		// If there's a query, fuzzy-rank within each provider, then concatenate by provider order
-		if query != "" && providersWithResults > 0 {
+		if query != "" && providersWithResults > 1 {
 			t := theme.CurrentTheme()
 			baseStyle := styles.NewStyle().Background(t.BackgroundElement())
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.5.12",
+  "version": "0.6.5",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -41,7 +41,7 @@
     "gray-matter": "4.0.3",
     "hono": "catalog:",
     "hono-openapi": "0.4.8",
-    "isomorphic-git": "1.32.1",
+    "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",

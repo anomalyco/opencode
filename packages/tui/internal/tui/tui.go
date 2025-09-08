@@ -134,7 +134,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					)
 					if err != nil {
 						slog.Error("Failed to respond to permission request", "error", err)
-						return toast.NewErrorToast("Failed to respond to permission request")
+						return toast.NewErrorToast("Failed to respond to permission request")()
 					}
 					slog.Debug("Responded to permission request", "response", resp)
 					return nil
@@ -393,7 +393,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCompletionDialog = false
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
-			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID, opencode.SessionGetParams{})
 			if err != nil {
 				slog.Error("Failed to get parent session", "error", err)
 				return a, toast.NewErrorToast("Failed to get parent session")
@@ -408,10 +408,28 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.app, cmd = a.app.SendPrompt(context.Background(), msg)
 			cmds = append(cmds, cmd)
 		}
+	case app.SendCommand:
+		// If we're in a child session, switch back to parent before sending prompt
+		if a.app.Session.ParentID != "" {
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID, opencode.SessionGetParams{})
+			if err != nil {
+				slog.Error("Failed to get parent session", "error", err)
+				return a, toast.NewErrorToast("Failed to get parent session")
+			}
+			a.app.Session = parentSession
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, tea.Sequence(
+				util.CmdHandler(app.SessionSelectedMsg(parentSession)),
+				cmd,
+			))
+		} else {
+			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
+			cmds = append(cmds, cmd)
+		}
 	case app.SendShell:
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
-			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID)
+			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID, opencode.SessionGetParams{})
 			if err != nil {
 				slog.Error("Failed to get parent session", "error", err)
 				return a, toast.NewErrorToast("Failed to get parent session")
@@ -442,11 +460,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			"opencode updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
-	case opencode.EventListResponseEventIdeInstalled:
-		return a, toast.NewSuccessToast(
-			"Installed the opencode extension in "+msg.Properties.Ide,
-			toast.WithTitle(msg.Properties.Ide+" extension installed"),
-		)
+		/*
+			case opencode.EventListResponseEventIdeInstalled:
+				return a, toast.NewSuccessToast(
+					"Installed the opencode extension in "+msg.Properties.Ide,
+					toast.WithTitle(msg.Properties.Ide+" extension installed"),
+				)
+		*/
 	case opencode.EventListResponseEventSessionDeleted:
 		if a.app.Session != nil && msg.Properties.Info.ID == a.app.Session.ID {
 			a.app.Session = &opencode.Session{}
@@ -656,7 +676,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if nextMessageID == "" {
 				// Last message - use unrevert to restore full conversation
-				response, err = a.app.Client.Session.Unrevert(context.Background(), a.app.Session.ID)
+				response, err = a.app.Client.Session.Unrevert(context.Background(), a.app.Session.ID, opencode.SessionUnrevertParams{})
 			} else {
 				// Revert to next message to make target the last visible
 				response, err = a.app.Client.Session.Revert(context.Background(), a.app.Session.ID,
@@ -897,9 +917,10 @@ func (a Model) Cleanup() {
 func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
-	baseStyle := styles.NewStyle().Background(t.Background())
+	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	highlight := styles.NewStyle().Foreground(t.Accent()).Background(t.Background()).Render
 
 	open := `
 █▀▀█ █▀▀█ █▀▀ █▀▀▄ 
@@ -934,9 +955,9 @@ func (a Model) home() (string, int, int) {
 	)
 
 	// Use limit of 4 for vscode, 6 for others
-	limit := 6
+	limit := 4
 	if util.IsVSCode() {
-		limit = 4
+		limit = 2
 	}
 
 	showVscode := util.IsVSCode()
@@ -953,14 +974,22 @@ func (a Model) home() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
+	grok := highlight("Grok Code is free for a limited time")
+	grok = lipgloss.PlaceHorizontal(
+		effectiveWidth,
+		lipgloss.Center,
+		grok,
+		styles.WhitespaceStyle(t.Background()),
+	)
+
 	lines := []string{}
-	lines = append(lines, "")
 	lines = append(lines, "")
 	lines = append(lines, logoAndVersion)
 	lines = append(lines, "")
-	lines = append(lines, "")
 	lines = append(lines, cmds)
 	lines = append(lines, "")
+	lines = append(lines, "")
+	lines = append(lines, grok)
 	lines = append(lines, "")
 
 	mainHeight := lipgloss.Height(strings.Join(lines, "\n"))
@@ -1156,7 +1185,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		response, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID)
+		response, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID, opencode.SessionShareParams{})
 		if err != nil {
 			slog.Error("Failed to share session", "error", err)
 			return a, toast.NewErrorToast("Failed to share session")
@@ -1168,7 +1197,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		_, err := a.app.Client.Session.Unshare(context.Background(), a.app.Session.ID)
+		_, err := a.app.Client.Session.Unshare(context.Background(), a.app.Session.ID, opencode.SessionUnshareParams{})
 		if err != nil {
 			slog.Error("Failed to unshare session", "error", err)
 			return a, toast.NewErrorToast("Failed to unshare session")
@@ -1196,7 +1225,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			var parentSession *opencode.Session
 			if a.app.Session.ParentID != "" {
 				parentSessionID = a.app.Session.ParentID
-				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID)
+				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID, opencode.SessionGetParams{})
 				if err != nil {
 					slog.Error("Failed to get parent session", "error", err)
 					return toast.NewErrorToast("Failed to get parent session")
@@ -1206,7 +1235,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 				parentSession = a.app.Session
 			}
 
-			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID)
+			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID, opencode.SessionChildrenParams{})
 			if err != nil {
 				slog.Error("Failed to get session children", "error", err)
 				return toast.NewErrorToast("Failed to get session children")
@@ -1254,7 +1283,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			var parentSession *opencode.Session
 			if a.app.Session.ParentID != "" {
 				parentSessionID = a.app.Session.ParentID
-				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID)
+				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID, opencode.SessionGetParams{})
 				if err != nil {
 					slog.Error("Failed to get parent session", "error", err)
 					return toast.NewErrorToast("Failed to get parent session")
@@ -1264,7 +1293,7 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 				parentSession = a.app.Session
 			}
 
-			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID)
+			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID, opencode.SessionChildrenParams{})
 			if err != nil {
 				slog.Error("Failed to get session children", "error", err)
 				return toast.NewErrorToast("Failed to get session children")

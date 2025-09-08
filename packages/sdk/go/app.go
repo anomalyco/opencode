@@ -5,8 +5,10 @@ package opencode
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
+	"github.com/sst/opencode-sdk-go/internal/apiquery"
 	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
@@ -31,268 +33,20 @@ func NewAppService(opts ...option.RequestOption) (r *AppService) {
 	return
 }
 
-// List all agents
-func (r *AppService) Agents(ctx context.Context, opts ...option.RequestOption) (res *[]Agent, err error) {
-	opts = append(r.Options[:], opts...)
-	path := "agent"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
-	return
-}
-
-// Get app info
-func (r *AppService) Get(ctx context.Context, opts ...option.RequestOption) (res *App, err error) {
-	opts = append(r.Options[:], opts...)
-	path := "app"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
-	return
-}
-
-// Initialize the app
-func (r *AppService) Init(ctx context.Context, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
-	path := "app/init"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, nil, &res, opts...)
-	return
-}
-
 // Write a log entry to the server logs
-func (r *AppService) Log(ctx context.Context, body AppLogParams, opts ...option.RequestOption) (res *bool, err error) {
+func (r *AppService) Log(ctx context.Context, params AppLogParams, opts ...option.RequestOption) (res *bool, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "log"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, body, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return
 }
 
 // List all providers
-func (r *AppService) Providers(ctx context.Context, opts ...option.RequestOption) (res *AppProvidersResponse, err error) {
+func (r *AppService) Providers(ctx context.Context, query AppProvidersParams, opts ...option.RequestOption) (res *AppProvidersResponse, err error) {
 	opts = append(r.Options[:], opts...)
 	path := "config/providers"
-	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, nil, &res, opts...)
+	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
-}
-
-type Agent struct {
-	BuiltIn     bool                   `json:"builtIn,required"`
-	Mode        AgentMode              `json:"mode,required"`
-	Name        string                 `json:"name,required"`
-	Options     map[string]interface{} `json:"options,required"`
-	Permission  AgentPermission        `json:"permission,required"`
-	Tools       map[string]bool        `json:"tools,required"`
-	Description string                 `json:"description"`
-	Model       AgentModel             `json:"model"`
-	Prompt      string                 `json:"prompt"`
-	Temperature float64                `json:"temperature"`
-	TopP        float64                `json:"topP"`
-	JSON        agentJSON              `json:"-"`
-}
-
-// agentJSON contains the JSON metadata for the struct [Agent]
-type agentJSON struct {
-	BuiltIn     apijson.Field
-	Mode        apijson.Field
-	Name        apijson.Field
-	Options     apijson.Field
-	Permission  apijson.Field
-	Tools       apijson.Field
-	Description apijson.Field
-	Model       apijson.Field
-	Prompt      apijson.Field
-	Temperature apijson.Field
-	TopP        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *Agent) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r agentJSON) RawJSON() string {
-	return r.raw
-}
-
-type AgentMode string
-
-const (
-	AgentModeSubagent AgentMode = "subagent"
-	AgentModePrimary  AgentMode = "primary"
-	AgentModeAll      AgentMode = "all"
-)
-
-func (r AgentMode) IsKnown() bool {
-	switch r {
-	case AgentModeSubagent, AgentModePrimary, AgentModeAll:
-		return true
-	}
-	return false
-}
-
-type AgentPermission struct {
-	Bash     map[string]AgentPermissionBash `json:"bash,required"`
-	Edit     AgentPermissionEdit            `json:"edit,required"`
-	Webfetch AgentPermissionWebfetch        `json:"webfetch"`
-	JSON     agentPermissionJSON            `json:"-"`
-}
-
-// agentPermissionJSON contains the JSON metadata for the struct [AgentPermission]
-type agentPermissionJSON struct {
-	Bash        apijson.Field
-	Edit        apijson.Field
-	Webfetch    apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *AgentPermission) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r agentPermissionJSON) RawJSON() string {
-	return r.raw
-}
-
-type AgentPermissionBash string
-
-const (
-	AgentPermissionBashAsk   AgentPermissionBash = "ask"
-	AgentPermissionBashAllow AgentPermissionBash = "allow"
-	AgentPermissionBashDeny  AgentPermissionBash = "deny"
-)
-
-func (r AgentPermissionBash) IsKnown() bool {
-	switch r {
-	case AgentPermissionBashAsk, AgentPermissionBashAllow, AgentPermissionBashDeny:
-		return true
-	}
-	return false
-}
-
-type AgentPermissionEdit string
-
-const (
-	AgentPermissionEditAsk   AgentPermissionEdit = "ask"
-	AgentPermissionEditAllow AgentPermissionEdit = "allow"
-	AgentPermissionEditDeny  AgentPermissionEdit = "deny"
-)
-
-func (r AgentPermissionEdit) IsKnown() bool {
-	switch r {
-	case AgentPermissionEditAsk, AgentPermissionEditAllow, AgentPermissionEditDeny:
-		return true
-	}
-	return false
-}
-
-type AgentPermissionWebfetch string
-
-const (
-	AgentPermissionWebfetchAsk   AgentPermissionWebfetch = "ask"
-	AgentPermissionWebfetchAllow AgentPermissionWebfetch = "allow"
-	AgentPermissionWebfetchDeny  AgentPermissionWebfetch = "deny"
-)
-
-func (r AgentPermissionWebfetch) IsKnown() bool {
-	switch r {
-	case AgentPermissionWebfetchAsk, AgentPermissionWebfetchAllow, AgentPermissionWebfetchDeny:
-		return true
-	}
-	return false
-}
-
-type AgentModel struct {
-	ModelID    string         `json:"modelID,required"`
-	ProviderID string         `json:"providerID,required"`
-	JSON       agentModelJSON `json:"-"`
-}
-
-// agentModelJSON contains the JSON metadata for the struct [AgentModel]
-type agentModelJSON struct {
-	ModelID     apijson.Field
-	ProviderID  apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *AgentModel) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r agentModelJSON) RawJSON() string {
-	return r.raw
-}
-
-type App struct {
-	Git      bool    `json:"git,required"`
-	Hostname string  `json:"hostname,required"`
-	Path     AppPath `json:"path,required"`
-	Time     AppTime `json:"time,required"`
-	JSON     appJSON `json:"-"`
-}
-
-// appJSON contains the JSON metadata for the struct [App]
-type appJSON struct {
-	Git         apijson.Field
-	Hostname    apijson.Field
-	Path        apijson.Field
-	Time        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *App) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r appJSON) RawJSON() string {
-	return r.raw
-}
-
-type AppPath struct {
-	Config string      `json:"config,required"`
-	Cwd    string      `json:"cwd,required"`
-	Data   string      `json:"data,required"`
-	Root   string      `json:"root,required"`
-	State  string      `json:"state,required"`
-	JSON   appPathJSON `json:"-"`
-}
-
-// appPathJSON contains the JSON metadata for the struct [AppPath]
-type appPathJSON struct {
-	Config      apijson.Field
-	Cwd         apijson.Field
-	Data        apijson.Field
-	Root        apijson.Field
-	State       apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *AppPath) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r appPathJSON) RawJSON() string {
-	return r.raw
-}
-
-type AppTime struct {
-	Initialized float64     `json:"initialized"`
-	JSON        appTimeJSON `json:"-"`
-}
-
-// appTimeJSON contains the JSON metadata for the struct [AppTime]
-type appTimeJSON struct {
-	Initialized apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
-}
-
-func (r *AppTime) UnmarshalJSON(data []byte) (err error) {
-	return apijson.UnmarshalRoot(data, r)
-}
-
-func (r appTimeJSON) RawJSON() string {
-	return r.raw
 }
 
 type Model struct {
@@ -440,13 +194,22 @@ type AppLogParams struct {
 	// Log message
 	Message param.Field[string] `json:"message,required"`
 	// Service name for the log entry
-	Service param.Field[string] `json:"service,required"`
+	Service   param.Field[string] `json:"service,required"`
+	Directory param.Field[string] `query:"directory"`
 	// Additional metadata for the log entry
 	Extra param.Field[map[string]interface{}] `json:"extra"`
 }
 
 func (r AppLogParams) MarshalJSON() (data []byte, err error) {
 	return apijson.MarshalRoot(r)
+}
+
+// URLQuery serializes [AppLogParams]'s query parameters as `url.Values`.
+func (r AppLogParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
 }
 
 // Log level
@@ -465,4 +228,16 @@ func (r AppLogParamsLevel) IsKnown() bool {
 		return true
 	}
 	return false
+}
+
+type AppProvidersParams struct {
+	Directory param.Field[string] `query:"directory"`
+}
+
+// URLQuery serializes [AppProvidersParams]'s query parameters as `url.Values`.
+func (r AppProvidersParams) URLQuery() (v url.Values) {
+	return apiquery.MarshalWithSettings(r, apiquery.QuerySettings{
+		ArrayFormat:  apiquery.ArrayQueryFormatComma,
+		NestedFormat: apiquery.NestedQueryFormatBrackets,
+	})
 }
