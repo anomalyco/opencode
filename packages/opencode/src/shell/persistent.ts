@@ -2,7 +2,7 @@ import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
 import { Log } from "../util/log"
-import { App } from "../app/app"
+import { Instance } from "../project/instance"
 
 const execAsync = promisify(exec)
 const log = Log.create({ service: "persistent-shell" })
@@ -28,8 +28,7 @@ export class PersistentShell {
   private shellBinary: string
   
   constructor() {
-    const app = App.info()
-    this.workingDir = app.path.cwd
+    this.workingDir = Instance.directory
     this.environment = new Map(Object.entries(process.env as ShellEnvironment))
     
     // Detect user's shell
@@ -224,8 +223,7 @@ export class PersistentShell {
    * Reset shell state to defaults
    */
   reset(): void {
-    const app = App.info()
-    this.workingDir = app.path.cwd
+    this.workingDir = Instance.directory
     this.environment = new Map(Object.entries(process.env as ShellEnvironment))
     log.info("reset shell state")
   }
