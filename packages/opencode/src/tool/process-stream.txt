@@ -1,0 +1,22 @@
+Read output from a background process with stream-like functionality.
+
+This tool provides different ways to read output from processes that were started by the bash tool and are now running in the background:
+
+Actions:
+- read: Consume and return unread output (default) - marks output as read
+- peek: View unread output without consuming it - does not update read position
+- tail: Get the most recent output regardless of read position
+- reset: Reset the read cursor to the beginning
+
+Parameters:
+- processId: The ID returned when a bash command was backgrounded
+- action: The stream operation to perform (default: "read")
+- maxBytes: Optional limit on bytes to return
+
+Usage examples:
+- Read new output: process_stream processId="abc-123"
+- Peek without consuming: process_stream processId="abc-123" action="peek"
+- Get last 1KB: process_stream processId="abc-123" action="tail" maxBytes=1024
+- Reset cursor: process_stream processId="abc-123" action="reset"
+
+The tool tracks what output has been read to avoid duplicates when using the "read" action.

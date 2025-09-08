@@ -1,0 +1,28 @@
+Send input or signals to a background process.
+
+This tool allows you to interact with processes that are running in the background after being started by the bash tool:
+
+Actions:
+- stdin: Send text input to the process (adds newline automatically)
+- signal: Send a Unix signal to the process (e.g., SIGTERM, SIGINT, SIGHUP)
+- kill: Forcefully terminate the process with SIGKILL
+
+Parameters:
+- processId: The ID returned when a bash command was backgrounded
+- action: The type of interaction (stdin, signal, or kill)
+- data: For stdin - the text to send; For signal - the signal name (default: SIGTERM)
+
+Common signals:
+- SIGTERM: Graceful termination request (default)
+- SIGINT: Interrupt signal (like Ctrl+C)
+- SIGKILL: Force kill (cannot be caught)
+- SIGHUP: Hangup signal
+- SIGUSR1/SIGUSR2: User-defined signals
+
+Usage examples:
+- Send input: process_interact processId="abc-123" action="stdin" data="help"
+- Send Ctrl+C: process_interact processId="abc-123" action="signal" data="SIGINT"
+- Graceful stop: process_interact processId="abc-123" action="signal"
+- Force kill: process_interact processId="abc-123" action="kill"
+
+Note: stdin input is logged in the process output buffer prefixed with [STDIN].

@@ -1,0 +1,29 @@
+List all running background processes started by bash commands.
+
+This tool shows all processes that are currently running in the background after being started by the bash tool. It provides an overview of their status, runtime, and buffer usage.
+
+Information provided for each process:
+- Process ID: Unique identifier for interacting with the process
+- PID: System process ID
+- Command: The command that was executed (truncated if long)
+- Status: Running (🟢) or Stopped (⚫)
+- Runtime: How long the process has been running
+- Buffer Size: Current memory usage for output storage
+- Buffer Status: OK or WARNING (if over 100MB)
+- Unread Bytes: Amount of output not yet read
+- Warning Count: Number of buffer warnings issued
+
+Global statistics:
+- Total buffer size across all processes
+- Number of tracked processes
+
+No parameters required.
+
+Usage:
+process_list
+
+This tool is useful for:
+- Checking which processes are still running
+- Monitoring memory usage of background processes
+- Finding process IDs for interaction with other process tools
+- Identifying processes that may need buffer trimming

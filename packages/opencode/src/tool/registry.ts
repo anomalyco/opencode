@@ -11,6 +11,10 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { ProcessListTool } from "./process-list"
+import { ProcessStreamTool } from "./process-stream"
+import { ProcessInteractTool } from "./process-interact"
+import { ProcessTrimTool } from "./process-trim"
 import type { Agent } from "../agent/agent"
 
 export namespace ToolRegistry {
@@ -28,6 +32,10 @@ export namespace ToolRegistry {
     TodoWriteTool,
     TodoReadTool,
     TaskTool,
+    ProcessListTool,
+    ProcessStreamTool,
+    ProcessInteractTool,
+    ProcessTrimTool,
   ]
 
   export function ids() {

@@ -1,0 +1,24 @@
+Trim the output buffer of a background process to save memory.
+
+This tool helps manage memory usage by reducing the size of output buffers for long-running background processes. It's especially useful when you receive buffer warnings from the bash tool.
+
+Parameters:
+- processId: The ID of the process whose buffer to trim
+- retainSize: Bytes to retain (default: 1MB, maximum: 100MB)
+- retainMode: What to keep - "recent" (default) or "unread" output
+
+Modes:
+- recent: Keeps the most recent N bytes of output, regardless of read status
+- unread: Keeps only unread output up to the specified size
+
+Behavior:
+- Automatically resets the read cursor when trimming
+- Cannot retain more than 100MB (soft limit)
+- Frees memory by discarding older output
+
+Usage examples:
+- Keep last 1MB: process_trim processId="abc-123"
+- Keep last 5MB: process_trim processId="abc-123" retainSize=5242880
+- Keep unread only: process_trim processId="abc-123" retainMode="unread"
+
+Note: This tool is automatically suggested when a process buffer exceeds 100MB. Buffers exceeding 200MB are automatically trimmed to 1MB.
