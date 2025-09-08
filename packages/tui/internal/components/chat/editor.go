@@ -160,7 +160,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
 			statPath := filePath
 			if !filepath.IsAbs(filePath) {
-				statPath = filepath.Join(util.CwdPath, filePath)
+				statPath = filepath.Join(util.RootPath, filePath)
 			}
 			if _, err := os.Stat(statPath); err == nil {
 				attachment := m.createAttachmentFromPath(filePath)
@@ -629,7 +629,7 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 			if end > start {
 				filePath := value[start:end]
 				slog.Debug("test", "filePath", filePath)
-				if _, err := os.Stat(filepath.Join(util.CwdPath, filePath)); err == nil {
+				if _, err := os.Stat(filepath.Join(util.RootPath, filePath)); err == nil {
 					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
@@ -832,7 +832,7 @@ func (m *editorComponent) createAttachmentFromFile(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(ext)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(util.CwdPath, filePath)
+		absolutePath = filepath.Join(util.RootPath, filePath)
 	}
 
 	// For text files, create a simple file reference
@@ -886,7 +886,7 @@ func (m *editorComponent) createAttachmentFromPath(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(extension)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(util.CwdPath, filePath)
+		absolutePath = filepath.Join(util.RootPath, filePath)
 	}
 	return &attachment.Attachment{
 		ID:        uuid.NewString(),
