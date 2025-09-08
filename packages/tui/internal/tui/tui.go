@@ -409,6 +409,14 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case app.SendCommand:
+		// Handle SwitchModelCommand locally
+		if msg.Command == string(commands.SwitchModelCommand) {
+			updated, cmd := a.app.SwitchToModel(msg.Args)
+			a.app = updated
+			cmds = append(cmds, cmd)
+			break
+		}
+
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {
 			parentSession, err := a.app.Client.Session.Get(context.Background(), a.app.Session.ParentID, opencode.SessionGetParams{})

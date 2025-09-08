@@ -123,6 +123,7 @@ const (
 	AppHelpCommand                  CommandName = "app_help"
 	SwitchAgentCommand              CommandName = "switch_agent"
 	SwitchAgentReverseCommand       CommandName = "switch_agent_reverse"
+	SwitchModelCommand              CommandName = "switch_model"
 	EditorOpenCommand               CommandName = "editor_open"
 	SessionNewCommand               CommandName = "session_new"
 	SessionListCommand              CommandName = "session_list"
@@ -303,6 +304,12 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 			Name:        AgentCycleReverseCommand,
 			Description: "previous agent",
 			Keybindings: parseBindings("shift+tab"),
+		},
+		{
+			Name:        SwitchModelCommand,
+			Description: "switch model",
+			Trigger:     []string{"model"},
+			Custom:      true,
 		},
 		{
 			Name:        ThemeListCommand,

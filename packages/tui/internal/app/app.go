@@ -410,6 +410,26 @@ func (a *App) SwitchToAgent(agentName string) (*App, tea.Cmd) {
 	return a, a.SaveState()
 }
 
+func (a *App) SwitchToModel(fullModelID string) (*App, tea.Cmd) {
+	provider, model := findModelByFullID(a.Providers, fullModelID)
+	if provider == nil || model == nil {
+		return a, toast.NewErrorToast(fmt.Sprintf("Model not found: %s", fullModelID))
+	}
+
+	a.Provider = provider
+	a.Model = model
+	a.State.AgentModel[a.Agent().Name] = AgentModel{
+		ProviderID: provider.ID,
+		ModelID:    model.ID,
+	}
+	a.State.UpdateModelUsage(provider.ID, model.ID)
+
+	return a, tea.Sequence(
+		a.SaveState(),
+		toast.NewSuccessToast(fmt.Sprintf("Switched to %s (%s)", model.Name, provider.Name)),
+	)
+}
+
 // findModelByFullID finds a model by its full ID in the format "provider/model"
 func findModelByFullID(
 	providers []opencode.Provider,

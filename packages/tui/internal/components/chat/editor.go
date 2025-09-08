@@ -505,7 +505,18 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 		expandedValue = expandedValue[1:] // Remove the "/"
 		commandName := strings.Split(expandedValue, " ")[0]
-		command := m.app.Commands[commands.CommandName(commandName)]
+		var command = m.app.Commands[commands.CommandName(commandName)]
+		if command.Name == "" {
+			for _, cmd := range m.app.Commands {
+				if cmd.MatchesTrigger(commandName) {
+					command = cmd
+				}
+			}
+		}
+		if command.Name == "" {
+			return m, util.CmdHandler(toast.NewErrorToast("Unknown command: /" + commandName + " Use /help to list available commands."))
+		}
+
 		if command.Custom {
 			args := ""
 			if strings.HasPrefix(expandedValue, command.PrimaryTrigger()+" ") {
