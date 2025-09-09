@@ -22,7 +22,7 @@ const MODELS = {
   //    headerMappings: {},
   //  },
   "qwen/qwen3-coder": {
-    id: "qwen/qwen3-coder",
+    id: "qwen/qwen3-coder" as const,
     auth: true,
     api: "https://inference.baseten.co",
     apiKey: Resource.BASETEN_API_KEY.value,
@@ -37,7 +37,7 @@ const MODELS = {
     headerMappings: {},
   },
   "grok-code": {
-    id: "x-ai/grok-code-fast-1",
+    id: "x-ai/grok-code-fast-1" as const,
     auth: false,
     api: "https://api.x.ai",
     apiKey: Resource.XAI_API_KEY.value,
@@ -68,6 +68,11 @@ export async function POST(input: APIEvent) {
   try {
     const url = new URL(input.request.url)
     const body = await input.request.json()
+    logMetric({
+      is_tream: !!body.stream,
+      session: input.request.headers.get("x-opencode-session"),
+      request: input.request.headers.get("x-opencode-request"),
+    })
     const MODEL = validateModel()
     const apiKey = await authenticate()
     const isFree = FREE_WORKSPACES.includes(apiKey?.workspaceID ?? "")
@@ -106,9 +111,11 @@ export async function POST(input: APIEvent) {
 
     // Handle non-streaming response
     if (!body.stream) {
-      const body = await res.json()
-      await trackUsage(body)
-      return new Response(JSON.stringify(body), {
+      const json = await res.json()
+      const body = JSON.stringify(json)
+      logMetric({ response_length: body.length })
+      await trackUsage(json)
+      return new Response(body, {
         status: res.status,
         statusText: res.statusText,
         headers: resHeaders,
@@ -121,16 +128,26 @@ export async function POST(input: APIEvent) {
         const reader = res.body?.getReader()
         const decoder = new TextDecoder()
         let buffer = ""
+        let responseLength = 0
+        let startTimestamp = Date.now()
+        let receivedFirstByte = false
 
         function pump(): Promise<void> {
           return (
             reader?.read().then(async ({ done, value }) => {
               if (done) {
+                logMetric({ response_length: responseLength })
                 c.close()
                 return
               }
 
+              if (!receivedFirstByte) {
+                receivedFirstByte = true
+                logMetric({ time_to_first_byte: Date.now() - startTimestamp })
+              }
+
               buffer += decoder.decode(value, { stream: true })
+              responseLength += value.length
 
               const parts = buffer.split("\n\n")
               buffer = parts.pop() ?? ""
@@ -169,7 +186,9 @@ export async function POST(input: APIEvent) {
       if (!(body.model in MODELS)) {
         throw new ModelError(`Model ${body.model} not supported`)
       }
-      return MODELS[body.model as keyof typeof MODELS]
+      const model = MODELS[body.model as keyof typeof MODELS]
+      logMetric({ model: model.id })
+      return model
     }
 
     async function authenticate() {
@@ -190,9 +209,12 @@ export async function POST(input: APIEvent) {
         )
 
         if (!key) throw new AuthError("Invalid API key.")
+        logMetric({
+          api_key: key.id,
+          workspace: key.workspaceID,
+        })
         return key
       } catch (e) {
-        console.log(e)
         // ignore error if model does not require authentication
         if (!MODEL.auth) return
         throw e
@@ -216,10 +238,6 @@ export async function POST(input: APIEvent) {
     }
 
     async function trackUsage(chunk: any) {
-      console.log(`trackUsage ${apiKey}`)
-
-      if (!apiKey) return
-
       const usage = chunk.usage
       const inputTokens = usage.prompt_tokens ?? 0
       const outputTokens = usage.completion_tokens ?? 0
@@ -228,14 +246,30 @@ export async function POST(input: APIEvent) {
       //const cacheWriteTokens = providerMetadata?.["anthropic"]?.["cacheCreationInputTokens"] ?? 0
       const cacheWriteTokens = 0
 
-      const inputCost = MODEL.cost.input * inputTokens
-      const outputCost = MODEL.cost.output * outputTokens
-      const reasoningCost = MODEL.cost.reasoning * reasoningTokens
-      const cacheReadCost = MODEL.cost.cacheRead * cacheReadTokens
-      const cacheWriteCost = MODEL.cost.cacheWrite * cacheWriteTokens
-      const costInCents = (inputCost + outputCost + reasoningCost + cacheReadCost + cacheWriteCost) * 100
-      const cost = isFree ? 0 : centsToMicroCents(costInCents)
+      const inputCost = MODEL.cost.input * inputTokens * 100
+      const outputCost = MODEL.cost.output * outputTokens * 100
+      const reasoningCost = MODEL.cost.reasoning * reasoningTokens * 100
+      const cacheReadCost = MODEL.cost.cacheRead * cacheReadTokens * 100
+      const cacheWriteCost = MODEL.cost.cacheWrite * cacheWriteTokens * 100
+      const totalCostInCent = inputCost + outputCost + reasoningCost + cacheReadCost + cacheWriteCost
 
+      logMetric({
+        "tokens.input": inputTokens,
+        "tokens.output": outputTokens,
+        "tokens.reasoning": reasoningTokens,
+        "tokens.cache_read": cacheReadTokens,
+        "tokens.cache_write": cacheWriteTokens,
+        "cost.input": Math.round(inputCost),
+        "cost.output": Math.round(outputCost),
+        "cost.reasoning": Math.round(reasoningCost),
+        "cost.cache_read": Math.round(cacheReadCost),
+        "cost.cache_write": Math.round(cacheWriteCost),
+        "cost.total": Math.round(totalCostInCent),
+      })
+
+      if (!apiKey) return
+
+      const cost = isFree ? 0 : centsToMicroCents(totalCostInCent)
       await Database.transaction(async (tx) => {
         await tx.insert(UsageTable).values({
           workspaceID: apiKey.workspaceID,
@@ -264,47 +298,18 @@ export async function POST(input: APIEvent) {
       )
     }
   } catch (error: any) {
-    if (error instanceof AuthError) {
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: error.message,
-            type: "invalid_request_error",
-            param: null,
-            code: "unauthorized",
-          },
-        }),
-        {
-          status: 401,
-        },
-      )
-    }
-
-    if (error instanceof CreditsError) {
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: error.message,
-            type: "insufficient_quota",
-            param: null,
-            code: "insufficient_quota",
-          },
-        }),
-        {
-          status: 401,
-        },
-      )
-    }
-
-    if (error instanceof ModelError) {
-      return new Response(JSON.stringify({ error: { message: error.message } }), {
-        status: 401,
-      })
-    }
-
-    console.log(error)
-    return new Response(JSON.stringify({ error: { message: error.message } }), {
-      status: 500,
+    logMetric({
+      "error.type": error.constructor.name,
+      "error.message": error.message,
     })
+
+    if (error instanceof AuthError || error instanceof CreditsError || error instanceof ModelError)
+      return new Response(JSON.stringify({ error: { message: error.message } }), { status: 401 })
+
+    return new Response(JSON.stringify({ error: { message: error.message } }), { status: 500 })
+  }
+
+  function logMetric(values: Record<string, any>) {
+    console.log(`_metric:${JSON.stringify(values)}`)
   }
 }

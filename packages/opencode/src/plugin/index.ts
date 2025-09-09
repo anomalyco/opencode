@@ -7,6 +7,7 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { ToolRegistry } from "../tool/registry"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -24,6 +25,8 @@ export namespace Plugin {
       worktree: Instance.worktree,
       directory: Instance.directory,
       $: Bun.$,
+      Tool: await import("../tool/tool").then(m => m.Tool),
+      z: await import("zod").then(m => m.z),
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
@@ -75,6 +78,11 @@ export namespace Plugin {
     const config = await Config.get()
     for (const hook of hooks) {
       await hook.config?.(config)
+      // Let plugins register tools at startup
+      await hook["tool.register"]?.({}, { 
+        registerHTTP: ToolRegistry.registerHTTP,
+        register: ToolRegistry.register 
+      })
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)

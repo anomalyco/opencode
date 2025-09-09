@@ -50,6 +50,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "HONEYCOMB_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "STRIPE_SECRET_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -76,6 +80,7 @@ declare module "sst" {
     "AuthApi": cloudflare.Service
     "AuthStorage": cloudflare.KVNamespace
     "Bucket": cloudflare.R2Bucket
+    "LogProcessor": cloudflare.Service
   }
 }
 

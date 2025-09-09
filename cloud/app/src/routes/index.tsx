@@ -113,7 +113,7 @@ export default function Home() {
             <h3 data-component="title">npm</h3>
             <button data-copy data-slot="button">
               <span>
-                npm install -g&nbsp;<strong>opencode-ai</strong>
+                npm install -g <strong>opencode-ai</strong>
               </span>
               <CopyStatus />
             </button>
@@ -122,7 +122,7 @@ export default function Home() {
             <h3 data-component="title">bun</h3>
             <button data-copy data-slot="button">
               <span>
-                bun install -g&nbsp;<strong>opencode-ai</strong>
+                bun install -g <strong>opencode-ai</strong>
               </span>
               <CopyStatus />
             </button>
@@ -131,7 +131,7 @@ export default function Home() {
             <h3 data-component="title">homebrew</h3>
             <button data-copy data-slot="button">
               <span>
-                brew install&nbsp;<strong>sst/tap/opencode</strong>
+                brew install <strong>sst/tap/opencode</strong>
               </span>
               <CopyStatus />
             </button>
@@ -140,7 +140,7 @@ export default function Home() {
             <h3 data-component="title">paru</h3>
             <button data-copy data-slot="button">
               <span>
-                paru -S&nbsp;<strong>opencode-bin</strong>
+                paru -S <strong>opencode-bin</strong>
               </span>
               <CopyStatus />
             </button>

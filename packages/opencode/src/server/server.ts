@@ -23,6 +23,8 @@ import { Auth } from "../auth"
 import { Command } from "../command"
 import { Global } from "../global"
 import { ProjectRoute } from "./project"
+import { ToolRegistry } from "../tool/registry"
+import { zodToJsonSchema } from "zod-to-json-schema"
 
 const ERRORS = {
   400: {
@@ -45,6 +47,29 @@ const ERRORS = {
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+
+  // Schemas for HTTP tool registration
+  const HttpParamSpec = z
+    .object({
+      type: z.enum(["string", "number", "boolean", "array"]),
+      description: z.string().optional(),
+      optional: z.boolean().optional(),
+      items: z.enum(["string", "number", "boolean"]).optional(),
+    })
+    .openapi({ ref: "HttpParamSpec" })
+
+  const HttpToolRegistration = z
+    .object({
+      id: z.string(),
+      description: z.string(),
+      parameters: z.object({
+        type: z.literal("object"),
+        properties: z.record(HttpParamSpec),
+      }),
+      callbackUrl: z.string(),
+      headers: z.record(z.string(), z.string()).optional(),
+    })
+    .openapi({ ref: "HttpToolRegistration" })
 
   export const Event = {
     Connected: Bus.event("server.connected", z.object({})),
@@ -164,6 +189,99 @@ export namespace Server {
       }),
       async (c) => {
         return c.json(await Config.get())
+      },
+    )
+    .post(
+      "/experimental/tool/register",
+      describeRoute({
+        description: "Register a new HTTP callback tool",
+        operationId: "tool.register",
+        responses: {
+          200: {
+            description: "Tool registered successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...ERRORS,
+        },
+      }),
+      zValidator("json", HttpToolRegistration),
+      async (c) => {
+        ToolRegistry.registerHTTP(c.req.valid("json"))
+        return c.json(true)
+      },
+    )
+    .get(
+      "/experimental/tool/ids",
+      describeRoute({
+        description: "List all tool IDs (including built-in and dynamically registered)",
+        operationId: "tool.ids",
+        responses: {
+          200: {
+            description: "Tool IDs",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.string()).openapi({ ref: "ToolIDs" })),
+              },
+            },
+          },
+          ...ERRORS,
+        },
+      }),
+      async (c) => {
+        return c.json(ToolRegistry.ids())
+      },
+    )
+    .get(
+      "/experimental/tool",
+      describeRoute({
+        description: "List tools with JSON schema parameters for a provider/model",
+        operationId: "tool.list",
+        responses: {
+          200: {
+            description: "Tools",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z
+                    .array(
+                      z
+                        .object({
+                          id: z.string(),
+                          description: z.string(),
+                          parameters: z.any(),
+                        })
+                        .openapi({ ref: "ToolListItem" }),
+                    )
+                    .openapi({ ref: "ToolList" }),
+                ),
+              },
+            },
+          },
+          ...ERRORS,
+        },
+      }),
+      zValidator(
+        "query",
+        z.object({
+          provider: z.string(),
+          model: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { provider, model } = c.req.valid("query")
+        const tools = await ToolRegistry.tools(provider, model)
+        return c.json(
+          tools.map((t) => ({
+            id: t.id,
+            description: t.description,
+            // Handle both Zod schemas and plain JSON schemas
+            parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+          })),
+        )
       },
     )
     .get(

@@ -7,7 +7,7 @@ import { domain } from "./stage"
 
 const cluster = planetscale.getDatabaseOutput({
   name: "opencode",
-  organization: "sst",
+  organization: "anomalyco",
 })
 
 const branch =
@@ -114,6 +114,15 @@ const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
 // CONSOLE
 ////////////////
 
+let logProcessor
+if ($app.stage === "production" || $app.stage === "frank") {
+  const HONEYCOMB_API_KEY = new sst.Secret("HONEYCOMB_API_KEY")
+  logProcessor = new sst.cloudflare.Worker("LogProcessor", {
+    handler: "cloud/function/src/log-processor.ts",
+    link: [HONEYCOMB_API_KEY],
+  })
+}
+
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "cloud/app",
@@ -135,9 +144,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     server: {
       transform: {
         worker: {
-          placement: {
-            mode: "smart",
-          },
+          placement: { mode: "smart" },
+          tailConsumers: logProcessor ? [{ service: logProcessor.nodes.worker.scriptName }] : [],
         },
       },
     },

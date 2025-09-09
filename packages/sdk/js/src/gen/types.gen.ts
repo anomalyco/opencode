@@ -1053,17 +1053,49 @@ export type McpRemoteConfig = {
 
 export type LayoutConfig = "auto" | "stretch"
 
+export type _Error = {
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type HttpToolRegistration = {
+  id: string
+  description: string
+  parameters: {
+    type: "object"
+    properties: {
+      [key: string]: HttpParamSpec
+    }
+  }
+  callbackUrl: string
+  headers?: {
+    [key: string]: string
+  }
+}
+
+export type HttpParamSpec = {
+  type: "string" | "number" | "boolean" | "array"
+  description?: string
+  optional?: boolean
+  items?: "string" | "number" | "boolean"
+}
+
+export type ToolIds = Array<string>
+
+export type ToolList = Array<ToolListItem>
+
+export type ToolListItem = {
+  id: string
+  description: string
+  parameters?: unknown
+}
+
 export type Path = {
   state: string
   config: string
   worktree: string
   directory: string
-}
-
-export type _Error = {
-  data: {
-    [key: string]: unknown
-  }
 }
 
 export type TextPartInput = {
@@ -1275,6 +1307,89 @@ export type ConfigGetResponses = {
 }
 
 export type ConfigGetResponse = ConfigGetResponses[keyof ConfigGetResponses]
+
+export type ToolRegisterData = {
+  body?: HttpToolRegistration
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/tool/register"
+}
+
+export type ToolRegisterErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ToolRegisterError = ToolRegisterErrors[keyof ToolRegisterErrors]
+
+export type ToolRegisterResponses = {
+  /**
+   * Tool registered successfully
+   */
+  200: boolean
+}
+
+export type ToolRegisterResponse = ToolRegisterResponses[keyof ToolRegisterResponses]
+
+export type ToolIdsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/tool/ids"
+}
+
+export type ToolIdsErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ToolIdsError = ToolIdsErrors[keyof ToolIdsErrors]
+
+export type ToolIdsResponses = {
+  /**
+   * Tool IDs
+   */
+  200: ToolIds
+}
+
+export type ToolIdsResponse = ToolIdsResponses[keyof ToolIdsResponses]
+
+export type ToolListData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    provider: string
+    model: string
+  }
+  url: "/experimental/tool"
+}
+
+export type ToolListErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ToolListError = ToolListErrors[keyof ToolListErrors]
+
+export type ToolListResponses = {
+  /**
+   * Tools
+   */
+  200: ToolList
+}
+
+export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
 
 export type PathGetData = {
   body?: never

@@ -10,6 +10,15 @@ import type {
   EventSubscribeResponses,
   ConfigGetData,
   ConfigGetResponses,
+  ToolRegisterData,
+  ToolRegisterResponses,
+  ToolRegisterErrors,
+  ToolIdsData,
+  ToolIdsResponses,
+  ToolIdsErrors,
+  ToolListData,
+  ToolListResponses,
+  ToolListErrors,
   PathGetData,
   PathGetResponses,
   SessionListData,
@@ -173,6 +182,42 @@ class Config extends _HeyApiClient {
   public providers<ThrowOnError extends boolean = false>(options?: Options<ConfigProvidersData, ThrowOnError>) {
     return (options?.client ?? this._client).get<ConfigProvidersResponses, unknown, ThrowOnError>({
       url: "/config/providers",
+      ...options,
+    })
+  }
+}
+
+class Tool extends _HeyApiClient {
+  /**
+   * Register a new HTTP callback tool
+   */
+  public register<ThrowOnError extends boolean = false>(options?: Options<ToolRegisterData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<ToolRegisterResponses, ToolRegisterErrors, ThrowOnError>({
+      url: "/experimental/tool/register",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * List all tool IDs (including built-in and dynamically registered)
+   */
+  public ids<ThrowOnError extends boolean = false>(options?: Options<ToolIdsData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<ToolIdsResponses, ToolIdsErrors, ThrowOnError>({
+      url: "/experimental/tool/ids",
+      ...options,
+    })
+  }
+
+  /**
+   * List tools with JSON schema parameters for a provider/model
+   */
+  public list<ThrowOnError extends boolean = false>(options: Options<ToolListData, ThrowOnError>) {
+    return (options.client ?? this._client).get<ToolListResponses, ToolListErrors, ThrowOnError>({
+      url: "/experimental/tool",
       ...options,
     })
   }
@@ -649,6 +694,7 @@ export class OpencodeClient extends _HeyApiClient {
   project = new Project({ client: this._client })
   event = new Event({ client: this._client })
   config = new Config({ client: this._client })
+  tool = new Tool({ client: this._client })
   path = new Path({ client: this._client })
   session = new Session({ client: this._client })
   command = new Command({ client: this._client })

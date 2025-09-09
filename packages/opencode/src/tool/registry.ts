@@ -12,9 +12,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
+import { Tool } from "./tool"
 
 export namespace ToolRegistry {
-  const ALL = [
+  // Built-in tools that ship with opencode
+  const BUILTIN = [
     InvalidTool,
     BashTool,
     EditTool,
@@ -30,13 +32,103 @@ export namespace ToolRegistry {
     TaskTool,
   ]
 
+  // Extra tools registered at runtime (via plugins)
+  const EXTRA: Tool.Info[] = []
+
+  // Tools registered via HTTP callback (via SDK/API)
+  const HTTP: Tool.Info[] = []
+
+  export type HttpParamSpec = {
+    type: "string" | "number" | "boolean" | "array"
+    description?: string
+    optional?: boolean
+    items?: "string" | "number" | "boolean"
+  }
+  export type HttpToolRegistration = {
+    id: string
+    description: string
+    parameters: {
+      type: "object"
+      properties: Record<string, HttpParamSpec>
+    }
+    callbackUrl: string
+    headers?: Record<string, string>
+  }
+
+  function buildZodFromHttpSpec(spec: HttpToolRegistration["parameters"]) {
+    const shape: Record<string, z.ZodTypeAny> = {}
+    for (const [key, val] of Object.entries(spec.properties)) {
+      let base: z.ZodTypeAny
+      switch (val.type) {
+        case "string":
+          base = z.string()
+          break
+        case "number":
+          base = z.number()
+          break
+        case "boolean":
+          base = z.boolean()
+          break
+        case "array":
+          if (!val.items) throw new Error(`array spec for ${key} requires 'items'`)
+          base = z.array(
+            val.items === "string" ? z.string() : val.items === "number" ? z.number() : z.boolean(),
+          )
+          break
+        default:
+          base = z.any()
+      }
+      if (val.description) base = base.describe(val.description)
+      shape[key] = val.optional ? base.optional() : base
+    }
+    return z.object(shape)
+  }
+
+  export function register(tool: Tool.Info) {
+    // Prevent duplicates by id (replace existing)
+    const idx = EXTRA.findIndex((t) => t.id === tool.id)
+    if (idx >= 0) EXTRA.splice(idx, 1, tool)
+    else EXTRA.push(tool)
+  }
+
+  export function registerHTTP(input: HttpToolRegistration) {
+    const parameters = buildZodFromHttpSpec(input.parameters)
+    const info = Tool.define(input.id, {
+      description: input.description,
+      parameters,
+      async execute(args) {
+        const res = await fetch(input.callbackUrl, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(input.headers ?? {}) },
+          body: JSON.stringify({ args }),
+        })
+        if (!res.ok) {
+          throw new Error(`HTTP tool callback failed: ${res.status} ${await res.text()}`)
+        }
+        const json = (await res.json()) as { title?: string; output: string; metadata?: Record<string, any> }
+        return {
+          title: json.title ?? input.id,
+          output: json.output ?? "",
+          metadata: (json.metadata ?? {}) as any,
+        }
+      },
+    })
+    const idx = HTTP.findIndex((t) => t.id === info.id)
+    if (idx >= 0) HTTP.splice(idx, 1, info)
+    else HTTP.push(info)
+  }
+
+  function allTools(): Tool.Info[] {
+    return [...BUILTIN, ...EXTRA, ...HTTP]
+  }
+
   export function ids() {
-    return ALL.map((t) => t.id)
+    return allTools().map((t) => t.id)
   }
 
   export async function tools(providerID: string, _modelID: string) {
     const result = await Promise.all(
-      ALL.map(async (t) => ({
+      allTools().map(async (t) => ({
         id: t.id,
         ...(await t.init()),
       })),
@@ -45,21 +137,21 @@ export namespace ToolRegistry {
     if (providerID === "openai") {
       return result.map((t) => ({
         ...t,
-        parameters: optionalToNullable(t.parameters),
+        parameters: optionalToNullable(t.parameters as unknown as z.ZodTypeAny),
       }))
     }
 
     if (providerID === "azure") {
       return result.map((t) => ({
         ...t,
-        parameters: optionalToNullable(t.parameters),
+        parameters: optionalToNullable(t.parameters as unknown as z.ZodTypeAny),
       }))
     }
 
     if (providerID === "google") {
       return result.map((t) => ({
         ...t,
-        parameters: sanitizeGeminiParameters(t.parameters),
+        parameters: sanitizeGeminiParameters(t.parameters as unknown as z.ZodTypeAny),
       }))
     }
 
@@ -68,7 +160,7 @@ export namespace ToolRegistry {
 
   export async function enabled(
     _providerID: string,
-    modelID: string,
+    _modelID: string,
     agent: Agent.Info,
   ): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
@@ -84,11 +176,6 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
-    }
-
-    if (modelID.toLowerCase().includes("qwen")) {
-      result["todowrite"] = false
-      result["todoread"] = false
     }
 
     return result
