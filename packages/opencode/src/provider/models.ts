@@ -28,6 +28,7 @@ export namespace ModelsDev {
         context: z.number(),
         output: z.number(),
       }),
+      experimental: z.boolean().optional(),
       options: z.record(z.any()),
     })
     .openapi({

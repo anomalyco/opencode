@@ -21,8 +21,23 @@ const MODELS = {
   //    },
   //    headerMappings: {},
   //  },
-  "qwen/qwen3-coder": {
-    id: "qwen/qwen3-coder" as const,
+  "gpt-5": {
+    id: "gpt-5" as const,
+    auth: true,
+    api: "https://inference.baseten.co",
+    apiKey: Resource.BASETEN_API_KEY.value,
+    model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    cost: {
+      input: 0.00000125,
+      output: 0.00001,
+      reasoning: 0,
+      cacheRead: 0.000000125,
+      cacheWrite: 0,
+    },
+    headerMappings: {},
+  },
+  "qwen3-coder": {
+    id: "qwen3-coder" as const,
     auth: true,
     api: "https://inference.baseten.co",
     apiKey: Resource.BASETEN_API_KEY.value,
@@ -36,8 +51,23 @@ const MODELS = {
     },
     headerMappings: {},
   },
+  "kimi-k2": {
+    id: "kimi-k2" as const,
+    auth: true,
+    api: "https://inference.baseten.co",
+    apiKey: Resource.BASETEN_API_KEY.value,
+    model: "moonshotai/Kimi-K2-Instruct-0905",
+    cost: {
+      input: 0.0000006,
+      output: 0.0000025,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    headerMappings: {},
+  },
   "grok-code": {
-    id: "x-ai/grok-code-fast-1" as const,
+    id: "grok-code" as const,
     auth: false,
     api: "https://api.x.ai",
     apiKey: Resource.XAI_API_KEY.value,
@@ -53,6 +83,22 @@ const MODELS = {
       "x-grok-conv-id": "x-opencode-session",
       "x-grok-req-id": "x-opencode-request",
     },
+  },
+  // deprecated
+  "qwen/qwen3-coder": {
+    id: "qwen/qwen3-coder" as const,
+    auth: true,
+    api: "https://inference.baseten.co",
+    apiKey: Resource.BASETEN_API_KEY.value,
+    model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    cost: {
+      input: 0.00000038,
+      output: 0.00000153,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+    },
+    headerMappings: {},
   },
 }
 
