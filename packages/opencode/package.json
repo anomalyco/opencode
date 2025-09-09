@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.6.9",
+  "version": "0.6.10",
   "name": "lash-cli",
   "description": "lash - The AI coding agent built for the terminal",
   "type": "module",
