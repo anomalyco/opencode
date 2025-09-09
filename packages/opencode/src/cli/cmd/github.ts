@@ -78,17 +78,38 @@ export const GithubInstallCommand = cmd({
         // match https or git pattern
         // ie. https://github.com/sst/opencode.git
         // ie. https://github.com/sst/opencode
+        // ie. https://company.ghe.com/sst/opencode.git
+        // ie. https://company.ghe.com/sst/opencode
         // ie. git@github.com:sst/opencode.git
         // ie. git@github.com:sst/opencode
+        // ie. git@company.ghe.com:sst/opencode.git
+        // ie. git@company.ghe.com:sst/opencode
         // ie. ssh://git@github.com/sst/opencode.git
         // ie. ssh://git@github.com/sst/opencode
-        const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
-        if (!parsed) {
-          prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
+        // ie. ssh://git@company.ghe.com/sst/opencode.git
+        // ie. ssh://git@company.ghe.com/sst/opencode
+        const githubComMatch = info.match(
+          /^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/,
+        )
+        const gheMatch = info.match(
+          /^(?:(?:https?|ssh):\/\/)?(?:git@)?([^:/]+\.ghe\.com)[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/,
+        )
+
+        let owner: string, repo: string, githubHost: string
+
+        if (githubComMatch) {
+          ;[, owner, repo] = githubComMatch
+          githubHost = "github.com"
+        } else if (gheMatch) {
+          ;[, githubHost, owner, repo] = gheMatch
+        } else {
+          prompts.log.error(
+            `Could not find GitHub repository. Please run this command from a GitHub or GitHub Enterprise repository.`,
+          )
           throw new UI.CancelledError()
         }
-        const [, owner, repo] = parsed
-        return { owner, repo, root: Instance.worktree }
+
+        return { owner, repo, root: Instance.worktree, githubHost }
       }
 
       async function promptProvider() {
@@ -96,10 +117,11 @@ export const GithubInstallCommand = cmd({
           opencode: 0,
           anthropic: 1,
           "github-copilot": 2,
-          openai: 3,
-          google: 4,
-          openrouter: 5,
-          vercel: 6,
+          "github-copilot-enterprise": 3,
+          openai: 4,
+          google: 5,
+          openrouter: 6,
+          vercel: 7,
         }
         let provider = await prompts.select({
           message: "Select provider",
@@ -149,7 +171,15 @@ export const GithubInstallCommand = cmd({
         const s = prompts.spinner()
         s.start("Installing GitHub app")
 
-        // Get installation
+        // For GitHub Enterprise, we can't automatically detect installations
+        if (app.githubHost !== "github.com") {
+          s.stop("GitHub Enterprise detected")
+          prompts.log.warn("For GitHub Enterprise, you need to:")
+          prompts.log.warn(`- Contact your GitHub Enterprise administrator to install the opencode agent app`)
+          prompts.log.info("Skipping app installation for GitHub Enterprise...")
+          return
+        }
+
         const installation = await getInstallation()
         if (installation) return s.stop("GitHub app already installed")
 

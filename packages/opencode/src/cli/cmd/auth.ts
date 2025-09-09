@@ -9,6 +9,7 @@ import os from "os"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { AuthGithubCopilot } from "../../auth/github-copilot"
 
 export const AuthCommand = cmd({
   command: "auth",
@@ -136,6 +137,10 @@ export const AuthLoginCommand = cmd({
       })
 
       if (prompts.isCancel(provider)) throw new UI.CancelledError()
+
+      if (provider === "github-copilot") {
+        return await handleGithubCopilotAuth(provider)
+      }
 
       const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
       if (plugin && plugin.auth) {
@@ -292,3 +297,89 @@ export const AuthLogoutCommand = cmd({
     prompts.outro("Logout successful")
   },
 })
+
+async function handleGithubCopilotAuth(providerID: string) {
+  try {
+    const deploymentType = await prompts.select({
+      message: "Select GitHub deployment type",
+      options: [
+        {
+          label: "GitHub.com",
+          value: "github.com",
+          hint: "Public",
+        },
+        {
+          label: "GitHub Enterprise Server",
+          value: "enterprise",
+          hint: "Enterprise",
+        },
+      ],
+    })
+
+    if (prompts.isCancel(deploymentType)) throw new UI.CancelledError()
+
+    let enterpriseUrl: string | undefined
+    let actualProviderID = providerID
+
+    if (deploymentType === "enterprise") {
+      const enterpriseHost = await prompts.text({
+        message: "Enter your GitHub Enterprise Server domain",
+        placeholder: "company.ghe.com",
+        validate: (value) => {
+          if (!value) return "Domain is required"
+          if (value.includes("://")) {
+            return "Please enter just the domain (without https://)"
+          }
+          try {
+            // Test if it's a valid domain by trying to create a URL
+            new URL(`https://${value}`)
+            return undefined
+          } catch {
+            return "Please enter a valid domain"
+          }
+        },
+      })
+
+      if (prompts.isCancel(enterpriseHost)) throw new UI.CancelledError()
+
+      enterpriseUrl = `https://${enterpriseHost}`
+
+      actualProviderID = "github-copilot-enterprise"
+    }
+
+    const authorize = await AuthGithubCopilot.authorize(actualProviderID, enterpriseUrl)
+
+    prompts.log.info(`Go to: ${authorize.verification}`)
+    prompts.log.info(`Enter code: ${authorize.user}`)
+
+    const spinner = prompts.spinner()
+    spinner.start("Waiting for authorization...")
+
+    let attempts = 0
+    const maxAttempts = Math.ceil(authorize.expiry / authorize.interval)
+
+    while (attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, authorize.interval * 1000))
+
+      const result = await AuthGithubCopilot.poll(authorize.device, actualProviderID, enterpriseUrl)
+
+      if (result === "complete") {
+        spinner.stop("Login successful")
+        prompts.outro("Done")
+        return
+      } else if (result === "failed") {
+        spinner.stop("Failed to authorize", 1)
+        prompts.outro("Authentication failed")
+        return
+      }
+
+      attempts++
+    }
+
+    spinner.stop("Authorization timed out", 1)
+    prompts.outro("Please try again")
+  } catch (error) {
+    prompts.log.error(`Authentication failed: ${error instanceof Error ? error.message : String(error)}`)
+    prompts.outro("Done")
+  }
+}
