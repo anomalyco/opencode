@@ -187,6 +187,32 @@ export namespace Provider {
         },
       }
     },
+    "github-copilot-enterprise": async (provider) => {
+      const { AuthGithubCopilot } = await import("../auth/github-copilot")
+      const { Auth } = await import("../auth")
+
+      const authInfo = await Auth.get("github-copilot-enterprise")
+      const enterpriseUrl = authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined
+
+      let baseURL = provider?.api
+      if (enterpriseUrl) {
+        const domain = enterpriseUrl.replace(/^https?:\/\//, "")
+        baseURL = `https://copilot-api.${domain}`
+      }
+
+      const token = await AuthGithubCopilot.access("github-copilot-enterprise")
+
+      return {
+        autoload: false,
+        options: {
+          baseURL,
+          ...(token && { apiKey: token }),
+          headers: {
+            "Editor-Version": "vscode/1.103.2",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -234,6 +260,18 @@ export namespace Provider {
     }
 
     const configProviders = Object.entries(config.provider ?? {})
+
+    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
+    if (database["github-copilot"]) {
+      const githubCopilot = database["github-copilot"]
+      database["github-copilot-enterprise"] = {
+        ...githubCopilot,
+        id: "github-copilot-enterprise",
+        name: "GitHub Copilot Enterprise",
+        // Enterprise uses a different API endpoint - will be set dynamically based on auth
+        api: undefined,
+      }
+    }
 
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
@@ -305,6 +343,9 @@ export namespace Provider {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, { apiKey: provider.key }, "api")
+      }
+      if (providerID === "github-copilot-enterprise" && provider.type === "oauth") {
+        mergeProvider(providerID, {}, "api")
       }
     }
 
