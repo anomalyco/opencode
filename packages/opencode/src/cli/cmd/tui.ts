@@ -113,9 +113,42 @@ export const TuiCommand = cmd({
 
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
         if (!tui) {
-          UI.error("TUI binary not found in embedded files. This is a build issue.")
-          UI.error("Please try installing from source or report this issue.")
-          return "done"
+          if (Installation.isDev()) {
+            // In development mode, fall back to Go source if TUI binary not embedded
+            UI.println("TUI binary not embedded, using Go source (development mode)")
+            const cmd = ["go", "run", "./main.go"]
+            const cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+            Log.Default.info("tui", { cmd, cwd })
+            const proc = Bun.spawn({
+              cmd: [
+                ...cmd,
+                ...(args.model ? ["--model", args.model] : []),
+                ...(args.prompt ? ["--prompt", args.prompt] : []),
+                ...(args.agent ? ["--agent", args.agent] : []),
+                ...(sessionID ? ["--session", sessionID] : []),
+              ],
+              cwd,
+              stdout: "inherit",
+              stderr: "inherit",
+              stdin: "inherit",
+              env: {
+                ...process.env,
+                CGO_ENABLED: "0",
+                OPENCODE_SERVER: server.url.toString(),
+                OPENCODE_PROJECT: JSON.stringify(Instance.project),
+              },
+              onExit: () => {
+                server.stop()
+              },
+            })
+            await proc.exited
+            server.stop()
+            return "done"
+          } else {
+            UI.error("TUI binary not found in embedded files. This is a build issue.")
+            UI.error("Please try installing from source or report this issue.")
+            return "done"
+          }
         }
         
         let binaryName = tui.name

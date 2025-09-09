@@ -10,6 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bun run --conditions=development ./src/index.ts",
+    "build:dev": "mkdir -p dist/dev && cd ../tui && go build -ldflags='-s -w -X main.Version=dev' -o ../opencode/dist/dev/tui ./cmd/opencode/main.go && cd ../opencode && bun build --define OPENCODE_VERSION='dev' --compile --target=bun --outfile=dist/dev/lash ./src/index.ts --embed ./dist/dev/tui && rm dist/dev/tui",
     "build": "bun run ./script/build-binaries.ts",
     "prepublishOnly": "bun run ./script/prepare-npm.ts",
     "release": "bun run ./script/release.ts",
