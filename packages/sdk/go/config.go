@@ -899,8 +899,8 @@ func init() {
 }
 
 type ConfigLspDisabled struct {
-	Disabled ConfigLspDisabledDisabled `json:"disabled,required"`
-	JSON     configLspDisabledJSON     `json:"-"`
+	Disabled bool                   `json:"disabled,required"`
+	JSON     configLspDisabledJSON `json:"-"`
 }
 
 // configLspDisabledJSON contains the JSON metadata for the struct
