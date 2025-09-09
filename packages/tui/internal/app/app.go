@@ -922,6 +922,12 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 			if err != nil && output == "" {
 				output = fmt.Sprintf("Error: %v", err)
 			}
+
+			// Normalize carriage returns so progress outputs are fully visible
+			if output != "" {
+				output = strings.ReplaceAll(output, "\r\n", "\n")
+				output = strings.ReplaceAll(output, "\r", "\n")
+			}
 			assistantMessageID := id.Ascending(id.Message)
 			assistantMessage := Message{
 				Info: opencode.AssistantMessage{
