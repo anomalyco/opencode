@@ -42,8 +42,8 @@ for (const [os, arch] of targets) {
     "../tui",
   )
   
-  // Build lash binary
-  await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/lash ./src/index.ts`
+  // Build lash binary with embedded TUI
+  await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/lash ./src/index.ts --embed ./dist/${name}/bin/tui`
   
   // Run smoke test on current platform
   if (
@@ -52,9 +52,11 @@ for (const [os, arch] of targets) {
   ) {
     console.log(`✓ Smoke test: running dist/${name}/bin/lash --version`)
     await $`./dist/${name}/bin/lash --version`
+    console.log(`✓ Smoke test: checking TUI binary is embedded`)
+    await $`./dist/${name}/bin/lash --help | head -5`
   }
   
-  // Clean up TUI binary (embedded in lash binary)
+  // Clean up TUI binary (now embedded in lash binary)
   await $`rm -rf ./dist/${name}/bin/tui`
   
   // Create package.json for platform-specific package

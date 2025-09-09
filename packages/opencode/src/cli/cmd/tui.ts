@@ -111,23 +111,24 @@ export const TuiCommand = cmd({
           hostname: args.hostname,
         })
 
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
-        if (tui) {
-          let binaryName = tui.name
-          if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
-            binaryName += ".exe"
-          }
-          const binary = path.join(Global.Path.cache, "tui", binaryName)
-          const file = Bun.file(binary)
-          if (!(await file.exists())) {
-            await Bun.write(file, tui, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
-          }
-          cwd = process.cwd()
-          cmd = [binary]
+        if (!tui) {
+          UI.error("TUI binary not found in embedded files. This is a build issue.")
+          UI.error("Please try installing from source or report this issue.")
+          return "done"
         }
+        
+        let binaryName = tui.name
+        if (process.platform === "win32" && !binaryName.endsWith(".exe")) {
+          binaryName += ".exe"
+        }
+        const binary = path.join(Global.Path.cache, "tui", binaryName)
+        const file = Bun.file(binary)
+        if (!(await file.exists())) {
+          await Bun.write(file, tui, { mode: 0o755 })
+          await fs.chmod(binary, 0o755)
+        }
+        const cmd = [binary]
         Log.Default.info("tui", {
           cmd,
         })
@@ -139,7 +140,7 @@ export const TuiCommand = cmd({
             ...(args.agent ? ["--agent", args.agent] : []),
             ...(sessionID ? ["--session", sessionID] : []),
           ],
-          cwd,
+          cwd: process.cwd(),
           stdout: "inherit",
           stderr: "inherit",
           stdin: "inherit",
