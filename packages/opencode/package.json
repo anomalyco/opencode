@@ -55,7 +55,6 @@
   "dependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/zod-validator": "0.4.2",
-    "@lash/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
     "@standard-schema/spec": "1.0.0",
