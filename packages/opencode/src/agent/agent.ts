@@ -50,7 +50,7 @@ export namespace Agent {
 
     const planPermission = mergeAgentPermissions(
       {
-        edit: "ask",
+        edit: "deny",
         bash: "ask",
         webfetch: "allow",
       },
