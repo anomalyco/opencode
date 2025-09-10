@@ -21,7 +21,7 @@ export namespace Provider {
     api?: string,
   ) => Promise<{
     autoload: boolean
-    getModel?: (sdk: any, modelID: string) => Promise<any>
+    getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
     options?: Record<string, any>
   }>
 
@@ -48,7 +48,7 @@ export namespace Provider {
     openai: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
         options: {},
@@ -57,8 +57,12 @@ export namespace Provider {
     azure: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useDeploymentBasedUrl"]) {
+            return sdk.completion(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
         },
         options: {},
       }
@@ -76,7 +80,7 @@ export namespace Provider {
           region,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -153,11 +157,11 @@ export namespace Provider {
       [providerID: string]: {
         source: Source
         info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string) => Promise<any>
+        getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
         options: Record<string, any>
       }
     } = {}
-    const models = new Map<
+        const models = new Map<
       string,
       { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
     >()
@@ -169,7 +173,7 @@ export namespace Provider {
       id: string,
       options: Record<string, any>,
       source: Source,
-      getModel?: (sdk: any, modelID: string) => Promise<any>,
+      getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>,
     ) {
       const provider = providers[id]
       if (!provider) {
@@ -215,26 +219,26 @@ export namespace Provider {
           cost:
             !model.cost && !existing?.cost
               ? {
-                  input: 0,
-                  output: 0,
-                  cache_read: 0,
-                  cache_write: 0,
-                }
+                input: 0,
+                output: 0,
+                cache_read: 0,
+                cache_write: 0,
+              }
               : {
-                  cache_read: 0,
-                  cache_write: 0,
-                  ...existing?.cost,
-                  ...model.cost,
-                },
+                cache_read: 0,
+                cache_write: 0,
+                ...existing?.cost,
+                ...model.cost,
+              },
           options: {
             ...existing?.options,
             ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {
-              context: 0,
-              output: 0,
-            },
+            context: 0,
+            output: 0,
+          },
           provider: model.provider ?? existing?.provider,
         }
         parsed.models[modelID] = parsedModel
@@ -294,8 +298,8 @@ export namespace Provider {
         Object.entries(provider.info.models)
           // Filter out blacklisted models
           .filter(
-            ([modelID]) =>
-              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+          ([modelID]) =>
+            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
           .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
@@ -370,7 +374,7 @@ export namespace Provider {
     const sdk = await getSDK(provider.info, info)
 
     try {
-      const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
+      const language = provider.getModel ? await provider.getModel(sdk, modelID, provider.options) : sdk.languageModel(modelID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         providerID,
@@ -428,7 +432,7 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
-
+      
     // this will be adjusted when migration to opentui is complete,
     // for now we just read the tui state toml file directly
     //
