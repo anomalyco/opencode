@@ -11,7 +11,7 @@ import { ToolRegistry } from "../tool/registry"
 
 type HasExactlyTwoParams<T> = T extends (...args: infer P) => any
   ? P extends [any, any]
-    ? P['length'] extends 2
+    ? P["length"] extends 2
       ? true
       : false
     : false
@@ -78,18 +78,20 @@ export namespace Plugin {
 
   export async function trigger<Name extends HooksWithoutOutput>(
     name: Exclude<Name, "auth" | "event">,
-    input: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[0] : never
+    input: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[0] : never,
   ): Promise<void>
 
   export async function trigger<Name extends HooksWithOutput>(
     name: Exclude<Name, "auth" | "event">,
     input: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[0] : never,
-    output: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[1] : never
+    output: Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[1] : never,
   ): Promise<Name extends keyof Hooks ? Parameters<NonNullable<Hooks[Name]>>[1] : never>
 
-  export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">
-  >(name: Name, input: any, output?: any): Promise<any> {
+  export async function trigger<Name extends Exclude<keyof Required<Hooks>, "auth" | "event">>(
+    name: Name,
+    input: any,
+    output?: any,
+  ): Promise<any> {
     if (!name) return output
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
