@@ -13,13 +13,25 @@ function main() {
     return
   }
 
-  const binDir = path.join(__dirname, "bin")
-  const unixScript = path.join(binDir, "opencode")
+  console.log("Windows detected: Modifying package.json bin entry")
 
-  console.log("Windows detected: Configuring bin scripts for Windows")
+  // Read package.json
+  const packageJsonPath = path.join(__dirname, "package.json")
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
 
+  // Modify bin to point to .cmd file on Windows
+  packageJson.bin = {
+    opencode: "./bin/opencode.cmd",
+  }
+
+  // Write it back
+  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2))
+  console.log("Updated package.json bin to use opencode.cmd")
+
+  // Now you can also remove the Unix script if you want
+  const unixScript = path.join(__dirname, "bin", "opencode")
   if (fs.existsSync(unixScript)) {
-    console.log("Removing Unix shell script from bin/")
+    console.log("Removing Unix shell script")
     fs.unlinkSync(unixScript)
   }
 }

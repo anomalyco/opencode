@@ -68,15 +68,52 @@ function findBinary() {
   }
 }
 
-function main() {
+async function regenerateWindowsCmdWrappers() {
+  console.log("Windows + npm detected: Forcing npm to rebuild bin links")
+
+  try {
+    const { execSync } = require("child_process")
+    const pkgPath = path.join(__dirname, "..")
+
+    // Determine if this is a global or local install
+    const isGlobal =
+      process.env.npm_config_global === "true" ||
+      pkgPath.includes(path.join("npm", "node_modules")) ||
+      pkgPath.includes(path.join("npm-global", "lib", "node_modules"))
+
+    console.log(`Installation type: ${isGlobal ? "global" : "local"}`)
+
+    // Build command and options
+    const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
+    const opts = {
+      stdio: "inherit",
+      shell: true,
+      ...(isGlobal ? {} : { cwd: path.join(pkgPath, "..", "..") }), // For local, run from project root
+    }
+
+    console.log(`Running: ${cmd}`)
+    execSync(cmd, opts)
+    console.log("Successfully rebuilt npm bin links")
+  } catch (error) {
+    console.error("Error rebuilding npm links:", error.message)
+    console.error("npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts")
+  }
+}
+
+async function main() {
   try {
     if (os.platform() === "win32") {
-      console.log("Windows detected, skipping postinstall")
+      // On Windows with npm, regenerate cmd wrappers
+      if (process.env.npm_config_user_agent) {
+        await regenerateWindowsCmdWrappers()
+      } else {
+        console.log("Windows detected but not npm, skipping postinstall")
+      }
       return
     }
 
     const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
+    const binScript = path.join(__dirname, "..", "bin", "opencode")
 
     // Remove existing bin script if it exists
     if (fs.existsSync(binScript)) {
@@ -92,4 +129,9 @@ function main() {
   }
 }
 
-main()
+try {
+  main()
+} catch (error) {
+  console.error("Postinstall script error:", error.message)
+  process.exit(0)
+}
