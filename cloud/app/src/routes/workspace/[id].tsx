@@ -1,15 +1,7 @@
 import "./[id].css"
 import { Billing } from "@opencode/cloud-core/billing.js"
 import { Key } from "@opencode/cloud-core/key.js"
-import {
-  json,
-  query,
-  action,
-  useParams,
-  useAction,
-  createAsync,
-  useSubmission,
-} from "@solidjs/router"
+import { json, query, action, useParams, useAction, createAsync, useSubmission } from "@solidjs/router"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCopy, IconCheck } from "~/component/icon"
@@ -432,50 +424,57 @@ function PaymentsSection() {
   const payments = createAsync(() => getPaymentsInfo(params.id))
   // const payments = () => dummyPayments
 
-  return payments() && payments()!.length > 0 && (
-    <section data-component="payments-section">
-      <div data-slot="section-title">
-        <h2>Payments History</h2>
-        <p>Recent payment transactions.</p>
-      </div>
-      <div data-slot="payments-table">
-        <table data-slot="payments-table-element">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Payment ID</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <For each={payments()!}>
-              {(payment) => {
-                const date = new Date(payment.timeCreated)
-                return (
-                  <tr>
-                    <td data-slot="payment-date" title={formatDateUTC(date)}>
-                      {formatDateForTable(date)}
-                    </td>
-                    <td data-slot="payment-id">{payment.id}</td>
-                    <td data-slot="payment-amount">${((payment.amount ?? 0) / 100000000).toFixed(2)}</td>
-                  </tr>
-                )
-              }}
-            </For>
-          </tbody>
-        </table>
-      </div>
-    </section>
+  return (
+    payments() &&
+    payments()!.length > 0 && (
+      <section data-component="payments-section">
+        <div data-slot="section-title">
+          <h2>Payments History</h2>
+          <p>Recent payment transactions.</p>
+        </div>
+        <div data-slot="payments-table">
+          <table data-slot="payments-table-element">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Payment ID</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={payments()!}>
+                {(payment) => {
+                  const date = new Date(payment.timeCreated)
+                  return (
+                    <tr>
+                      <td data-slot="payment-date" title={formatDateUTC(date)}>
+                        {formatDateForTable(date)}
+                      </td>
+                      <td data-slot="payment-id">{payment.id}</td>
+                      <td data-slot="payment-amount">${((payment.amount ?? 0) / 100000000).toFixed(2)}</td>
+                    </tr>
+                  )
+                }}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
   )
 }
 
-export default function() {
+export default function () {
   return (
     <div data-page="workspace-[id]">
       <section data-component="title-section">
         <h1>Zen</h1>
         <p>
-          Curated list of models provided by opencode. <a target="_blank" href="/docs/zen">Learn more</a>.
+          Curated list of models provided by opencode.{" "}
+          <a target="_blank" href="/docs/zen">
+            Learn more
+          </a>
+          .
         </p>
       </section>
 

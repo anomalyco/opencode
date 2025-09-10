@@ -64,9 +64,7 @@ export default function Home() {
 
         <section data-component="cta">
           <div data-slot="left">
-            <a href="/docs">
-              Get Started
-            </a>
+            <a href="/docs">Get Started</a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
@@ -90,7 +88,8 @@ export default function Home() {
               <strong>LSP enabled</strong> Automatically loads the right LSPs for the LLM
             </li>
             <li>
-              <strong>opencode zen</strong> A <a href="/docs/zen">curated list of models</a> provided by opencode <label>New</label>
+              <strong>opencode zen</strong> A <a href="/docs/zen">curated list of models</a> provided by opencode{" "}
+              <label>New</label>
             </li>
             <li>
               <strong>Multi-session</strong> Start multiple agents in parallel on the same project

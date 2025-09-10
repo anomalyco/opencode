@@ -623,5 +623,7 @@ export function replace(content: string, oldString: string, newString: string, r
   if (notFound) {
     throw new Error("oldString not found in content")
   }
-  throw new Error("oldString found multiple times and requires more code context to uniquely identify the intended match")
+  throw new Error(
+    "oldString found multiple times and requires more code context to uniquely identify the intended match",
+  )
 }

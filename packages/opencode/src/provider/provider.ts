@@ -11,6 +11,7 @@ import { NamedError } from "../util/error"
 import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
+import { Flag } from "../flag/flag"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -234,6 +235,7 @@ export namespace Provider {
               context: 0,
               output: 0,
             },
+          provider: model.provider ?? existing?.provider,
         }
         parsed.models[modelID] = parsedModel
       }
@@ -288,12 +290,15 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
-      // Filter out blacklisted models
       const filteredModels = Object.fromEntries(
-        Object.entries(provider.info.models).filter(
-          ([modelID]) =>
-            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
-        ),
+        Object.entries(provider.info.models)
+          // Filter out blacklisted models
+          .filter(
+            ([modelID]) =>
+              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+          )
+          // Filter out experimental models
+          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
       )
       provider.info.models = filteredModels
 
@@ -315,7 +320,7 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(provider: ModelsDev.Provider) {
+  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
     return (async () => {
       using _ = log.time("getSDK", {
         providerID: provider.id,
@@ -323,7 +328,7 @@ export namespace Provider {
       const s = await state()
       const existing = s.sdk.get(provider.id)
       if (existing) return existing
-      const pkg = provider.npm ?? provider.id
+      const pkg = model.provider?.npm ?? provider.npm ?? provider.id
       const mod = await import(await BunProc.install(pkg, "latest"))
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       let options = { ...s.providers[provider.id]?.options }
@@ -362,7 +367,7 @@ export namespace Provider {
     if (!provider) throw new ModelNotFoundError({ providerID, modelID })
     const info = provider.info.models[modelID]
     if (!info) throw new ModelNotFoundError({ providerID, modelID })
-    const sdk = await getSDK(provider.info)
+    const sdk = await getSDK(provider.info, info)
 
     try {
       const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)

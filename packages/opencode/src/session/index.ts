@@ -766,8 +766,8 @@ export namespace Session {
       })
     }
 
-    const lastAssistantMsg = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
-    if (lastAssistantMsg?.mode === "plan" && agent.name === "build") {
+    const wasPlan = msgs.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
+    if (wasPlan && agent.name === "build") {
       msgs.at(-1)?.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMsg.id,
@@ -1007,6 +1007,17 @@ export namespace Session {
         }
       },
       async experimental_repairToolCall(input) {
+        const lower = input.toolCall.toolName.toLowerCase()
+        if (lower !== input.toolCall.toolName && tools[lower]) {
+          log.info("repairing tool call", {
+            tool: input.toolCall.toolName,
+            repaired: lower,
+          })
+          return {
+            ...input.toolCall,
+            toolName: lower,
+          }
+        }
         return {
           ...input.toolCall,
           input: JSON.stringify({

@@ -1,24 +1,28 @@
-name: Typecheck
+name: Format
 
 on:
+  push:
   pull_request:
-    branches: [dev]
   workflow_dispatch:
-
 jobs:
-  typecheck:
+  format:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: 1.2.21
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run typecheck
-        run: bun typecheck
+      - name: run
+        run: |
+          bun install
+          ./script/format.ts
+        env:
+          CI: true

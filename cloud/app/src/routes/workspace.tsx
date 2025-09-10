@@ -2,7 +2,17 @@ import "./workspace.css"
 import { useAuthSession } from "~/context/auth.session"
 import { IconLogo } from "../component/icon"
 import { withActor } from "~/context/auth.withActor"
-import { query, action, redirect, createAsync, RouteSectionProps, Navigate, useNavigate, useParams, A } from "@solidjs/router"
+import {
+  query,
+  action,
+  redirect,
+  createAsync,
+  RouteSectionProps,
+  Navigate,
+  useNavigate,
+  useParams,
+  A,
+} from "@solidjs/router"
 import { User } from "@opencode/cloud-core/user.js"
 import { Actor } from "@opencode/cloud-core/actor.js"
 import { getRequestEvent } from "solid-js/web"

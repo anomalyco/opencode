@@ -38,7 +38,20 @@ for (const [os, arch] of targets) {
   await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`.cwd(
     "../tui",
   )
-  await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/opencode ./src/index.ts`
+  await Bun.build({
+    compile: {
+      target: `bun-${os}-${arch}` as any,
+      outfile: `dist/${name}/bin/opencode`,
+      execArgv: [`--user-agent=opencode/${version}`],
+      windows: {},
+    },
+    entrypoints: ["./src/index.ts"],
+    define: {
+      OPENCODE_VERSION: `'${version}'`,
+      OPENCODE_TUI_PATH: `'../../../dist/${name}/bin/tui'`,
+    },
+  })
+  // await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/opencode ./src/index.ts`
   // Run the binary only if it matches current OS/arch
   if (
     process.platform === (os === "windows" ? "win32" : os) &&

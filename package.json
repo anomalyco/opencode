@@ -3,7 +3,7 @@
   "name": "opencode",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.2.19",
+  "packageManager": "bun@1.2.21",
   "scripts": {
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
@@ -17,6 +17,7 @@
       "packages/sdk/js"
     ],
     "catalog": {
+      "@types/bun": "1.2.21",
       "@hono/zod-validator": "0.4.2",
       "@types/node": "22.13.9",
       "@tsconfig/node22": "22.0.2",

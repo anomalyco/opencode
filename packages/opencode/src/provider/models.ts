@@ -28,7 +28,9 @@ export namespace ModelsDev {
         context: z.number(),
         output: z.number(),
       }),
+      experimental: z.boolean().optional(),
       options: z.record(z.any()),
+      provider: z.object({ npm: z.string() }).optional(),
     })
     .openapi({
       ref: "Model",

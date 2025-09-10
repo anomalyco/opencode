@@ -637,8 +637,12 @@ export type Config = {
             context: number
             output: number
           }
+          experimental?: boolean
           options?: {
             [key: string]: unknown
+          }
+          provider?: {
+            npm: string
           }
         }
       }
@@ -1004,8 +1008,12 @@ export type Model = {
     context: number
     output: number
   }
+  experimental?: boolean
   options: {
     [key: string]: unknown
+  }
+  provider?: {
+    npm: string
   }
 }
 
