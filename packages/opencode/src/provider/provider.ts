@@ -161,7 +161,7 @@ export namespace Provider {
         options: Record<string, any>
       }
     } = {}
-        const models = new Map<
+    const models = new Map<
       string,
       { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
     >()
@@ -298,8 +298,8 @@ export namespace Provider {
         Object.entries(provider.info.models)
           // Filter out blacklisted models
           .filter(
-          ([modelID]) =>
-            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+            ([modelID]) =>
+              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
           .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
@@ -374,7 +374,9 @@ export namespace Provider {
     const sdk = await getSDK(provider.info, info)
 
     try {
-      const language = provider.getModel ? await provider.getModel(sdk, modelID, provider.options) : sdk.languageModel(modelID)
+      const language = provider.getModel
+        ? await provider.getModel(sdk, modelID, provider.options)
+        : sdk.languageModel(modelID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         providerID,
@@ -432,7 +434,7 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
-      
+
     // this will be adjusted when migration to opentui is complete,
     // for now we just read the tui state toml file directly
     //
