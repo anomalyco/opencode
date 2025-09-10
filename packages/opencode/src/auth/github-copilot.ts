@@ -114,16 +114,12 @@ export namespace AuthGithubCopilot {
     return "pending"
   }
 
-  export async function access(providerID = "github-copilot", enterpriseUrl?: string) {
+  export async function access(providerID = "github-copilot") {
     const info = await Auth.get(providerID)
     if (!info || info.type !== "oauth") return
     if (info.access && info.expires > Date.now()) return info.access
 
-    if (!enterpriseUrl && "enterpriseUrl" in info && info.enterpriseUrl) {
-      enterpriseUrl = info.enterpriseUrl
-    }
-
-    const urls = await getUrls(providerID, enterpriseUrl)
+    const urls = await getUrls(providerID, info.enterpriseUrl)
     const response = await fetch(urls.COPILOT_API_KEY_URL, {
       headers: {
         Accept: "application/json",
