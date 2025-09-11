@@ -20,6 +20,11 @@ export function mapFormattingPositions(
   const newStart = dmp.diff_xIndex(diffs, start)
   const newEnd = dmp.diff_xIndex(diffs, end)
 
+  // Throw if indexes are -1 (position not found)
+  if (newStart === -1 || newEnd === -1) {
+    throw new Error(`Failed to map positions: start=${newStart}, end=${newEnd}`)
+  }
+
   return {
     newContent: formattedContent,
     start: newStart,
