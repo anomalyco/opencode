@@ -31,23 +31,24 @@ export function mapFormattingPositions(
   }
 
   let newContent: string
-  let start: number
-  let end: number
-
+  
   if (replaceAll) {
     newContent = content.replaceAll(oldString, newString)
-    // For replaceAll, we only track the first replacement
-    start = index
-    end = index + newString.length
   } else {
     const lastIndex = content.lastIndexOf(oldString)
     if (index !== lastIndex) {
       throw new Error("oldString found multiple times and requires more code context to uniquely identify the intended match")
     }
     newContent = content.substring(0, index) + newString + content.substring(index + oldString.length)
-    start = index
-    end = index + newString.length
   }
+
+  // Use diff_match_patch to map positions from original to new content
+  const dmp = new diff_match_patch()
+  const diffs = dmp.diff_main(content, newContent, false)
+  
+  // Map the start and end positions
+  const start = dmp.diff_xIndex(diffs, index)
+  const end = dmp.diff_xIndex(diffs, index + oldString.length)
 
   return {
     newContent,
