@@ -1,462 +1,439 @@
 import { describe, expect, it } from "bun:test"
 import { mapFormattingPositions } from "../../src/util/position-mapper"
+import * as prettier from "prettier"
 
-describe("mapFormattingPositions - formatting transformations", () => {
-  it("handles simple formatting - spaces around operators", () => {
-    const result = testFormatting(
-      "const a=1+2*3;const b=4;",
-      "a=1+2*3",
-      "a = 1 + 2 * 3"
-    )
-    expect(result).toMatchInlineSnapshot(`"const |start|a = 1 + 2 * 3|end|;const b=4;"`)
-  })
-
-  it("handles minified to formatted - object literal", () => {
-    const result = testFormatting(
-      `const config={host:"localhost",port:3000,ssl:true,options:{timeout:5000,retries:3}};`,
-      `{host:"localhost",port:3000,ssl:true,options:{timeout:5000,retries:3}}`,
-      dedent`
-        {
-          host: "localhost",
-          port: 3000,
-          ssl: true,
-          options: {
-            timeout: 5000,
-            retries: 3
-          }
-        }`
-    )
+describe("mapFormattingPositions - prettier formatting", () => {
+  it("adds spaces around operators", async () => {
+    const result = await testFormatting(`const sum = |start|a+b|end| * 2`)
     expect(result).toMatchInlineSnapshot(`
-      "const config=|start|{
-        host: "localhost",
-        port: 3000,
-        ssl: true,
-        options: {
-          timeout: 5000,
-          retries: 3
-        }
-      }|end|;"
+      "const sum = |start|a + b|end| * 2;
+      "
     `)
   })
 
-  it("handles arrow function transformation - adding braces and return", () => {
-    const result = testFormatting(
-      `const double = x => x * 2;
-const triple = x => x * 3;`,
-      "x => x * 2",
-      dedent`
-        x => {
-          return x * 2;
-        }`
+  it("converts double quotes to single quotes", async () => {
+    const result = await testFormatting(
+      `const msg = |start|"hello world"|end|`,
+      { singleQuote: true }
     )
     expect(result).toMatchInlineSnapshot(`
-      "const double = |start|x => {
-        return x * 2;
-      }|end|;
-      const triple = x => x * 3;"
+      "const msg = |start|'hello world';
+      |end|"
     `)
   })
 
-  it("handles array method chaining - from single line to formatted", () => {
-    const result = testFormatting(
-      `const result = data.filter(x=>x>0).map(x=>x*2).reduce((a,b)=>a+b,0);`,
-      `data.filter(x=>x>0).map(x=>x*2).reduce((a,b)=>a+b,0)`,
-      dedent`
-        data
-          .filter(x => x > 0)
-          .map(x => x * 2)
-          .reduce((a, b) => a + b, 0)`
+  it("adds parentheses to arrow function", async () => {
+    const result = await testFormatting(
+      `const fn = |start|x => x * 2|end|`,
+      { arrowParens: "always" }
     )
     expect(result).toMatchInlineSnapshot(`
-      "const result = |start|data
-        .filter(x => x > 0)
-        .map(x => x * 2)
-        .reduce((a, b) => a + b, 0)|end|;"
+      "const fn = (|start|x) => x * 2;
+      |end|"
     `)
   })
 
-  it("handles JSX formatting - from inline to multi-line", () => {
-    const result = testFormatting(
-      `function App() {
-return <div className="app"><header><h1>Title</h1></header><main><p>Content</p></main></div>;
-}`,
-      `<div className="app"><header><h1>Title</h1></header><main><p>Content</p></main></div>`,
-      dedent`
-        <div className="app">
-          <header>
-            <h1>Title</h1>
-          </header>
-          <main>
-            <p>Content</p>
-          </main>
-        </div>`
-    )
+  it("formats nested ternary operators", async () => {
+    const result = await testFormatting(`const val = |start|a?b:c?d:e|end|`)
     expect(result).toMatchInlineSnapshot(`
-      "function App() {
-      return |start|<div className="app">
-        <header>
-          <h1>Title</h1>
-        </header>
-        <main>
-          <p>Content</p>
-        </main>
-      </div>|end|;
-      }"
+      "const val = |start|a ? b : c ? d : e;
+      |end|"
     `)
   })
 
-  it("handles function declaration formatting", () => {
-    const result = testFormatting(
-      `function calculate(a,b,c){const sum=a+b+c;const avg=sum/3;return{sum,avg};}
-function display() {}`,
-      `function calculate(a,b,c){const sum=a+b+c;const avg=sum/3;return{sum,avg};}`,
-      dedent`
-        function calculate(a, b, c) {
-          const sum = a + b + c;
-          const avg = sum / 3;
-          return { sum, avg };
-        }`
+  it("formats method chaining to multiple lines", async () => {
+    const result = await testFormatting(
+      `const result = arr.|start|filter(x=>x>0).map(x=>x*2).reduce((a,b)=>a+b,0)|end|`
     )
     expect(result).toMatchInlineSnapshot(`
-      "|start|function calculate(a, b, c) {
-        const sum = a + b + c;
-        const avg = sum / 3;
-        return { sum, avg };
-      }|end|
-      function display() {}"
+      "const result = arr
+        .|start|filter((x) => x > 0)
+        .map((x) => x * 2)
+        .reduce((a, b) => a + b, 0);
+      |end|"
     `)
   })
 
-  it("handles conditional (ternary) operator formatting", () => {
-    const result = testFormatting(
-      `const message=isValid?isAuthorized?"Welcome":"Not authorized":"Invalid";`,
-      `isValid?isAuthorized?"Welcome":"Not authorized":"Invalid"`,
-      dedent`
-        isValid
-          ? isAuthorized
-            ? "Welcome"
-            : "Not authorized"
-          : "Invalid"`
+  it("formats inline JSX to multi-line", async () => {
+    const result = await testFormatting(
+      `return |start|<div><span>text</span></div>|end|`
     )
     expect(result).toMatchInlineSnapshot(`
-      "const message=|start|isValid
-        ? isAuthorized
-          ? "Welcome"
-          : "Not authorized"
-        : "Invalid"|end|;"
+      "return (
+        |start|<div>
+          <span>text</span>
+        </div>
+      );
+      |end|"
     `)
   })
 
-  it("handles class formatting with decorators", () => {
-    const result = testFormatting(
-      `@injectable()class UserService{constructor(private db:Database){}async getUser(id:string){return this.db.users.find(id);}}export{UserService};`,
-      `@injectable()class UserService{constructor(private db:Database){}async getUser(id:string){return this.db.users.find(id);}}`,
-      dedent`
-        @injectable()
-        class UserService {
-          constructor(private db: Database) {}
-
-          async getUser(id: string) {
-            return this.db.users.find(id);
-          }
-        }`
-    )
+  it("adds spaces to object destructuring", async () => {
+    const result = await testFormatting(`const |start|{a,b,c}|end| = obj`)
     expect(result).toMatchInlineSnapshot(`
-      "|start|@injectable()
-      class UserService {
-        constructor(private db: Database) {}
-
-        async getUser(id: string) {
-          return this.db.users.find(id);
-        }
-      }|end|export{UserService};"
+      "const |start|{ a, b, c }|end| = obj;
+      "
     `)
   })
 
-  it("handles complex destructuring formatting", () => {
-    const result = testFormatting(
-      `const{name,age,address:{street,city,country="US"}}=user;`,
-      `{name,age,address:{street,city,country="US"}}`,
-      dedent`
-        {
-          name,
-          age,
-          address: {
-            street,
-            city,
-            country = "US"
-          }
-        }`
+  it("adds trailing comma to array", async () => {
+    const result = await testFormatting(
+      `const arr = [|start|1,2,3|end|]`,
+      { trailingComma: "all" }
     )
     expect(result).toMatchInlineSnapshot(`
-      "const|start|{
-        name,
-        age,
-        address: {
-          street,
-          city,
-          country = "US"
-        }
-      }|end|=user;"
+      "const arr = [|start|1, 2, 3|end|];
+      "
     `)
   })
 
-  it("handles import statement formatting", () => {
-    const result = testFormatting(
-      `import{useState,useEffect,useCallback,useMemo}from"react";import{Button,Card}from"./components";`,
-      `{useState,useEffect,useCallback,useMemo}`,
-      dedent`
-        {
-          useState,
-          useEffect,
-          useCallback,
-          useMemo
-        }`
+  it("formats compact import statement", async () => {
+    const result = await testFormatting(
+      `import |start|{useState,useEffect}|end| from "react"`
     )
     expect(result).toMatchInlineSnapshot(`
-      "import|start|{
-        useState,
-        useEffect,
-        useCallback,
-        useMemo
-      }|end|from"react";import{Button,Card}from"./components";"
+      "import |start|{ useState, useEffect }|end| from "react";
+      "
     `)
   })
 
-  it("handles async/await with try-catch formatting", () => {
-    const result = testFormatting(
-      `async function fetchData(){try{const res=await fetch(url);const data=await res.json();return data;}catch(e){console.error(e);throw e;}}`,
-      `try{const res=await fetch(url);const data=await res.json();return data;}catch(e){console.error(e);throw e;}`,
-      dedent`
-        try {
-          const res = await fetch(url);
-          const data = await res.json();
-          return data;
-        } catch (e) {
-          console.error(e);
-          throw e;
-        }`
+  it("preserves template literal", async () => {
+    const result = await testFormatting(
+      `const str = |start|\`hello \${name}\`|end|`
     )
     expect(result).toMatchInlineSnapshot(`
-      "async function fetchData(){|start|try {
+      "const str = |start|\`hello \${name}\`;
+      |end|"
+    `)
+  })
+
+  it("formats minified function to multi-line", async () => {
+    const result = await testFormatting(
+      `|start|function getData(){const res=await fetch(url);return res.json()}|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "|start|function getData() {
         const res = await fetch(url);
-        const data = await res.json();
-        return data;
+        return res.json();
+      }
+      |end|"
+    `)
+  })
+
+  it("formats switch cases", async () => {
+    const result = await testFormatting(
+      `switch(type){|start|case'a':return 1;case'b':return 2|end|}`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "switch (type) {
+        |start|case "a":
+          return 1;
+        case "b":
+          return 2;
+      |end|}
+      "
+    `)
+  })
+
+  it("formats compact class", async () => {
+    const result = await testFormatting(
+      `|start|class Service{constructor(private db:DB){}getUser(id:string){return this.db.find(id)}}|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "|start|class Service {
+        constructor(private db: DB) {}
+        getUser(id: string) {
+          return this.db.find(id);
+        }
+      }
+      |end|"
+    `)
+  })
+
+  it("wraps long function parameters", async () => {
+    const result = await testFormatting(
+      `function fn(|start|a:string,b:number,c:boolean,d:any,e:unknown|end|){}`,
+      { printWidth: 40 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "function fn(
+        |start|a: string,
+        b: number,
+        c: boolean,
+        d: any,
+        e: unknown,
+      |end|) {}
+      "
+    `)
+  })
+
+  it("formats compact ternary", async () => {
+    const result = await testFormatting(
+      `const val = |start|condition?trueValue:falseValue|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const val = |start|condition ? trueValue : falseValue;
+      |end|"
+    `)
+  })
+
+  it("adds line breaks to object methods", async () => {
+    const result = await testFormatting(
+      `const obj = {|start|method(){return 42}|end|}`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const obj = {
+        |start|method() {
+          return 42;
+        },
+      |end|};
+      "
+    `)
+  })
+
+  it("formats export with bracket spacing", async () => {
+    const result = await testFormatting(
+      `export |start|{foo,bar}|end| from './module'`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "export |start|{ foo, bar }|end| from "./module";
+      "
+    `)
+  })
+
+  it("formats try-catch block", async () => {
+    const result = await testFormatting(
+      `|start|try{doSomething()}catch(e){console.error(e)}|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "|start|try {
+        doSomething();
       } catch (e) {
         console.error(e);
-        throw e;
-      }|end|}"
+      }
+      |end|"
     `)
   })
 
-  it("handles template literal formatting", () => {
-    const result = testFormatting(
-      "const sql=`SELECT * FROM users WHERE age>${minAge} AND city='${city}' ORDER BY name`;const other='test';",
-      "`SELECT * FROM users WHERE age>${minAge} AND city='${city}' ORDER BY name`",
-      dedent`
-        \`
-          SELECT *
-          FROM users
-          WHERE age > \${minAge}
-            AND city = '\${city}'
-          ORDER BY name
-        \``
+  it("formats union type", async () => {
+    const result = await testFormatting(
+      `type Result = |start|{data:T}|{error:Error}|end|`
     )
     expect(result).toMatchInlineSnapshot(`
-      "const sql=|start|\`
-        SELECT *
-        FROM users
-        WHERE age > \${minAge}
-          AND city = '\${city}'
-        ORDER BY name
-      \`|end|;const other='test';"
+      "type Result = |start|{ data: T } | { error: Error };
+      |end|"
     `)
   })
 
-  it("handles switch statement formatting", () => {
-    const result = testFormatting(
-      `function getColor(type){switch(type){case"error":return"red";case"warning":return"yellow";case"success":return"green";default:return"gray";}}`,
-      `switch(type){case"error":return"red";case"warning":return"yellow";case"success":return"green";default:return"gray";}`,
-      dedent`
-        switch (type) {
-          case "error":
-            return "red";
-          case "warning":
-            return "yellow";
-          case "success":
-            return "green";
-          default:
-            return "gray";
-        }`
+  it("adds semicolons", async () => {
+    const result = await testFormatting(
+      `|start|const x = 1|end|\nconst y = 2`,
+      { semi: true }
     )
     expect(result).toMatchInlineSnapshot(`
-      "function getColor(type){|start|switch (type) {
-        case "error":
-          return "red";
-        case "warning":
-          return "yellow";
-        case "success":
-          return "green";
-        default:
-          return "gray";
-      }|end|}"
+      "|start|const x = 1;|end|
+      const y = 2;
+      "
     `)
   })
 
-  it("handles replaceAll with formatting", () => {
-    const result = testFormatting(
-      `const a=1;const b=2;const c=3;`,
-      "=",
-      " = ",
-      true
-    )
-    expect(result).toMatchInlineSnapshot(`"const a|start| = |end|1;const b = 2;const c = 3;"`)
-  })
-
-  it("handles empty file creation with formatted code", () => {
-    const newString = dedent`
-      export class Calculator {
-        add(a: number, b: number): number {
-          return a + b;
-        }
-
-        subtract(a: number, b: number): number {
-          return a - b;
-        }
-      }`
-    const result = testFormatting("", "", newString)
-    expect(result).toMatchInlineSnapshot(`
-      "|start|export class Calculator {
-        add(a: number, b: number): number {
-          return a + b;
-        }
-
-        subtract(a: number, b: number): number {
-          return a - b;
-        }
-      }|end|"
-    `)
-  })
-
-  it("handles multiple formatting changes in one replacement", () => {
-    const result = testFormatting(
-      `if(x>5&&y<10){console.log("valid");return true;}else{return false;}`,
-      `if(x>5&&y<10){console.log("valid");return true;}else{return false;}`,
-      dedent`
-        if (x > 5 && y < 10) {
-          console.log("valid");
-          return true;
-        } else {
-          return false;
-        }`
+  it("removes semicolons", async () => {
+    const result = await testFormatting(
+      `|start|const x = 1;|end|\nconst y = 2;`,
+      { semi: false }
     )
     expect(result).toMatchInlineSnapshot(`
-      "|start|if (x > 5 && y < 10) {
-        console.log("valid");
-        return true;
-      } else {
-        return false;
-      }|end|"
+      "|start|const x = 1|end|
+      const y = 2
+      "
     `)
   })
 
-  it("handles React component with props formatting", () => {
-    const result = testFormatting(
-      `const Button=({label,onClick,disabled=false})=><button onClick={onClick}disabled={disabled}>{label}</button>;`,
-      `({label,onClick,disabled=false})=><button onClick={onClick}disabled={disabled}>{label}</button>`,
-      dedent`
-        ({ label, onClick, disabled = false }) => (
-          <button onClick={onClick} disabled={disabled}>
-            {label}
-          </button>
-        )`
+  it("formats with tabs", async () => {
+    const result = await testFormatting(
+      `function test() {\n|start|console.log("hello")|end|\n}`,
+      { useTabs: true }
     )
     expect(result).toMatchInlineSnapshot(`
-      "const Button=|start|({ label, onClick, disabled = false }) => (
-        <button onClick={onClick} disabled={disabled}>
-          {label}
-        </button>
-      )|end|;"
+      "function test() {
+      	|start|console.log("hello");|end|
+      }
+      "
     `)
   })
 
-  it("handles loop formatting", () => {
-    const result = testFormatting(
-      `for(let i=0;i<items.length;i++){const item=items[i];process(item);}`,
-      `for(let i=0;i<items.length;i++){const item=items[i];process(item);}`,
-      dedent`
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          process(item);
-        }`
+  it("adds trailing commas to objects", async () => {
+    const result = await testFormatting(
+      `const obj = {|start|a: 1, b: 2|end|}`,
+      { trailingComma: "all" }
     )
     expect(result).toMatchInlineSnapshot(`
-      "|start|for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        process(item);
-      }|end|"
+      "const obj = { |start|a: 1, b: 2 |end|};
+      "
     `)
   })
 
-  it("verifies marker extraction works correctly", () => {
-    const text = "before |start|middle content here|end| after"
-    const extracted = extractBetweenMarkers(text)
-    expect(extracted).toBe("middle content here")
+  it("formats arrow function with different parens options", async () => {
+    const result = await testFormatting(
+      `const fn = |start|(x) => x * 2|end|`,
+      { arrowParens: "avoid" }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const fn = |start|x => x * 2;
+      |end|"
+    `)
+  })
+
+  it("handles complex object formatting", async () => {
+    const result = await testFormatting(
+      `const config = {|start|host:"localhost",port:3000,ssl:true|end|}`,
+      { printWidth: 40 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const config = {
+        |start|host: "localhost",
+        port: 3000,
+        ssl: true,
+      |end|};
+      "
+    `)
+  })
+
+  it("formats JSX with fragments", async () => {
+    const result = await testFormatting(
+      `return |start|<><div>A</div><div>B</div></>|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "return (
+        |start|<>
+          <div>A</div>
+          <div>B</div>
+        </>
+      );
+      |end|"
+    `)
+  })
+
+  it("handles spread in arrays", async () => {
+    const result = await testFormatting(
+      `const arr = [|start|...a,...b|end|]`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const arr = [|start|...a, ...b|end|];
+      "
+    `)
+  })
+
+  it("formats type annotations", async () => {
+    const result = await testFormatting(
+      `type User = |start|{name:string;age:number}|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "type User = |start|{ name: string; age: number };
+      |end|"
+    `)
+  })
+
+  it("handles async/await formatting", async () => {
+    const result = await testFormatting(
+      `|start|async()=>{await fetch(url)}|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "|start|async () => {
+        await fetch(url);
+      };
+      |end|"
+    `)
+  })
+
+  it("formats array with trailing comma", async () => {
+    const result = await testFormatting(
+      `function test() {\nconst items = [|start|"a","b","c"|end|]\n}`,
+      { trailingComma: "all" }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "function test() {
+        const items = [|start|"a", "b", "c"|end|];
+      }
+      "
+    `)
+  })
+
+  it("formats object spread", async () => {
+    const result = await testFormatting(
+      `const merged = {...defaults,|start|...userConfig,...overrides|end|}`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const merged = { ...defaults, |start|...userConfig, ...overrides |end|};
+      "
+    `)
+  })
+
+  it("formats conditional expression", async () => {
+    const result = await testFormatting(
+      `const result = |start|isValid ? processData(data) : handleError(error)|end|`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const result = |start|isValid ? processData(data) : handleError(error);
+      |end|"
+    `)
+  })
+
+  it("formats destructuring with defaults", async () => {
+    const result = await testFormatting(
+      `const {|start|name="John",age=30,active=true|end|} = user`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const { |start|name = "John", age = 30, active = true |end|} = user;
+      "
+    `)
   })
 })
 
-// Test helpers at end of file
-function insertMarkers(text: string, start: number, end: number): string {
-  const withEnd = text.slice(0, end) + "|end|" + text.slice(end)
-  const withBoth = withEnd.slice(0, start) + "|start|" + withEnd.slice(start)
-  return withBoth
-}
-
-function extractBetweenMarkers(text: string): string {
+async function testFormatting(
+  input: string,
+  options: prettier.Options = {}
+): Promise<string> {
   const startMarker = "|start|"
   const endMarker = "|end|"
   
-  const startIndex = text.indexOf(startMarker)
-  const endIndex = text.indexOf(endMarker)
+  // Find marker positions
+  const startIdx = input.indexOf(startMarker)
+  const endIdx = input.indexOf(endMarker)
   
-  if (startIndex === -1 || endIndex === -1) {
-    throw new Error("Markers not found in text")
+  if (startIdx === -1 || endIdx === -1) {
+    throw new Error("Missing |start| or |end| markers")
   }
   
-  return text.slice(startIndex + startMarker.length, endIndex)
+  // Extract the original position (accounting for the start marker length)
+  const originalStart = startIdx
+  const originalEnd = endIdx - startMarker.length
+  
+  // Remove markers to get clean content
+  const originalContent = input.replace(startMarker, "").replace(endMarker, "")
+  
+  // Format the entire content with Prettier
+  const formattedContent = await prettier.format(originalContent, {
+    parser: "typescript",
+    printWidth: 80,
+    tabWidth: 2,
+    useTabs: false,
+    semi: true,
+    ...options
+  })
+  
+  // Use mapFormattingPositions to map the positions
+  const result = mapFormattingPositions(
+    originalContent,
+    formattedContent,
+    originalStart,
+    originalEnd
+  )
+  
+  // Insert markers at the mapped positions
+  return insertMarkers(result.newContent, result.start, result.end)
 }
 
-function testFormatting(content: string, oldString: string, newString: string, replaceAll = false) {
-  const result = mapFormattingPositions(content, oldString, newString, replaceAll)
-  const markedResult = insertMarkers(result.newContent, result.start, result.end)
-  
-  const extracted = extractBetweenMarkers(markedResult)
-  expect(extracted).toBe(newString)
-  
-  return markedResult
-}
-
-// Simple dedent function for template literals
-function dedent(strings: TemplateStringsArray, ...values: any[]): string {
-  // Combine strings and values
-  let str = strings[0]
-  for (let i = 0; i < values.length; i++) {
-    str += values[i] + strings[i + 1]
-  }
-  
-  // Find minimum indentation (excluding empty lines)
-  const lines = str.split('\n')
-  const indents = lines
-    .filter(line => line.trim())
-    .map(line => line.match(/^(\s*)/)?.[0].length ?? 0)
-  
-  if (indents.length === 0) return str
-  
-  const minIndent = Math.min(...indents)
-  
-  // Remove the minimum indentation from all lines
-  return lines
-    .map(line => line.slice(minIndent))
-    .join('\n')
-    .trim()
+function insertMarkers(text: string, start: number, end: number): string {
+  return text.slice(0, start) + "|start|" + text.slice(start, end) + "|end|" + text.slice(end)
 }
