@@ -503,6 +503,7 @@ export namespace Config {
             .object({
               limit: z.number().int().min(0).optional(),
               glob: z.array(z.string()).optional(),
+              format: z.string().optional(),
             })
             .optional()
         })

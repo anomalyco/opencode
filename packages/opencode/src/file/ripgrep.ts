@@ -222,7 +222,8 @@ export namespace Ripgrep {
   export async function tree(input: {
     cwd: string;
     limit?: number;
-    glob?: string[]
+    glob?: string[];
+    format?: string,
   }) {
     const files = await Ripgrep.files({ cwd: input.cwd, glob: input.glob })
     interface Node {
@@ -311,6 +312,30 @@ export namespace Ripgrep {
     }
 
     const lines: string[] = []
+
+    if (input.format === 'markdown') {
+      function renderPretty(node: Node) {
+        const files = node.children.filter((c) => c.children.length === 0)
+        const dirs = node.children.filter((c) => c.children.length > 0)
+        const hasTrunc = files.some((f) => /^\[\d+ truncated\]$/.test(f.path.at(-1) || ""))
+
+        if (files.length || hasTrunc) {
+          lines.push("#" + node.path.join("/"))
+          for (const f of files) {
+            lines.push(f.path.at(-1)!)
+          }
+          lines.push("")
+        }
+        for (const d of dirs) {
+          renderPretty(d)
+        }
+      }
+
+      for (const child of result.children) {
+        renderPretty(child)
+      }
+      return lines.join("\n")
+    }
 
     function render(node: Node, depth: number) {
       const indent = "\t".repeat(depth)

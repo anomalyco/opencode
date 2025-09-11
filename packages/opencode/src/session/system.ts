@@ -34,6 +34,7 @@ export namespace SystemPrompt {
     const config = await Config.get()
     const limit = config.experimental?.project_tree?.limit ?? 200
     const glob = config.experimental?.project_tree?.glob
+    const format = config.experimental?.project_tree?.format ?? 'tree'
 
     const project = Instance.project
     return [
@@ -51,7 +52,8 @@ export namespace SystemPrompt {
             ? await Ripgrep.tree({
                 cwd: Instance.directory,
                 limit,
-                glob
+                glob,
+                format
               })
             : ""
         }`,
