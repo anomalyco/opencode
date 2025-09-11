@@ -219,8 +219,12 @@ export namespace Ripgrep {
     return result.split("\n").filter(Boolean)
   }
 
-  export async function tree(input: { cwd: string; limit?: number }) {
-    const files = await Ripgrep.files({ cwd: input.cwd })
+  export async function tree(input: {
+    cwd: string;
+    limit?: number;
+    glob?: string[]
+  }) {
+    const files = await Ripgrep.files({ cwd: input.cwd, glob: input.glob })
     interface Node {
       path: string[]
       children: Node[]

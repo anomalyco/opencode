@@ -31,6 +31,10 @@ export namespace SystemPrompt {
   }
 
   export async function environment() {
+    const config = await Config.get()
+    const limit = config.experimental?.project_tree?.limit ?? 200
+    const glob = config.experimental?.project_tree?.glob
+
     const project = Instance.project
     return [
       [
@@ -43,10 +47,11 @@ export namespace SystemPrompt {
         `</env>`,
         `<project>`,
         `  ${
-          project.vcs === "git"
+          project.vcs === "git" && limit > 0
             ? await Ripgrep.tree({
                 cwd: Instance.directory,
-                limit: 200,
+                limit,
+                glob
               })
             : ""
         }`,

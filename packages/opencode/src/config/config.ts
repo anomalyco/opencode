@@ -499,6 +499,12 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          project_tree: z
+            .object({
+              limit: z.number().int().min(0).optional(),
+              glob: z.array(z.string()).optional(),
+            })
+            .optional()
         })
         .optional(),
     })
