@@ -323,6 +323,339 @@ describe("mapFormattingPositions - prettier formatting", () => {
       "
     `)
   })
+
+  it("handles extreme print width causing single line to multi-line", async () => {
+    const result = await testFormatting(
+      `const obj = {《a:1,b:2,c:3,d:4,e:5,f:6,g:7,h:8,i:9,j:10,k:11,l:12,m:13,n:14,o:15,p:16》}`,
+      { printWidth: 20 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const obj = {
+        《a: 1,
+        b: 2,
+        c: 3,
+        d: 4,
+        e: 5,
+        f: 6,
+        g: 7,
+        h: 8,
+        i: 9,
+        j: 10,
+        k: 11,
+        l: 12,
+        m: 13,
+        n: 14,
+        o: 15,
+        p: 16,
+      》};
+      "
+    `)
+  })
+
+  it("formats deeply nested ternary with JSX", async () => {
+    const result = await testFormatting(
+      `const Component = () => 《isLoading ? <Spinner /> : error ? <Error msg={error} /> : data ? <div>{data.map(item => <Item key={item.id} {...item} />)}</div> : <Empty />》`,
+      { printWidth: 40 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const Component = () =>
+        《isLoading ? (
+          <Spinner />
+        ) : error ? (
+          <Error msg={error} />
+        ) : data ? (
+          <div>
+            {data.map((item) => (
+              <Item key={item.id} {...item} />
+            ))}
+          </div>
+        ) : (
+          <Empty />
+        );
+      》"
+    `)
+  })
+
+  it("handles complex generic type with constraints", async () => {
+    const result = await testFormatting(
+      `type Complex<T extends 《[{a:string,b:number},{c:boolean,d:T extends {a:string} ? string : number}]》> = T`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "type Complex<
+        T extends 《[
+          { a: string; b: number },
+          { c: boolean; d: T extends { a: string } ? string : number },
+        ],
+      》> = T;
+      "
+    `)
+  })
+
+  it("formats mixed quotes in JSX attributes", async () => {
+    const result = await testFormatting(
+      `<Component 《attr1="value1" attr2='value2' attr3={"value3"} attr4={'value4'}》 />`,
+      { jsxSingleQuote: true, singleQuote: false }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "<Component 《attr1='value1' attr2='value2' attr3={"value3"} attr4={"value4"}》 />;
+      "
+    `)
+  })
+
+  it("handles semicolon insertion in ambiguous cases", async () => {
+    const result = await testFormatting(
+      `《const a = b
+[1,2,3].forEach(x => console.log(x))》`,
+      { semi: true }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《const a = b[(1, 2, 3)].forEach((x) => console.log(x));
+      》"
+    `)
+  })
+
+  it("formats complex destructuring with rename and defaults", async () => {
+    const result = await testFormatting(
+      `const {《a:aliasA="defaultA",b:{c:aliasC,d:[first,...rest]={}},...others》} = complex`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const {
+        《a: aliasA = "defaultA",
+        b: { c: aliasC, d: [first, ...rest] = {} },
+        ...others
+      》} = complex;
+      "
+    `)
+  })
+
+  it("handles arrow function with destructured params and return type", async () => {
+    const result = await testFormatting(
+      `const fn = 《({a,b,c}:{a:string,b:number,c:boolean}):{result:string,success:boolean}=>({result:a+b,success:c})》`,
+      { arrowParens: "always", printWidth: 40 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const fn = 《({
+        a,
+        b,
+        c,
+      }: {
+        a: string;
+        b: number;
+        c: boolean;
+      }): {
+        result: string;
+        success: boolean;
+      } => ({ result: a + b, success: c });
+      》"
+    `)
+  })
+
+  it("formats template literal with nested expressions", async () => {
+    const result = await testFormatting(
+      "const str = 《`Result: ${data.map(d => `- ${d.name}: ${d.value}`).join('\\n')}`》"
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const str = 《\`Result: \${data.map((d) => \`- \${d.name}: \${d.value}\`).join("\\n")}\`;
+      》"
+    `)
+  })
+
+  it("handles class with decorators and parameter properties", async () => {
+    const result = await testFormatting(
+      `《@injectable()@singleton()class Service{constructor(@inject(TYPES.Database)private readonly db:IDatabase,@inject(TYPES.Logger)private logger:ILogger){}}》`,
+      { printWidth: 50 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《@injectable()
+      @singleton()
+      class Service {
+        constructor(
+          @inject(TYPES.Database)
+          private readonly db: IDatabase,
+          @inject(TYPES.Logger) private logger: ILogger,
+        ) {}
+      }
+      》"
+    `)
+  })
+
+  it("formats complex async generator with try-catch", async () => {
+    const result = await testFormatting(
+      `《async function*complexGenerator<T>(items:T[]):AsyncGenerator<T,void,unknown>{try{for(const item of items){yield await processItem(item)}}catch(e){console.error(e);throw e}}》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《async function* complexGenerator<T>(
+        items: T[],
+      ): AsyncGenerator<T, void, unknown> {
+        try {
+          for (const item of items) {
+            yield await processItem(item);
+          }
+        } catch (e) {
+          console.error(e);
+          throw e;
+        }
+      }
+      》"
+    `)
+  })
+
+  it("handles mixed object and array destructuring", async () => {
+    const result = await testFormatting(
+      `const 《{data:[{id,name},...rest],meta:{total,page}}》 = response`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const 《{
+        data: [{ id, name }, ...rest],
+        meta: { total, page },
+      }》 = response;
+      "
+    `)
+  })
+
+  it("formats function overloads with complex types", async () => {
+    const result = await testFormatting(
+      `《function process(input:string):string;function process(input:number):number;function process<T extends string|number>(input:T):T{return input}》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《function process(input: string): string;
+      function process(input: number): number;
+      function process<T extends string | number>(input: T): T {
+        return input;
+      }
+      》"
+    `)
+  })
+
+  it("handles JSX with spread props and children", async () => {
+    const result = await testFormatting(
+      `const el = 《<Parent {...parentProps}><Child {...childProps}>{items.map((item,i)=><Item key={i} {...item}/>)}</Child></Parent>》`,
+      { printWidth: 30 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const el = (
+        《<Parent {...parentProps}>
+          <Child {...childProps}>
+            {items.map(
+              (item, i) => (
+                <Item
+                  key={i}
+                  {...item}
+                />
+              ),
+            )}
+          </Child>
+        </Parent>
+      );
+      》"
+    `)
+  })
+
+  it("formats complex type union with intersections", async () => {
+    const result = await testFormatting(
+      `type Combined = 《{a:string}&{b:number}|{c:boolean}&{d:string}|{e:T extends string ? {f:string} : {g:number}}》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "type Combined =
+        | (《{ a: string } & { b: number })
+        | ({ c: boolean } & { d: string })
+        | { e: T extends string ? { f: string } : { g: number } };
+      》"
+    `)
+  })
+
+  it("handles dynamic import with complex then chain", async () => {
+    const result = await testFormatting(
+      `《import('./module').then(({default:mod})=>mod.initialize()).then(instance=>instance.start()).catch(console.error)》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《import("./module")
+        .then(({ default: mod }) => mod.initialize())
+        .then((instance) => instance.start())
+        .catch(console.error);
+      》"
+    `)
+  })
+
+  it("formats regex with unicode and flags", async () => {
+    const result = await testFormatting(
+      `const regex = 《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const regex =
+        《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu;
+      》"
+    `)
+  })
+
+  it("handles complex mapped types with template literals", async () => {
+    const result = await testFormatting(
+      `type Getters<T> = 《{[K in keyof T as \`get\${Capitalize<string & K>}\`]:()=>T[K]}&{[K in keyof T as \`set\${Capitalize<string & K>}\`]:(value:T[K])=>void}》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "type Getters<T> = 《{
+        [K in keyof T as \`get\${Capitalize<string & K>}\`]: () => T[K];
+      } & { [K in keyof T as \`set\${Capitalize<string & K>}\`]: (value: T[K]) => void };
+      》"
+    `)
+  })
+
+  it("formats do-while with complex condition", async () => {
+    const result = await testFormatting(
+      `《do{result=await attemptOperation();retries++}while(!result.success&&retries<maxRetries&&Date.now()-startTime<timeout)》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "《do {
+        result = await attemptOperation();
+        retries++;
+      } while (
+        !result.success &&
+        retries < maxRetries &&
+        Date.now() - startTime < timeout
+      );
+      》"
+    `)
+  })
+
+  it("handles optional chaining with nullish coalescing", async () => {
+    const result = await testFormatting(
+      `const value = 《data?.user?.profile?.settings?.theme?.colors?.primary??data?.defaults?.theme?.colors?.primary??'#000000'》`
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const value =
+        《data?.user?.profile?.settings?.theme?.colors?.primary ??
+        data?.defaults?.theme?.colors?.primary ??
+        "#000000";
+      》"
+    `)
+  })
+
+  it("formats complex array methods with type predicates", async () => {
+    const result = await testFormatting(
+      `const filtered = 《items.filter((item):item is ValidItem=>item.isValid&&item.data!==null).map(item=>({...item,processed:true})).reduce((acc,item)=>({...acc,[item.id]:item}),{})》`,
+      { printWidth: 40 }
+    )
+    expect(result).toMatchInlineSnapshot(`
+      "const filtered = 《items
+        .filter(
+          (item): item is ValidItem =>
+            item.isValid &&
+            item.data !== null,
+        )
+        .map((item) => ({
+          ...item,
+          processed: true,
+        }))
+        .reduce(
+          (acc, item) => ({
+            ...acc,
+            [item.id]: item,
+          }),
+          {},
+        );
+      》"
+    `)
+  })
 })
 
 async function testFormatting(input: string, options: prettier.Options = {}): Promise<string> {
