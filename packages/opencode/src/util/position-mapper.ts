@@ -10,7 +10,7 @@ export function mapFormattingPositions(
   content: string,
   oldString: string,
   newString: string,
-  replaceAll = false
+  replaceAll = false,
 ): ReplacementInfo {
   if (oldString === newString) {
     throw new Error("oldString and newString must be different")
@@ -31,13 +31,15 @@ export function mapFormattingPositions(
   }
 
   let newContent: string
-  
+
   if (replaceAll) {
     newContent = content.replaceAll(oldString, newString)
   } else {
     const lastIndex = content.lastIndexOf(oldString)
     if (index !== lastIndex) {
-      throw new Error("oldString found multiple times and requires more code context to uniquely identify the intended match")
+      throw new Error(
+        "oldString found multiple times and requires more code context to uniquely identify the intended match",
+      )
     }
     newContent = content.substring(0, index) + newString + content.substring(index + oldString.length)
   }
@@ -45,10 +47,27 @@ export function mapFormattingPositions(
   // Use diff_match_patch to map positions from original to new content
   const dmp = new diff_match_patch()
   const diffs = dmp.diff_main(content, newContent, false)
-  
+
   // Map the start and end positions
-  const start = dmp.diff_xIndex(diffs, index)
-  const end = dmp.diff_xIndex(diffs, index + oldString.length)
+  let start = dmp.diff_xIndex(diffs, index)
+  let end = dmp.diff_xIndex(diffs, index + oldString.length)
+
+  // For replaceAll, we need to find where the replacement actually starts and ends
+  // in the new content. Since the first character might have moved, we need to
+  // find the actual replacement boundaries.
+  if (replaceAll && newContent.substring(start, start + newString.length) !== newString) {
+    // Adjust start position if needed
+    const searchStart = Math.max(0, start - 10)
+    const searchEnd = Math.min(newContent.length, start + 10)
+    const searchArea = newContent.substring(searchStart, searchEnd)
+    const relIndex = searchArea.indexOf(newString)
+    if (relIndex >= 0) {
+      start = searchStart + relIndex
+      end = start + newString.length
+    }
+  } else if (replaceAll) {
+    end = start + newString.length
+  }
 
   return {
     newContent,
