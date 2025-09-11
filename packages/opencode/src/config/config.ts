@@ -499,6 +499,7 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          disable_paste_summary: z.boolean().optional()
         })
         .optional(),
     })

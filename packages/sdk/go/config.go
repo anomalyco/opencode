@@ -698,16 +698,18 @@ func (r configCommandJSON) RawJSON() string {
 }
 
 type ConfigExperimental struct {
-	Hook ConfigExperimentalHook `json:"hook"`
-	JSON configExperimentalJSON `json:"-"`
+	Hook                ConfigExperimentalHook `json:"hook"`
+	DisablePasteSummary bool                   `json:"disable_paste_summary"`
+	JSON                configExperimentalJSON `json:"-"`
 }
 
 // configExperimentalJSON contains the JSON metadata for the struct
 // [ConfigExperimental]
 type configExperimentalJSON struct {
-	Hook        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	Hook           apijson.Field
+	SummarizePaste apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
 }
 
 func (r *ConfigExperimental) UnmarshalJSON(data []byte) (err error) {
@@ -1751,15 +1753,15 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed,required"`
-	JSON        configTuiJSON `json:"-"`
+	ScrollSpeed    float64       `json:"scroll_speed,required"`
+	JSON           configTuiJSON `json:"-"`
 }
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
-	ScrollSpeed apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ScrollSpeed    apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
 }
 
 func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
