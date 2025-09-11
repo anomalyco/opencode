@@ -174,7 +174,7 @@ describe("mapFormattingPositions - prettier formatting", () => {
   })
 
   it("formats try-catch block", async () => {
-    const result = await testFormatting(`《try{doSomething()}catch(e){console.error(e)}》`)
+    const result = await testFormatting(`console.log();\ntry{doSomething()}catch(e){console.error(e)}》`)
     expect(result).toMatchInlineSnapshot(`
       "《try {
         doSomething();
@@ -687,6 +687,40 @@ async function testFormatting(input: string, options: prettier.Options = {}): Pr
 
   // Use mapFormattingPositions to map the positions
   const result = mapFormattingPositions(originalContent, formattedContent, originalStart, originalEnd)
+
+  // Validate the formatted partial string
+  // 1. Extract the original partial string and the formatted partial string
+  const originalPartial = originalContent.slice(originalStart, originalEnd)
+  const formattedPartial = result.newContent.slice(result.start, result.end)
+
+  // 2. Replace the original partial with the formatted partial in the original content
+  const replacedContent = originalContent.slice(0, originalStart) + formattedPartial + originalContent.slice(originalEnd)
+
+  // 3. Try to format the replaced content to check for syntax errors
+  let formattedReplacedContent: string
+  try {
+    formattedReplacedContent = await prettier.format(replacedContent, {
+      parser: "typescript",
+      printWidth: 80,
+      tabWidth: 2,
+      useTabs: false,
+      semi: true,
+      ...options,
+    })
+  } catch (error) {
+    throw new Error(`Replacing original partial string with formatted partial string resulted in invalid code: ${error}`)
+  }
+
+  // 4. Verify that formatting the replaced content gives the same result as formatting the original
+  if (formattedReplacedContent !== formattedContent) {
+    throw new Error(
+      `Semantic equivalence check failed. Replacing the partial string and formatting gives different result than formatting the original content.\n` +
+      `Original partial: ${JSON.stringify(originalPartial)}\n` +
+      `Formatted partial: ${JSON.stringify(formattedPartial)}\n` +
+      `Expected: ${JSON.stringify(formattedContent)}\n` +
+      `Got: ${JSON.stringify(formattedReplacedContent)}`
+    )
+  }
 
   // Insert markers at the mapped positions
   return insertMarkers(result.newContent, result.start, result.end)
