@@ -219,12 +219,7 @@ export namespace Ripgrep {
     return result.split("\n").filter(Boolean)
   }
 
-  export async function tree(input: {
-    cwd: string;
-    limit?: number;
-    glob?: string[];
-    format?: string,
-  }) {
+  export async function tree(input: { cwd: string; limit?: number; glob?: string[]; format?: string }) {
     const files = await Ripgrep.files({ cwd: input.cwd, glob: input.glob })
     interface Node {
       path: string[]
@@ -313,7 +308,7 @@ export namespace Ripgrep {
 
     const lines: string[] = []
 
-    if (input.format === 'markdown') {
+    if (input.format === "markdown") {
       function renderPretty(node: Node) {
         const files = node.children.filter((c) => c.children.length === 0)
         const dirs = node.children.filter((c) => c.children.length > 0)

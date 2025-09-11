@@ -505,7 +505,7 @@ export namespace Config {
               glob: z.array(z.string()).optional(),
               format: z.string().optional(),
             })
-            .optional()
+            .optional(),
         })
         .optional(),
     })
