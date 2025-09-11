@@ -20,10 +20,10 @@ describe("mapFormattingPositions - prettier formatting", () => {
   })
 
   it("adds parentheses to arrow function", async () => {
-    const result = await testFormatting(`const fn = 《x => x * 2》`, { arrowParens: "always" })
+    const result = await testFormatting(`const fn = (《x) => x * 2》;`, { arrowParens: "always" })
     expect(result).toMatchInlineSnapshot(`
-      "const fn = (《x) => x * 2;
-      》"
+      "const fn = (《x) => x * 2》;
+      "
     `)
   })
 
@@ -47,14 +47,16 @@ describe("mapFormattingPositions - prettier formatting", () => {
   })
 
   it("formats inline JSX to multi-line", async () => {
-    const result = await testFormatting(`return 《<div><span>text</span></div>》`)
+    const result = await testFormatting(`return (
+  《<div><span>text</span></div>》
+);`)
     expect(result).toMatchInlineSnapshot(`
       "return (
         《<div>
           <span>text</span>
-        </div>
+        </div>》
       );
-      》"
+      "
     `)
   })
 
@@ -174,7 +176,7 @@ describe("mapFormattingPositions - prettier formatting", () => {
   })
 
   it("formats try-catch block", async () => {
-    const result = await testFormatting(`console.log();\ntry{doSomething()}catch(e){console.error(e)}》`)
+    const result = await testFormatting(`《try{doSomething()}catch(e){console.error(e)}》`)
     expect(result).toMatchInlineSnapshot(`
       "《try {
         doSomething();
@@ -250,15 +252,17 @@ describe("mapFormattingPositions - prettier formatting", () => {
   })
 
   it("formats JSX with fragments", async () => {
-    const result = await testFormatting(`return 《<><div>A</div><div>B</div></>》`)
+    const result = await testFormatting(`return (
+  《<><div>A</div><div>B</div></>》
+);`)
     expect(result).toMatchInlineSnapshot(`
       "return (
         《<>
           <div>A</div>
           <div>B</div>
-        </>
+        </>》
       );
-      》"
+      "
     `)
   })
 
@@ -527,7 +531,9 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("handles JSX with spread props and children", async () => {
     const result = await testFormatting(
-      `const el = 《<Parent {...parentProps}><Child {...childProps}>{items.map((item,i)=><Item key={i} {...item}/>)}</Child></Parent>》`,
+      `const el = (
+  《<Parent {...parentProps}><Child {...childProps}>{items.map((item,i)=><Item key={i} {...item}/>)}</Child></Parent>》
+);`,
       { printWidth: 30 },
     )
     expect(result).toMatchInlineSnapshot(`
@@ -543,22 +549,25 @@ describe("mapFormattingPositions - prettier formatting", () => {
               ),
             )}
           </Child>
-        </Parent>
+        </Parent>》
       );
-      》"
+      "
     `)
   })
 
   it("formats complex type union with intersections", async () => {
     const result = await testFormatting(
-      `type Combined = 《{a:string}&{b:number}|{c:boolean}&{d:string}|{e:T extends string ? {f:string} : {g:number}}》`,
+      `type Combined =
+  | (《{a:string}&{b:number}》)
+  | ({c:boolean}&{d:string})
+  | {e:T extends string ? {f:string} : {g:number}};`,
     )
     expect(result).toMatchInlineSnapshot(`
       "type Combined =
-        | (《{ a: string } & { b: number })
+        | (《{ a: string } & { b: number }》)
         | ({ c: boolean } & { d: string })
         | { e: T extends string ? { f: string } : { g: number } };
-      》"
+      "
     `)
   })
 
