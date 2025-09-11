@@ -663,6 +663,254 @@ describe("mapFormattingPositions - prettier formatting", () => {
       》"
     `)
   })
+
+  describe("complex edge cases with significant transformations", () => {
+    it("handles minified object with complex nesting", async () => {
+      const result = await testFormatting(
+        `const config = {
+  api: {
+    《url:"https://api.example.com",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},retry:{attempts:3,delay:1000,backoff:2},transformResponse:data=>({...data,timestamp:Date.now()})》
+  }
+};`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "const config = {
+          api: {
+            《url: "https://api.example.com",
+            headers: {
+              Authorization: "Bearer " + token,
+              "Content-Type": "application/json",
+            },
+            retry: { attempts: 3, delay: 1000, backoff: 2 },
+            transformResponse: (data) => ({ ...data, timestamp: Date.now() }),》
+          },
+        };
+        "
+      `)
+    })
+
+    it("handles deeply nested ternary with mixed content", async () => {
+      const result = await testFormatting(
+        `const Component = () => (
+  <div>
+    {《loading?<Spinner/>:error?<Alert type="error">{error.message}</Alert>:data?.items?.length>0?data.items.map(item=><Card key={item.id}>{item.name}</Card>):<Empty/>》}
+  </div>
+);`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "const Component = () => (
+          <div>
+            {《loading ? (
+              <Spinner />
+            ) : error ? (
+              <Alert type="error">{error.message}</Alert>
+            ) : data?.items?.length > 0 ? (
+              data.items.map((item) => <Card key={item.id}>{item.name}</Card>)
+            ) : (
+              <Empty />
+            )》}
+          </div>
+        );
+        "
+      `)
+    })
+
+    it("handles inline async function with error handling", async () => {
+      const result = await testFormatting(
+        `const handler = 《async(req,res)=>{try{const{id,data}=req.body;if(!id||!data)return res.status(400).json({error:"Missing required fields"});const result=await db.update(id,data);res.json({success:true,result})}catch(e){console.error(e);res.status(500).json({error:"Internal server error"})}}》;`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "const handler = 《async (req, res) => {
+          try {
+            const { id, data } = req.body;
+            if (!id || !data)
+              return res.status(400).json({ error: "Missing required fields" });
+            const result = await db.update(id, data);
+            res.json({ success: true, result });
+          } catch (e) {
+            console.error(e);
+            res.status(500).json({ error: "Internal server error" });
+          }
+        }》;
+        "
+      `)
+    })
+
+    it("handles complex type definition with conditional types", async () => {
+      const result = await testFormatting(
+        `type ApiResponse<T> =
+  | {
+      《status:"success";data:T;metadata:{timestamp:number;version:string;};errors?:never》
+    }
+  | {status:"error";data?:never;metadata?:never;errors:Array<{code:string;message:string;field?:string}>};`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "type ApiResponse<T> =
+          | {
+              《status: "success";
+              data: T;
+              metadata: { timestamp: number; version: string };
+              errors?: never;》
+            }
+          | {
+              status: "error";
+              data?: never;
+              metadata?: never;
+              errors: Array<{ code: string; message: string; field?: string }>;
+            };
+        "
+      `)
+    })
+
+    it("handles inline array of functions with mixed syntax", async () => {
+      const result = await testFormatting(
+        `const middlewares = [
+  《(req,res,next)=>{console.log(req.url);next()},async(req,res,next)=>{try{req.user=await authenticate(req.headers.authorization);next()}catch(e){res.status(401).json({error:"Unauthorized"})}},function rateLimit(req,res,next){if(requests[req.ip]>100)return res.status(429).json({error:"Too many requests"});next()}》
+];`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "const middlewares = [
+          《(req, res, next) => {
+            console.log(req.url);
+            next();
+          },
+          async (req, res, next) => {
+            try {
+              req.user = await authenticate(req.headers.authorization);
+              next();
+            } catch (e) {
+              res.status(401).json({ error: "Unauthorized" });
+            }
+          },
+          function rateLimit(req, res, next) {
+            if (requests[req.ip] > 100)
+              return res.status(429).json({ error: "Too many requests" });
+            next();
+          },》
+        ];
+        "
+      `)
+    })
+
+    it("handles compact class with decorators and methods", async () => {
+      const result = await testFormatting(
+        `@Injectable()
+class UserService {
+  《constructor(private db:Database,private cache:Cache,private logger:Logger){}async getUser(id:string){const cached=await this.cache.get(\`user:\${id}\`);if(cached)return cached;const user=await this.db.findOne({id});if(user)await this.cache.set(\`user:\${id}\`,user,3600);return user}async updateUser(id:string,data:Partial<User>){await this.db.update({id},data);await this.cache.delete(\`user:\${id}\`);this.logger.info(\`Updated user \${id}\`);}》
+}`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "@Injectable()
+        class UserService {
+          《constructor(
+            private db: Database,
+            private cache: Cache,
+            private logger: Logger,
+          ) {}
+          async getUser(id: string) {
+            const cached = await this.cache.get(\`user:\${id}\`);
+            if (cached) return cached;
+            const user = await this.db.findOne({ id });
+            if (user) await this.cache.set(\`user:\${id}\`, user, 3600);
+            return user;
+          }
+          async updateUser(id: string, data: Partial<User>) {
+            await this.db.update({ id }, data);
+            await this.cache.delete(\`user:\${id}\`);
+            this.logger.info(\`Updated user \${id}\`);
+          }》
+        }
+        "
+      `)
+    })
+
+    it("handles minified React component with hooks", async () => {
+      const result = await testFormatting(
+        `function TodoList() {
+  《const[todos,setTodos]=useState([]);const[input,setInput]=useState("");const[filter,setFilter]=useState("all");const filtered=useMemo(()=>filter==="all"?todos:filter==="active"?todos.filter(t=>!t.done):todos.filter(t=>t.done),[todos,filter]);return(<div><input value={input} onChange={e=>setInput(e.target.value)}/><button onClick={()=>{if(input.trim()){setTodos([...todos,{id:Date.now(),text:input,done:false}]);setInput("")}}}>Add</button><ul>{filtered.map(todo=><li key={todo.id}><input type="checkbox" checked={todo.done} onChange={()=>setTodos(todos.map(t=>t.id===todo.id?{...t,done:!t.done}:t))}/>{todo.text}</li>)}</ul></div>)》;
+}`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "function TodoList() {
+          《const [todos, setTodos] = useState([]);
+          const [input, setInput] = useState("");
+          const [filter, setFilter] = useState("all");
+          const filtered = useMemo(
+            () =>
+              filter === "all"
+                ? todos
+                : filter === "active"
+                  ? todos.filter((t) => !t.done)
+                  : todos.filter((t) => t.done),
+            [todos, filter],
+          );
+          return (
+            <div>
+              <input value={input} onChange={(e) => setInput(e.target.value)} />
+              <button
+                onClick={() => {
+                  if (input.trim()) {
+                    setTodos([...todos, { id: Date.now(), text: input, done: false }]);
+                    setInput("");
+                  }
+                }}
+              >
+                Add
+              </button>
+              <ul>
+                {filtered.map((todo) => (
+                  <li key={todo.id}>
+                    <input
+                      type="checkbox"
+                      checked={todo.done}
+                      onChange={() =>
+                        setTodos(
+                          todos.map((t) =>
+                            t.id === todo.id ? { ...t, done: !t.done } : t,
+                          ),
+                        )
+                      }
+                    />
+                    {todo.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )》;
+        }
+        "
+      `)
+    })
+
+    it("handles promise chain with mixed async patterns", async () => {
+      const result = await testFormatting(
+        `const processData = () => {
+  《fetch(url).then(r=>r.ok?r.json():Promise.reject(new Error(\`HTTP \${r.status}\`))).then(async data=>{const processed=await transformData(data);const validated=validateSchema(processed);if(!validated.valid)throw new Error("Invalid data: "+validated.errors.join(", "));return saveToDatabase(validated.data)}).then(saved=>({success:true,id:saved.id,timestamp:Date.now()})).catch(err=>{console.error("Processing failed:",err);return{success:false,error:err.message}})》
+};`,
+      )
+      expect(result).toMatchInlineSnapshot(`
+        "const processData = () => {
+          《fetch(url)
+            .then((r) =>
+              r.ok ? r.json() : Promise.reject(new Error(\`HTTP \${r.status}\`)),
+            )
+            .then(async (data) => {
+              const processed = await transformData(data);
+              const validated = validateSchema(processed);
+              if (!validated.valid)
+                throw new Error("Invalid data: " + validated.errors.join(", "));
+              return saveToDatabase(validated.data);
+            })
+            .then((saved) => ({ success: true, id: saved.id, timestamp: Date.now() }))
+            .catch((err) => {
+              console.error("Processing failed:", err);
+              return { success: false, error: err.message };
+            });》
+        };
+        "
+      `)
+    })
+  })
 })
 
 async function testFormatting(input: string, options: prettier.Options = {}): Promise<string> {
@@ -703,7 +951,8 @@ async function testFormatting(input: string, options: prettier.Options = {}): Pr
   const formattedPartial = result.newContent.slice(result.start, result.end)
 
   // 2. Replace the original partial with the formatted partial in the original content
-  const replacedContent = originalContent.slice(0, originalStart) + formattedPartial + originalContent.slice(originalEnd)
+  const replacedContent =
+    originalContent.slice(0, originalStart) + formattedPartial + originalContent.slice(originalEnd)
 
   // 3. Try to format the replaced content to check for syntax errors
   let formattedReplacedContent: string
@@ -717,17 +966,19 @@ async function testFormatting(input: string, options: prettier.Options = {}): Pr
       ...options,
     })
   } catch (error) {
-    throw new Error(`Replacing original partial string with formatted partial string resulted in invalid code: ${error}`)
+    throw new Error(
+      `Replacing original partial string with formatted partial string resulted in invalid code: ${error}`,
+    )
   }
 
   // 4. Verify that formatting the replaced content gives the same result as formatting the original
   if (formattedReplacedContent !== formattedContent) {
     throw new Error(
       `Semantic equivalence check failed. Replacing the partial string and formatting gives different result than formatting the original content.\n` +
-      `Original partial: ${JSON.stringify(originalPartial)}\n` +
-      `Formatted partial: ${JSON.stringify(formattedPartial)}\n` +
-      `Expected: ${JSON.stringify(formattedContent)}\n` +
-      `Got: ${JSON.stringify(formattedReplacedContent)}`
+        `Original partial: ${JSON.stringify(originalPartial)}\n` +
+        `Formatted partial: ${JSON.stringify(formattedPartial)}\n` +
+        `Expected: ${JSON.stringify(formattedContent)}\n` +
+        `Got: ${JSON.stringify(formattedReplacedContent)}`,
     )
   }
 
