@@ -486,43 +486,43 @@ export namespace Provider {
     }
   }
 
-function transformJsonSchema(schema: any): any {
+  function transformJsonSchema(schema: any): any {
     // Only handle simple object schemas
-    if (!schema || schema.type !== 'object' || !schema.properties) {
+    if (!schema || schema.type !== "object" || !schema.properties) {
       return schema // Return as-is for anything we don't understand
     }
-    
+
     // If it has oneOf, anyOf, allOf, or other complex stuff - bail out
     if (schema.oneOf || schema.anyOf || schema.allOf) {
-      log.warn('Complex JSON schema detected, skipping transformation', { schema })
+      log.warn("Complex JSON schema detected, skipping transformation", { schema })
       return schema
     }
-    
+
     // Simple transformation: all properties become required + nullable
     const required = Object.keys(schema.properties)
     const properties: Record<string, any> = {}
-    
+
     for (const [key, prop] of Object.entries(schema.properties)) {
       if (!schema.required?.includes(key)) {
         // Make it nullable
-        properties[key] = { 
-          anyOf: [prop, { type: 'null' }] 
+        properties[key] = {
+          anyOf: [prop, { type: "null" }],
         }
       } else {
         properties[key] = prop
       }
     }
-    
+
     return {
       ...schema,
       required,
-      properties
+      properties,
     }
   }
 
   export function transformMCPToolForProvider(tool: any, providerID: string): any {
-    if (!['openai', 'azure'].includes(providerID)) return tool
-    
+    if (!["openai", "azure"].includes(providerID)) return tool
+
     try {
       // AI SDK converts MCP tools to: { parameters: { jsonSchema: <original_inputSchema> } }
       if (tool.parameters?.jsonSchema) {
@@ -531,16 +531,16 @@ function transformJsonSchema(schema: any): any {
           ...tool,
           parameters: {
             ...tool.parameters,
-            jsonSchema: transformedSchema
-          }
+            jsonSchema: transformedSchema,
+          },
         }
       }
-      
+
       return tool
     } catch (error: any) {
-      log.warn('Could not transform MCP tool schema, using as-is', { 
-        toolId: tool.id || 'unknown',
-        error: error.message 
+      log.warn("Could not transform MCP tool schema, using as-is", {
+        toolId: tool.id || "unknown",
+        error: error.message,
       })
       return tool
     }
