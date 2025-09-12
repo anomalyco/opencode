@@ -55,7 +55,15 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
-    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).nothrow().text()
+    const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).nothrow()
+
+    // If git diff fails, return empty patch
+    if (result.exitCode !== 0) {
+      log.warn("failed to get diff", { hash, exitCode: result.exitCode })
+      return { hash, files: [] }
+    }
+
+    const files = result.text()
     return {
       hash,
       files: files
@@ -70,10 +78,14 @@ export namespace Snapshot {
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const git = gitdir()
-    await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
+    const result = await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
       .quiet()
       .cwd(Instance.worktree)
       .nothrow()
+
+    if (result.exitCode !== 0) {
+      log.error("failed to restore snapshot", { snapshot, exitCode: result.exitCode })
+    }
   }
 
   export async function revert(patches: Patch[]) {
@@ -98,8 +110,14 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow().text()
-    return result.trim()
+    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow()
+
+    if (result.exitCode !== 0) {
+      log.warn("failed to get diff", { hash, exitCode: result.exitCode })
+      return ""
+    }
+
+    return result.text().trim()
   }
 
   function gitdir() {
