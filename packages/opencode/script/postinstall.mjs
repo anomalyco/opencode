@@ -111,7 +111,7 @@ async function main() {
     }
 
     const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "..", "bin", "opencode")
+    const binScript = path.join(__dirname, "bin", "opencode")
 
     // Remove existing bin script if it exists
     if (fs.existsSync(binScript)) {
