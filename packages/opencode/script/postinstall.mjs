@@ -75,15 +75,12 @@ async function regenerateWindowsCmdWrappers() {
     const { execSync } = require("child_process")
     const pkgPath = path.join(__dirname, "..")
 
-    // Determine if this is a global or local install
-    const isGlobal =
-      process.env.npm_config_global === "true" ||
-      pkgPath.includes(path.join("npm", "node_modules")) ||
-      pkgPath.includes(path.join("npm-global", "lib", "node_modules"))
+    // npm_config_global is string | undefined
+    // if it exists, the value is true
+    const isGlobal = process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
 
-    console.log(`Installation type: ${isGlobal ? "global" : "local"}`)
-
-    // Build command and options
+    // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
+    // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
     const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
     const opts = {
       stdio: "inherit",
@@ -103,8 +100,9 @@ async function regenerateWindowsCmdWrappers() {
 async function main() {
   try {
     if (os.platform() === "win32") {
-      // On Windows with npm, regenerate cmd wrappers
-      if (process.env.npm_config_user_agent) {
+      // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
+      // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
+      if (process.env.npm_config_user_agent.startsWith("npm")) {
         await regenerateWindowsCmdWrappers()
       } else {
         console.log("Windows detected but not npm, skipping postinstall")
