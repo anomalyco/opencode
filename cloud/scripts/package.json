@@ -1,12 +1,13 @@
 {
   "name": "@opencode/cloud-scripts",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx",
-    "shell": "sst shell"
+    "shell": "sst shell -- bun tsx",
+    "shell-dev": "sst shell --stage dev -- bun tsx",
+    "shell-prod": "sst shell --stage production -- bun tsx"
   },
   "dependencies": {
     "@opencode/cloud-core": "workspace:*",

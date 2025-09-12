@@ -1,6 +1,6 @@
 {
   "name": "@opencode/function",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",

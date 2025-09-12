@@ -1,7 +1,7 @@
 {
   "name": "@opencode/web",
   "type": "module",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "sst shell --stage=dev --target=Web astro dev",

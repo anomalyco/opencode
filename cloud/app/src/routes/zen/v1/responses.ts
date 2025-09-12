@@ -1,8 +1,20 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { handler } from "~/util/zen"
 
+type Usage = {
+  input_tokens?: number
+  input_tokens_details?: {
+    cached_tokens?: number
+  }
+  output_tokens?: number
+  output_tokens_details?: {
+    reasoning_tokens?: number
+  }
+  total_tokens?: number
+}
+
 export function POST(input: APIEvent) {
-  let usage: any
+  let usage: Usage
   return handler(input, {
     setAuthHeader: (headers: Headers, apiKey: string) => {
       headers.set("authorization", `Bearer ${apiKey}`)
@@ -15,7 +27,7 @@ export function POST(input: APIEvent) {
 
       let json
       try {
-        json = JSON.parse(data.slice(6))
+        json = JSON.parse(data.slice(6)) as { response?: { usage?: Usage } }
       } catch (e) {
         return
       }
@@ -24,14 +36,14 @@ export function POST(input: APIEvent) {
       usage = json.response.usage
     },
     getStreamUsage: () => usage,
-    normalizeUsage: (usage: any) => {
+    normalizeUsage: (usage: Usage) => {
       const inputTokens = usage.input_tokens ?? 0
       const outputTokens = usage.output_tokens ?? 0
-      const reasoningTokens = usage.output_tokens_details?.reasoning_tokens ?? 0
-      const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? 0
+      const reasoningTokens = usage.output_tokens_details?.reasoning_tokens ?? undefined
+      const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
       return {
-        inputTokens: inputTokens - cacheReadTokens,
-        outputTokens: outputTokens - reasoningTokens,
+        inputTokens: inputTokens - (cacheReadTokens ?? 0),
+        outputTokens: outputTokens - (reasoningTokens ?? 0),
         reasoningTokens,
         cacheReadTokens,
       }

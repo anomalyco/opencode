@@ -1116,7 +1116,7 @@ export namespace Session {
       item.callback(result)
     }
     state().queued.delete(input.sessionID)
-    Session.prune(input)
+    // Session.prune(input)
     return result
   }
 

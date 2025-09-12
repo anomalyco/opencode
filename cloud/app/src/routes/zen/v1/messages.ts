@@ -53,9 +53,9 @@ export function POST(input: APIEvent) {
     normalizeUsage: (usage: Usage) => ({
       inputTokens: usage.input_tokens ?? 0,
       outputTokens: usage.output_tokens ?? 0,
-      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-      cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens,
-      cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens,
+      cacheReadTokens: usage.cache_read_input_tokens ?? undefined,
+      cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? undefined,
+      cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
     }),
   })
 }

@@ -1,8 +1,26 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { handler } from "~/util/zen"
 
+type Usage = {
+  prompt_tokens?: number
+  completion_tokens?: number
+  total_tokens?: number
+  prompt_tokens_details?: {
+    text_tokens?: number
+    audio_tokens?: number
+    image_tokens?: number
+    cached_tokens?: number
+  }
+  completion_tokens_details?: {
+    reasoning_tokens?: number
+    audio_tokens?: number
+    accepted_prediction_tokens?: number
+    rejected_prediction_tokens?: number
+  }
+}
+
 export function POST(input: APIEvent) {
-  let usage: any
+  let usage: Usage
   return handler(input, {
     modifyBody: (body: any) => ({
       ...body,
@@ -17,7 +35,7 @@ export function POST(input: APIEvent) {
 
       let json
       try {
-        json = JSON.parse(chunk.slice(6))
+        json = JSON.parse(chunk.slice(6)) as { usage?: Usage }
       } catch (e) {
         return
       }
@@ -26,11 +44,11 @@ export function POST(input: APIEvent) {
       usage = json.usage
     },
     getStreamUsage: () => usage,
-    normalizeUsage: (usage: any) => ({
+    normalizeUsage: (usage: Usage) => ({
       inputTokens: usage.prompt_tokens ?? 0,
       outputTokens: usage.completion_tokens ?? 0,
-      reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
-      cacheReadTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+      reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
+      cacheReadTokens: usage.prompt_tokens_details?.cached_tokens ?? undefined,
     }),
   })
 }

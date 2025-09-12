@@ -10,10 +10,11 @@ import { Resource } from "@opencode/cloud-resource"
 type ModelCost = {
   input: number
   output: number
-  cacheRead: number
-  cacheWrite5m: number
-  cacheWrite1h: number
+  cacheRead?: number
+  cacheWrite5m?: number
+  cacheWrite1h?: number
 }
+
 type Model = {
   id: string
   auth: boolean
@@ -42,7 +43,7 @@ export async function handler(
       inputTokens: number
       outputTokens: number
       reasoningTokens?: number
-      cacheReadTokens: number
+      cacheReadTokens?: number
       cacheWrite5mTokens?: number
       cacheWrite1hTokens?: number
     }
@@ -129,8 +130,6 @@ export async function handler(
         input: 0.00000125,
         output: 0.00001,
         cacheRead: 0.000000125,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
       },
       headerMappings: {},
       providers: {
@@ -147,9 +146,6 @@ export async function handler(
       cost: {
         input: 0.00000045,
         output: 0.0000018,
-        cacheRead: 0,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
       },
       headerMappings: {},
       providers: {
@@ -173,9 +169,6 @@ export async function handler(
       cost: {
         input: 0.0000006,
         output: 0.0000025,
-        cacheRead: 0,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
       },
       headerMappings: {},
       providers: {
@@ -200,8 +193,6 @@ export async function handler(
         input: 0,
         output: 0,
         cacheRead: 0,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
       },
       headerMappings: {
         "x-grok-conv-id": "x-opencode-session",
@@ -222,9 +213,6 @@ export async function handler(
       cost: {
         input: 0.00000038,
         output: 0.00000153,
-        cacheRead: 0,
-        cacheWrite5m: 0,
-        cacheWrite1h: 0,
       },
       headerMappings: {},
       providers: {
@@ -438,15 +426,30 @@ export async function handler(
 
       const inputCost = modelCost.input * inputTokens * 100
       const outputCost = modelCost.output * outputTokens * 100
-      const reasoningCost = reasoningTokens ? modelCost.output * reasoningTokens * 100 : undefined
-      const cacheReadCost = modelCost.cacheRead * cacheReadTokens * 100
-      const cacheWrite5mCost = cacheWrite5mTokens ? modelCost.cacheWrite5m * cacheWrite5mTokens * 100 : undefined
-      const cacheWrite1hCost = cacheWrite1hTokens ? modelCost.cacheWrite1h * cacheWrite1hTokens * 100 : undefined
+      const reasoningCost = (() => {
+        if (!reasoningTokens) return undefined
+        return modelCost.output * reasoningTokens * 100
+      })()
+      const cacheReadCost = (() => {
+        if (!cacheReadTokens) return undefined
+        if (!modelCost.cacheRead) return undefined
+        return modelCost.cacheRead * cacheReadTokens * 100
+      })()
+      const cacheWrite5mCost = (() => {
+        if (!cacheWrite5mTokens) return undefined
+        if (!modelCost.cacheWrite5m) return undefined
+        return modelCost.cacheWrite5m * cacheWrite5mTokens * 100
+      })()
+      const cacheWrite1hCost = (() => {
+        if (!cacheWrite1hTokens) return undefined
+        if (!modelCost.cacheWrite1h) return undefined
+        return modelCost.cacheWrite1h * cacheWrite1hTokens * 100
+      })()
       const totalCostInCent =
         inputCost +
         outputCost +
         (reasoningCost ?? 0) +
-        cacheReadCost +
+        (cacheReadCost ?? 0) +
         (cacheWrite5mCost ?? 0) +
         (cacheWrite1hCost ?? 0)
 
@@ -460,7 +463,7 @@ export async function handler(
         "cost.input": Math.round(inputCost),
         "cost.output": Math.round(outputCost),
         "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,
-        "cost.cache_read": Math.round(cacheReadCost),
+        "cost.cache_read": cacheReadCost ? Math.round(cacheReadCost) : undefined,
         "cost.cache_write_5m": cacheWrite5mCost ? Math.round(cacheWrite5mCost) : undefined,
         "cost.cache_write_1h": cacheWrite1hCost ? Math.round(cacheWrite1hCost) : undefined,
         "cost.total": Math.round(totalCostInCent),
@@ -479,7 +482,8 @@ export async function handler(
           outputTokens,
           reasoningTokens,
           cacheReadTokens,
-          cacheWriteTokens: (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0),
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
           cost,
         })
         await tx

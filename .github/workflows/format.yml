@@ -2,7 +2,11 @@ name: Format
 
 on:
   push:
+    branches-ignore:
+      - production
   pull_request:
+    branches-ignore:
+      - production
   workflow_dispatch:
 jobs:
   format:
