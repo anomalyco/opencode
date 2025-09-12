@@ -463,7 +463,7 @@ export namespace Session {
     // Process revert cleanup first, before creating new messages
     const session = await get(input.sessionID)
     if (session.revert) {
-      cleanupRevert(session)
+      await cleanupRevert(session)
     }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
@@ -1131,7 +1131,7 @@ export namespace Session {
     using abort = lock(input.sessionID)
     const session = await get(input.sessionID)
     if (session.revert) {
-      cleanupRevert(session)
+      await cleanupRevert(session)
     }
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
