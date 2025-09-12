@@ -1010,11 +1010,13 @@ export namespace Session {
               providerID: model.providerID,
               modelID: model.info.id,
             })
-            const msgs = await Session.messages(input.sessionID).then((x) =>
-              x.filter((x) => x.info.id >= summarized.id),
-            )
-            return {
-              messages: MessageV2.toModelMessage(msgs),
+            if (summarized) {
+              const msgs = await Session.messages(input.sessionID).then((x) =>
+                x.filter((x) => x.info.id >= summarized.id),
+              )
+              return {
+                messages: MessageV2.toModelMessage(msgs),
+              }
             }
           }
         }
@@ -1775,7 +1777,11 @@ export namespace Session {
     return next
   }
 
-  export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
+  export async function summarize(input: {
+    sessionID: string
+    providerID: string
+    modelID: string
+  }): Promise<MessageV2.Info | undefined> {
     await update(input.sessionID, (draft) => {
       draft.time.compacting = Date.now()
     })
@@ -1792,6 +1798,7 @@ export namespace Session {
     const split = start + Math.floor((msgs.length - start) / 2)
     log.info("summarizing", { start, split })
     const toSummarize = msgs.slice(start, split)
+    if (toSummarize.length === 0) return
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
