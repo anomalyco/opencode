@@ -55,7 +55,7 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
-    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).text()
+    const files = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).nothrow().text()
     return {
       hash,
       files: files
@@ -73,6 +73,7 @@ export namespace Snapshot {
     await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
       .quiet()
       .cwd(Instance.worktree)
+      .nothrow()
   }
 
   export async function revert(patches: Patch[]) {
@@ -97,7 +98,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).text()
+    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow().text()
     return result.trim()
   }
 
