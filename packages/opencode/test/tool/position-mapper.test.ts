@@ -118,16 +118,20 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("formats compact class", async () => {
     const result = await testFormatting(
-      `《class Service{constructor(private db:DB){}getUser(id:string){return this.db.find(id)}}》`,
+      `namespace Services {
+  export 《class Service{constructor(private db:DB){}getUser(id:string){return this.db.find(id)}}》
+}`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "《class Service {
-        constructor(private db: DB) {}
-        getUser(id: string) {
-          return this.db.find(id);
-        }
+      "namespace Services {
+        export 《class Service {
+          constructor(private db: DB) {}
+          getUser(id: string) {
+            return this.db.find(id);
+          }
+        }》
       }
-      》"
+      "
     `)
   })
 
@@ -358,7 +362,8 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("formats deeply nested ternary with JSX", async () => {
     const result = await testFormatting(
-      `const Component = () => 《isLoading ? <Spinner /> : error ? <Error msg={error} /> : data ? <div>{data.map(item => <Item key={item.id} {...item} />)}</div> : <Empty />》`,
+      `const Component = () =>
+  《isLoading ? <Spinner /> : error ? <Error msg={error} /> : data ? <div>{data.map(item => <Item key={item.id} {...item} />)}</div> : <Empty />》;`,
       { printWidth: 40 },
     )
     expect(result).toMatchInlineSnapshot(`
@@ -375,8 +380,8 @@ describe("mapFormattingPositions - prettier formatting", () => {
           </div>
         ) : (
           <Empty />
-        );
-      》"
+        )》;
+      "
     `)
   })
 
@@ -434,11 +439,11 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("handles arrow function with destructured params and return type", async () => {
     const result = await testFormatting(
-      `const fn = 《({a,b,c}:{a:string,b:number,c:boolean}):{result:string,success:boolean}=>({result:a+b,success:c})》`,
+      `const fn: ComplexHandler = 《({a,b,c}:{a:string,b:number,c:boolean}):{result:string,success:boolean}=>({result:a+b,success:c})》;`,
       { arrowParens: "always", printWidth: 40 },
     )
     expect(result).toMatchInlineSnapshot(`
-      "const fn = 《({
+      "const fn: ComplexHandler = 《({
         a,
         b,
         c,
@@ -449,8 +454,8 @@ describe("mapFormattingPositions - prettier formatting", () => {
       }): {
         result: string;
         success: boolean;
-      } => ({ result: a + b, success: c });
-      》"
+      } => ({ result: a + b, success: c })》;
+      "
     `)
   })
 
@@ -466,11 +471,14 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("handles class with decorators and parameter properties", async () => {
     const result = await testFormatting(
-      `《@injectable()@singleton()class Service{constructor(@inject(TYPES.Database)private readonly db:IDatabase,@inject(TYPES.Logger)private logger:ILogger){}}》`,
+      `export 《@injectable()@singleton()class Service{constructor(@inject(TYPES.Database)private readonly db:IDatabase,@inject(TYPES.Logger)private logger:ILogger){}}》
+
+const serviceInstance = new Service(db, logger);`,
       { printWidth: 50 },
     )
     expect(result).toMatchInlineSnapshot(`
-      "《@injectable()
+      "export
+      《@injectable()
       @singleton()
       class Service {
         constructor(
@@ -478,17 +486,21 @@ describe("mapFormattingPositions - prettier formatting", () => {
           private readonly db: IDatabase,
           @inject(TYPES.Logger) private logger: ILogger,
         ) {}
-      }
-      》"
+      }》
+
+      const serviceInstance = new Service(db, logger);
+      "
     `)
   })
 
   it("formats complex async generator with try-catch", async () => {
     const result = await testFormatting(
-      `《async function*complexGenerator<T>(items:T[]):AsyncGenerator<T,void,unknown>{try{for(const item of items){yield await processItem(item)}}catch(e){console.error(e);throw e}}》`,
+      `export 《async function*complexGenerator<T>(items:T[]):AsyncGenerator<T,void,unknown>{try{for(const item of items){yield await processItem(item)}}catch(e){console.error(e);throw e}}》
+
+export default complexGenerator;`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "《async function* complexGenerator<T>(
+      "export 《async function* complexGenerator<T>(
         items: T[],
       ): AsyncGenerator<T, void, unknown> {
         try {
@@ -499,8 +511,10 @@ describe("mapFormattingPositions - prettier formatting", () => {
           console.error(e);
           throw e;
         }
-      }
-      》"
+      }》
+
+      export default complexGenerator;
+      "
     `)
   })
 
@@ -517,15 +531,19 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("formats function overloads with complex types", async () => {
     const result = await testFormatting(
-      `《function process(input:string):string;function process(input:number):number;function process<T extends string|number>(input:T):T{return input}》`,
+      `export namespace Utils {
+  《function process(input:string):string;function process(input:number):number;function process<T extends string|number>(input:T):T{return input}》
+}`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "《function process(input: string): string;
-      function process(input: number): number;
-      function process<T extends string | number>(input: T): T {
-        return input;
+      "export namespace Utils {
+        《function process(input: string): string;
+        function process(input: number): number;
+        function process<T extends string | number>(input: T): T {
+          return input;
+        }》
       }
-      》"
+      "
     `)
   })
 
@@ -573,94 +591,121 @@ describe("mapFormattingPositions - prettier formatting", () => {
 
   it("handles dynamic import with complex then chain", async () => {
     const result = await testFormatting(
-      `《import('./module').then(({default:mod})=>mod.initialize()).then(instance=>instance.start()).catch(console.error)》`,
+      `const loader = () => 《import('./module').then(({default:mod})=>mod.initialize()).then(instance=>instance.start()).catch(console.error)》;`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "《import("./module")
-        .then(({ default: mod }) => mod.initialize())
-        .then((instance) => instance.start())
-        .catch(console.error);
-      》"
+      "const loader = () =>
+        《import("./module")
+          .then(({ default: mod }) => mod.initialize())
+          .then((instance) => instance.start())
+          .catch(console.error)》;
+      "
     `)
   })
 
   it("formats regex with unicode and flags", async () => {
     const result = await testFormatting(
-      `const regex = 《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu》`,
+      `const emailRegex: RegExp = 《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu》;
+export { emailRegex };`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "const regex =
-        《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu;
-      》"
+      "const emailRegex: RegExp =
+        《/^(?:[a-z0-9!#$%&'*+/=?^_\`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$/iu》;
+      export { emailRegex };
+      "
     `)
   })
 
   it("handles complex mapped types with template literals", async () => {
     const result = await testFormatting(
-      `type Getters<T> = 《{[K in keyof T as \`get\${Capitalize<string & K>}\`]:()=>T[K]}&{[K in keyof T as \`set\${Capitalize<string & K>}\`]:(value:T[K])=>void}》`,
+      `export type Getters<T> = 《{[K in keyof T as \`get\${Capitalize<string & K>}\`]:()=>T[K]}&{[K in keyof T as \`set\${Capitalize<string & K>}\`]:(value:T[K])=>void}》;
+
+type UserGetters = Getters<User>;`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "type Getters<T> = 《{
+      "export type Getters<T> = 《{
         [K in keyof T as \`get\${Capitalize<string & K>}\`]: () => T[K];
-      } & { [K in keyof T as \`set\${Capitalize<string & K>}\`]: (value: T[K]) => void };
-      》"
+      } & { [K in keyof T as \`set\${Capitalize<string & K>}\`]: (value: T[K]) => void }》;
+
+      type UserGetters = Getters<User>;
+      "
     `)
   })
 
   it("formats do-while with complex condition", async () => {
     const result = await testFormatting(
-      `《do{result=await attemptOperation();retries++}while(!result.success&&retries<maxRetries&&Date.now()-startTime<timeout)》`,
+      `async function retry() {
+  《do{result=await attemptOperation();retries++}while(!result.success&&retries<maxRetries&&Date.now()-startTime<timeout)》;
+  return result;
+}`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "《do {
-        result = await attemptOperation();
-        retries++;
-      } while (
-        !result.success &&
-        retries < maxRetries &&
-        Date.now() - startTime < timeout
-      );
-      》"
+      "async function retry() {
+        《do {
+          result = await attemptOperation();
+          retries++;
+        } while (
+          !result.success &&
+          retries < maxRetries &&
+          Date.now() - startTime < timeout
+        )》;
+        return result;
+      }
+      "
     `)
   })
 
   it("handles optional chaining with nullish coalescing", async () => {
     const result = await testFormatting(
-      `const value = 《data?.user?.profile?.settings?.theme?.colors?.primary??data?.defaults?.theme?.colors?.primary??'#000000'》`,
+      `const getThemeColor = (data: AppData) => {
+  const value = 《data?.user?.profile?.settings?.theme?.colors?.primary??data?.defaults?.theme?.colors?.primary??'#000000'》;
+  return value;
+};`,
     )
     expect(result).toMatchInlineSnapshot(`
-      "const value =
-        《data?.user?.profile?.settings?.theme?.colors?.primary ??
-        data?.defaults?.theme?.colors?.primary ??
-        "#000000";
-      》"
+      "const getThemeColor = (data: AppData) => {
+        const value =
+          《data?.user?.profile?.settings?.theme?.colors?.primary ??
+          data?.defaults?.theme?.colors?.primary ??
+          "#000000"》;
+        return value;
+      };
+      "
     `)
   })
 
   it("formats complex array methods with type predicates", async () => {
     const result = await testFormatting(
-      `const filtered = 《items.filter((item):item is ValidItem=>item.isValid&&item.data!==null).map(item=>({...item,processed:true})).reduce((acc,item)=>({...acc,[item.id]:item}),{})》`,
+      `function processItems(items: Item[]): Record<string, ProcessedItem> {
+  const filtered = 《items.filter((item):item is ValidItem=>item.isValid&&item.data!==null).map(item=>({...item,processed:true})).reduce((acc,item)=>({...acc,[item.id]:item}),{})》;
+  return filtered;
+}`,
       { printWidth: 40 },
     )
     expect(result).toMatchInlineSnapshot(`
-      "const filtered = 《items
-        .filter(
-          (item): item is ValidItem =>
-            item.isValid &&
-            item.data !== null,
-        )
-        .map((item) => ({
-          ...item,
-          processed: true,
-        }))
-        .reduce(
-          (acc, item) => ({
-            ...acc,
-            [item.id]: item,
-          }),
-          {},
-        );
-      》"
+      "function processItems(
+        items: Item[],
+      ): Record<string, ProcessedItem> {
+        const filtered = 《items
+          .filter(
+            (item): item is ValidItem =>
+              item.isValid &&
+              item.data !== null,
+          )
+          .map((item) => ({
+            ...item,
+            processed: true,
+          }))
+          .reduce(
+            (acc, item) => ({
+              ...acc,
+              [item.id]: item,
+            }),
+            {},
+          )》;
+        return filtered;
+      }
+      "
     `)
   })
 
