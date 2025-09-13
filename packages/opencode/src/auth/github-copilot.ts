@@ -2,30 +2,28 @@ import z from "zod/v4"
 import { Auth } from "./index"
 import { NamedError } from "../util/error"
 import { Config } from "../config/config"
+import { normalizeDomain } from "../util/url"
 
 export namespace AuthGithubCopilot {
   const CLIENT_ID = "Iv1.b507a08c87ecfe98"
 
   async function getBaseUrl(providerID: string, enterpriseUrl?: string): Promise<string> {
-    if (enterpriseUrl) {
-      return enterpriseUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
-    }
+    if (enterpriseUrl) return normalizeDomain(enterpriseUrl)
 
     const config = await Config.get()
     const providerConfig = config.provider?.[providerID]
     const configUrl = providerConfig?.options?.githubEnterpriseUrl
 
-    return configUrl ? configUrl.replace(/^https?:\/\//, "").replace(/\/$/, "") : "github.com"
+    return configUrl ? normalizeDomain(configUrl) : "github.com"
   }
 
   async function getUrls(providerID = "github-copilot", enterpriseUrl?: string) {
     const baseUrl = await getBaseUrl(providerID, enterpriseUrl)
-    const apiDomain = baseUrl === "github.com" ? "api.github.com" : `api.${baseUrl}`
 
     return {
       DEVICE_CODE_URL: `https://${baseUrl}/login/device/code`,
       ACCESS_TOKEN_URL: `https://${baseUrl}/login/oauth/access_token`,
-      COPILOT_API_KEY_URL: `https://${apiDomain}/copilot_internal/v2/token`,
+      COPILOT_API_KEY_URL: `https://api.${baseUrl}/copilot_internal/v2/token`,
     }
   }
 
