@@ -25,6 +25,9 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionPrompt } from "../session/prompt"
+import { SessionCompaction } from "../session/compaction"
+import { SessionRevert } from "../session/revert"
 
 const ERRORS = {
   400: {
@@ -558,7 +561,7 @@ export namespace Server {
         }),
       ),
       async (c) => {
-        return c.json(Session.abort(c.req.valid("param").id))
+        return c.json(SessionPrompt.abort(c.req.valid("param").id))
       },
     )
     .post(
@@ -651,7 +654,7 @@ export namespace Server {
       async (c) => {
         const id = c.req.valid("param").id
         const body = c.req.valid("json")
-        await Session.summarize({ ...body, sessionID: id })
+        await SessionCompaction.run({ ...body, sessionID: id })
         return c.json(true)
       },
     )
@@ -665,14 +668,7 @@ export namespace Server {
             description: "List of messages",
             content: {
               "application/json": {
-                schema: resolver(
-                  z
-                    .object({
-                      info: MessageV2.Info,
-                      parts: MessageV2.Part.array(),
-                    })
-                    .array(),
-                ),
+                schema: resolver(MessageV2.WithParts.array()),
               },
             },
           },
@@ -750,11 +746,11 @@ export namespace Server {
           id: z.string().openapi({ description: "Session ID" }),
         }),
       ),
-      zValidator("json", Session.PromptInput.omit({ sessionID: true })),
+      zValidator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").id
         const body = c.req.valid("json")
-        const msg = await Session.prompt({ ...body, sessionID })
+        const msg = await SessionPrompt.prompt({ ...body, sessionID })
         return c.json(msg)
       },
     )
@@ -785,11 +781,11 @@ export namespace Server {
           id: z.string().openapi({ description: "Session ID" }),
         }),
       ),
-      zValidator("json", Session.CommandInput.omit({ sessionID: true })),
+      zValidator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").id
         const body = c.req.valid("json")
-        const msg = await Session.command({ ...body, sessionID })
+        const msg = await SessionPrompt.command({ ...body, sessionID })
         return c.json(msg)
       },
     )
@@ -815,11 +811,11 @@ export namespace Server {
           id: z.string().openapi({ description: "Session ID" }),
         }),
       ),
-      zValidator("json", Session.ShellInput.omit({ sessionID: true })),
+      zValidator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").id
         const body = c.req.valid("json")
-        const msg = await Session.shell({ ...body, sessionID })
+        const msg = await SessionPrompt.shell({ ...body, sessionID })
         return c.json(msg)
       },
     )
@@ -845,11 +841,11 @@ export namespace Server {
           id: z.string(),
         }),
       ),
-      zValidator("json", Session.RevertInput.omit({ sessionID: true })),
+      zValidator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
       async (c) => {
         const id = c.req.valid("param").id
         log.info("revert", c.req.valid("json"))
-        const session = await Session.revert({ sessionID: id, ...c.req.valid("json") })
+        const session = await SessionRevert.revert({ sessionID: id, ...c.req.valid("json") })
         return c.json(session)
       },
     )
@@ -877,7 +873,7 @@ export namespace Server {
       ),
       async (c) => {
         const id = c.req.valid("param").id
-        const session = await Session.unrevert({ sessionID: id })
+        const session = await SessionRevert.unrevert({ sessionID: id })
         return c.json(session)
       },
     )

@@ -83,7 +83,7 @@ export namespace Permission {
       toolCallID: input.callID,
       pattern: input.pattern,
     })
-    if (approved[input.sessionID]?.[input.pattern ?? input.type]) return
+    if (approved[input.sessionID]?.[input.type]) return
     const info: Info = {
       id: Identifier.ascending("permission"),
       type: input.type,
@@ -141,9 +141,9 @@ export namespace Permission {
     })
     if (input.response === "always") {
       approved[input.sessionID] = approved[input.sessionID] || {}
-      approved[input.sessionID][match.info.pattern ?? match.info.type] = true
+      approved[input.sessionID][match.info.type] = true
       for (const item of Object.values(pending[input.sessionID])) {
-        if ((item.info.pattern ?? item.info.type) === (match.info.pattern ?? match.info.type)) {
+        if (item.info.type === match.info.type) {
           respond({ sessionID: item.info.sessionID, permissionID: item.info.id, response: input.response })
         }
       }

@@ -71,9 +71,7 @@ export namespace ToolRegistry {
           break
         case "array":
           if (!val.items) throw new Error(`array spec for ${key} requires 'items'`)
-          base = z.array(
-            val.items === "string" ? z.string() : val.items === "number" ? z.number() : z.boolean(),
-          )
+          base = z.array(val.items === "string" ? z.string() : val.items === "number" ? z.number() : z.boolean())
           break
         default:
           base = z.any()

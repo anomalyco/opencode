@@ -1,4 +1,4 @@
-import { bigint, boolean, int, mysqlTable, varchar } from "drizzle-orm/mysql-core"
+import { bigint, boolean, int, mysqlTable, varchar, json } from "drizzle-orm/mysql-core"
 import { timestamps, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
@@ -34,11 +34,13 @@ export const UsageTable = mysqlTable(
     ...workspaceColumns,
     ...timestamps,
     model: varchar("model", { length: 255 }).notNull(),
+    provider: varchar("provider", { length: 255 }).notNull(),
     inputTokens: int("input_tokens").notNull(),
     outputTokens: int("output_tokens").notNull(),
     reasoningTokens: int("reasoning_tokens"),
     cacheReadTokens: int("cache_read_tokens"),
-    cacheWriteTokens: int("cache_write_tokens"),
+    cacheWrite5mTokens: int("cache_write_5m_tokens"),
+    cacheWrite1hTokens: int("cache_write_1h_tokens"),
     cost: bigint("cost", { mode: "number" }).notNull(),
   },
   (table) => [...workspaceIndexes(table)],

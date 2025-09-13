@@ -14,6 +14,7 @@ body {
   --font-size-8xl: 6rem;
   --font-size-9xl: 8rem;
 
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-sans: var(--font-mono);
 }

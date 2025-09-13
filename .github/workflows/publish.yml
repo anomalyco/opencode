@@ -1,17 +1,17 @@
 name: publish
-run-name: "${{ format('v{0}', inputs.version) }}"
+run-name: "${{ format('release {0}', inputs.bump) }}"
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to publish"
+      bump:
+        description: "Bump major, minor, or patch"
         required: true
-        type: string
-      title:
-        description: "Custom title for this run"
-        required: false
-        type: string
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -37,16 +37,16 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.19
+          bun-version: 1.2.21
 
       - name: Cache ~/.bun
         id: cache-bun
         uses: actions/cache@v3
         with:
           path: ~/.bun
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-1-2-21-${{ hashFiles('bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-bun-
+            ${{ runner.os }}-bun-1-2-21-
 
       - name: Install makepkg
         run: |
@@ -65,8 +65,9 @@ jobs:
 
       - name: Publish
         run: |
-          OPENCODE_VERSION=${{ inputs.version }} ./script/publish.ts
+          ./script/publish.ts
         env:
+          OPENCODE_BUMP: ${{ inputs.bump }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

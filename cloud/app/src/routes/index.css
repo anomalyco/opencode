@@ -29,6 +29,9 @@
     --heading-font-size: 1rem;
   }
 
+  display: flex;
+  gap: var(--vertical-padding);
+  flex-direction: column;
   font-family: var(--font-mono);
   color: var(--color-text);
   padding: calc(var(--padding) + 1rem);
@@ -47,7 +50,8 @@
   }
 
   [data-component="top"] {
-    padding: var(--padding);
+    padding: calc(var(--padding) * 1.5) var(--padding) var(--padding);
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -79,6 +83,25 @@
       color: var(--color-text-secondary);
       text-transform: uppercase;
     }
+
+    [data-slot="login"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      border-width: 0 0 1px 1px;
+      border-style: solid;
+      border-color: var(--color-border);
+      background-color: var(--color-bg);
+
+      @media (max-width: 30rem) {
+        display: none;
+      }
+
+      a {
+        display: block;
+        padding: 0.5rem 1rem calc(0.5rem + 4px);
+      }
+    }
   }
 
   [data-component="cta"] {
@@ -105,6 +128,19 @@
       @media (max-width: 30rem) {
         padding-left: 0.5rem;
         padding-right: 0.5rem;
+      }
+    }
+
+    [data-slot="center"] {
+      display: none;
+
+      @media (max-width: 30rem) {
+        display: block;
+        flex: 1;
+        text-align: center;
+        padding: var(--vertical-padding) 0.5rem;
+        border-top: 1px solid var(--color-border);
+        border-left: none;
       }
     }
 
@@ -440,22 +476,8 @@
       border-left: 1px solid var(--color-border);
     }
 
-    /* Small desktop: first two columns shrink to content, third expands */
-    @media (max-width: 57rem) {
-      [data-slot="cell"]:nth-child(1),
-      [data-slot="cell"]:nth-child(2) {
-        flex: 0 0 auto;
-        padding-left: calc(var(--padding) / 2);
-        padding-right: calc(var(--padding) / 2);
-      }
-
-      [data-slot="cell"]:nth-child(3) {
-        flex: 1;
-      }
-    }
-
     /* Mobile: third column on its own row */
-    @media (max-width: 40rem) {
+    @media (max-width: 30rem) {
       flex-wrap: wrap;
 
       [data-slot="cell"]:nth-child(1),
@@ -468,6 +490,15 @@
         border-left: none;
         border-top: 1px solid var(--color-border);
       }
+    }
+  }
+
+  [data-component="legal"] {
+    color: var(--color-text-dimmed);
+    text-align: center;
+
+    a {
+      color: var(--color-text-dimmed);
     }
   }
 }

@@ -11,14 +11,12 @@ const TodoInfo = z.object({
 })
 type TodoInfo = z.infer<typeof TodoInfo>
 
-const state = Instance.state(
-  () => {
-    const todos: {
-      [sessionId: string]: TodoInfo[]
-    } = {}
-    return todos
-  },
-)
+const state = Instance.state(() => {
+  const todos: {
+    [sessionId: string]: TodoInfo[]
+  } = {}
+  return todos
+})
 
 export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,

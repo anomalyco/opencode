@@ -19,10 +19,7 @@ export type PluginInput = {
   worktree: string
   $: BunShell
   Tool: {
-    define(
-      id: string,
-      init: any | (() => Promise<any>)
-    ): any
+    define(id: string, init: any | (() => Promise<any>)): any
   }
   z: any // Zod instance for creating schemas
 }
@@ -133,7 +130,7 @@ export interface Hooks {
     input: {},
     output: {
       registerHTTP: (tool: HttpToolRegistration) => void | Promise<void>
-      register: (tool: any) => void | Promise<void>  // Tool.Info type from opencode
+      register: (tool: any) => void | Promise<void> // Tool.Info type from opencode
     },
   ) => Promise<void>
 }

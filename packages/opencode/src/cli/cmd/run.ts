@@ -11,6 +11,7 @@ import { MessageV2 } from "../../session/message-v2"
 import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
+import { SessionPrompt } from "../../session/prompt"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -71,7 +72,7 @@ export const RunCommand = cmd({
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
-      return
+      process.exit(1)
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -79,7 +80,7 @@ export const RunCommand = cmd({
         const exists = await Command.get(args.command)
         if (!exists) {
           UI.error(`Command "${args.command}" not found`)
-          return
+          process.exit(1)
         }
       }
       const session = await (async () => {
@@ -104,7 +105,7 @@ export const RunCommand = cmd({
 
       if (!session) {
         UI.error("Session not found")
-        return
+        process.exit(1)
       }
 
       const cfg = await Config.get()
@@ -185,7 +186,7 @@ export const RunCommand = cmd({
       })
 
       if (args.command) {
-        await Session.command({
+        await SessionPrompt.command({
           messageID: Identifier.ascending("message"),
           sessionID: session.id,
           agent: agent.name,
@@ -197,7 +198,7 @@ export const RunCommand = cmd({
       }
 
       const messageID = Identifier.ascending("message")
-      const result = await Session.prompt({
+      const result = await SessionPrompt.prompt({
         sessionID: session.id,
         messageID,
         model: {
@@ -221,6 +222,7 @@ export const RunCommand = cmd({
         if (errorMsg) process.stdout.write(errorMsg)
       }
       UI.empty()
+      if (errorMsg) process.exit(1)
     })
   },
 })

@@ -63,7 +63,8 @@ type EventListResponse struct {
 	// [EventListResponseEventSessionUpdatedProperties],
 	// [EventListResponseEventSessionDeletedProperties],
 	// [EventListResponseEventSessionIdleProperties],
-	// [EventListResponseEventSessionErrorProperties], [interface{}].
+	// [EventListResponseEventSessionErrorProperties],
+	// [EventListResponseEventSessionCompactedProperties], [interface{}].
 	Properties interface{}           `json:"properties,required"`
 	Type       EventListResponseType `json:"type,required"`
 	JSON       eventListResponseJSON `json:"-"`
@@ -105,6 +106,7 @@ func (r *EventListResponse) UnmarshalJSON(data []byte) (err error) {
 // [EventListResponseEventPermissionReplied], [EventListResponseEventFileEdited],
 // [EventListResponseEventSessionUpdated], [EventListResponseEventSessionDeleted],
 // [EventListResponseEventSessionIdle], [EventListResponseEventSessionError],
+// [EventListResponseEventSessionCompacted],
 // [EventListResponseEventServerConnected].
 func (r EventListResponse) AsUnion() EventListResponseUnion {
 	return r.union
@@ -118,7 +120,8 @@ func (r EventListResponse) AsUnion() EventListResponseUnion {
 // [EventListResponseEventPermissionUpdated],
 // [EventListResponseEventPermissionReplied], [EventListResponseEventFileEdited],
 // [EventListResponseEventSessionUpdated], [EventListResponseEventSessionDeleted],
-// [EventListResponseEventSessionIdle], [EventListResponseEventSessionError] or
+// [EventListResponseEventSessionIdle], [EventListResponseEventSessionError],
+// [EventListResponseEventSessionCompacted] or
 // [EventListResponseEventServerConnected].
 type EventListResponseUnion interface {
 	implementsEventListResponse()
@@ -192,6 +195,11 @@ func init() {
 			TypeFilter:         gjson.JSON,
 			Type:               reflect.TypeOf(EventListResponseEventSessionError{}),
 			DiscriminatorValue: "session.error",
+		},
+		apijson.UnionVariant{
+			TypeFilter:         gjson.JSON,
+			Type:               reflect.TypeOf(EventListResponseEventSessionCompacted{}),
+			DiscriminatorValue: "session.compacted",
 		},
 		apijson.UnionVariant{
 			TypeFilter:         gjson.JSON,
@@ -1108,6 +1116,66 @@ func (r EventListResponseEventSessionErrorType) IsKnown() bool {
 	return false
 }
 
+type EventListResponseEventSessionCompacted struct {
+	Properties EventListResponseEventSessionCompactedProperties `json:"properties,required"`
+	Type       EventListResponseEventSessionCompactedType       `json:"type,required"`
+	JSON       eventListResponseEventSessionCompactedJSON       `json:"-"`
+}
+
+// eventListResponseEventSessionCompactedJSON contains the JSON metadata for the
+// struct [EventListResponseEventSessionCompacted]
+type eventListResponseEventSessionCompactedJSON struct {
+	Properties  apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventSessionCompacted) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventSessionCompactedJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r EventListResponseEventSessionCompacted) implementsEventListResponse() {}
+
+type EventListResponseEventSessionCompactedProperties struct {
+	SessionID string                                               `json:"sessionID,required"`
+	JSON      eventListResponseEventSessionCompactedPropertiesJSON `json:"-"`
+}
+
+// eventListResponseEventSessionCompactedPropertiesJSON contains the JSON metadata
+// for the struct [EventListResponseEventSessionCompactedProperties]
+type eventListResponseEventSessionCompactedPropertiesJSON struct {
+	SessionID   apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventSessionCompactedProperties) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventSessionCompactedPropertiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type EventListResponseEventSessionCompactedType string
+
+const (
+	EventListResponseEventSessionCompactedTypeSessionCompacted EventListResponseEventSessionCompactedType = "session.compacted"
+)
+
+func (r EventListResponseEventSessionCompactedType) IsKnown() bool {
+	switch r {
+	case EventListResponseEventSessionCompactedTypeSessionCompacted:
+		return true
+	}
+	return false
+}
+
 type EventListResponseEventServerConnected struct {
 	Properties interface{}                               `json:"properties,required"`
 	Type       EventListResponseEventServerConnectedType `json:"type,required"`
@@ -1163,12 +1231,13 @@ const (
 	EventListResponseTypeSessionDeleted       EventListResponseType = "session.deleted"
 	EventListResponseTypeSessionIdle          EventListResponseType = "session.idle"
 	EventListResponseTypeSessionError         EventListResponseType = "session.error"
+	EventListResponseTypeSessionCompacted     EventListResponseType = "session.compacted"
 	EventListResponseTypeServerConnected      EventListResponseType = "server.connected"
 )
 
 func (r EventListResponseType) IsKnown() bool {
 	switch r {
-	case EventListResponseTypeInstallationUpdated, EventListResponseTypeLspClientDiagnostics, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeMessagePartRemoved, EventListResponseTypePermissionUpdated, EventListResponseTypePermissionReplied, EventListResponseTypeFileEdited, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionIdle, EventListResponseTypeSessionError, EventListResponseTypeServerConnected:
+	case EventListResponseTypeInstallationUpdated, EventListResponseTypeLspClientDiagnostics, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeMessagePartRemoved, EventListResponseTypePermissionUpdated, EventListResponseTypePermissionReplied, EventListResponseTypeFileEdited, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionIdle, EventListResponseTypeSessionError, EventListResponseTypeSessionCompacted, EventListResponseTypeServerConnected:
 		return true
 	}
 	return false

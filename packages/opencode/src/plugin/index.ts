@@ -25,8 +25,8 @@ export namespace Plugin {
       worktree: Instance.worktree,
       directory: Instance.directory,
       $: Bun.$,
-      Tool: await import("../tool/tool").then(m => m.Tool),
-      z: await import("zod").then(m => m.z),
+      Tool: await import("../tool/tool").then((m) => m.Tool),
+      z: await import("zod").then((m) => m.z),
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
@@ -79,10 +79,13 @@ export namespace Plugin {
     for (const hook of hooks) {
       await hook.config?.(config)
       // Let plugins register tools at startup
-      await hook["tool.register"]?.({}, { 
-        registerHTTP: ToolRegistry.registerHTTP,
-        register: ToolRegistry.register 
-      })
+      await hook["tool.register"]?.(
+        {},
+        {
+          registerHTTP: ToolRegistry.registerHTTP,
+          register: ToolRegistry.register,
+        },
+      )
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
