@@ -55,7 +55,7 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
-    const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.cwd(Instance.directory).nothrow()
+    const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.quiet().cwd(Instance.directory).nothrow()
 
     // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
