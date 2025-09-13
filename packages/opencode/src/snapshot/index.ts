@@ -84,7 +84,12 @@ export namespace Snapshot {
       .nothrow()
 
     if (result.exitCode !== 0) {
-      log.error("failed to restore snapshot", { snapshot, exitCode: result.exitCode })
+      log.error("failed to restore snapshot", {
+        snapshot,
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
     }
   }
 
@@ -113,7 +118,12 @@ export namespace Snapshot {
     const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow()
 
     if (result.exitCode !== 0) {
-      log.warn("failed to get diff", { hash, exitCode: result.exitCode })
+      log.warn("failed to get diff", {
+        hash,
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
       return ""
     }
 
