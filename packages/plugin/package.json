@@ -13,8 +13,7 @@
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*"

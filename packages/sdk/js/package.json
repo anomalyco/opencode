@@ -21,8 +21,7 @@
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "devDependencies": {
     "typescript": "catalog:",
