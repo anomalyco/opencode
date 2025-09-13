@@ -462,7 +462,7 @@ export namespace Config {
                   githubEnterpriseUrl: z
                     .string()
                     .optional()
-                    .describe("GitHub Enterprise Server URL for copilot authentication"),
+                    .describe("GitHub Enterprise URL for copilot authentication"),
                   timeout: z
                     .union([
                       z

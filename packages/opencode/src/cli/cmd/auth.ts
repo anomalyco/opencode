@@ -309,9 +309,9 @@ async function handleGithubCopilotAuth(providerID: string) {
           hint: "Public",
         },
         {
-          label: "GitHub Enterprise Server",
+          label: "GitHub Enterprise",
           value: "enterprise",
-          hint: "Enterprise",
+          hint: "Data residency or self-hosted",
         },
       ],
     })
@@ -323,26 +323,24 @@ async function handleGithubCopilotAuth(providerID: string) {
 
     if (deploymentType === "enterprise") {
       const enterpriseHost = await prompts.text({
-        message: "Enter your GitHub Enterprise Server domain",
-        placeholder: "company.ghe.com",
+        message: "Enter your GitHub Enterprise URL or domain",
+        placeholder: "company.ghe.com or https://company.ghe.com",
         validate: (value) => {
-          if (!value) return "Domain is required"
-          if (value.includes("://")) {
-            return "Please enter just the domain (without https://)"
-          }
+          if (!value) return "URL or domain is required"
           try {
-            // Test if it's a valid domain by trying to create a URL
-            new URL(`https://${value}`)
+            // Test if it's a valid URL
+            const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
+            if (!url.hostname) return "Please enter a valid URL or domain"
             return undefined
           } catch {
-            return "Please enter a valid domain"
+            return "Please enter a valid URL (e.g., company.ghe.com or https://company.ghe.com)"
           }
         },
       })
 
       if (prompts.isCancel(enterpriseHost)) throw new UI.CancelledError()
 
-      enterpriseUrl = `https://${enterpriseHost}`
+      enterpriseUrl = enterpriseHost.includes("://") ? enterpriseHost : `https://${enterpriseHost}`
 
       actualProviderID = "github-copilot-enterprise"
     }
