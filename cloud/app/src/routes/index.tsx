@@ -1,13 +1,11 @@
 import "./index.css"
 import { Title } from "@solidjs/meta"
-import { Match, onCleanup, onMount, Switch } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import logoLight from "../asset/logo-ornate-light.svg"
 import logoDark from "../asset/logo-ornate-dark.svg"
 import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
-import IMG_VSCODE from "../asset/lander/screenshot-vscode.png"
-import IMG_GITHUB from "../asset/lander/screenshot-github.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { createAsync, query, redirect, A } from "@solidjs/router"
+import { createAsync, query } from "@solidjs/router"
 import { getActor } from "~/context/auth"
 import { withActor } from "~/context/auth.withActor"
 import { Account } from "@opencode/cloud-core/account.js"
@@ -55,16 +53,23 @@ export default function Home() {
   return (
     <main data-page="home">
       <Title>opencode | AI coding agent built for the terminal</Title>
+
       <div data-component="content">
         <section data-component="top">
           <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
           <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
           <h1 data-slot="title">The AI coding agent built for the terminal</h1>
+          <div data-slot="login">
+            <a href="/auth">opencode zen</a>
+          </div>
         </section>
 
         <section data-component="cta">
           <div data-slot="left">
             <a href="/docs">Get Started</a>
+          </div>
+          <div data-slot="center">
+            <a href="/auth">opencode zen</a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
@@ -157,17 +162,21 @@ export default function Home() {
 
         <footer data-component="footer">
           <div data-slot="cell">
+            <a href="https://x.com/opencode">X.com</a>
+          </div>
+          <div data-slot="cell">
             <a href="https://github.com/sst/opencode">GitHub</a>
           </div>
           <div data-slot="cell">
             <a href="https://opencode.ai/discord">Discord</a>
           </div>
-          <div data-slot="cell">
-            <span>
-              ©2025 <a href="https://anoma.ly">Anomaly Innovations</a>
-            </span>
-          </div>
         </footer>
+      </div>
+
+      <div data-component="legal">
+        <span>
+          ©2025 <a href="https://anoma.ly">Anomaly Innovations</a>
+        </span>
       </div>
     </main>
   )

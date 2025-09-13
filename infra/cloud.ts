@@ -103,6 +103,7 @@ const ANTHROPIC_API_KEY = new sst.Secret("ANTHROPIC_API_KEY")
 const OPENAI_API_KEY = new sst.Secret("OPENAI_API_KEY")
 const XAI_API_KEY = new sst.Secret("XAI_API_KEY")
 const BASETEN_API_KEY = new sst.Secret("BASETEN_API_KEY")
+const FIREWORKS_API_KEY = new sst.Secret("FIREWORKS_API_KEY")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -136,6 +137,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     OPENAI_API_KEY,
     XAI_API_KEY,
     BASETEN_API_KEY,
+    FIREWORKS_API_KEY,
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),

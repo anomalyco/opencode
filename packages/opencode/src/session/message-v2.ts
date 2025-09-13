@@ -52,6 +52,7 @@ export namespace MessageV2 {
       time: z.object({
         start: z.number(),
         end: z.number(),
+        compacted: z.number().optional(),
       }),
     })
     .openapi({
@@ -487,8 +488,8 @@ export namespace MessageV2 {
                   text: part.text,
                 },
               ]
-            // text/plain files are converted into text parts, ignore them
-            if (part.type === "file" && part.mime !== "text/plain")
+            // text/plain and directory files are converted into text parts, ignore them
+            if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
               return [
                 {
                   type: "file",
@@ -528,7 +529,7 @@ export namespace MessageV2 {
                     state: "output-available",
                     toolCallId: part.callID,
                     input: part.state.input,
-                    output: part.state.output,
+                    output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                   },
                 ]
               if (part.state.status === "error")

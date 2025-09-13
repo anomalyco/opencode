@@ -50,33 +50,37 @@ func (r *AppService) Providers(ctx context.Context, query AppProvidersParams, op
 }
 
 type Model struct {
-	ID          string                 `json:"id,required"`
-	Attachment  bool                   `json:"attachment,required"`
-	Cost        ModelCost              `json:"cost,required"`
-	Limit       ModelLimit             `json:"limit,required"`
-	Name        string                 `json:"name,required"`
-	Options     map[string]interface{} `json:"options,required"`
-	Reasoning   bool                   `json:"reasoning,required"`
-	ReleaseDate string                 `json:"release_date,required"`
-	Temperature bool                   `json:"temperature,required"`
-	ToolCall    bool                   `json:"tool_call,required"`
-	JSON        modelJSON              `json:"-"`
+	ID           string                 `json:"id,required"`
+	Attachment   bool                   `json:"attachment,required"`
+	Cost         ModelCost              `json:"cost,required"`
+	Limit        ModelLimit             `json:"limit,required"`
+	Name         string                 `json:"name,required"`
+	Options      map[string]interface{} `json:"options,required"`
+	Reasoning    bool                   `json:"reasoning,required"`
+	ReleaseDate  string                 `json:"release_date,required"`
+	Temperature  bool                   `json:"temperature,required"`
+	ToolCall     bool                   `json:"tool_call,required"`
+	Experimental bool                   `json:"experimental"`
+	Provider     ModelProvider          `json:"provider"`
+	JSON         modelJSON              `json:"-"`
 }
 
 // modelJSON contains the JSON metadata for the struct [Model]
 type modelJSON struct {
-	ID          apijson.Field
-	Attachment  apijson.Field
-	Cost        apijson.Field
-	Limit       apijson.Field
-	Name        apijson.Field
-	Options     apijson.Field
-	Reasoning   apijson.Field
-	ReleaseDate apijson.Field
-	Temperature apijson.Field
-	ToolCall    apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ID           apijson.Field
+	Attachment   apijson.Field
+	Cost         apijson.Field
+	Limit        apijson.Field
+	Name         apijson.Field
+	Options      apijson.Field
+	Reasoning    apijson.Field
+	ReleaseDate  apijson.Field
+	Temperature  apijson.Field
+	ToolCall     apijson.Field
+	Experimental apijson.Field
+	Provider     apijson.Field
+	raw          string
+	ExtraFields  map[string]apijson.Field
 }
 
 func (r *Model) UnmarshalJSON(data []byte) (err error) {
@@ -132,6 +136,26 @@ func (r *ModelLimit) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r modelLimitJSON) RawJSON() string {
+	return r.raw
+}
+
+type ModelProvider struct {
+	Npm  string            `json:"npm,required"`
+	JSON modelProviderJSON `json:"-"`
+}
+
+// modelProviderJSON contains the JSON metadata for the struct [ModelProvider]
+type modelProviderJSON struct {
+	Npm         apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ModelProvider) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r modelProviderJSON) RawJSON() string {
 	return r.raw
 }
 

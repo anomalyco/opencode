@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { fn } from "./util/fn"
 import { Actor } from "./actor"
-import { and, Database, eq, sql } from "./drizzle"
+import { and, Database, eq, isNull, sql } from "./drizzle"
 import { Identifier } from "./identifier"
 import { KeyTable } from "./schema/key.sql"
 
@@ -12,7 +12,7 @@ export namespace Key {
       tx
         .select()
         .from(KeyTable)
-        .where(eq(KeyTable.workspaceID, workspace))
+        .where(and(eq(KeyTable.workspaceID, workspace), isNull(KeyTable.timeDeleted)))
         .orderBy(sql`${KeyTable.timeCreated} DESC`),
     )
     return keys
@@ -41,15 +41,35 @@ export namespace Key {
         key: secretKey,
         timeUsed: null,
       }),
-    )
+    ).catch((e: any) => {
+      if (e.message.match(/Duplicate entry '.*' for key 'key.name'/))
+        throw new Error("A key with this name already exists. Please choose a different name.")
+      throw e
+    })
 
     return keyID
   })
 
   export const remove = fn(z.object({ id: z.string() }), async (input) => {
     const workspace = Actor.workspace()
-    await Database.use((tx) =>
-      tx.delete(KeyTable).where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace))),
-    )
+    await Database.transaction(async (tx) => {
+      const row = await tx
+        .select({
+          name: KeyTable.name,
+        })
+        .from(KeyTable)
+        .where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace)))
+        .then((rows) => rows[0])
+      if (!row) return
+
+      await tx
+        .update(KeyTable)
+        .set({
+          timeDeleted: sql`now()`,
+          oldName: row.name,
+          name: input.id, // Use the key ID as the name
+        })
+        .where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace)))
+    })
   })
 }

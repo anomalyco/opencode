@@ -42,7 +42,7 @@ for (const [os, arch] of targets) {
     compile: {
       target: `bun-${os}-${arch}` as any,
       outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${version}`],
+      execArgv: [`--user-agent=opencode/${version}`, `--`],
       windows: {},
     },
     entrypoints: ["./src/index.ts"],

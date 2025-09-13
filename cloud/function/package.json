@@ -1,6 +1,6 @@
 {
   "name": "@opencode/cloud-function",
-  "version": "0.7.0",
+  "version": "0.7.8",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",

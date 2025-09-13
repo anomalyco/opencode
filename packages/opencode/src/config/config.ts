@@ -118,16 +118,27 @@ export namespace Config {
     // Load command markdown files
     result.command = result.command || {}
     const markdownCommands = [
-      ...(await Filesystem.globUp("command/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/command/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp("command/**/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/command/**/*.md", Instance.directory, Instance.worktree)),
     ]
     for (const item of markdownCommands) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
 
+      const name = (() => {
+        const patterns = ["/.opencode/command/", "/command/"]
+        const pattern = patterns.find((p) => item.includes(p))
+
+        if (pattern) {
+          const index = item.indexOf(pattern)
+          return item.slice(index + pattern.length, -3)
+        }
+        return path.basename(item, ".md")
+      })()
+
       const config = {
-        name: path.basename(item, ".md"),
+        name,
         ...md.data,
         template: md.content.trim(),
       }
@@ -488,6 +499,7 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
     })

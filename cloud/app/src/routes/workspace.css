@@ -15,7 +15,7 @@
     cursor: pointer;
     transition: all 0.15s ease;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background-color: var(--color-surface-hover);
       border-color: var(--color-accent);
     }
@@ -26,13 +26,7 @@
 
     &:disabled {
       opacity: 0.5;
-      cursor: not-allowed;
-
-      &:hover {
-        background-color: var(--color-bg);
-        border-color: var(--color-border);
-        transform: none;
-      }
+      transform: none;
     }
 
     &[data-color="primary"] {
@@ -40,7 +34,7 @@
       border-color: var(--color-primary);
       color: var(--color-primary-text);
 
-      &:hover {
+      &:hover:not(:disabled) {
         background-color: var(--color-primary-hover);
         border-color: var(--color-primary-hover);
       }
@@ -51,7 +45,7 @@
       border-color: transparent;
       color: var(--color-text-muted);
 
-      &:hover {
+      &:hover:not(:disabled) {
         background-color: var(--color-surface-hover);
         border-color: var(--color-border);
         color: var(--color-text);

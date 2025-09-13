@@ -15,6 +15,48 @@
       "when": 1756871639102,
       "tag": "0001_serious_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1757597611832,
+      "tag": "0002_violet_loners",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1757600397194,
+      "tag": "0003_dusty_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1757627357232,
+      "tag": "0004_first_mockingbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1757632304856,
+      "tag": "0005_jazzy_skrulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1757643108507,
+      "tag": "0006_parallel_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1757693869142,
+      "tag": "0007_familiar_nightshade",
+      "breakpoints": true
     }
   ]
 }

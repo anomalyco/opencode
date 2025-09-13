@@ -16,6 +16,7 @@ import { Ide } from "../../ide"
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
 import { Instance } from "../../project/instance"
+import { $ } from "bun"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -111,8 +112,7 @@ export const TuiCommand = cmd({
           hostname: args.hostname,
         })
 
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+        let cmd = [] as string[]
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
         if (tui) {
           let binaryName = tui.name
@@ -125,8 +125,12 @@ export const TuiCommand = cmd({
             await Bun.write(file, tui, { mode: 0o755 })
             await fs.chmod(binary, 0o755)
           }
-          cwd = process.cwd()
           cmd = [binary]
+        }
+        if (!tui) {
+          const dir = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+          await $`go build -o ./dist/tui ./main.go`.cwd(dir)
+          cmd = [path.join(dir, "dist/tui")]
         }
         Log.Default.info("tui", {
           cmd,

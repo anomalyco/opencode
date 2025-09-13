@@ -698,16 +698,18 @@ func (r configCommandJSON) RawJSON() string {
 }
 
 type ConfigExperimental struct {
-	Hook ConfigExperimentalHook `json:"hook"`
-	JSON configExperimentalJSON `json:"-"`
+	Hook                ConfigExperimentalHook `json:"hook"`
+	DisablePasteSummary bool                   `json:"disable_paste_summary"`
+	JSON                configExperimentalJSON `json:"-"`
 }
 
 // configExperimentalJSON contains the JSON metadata for the struct
 // [ConfigExperimental]
 type configExperimentalJSON struct {
-	Hook        apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	Hook           apijson.Field
+	SummarizePaste apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
 }
 
 func (r *ConfigExperimental) UnmarshalJSON(data []byte) (err error) {
@@ -1562,34 +1564,38 @@ func (r configProviderJSON) RawJSON() string {
 }
 
 type ConfigProviderModel struct {
-	ID          string                    `json:"id"`
-	Attachment  bool                      `json:"attachment"`
-	Cost        ConfigProviderModelsCost  `json:"cost"`
-	Limit       ConfigProviderModelsLimit `json:"limit"`
-	Name        string                    `json:"name"`
-	Options     map[string]interface{}    `json:"options"`
-	Reasoning   bool                      `json:"reasoning"`
-	ReleaseDate string                    `json:"release_date"`
-	Temperature bool                      `json:"temperature"`
-	ToolCall    bool                      `json:"tool_call"`
-	JSON        configProviderModelJSON   `json:"-"`
+	ID           string                       `json:"id"`
+	Attachment   bool                         `json:"attachment"`
+	Cost         ConfigProviderModelsCost     `json:"cost"`
+	Experimental bool                         `json:"experimental"`
+	Limit        ConfigProviderModelsLimit    `json:"limit"`
+	Name         string                       `json:"name"`
+	Options      map[string]interface{}       `json:"options"`
+	Provider     ConfigProviderModelsProvider `json:"provider"`
+	Reasoning    bool                         `json:"reasoning"`
+	ReleaseDate  string                       `json:"release_date"`
+	Temperature  bool                         `json:"temperature"`
+	ToolCall     bool                         `json:"tool_call"`
+	JSON         configProviderModelJSON      `json:"-"`
 }
 
 // configProviderModelJSON contains the JSON metadata for the struct
 // [ConfigProviderModel]
 type configProviderModelJSON struct {
-	ID          apijson.Field
-	Attachment  apijson.Field
-	Cost        apijson.Field
-	Limit       apijson.Field
-	Name        apijson.Field
-	Options     apijson.Field
-	Reasoning   apijson.Field
-	ReleaseDate apijson.Field
-	Temperature apijson.Field
-	ToolCall    apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ID           apijson.Field
+	Attachment   apijson.Field
+	Cost         apijson.Field
+	Experimental apijson.Field
+	Limit        apijson.Field
+	Name         apijson.Field
+	Options      apijson.Field
+	Provider     apijson.Field
+	Reasoning    apijson.Field
+	ReleaseDate  apijson.Field
+	Temperature  apijson.Field
+	ToolCall     apijson.Field
+	raw          string
+	ExtraFields  map[string]apijson.Field
 }
 
 func (r *ConfigProviderModel) UnmarshalJSON(data []byte) (err error) {
@@ -1647,6 +1653,27 @@ func (r *ConfigProviderModelsLimit) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r configProviderModelsLimitJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigProviderModelsProvider struct {
+	Npm  string                           `json:"npm,required"`
+	JSON configProviderModelsProviderJSON `json:"-"`
+}
+
+// configProviderModelsProviderJSON contains the JSON metadata for the struct
+// [ConfigProviderModelsProvider]
+type configProviderModelsProviderJSON struct {
+	Npm         apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigProviderModelsProvider) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configProviderModelsProviderJSON) RawJSON() string {
 	return r.raw
 }
 
@@ -1726,15 +1753,15 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed,required"`
-	JSON        configTuiJSON `json:"-"`
+	ScrollSpeed    float64       `json:"scroll_speed,required"`
+	JSON           configTuiJSON `json:"-"`
 }
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
-	ScrollSpeed apijson.Field
-	raw         string
-	ExtraFields map[string]apijson.Field
+	ScrollSpeed    apijson.Field
+	raw            string
+	ExtraFields    map[string]apijson.Field
 }
 
 func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {

@@ -161,7 +161,7 @@ export namespace Provider {
       string,
       { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
     >()
-    const sdk = new Map<string, SDK>()
+    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -326,23 +326,24 @@ export namespace Provider {
         providerID: provider.id,
       })
       const s = await state()
-      const existing = s.sdk.get(provider.id)
-      if (existing) return existing
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
+      const options = { ...s.providers[provider.id]?.options }
+      const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
+      const existing = s.sdk.get(key)
+      if (existing) return existing
       const mod = await import(await BunProc.install(pkg, "latest"))
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      let options = { ...s.providers[provider.id]?.options }
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: any) => {
           return await fetch(input, { ...init, timeout: options["timeout"] })
         }
       }
+      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
         ...options,
       })
-      s.sdk.set(provider.id, loaded)
+      s.sdk.set(key, loaded)
       return loaded as SDK
     })().catch((e) => {
       throw new InitError({ providerID: provider.id }, { cause: e })

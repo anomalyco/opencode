@@ -1332,15 +1332,17 @@ func (r sessionJSON) RawJSON() string {
 }
 
 type SessionTime struct {
-	Created float64         `json:"created,required"`
-	Updated float64         `json:"updated,required"`
-	JSON    sessionTimeJSON `json:"-"`
+	Created    float64         `json:"created,required"`
+	Updated    float64         `json:"updated,required"`
+	Compacting float64         `json:"compacting"`
+	JSON       sessionTimeJSON `json:"-"`
 }
 
 // sessionTimeJSON contains the JSON metadata for the struct [SessionTime]
 type sessionTimeJSON struct {
 	Created     apijson.Field
 	Updated     apijson.Field
+	Compacting  apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

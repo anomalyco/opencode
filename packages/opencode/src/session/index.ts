@@ -52,6 +52,8 @@ import { ulid } from "ulid"
 import { defer } from "../util/defer"
 import { Command } from "../command"
 import { $ } from "bun"
+import { ListTool } from "../tool/ls"
+import { Token } from "../util/token"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -85,6 +87,7 @@ export namespace Session {
       time: z.object({
         created: z.number(),
         updated: z.number(),
+        compacting: z.number().optional(),
       }),
       revert: z
         .object({
@@ -136,12 +139,17 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
+    Compacted: Bus.event(
+      "session.compacted",
+      z.object({
+        sessionID: z.string(),
+      }),
+    ),
   }
 
   const state = Instance.state(
     () => {
       const pending = new Map<string, AbortController>()
-      const autoCompacting = new Map<string, boolean>()
       const queued = new Map<
         string,
         {
@@ -155,7 +163,6 @@ export namespace Session {
 
       return {
         pending,
-        autoCompacting,
         queued,
       }
     },
@@ -355,6 +362,7 @@ export namespace Session {
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
+    return msg
   }
 
   async function updatePart(part: MessageV2.Part) {
@@ -455,7 +463,7 @@ export namespace Session {
     // Process revert cleanup first, before creating new messages
     const session = await get(input.sessionID)
     if (session.revert) {
-      cleanupRevert(session)
+      await cleanupRevert(session)
     }
     const userMsg: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
@@ -576,7 +584,45 @@ export namespace Session {
                 ]
               }
 
-              let file = Bun.file(filePath)
+              if (part.mime === "application/x-directory") {
+                const args = { path: filePath }
+                const result = await ListTool.init().then((t) =>
+                  t.execute(args, {
+                    sessionID: input.sessionID,
+                    abort: new AbortController().signal,
+                    agent: input.agent!,
+                    messageID: userMsg.id,
+                    extra: { bypassCwdCheck: true },
+                    metadata: async () => {},
+                  }),
+                )
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Called the list tool with the following input: ${JSON.stringify(args)}`,
+                  },
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: result.output,
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: userMsg.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
+
+              const file = Bun.file(filePath)
               FileTime.read(input.sessionID, filePath)
               return [
                 {
@@ -673,30 +719,29 @@ export namespace Session {
       }
       return Provider.defaultModel()
     })().then((x) => Provider.getModel(x.providerID, x.modelID))
-    let msgs = await messages(input.sessionID)
 
-    const previous = msgs.filter((x) => x.info.role === "assistant").at(-1)?.info as MessageV2.Assistant
+    let msgs = await messages(input.sessionID).then((x) => sinceSummary(x))
+
+    const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
+    if (
+      lastAssistant?.info.role === "assistant" &&
+      needsCompaction({
+        tokens: lastAssistant.info.tokens,
+        model: model.info,
+      })
+    ) {
+      const msg = await summarize({
+        sessionID: input.sessionID,
+        providerID: model.providerID,
+        modelID: model.info.id,
+      })
+      msgs = [msg]
+    }
+
     const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 
-    // auto summarize if too long
-    if (previous && previous.tokens) {
-      const tokens =
-        previous.tokens.input + previous.tokens.cache.read + previous.tokens.cache.write + previous.tokens.output
-      if (model.info.limit.context && tokens > Math.max((model.info.limit.context - outputLimit) * 0.9, 0)) {
-        state().autoCompacting.set(input.sessionID, true)
-
-        await summarize({
-          sessionID: input.sessionID,
-          providerID: model.providerID,
-          modelID: model.info.id,
-        })
-        return prompt(input)
-      }
-    }
     using abort = lock(input.sessionID)
 
-    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
-    if (lastSummary) msgs = msgs.filter((msg) => msg.info.id >= lastSummary.info.id)
     const numRealUserMsgs = msgs.filter(
       (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
     ).length
@@ -791,38 +836,20 @@ export namespace Session {
     const [first, ...rest] = system
     system = [first, rest.join("\n")]
 
-    const assistantMsg: MessageV2.Info = {
-      id: Identifier.ascending("message"),
-      role: "assistant",
-      system,
-      mode: inputAgent,
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
-      },
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      modelID: model.modelID,
-      providerID: model.providerID,
-      time: {
-        created: Date.now(),
-      },
+    const processor = await createProcessor({
       sessionID: input.sessionID,
-    }
-    await updateMessage(assistantMsg)
+      model: model.info,
+      providerID: model.providerID,
+      agent: inputAgent,
+      system,
+    })
+
     await using _ = defer(async () => {
-      if (assistantMsg.time.completed) return
-      await Storage.remove(["session", "message", input.sessionID, assistantMsg.id])
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: assistantMsg.id })
+      if (processor.message.time.completed) return
+      await Storage.remove(["session", "message", input.sessionID, processor.message.id])
+      await Bus.publish(MessageV2.Event.Removed, { sessionID: input.sessionID, messageID: processor.message.id })
     })
     const tools: Record<string, AITool> = {}
-
-    const processor = createProcessor(assistantMsg, model.info)
 
     const enabledTools = pipe(
       agent.tools,
@@ -850,7 +877,7 @@ export namespace Session {
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
-            messageID: assistantMsg.id,
+            messageID: processor.message.id,
             callID: options.toolCallId,
             agent: agent.name,
             metadata: async (val) => {
@@ -954,15 +981,39 @@ export namespace Session {
         },
       },
     )
+
+    let pointer = 0
     const stream = streamText({
       onError(e) {
         log.error("streamText error", {
           error: e,
         })
       },
-      async prepareStep({ messages }) {
+      async prepareStep({ messages, steps }) {
+        const step = steps.at(-1)
+        if (
+          step &&
+          needsCompaction({
+            tokens: getUsage(model.info, step.usage, step.providerMetadata).tokens,
+            model: model.info,
+          }) &&
+          false
+        ) {
+          await processor.end()
+          const msg = await Session.summarize({
+            sessionID: input.sessionID,
+            providerID: model.providerID,
+            modelID: model.info.id,
+          })
+          await processor.next()
+          pointer = messages.length
+          messages.push(...MessageV2.toModelMessage([msg]))
+        }
+
+        // Add queued messages to the stream
         const queue = (state().queued.get(input.sessionID) ?? []).filter((x) => !x.processed)
         if (queue.length) {
+          await processor.end()
           for (const item of queue) {
             if (item.processed) continue
             messages.push(
@@ -975,35 +1026,10 @@ export namespace Session {
             )
             item.processed = true
           }
-          assistantMsg.time.completed = Date.now()
-          await updateMessage(assistantMsg)
-          Object.assign(assistantMsg, {
-            id: Identifier.ascending("message"),
-            role: "assistant",
-            system,
-            path: {
-              cwd: Instance.directory,
-              root: Instance.worktree,
-            },
-            cost: 0,
-            tokens: {
-              input: 0,
-              output: 0,
-              reasoning: 0,
-              cache: { read: 0, write: 0 },
-            },
-            modelID: model.modelID,
-            providerID: model.providerID,
-            mode: inputAgent,
-            time: {
-              created: Date.now(),
-            },
-            sessionID: input.sessionID,
-          })
-          await updateMessage(assistantMsg)
+          await processor.next()
         }
         return {
-          messages,
+          messages: messages.slice(pointer),
         }
       },
       async experimental_repairToolCall(input) {
@@ -1091,6 +1117,7 @@ export namespace Session {
       item.callback(result)
     }
     state().queued.delete(input.sessionID)
+    // Session.prune(input)
     return result
   }
 
@@ -1104,7 +1131,7 @@ export namespace Session {
     using abort = lock(input.sessionID)
     const session = await get(input.sessionID)
     if (session.revert) {
-      cleanupRevert(session)
+      await cleanupRevert(session)
     }
     const userMsg: MessageV2.User = {
       id: Identifier.ascending("message"),
@@ -1318,7 +1345,15 @@ export namespace Session {
           return
         }
 
-        if (stats.isDirectory()) return
+        if (stats.isDirectory()) {
+          parts.push({
+            type: "file",
+            url: `file://${filepath}`,
+            filename: name,
+            mime: "application/x-directory",
+          })
+          return
+        }
 
         parts.push({
           type: "file",
@@ -1354,11 +1389,60 @@ export namespace Session {
     })
   }
 
-  function createProcessor(assistantMsg: MessageV2.Assistant, model: ModelsDev.Model) {
+  async function createProcessor(input: {
+    sessionID: string
+    providerID: string
+    model: ModelsDev.Model
+    system: string[]
+    agent: string
+  }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
     let shouldStop = false
-    return {
+
+    async function createMessage() {
+      const msg: MessageV2.Info = {
+        id: Identifier.ascending("message"),
+        role: "assistant",
+        system: input.system,
+        mode: input.agent,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: input.model.id,
+        providerID: input.providerID,
+        time: {
+          created: Date.now(),
+        },
+        sessionID: input.sessionID,
+      }
+      await updateMessage(msg)
+      return msg
+    }
+
+    let assistantMsg = await createMessage()
+
+    const result = {
+      async end() {
+        if (assistantMsg) {
+          assistantMsg.time.completed = Date.now()
+          await updateMessage(assistantMsg)
+        }
+      },
+      async next() {
+        assistantMsg = await createMessage()
+      },
+      get message() {
+        return assistantMsg
+      },
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
@@ -1514,7 +1598,7 @@ export namespace Session {
                 break
 
               case "finish-step":
-                const usage = getUsage(model, value.usage, value.providerMetadata)
+                const usage = getUsage(input.model, value.usage, value.providerMetadata)
                 assistantMsg.cost += usage.cost
                 assistantMsg.tokens = usage.tokens
                 await updatePart({
@@ -1605,7 +1689,7 @@ export namespace Session {
             case LoadAPIKeyError.isInstance(e):
               assistantMsg.error = new MessageV2.AuthError(
                 {
-                  providerID: model.id,
+                  providerID: input.providerID,
                   message: e.message,
                 },
                 { cause: e },
@@ -1644,6 +1728,7 @@ export namespace Session {
         return { info: assistantMsg, parts: p }
       },
     }
+    return result
   }
 
   export const RevertInput = z.object({
@@ -1709,10 +1794,15 @@ export namespace Session {
   }
 
   export async function summarize(input: { sessionID: string; providerID: string; modelID: string }) {
-    using abort = lock(input.sessionID)
-    const msgs = await messages(input.sessionID)
-    const lastSummary = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.summary === true)
-    const filtered = msgs.filter((msg) => !lastSummary || msg.info.id >= lastSummary.info.id)
+    await update(input.sessionID, (draft) => {
+      draft.time.compacting = Date.now()
+    })
+    await using _ = defer(async () => {
+      await update(input.sessionID, (draft) => {
+        draft.time.compacting = undefined
+      })
+    })
+    const toSummarize = await messages(input.sessionID).then((x) => sinceSummary(x))
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -1720,7 +1810,7 @@ export namespace Session {
       ...(await SystemPrompt.custom()),
     ]
 
-    const next: MessageV2.Info = {
+    const msg = (await updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
       sessionID: input.sessionID,
@@ -1730,26 +1820,21 @@ export namespace Session {
         cwd: Instance.directory,
         root: Instance.worktree,
       },
-      summary: true,
       cost: 0,
-      modelID: input.modelID,
-      providerID: model.providerID,
       tokens: {
-        input: 0,
         output: 0,
+        input: 0,
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
+      modelID: input.modelID,
+      providerID: model.providerID,
       time: {
         created: Date.now(),
       },
-    }
-    await updateMessage(next)
-
-    const processor = createProcessor(next, model.info)
-    const stream = streamText({
+    })) as MessageV2.Assistant
+    const generated = await generateText({
       maxRetries: 10,
-      abortSignal: abort.signal,
       model: model.language,
       messages: [
         ...system.map(
@@ -1758,7 +1843,7 @@ export namespace Session {
             content: x,
           }),
         ),
-        ...MessageV2.toModelMessage(filtered),
+        ...MessageV2.toModelMessage(toSummarize),
         {
           role: "user",
           content: [
@@ -1770,9 +1855,77 @@ export namespace Session {
         },
       ],
     })
+    const usage = getUsage(model.info, generated.usage, generated.providerMetadata)
+    msg.cost += usage.cost
+    msg.tokens = usage.tokens
+    msg.summary = true
+    msg.time.completed = Date.now()
+    await updateMessage(msg)
+    const part = await updatePart({
+      type: "text",
+      sessionID: input.sessionID,
+      messageID: msg.id,
+      id: Identifier.ascending("part"),
+      text: generated.text,
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
+    })
 
-    const result = await processor.process(stream)
-    return result
+    Bus.publish(Event.Compacted, {
+      sessionID: input.sessionID,
+    })
+
+    return {
+      info: msg,
+      parts: [part],
+    }
+  }
+
+  function sinceSummary(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
+    const result = []
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      result.push(msg)
+      if (msg.info.role === "assistant" && msg.info.summary) break
+    }
+    return result.toReversed()
+  }
+
+  function needsCompaction(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
+    const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
+    const output = Math.min(input.model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+    const usable = input.model.limit.context - output
+    return count > usable
+  }
+
+  // goes backwards through parts until there are 40_000 tokens worth of tool
+  // calls. then erases output of previous tool calls. idea is to throw away old
+  // tool calls that are no longer relevant.
+  export async function prune(input: { sessionID: string }) {
+    const msgs = await messages(input.sessionID)
+    let sum = 0
+    for (let msgIndex = msgs.length - 2; msgIndex >= 0; msgIndex--) {
+      const msg = msgs[msgIndex]
+      if (msg.info.role === "assistant" && msg.info.summary) return
+      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = msg.parts[partIndex]
+        if (part.type === "tool")
+          if (part.state.status === "completed") {
+            if (part.state.time.compacted) return
+            sum += Token.estimate(part.state.output)
+            if (sum > 40_000) {
+              log.info("pruning", {
+                sum,
+                id: part.id,
+              })
+              part.state.time.compacted = Date.now()
+              await updatePart(part)
+            }
+          }
+      }
+    }
   }
 
   function isLocked(sessionID: string) {
@@ -1789,12 +1942,6 @@ export namespace Session {
       async [Symbol.dispose]() {
         log.info("unlocking", { sessionID })
         state().pending.delete(sessionID)
-
-        const isAutoCompacting = state().autoCompacting.get(sessionID) ?? false
-        if (isAutoCompacting) {
-          state().autoCompacting.delete(sessionID)
-          return
-        }
 
         const session = await get(sessionID)
         if (session.parentID) return

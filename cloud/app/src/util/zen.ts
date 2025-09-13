@@ -1,22 +1,51 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { Database, eq, sql } from "@opencode/cloud-core/drizzle/index.js"
+import path from "node:path"
+import { and, Database, eq, isNull, sql } from "@opencode/cloud-core/drizzle/index.js"
 import { KeyTable } from "@opencode/cloud-core/schema/key.sql.js"
 import { BillingTable, UsageTable } from "@opencode/cloud-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode/cloud-core/util/price.js"
 import { Identifier } from "@opencode/cloud-core/identifier.js"
 import { Resource } from "@opencode/cloud-resource"
 
+type ModelCost = {
+  input: number
+  output: number
+  cacheRead?: number
+  cacheWrite5m?: number
+  cacheWrite1h?: number
+}
+
+type Model = {
+  id: string
+  auth: boolean
+  cost: ModelCost | ((usage: any) => ModelCost)
+  headerMappings: Record<string, string>
+  providers: Record<
+    string,
+    {
+      api: string
+      apiKey: string
+      model: string
+      weight?: number
+    }
+  >
+}
+
 export async function handler(
   input: APIEvent,
   opts: {
-    transformBody?: (body: any) => any
-    parseUsageChunk: (chunk: string) => string | undefined
-    buildUsage: (body: any) => {
+    modifyBody?: (body: any) => any
+    setAuthHeader: (headers: Headers, apiKey: string) => void
+    parseApiKey: (headers: Headers) => string | undefined
+    onStreamPart: (chunk: string) => void
+    getStreamUsage: () => any
+    normalizeUsage: (body: any) => {
       inputTokens: number
       outputTokens: number
-      reasoningTokens: number
-      cacheReadTokens: number
-      cacheWriteTokens: number
+      reasoningTokens?: number
+      cacheReadTokens?: number
+      cacheWrite5mTokens?: number
+      cacheWrite1hTokens?: number
     }
   },
 ) {
@@ -24,99 +53,182 @@ export async function handler(
   class CreditsError extends Error {}
   class ModelError extends Error {}
 
-  const MODELS = {
-    //  "anthropic/claude-sonnet-4": {
-    //    auth: true,
-    //    api: "https://api.anthropic.com",
-    //    apiKey: Resource.ANTHROPIC_API_KEY.value,
-    //    model: "claude-sonnet-4-20250514",
-    //    cost: {
-    //      input: 0.0000015,
-    //      output: 0.000006,
-    //      reasoning: 0.0000015,
-    //      cacheRead: 0.0000001,
-    //      cacheWrite: 0.0000001,
-    //    },
-    //    headerMappings: {},
-    //  },
+  const MODELS: Record<string, Model> = {
+    "claude-opus-4-1": {
+      id: "claude-opus-4-1" as const,
+      auth: true,
+      cost: {
+        input: 0.000015,
+        output: 0.000075,
+        cacheRead: 0.0000015,
+        cacheWrite5m: 0.00001875,
+        cacheWrite1h: 0.00003,
+      },
+      headerMappings: {},
+      providers: {
+        anthropic: {
+          api: "https://api.anthropic.com",
+          apiKey: Resource.ANTHROPIC_API_KEY.value,
+          model: "claude-opus-4-1-20250805",
+        },
+      },
+    },
+    "claude-sonnet-4": {
+      id: "claude-sonnet-4" as const,
+      auth: true,
+      cost: (usage: any) => {
+        const totalInputTokens =
+          usage.inputTokens + usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens
+        return totalInputTokens <= 200_000
+          ? {
+              input: 0.000003,
+              output: 0.000015,
+              cacheRead: 0.0000003,
+              cacheWrite5m: 0.00000375,
+              cacheWrite1h: 0.000006,
+            }
+          : {
+              input: 0.000006,
+              output: 0.0000225,
+              cacheRead: 0.0000006,
+              cacheWrite5m: 0.0000075,
+              cacheWrite1h: 0.000012,
+            }
+      },
+      headerMappings: {},
+      providers: {
+        anthropic: {
+          api: "https://api.anthropic.com",
+          apiKey: Resource.ANTHROPIC_API_KEY.value,
+          model: "claude-sonnet-4-20250514",
+        },
+      },
+    },
+    "claude-3-5-haiku": {
+      id: "claude-3-5-haiku" as const,
+      auth: true,
+      cost: {
+        input: 0.0000008,
+        output: 0.000004,
+        cacheRead: 0.00000008,
+        cacheWrite5m: 0.000001,
+        cacheWrite1h: 0.0000016,
+      },
+      headerMappings: {},
+      providers: {
+        anthropic: {
+          api: "https://api.anthropic.com",
+          apiKey: Resource.ANTHROPIC_API_KEY.value,
+          model: "claude-3-5-haiku-20241022",
+        },
+      },
+    },
     "gpt-5": {
       id: "gpt-5" as const,
       auth: true,
-      api: "https://api.openai.com",
-      apiKey: Resource.OPENAI_API_KEY.value,
-      model: "gpt-5",
       cost: {
         input: 0.00000125,
         output: 0.00001,
-        reasoning: 0.00001,
         cacheRead: 0.000000125,
-        cacheWrite: 0,
       },
       headerMappings: {},
+      providers: {
+        openai: {
+          api: "https://api.openai.com",
+          apiKey: Resource.OPENAI_API_KEY.value,
+          model: "gpt-5",
+        },
+      },
     },
     "qwen3-coder": {
       id: "qwen3-coder" as const,
       auth: true,
-      api: "https://inference.baseten.co",
-      apiKey: Resource.BASETEN_API_KEY.value,
-      model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
       cost: {
-        input: 0.00000038,
-        output: 0.00000153,
-        reasoning: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
+        input: 0.00000045,
+        output: 0.0000018,
       },
       headerMappings: {},
+      providers: {
+        baseten: {
+          api: "https://inference.baseten.co",
+          apiKey: Resource.BASETEN_API_KEY.value,
+          model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+          weight: 4,
+        },
+        fireworks: {
+          api: "https://api.fireworks.ai/inference",
+          apiKey: Resource.FIREWORKS_API_KEY.value,
+          model: "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct",
+          weight: 1,
+        },
+      },
     },
     "kimi-k2": {
       id: "kimi-k2" as const,
       auth: true,
-      api: "https://inference.baseten.co",
-      apiKey: Resource.BASETEN_API_KEY.value,
-      model: "moonshotai/Kimi-K2-Instruct-0905",
       cost: {
         input: 0.0000006,
         output: 0.0000025,
-        reasoning: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
       },
       headerMappings: {},
+      providers: {
+        baseten: {
+          api: "https://inference.baseten.co",
+          apiKey: Resource.BASETEN_API_KEY.value,
+          model: "moonshotai/Kimi-K2-Instruct-0905",
+          weight: 4,
+        },
+        fireworks: {
+          api: "https://api.fireworks.ai/inference",
+          apiKey: Resource.FIREWORKS_API_KEY.value,
+          model: "accounts/fireworks/models/kimi-k2-instruct-0905",
+          weight: 1,
+        },
+      },
     },
     "grok-code": {
       id: "grok-code" as const,
       auth: false,
-      api: "https://api.x.ai",
-      apiKey: Resource.XAI_API_KEY.value,
-      model: "grok-code",
       cost: {
         input: 0,
         output: 0,
-        reasoning: 0,
         cacheRead: 0,
-        cacheWrite: 0,
       },
       headerMappings: {
         "x-grok-conv-id": "x-opencode-session",
         "x-grok-req-id": "x-opencode-request",
+      },
+      providers: {
+        xai: {
+          api: "https://api.x.ai",
+          apiKey: Resource.XAI_API_KEY.value,
+          model: "grok-code",
+        },
       },
     },
     // deprecated
     "qwen/qwen3-coder": {
       id: "qwen/qwen3-coder" as const,
       auth: true,
-      api: "https://inference.baseten.co",
-      apiKey: Resource.BASETEN_API_KEY.value,
-      model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
       cost: {
         input: 0.00000038,
         output: 0.00000153,
-        reasoning: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
       },
       headerMappings: {},
+      providers: {
+        baseten: {
+          api: "https://inference.baseten.co",
+          apiKey: Resource.BASETEN_API_KEY.value,
+          model: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+          weight: 5,
+        },
+        fireworks: {
+          api: "https://api.fireworks.ai/inference",
+          apiKey: Resource.FIREWORKS_API_KEY.value,
+          model: "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct",
+          weight: 1,
+        },
+      },
     },
   }
 
@@ -148,23 +260,27 @@ export async function handler(
     const apiKey = await authenticate()
     const isFree = FREE_WORKSPACES.includes(apiKey?.workspaceID ?? "")
     await checkCredits()
+    const providerName = selectProvider()
+    const providerData = MODEL.providers[providerName]
+    logger.metric({ provider: providerName })
 
     // Request to model provider
-    const res = await fetch(new URL(url.pathname.replace(/^\/zen/, "") + url.search, MODEL.api), {
+    const startTimestamp = Date.now()
+    const res = await fetch(path.posix.join(providerData.api, url.pathname.replace(/^\/zen/, "") + url.search), {
       method: "POST",
       headers: (() => {
         const headers = input.request.headers
         headers.delete("host")
         headers.delete("content-length")
-        headers.set("authorization", `Bearer ${MODEL.apiKey}`)
+        opts.setAuthHeader(headers, providerData.apiKey)
         Object.entries(MODEL.headerMappings ?? {}).forEach(([k, v]) => {
           headers.set(k, headers.get(v)!)
         })
         return headers
       })(),
       body: JSON.stringify({
-        ...(opts.transformBody?.(body) ?? body),
-        model: MODEL.model,
+        ...(opts.modifyBody?.(body) ?? body),
+        model: providerData.model,
       }),
     })
 
@@ -198,33 +314,30 @@ export async function handler(
         const decoder = new TextDecoder()
         let buffer = ""
         let responseLength = 0
-        let startTimestamp = Date.now()
-        let receivedFirstByte = false
 
         function pump(): Promise<void> {
           return (
             reader?.read().then(async ({ done, value }) => {
               if (done) {
                 logger.metric({ response_length: responseLength })
+                const usage = opts.getStreamUsage()
+                if (usage) await trackUsage(usage)
                 c.close()
                 return
               }
 
-              if (!receivedFirstByte) {
-                receivedFirstByte = true
+              if (responseLength === 0) {
                 logger.metric({ time_to_first_byte: Date.now() - startTimestamp })
               }
-
-              buffer += decoder.decode(value, { stream: true })
               responseLength += value.length
+              buffer += decoder.decode(value, { stream: true })
 
               const parts = buffer.split("\n\n")
               buffer = parts.pop() ?? ""
 
               for (const part of parts) {
                 logger.debug(part)
-                const usage = opts.parseUsageChunk(part.trim())
-                if (usage) await trackUsage(usage)
+                opts.onStreamPart(part.trim())
               }
 
               c.enqueue(value)
@@ -255,10 +368,9 @@ export async function handler(
 
     async function authenticate() {
       try {
-        const authHeader = input.request.headers.get("authorization")
-        if (!authHeader || !authHeader.startsWith("Bearer ")) throw new AuthError("Missing API key.")
+        const apiKey = opts.parseApiKey(input.request.headers)
+        if (!apiKey) throw new AuthError("Missing API key.")
 
-        const apiKey = authHeader.split(" ")[1]
         const key = await Database.use((tx) =>
           tx
             .select({
@@ -266,7 +378,7 @@ export async function handler(
               workspaceID: KeyTable.workspaceID,
             })
             .from(KeyTable)
-            .where(eq(KeyTable.key, apiKey))
+            .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
             .then((rows) => rows[0]),
         )
 
@@ -299,27 +411,61 @@ export async function handler(
       if (billing.balance <= 0) throw new CreditsError("Insufficient balance")
     }
 
-    async function trackUsage(usage: any) {
-      const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWriteTokens } = opts.buildUsage(usage)
+    function selectProvider() {
+      const picks = Object.entries(MODEL.providers).flatMap(([name, provider]) =>
+        Array<string>(provider.weight ?? 1).fill(name),
+      )
+      return picks[Math.floor(Math.random() * picks.length)]
+    }
 
-      const inputCost = MODEL.cost.input * inputTokens * 100
-      const outputCost = MODEL.cost.output * outputTokens * 100
-      const reasoningCost = MODEL.cost.reasoning * reasoningTokens * 100
-      const cacheReadCost = MODEL.cost.cacheRead * cacheReadTokens * 100
-      const cacheWriteCost = MODEL.cost.cacheWrite * cacheWriteTokens * 100
-      const totalCostInCent = inputCost + outputCost + reasoningCost + cacheReadCost + cacheWriteCost
+    async function trackUsage(usage: any) {
+      const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
+        opts.normalizeUsage(usage)
+
+      const modelCost = typeof MODEL.cost === "function" ? MODEL.cost(usage) : MODEL.cost
+
+      const inputCost = modelCost.input * inputTokens * 100
+      const outputCost = modelCost.output * outputTokens * 100
+      const reasoningCost = (() => {
+        if (!reasoningTokens) return undefined
+        return modelCost.output * reasoningTokens * 100
+      })()
+      const cacheReadCost = (() => {
+        if (!cacheReadTokens) return undefined
+        if (!modelCost.cacheRead) return undefined
+        return modelCost.cacheRead * cacheReadTokens * 100
+      })()
+      const cacheWrite5mCost = (() => {
+        if (!cacheWrite5mTokens) return undefined
+        if (!modelCost.cacheWrite5m) return undefined
+        return modelCost.cacheWrite5m * cacheWrite5mTokens * 100
+      })()
+      const cacheWrite1hCost = (() => {
+        if (!cacheWrite1hTokens) return undefined
+        if (!modelCost.cacheWrite1h) return undefined
+        return modelCost.cacheWrite1h * cacheWrite1hTokens * 100
+      })()
+      const totalCostInCent =
+        inputCost +
+        outputCost +
+        (reasoningCost ?? 0) +
+        (cacheReadCost ?? 0) +
+        (cacheWrite5mCost ?? 0) +
+        (cacheWrite1hCost ?? 0)
 
       logger.metric({
         "tokens.input": inputTokens,
         "tokens.output": outputTokens,
         "tokens.reasoning": reasoningTokens,
         "tokens.cache_read": cacheReadTokens,
-        "tokens.cache_write": cacheWriteTokens,
+        "tokens.cache_write_5m": cacheWrite5mTokens,
+        "tokens.cache_write_1h": cacheWrite1hTokens,
         "cost.input": Math.round(inputCost),
         "cost.output": Math.round(outputCost),
-        "cost.reasoning": Math.round(reasoningCost),
-        "cost.cache_read": Math.round(cacheReadCost),
-        "cost.cache_write": Math.round(cacheWriteCost),
+        "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,
+        "cost.cache_read": cacheReadCost ? Math.round(cacheReadCost) : undefined,
+        "cost.cache_write_5m": cacheWrite5mCost ? Math.round(cacheWrite5mCost) : undefined,
+        "cost.cache_write_1h": cacheWrite1hCost ? Math.round(cacheWrite1hCost) : undefined,
         "cost.total": Math.round(totalCostInCent),
       })
 
@@ -331,11 +477,13 @@ export async function handler(
           workspaceID: apiKey.workspaceID,
           id: Identifier.create("usage"),
           model: MODEL.id,
+          provider: providerName,
           inputTokens,
           outputTokens,
           reasoningTokens,
           cacheReadTokens,
-          cacheWriteTokens,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
           cost,
         })
         await tx
@@ -359,9 +507,25 @@ export async function handler(
       "error.message": error.message,
     })
 
+    // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
     if (error instanceof AuthError || error instanceof CreditsError || error instanceof ModelError)
-      return new Response(JSON.stringify({ error: { message: error.message } }), { status: 401 })
+      return new Response(
+        JSON.stringify({
+          type: "error",
+          error: { type: error.constructor.name, message: error.message },
+        }),
+        { status: 401 },
+      )
 
-    return new Response(JSON.stringify({ error: { message: error.message } }), { status: 500 })
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        error: {
+          type: "error",
+          message: error.message,
+        },
+      }),
+      { status: 500 },
+    )
   }
 }
