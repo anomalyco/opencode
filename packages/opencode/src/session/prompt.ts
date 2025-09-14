@@ -862,7 +862,8 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text = part.text.trimEnd()
-                  // part.metadata = value.providerMetadata
+                  part.metadata = mergeDeep(part.metadata ?? {}, value.providerMetadata ?? {})
+
                   part.time = {
                     ...part.time,
                     end: Date.now(),
