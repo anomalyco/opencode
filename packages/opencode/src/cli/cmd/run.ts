@@ -145,6 +145,7 @@ export const RunCommand = cmd({
       }
 
       let text = ""
+
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         if (evt.properties.part.sessionID !== session.id) return
         if (evt.properties.part.messageID === messageID) return
@@ -155,7 +156,13 @@ export const RunCommand = cmd({
           const title =
             part.state.title ||
             (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
+
           printEvent(color, tool, title)
+
+          if (part.tool === "bash" && part.state.output && part.state.output.trim()) {
+            UI.println()
+            UI.println(part.state.output)
+          }
         }
 
         if (part.type === "text") {
