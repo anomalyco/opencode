@@ -21,9 +21,11 @@ export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
   async handler() {
-    await Instance.provide(process.cwd(), async () => {
-      UI.empty()
-      prompts.intro("Install GitHub agent")
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Install GitHub agent")
       const app = await getAppInfo()
       await installGitHubApp()
 
@@ -264,7 +266,8 @@ jobs:
         )
 
         prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
-      }
+        }
+      },
     })
   },
 })

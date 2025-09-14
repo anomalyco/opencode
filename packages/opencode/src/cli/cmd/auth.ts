@@ -75,9 +75,11 @@ export const AuthLoginCommand = cmd({
       type: "string",
     }),
   async handler(args) {
-    await Instance.provide(process.cwd(), async () => {
-      UI.empty()
-      prompts.intro("Add credential")
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Add credential")
       if (args.url) {
         const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
         prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
@@ -269,6 +271,7 @@ export const AuthLoginCommand = cmd({
       })
 
       prompts.outro("Done")
+      },
     })
   },
 })
