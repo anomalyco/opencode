@@ -12,7 +12,7 @@ export namespace AuthGithubCopilot {
 
     const config = await Config.get()
     const providerConfig = config.provider?.[providerID]
-    const configUrl = providerConfig?.options?.githubEnterpriseUrl
+    const configUrl = providerConfig?.options?.enterpriseUrl
 
     return configUrl ? normalizeDomain(configUrl) : "github.com"
   }
