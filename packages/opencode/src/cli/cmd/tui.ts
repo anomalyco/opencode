@@ -123,14 +123,15 @@ export const TuiCommand = cmd({
           const file = Bun.file(binary)
           if (!(await file.exists())) {
             await Bun.write(file, tui, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
+            if (process.platform !== "win32") await fs.chmod(binary, 0o755)
           }
           cmd = [binary]
         }
         if (!tui) {
           const dir = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
-          await $`go build -o ./dist/tui ./main.go`.cwd(dir)
-          cmd = [path.join(dir, "dist/tui")]
+          let binaryName = `./dist/tui${process.platform === "win32" ? ".exe" : ""}`
+          await $`go build -o ${binaryName} ./main.go`.cwd(dir)
+          cmd = [path.join(dir, binaryName)]
         }
         Log.Default.info("tui", {
           cmd,
