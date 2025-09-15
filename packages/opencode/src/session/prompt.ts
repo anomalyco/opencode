@@ -709,6 +709,15 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat())
 
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: info,
+        parts,
+      },
+    )
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
