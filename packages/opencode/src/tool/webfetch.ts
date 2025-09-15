@@ -56,23 +56,33 @@ export const WebFetchTool = Tool.define("webfetch", {
 
     clearTimeout(timeoutId)
 
+    if (!response) {
+      throw new Error("Network request failed - no response received")
+    }
+
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
     }
 
-    // Check content length
-    const contentLength = response.headers.get("content-length")
+    // Check content length with safe header access
+    const contentLength = response.headers?.get?.("content-length")
     if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
-    const arrayBuffer = await response.arrayBuffer()
+    let arrayBuffer: ArrayBuffer
+    try {
+      arrayBuffer = await response.arrayBuffer()
+    } catch (error) {
+      throw new Error(`Failed to read response body: ${error instanceof Error ? error.message : "Unknown error"}`)
+    }
+
     if (arrayBuffer.byteLength > MAX_RESPONSE_SIZE) {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
     const content = new TextDecoder().decode(arrayBuffer)
-    const contentType = response.headers.get("content-type") || ""
+    const contentType = response.headers?.get?.("content-type") || ""
 
     const title = `${params.url} (${contentType})`
     switch (params.format) {
