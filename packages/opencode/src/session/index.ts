@@ -301,7 +301,7 @@ export namespace Session {
     let sum = 0
     for (let msgIndex = msgs.length - 2; msgIndex >= 0; msgIndex--) {
       const msg = msgs[msgIndex]
-      if (msg.info.role === "assistant" && msg.info.summary) return
+      if (msg.info.role === "assistant" && msg.info.summary && !msg.info.error) return
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
         const part = msg.parts[partIndex]
         if (part.type === "tool")

@@ -75,12 +75,25 @@ export const TaskTool = Tool.define("task", async () => {
         ],
       })
       unsub()
+      const outputText = (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? ""
+      const err = (result as any).info?.error
+      if (err) {
+        const isAborted = MessageV2.AbortedError.isInstance(err)
+        const name = typeof err === "object" && err && "name" in err ? (err as any).name : "Error"
+        const msg =
+          typeof err === "object" && err && "data" in err && (err as any).data && "message" in (err as any).data
+            ? ((err as any).data as any).message
+            : name
+        const partial = outputText ? `\nPartial output from subagent before interruption:\n${outputText}` : ""
+        const text = isAborted ? `Subagent task was interrupted by user.` : `Subagent encountered an error: ${msg}`
+        throw new Error(`${text}${partial}`)
+      }
       return {
         title: params.description,
         metadata: {
           summary: result.parts.filter((x: any) => x.type === "tool"),
         },
-        output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
+        output: outputText,
       }
     },
   }

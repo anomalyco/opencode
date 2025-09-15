@@ -569,7 +569,7 @@ export namespace MessageV2 {
   }
 
   export function filterSummarized(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
-    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
+    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary && !m.info.error)
     if (i === -1) return msgs.slice()
     return msgs.slice(i)
   }
