@@ -1,4 +1,4 @@
-import { App } from "../../app/app"
+import { Instance } from "../../project/instance"
 import { Provider } from "../../provider/provider"
 import { cmd } from "./cmd"
 
@@ -6,7 +6,7 @@ export const ModelsCommand = cmd({
   command: "models",
   describe: "list all available models",
   handler: async () => {
-    await App.provide({ cwd: process.cwd() }, async () => {
+    await Instance.provide(process.cwd(), async () => {
       const providers = await Provider.list()
 
       for (const [providerID, provider] of Object.entries(providers)) {

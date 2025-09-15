@@ -1,6 +1,6 @@
 import path from "path"
 import { $ } from "bun"
-import { z } from "zod"
+import z from "zod/v4"
 import { NamedError } from "../util/error"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -28,7 +28,7 @@ export namespace Installation {
       version: z.string(),
       latest: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "InstallationInfo",
     })
   export type Info = z.infer<typeof Info>

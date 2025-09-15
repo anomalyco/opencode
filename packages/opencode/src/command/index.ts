@@ -1,6 +1,6 @@
-import z from "zod"
-import { App } from "../app/app"
+import z from "zod/v4"
 import { Config } from "../config/config"
+import { Instance } from "../project/instance"
 
 export namespace Command {
   export const Info = z
@@ -10,13 +10,14 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       template: z.string(),
+      subtask: z.boolean().optional(),
     })
-    .openapi({
+    .meta({
       ref: "Command",
     })
   export type Info = z.infer<typeof Info>
 
-  const state = App.state("command", async () => {
+  const state = Instance.state(async () => {
     const cfg = await Config.get()
 
     const result: Record<string, Info> = {}
@@ -28,6 +29,7 @@ export namespace Command {
         model: command.model,
         description: command.description,
         template: command.template,
+        subtask: command.subtask,
       }
     }
 

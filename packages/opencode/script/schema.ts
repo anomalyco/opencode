@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 
-import "zod-openapi/extend"
+import { z } from "zod/v4"
 import { Config } from "../src/config/config"
-import { zodToJsonSchema } from "zod-to-json-schema"
 
 const file = process.argv[2]
 console.log(file)
 
-const result = zodToJsonSchema(Config.Info, {
+const result = z.toJSONSchema(Config.Info, {
   /**
    * We'll use the `default` values of the field as the only value in `examples`.
    * This will ensure no docs are needed to be read, as the configuration is
@@ -15,10 +14,8 @@ const result = zodToJsonSchema(Config.Info, {
    *
    * See https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-validation-00#rfc.section.9.5
    */
-  postProcess(jsonSchema) {
-    const schema = jsonSchema as typeof jsonSchema & {
-      examples?: unknown[]
-    }
+  override(input) {
+    const schema = input.jsonSchema
     if (schema && typeof schema === "object" && "type" in schema && schema.type === "string" && schema?.default) {
       if (!schema.examples) {
         schema.examples = [schema.default]
@@ -29,8 +26,6 @@ const result = zodToJsonSchema(Config.Info, {
         .join("\n\n")
         .trim()
     }
-
-    return jsonSchema
   },
 }) as Record<string, unknown> & {
   allowComments?: boolean

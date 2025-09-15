@@ -1,7 +1,7 @@
 import type {
   Event,
   createOpencodeClient,
-  App,
+  Project,
   Model,
   Provider,
   Permission,
@@ -14,10 +14,34 @@ import type { BunShell } from "./shell"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
-  app: App
+  project: Project
+  directory: string
+  worktree: string
   $: BunShell
+  Tool: {
+    define(id: string, init: any | (() => Promise<any>)): any
+  }
+  z: any // Zod instance for creating schemas
 }
 export type Plugin = (input: PluginInput) => Promise<Hooks>
+
+// Lightweight schema spec for HTTP-registered tools
+export type HttpParamSpec = {
+  type: "string" | "number" | "boolean" | "array"
+  description?: string
+  optional?: boolean
+  items?: "string" | "number" | "boolean"
+}
+export type HttpToolRegistration = {
+  id: string
+  description: string
+  parameters: {
+    type: "object"
+    properties: Record<string, HttpParamSpec>
+  }
+  callbackUrl: string
+  headers?: Record<string, string>
+}
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
@@ -95,6 +119,18 @@ export interface Hooks {
       title: string
       output: string
       metadata: any
+    },
+  ) => Promise<void>
+  /**
+   * Allow plugins to register additional tools with the server.
+   * Use registerHTTP to add a tool that calls back to your plugin/service.
+   * Use register to add a native/local tool with direct function execution.
+   */
+  "tool.register"?: (
+    input: {},
+    output: {
+      registerHTTP: (tool: HttpToolRegistration) => void | Promise<void>
+      register: (tool: any) => void | Promise<void> // Tool.Info type from opencode
     },
   ) => Promise<void>
 }

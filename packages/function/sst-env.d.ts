@@ -6,81 +6,89 @@
 import "sst"
 declare module "sst" {
   export interface Resource {
-    "ANTHROPIC_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
+    ANTHROPIC_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "AUTH_API_URL": {
-      "type": "sst.sst.Linkable"
-      "value": string
+    AUTH_API_URL: {
+      type: "sst.sst.Linkable"
+      value: string
     }
-    "DATABASE_PASSWORD": {
-      "type": "sst.sst.Secret"
-      "value": string
+    BASETEN_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "DATABASE_USERNAME": {
-      "type": "sst.sst.Secret"
-      "value": string
+    Console: {
+      type: "sst.cloudflare.SolidStart"
+      url: string
     }
-    "Database": {
-      "database": string
-      "host": string
-      "password": string
-      "port": number
-      "type": "sst.sst.Linkable"
-      "username": string
+    Database: {
+      database: string
+      host: string
+      password: string
+      port: number
+      type: "sst.sst.Linkable"
+      username: string
     }
-    "GITHUB_APP_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
+    FIREWORKS_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "GITHUB_APP_PRIVATE_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
+    GITHUB_APP_ID: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "GITHUB_CLIENT_ID_CONSOLE": {
-      "type": "sst.sst.Secret"
-      "value": string
+    GITHUB_APP_PRIVATE_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "GITHUB_CLIENT_SECRET_CONSOLE": {
-      "type": "sst.sst.Secret"
-      "value": string
+    GITHUB_CLIENT_ID_CONSOLE: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "GOOGLE_CLIENT_ID": {
-      "type": "sst.sst.Secret"
-      "value": string
+    GITHUB_CLIENT_SECRET_CONSOLE: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "OPENAI_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
+    GOOGLE_CLIENT_ID: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "STRIPE_SECRET_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
+    HONEYCOMB_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "STRIPE_WEBHOOK_SECRET": {
-      "type": "sst.sst.Linkable"
-      "value": string
+    OPENAI_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "Web": {
-      "type": "sst.cloudflare.Astro"
-      "url": string
+    STRIPE_SECRET_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
-    "ZHIPU_API_KEY": {
-      "type": "sst.sst.Secret"
-      "value": string
+    STRIPE_WEBHOOK_SECRET: {
+      type: "sst.sst.Linkable"
+      value: string
+    }
+    Web: {
+      type: "sst.cloudflare.Astro"
+      url: string
+    }
+    XAI_API_KEY: {
+      type: "sst.sst.Secret"
+      value: string
     }
   }
 }
-// cloudflare 
-import * as cloudflare from "@cloudflare/workers-types";
+// cloudflare
+import * as cloudflare from "@cloudflare/workers-types"
 declare module "sst" {
   export interface Resource {
-    "Api": cloudflare.Service
-    "AuthApi": cloudflare.Service
-    "AuthStorage": cloudflare.KVNamespace
-    "Bucket": cloudflare.R2Bucket
-    "GatewayApi": cloudflare.Service
+    Api: cloudflare.Service
+    AuthApi: cloudflare.Service
+    AuthStorage: cloudflare.KVNamespace
+    Bucket: cloudflare.R2Bucket
+    LogProcessor: cloudflare.Service
   }
 }
 

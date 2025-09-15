@@ -1,0 +1,46 @@
+{
+  "name": "@opencode/app",
+  "version": "0.3.126",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.11",
+    "@types/luxon": "3.7.1",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "^6.0.0",
+    "vite-plugin-icons-spritesheet": "3.0.1",
+    "vite-plugin-solid": "^2.11.6"
+  },
+  "dependencies": {
+    "@kobalte/core": "0.13.11",
+    "@opencode-ai/sdk": "workspace:*",
+    "@shikijs/transformers": "3.9.2",
+    "@solid-primitives/resize-observer": "2.1.3",
+    "@solid-primitives/scroll": "2.1.3",
+    "@solidjs/router": "0.15.3",
+    "@thisbeyond/solid-dnd": "0.7.5",
+    "diff": "8.0.2",
+    "luxon": "3.7.1",
+    "marked": "16.2.0",
+    "marked-shiki": "1.2.1",
+    "remeda": "catalog:",
+    "shiki": "3.9.2",
+    "solid-js": "catalog:",
+    "solid-list": "0.3.0",
+    "tailwindcss": "4.1.11",
+    "virtua": "0.42.3"
+  },
+  "prettier": {
+    "semi": false,
+    "printWidth": 120
+  }
+}

@@ -15,6 +15,8 @@ import { Ide } from "../../ide"
 
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
+import { Instance } from "../../project/instance"
+import { $ } from "bun"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -79,7 +81,7 @@ export const TuiCommand = cmd({
         UI.error("Failed to change directory to " + cwd)
         return
       }
-      const result = await bootstrap({ cwd }, async (app) => {
+      const result = await bootstrap(cwd, async () => {
         const sessionID = await (async () => {
           if (args.continue) {
             const it = Session.list()
@@ -110,8 +112,7 @@ export const TuiCommand = cmd({
           hostname: args.hostname,
         })
 
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+        let cmd = [] as string[]
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
         if (tui) {
           let binaryName = tui.name
@@ -122,10 +123,15 @@ export const TuiCommand = cmd({
           const file = Bun.file(binary)
           if (!(await file.exists())) {
             await Bun.write(file, tui, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
+            if (process.platform !== "win32") await fs.chmod(binary, 0o755)
           }
-          cwd = process.cwd()
           cmd = [binary]
+        }
+        if (!tui) {
+          const dir = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+          let binaryName = `./dist/tui${process.platform === "win32" ? ".exe" : ""}`
+          await $`go build -o ${binaryName} ./main.go`.cwd(dir)
+          cmd = [path.join(dir, binaryName)]
         }
         Log.Default.info("tui", {
           cmd,
@@ -146,7 +152,7 @@ export const TuiCommand = cmd({
             ...process.env,
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
-            OPENCODE_APP_INFO: JSON.stringify(app),
+            OPENCODE_PROJECT: JSON.stringify(Instance.project),
           },
           onExit: () => {
             server.stop()

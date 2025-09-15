@@ -1,12 +1,13 @@
-import { z, type ZodType } from "zod"
-import { App } from "../app/app"
+import z from "zod/v4"
+import type { ZodType } from "zod/v4"
 import { Log } from "../util/log"
+import { Instance } from "../project/instance"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
 
-  const state = App.state("bus", () => {
+  const state = Instance.state(() => {
     const subscriptions = new Map<any, Subscription[]>()
 
     return {
@@ -38,7 +39,7 @@ export namespace Bus {
               type: z.literal(type),
               properties: def.properties,
             })
-            .openapi({
+            .meta({
               ref: "Event" + "." + def.type,
             }),
         )

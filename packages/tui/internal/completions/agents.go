@@ -30,8 +30,9 @@ func (cg *agentsContextGroup) GetChildEntries(
 
 	query = strings.TrimSpace(query)
 
-	agents, err := cg.app.Client.App.Agents(
+	agents, err := cg.app.Client.Agent.List(
 		context.Background(),
+		opencode.AgentListParams{},
 	)
 	if err != nil {
 		slog.Error("Failed to get agent list", "error", err)

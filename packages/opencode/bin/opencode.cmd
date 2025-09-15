@@ -52,5 +52,7 @@ echo It seems that your package manager failed to install the right version of t
 exit /b 1
 
 :execute
-rem Execute the binary with all arguments
-"%resolved%" %*
+rem Execute the binary with all arguments in the same console window
+rem Use start /b /wait to ensure it runs in the current shell context for all shells
+start /b /wait "" "%resolved%" %*
+exit /b %ERRORLEVEL%

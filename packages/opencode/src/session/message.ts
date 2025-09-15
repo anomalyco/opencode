@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import { NamedError } from "../util/error"
 
 export namespace Message {
@@ -19,7 +19,7 @@ export namespace Message {
       toolName: z.string(),
       args: z.custom<Required<unknown>>(),
     })
-    .openapi({
+    .meta({
       ref: "ToolCall",
     })
   export type ToolCall = z.infer<typeof ToolCall>
@@ -32,7 +32,7 @@ export namespace Message {
       toolName: z.string(),
       args: z.custom<Required<unknown>>(),
     })
-    .openapi({
+    .meta({
       ref: "ToolPartialCall",
     })
   export type ToolPartialCall = z.infer<typeof ToolPartialCall>
@@ -46,12 +46,12 @@ export namespace Message {
       args: z.custom<Required<unknown>>(),
       result: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "ToolResult",
     })
   export type ToolResult = z.infer<typeof ToolResult>
 
-  export const ToolInvocation = z.discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult]).openapi({
+  export const ToolInvocation = z.discriminatedUnion("state", [ToolCall, ToolPartialCall, ToolResult]).meta({
     ref: "ToolInvocation",
   })
   export type ToolInvocation = z.infer<typeof ToolInvocation>
@@ -61,7 +61,7 @@ export namespace Message {
       type: z.literal("text"),
       text: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "TextPart",
     })
   export type TextPart = z.infer<typeof TextPart>
@@ -70,9 +70,9 @@ export namespace Message {
     .object({
       type: z.literal("reasoning"),
       text: z.string(),
-      providerMetadata: z.record(z.any()).optional(),
+      providerMetadata: z.record(z.string(), z.any()).optional(),
     })
-    .openapi({
+    .meta({
       ref: "ReasoningPart",
     })
   export type ReasoningPart = z.infer<typeof ReasoningPart>
@@ -82,7 +82,7 @@ export namespace Message {
       type: z.literal("tool-invocation"),
       toolInvocation: ToolInvocation,
     })
-    .openapi({
+    .meta({
       ref: "ToolInvocationPart",
     })
   export type ToolInvocationPart = z.infer<typeof ToolInvocationPart>
@@ -93,9 +93,9 @@ export namespace Message {
       sourceId: z.string(),
       url: z.string(),
       title: z.string().optional(),
-      providerMetadata: z.record(z.any()).optional(),
+      providerMetadata: z.record(z.string(), z.any()).optional(),
     })
-    .openapi({
+    .meta({
       ref: "SourceUrlPart",
     })
   export type SourceUrlPart = z.infer<typeof SourceUrlPart>
@@ -107,7 +107,7 @@ export namespace Message {
       filename: z.string().optional(),
       url: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "FilePart",
     })
   export type FilePart = z.infer<typeof FilePart>
@@ -116,14 +116,14 @@ export namespace Message {
     .object({
       type: z.literal("step-start"),
     })
-    .openapi({
+    .meta({
       ref: "StepStartPart",
     })
   export type StepStartPart = z.infer<typeof StepStartPart>
 
   export const MessagePart = z
     .discriminatedUnion("type", [TextPart, ReasoningPart, ToolInvocationPart, SourceUrlPart, FilePart, StepStartPart])
-    .openapi({
+    .meta({
       ref: "MessagePart",
     })
   export type MessagePart = z.infer<typeof MessagePart>
@@ -180,9 +180,9 @@ export namespace Message {
             .optional(),
           snapshot: z.string().optional(),
         })
-        .openapi({ ref: "MessageMetadata" }),
+        .meta({ ref: "MessageMetadata" }),
     })
-    .openapi({
+    .meta({
       ref: "Message",
     })
   export type Info = z.infer<typeof Info>

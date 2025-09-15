@@ -1,27 +1,32 @@
 import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
-import { App } from "../app/app"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
+import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { ToolRegistry } from "../tool/registry"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = App.state("plugin", async (app) => {
+  const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.app().fetch(...args),
+      fetch: async (...args) => Server.App.fetch(...args),
     })
     const config = await Config.get()
     const hooks = []
     const input = {
       client,
-      app,
+      project: Instance.project,
+      worktree: Instance.worktree,
+      directory: Instance.directory,
       $: Bun.$,
+      Tool: await import("../tool/tool").then((m) => m.Tool),
+      z: await import("zod").then((m) => m.z),
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
@@ -73,6 +78,14 @@ export namespace Plugin {
     const config = await Config.get()
     for (const hook of hooks) {
       await hook.config?.(config)
+      // Let plugins register tools at startup
+      await hook["tool.register"]?.(
+        {},
+        {
+          registerHTTP: ToolRegistry.registerHTTP,
+          register: ToolRegistry.register,
+        },
+      )
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)

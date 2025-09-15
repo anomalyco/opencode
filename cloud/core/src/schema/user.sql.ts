@@ -1,16 +1,16 @@
-import { text, pgTable, uniqueIndex, varchar, integer } from "drizzle-orm/pg-core"
+import { text, mysqlTable, uniqueIndex, varchar, int } from "drizzle-orm/mysql-core"
 import { timestamps, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
-export const UserTable = pgTable(
+export const UserTable = mysqlTable(
   "user",
   {
     ...workspaceColumns,
     ...timestamps,
-    email: text("email").notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
     timeSeen: utc("time_seen"),
-    color: integer("color"),
+    color: int("color"),
   },
   (table) => [...workspaceIndexes(table), uniqueIndex("user_email").on(table.workspaceID, table.email)],
 )

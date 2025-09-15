@@ -39,4 +39,8 @@ body {
   --space-72: 18rem;
   --space-80: 20rem;
   --space-96: 24rem;
+
+  --border-radius-sm: 0.1875rem;
+  --border-radius-md: 0.3125rem;
+  --border-radius-lg: 0.5rem;
 }

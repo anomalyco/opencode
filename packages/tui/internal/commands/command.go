@@ -92,6 +92,12 @@ func (r CommandRegistry) Sorted() []Command {
 		if b.Name == AppExitCommand {
 			return -1
 		}
+		if a.Custom && !b.Custom {
+			return 1
+		}
+		if !a.Custom && b.Custom {
+			return -1
+		}
 
 		return strings.Compare(string(a.Name), string(b.Name))
 	})

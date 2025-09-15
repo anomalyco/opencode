@@ -2,13 +2,7 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "customConditions": [
-      "development"
-    ]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "customConditions": ["development"]
   }
 }
