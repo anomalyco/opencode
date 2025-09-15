@@ -718,53 +718,117 @@ export namespace LSPServer {
       return NearestRoot([".git"])(file)
     },
     async spawn(root) {
-      const java = Bun.which("java")
-      if (!java) {
-        log.error("Java is required to run Nextflow Language Server. Please install Java 17 or later.")
-        return
-      }
+      try {
+        log.info("starting Nextflow Language Server", { root })
 
-      const nextflowLsDir = path.join(Global.Path.bin, "nextflow-ls")
-      const jarPath = path.join(nextflowLsDir, "language-server-all.jar")
-
-      if (!(await Bun.file(jarPath).exists())) {
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-
-        log.info("downloading Nextflow Language Server from GitHub releases")
-
-        // Create nextflow-ls directory
-        await fs.mkdir(nextflowLsDir, { recursive: true })
-
-        // Fetch latest release
-        const releaseResponse = await fetch("https://api.github.com/repos/nextflow-io/language-server/releases/latest")
-        if (!releaseResponse.ok) {
-          log.error("Failed to fetch Nextflow Language Server release info")
+        const java = Bun.which("java")
+        if (!java) {
+          log.error("Java is required to run Nextflow Language Server. Please install Java 17 or later.")
           return
         }
+        log.info("found Java executable", { java })
 
-        const release = await releaseResponse.json()
-        const asset = release.assets.find((a: any) => a.name === "language-server-all.jar")
-        if (!asset) {
-          log.error("Could not find language-server-all.jar in latest Nextflow Language Server release")
-          return
+        const nextflowLsDir = path.join(Global.Path.bin, "nextflow-ls")
+        const jarPath = path.join(nextflowLsDir, "language-server-all.jar")
+        log.info("checking for Nextflow Language Server JAR", { jarPath })
+
+        if (!(await Bun.file(jarPath).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) {
+            log.warn("Nextflow Language Server JAR not found and downloads disabled")
+            return
+          }
+
+          log.info("downloading Nextflow Language Server from GitHub releases")
+
+          try {
+            // Create nextflow-ls directory
+            await fs.mkdir(nextflowLsDir, { recursive: true })
+            log.info("created directory", { nextflowLsDir })
+
+            // Fetch latest release
+            log.info("fetching latest release info from GitHub")
+            const releaseResponse = await fetch("https://api.github.com/repos/nextflow-io/language-server/releases/latest")
+            if (!releaseResponse.ok) {
+              log.error("Failed to fetch Nextflow Language Server release info", {
+                status: releaseResponse.status,
+                statusText: releaseResponse.statusText
+              })
+              return
+            }
+
+            const release = await releaseResponse.json()
+            log.info("found release", { version: release.tag_name, assetsCount: release.assets?.length })
+
+            const asset = release.assets.find((a: any) => a.name === "language-server-all.jar")
+            if (!asset) {
+              log.error("Could not find language-server-all.jar in latest Nextflow Language Server release", {
+                availableAssets: release.assets?.map((a: any) => a.name)
+              })
+              return
+            }
+
+            const downloadUrl = asset.browser_download_url
+            log.info("downloading JAR file", { downloadUrl, size: asset.size })
+
+            const downloadResponse = await fetch(downloadUrl)
+            if (!downloadResponse.ok) {
+              log.error("Failed to download Nextflow Language Server JAR", {
+                status: downloadResponse.status,
+                statusText: downloadResponse.statusText
+              })
+              return
+            }
+
+            const jarData = await downloadResponse.arrayBuffer()
+            await Bun.file(jarPath).write(jarData)
+
+            // Validate the downloaded file
+            const downloadedFile = await Bun.file(jarPath)
+            const fileSize = downloadedFile.size
+            if (fileSize === 0) {
+              log.error("Downloaded JAR file is empty")
+              await fs.rm(jarPath, { force: true })
+              return
+            }
+
+            log.info(`successfully installed Nextflow Language Server`, {
+              jarPath,
+              version: release.tag_name,
+              fileSize
+            })
+          } catch (downloadError) {
+            log.error("Error during Nextflow Language Server download", { error: downloadError })
+            // Clean up any partial download
+            try {
+              await fs.rm(jarPath, { force: true })
+            } catch (cleanupError) {
+              log.warn("Failed to clean up partial download", { error: cleanupError })
+            }
+            return
+          }
+        } else {
+          log.info("Nextflow Language Server JAR already exists", { jarPath })
         }
 
-        const downloadUrl = asset.browser_download_url
-        const downloadResponse = await fetch(downloadUrl)
-        if (!downloadResponse.ok) {
-          log.error("Failed to download Nextflow Language Server JAR")
-          return
-        }
-
-        await Bun.file(jarPath).write(downloadResponse)
-        log.info(`installed Nextflow Language Server`, { jarPath, version: release.tag_name })
-      }
-
-      return {
-        process: spawn(java, ["-jar", jarPath], {
+        // Spawn the Java process
+        log.info("spawning Nextflow Language Server process", { java, jarPath, cwd: root })
+        const process = spawn(java, ["-jar", jarPath], {
           cwd: root,
-        }),
-        initialization: {},
+          stdio: ["pipe", "pipe", "pipe"]
+        })
+
+        // Add error handling for the process
+        process.on('error', (error) => {
+          log.error("Nextflow Language Server process error", { error })
+        })
+
+        return {
+          process,
+          initialization: {},
+        }
+      } catch (error) {
+        log.error("Failed to start Nextflow Language Server", { error })
+        return
       }
     },
   }

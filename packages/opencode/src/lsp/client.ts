@@ -96,7 +96,7 @@ export namespace LSPClient {
           },
         },
       }),
-      5_000,
+      15_000,
     ).catch((err) => {
       l.error("initialize error", { error: err })
       throw new InitializeError(
