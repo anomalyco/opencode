@@ -26,7 +26,11 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-      const session = await Session.create(ctx.sessionID, ctx.triggerMessageID, params.description + ` (@${agent.name} subagent)`)
+      const session = await Session.create(
+        ctx.sessionID,
+        ctx.triggerMessageID,
+        params.description + ` (@${agent.name} subagent)`,
+      )
       const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const messageID = Identifier.ascending("message")

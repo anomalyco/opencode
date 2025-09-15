@@ -109,7 +109,13 @@ export namespace Session {
     })
   }
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; parentMessageID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    parentMessageID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -235,7 +241,7 @@ export namespace Session {
     }
   }
 
-  export async function children(parentID: string, parentMessageID?:string) {
+  export async function children(parentID: string, parentMessageID?: string) {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
