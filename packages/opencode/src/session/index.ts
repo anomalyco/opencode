@@ -35,6 +35,7 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      parentMessageID: z.string().optional(),
       share: z
         .object({
           url: z.string(),
@@ -93,9 +94,10 @@ export namespace Session {
     ),
   }
 
-  export async function create(parentID?: string, title?: string) {
+  export async function create(parentID?: string, parentMessageID?: string, title?: string) {
     return createNext({
       parentID,
+      parentMessageID,
       directory: Instance.directory,
       title,
     })
@@ -107,13 +109,14 @@ export namespace Session {
     })
   }
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: { id?: string; title?: string; parentID?: string; parentMessageID?: string; directory: string }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      parentMessageID: input.parentMessageID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       time: {
         created: Date.now(),
@@ -232,12 +235,13 @@ export namespace Session {
     }
   }
 
-  export async function children(parentID: string) {
+  export async function children(parentID: string, parentMessageID?:string) {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
       const session = await Storage.read<Info>(item)
       if (session.parentID !== parentID) continue
+      if (parentMessageID && session.parentMessageID !== parentMessageID) continue
       result.push(session)
     }
     return result
@@ -277,6 +281,9 @@ export namespace Session {
   }
 
   export async function removeMessage(sessionID: string, messageID: string) {
+    for (const child of await children(sessionID, messageID)) {
+      await remove(child.id, false)
+    }
     await Storage.remove(["message", sessionID, messageID])
     Bus.publish(MessageV2.Event.Removed, {
       sessionID,

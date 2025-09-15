@@ -1279,16 +1279,17 @@ func (r ReasoningPartType) IsKnown() bool {
 }
 
 type Session struct {
-	ID        string        `json:"id,required"`
-	Directory string        `json:"directory,required"`
-	ProjectID string        `json:"projectID,required"`
-	Time      SessionTime   `json:"time,required"`
-	Title     string        `json:"title,required"`
-	Version   string        `json:"version,required"`
-	ParentID  string        `json:"parentID"`
-	Revert    SessionRevert `json:"revert"`
-	Share     SessionShare  `json:"share"`
-	JSON      sessionJSON   `json:"-"`
+	ID              string        `json:"id,required"`
+	Directory       string        `json:"directory,required"`
+	ProjectID       string        `json:"projectID,required"`
+	Time            SessionTime   `json:"time,required"`
+	Title           string        `json:"title,required"`
+	Version         string        `json:"version,required"`
+	ParentID        string        `json:"parentID"`
+	ParentMessageID string        `json:"parentMessageID"`
+	Revert          SessionRevert `json:"revert"`
+	Share           SessionShare  `json:"share"`
+	JSON            sessionJSON   `json:"-"`
 }
 
 // sessionJSON contains the JSON metadata for the struct [Session]

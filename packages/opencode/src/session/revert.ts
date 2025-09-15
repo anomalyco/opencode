@@ -7,6 +7,7 @@ import { Log } from "../util/log"
 import { splitWhen } from "remeda"
 import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
+import { Instance } from "../project/instance"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -75,12 +76,18 @@ export namespace SessionRevert {
 
   export async function cleanup(session: Session.Info) {
     if (!session.revert) return
+    const project = Instance.project
+
     const sessionID = session.id
     let msgs = await Session.messages(sessionID)
     const messageID = session.revert.messageID
     const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
     msgs = preserve
     for (const msg of remove) {
+      const children = await Session.children(sessionID, msg.info.id)
+      for (const child of children) {
+        await Storage.remove(["session", project.id, child.id])
+      }
       await Storage.remove(["message", sessionID, msg.info.id])
       await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
     }

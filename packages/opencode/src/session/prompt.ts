@@ -184,6 +184,7 @@ export namespace SessionPrompt {
       providerID: model.providerID,
       tools: input.tools,
       processor,
+      triggerMessageID: input.messageID ?? userMsg.info.id,
     })
 
     const params = await Plugin.trigger(
@@ -385,6 +386,7 @@ export namespace SessionPrompt {
     providerID: string
     tools?: Record<string, boolean>
     processor: Processor
+    triggerMessageID: string
   }) {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
@@ -415,6 +417,7 @@ export namespace SessionPrompt {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
+            triggerMessageID: input.triggerMessageID,
             callID: options.toolCallId,
             agent: input.agent.name,
             metadata: async (val) => {
@@ -591,6 +594,7 @@ export namespace SessionPrompt {
                     abort: new AbortController().signal,
                     agent: input.agent!,
                     messageID: info.id,
+                    triggerMessageID: input.messageID ?? undefined,
                     extra: { bypassCwdCheck: true },
                     metadata: async () => {},
                   }),
@@ -629,6 +633,7 @@ export namespace SessionPrompt {
                     abort: new AbortController().signal,
                     agent: input.agent!,
                     messageID: info.id,
+                    triggerMessageID: input.messageID ?? undefined,
                     extra: { bypassCwdCheck: true },
                     metadata: async () => {},
                   }),
@@ -1481,6 +1486,7 @@ export namespace SessionPrompt {
           abort: abort.signal,
           agent: agent.name,
           messageID: assistantMsg.id,
+          triggerMessageID: input.messageID ?? undefined,
           extra: {},
           metadata: async (metadata) => {
             if (toolPart.state.status === "running") {

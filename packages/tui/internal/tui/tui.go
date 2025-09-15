@@ -1281,6 +1281,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			// Create combined array: [parent, child1, child2, ...]
 			sessions := []*opencode.Session{parentSession}
 			for i := range *children {
+				if parentSession.Revert.MessageID == (*children)[i].ParentMessageID {
+					continue
+				}
 				sessions = append(sessions, &(*children)[i])
 			}
 
@@ -1339,6 +1342,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			// Create combined array: [parent, child1, child2, ...]
 			sessions := []*opencode.Session{parentSession}
 			for i := range *children {
+				if parentSession.Revert.MessageID == (*children)[i].ParentMessageID {
+					continue
+				}
 				sessions = append(sessions, &(*children)[i])
 			}
 
