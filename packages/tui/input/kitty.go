@@ -1,6 +1,8 @@
 package input
 
 import (
+	"fmt"
+	"os"
 	"unicode"
 	"unicode/utf8"
 
@@ -168,6 +170,11 @@ func init() {
 		if _, ok := kittyKeyMap[i]; !ok {
 			kittyKeyMap[i] = Key{Code: rune(i + 0x40), Mod: ModCtrl}
 		}
+	}
+
+	// Enable Kitty keyboard protocol enhancements if not disabled
+	if os.Getenv("OPENCODE_KITTY_KEYBOARD") != "0" {
+		fmt.Printf("\x1b[=%d;%d;%d;%d;%d c", 1, 2, 3, 4, 5)
 	}
 }
 
