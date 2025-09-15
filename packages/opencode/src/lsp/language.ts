@@ -98,4 +98,6 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".vue": "vue",
   ".zig": "zig",
   ".zon": "zig",
+  ".nf": "nextflow",
+  ".config": "nextflow",
 } as const

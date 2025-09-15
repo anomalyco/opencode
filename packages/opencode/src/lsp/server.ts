@@ -706,4 +706,66 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const NextflowLS: Info = {
+    id: "nextflow-ls",
+    extensions: [".nf", ".config"],
+    root: async (file) => {
+      // First try to find nextflow.config
+      const configRoot = await NearestRoot(["nextflow.config"])(file)
+      if (configRoot) return configRoot
+      // Fall back to git ancestor
+      return NearestRoot([".git"])(file)
+    },
+    async spawn(root) {
+      const java = Bun.which("java")
+      if (!java) {
+        log.error("Java is required to run Nextflow Language Server. Please install Java 17 or later.")
+        return
+      }
+
+      const nextflowLsDir = path.join(Global.Path.bin, "nextflow-ls")
+      const jarPath = path.join(nextflowLsDir, "language-server-all.jar")
+
+      if (!(await Bun.file(jarPath).exists())) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+
+        log.info("downloading Nextflow Language Server from GitHub releases")
+
+        // Create nextflow-ls directory
+        await fs.mkdir(nextflowLsDir, { recursive: true })
+
+        // Fetch latest release
+        const releaseResponse = await fetch("https://api.github.com/repos/nextflow-io/language-server/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch Nextflow Language Server release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+        const asset = release.assets.find((a: any) => a.name === "language-server-all.jar")
+        if (!asset) {
+          log.error("Could not find language-server-all.jar in latest Nextflow Language Server release")
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download Nextflow Language Server JAR")
+          return
+        }
+
+        await Bun.file(jarPath).write(downloadResponse)
+        log.info(`installed Nextflow Language Server`, { jarPath, version: release.tag_name })
+      }
+
+      return {
+        process: spawn(java, ["-jar", jarPath], {
+          cwd: root,
+        }),
+        initialization: {},
+      }
+    },
+  }
 }
