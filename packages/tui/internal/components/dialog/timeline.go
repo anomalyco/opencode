@@ -301,6 +301,32 @@ func NewTimelineDialog(app *app.App) TimelineDialog { // renamed from NewNavigat
 		}
 	}
 
+	// Compute current item and remove reverted one from the list to avoid empty rows
+	revertID := app.Session.Revert.MessageID
+	currentID := ""
+	if revertID != "" {
+		for i := range items {
+			if items[i].messageID == revertID {
+				if i > 0 {
+					currentID = items[i-1].messageID
+				}
+				break
+			}
+		}
+		if len(items) > 0 {
+			filtered := make([]timelineItem, 0, len(items))
+			for _, item := range items {
+				if item.messageID == revertID {
+					continue
+				}
+				filtered = append(filtered, item)
+			}
+			items = filtered
+		}
+	} else if len(items) > 0 {
+		currentID = items[len(items)-1].messageID
+	}
+
 	listComponent := list.NewListComponent(
 		list.WithItems(items),
 		list.WithMaxVisibleHeight[timelineItem](12),
@@ -308,31 +334,8 @@ func NewTimelineDialog(app *app.App) TimelineDialog { // renamed from NewNavigat
 		list.WithAlphaNumericKeys[timelineItem](true),
 		list.WithRenderFunc(
 			func(item timelineItem, selected bool, width int, baseStyle styles.Style) string {
-				// Determine if this item is the current message for the session
-				isCurrent := false
-				if app.Session.Revert.MessageID != "" {
-					// When reverted, Session.Revert.MessageID contains the NEXT user message ID
-					// So we need to find the previous user message to highlight the correct one
-					for i, navItem := range items {
-						if navItem.messageID == app.Session.Revert.MessageID && i > 0 {
-							// Found the next message, so the previous one is current
-							isCurrent = item.messageID == items[i-1].messageID
-							break
-						}
-					}
-				} else if len(app.Messages) > 0 {
-					// If not reverted, highlight the last user message
-					lastUserMsgID := ""
-					for i := len(app.Messages) - 1; i >= 0; i-- {
-						if userMsg, ok := app.Messages[i].Info.(opencode.UserMessage); ok {
-							lastUserMsgID = userMsg.ID
-							break
-						}
-					}
-					isCurrent = item.messageID == lastUserMsgID
-				}
-				// Only show the dot if undo/redo/restore is available
-				showDot := app.Session.Revert.MessageID != ""
+				isCurrent := item.messageID == currentID
+				showDot := revertID != ""
 				return item.Render(selected, width, false, baseStyle, isCurrent && showDot)
 			},
 		),
