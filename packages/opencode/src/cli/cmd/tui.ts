@@ -71,6 +71,10 @@ export const TuiCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("server-url", {
+        type: "string",
+        describe: "URL of existing server to connect to",
       }),
   handler: async (args) => {
     while (true) {
@@ -106,10 +110,17 @@ export const TuiCommand = cmd({
           return "needs_provider"
         }
 
-        const server = Server.listen({
-          port: args.port,
-          hostname: args.hostname,
-        })
+        let server: Bun.Server | undefined
+        let serverUrl: string
+        if (args.serverUrl) {
+          serverUrl = args.serverUrl
+        } else {
+          server = Server.listen({
+            port: args.port,
+            hostname: args.hostname,
+          })
+          serverUrl = server.url.toString()
+        }
 
         let cmd = [] as string[]
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
@@ -150,11 +161,11 @@ export const TuiCommand = cmd({
           env: {
             ...process.env,
             CGO_ENABLED: "0",
-            OPENCODE_SERVER: server.url.toString(),
+            OPENCODE_SERVER: serverUrl,
             OPENCODE_PROJECT: JSON.stringify(Instance.project),
           },
           onExit: () => {
-            server.stop()
+            if (server) server.stop()
           },
         })
 
@@ -183,7 +194,7 @@ export const TuiCommand = cmd({
         FileWatcher.init()
 
         await proc.exited
-        server.stop()
+        if (server) server.stop()
 
         return "done"
       })
