@@ -3,6 +3,7 @@ import { Tabs } from "@/ui/tabs"
 import { Select } from "@/components/select"
 import FileTree from "@/components/file-tree"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import CommandPalette from "@/components/command-palette"
 import { useLocal, useSDK } from "@/context"
 import { Code } from "@/components/code"
 import {
@@ -28,6 +29,7 @@ export default function Page() {
     activeItem: undefined as string | undefined,
     prompt: "",
     dragging: undefined as "left" | "right" | undefined,
+    commandPaletteOpen: false,
   })
 
   let inputRef: HTMLInputElement | undefined = undefined
@@ -43,6 +45,13 @@ export default function Page() {
   })
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    // Handle Ctrl+K / Cmd+K for command palette
+    if (e.getModifierState(MOD) && e.key.toLowerCase() === "k") {
+      e.preventDefault()
+      setStore("commandPaletteOpen", true)
+      return
+    }
+
     const inputFocused = document.activeElement === inputRef
     if (inputFocused) {
       if (e.key === "Escape") {
@@ -510,6 +519,7 @@ export default function Page() {
           </div>
         </form>
       </div>
+      <CommandPalette open={store.commandPaletteOpen} onOpenChange={(open) => setStore("commandPaletteOpen", open)} />
     </div>
   )
 }
