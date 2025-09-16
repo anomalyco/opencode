@@ -2,7 +2,7 @@ name: discord
 
 on:
   release:
-    types: [published]   # fires only when a release is published
+    types: [published] # fires only when a release is published
 
 jobs:
   notify:

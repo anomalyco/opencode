@@ -1,28 +1,38 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
 import { Instance } from "../project/instance"
+import { Wildcard } from "../util/wildcard"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
+
+  function toKeys(pattern: Info["pattern"], type: string): string[] {
+    return pattern === undefined ? [type] : Array.isArray(pattern) ? pattern : [pattern]
+  }
+
+  function covered(keys: string[], approved: Record<string, boolean>): boolean {
+    const pats = Object.keys(approved)
+    return keys.every((k) => pats.some((p) => Wildcard.match(k, p)))
+  }
 
   export const Info = z
     .object({
       id: z.string(),
       type: z.string(),
-      pattern: z.string().optional(),
+      pattern: z.union([z.string(), z.array(z.string())]).optional(),
       sessionID: z.string(),
       messageID: z.string(),
       callID: z.string().optional(),
       title: z.string(),
-      metadata: z.record(z.any()),
+      metadata: z.record(z.string(), z.any()),
       time: z.object({
         created: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Permission",
     })
   export type Info = z.infer<typeof Info>
@@ -83,7 +93,9 @@ export namespace Permission {
       toolCallID: input.callID,
       pattern: input.pattern,
     })
-    if (approved[input.sessionID]?.[input.pattern ?? input.type]) return
+    const approvedForSession = approved[input.sessionID] || {}
+    const keys = toKeys(input.pattern, input.type)
+    if (covered(keys, approvedForSession)) return
     const info: Info = {
       id: Identifier.ascending("permission"),
       type: input.type,
@@ -141,9 +153,15 @@ export namespace Permission {
     })
     if (input.response === "always") {
       approved[input.sessionID] = approved[input.sessionID] || {}
-      approved[input.sessionID][match.info.pattern ?? match.info.type] = true
-      for (const item of Object.values(pending[input.sessionID])) {
-        if ((item.info.pattern ?? item.info.type) === (match.info.pattern ?? match.info.type)) {
+      const approveKeys = toKeys(match.info.pattern, match.info.type)
+      for (const k of approveKeys) {
+        approved[input.sessionID][k] = true
+      }
+      const items = pending[input.sessionID]
+      if (!items) return
+      for (const item of Object.values(items)) {
+        const itemKeys = toKeys(item.info.pattern, item.info.type)
+        if (covered(itemKeys, approved[input.sessionID])) {
           respond({ sessionID: item.info.sessionID, permissionID: item.info.id, response: input.response })
         }
       }

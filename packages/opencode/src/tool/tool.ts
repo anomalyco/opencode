@@ -1,4 +1,4 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec"
+import z from "zod/v4"
 
 export namespace Tool {
   interface Metadata {
@@ -13,13 +13,13 @@ export namespace Tool {
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
   }
-  export interface Info<Parameters extends StandardSchemaV1 = StandardSchemaV1, M extends Metadata = Metadata> {
+  export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
     init: () => Promise<{
       description: string
       parameters: Parameters
       execute(
-        args: StandardSchemaV1.InferOutput<Parameters>,
+        args: z.infer<Parameters>,
         ctx: Context,
       ): Promise<{
         title: string
@@ -29,7 +29,7 @@ export namespace Tool {
     }>
   }
 
-  export function define<Parameters extends StandardSchemaV1, Result extends Metadata>(
+  export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: Info<Parameters, Result>["init"] | Awaited<ReturnType<Info<Parameters, Result>["init"]>>,
   ): Info<Parameters, Result> {

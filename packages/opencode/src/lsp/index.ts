@@ -2,7 +2,7 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import { z } from "zod"
+import z from "zod/v4"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
@@ -21,7 +21,7 @@ export namespace LSP {
         character: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Range",
     })
   export type Range = z.infer<typeof Range>
@@ -35,7 +35,7 @@ export namespace LSP {
         range: Range,
       }),
     })
-    .openapi({
+    .meta({
       ref: "Symbol",
     })
   export type Symbol = z.infer<typeof Symbol>
@@ -48,7 +48,7 @@ export namespace LSP {
       range: Range,
       selectionRange: Range,
     })
-    .openapi({
+    .meta({
       ref: "DocumentSymbol",
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>

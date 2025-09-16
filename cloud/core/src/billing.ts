@@ -6,8 +6,13 @@ import { fn } from "./util/fn"
 import { z } from "zod"
 import { User } from "./user"
 import { Resource } from "@opencode/cloud-resource"
+import { Identifier } from "./identifier"
+import { centsToMicroCents } from "./util/price"
 
 export namespace Billing {
+  export const CHARGE_AMOUNT = 2000 // $20
+  export const CHARGE_FEE = 123 // Stripe fee 4.4% + $0.30
+  export const CHARGE_THRESHOLD = 500 // $5
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
@@ -19,8 +24,14 @@ export namespace Billing {
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          paymentMethodLast4: BillingTable.paymentMethodLast4,
           balance: BillingTable.balance,
           reload: BillingTable.reload,
+          monthlyLimit: BillingTable.monthlyLimit,
+          monthlyUsage: BillingTable.monthlyUsage,
+          timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+          reloadError: BillingTable.reloadError,
+          timeReloadError: BillingTable.timeReloadError,
         })
         .from(BillingTable)
         .where(eq(BillingTable.workspaceID, Actor.workspace()))
@@ -50,6 +61,87 @@ export namespace Billing {
     )
   }
 
+  export const reload = async () => {
+    const { customerID, paymentMethodID } = await Database.use((tx) =>
+      tx
+        .select({
+          customerID: BillingTable.customerID,
+          paymentMethodID: BillingTable.paymentMethodID,
+        })
+        .from(BillingTable)
+        .where(eq(BillingTable.workspaceID, Actor.workspace()))
+        .then((rows) => rows[0]),
+    )
+    const paymentID = Identifier.create("payment")
+    let charge
+    try {
+      charge = await Billing.stripe().paymentIntents.create(
+        {
+          amount: Billing.CHARGE_AMOUNT + Billing.CHARGE_FEE,
+          currency: "usd",
+          customer: customerID!,
+          payment_method: paymentMethodID!,
+          off_session: true,
+          confirm: true,
+        },
+        { idempotencyKey: paymentID },
+      )
+
+      if (charge.status !== "succeeded") throw new Error(charge.last_payment_error?.message)
+    } catch (e: any) {
+      await Database.use((tx) =>
+        tx
+          .update(BillingTable)
+          .set({
+            reloadError: e.message ?? "Payment failed.",
+            timeReloadError: sql`now()`,
+          })
+          .where(eq(BillingTable.workspaceID, Actor.workspace())),
+      )
+      return
+    }
+
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          balance: sql`${BillingTable.balance} + ${centsToMicroCents(CHARGE_AMOUNT)}`,
+          reloadError: null,
+          timeReloadError: null,
+        })
+        .where(eq(BillingTable.workspaceID, Actor.workspace()))
+      await tx.insert(PaymentTable).values({
+        workspaceID: Actor.workspace(),
+        id: paymentID,
+        amount: centsToMicroCents(CHARGE_AMOUNT),
+        paymentID: charge.id,
+        customerID,
+      })
+    })
+  }
+
+  export const disableReload = async () => {
+    return await Database.use((tx) =>
+      tx
+        .update(BillingTable)
+        .set({
+          reload: false,
+        })
+        .where(eq(BillingTable.workspaceID, Actor.workspace())),
+    )
+  }
+
+  export const setMonthlyLimit = fn(z.number(), async (input) => {
+    return await Database.use((tx) =>
+      tx
+        .update(BillingTable)
+        .set({
+          monthlyLimit: input,
+        })
+        .where(eq(BillingTable.workspaceID, Actor.workspace())),
+    )
+  })
+
   export const generateCheckoutUrl = fn(
     z.object({
       successUrl: z.string(),
@@ -70,7 +162,17 @@ export namespace Billing {
               product_data: {
                 name: "opencode credits",
               },
-              unit_amount: 2123, // $20 minimum + Stripe fee 4.4% + $0.30
+              unit_amount: CHARGE_AMOUNT,
+            },
+            quantity: 1,
+          },
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "processing fee",
+              },
+              unit_amount: CHARGE_FEE,
             },
             quantity: 1,
           },
@@ -79,7 +181,9 @@ export namespace Billing {
           setup_future_usage: "on_session",
         },
         ...(customer.customerID
-          ? { customer: customer.customerID }
+          ? {
+              customer: customer.customerID,
+            }
           : {
               customer_email: user.email,
               customer_creation: "always",
@@ -89,6 +193,9 @@ export namespace Billing {
         },
         currency: "usd",
         payment_method_types: ["card"],
+        payment_method_data: {
+          allow_redisplay: "always",
+        },
         success_url: successUrl,
         cancel_url: cancelUrl,
       })
@@ -97,7 +204,7 @@ export namespace Billing {
     },
   )
 
-  export const generatePortalUrl = fn(
+  export const generateSessionUrl = fn(
     z.object({
       returnUrl: z.string(),
     }),

@@ -1,10 +1,10 @@
 {
   "name": "@opencode/web",
   "type": "module",
-  "version": "0.6.8",
+  "version": "0.9.3",
   "scripts": {
     "dev": "astro dev",
-    "dev:remote": "sst shell --stage=dev --target=Web astro dev",
+    "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",

@@ -592,10 +592,40 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if matchIndex == -1 {
-				a.app.Messages = append(a.app.Messages, app.Message{
+				// Extract the new message ID
+				var newMessageID string
+				switch casted := msg.Properties.Info.AsUnion().(type) {
+				case opencode.UserMessage:
+					newMessageID = casted.ID
+				case opencode.AssistantMessage:
+					newMessageID = casted.ID
+				}
+
+				// Find the correct insertion index by scanning backwards
+				// Most messages are added to the end, so start from the end
+				insertIndex := len(a.app.Messages)
+				for i := len(a.app.Messages) - 1; i >= 0; i-- {
+					var existingID string
+					switch casted := a.app.Messages[i].Info.(type) {
+					case opencode.UserMessage:
+						existingID = casted.ID
+					case opencode.AssistantMessage:
+						existingID = casted.ID
+					}
+					if existingID < newMessageID {
+						insertIndex = i + 1
+						break
+					}
+				}
+
+				// Create the new message
+				newMessage := app.Message{
 					Info:  msg.Properties.Info.AsUnion(),
 					Parts: []opencode.PartUnion{},
-				})
+				}
+
+				// Insert at the correct position
+				a.app.Messages = append(a.app.Messages[:insertIndex], append([]app.Message{newMessage}, a.app.Messages[insertIndex:]...)...)
 			}
 		}
 	case opencode.EventListResponseEventPermissionUpdated:
@@ -626,6 +656,10 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case opencode.UnknownError:
 			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
 			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
+		}
+	case opencode.EventListResponseEventSessionCompacted:
+		if msg.Properties.SessionID == a.app.Session.ID {
+			return a, toast.NewSuccessToast("Session compacted successfully")
 		}
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar

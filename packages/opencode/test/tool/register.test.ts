@@ -1,4 +1,3 @@
-import "zod-openapi/extend"
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import os from "os"

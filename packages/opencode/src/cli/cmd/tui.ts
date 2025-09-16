@@ -10,12 +10,13 @@ import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
-import { FileWatcher } from "../../file/watch"
+import { FileWatcher } from "../../file/watcher"
 import { Ide } from "../../ide"
 
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
 import { Instance } from "../../project/instance"
+import { $ } from "bun"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -100,7 +101,6 @@ export const TuiCommand = cmd({
           }
           return undefined
         })()
-        FileWatcher.init()
         const providers = await Provider.list()
         if (Object.keys(providers).length === 0) {
           return "needs_provider"
@@ -111,8 +111,7 @@ export const TuiCommand = cmd({
           hostname: args.hostname,
         })
 
-        let cmd = ["go", "run", "./main.go"]
-        let cwd = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+        let cmd = [] as string[]
         const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
         if (tui) {
           let binaryName = tui.name
@@ -123,10 +122,15 @@ export const TuiCommand = cmd({
           const file = Bun.file(binary)
           if (!(await file.exists())) {
             await Bun.write(file, tui, { mode: 0o755 })
-            await fs.chmod(binary, 0o755)
+            if (process.platform !== "win32") await fs.chmod(binary, 0o755)
           }
-          cwd = process.cwd()
           cmd = [binary]
+        }
+        if (!tui) {
+          const dir = Bun.fileURLToPath(new URL("../../../../tui/cmd/opencode", import.meta.url))
+          let binaryName = `./dist/tui${process.platform === "win32" ? ".exe" : ""}`
+          await $`go build -o ${binaryName} ./main.go`.cwd(dir)
+          cmd = [path.join(dir, binaryName)]
         }
         Log.Default.info("tui", {
           cmd,
@@ -176,6 +180,7 @@ export const TuiCommand = cmd({
             .then(() => Bus.publish(Ide.Event.Installed, { ide }))
             .catch(() => {})
         })()
+        FileWatcher.init()
 
         await proc.exited
         server.stop()

@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
@@ -17,7 +17,7 @@ export namespace Project {
         initialized: z.number().optional(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Project",
     })
   export type Info = z.infer<typeof Info>

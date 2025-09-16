@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { exec } from "child_process"
 
 import { Tool } from "./tool"
@@ -59,7 +59,7 @@ export const BashTool = Tool.define("bash", {
     const tree = await parser().then((p) => p.parse(params.command))
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
-    let needsAsk = false
+    const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {
       const command = []
       for (let i = 0; i < node.childCount; i++) {
@@ -96,27 +96,52 @@ export const BashTool = Tool.define("bash", {
       }
 
       // always allow cd if it passes above check
-      if (!needsAsk && command[0] !== "cd") {
+      if (command[0] !== "cd") {
         const action = Wildcard.all(node.text, permissions)
         if (action === "deny") {
           throw new Error(
             `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
           )
         }
-        if (action === "ask") needsAsk = true
+        if (action === "ask") {
+          const pattern = (() => {
+            let head = ""
+            let sub: string | undefined
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i)
+              if (!child) continue
+              if (child.type === "command_name") {
+                if (!head) {
+                  head = child.text
+                }
+                continue
+              }
+              if (!sub && child.type === "word") {
+                if (!child.text.startsWith("-")) sub = child.text
+              }
+            }
+            if (!head) return
+            return sub ? `${head} ${sub} *` : `${head} *`
+          })()
+          if (pattern) {
+            askPatterns.add(pattern)
+          }
+        }
       }
     }
 
-    if (needsAsk) {
+    if (askPatterns.size > 0) {
+      const patterns = Array.from(askPatterns)
       await Permission.ask({
         type: "bash",
-        pattern: params.command,
+        pattern: patterns,
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
         callID: ctx.callID,
         title: params.command,
         metadata: {
           command: params.command,
+          patterns,
         },
       })
     }

@@ -1,7 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
-import { z } from "zod"
+import z from "zod/v4"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
@@ -118,16 +118,27 @@ export namespace Config {
     // Load command markdown files
     result.command = result.command || {}
     const markdownCommands = [
-      ...(await Filesystem.globUp("command/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/command/*.md", Instance.directory, Instance.worktree)),
+      ...(await Filesystem.globUp("command/**/*.md", Global.Path.config, Global.Path.config)),
+      ...(await Filesystem.globUp(".opencode/command/**/*.md", Instance.directory, Instance.worktree)),
     ]
     for (const item of markdownCommands) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
 
+      const name = (() => {
+        const patterns = ["/.opencode/command/", "/command/"]
+        const pattern = patterns.find((p) => item.includes(p))
+
+        if (pattern) {
+          const index = item.indexOf(pattern)
+          return item.slice(index + pattern.length, -3)
+        }
+        return path.basename(item, ".md")
+      })()
+
       const config = {
-        name: path.basename(item, ".md"),
+        name,
         ...md.data,
         template: md.content.trim(),
       }
@@ -206,7 +217,7 @@ export namespace Config {
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "McpLocalConfig",
     })
 
@@ -218,7 +229,7 @@ export namespace Config {
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "McpRemoteConfig",
     })
 
@@ -233,6 +244,7 @@ export namespace Config {
     description: z.string().optional(),
     agent: z.string().optional(),
     model: z.string().optional(),
+    subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
@@ -255,7 +267,7 @@ export namespace Config {
         .optional(),
     })
     .catchall(z.any())
-    .openapi({
+    .meta({
       ref: "AgentConfig",
     })
   export type Agent = z.infer<typeof Agent>
@@ -330,7 +342,7 @@ export namespace Config {
       messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "KeybindsConfig",
     })
 
@@ -338,7 +350,7 @@ export namespace Config {
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
   })
 
-  export const Layout = z.enum(["auto", "stretch"]).openapi({
+  export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
   export type Layout = z.infer<typeof Layout>
@@ -353,6 +365,11 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      watcher: z
+        .object({
+          ignore: z.array(z.string()).optional(),
+        })
+        .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z
@@ -395,9 +412,10 @@ export namespace Config {
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
         .record(
+          z.string(),
           ModelsDev.Provider.partial()
             .extend({
-              models: z.record(ModelsDev.Model.partial()).optional(),
+              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
                   apiKey: z.string().optional(),
@@ -488,11 +506,12 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "Config",
     })
 
@@ -631,7 +650,7 @@ export namespace Config {
     "ConfigInvalidError",
     z.object({
       path: z.string(),
-      issues: z.custom<z.ZodIssue[]>().optional(),
+      issues: z.custom<z.core.$ZodIssue[]>().optional(),
       message: z.string().optional(),
     }),
   )

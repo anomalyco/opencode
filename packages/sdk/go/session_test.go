@@ -196,7 +196,7 @@ func TestSessionCommandWithOptionalParams(t *testing.T) {
 			Command:   opencode.F("command"),
 			Directory: opencode.F("directory"),
 			Agent:     opencode.F("agent"),
-			MessageID: opencode.F("msg"),
+			MessageID: opencode.F("msgJ!"),
 			Model:     opencode.F("model"),
 		},
 	)
@@ -353,7 +353,7 @@ func TestSessionPromptWithOptionalParams(t *testing.T) {
 			}}),
 			Directory: opencode.F("directory"),
 			Agent:     opencode.F("agent"),
-			MessageID: opencode.F("msg"),
+			MessageID: opencode.F("msgJ!"),
 			Model: opencode.F(opencode.SessionPromptParamsModel{
 				ModelID:    opencode.F("modelID"),
 				ProviderID: opencode.F("providerID"),
@@ -389,9 +389,9 @@ func TestSessionRevertWithOptionalParams(t *testing.T) {
 		context.TODO(),
 		"id",
 		opencode.SessionRevertParams{
-			MessageID: opencode.F("msg"),
+			MessageID: opencode.F("msgJ!"),
 			Directory: opencode.F("directory"),
-			PartID:    opencode.F("prt"),
+			PartID:    opencode.F("prtJ!"),
 		},
 	)
 	if err != nil {

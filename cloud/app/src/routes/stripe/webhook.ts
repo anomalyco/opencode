@@ -15,6 +15,28 @@ export async function POST(input: APIEvent) {
   )
 
   console.log(body.type, JSON.stringify(body, null, 2))
+  if (body.type === "customer.updated") {
+    // check default payment method changed
+    const prevInvoiceSettings = body.data.previous_attributes?.invoice_settings ?? {}
+    if (!("default_payment_method" in prevInvoiceSettings)) return
+
+    const customerID = body.data.object.id
+    const paymentMethodID = body.data.object.invoice_settings.default_payment_method as string
+
+    if (!customerID) throw new Error("Customer ID not found")
+    if (!paymentMethodID) throw new Error("Payment method ID not found")
+
+    const paymentMethod = await Billing.stripe().paymentMethods.retrieve(paymentMethodID)
+    await Database.use(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          paymentMethodID,
+          paymentMethodLast4: paymentMethod.card!.last4,
+        })
+        .where(eq(BillingTable.customerID, customerID))
+    })
+  }
   if (body.type === "checkout.session.completed") {
     const workspaceID = body.data.object.metadata?.workspaceID
     const customerID = body.data.object.customer as string
@@ -25,8 +47,6 @@ export async function POST(input: APIEvent) {
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
     if (!paymentID) throw new Error("Payment ID not found")
-
-    const chargedAmount = 2000
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
@@ -52,16 +72,19 @@ export async function POST(input: APIEvent) {
         await tx
           .update(BillingTable)
           .set({
-            balance: sql`${BillingTable.balance} + ${centsToMicroCents(chargedAmount)}`,
+            balance: sql`${BillingTable.balance} + ${centsToMicroCents(Billing.CHARGE_AMOUNT)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
             paymentMethodLast4: paymentMethod.card!.last4,
+            reload: true,
+            reloadError: null,
+            timeReloadError: null,
           })
           .where(eq(BillingTable.workspaceID, workspaceID))
         await tx.insert(PaymentTable).values({
           workspaceID,
           id: Identifier.create("payment"),
-          amount: centsToMicroCents(chargedAmount),
+          amount: centsToMicroCents(Billing.CHARGE_AMOUNT),
           paymentID,
           customerID,
         })

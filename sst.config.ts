@@ -15,11 +15,8 @@ export default $config({
     }
   },
   async run() {
-    const { api } = await import("./infra/app.js")
-    const { auth } = await import("./infra/cloud.js")
-    return {
-      api: api.url,
-      auth: auth.url,
-    }
+    await import("./infra/app.js")
+    await import("./infra/cloud.js")
+    //await import("./infra/desktop.js")
   },
 })

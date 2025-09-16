@@ -58,8 +58,8 @@ import type {
   SessionRevertResponses,
   SessionUnrevertData,
   SessionUnrevertResponses,
-  PostSessionByIdPermissionsByPermissionIdData,
-  PostSessionByIdPermissionsByPermissionIdResponses,
+  PostSessionIdPermissionsPermissionIdData,
+  PostSessionIdPermissionsPermissionIdResponses,
   CommandListData,
   CommandListResponses,
   ConfigProvidersData,
@@ -675,14 +675,10 @@ export class OpencodeClient extends _HeyApiClient {
   /**
    * Respond to a permission request
    */
-  public postSessionByIdPermissionsByPermissionId<ThrowOnError extends boolean = false>(
-    options: Options<PostSessionByIdPermissionsByPermissionIdData, ThrowOnError>,
+  public postSessionIdPermissionsPermissionId<ThrowOnError extends boolean = false>(
+    options: Options<PostSessionIdPermissionsPermissionIdData, ThrowOnError>,
   ) {
-    return (options.client ?? this._client).post<
-      PostSessionByIdPermissionsByPermissionIdResponses,
-      unknown,
-      ThrowOnError
-    >({
+    return (options.client ?? this._client).post<PostSessionIdPermissionsPermissionIdResponses, unknown, ThrowOnError>({
       url: "/session/{id}/permissions/{permissionID}",
       ...options,
       headers: {

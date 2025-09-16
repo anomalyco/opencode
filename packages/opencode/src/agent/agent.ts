@@ -1,5 +1,5 @@
 import { Config } from "../config/config"
-import z from "zod"
+import z from "zod/v4"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
@@ -28,10 +28,10 @@ export namespace Agent {
         })
         .optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.boolean()),
+      tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
     })
-    .openapi({
+    .meta({
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
