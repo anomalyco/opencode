@@ -88,7 +88,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     setDebouncedSearch("")
   }
 
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKey = (e: KeyboardEvent) => {
     const files = displayFiles()
 
     if (e.key === "ArrowDown") {
@@ -136,7 +136,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                 type="text"
                 value={search()}
                 onInput={(e) => handleSearchInput(e.currentTarget.value)}
-                onKeyDown={handleKeyDown}
+                onKeyDown={handleKey}
                 placeholder="Type at least 2 characters to search files..."
                 class="w-full pl-10 pr-4 py-2 bg-background-element border border-border-subtle 
                        rounded-md text-sm text-text placeholder-text-muted/70
