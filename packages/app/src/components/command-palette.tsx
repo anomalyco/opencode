@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, For, createMemo } from "solid-js"
+import { createSignal, createEffect, Show, For, createMemo, createResource } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
 import { FileIcon, Icon, IconButton } from "@/ui"
 import { useLocal, useSDK } from "@/context"
@@ -15,25 +15,19 @@ export default function CommandPalette(props: CommandPaletteProps) {
   const sdk = useSDK()
 
   const [search, setSearch] = createSignal("")
+  const [debouncedSearch, setDebouncedSearch] = createSignal("")
   const [selectedIndex, setSelectedIndex] = createSignal(0)
-  const [loading, setLoading] = createSignal(false)
-  const [searchResults, setSearchResults] = createSignal<Array<FileNode | LocalFile>>([])
-  const [searchTimer, setSearchTimer] = createSignal<number | undefined>()
 
   let inputRef: HTMLInputElement | undefined
+  let searchTimer: number | undefined
 
-  let querySeq = 0
-  const performSearch = async (q: string) => {
-    const query = q.trim()
-    if (query.length < 2) {
-      setSearchResults([])
-      return
-    }
-    const seq = ++querySeq
-    setLoading(true)
-    try {
-      const res = await sdk.find.files({ query: { query } })
-      if (seq !== querySeq) return
+  const [searchResults] = createResource(
+    debouncedSearch,
+    async (query) => {
+      const trimmed = query.trim()
+      if (trimmed.length < 2) return []
+
+      const res = await sdk.find.files({ query: { query: trimmed } })
       const files: FileNode[] = (res.data ?? []).map((path: string) => {
         const name = path.split("/").pop() || path
         return {
@@ -45,32 +39,27 @@ export default function CommandPalette(props: CommandPaletteProps) {
         }
       })
 
-      setSearchResults(files)
-    } catch (error) {
-      if (seq !== querySeq) return
-      setSearchResults([])
-    } finally {
-      if (seq === querySeq) setLoading(false)
-    }
-  }
+      return files
+    },
+    { initialValue: [] },
+  )
 
   const handleSearchInput = (value: string) => {
     setSearch(value)
     setSelectedIndex(0)
 
-    if (searchTimer()) {
-      clearTimeout(searchTimer())
+    if (searchTimer) {
+      clearTimeout(searchTimer)
     }
 
-    const timer = setTimeout(() => {
-      performSearch(value)
-    }, 300)
-
-    setSearchTimer(timer as unknown as number)
+    searchTimer = setTimeout(() => {
+      setDebouncedSearch(value)
+    }, 300) as unknown as number
   }
 
   const displayFiles = createMemo(() => {
-    return searchResults().map((node) => {
+    const results = searchResults() ?? []
+    return results.map((node) => {
       const localNode = local.file.node(node.path)
       return localNode || node
     })
@@ -81,13 +70,13 @@ export default function CommandPalette(props: CommandPaletteProps) {
       setTimeout(() => {
         inputRef?.focus()
         setSearch("")
-        setSearchResults([])
+        setDebouncedSearch("")
         setSelectedIndex(0)
       }, 0)
     } else if (!props.open) {
-      if (searchTimer()) {
-        clearTimeout(searchTimer())
-        setSearchTimer(undefined)
+      if (searchTimer) {
+        clearTimeout(searchTimer)
+        searchTimer = undefined
       }
     }
   })
@@ -96,7 +85,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
     local.file.open(file.path)
     props.onOpenChange(false)
     setSearch("")
-    setSearchResults([])
+    setDebouncedSearch("")
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,7 +114,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
       e.preventDefault()
       props.onOpenChange(false)
       setSearch("")
-      setSearchResults([])
+      setDebouncedSearch("")
       return
     }
   }
@@ -154,19 +143,19 @@ export default function CommandPalette(props: CommandPaletteProps) {
                        focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
               />
               <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <Show when={loading()}>
+                <Show when={searchResults.loading}>
                   <div class="text-text-muted">
                     <Icon name="refresh" size={14} class="animate-spin" />
                   </div>
                 </Show>
-                <Show when={search() && !loading()}>
+                <Show when={search() && !searchResults.loading}>
                   <IconButton
                     size="xs"
                     variant="ghost"
                     class="text-text-muted hover:text-text"
                     onClick={() => {
                       setSearch("")
-                      setSearchResults([])
+                      setDebouncedSearch("")
                     }}
                   >
                     <Icon name="close" size={14} />
@@ -181,7 +170,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
               when={displayFiles().length > 0}
               fallback={
                 <div class="text-center py-8 text-text-muted text-sm">
-                  {search().length >= 2 && !loading()
+                  {search().length >= 2 && !searchResults.loading
                     ? "No files found"
                     : search().length < 2
                       ? "Type at least 2 characters to search files"
@@ -236,7 +225,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                 Close
               </span>
             </div>
-            <span>{loading() ? "Searching..." : `${displayFiles().length} results`}</span>
+            <span>{searchResults.loading ? "Searching..." : `${displayFiles().length} results`}</span>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
