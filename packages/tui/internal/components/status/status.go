@@ -200,7 +200,7 @@ func (m *statusComponent) View() string {
 
 func (m *statusComponent) startGitWatcher() tea.Cmd {
 	cmd := util.CmdHandler(
-		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Project.Worktree)},
+		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(util.CwdPath)},
 	)
 	if err := m.initWatcher(); err != nil {
 		return cmd
@@ -209,7 +209,7 @@ func (m *statusComponent) startGitWatcher() tea.Cmd {
 }
 
 func (m *statusComponent) initWatcher() error {
-	gitDir := filepath.Join(m.app.Project.Worktree, ".git")
+	gitDir := filepath.Join(util.CwdPath, ".git")
 	headFile := filepath.Join(gitDir, "HEAD")
 	if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
 		return err
@@ -247,7 +247,7 @@ func (m *statusComponent) watchForGitChanges() tea.Cmd {
 		for {
 			select {
 			case event, ok := <-m.watcher.Events:
-				branch := getCurrentGitBranch(m.app.Project.Worktree)
+				branch := getCurrentGitBranch(util.CwdPath)
 				if !ok {
 					return GitBranchUpdatedMsg{Branch: branch}
 				}
@@ -276,8 +276,8 @@ func (m *statusComponent) updateWatchedFiles() {
 	if m.watcher == nil {
 		return
 	}
-	refFile := getGitRefFile(m.app.Project.Worktree)
-	headFile := filepath.Join(m.app.Project.Worktree, ".git", "HEAD")
+	refFile := getGitRefFile(util.CwdPath)
+	headFile := filepath.Join(util.CwdPath, ".git", "HEAD")
 	if refFile != headFile && refFile != "" {
 		if _, err := os.Stat(refFile); err == nil {
 			// Try to add the new ref file (ignore error if already watching)
