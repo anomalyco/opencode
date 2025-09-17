@@ -490,7 +490,7 @@ export namespace Config {
                       z
                         .number()
                         .int()
-                        .positive()
+                        .min(1)
                         .describe(
                           "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
                         ),
