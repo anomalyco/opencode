@@ -346,12 +346,37 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
