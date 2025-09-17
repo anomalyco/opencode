@@ -1573,6 +1573,31 @@ export namespace Server {
         openapi: "3.1.1",
       },
     })
+
+    // Remove duplicate parameters (OpenAPI spec doesn't allow parameters with same name and location)
+    // This fixes an issue where hono-openapi duplicates global middleware validators
+    // See: https://github.com/rhinobase/hono-openapi/issues/71
+    if (result.paths) {
+      for (const path of Object.values(result.paths)) {
+        for (const method of Object.values(path as any)) {
+          if (typeof method === "object" && method !== null && "parameters" in method) {
+            const operation = method as any
+            if (operation.parameters && Array.isArray(operation.parameters)) {
+              const seen = new Set<string>()
+              operation.parameters = operation.parameters.filter((p: any) => {
+                const key = `${p.in}-${p.name}`
+                if (seen.has(key)) {
+                  return false // Remove duplicate
+                }
+                seen.add(key)
+                return true
+              })
+            }
+          }
+        }
+      }
+    }
+
     return result
   }
 
