@@ -58,7 +58,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
+          return sdk.languageModel(modelID)
         },
         options: {},
       }
