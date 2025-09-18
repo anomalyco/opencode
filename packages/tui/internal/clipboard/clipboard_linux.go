@@ -75,7 +75,7 @@ func initialize() error {
 	for _, name := range order {
 		for i, tool := range clipboardTools {
 			if tool.name == name {
-				cmd := exec.Command("which", tool.name)
+				cmd := exec.Command("xclip", "-selection", "clipboard", "-i")
 				if err := cmd.Run(); err == nil {
 					clipboardTools[i].available = true
 					if selectedTool < 0 {
@@ -142,7 +142,8 @@ func readText(tool struct {
 	available bool
 }) ([]byte, error) {
 	// First check if clipboard contains text
-	cmd := exec.Command(tool.readCmd[0], tool.readCmd[1:]...)
+		cmd := exec.Command("xclip", "-selection", "clipboard")
+		cmd.Stdin = strings.NewReader(text)
 	out, err := cmd.Output()
 	if err != nil {
 		// Check if it's because clipboard contains non-text data
@@ -174,7 +175,7 @@ func readImage(tool struct {
 		return nil, errUnavailable
 	}
 
-	cmd := exec.Command(tool.readImg[0], tool.readImg[1:]...)
+	cmd := exec.Command("xclip", "-selection", "clipboard", "-i")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, errUnavailable
@@ -204,10 +205,10 @@ func write(t Format, buf []byte) (<-chan struct{}, error) {
 	case FmtText:
 		if len(buf) == 0 {
 			// Write empty string
-			cmd = exec.Command(tool.writeCmd[0], tool.writeCmd[1:]...)
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-i")
 			cmd.Stdin = bytes.NewReader([]byte{})
 		} else {
-			cmd = exec.Command(tool.writeCmd[0], tool.writeCmd[1:]...)
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-i")
 			cmd.Stdin = bytes.NewReader(buf)
 		}
 	case FmtImage:
@@ -217,10 +218,10 @@ func write(t Format, buf []byte) (<-chan struct{}, error) {
 		}
 		if len(buf) == 0 {
 			// Clear clipboard
-			cmd = exec.Command(tool.writeCmd[0], tool.writeCmd[1:]...)
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-i")
 			cmd.Stdin = bytes.NewReader([]byte{})
 		} else {
-			cmd = exec.Command(tool.writeImg[0], tool.writeImg[1:]...)
+			cmd = exec.Command("xclip", "-selection", "clipboard", "-i")
 			cmd.Stdin = bytes.NewReader(buf)
 		}
 	default:
