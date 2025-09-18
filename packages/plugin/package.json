@@ -3,15 +3,19 @@
   "name": "@opencode-ai/plugin",
   "version": "0.9.11",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "development": "./src/index.ts",
       "import": "./dist/index.js"
     },
     "./tool": {
+      "types": "./dist/tool.d.ts",
       "development": "./src/tool.ts",
       "import": "./dist/tool.js"
     }
