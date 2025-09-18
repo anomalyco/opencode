@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "bun@1.2.21",
   "scripts": {
+    "build": "turbo build",
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun turbo typecheck",
     "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",

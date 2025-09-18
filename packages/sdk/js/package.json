@@ -4,19 +4,21 @@
   "version": "0.9.9",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --project tsconfig.build.json",
+    "prepublishOnly": "bun run build"
   },
   "exports": {
     ".": {
-      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./client": {
-      "development": "./src/client.ts",
+      "types": "./dist/client.d.ts",
       "import": "./dist/client.js"
     },
     "./server": {
-      "development": "./src/server.ts",
+      "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
     }
   },
