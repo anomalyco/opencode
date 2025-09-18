@@ -53,7 +53,27 @@ export const GrepTool = Tool.define("grep", {
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
+      let filePath: string
+      let lineNumStr: string
+      let lineTextParts: string[]
+
+      if (process.platform === "win32") {
+        // Handle Windows paths with drive letters (e.g., C:\path\to\file.txt:10:content)
+        // First two colons are part of the path (C:) and line number separator
+        const match = line.match(/^([A-Za-z]:[^:]+):(\d+):(.*)/)
+        if (!match) continue
+
+        filePath = match[1]
+        lineNumStr = match[2]
+        lineTextParts = [match[3]]
+      } else {
+        // Unix-style paths
+        const parts = line.split(":")
+        filePath = parts[0]
+        lineNumStr = parts[1]
+        lineTextParts = parts.slice(2)
+      }
+
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
       const lineNum = parseInt(lineNumStr, 10)
