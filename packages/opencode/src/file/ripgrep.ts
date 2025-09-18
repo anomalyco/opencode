@@ -212,11 +212,16 @@ export namespace Ripgrep {
       }
     }
 
-    if (input.query) commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
-    if (input.limit) commands.push(`head -n ${input.limit}`)
+    if (input.query) commands.push(`${$.escape(await Fzf.filepath())} --filter=${input.query}`)
+    if (process.platform !== "win32" && input.limit) commands.push(`head -n ${input.limit}`)
     const joined = commands.join(" | ")
     const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
-    return result.split("\n").filter(Boolean)
+    if (process.platform !== "win32") {
+      return result.split("\n").filter(Boolean)
+    } else {
+      // Since Windows doesn't have the `head` command, limit the results returned in the results array
+      return result.split("\n", input.limit).filter(Boolean)
+    }
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
@@ -321,7 +326,7 @@ export namespace Ripgrep {
   }
 
   export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = [`${$.escape(await filepath())}`, "--json", "--hidden", "--glob='!.git/*'"]
 
     if (input.glob) {
       for (const g of input.glob) {
