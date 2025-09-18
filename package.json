@@ -8,7 +8,9 @@
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun run --filter='*' typecheck",
     "stainless": "./scripts/stainless",
-    "postinstall": "./script/hooks"
+    "postinstall": "./script/hooks",
+    "build": "bun run --filter=@opencode/web... build",
+    "vercel-build": "bun install && bun run build"
   },
   "workspaces": {
     "packages": [

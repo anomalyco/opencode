@@ -2,7 +2,6 @@
 import { defineConfig } from "astro/config"
 import starlight from "@astrojs/starlight"
 import solidJs from "@astrojs/solid-js"
-import cloudflare from "@astrojs/cloudflare"
 import theme from "toolbeam-docs-theme"
 import config from "./config.mjs"
 import { rehypeHeadingIds } from "@astrojs/markdown-remark"
@@ -15,9 +14,6 @@ const github = "https://github.com/sst/opencode"
 export default defineConfig({
   site: config.url,
   output: "server",
-  adapter: cloudflare({
-    imageService: "passthrough",
-  }),
   devToolbar: {
     enabled: false,
   },
