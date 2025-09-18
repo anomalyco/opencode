@@ -10,16 +10,19 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "development": "./src/index.ts",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./client": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.js"
+      "development": "./src/client.ts",
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
     },
     "./server": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
+      "development": "./src/server.ts",
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
     }
   },
   "files": [

@@ -29,6 +29,9 @@ export default defineConfig({
   build: {
     target: "esnext",
   },
+  esbuild: {
+    jsx: "automatic",
+  },
   optimizeDeps: {
     exclude: ["virtua"],
   },
