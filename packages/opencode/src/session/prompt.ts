@@ -281,9 +281,19 @@ export namespace SessionPrompt {
             }),
           ),
           ...MessageV2.toModelMessage(
-            msgs.filter(
-              (m) => !(m.info.role === "assistant" && m.info.error && !MessageV2.AbortedError.isInstance(m.info.error)),
-            ),
+            msgs.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
           ),
         ],
         tools: model.info.tool_call === false ? undefined : tools,
@@ -336,12 +346,37 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
@@ -1548,7 +1583,7 @@ export namespace SessionPrompt {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
     }
-    if (small.providerID === "openai") {
+    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
       options["reasoningEffort"] = "minimal"
     }
     if (small.providerID === "google") {

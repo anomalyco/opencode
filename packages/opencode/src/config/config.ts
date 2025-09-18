@@ -48,6 +48,14 @@ export namespace Config {
     }
 
     result.agent = result.agent || {}
+
+    const directories = [
+      Global.Path.config,
+      ...(await Array.fromAsync(
+        Filesystem.up({ targets: [".opencode"], start: Instance.directory, stop: Instance.worktree }),
+      )),
+    ]
+
     const markdownAgents = [
       ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
       ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, Instance.worktree)),
@@ -203,7 +211,10 @@ export namespace Config {
       result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
     }
 
-    return result
+    return {
+      config: result,
+      directories,
+    }
   })
 
   export const McpLocal = z
@@ -655,7 +666,11 @@ export namespace Config {
     }),
   )
 
-  export function get() {
-    return state()
+  export async function get() {
+    return state().then((x) => x.config)
+  }
+
+  export async function directories() {
+    return state().then((x) => x.directories)
   }
 }

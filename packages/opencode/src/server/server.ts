@@ -52,29 +52,6 @@ const ERRORS = {
 export namespace Server {
   const log = Log.create({ service: "server" })
 
-  // Schemas for HTTP tool registration
-  const HttpParamSpec = z
-    .object({
-      type: z.enum(["string", "number", "boolean", "array"]),
-      description: z.string().optional(),
-      optional: z.boolean().optional(),
-      items: z.enum(["string", "number", "boolean"]).optional(),
-    })
-    .meta({ ref: "HttpParamSpec" })
-
-  const HttpToolRegistration = z
-    .object({
-      id: z.string(),
-      description: z.string(),
-      parameters: z.object({
-        type: z.literal("object"),
-        properties: z.record(z.string(), HttpParamSpec),
-      }),
-      callbackUrl: z.string(),
-      headers: z.record(z.string(), z.string()).optional(),
-    })
-    .meta({ ref: "HttpToolRegistration" })
-
   export const Event = {
     Connected: Bus.event("server.connected", z.object({})),
   }
@@ -153,29 +130,6 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
-      .post(
-        "/experimental/tool/register",
-        describeRoute({
-          description: "Register a new HTTP callback tool",
-          operationId: "tool.register",
-          responses: {
-            200: {
-              description: "Tool registered successfully",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-            ...ERRORS,
-          },
-        }),
-        validator("json", HttpToolRegistration),
-        async (c) => {
-          ToolRegistry.registerHTTP(c.req.valid("json"))
-          return c.json(true)
-        },
-      )
       .get(
         "/experimental/tool/ids",
         describeRoute({
@@ -194,7 +148,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          return c.json(ToolRegistry.ids())
+          return c.json(await ToolRegistry.ids())
         },
       )
       .get(
