@@ -1,4 +1,4 @@
-import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -7,7 +7,6 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
-import { ToolRegistry } from "../tool/registry"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -19,14 +18,12 @@ export namespace Plugin {
     })
     const config = await Config.get()
     const hooks = []
-    const input = {
+    const input: PluginInput = {
       client,
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
       $: Bun.$,
-      Tool: await import("../tool/tool").then((m) => m.Tool),
-      z: await import("zod").then((m) => m.z),
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
@@ -53,7 +50,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -78,14 +75,6 @@ export namespace Plugin {
     const config = await Config.get()
     for (const hook of hooks) {
       await hook.config?.(config)
-      // Let plugins register tools at startup
-      await hook["tool.register"]?.(
-        {},
-        {
-          registerHTTP: ToolRegistry.registerHTTP,
-          register: ToolRegistry.register,
-        },
-      )
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)

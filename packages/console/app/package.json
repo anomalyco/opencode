@@ -1,0 +1,25 @@
+{
+  "name": "@opencode/console-app",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "vinxi dev --host 0.0.0.0",
+    "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
+    "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
+    "start": "vinxi start",
+    "version": "0.9.11"
+  },
+  "dependencies": {
+    "@ibm/plex": "6.4.1",
+    "@openauthjs/openauth": "0.0.0-20250322224806",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.0",
+    "@solidjs/start": "^1.1.0",
+    "solid-js": "catalog:",
+    "vinxi": "^0.5.7",
+    "@opencode/console-core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

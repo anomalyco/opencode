@@ -1,0 +1,20 @@
+{
+  "name": "@opencode/console-scripts",
+  "version": "0.9.11",
+  "$schema": "https://json.schemastore.org/package.json",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "shell": "sst shell -- bun tsx",
+    "shell-dev": "sst shell --stage dev -- bun tsx",
+    "shell-prod": "sst shell --stage production -- bun tsx"
+  },
+  "dependencies": {
+    "@opencode/console-core": "workspace:*",
+    "tsx": "4.20.5"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -8,8 +8,8 @@ export namespace Tool {
     sessionID: string
     messageID: string
     agent: string
-    callID?: string
     abort: AbortSignal
+    callID?: string
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
   }
