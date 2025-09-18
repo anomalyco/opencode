@@ -47,7 +47,7 @@ import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
+import { $, fileURLToPath } from "bun"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -547,7 +547,11 @@ export namespace SessionPrompt {
             case "file:":
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filePath = decodeURIComponent(url.pathname)
+              // let filePath = decodeURIComponent(url.pathname)
+              // if (process.platform === "win32" && /^\/[a-zA-Z]:/.test(filePath)) {
+              //   filePath = filePath.slice(1)
+              // }
+              let filePath = fileURLToPath(part.url)
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
