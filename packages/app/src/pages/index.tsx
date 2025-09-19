@@ -45,8 +45,7 @@ export default function Page() {
   })
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Handle Ctrl+K / Cmd+K for command palette
-    if (e.getModifierState(MOD) && e.key.toLowerCase() === "k") {
+    if (e.getModifierState(MOD) && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault()
       setStore("commandPaletteOpen", true)
       return
