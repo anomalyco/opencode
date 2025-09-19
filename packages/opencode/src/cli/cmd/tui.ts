@@ -1,7 +1,6 @@
 import { Global } from "../../global"
 import { Provider } from "../../provider/provider"
 import { Server } from "../../server/server"
-import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import path from "path"
@@ -16,6 +15,7 @@ import { Ide } from "../../ide"
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
 import { $ } from "bun"
+import { bootstrap } from "../bootstrap"
 
 declare global {
   const OPENCODE_TUI_PATH: string

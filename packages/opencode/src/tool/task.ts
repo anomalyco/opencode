@@ -75,10 +75,14 @@ export const TaskTool = Tool.define("task", async () => {
         ],
       })
       unsub()
+      let all
+      all = await Session.messages(session.id)
+      all = all.filter((x) => x.info.role === "assistant")
+      all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       return {
         title: params.description,
         metadata: {
-          summary: result.parts.filter((x: any) => x.type === "tool"),
+          summary: all,
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }

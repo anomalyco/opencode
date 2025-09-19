@@ -12,8 +12,8 @@
   },
   "workspaces": {
     "packages": [
-      "cloud/*",
       "packages/*",
+      "packages/console/*",
       "packages/sdk/js"
     ],
     "catalog": {
@@ -23,6 +23,8 @@
       "@tsconfig/node22": "22.0.2",
       "ai": "5.0.8",
       "hono": "4.7.10",
+      "fuzzysort": "3.1.0",
+      "luxon": "3.6.1",
       "typescript": "5.8.2",
       "zod": "4.1.8",
       "remeda": "2.26.0",

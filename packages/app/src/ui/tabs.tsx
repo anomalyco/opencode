@@ -18,7 +18,7 @@ function TabsList(props: TabsListProps) {
       classList={{
         "relative flex items-center bg-background overflow-x-auto no-scrollbar": true,
         "divide-x divide-border-subtle/40": true,
-        "after:content-[''] after:block after:grow after:h-9": true,
+        "after:content-[''] after:block after:grow after:h-8": true,
         "after:border-l empty:after:border-l-0! after:border-b after:border-border-subtle/40": true,
         [local.class ?? ""]: !!local.class,
       }}
@@ -32,7 +32,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
   return (
     <KobalteTabs.Trigger
       classList={{
-        "relative px-3 h-9 flex items-center": true,
+        "relative px-3 h-8 flex items-center": true,
         "text-sm font-medium text-text-muted/60 cursor-pointer": true,
         "whitespace-nowrap shrink-0 border-b border-border-subtle/40": true,
         "disabled:pointer-events-none disabled:opacity-50": true,

@@ -504,35 +504,13 @@ export type Config = {
   }
 }
 
+export type ToolIds = Array<string>
+
 export type _Error = {
   data: {
     [key: string]: unknown
   }
 }
-
-export type HttpParamSpec = {
-  type: "string" | "number" | "boolean" | "array"
-  description?: string
-  optional?: boolean
-  items?: "string" | "number" | "boolean"
-}
-
-export type HttpToolRegistration = {
-  id: string
-  description: string
-  parameters: {
-    type: "object"
-    properties: {
-      [key: string]: HttpParamSpec
-    }
-  }
-  callbackUrl: string
-  headers?: {
-    [key: string]: string
-  }
-}
-
-export type ToolIds = Array<string>
 
 export type ToolListItem = {
   id: string
@@ -1127,18 +1105,18 @@ export type EventSessionError = {
   }
 }
 
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -1164,8 +1142,8 @@ export type Event =
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
-  | EventServerConnected
   | EventFileWatcherUpdated
+  | EventServerConnected
   | EventIdeInstalled
 
 export type ProjectListData = {
@@ -1221,33 +1199,6 @@ export type ConfigGetResponses = {
 }
 
 export type ConfigGetResponse = ConfigGetResponses[keyof ConfigGetResponses]
-
-export type ToolRegisterData = {
-  body?: HttpToolRegistration
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/experimental/tool/register"
-}
-
-export type ToolRegisterErrors = {
-  /**
-   * Bad request
-   */
-  400: _Error
-}
-
-export type ToolRegisterError = ToolRegisterErrors[keyof ToolRegisterErrors]
-
-export type ToolRegisterResponses = {
-  /**
-   * Tool registered successfully
-   */
-  200: boolean
-}
-
-export type ToolRegisterResponse = ToolRegisterResponses[keyof ToolRegisterResponses]
 
 export type ToolIdsData = {
   body?: never

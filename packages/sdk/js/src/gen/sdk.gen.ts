@@ -8,9 +8,6 @@ import type {
   ProjectCurrentResponses,
   ConfigGetData,
   ConfigGetResponses,
-  ToolRegisterData,
-  ToolRegisterResponses,
-  ToolRegisterErrors,
   ToolIdsData,
   ToolIdsResponses,
   ToolIdsErrors,
@@ -176,20 +173,6 @@ class Config extends _HeyApiClient {
 }
 
 class Tool extends _HeyApiClient {
-  /**
-   * Register a new HTTP callback tool
-   */
-  public register<ThrowOnError extends boolean = false>(options?: Options<ToolRegisterData, ThrowOnError>) {
-    return (options?.client ?? this._client).post<ToolRegisterResponses, ToolRegisterErrors, ThrowOnError>({
-      url: "/experimental/tool/register",
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    })
-  }
-
   /**
    * List all tool IDs (including built-in and dynamically registered)
    */

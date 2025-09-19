@@ -1,23 +1,27 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.9.11",
+  "version": "0.10.2",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
   },
   "exports": {
     ".": {
       "development": "./src/index.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./client": {
       "development": "./src/client.ts",
-      "import": "./dist/client.js"
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
     },
     "./server": {
       "development": "./src/server.ts",
-      "import": "./dist/server.js"
+      "import": "./dist/server.js",
+      "types": "./dist/server.d.ts"
     }
   },
   "files": [
