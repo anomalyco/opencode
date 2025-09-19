@@ -14,7 +14,6 @@ import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
-import { Bus } from "../bus"
 import { State } from "../project/state"
 
 export namespace Config {
@@ -722,12 +721,6 @@ export namespace Config {
 
     const reloaded = await get()
 
-    Bus.publish(Event.Reloaded, { config: reloaded })
-
     return reloaded
-  }
-
-  export const Event = {
-    Reloaded: Bus.event("config.reloaded", z.object({ config: Info })),
   }
 }
