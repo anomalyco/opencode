@@ -118,8 +118,8 @@ export default tool({
   args: {},
   async execute(args, context) {
     // Access context information
-    const { project, directory, worktree } = context
-    return `Project: ${project.name}, Directory: ${directory}`
+    const { agent, sessionID, messageID } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}`
   },
 })
 ```
