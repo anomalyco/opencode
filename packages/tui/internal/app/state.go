@@ -35,6 +35,7 @@ type State struct {
 	RecentlyUsedModels []ModelUsage          `toml:"recently_used_models"`
 	RecentlyUsedAgents []AgentUsage          `toml:"recently_used_agents"`
 	MessageHistory     []Prompt              `toml:"message_history"`
+	ShellHistory       []string              `toml:"shell_history"`
 	ShowToolDetails    *bool                 `toml:"show_tool_details"`
 	ShowThinkingBlocks *bool                 `toml:"show_thinking_blocks"`
 }
@@ -47,6 +48,7 @@ func NewState() *State {
 		RecentlyUsedModels: make([]ModelUsage, 0),
 		RecentlyUsedAgents: make([]AgentUsage, 0),
 		MessageHistory:     make([]Prompt, 0),
+		ShellHistory:       make([]string, 0),
 	}
 }
 
@@ -127,6 +129,17 @@ func (s *State) AddPromptToHistory(prompt Prompt) {
 	s.MessageHistory = append([]Prompt{prompt}, s.MessageHistory...)
 	if len(s.MessageHistory) > 50 {
 		s.MessageHistory = s.MessageHistory[:50]
+	}
+}
+
+func (s *State) AddShellCommandToHistory(command string) {
+	// Don't add empty commands or duplicates of the most recent command
+	if command == "" || (len(s.ShellHistory) > 0 && s.ShellHistory[0] == command) {
+		return
+	}
+	s.ShellHistory = append([]string{command}, s.ShellHistory...)
+	if len(s.ShellHistory) > 50 {
+		s.ShellHistory = s.ShellHistory[:50]
 	}
 }
 

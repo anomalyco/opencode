@@ -59,6 +59,8 @@ type editorComponent struct {
 	exitKeyInDebounce      bool
 	historyIndex           int    // -1 means current (not in history)
 	currentText            string // Store current text when navigating history
+	shellHistoryIndex      int    // -1 means current (not in history)
+	shellCurrentText       string // Store current text when navigating shell history
 	pasteCounter           int
 	reverted               bool
 }
@@ -84,45 +86,90 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "ctrl+p":
 			// Only navigate history if cursor is at the first line and column (for arrow keys)
 			// or allow ctrl+p from anywhere
-			if (msg.String() == "ctrl+p" || (m.textarea.Line() == 0 && m.textarea.CursorColumn() == 0)) && len(m.app.State.MessageHistory) > 0 {
-				if m.historyIndex == -1 {
-					// Save current text before entering history
-					m.currentText = m.textarea.Value()
-					m.textarea.MoveToBegin()
+			if m.app.IsBashMode {
+				// Shell command history navigation
+				if (msg.String() == "ctrl+p" || (m.textarea.Line() == 0 && m.textarea.CursorColumn() == 0)) && len(m.app.State.ShellHistory) > 0 {
+					if m.shellHistoryIndex == -1 {
+						// Save current text before entering history
+						m.shellCurrentText = m.textarea.Value()
+						m.textarea.MoveToBegin()
+					}
+					// Move up in history (older commands)
+					if m.shellHistoryIndex < len(m.app.State.ShellHistory)-1 {
+						m.shellHistoryIndex++
+						m.RestoreFromShellHistory(m.shellHistoryIndex)
+						m.textarea.MoveToBegin()
+					}
+					return m, nil
 				}
-				// Move up in history (older messages)
-				if m.historyIndex < len(m.app.State.MessageHistory)-1 {
-					m.historyIndex++
-					m.RestoreFromHistory(m.historyIndex)
-					m.textarea.MoveToBegin()
+			} else {
+				// Prompt history navigation
+				if (msg.String() == "ctrl+p" || (m.textarea.Line() == 0 && m.textarea.CursorColumn() == 0)) && len(m.app.State.MessageHistory) > 0 {
+					if m.historyIndex == -1 {
+						// Save current text before entering history
+						m.currentText = m.textarea.Value()
+						m.textarea.MoveToBegin()
+					}
+					// Move up in history (older messages)
+					if m.historyIndex < len(m.app.State.MessageHistory)-1 {
+						m.historyIndex++
+						m.RestoreFromHistory(m.historyIndex)
+						m.textarea.MoveToBegin()
+					}
+					return m, nil
 				}
-				return m, nil
 			}
 		case "down", "ctrl+n":
 			// Only navigate history if cursor is at the last line and we're in history navigation (for arrow keys)
 			// or allow ctrl+n from anywhere if we're in history navigation
-			if (msg.String() == "ctrl+n" || m.textarea.IsCursorAtEnd()) && m.historyIndex > -1 {
-				// Move down in history (newer messages)
-				m.historyIndex--
-				if m.historyIndex == -1 {
-					// Restore current text
-					m.textarea.Reset()
-					m.textarea.SetValue(m.currentText)
-					m.currentText = ""
-				} else {
-					m.RestoreFromHistory(m.historyIndex)
+			if m.app.IsBashMode {
+				// Shell command history navigation
+				if (msg.String() == "ctrl+n" || m.textarea.IsCursorAtEnd()) && m.shellHistoryIndex > -1 {
+					// Move down in history (newer commands)
+					m.shellHistoryIndex--
+					if m.shellHistoryIndex == -1 {
+						// Restore current text
+						m.textarea.Reset()
+						m.textarea.SetValue(m.shellCurrentText)
+						m.shellCurrentText = ""
+					} else {
+						m.RestoreFromShellHistory(m.shellHistoryIndex)
+						m.textarea.MoveToEnd()
+					}
+					return m, nil
+				} else if m.shellHistoryIndex > -1 && msg.String() == "down" {
 					m.textarea.MoveToEnd()
+					return m, nil
 				}
-				return m, nil
-			} else if m.historyIndex > -1 && msg.String() == "down" {
-				m.textarea.MoveToEnd()
-				return m, nil
+			} else {
+				// Prompt history navigation
+				if (msg.String() == "ctrl+n" || m.textarea.IsCursorAtEnd()) && m.historyIndex > -1 {
+					// Move down in history (newer messages)
+					m.historyIndex--
+					if m.historyIndex == -1 {
+						// Restore current text
+						m.textarea.Reset()
+						m.textarea.SetValue(m.currentText)
+						m.currentText = ""
+					} else {
+						m.RestoreFromHistory(m.historyIndex)
+						m.textarea.MoveToEnd()
+					}
+					return m, nil
+				} else if m.historyIndex > -1 && msg.String() == "down" {
+					m.textarea.MoveToEnd()
+					return m, nil
+				}
 			}
 		}
 		// Reset history navigation on any other input
 		if m.historyIndex != -1 {
 			m.historyIndex = -1
 			m.currentText = ""
+		}
+		if m.shellHistoryIndex != -1 {
+			m.shellHistoryIndex = -1
+			m.shellCurrentText = ""
 		}
 		// Maximize editor responsiveness for printable characters
 		if msg.Text != "" {
@@ -540,6 +587,7 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 
 func (m *editorComponent) SubmitBash() (tea.Model, tea.Cmd) {
 	command := m.textarea.Value()
+	m.app.State.AddShellCommandToHistory(command)
 	var cmds []tea.Cmd
 	updated, cmd := m.Clear()
 	m = updated.(*editorComponent)
@@ -552,6 +600,8 @@ func (m *editorComponent) Clear() (tea.Model, tea.Cmd) {
 	m.textarea.Reset()
 	m.historyIndex = -1
 	m.currentText = ""
+	m.shellHistoryIndex = -1
+	m.shellCurrentText = ""
 	m.pasteCounter = 0
 	return m, nil
 }
@@ -775,6 +825,7 @@ func NewEditorComponent(app *app.App) EditorComponent {
 		spinner:                s,
 		interruptKeyInDebounce: false,
 		historyIndex:           -1,
+		shellHistoryIndex:      -1,
 		pasteCounter:           0,
 	}
 
@@ -812,6 +863,16 @@ func (m *editorComponent) RestoreFromHistory(index int) {
 	}
 	entry := m.app.State.MessageHistory[index]
 	m.RestoreFromPrompt(entry)
+}
+
+// RestoreFromShellHistory restores a shell command from history at the given index
+func (m *editorComponent) RestoreFromShellHistory(index int) {
+	if index < 0 || index >= len(m.app.State.ShellHistory) {
+		return
+	}
+	command := m.app.State.ShellHistory[index]
+	m.textarea.Reset()
+	m.textarea.SetValue(command)
 }
 
 func getMediaTypeFromExtension(ext string) string {
