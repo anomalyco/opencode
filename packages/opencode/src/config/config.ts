@@ -14,6 +14,8 @@ import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
+import { Bus } from "../bus"
+import { State } from "../project/state"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -672,5 +674,60 @@ export namespace Config {
 
   export async function directories() {
     return state().then((x) => x.directories)
+  }
+
+  export type ConfigScope = "global" | "project"
+
+  export async function update(scope: ConfigScope, updates: Partial<Info>) {
+    const validated = Info.partial().parse(updates)
+
+    const targetPath =
+      scope === "global"
+        ? path.join(Global.Path.config, "opencode.json")
+        : path.join(Instance.directory, "opencode.json")
+
+    log.info("updating config", { scope, path: targetPath })
+
+    let existing: Info = {}
+    try {
+      const content = await Bun.file(targetPath).text()
+      const errors: JsoncParseError[] = []
+      existing = parseJsonc(content, errors, { allowTrailingComma: true }) || {}
+    } catch (err) {
+      if ((err as any).code !== "ENOENT") {
+        throw new JsonError({ path: targetPath, message: "Failed to read existing config" }, { cause: err })
+      }
+    }
+
+    const merged = mergeDeep(existing, validated)
+
+    if (!merged.$schema) {
+      merged.$schema = "https://opencode.ai/config.json"
+    }
+
+    await Bun.write(targetPath, JSON.stringify(merged, null, 2))
+
+    const reloaded = await reload()
+
+    log.info("config updated", { scope })
+    return reloaded
+  }
+
+  export async function reload() {
+    log.info("reloading config")
+
+    global.clear()
+
+    await State.dispose(Instance.directory)
+
+    const reloaded = await get()
+
+    Bus.publish(Event.Reloaded, { config: reloaded })
+
+    return reloaded
+  }
+
+  export const Event = {
+    Reloaded: Bus.event("config.reloaded", z.object({ config: Info })),
   }
 }

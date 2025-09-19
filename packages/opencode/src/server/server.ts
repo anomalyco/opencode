@@ -135,6 +135,36 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update configuration",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            scope: z.enum(["global", "project"]).describe("Scope of config to update"),
+            updates: Config.Info.partial().describe("Partial config updates to apply"),
+          }),
+        ),
+        async (c) => {
+          const { scope, updates } = c.req.valid("json")
+          const updated = await Config.update(scope, updates)
+          return c.json(updated)
+        },
+      )
       .get(
         "/experimental/tool/ids",
         describeRoute({
