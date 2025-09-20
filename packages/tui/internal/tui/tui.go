@@ -229,10 +229,8 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if a.vimPendingDeleteLine {
 		a.vimPendingDeleteLine = false
 		if lower == "d" || key == "d" {
-			line := a.editor.DeleteCurrentLine()
-			clip := line + "\n"
-			cmd := app.SetClipboard(clip)
-			return true, cmd
+			a.editor.DeleteCurrentLine()
+			return true, nil
 		}
 	}
 	if key == "shift+v" || text == "V" {
@@ -370,13 +368,9 @@ func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		copyCmd := app.SetClipboard(clip)
 		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "d":
-		deleted := a.editor.DeleteSelection()
+		a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
-		if deleted == "" {
-			return true, cmd
-		}
-		copyCmd := app.SetClipboard(deleted)
-		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
+		return true, cmd
 	case "h":
 		a.editor.MoveLeft()
 		return true, nil
@@ -445,16 +439,9 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		copyCmd := app.SetClipboard(clip)
 		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "d":
-		deleted := a.editor.DeleteSelection()
+		a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
-		if deleted == "" {
-			return true, cmd
-		}
-		if !strings.HasSuffix(deleted, "\n") {
-			deleted += "\n"
-		}
-		copyCmd := app.SetClipboard(deleted)
-		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
+		return true, cmd
 	case "j":
 		a.editor.MoveDown()
 		a.editor.MoveLineStart()
