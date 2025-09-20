@@ -376,6 +376,10 @@ export namespace Config {
         .string()
         .optional()
         .describe("Custom username to display in conversations instead of system username"),
+      keybinding_mode: z
+        .enum(["vim"])
+        .optional()
+        .describe("Keybinding mode for the TUI input experience (for example: \"vim\")"),
       mode: z
         .object({
           build: Agent.optional(),

@@ -9,7 +9,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/lipgloss/v2/compat"
 	"github.com/fsnotify/fsnotify"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/commands"
@@ -27,6 +26,7 @@ type StatusComponent interface {
 	tea.Model
 	tea.ViewModel
 	Cleanup()
+	SetMode(string)
 }
 
 type statusComponent struct {
@@ -37,6 +37,8 @@ type statusComponent struct {
 	watcher    *fsnotify.Watcher
 	done       chan struct{}
 	lastUpdate time.Time
+	modeLabel  string
+	modeKey    string
 }
 
 func (m *statusComponent) Init() tea.Cmd {
@@ -56,6 +58,25 @@ func (m *statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.watchForGitChanges()
 	}
 	return m, nil
+}
+
+func (m *statusComponent) SetMode(mode string) {
+	trimmed := strings.TrimSpace(mode)
+	m.modeLabel = strings.ToUpper(trimmed)
+	switch m.modeLabel {
+	case "NORMAL":
+		m.modeKey = "esc"
+	case "INSERT":
+		m.modeKey = "i"
+	case "VISUAL":
+		m.modeKey = "v"
+	case "VISUAL-LINE":
+		m.modeKey = "shift+v"
+	case "SCROLL":
+		m.modeKey = "s"
+	default:
+		m.modeKey = ""
+	}
 }
 
 func (m *statusComponent) logo() string {
@@ -119,19 +140,6 @@ func (m *statusComponent) View() string {
 	logo := m.logo()
 	logoWidth := lipgloss.Width(logo)
 
-	var modeBackground compat.AdaptiveColor
-	var modeForeground compat.AdaptiveColor
-
-	agentColor := util.GetAgentColor(m.app.AgentIndex)
-
-	if m.app.AgentIndex == 0 {
-		modeBackground = t.BackgroundElement()
-		modeForeground = agentColor
-	} else {
-		modeBackground = agentColor
-		modeForeground = t.BackgroundPanel()
-	}
-
 	command := m.app.Commands[commands.AgentCycleCommand]
 	kb := command.Keybindings[0]
 	key := kb.Key
@@ -139,26 +147,70 @@ func (m *statusComponent) View() string {
 		key = m.app.Config.Keybinds.Leader + " " + kb.Key
 	}
 
-	agentStyle := styles.NewStyle().Background(modeBackground).Foreground(modeForeground)
+	agentColor := util.GetAgentColor(m.app.AgentIndex)
+
+	agentStyle := styles.NewStyle().Background(agentColor).Foreground(t.BackgroundPanel())
 	agentNameStyle := agentStyle.Bold(true).Render
 	agentDescStyle := agentStyle.Render
-	agent := agentNameStyle(strings.ToUpper(m.app.Agent().Name)) + agentDescStyle(" AGENT")
-	agent = agentStyle.
+	agentText := agentNameStyle(strings.ToUpper(m.app.Agent().Name)) + agentDescStyle(" AGENT")
+	agent := agentStyle.
 		Padding(0, 1).
 		BorderLeft(true).
 		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(modeBackground).
+		BorderForeground(agentColor).
 		BorderBackground(t.BackgroundPanel()).
-		Render(agent)
+		Render(agentText)
+
+	modePill := ""
+	if m.modeLabel != "" {
+		modeStyle := styles.NewStyle().
+			Background(t.BackgroundElement()).
+			Foreground(t.TextMuted()).
+			Bold(true)
+		tagStyle := styles.NewStyle().
+			Background(t.BackgroundElement()).
+			Foreground(t.TextMuted())
+		modeContent := modeStyle.Render(m.modeLabel) + tagStyle.Render(" MODE")
+		modePill = styles.NewStyle().
+			Background(t.BackgroundElement()).
+			Foreground(t.TextMuted()).
+			Padding(0, 1).
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(t.BackgroundElement()).
+			BorderBackground(t.BackgroundPanel()).
+			Render(modeContent)
+	}
 
 	faintStyle := styles.NewStyle().
 		Faint(true).
 		Background(t.BackgroundPanel()).
 		Foreground(t.TextMuted())
-	agent = faintStyle.Render(key+" ") + agent
-	modeWidth := lipgloss.Width(agent)
+	var modeSegments []string
+	if m.modeKey != "" {
+		modeKeyTag := faintStyle.Render(" " + m.modeKey + " ")
+		modeSegments = append(modeSegments, modeKeyTag)
+	}
+	if modePill != "" {
+		modeSegments = append(modeSegments, modePill)
+	}
 
-	availableWidth := m.width - logoWidth - modeWidth
+	agentKeyTag := faintStyle.Render(" " + key + " ")
+	agentSegments := []string{agentKeyTag, agent}
+
+	segments := make([]string, 0, len(modeSegments)+len(agentSegments)+1)
+	segments = append(segments, modeSegments...)
+	if len(modeSegments) > 0 {
+		gap := styles.NewStyle().Background(t.BackgroundPanel()).Render(" ")
+		segments = append(segments, gap)
+	}
+	segments = append(segments, agentSegments...)
+	joinedPills := lipgloss.JoinHorizontal(lipgloss.Left, segments...)
+	pillWithKey := joinedPills
+
+	pillWidth := lipgloss.Width(pillWithKey)
+
+	availableWidth := m.width - logoWidth - pillWidth
 	branchSuffix := ""
 	if m.branch != "" {
 		branchSuffix = ":" + m.branch
@@ -190,7 +242,7 @@ func (m *statusComponent) View() string {
 			View: logo + cwd,
 		},
 		layout.FlexItem{
-			View: agent,
+			View: pillWithKey,
 		},
 	)
 

@@ -57,6 +57,16 @@ const (
 const interruptDebounceTimeout = 1 * time.Second
 const exitDebounceTimeout = 1 * time.Second
 
+type VimMode string
+
+const (
+	VimModeNormal     VimMode = "NORMAL"
+	VimModeInsert     VimMode = "INSERT"
+	VimModeVisual     VimMode = "VISUAL"
+	VimModeScroll     VimMode = "SCROLL"
+	VimModeVisualLine VimMode = "VISUAL-LINE"
+)
+
 type Model struct {
 	tea.Model
 	tea.CursorModel
@@ -77,6 +87,10 @@ type Model struct {
 	interruptKeyState    InterruptKeyState
 	exitKeyState         ExitKeyState
 	messagesRight        bool
+	vimEnabled           bool
+	vimMode              VimMode
+	vimAwaitingReplace   bool
+	vimPendingDeleteLine bool
 }
 
 func (a Model) Init() tea.Cmd {
@@ -94,6 +108,475 @@ func (a Model) Init() tea.Cmd {
 	cmds = append(cmds, a.toastManager.Init())
 
 	return tea.Batch(cmds...)
+}
+
+func (a *Model) setVimMode(mode VimMode) tea.Cmd {
+	if !a.vimEnabled {
+		return nil
+	}
+	var cmds []tea.Cmd
+	if a.vimMode == VimModeVisual && a.editor.SelectionActive() {
+		a.editor.ClearSelection()
+	}
+	if a.vimMode == VimModeScroll {
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	a.vimMode = mode
+	a.vimAwaitingReplace = false
+	a.vimPendingDeleteLine = false
+	switch mode {
+	case VimModeNormal:
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if a.editor.SelectionActive() {
+			a.editor.ClearSelection()
+		}
+	case VimModeInsert:
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if a.editor.SelectionActive() {
+			a.editor.ClearSelection()
+		}
+	case VimModeVisual:
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if !a.editor.SelectionActive() {
+			a.editor.BeginSelection()
+		}
+	case VimModeVisualLine:
+		updated, cmd := a.editor.Focus()
+		a.editor = updated.(chat.EditorComponent)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		a.editor.BeginLineSelection()
+		a.editor.MoveLineStart()
+	case VimModeScroll:
+		if a.editor.SelectionActive() {
+			a.editor.ClearSelection()
+		}
+		a.editor.Blur()
+	}
+	a.status.SetMode(string(mode))
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+func (a *Model) handleVimKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	if !a.vimEnabled {
+		return false, nil
+	}
+	if a.app.CurrentPermission.ID != "" {
+		return false, nil
+	}
+	if a.modal != nil || a.showCompletionDialog || a.app.IsLeaderSequence || a.app.IsBashMode {
+		return false, nil
+	}
+	switch a.vimMode {
+	case VimModeInsert:
+		if msg.String() == "esc" {
+			cmd := a.setVimMode(VimModeNormal)
+			return true, cmd
+		}
+		return false, nil
+	case VimModeNormal:
+		return a.handleVimNormal(msg)
+	case VimModeVisual:
+		return a.handleVimVisual(msg)
+	case VimModeVisualLine:
+		return a.handleVimVisualLine(msg)
+	case VimModeScroll:
+		return a.handleVimScroll(msg)
+	}
+	return false, nil
+}
+
+func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	key := msg.String()
+	text := msg.Text
+	lower := strings.ToLower(text)
+	if a.vimPendingDeleteLine {
+		a.vimPendingDeleteLine = false
+		if lower == "d" || key == "d" {
+			line := a.editor.DeleteCurrentLine()
+			clip := line + "\n"
+			cmd := app.SetClipboard(clip)
+			return true, cmd
+		}
+	}
+	if key == "shift+v" || text == "V" {
+		cmd := a.setVimMode(VimModeVisualLine)
+		return true, cmd
+	}
+	if text == "O" {
+		a.editor.InsertLineAbove(true)
+		cmd := a.setVimMode(VimModeInsert)
+		return true, cmd
+	}
+	if key == "esc" {
+		a.vimAwaitingReplace = false
+		if a.editor.SelectionActive() {
+			a.editor.ClearSelection()
+		}
+		return true, nil
+	}
+	if key == "enter" {
+		return true, nil
+	}
+	if a.vimAwaitingReplace {
+		if text != "" {
+			r := []rune(text)[0]
+			a.editor.ReplaceUnderCursor(r)
+			a.vimAwaitingReplace = false
+			return true, nil
+		}
+		return true, nil
+	}
+	switch lower {
+	case "i":
+		cmd := a.setVimMode(VimModeInsert)
+		return true, cmd
+	case "v":
+		a.editor.ClearSelection()
+		cmd := a.setVimMode(VimModeVisual)
+		return true, cmd
+	case "s":
+		cmd := a.setVimMode(VimModeScroll)
+		return true, cmd
+	case "a":
+		if a.editor.IsCursorAtEnd() {
+			a.editor.MoveLineEnd()
+		} else {
+			a.editor.MoveRight()
+		}
+		cmd := a.setVimMode(VimModeInsert)
+		return true, cmd
+	case "d":
+		a.vimPendingDeleteLine = true
+		return true, nil
+	case "o":
+		a.editor.InsertLineBelow(true)
+		cmd := a.setVimMode(VimModeInsert)
+		return true, cmd
+	case "h":
+		a.editor.MoveLeft()
+		return true, nil
+	case "l":
+		a.editor.MoveRight()
+		return true, nil
+	case "j":
+		a.editor.MoveDown()
+		return true, nil
+	case "k":
+		a.editor.MoveUp()
+		return true, nil
+	case "w":
+		a.editor.MoveWordForward()
+		return true, nil
+	case "b":
+		a.editor.MoveWordBackward()
+		return true, nil
+	case "e":
+		a.editor.MoveWordEnd()
+		return true, nil
+	case "x":
+		a.editor.DeleteUnderCursor()
+		return true, nil
+	case "r":
+		a.vimAwaitingReplace = true
+		return true, nil
+	}
+	switch text {
+	case "0":
+		a.editor.MoveLineStart()
+		return true, nil
+	case "$":
+		a.editor.MoveLineEnd()
+		return true, nil
+	case "^":
+		a.editor.MoveFirstNonBlank()
+		return true, nil
+	}
+	if text != "" {
+		return true, nil
+	}
+	switch key {
+	case "backspace", "delete", "tab":
+		return true, nil
+	}
+	return false, nil
+}
+
+func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	key := msg.String()
+	text := msg.Text
+	lower := strings.ToLower(text)
+	if key == "esc" {
+		a.editor.ClearSelection()
+		cmd := a.setVimMode(VimModeNormal)
+		return true, cmd
+	}
+	if key == "enter" {
+		return true, nil
+	}
+	if !a.editor.SelectionActive() {
+		a.editor.BeginSelection()
+	}
+	switch lower {
+	case "y":
+		clip := a.editor.SelectionText()
+		cmd := a.setVimMode(VimModeNormal)
+		if clip == "" {
+			return true, cmd
+		}
+		copyCmd := app.SetClipboard(clip)
+		if cmd != nil && copyCmd != nil {
+			return true, tea.Batch(cmd, copyCmd)
+		}
+		if cmd != nil {
+			return true, cmd
+		}
+		return true, copyCmd
+	case "d":
+		deleted := a.editor.DeleteSelection()
+		cmd := a.setVimMode(VimModeNormal)
+		if deleted == "" {
+			return true, cmd
+		}
+		copyCmd := app.SetClipboard(deleted)
+		if cmd != nil && copyCmd != nil {
+			return true, tea.Batch(cmd, copyCmd)
+		}
+		if cmd != nil {
+			return true, cmd
+		}
+		return true, copyCmd
+	case "h":
+		a.editor.MoveLeft()
+		return true, nil
+	case "l":
+		a.editor.MoveRight()
+		return true, nil
+	case "j":
+		a.editor.MoveDown()
+		return true, nil
+	case "k":
+		a.editor.MoveUp()
+		return true, nil
+	case "w":
+		a.editor.MoveWordForward()
+		return true, nil
+	case "b":
+		a.editor.MoveWordBackward()
+		return true, nil
+	case "e":
+		a.editor.MoveWordEnd()
+		return true, nil
+	}
+	switch text {
+	case "0":
+		a.editor.MoveLineStart()
+		return true, nil
+	case "$":
+		a.editor.MoveLineEnd()
+		return true, nil
+	case "^":
+		a.editor.MoveFirstNonBlank()
+		return true, nil
+	}
+	if text != "" {
+		return true, nil
+	}
+	switch key {
+	case "backspace", "delete", "tab":
+		return true, nil
+	}
+	return false, nil
+}
+
+func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	key := msg.String()
+	text := msg.Text
+	lower := strings.ToLower(text)
+	if key == "esc" {
+		a.editor.ClearSelection()
+		cmd := a.setVimMode(VimModeNormal)
+		return true, cmd
+	}
+	if !a.editor.SelectionActive() {
+		a.editor.BeginLineSelection()
+	}
+	switch lower {
+	case "y":
+		clip := a.editor.SelectionText()
+		if clip != "" && !strings.HasSuffix(clip, "\n") {
+			clip += "\n"
+		}
+		cmd := a.setVimMode(VimModeNormal)
+		if clip == "" {
+			return true, cmd
+		}
+		copyCmd := app.SetClipboard(clip)
+		if cmd != nil && copyCmd != nil {
+			return true, tea.Batch(cmd, copyCmd)
+		}
+		if cmd != nil {
+			return true, cmd
+		}
+		return true, copyCmd
+	case "d":
+		deleted := a.editor.DeleteSelection()
+		cmd := a.setVimMode(VimModeNormal)
+		if deleted == "" {
+			return true, cmd
+		}
+		if !strings.HasSuffix(deleted, "\n") {
+			deleted += "\n"
+		}
+		copyCmd := app.SetClipboard(deleted)
+		if cmd != nil && copyCmd != nil {
+			return true, tea.Batch(cmd, copyCmd)
+		}
+		if cmd != nil {
+			return true, cmd
+		}
+		return true, copyCmd
+	case "j":
+		a.editor.MoveDown()
+		a.editor.MoveLineStart()
+		return true, nil
+	case "k":
+		a.editor.MoveUp()
+		a.editor.MoveLineStart()
+		return true, nil
+	}
+	switch key {
+	case "down":
+		a.editor.MoveDown()
+		a.editor.MoveLineStart()
+		return true, nil
+	case "up":
+		a.editor.MoveUp()
+		a.editor.MoveLineStart()
+		return true, nil
+	case "shift+v":
+		return true, nil
+	}
+	return true, nil
+}
+
+func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	key := msg.String()
+	lower := strings.ToLower(msg.Text)
+	if key == "esc" {
+		cmd := a.setVimMode(VimModeNormal)
+		return true, cmd
+	}
+	if lower == "i" {
+		cmd := a.setVimMode(VimModeInsert)
+		return true, cmd
+	}
+	switch key {
+	case "ctrl+d":
+		updated, cmd := a.messages.HalfPageDown()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "ctrl+u":
+		updated, cmd := a.messages.HalfPageUp()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "pgdown", "pagedown":
+		updated, cmd := a.messages.PageDown()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "pgup", "pageup":
+		updated, cmd := a.messages.PageUp()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "g":
+		updated, cmd := a.messages.GotoTop()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "G":
+		updated, cmd := a.messages.GotoBottom()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "shift+g":
+		updated, cmd := a.messages.GotoBottom()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "j", "down":
+		updated, cmd := a.messages.LineDown()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "k", "up":
+		updated, cmd := a.messages.LineUp()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "h", "left":
+		updated, cmd := a.messages.MoveLeft()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "l", "right":
+		updated, cmd := a.messages.MoveRight()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case " ", "space":
+		updated, cmd := a.messages.PageDown()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "shift+[":
+		updated, cmd := a.messages.PrevUserMessage()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	case "shift+]":
+		updated, cmd := a.messages.NextUserMessage()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	}
+	if lower == "g" {
+		updated, cmd := a.messages.GotoTop()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	}
+	if msg.Text == "G" {
+		updated, cmd := a.messages.GotoBottom()
+		a.messages = updated.(chat.MessagesComponent)
+		return true, cmd
+	}
+	if text := msg.Text; text != "" {
+		switch text {
+		case "{":
+			updated, cmd := a.messages.PrevUserMessage()
+			a.messages = updated.(chat.MessagesComponent)
+			return true, cmd
+		case "}":
+			updated, cmd := a.messages.NextUserMessage()
+			a.messages = updated.(chat.MessagesComponent)
+			return true, cmd
+		case "a":
+			cmd := a.setVimMode(VimModeInsert)
+			return true, cmd
+		}
+	}
+	updated, cmd := a.messages.Update(msg)
+	a.messages = updated.(chat.MessagesComponent)
+	return true, cmd
 }
 
 func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -255,6 +738,14 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.completions = updated.(dialog.CompletionDialog)
 			cmds = append(cmds, cmd)
 
+			return a, tea.Batch(cmds...)
+		}
+
+		handled, vimCmd := a.handleVimKey(msg)
+		if handled {
+			if vimCmd != nil {
+				cmds = append(cmds, vimCmd)
+			}
 			return a, tea.Batch(cmds...)
 		}
 
@@ -1510,6 +2001,13 @@ func NewModel(app *app.App) tea.Model {
 		toastManager:         toast.NewToastManager(),
 		interruptKeyState:    InterruptKeyIdle,
 		exitKeyState:         ExitKeyIdle,
+	}
+
+	model.status.SetMode("")
+	if app.Config != nil && strings.EqualFold(app.Config.KeybindingMode, "vim") {
+		model.vimEnabled = true
+		model.vimMode = VimModeNormal
+		model.status.SetMode(string(VimModeNormal))
 	}
 
 	return model

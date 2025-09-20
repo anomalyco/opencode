@@ -90,8 +90,10 @@ type Config struct {
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
-	Username string     `json:"username"`
-	JSON     configJSON `json:"-"`
+	Username string `json:"username"`
+	// Keybinding mode for the TUI input experience (for example: "vim")
+	KeybindingMode string     `json:"keybinding_mode"`
+	JSON           configJSON `json:"-"`
 }
 
 // configJSON contains the JSON metadata for the struct [Config]
@@ -121,6 +123,7 @@ type configJSON struct {
 	Tools             apijson.Field
 	Tui               apijson.Field
 	Username          apijson.Field
+	KeybindingMode    apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }

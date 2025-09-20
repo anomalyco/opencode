@@ -116,22 +116,33 @@ func (m Model) isAttachmentAtCursor() (*attachment.Attachment, int, int) {
 func (m Model) renderLineWithAttachments(
 	items []any,
 	style lipgloss.Style,
+	row int,
+	offset int,
 ) string {
 	var s strings.Builder
 	currentAttachment, _, _ := m.isAttachmentAtCursor()
+	selectionStart, selectionEnd, hasSelection := m.selectionColumnsForRow(row)
 
-	for _, item := range items {
+	for idx, item := range items {
+		col := offset + idx
+		inSelection := hasSelection && col >= selectionStart && col < selectionEnd
 		switch val := item.(type) {
 		case rune:
+			if inSelection {
+				s.WriteString(m.Styles.Selection.Render(string(val)))
+				continue
+			}
 			s.WriteString(style.Render(string(val)))
 		case *attachment.Attachment:
-			// Check if this is the attachment the cursor is currently on
 			if currentAttachment != nil && currentAttachment.ID == val.ID {
-				// Cursor is on this attachment, highlight it
 				s.WriteString(m.Styles.SelectedAttachment.Render(val.Display))
-			} else {
-				s.WriteString(m.Styles.Attachment.Render(val.Display))
+				continue
 			}
+			if inSelection {
+				s.WriteString(m.Styles.SelectedAttachment.Render(val.Display))
+				continue
+			}
+			s.WriteString(m.Styles.Attachment.Render(val.Display))
 		}
 	}
 	return s.String()
@@ -152,6 +163,23 @@ func getRuneAt(items []any, index int) rune {
 func isSpaceAt(items []any, index int) bool {
 	r := getRuneAt(items, index)
 	return r != 0 && unicode.IsSpace(r)
+}
+
+func isWhitespaceItem(item any) bool {
+	if r, ok := item.(rune); ok {
+		return unicode.IsSpace(r)
+	}
+	return false
+}
+
+func isWordChar(item any) bool {
+	switch v := item.(type) {
+	case rune:
+		return !unicode.IsSpace(v)
+	case *attachment.Attachment:
+		return true
+	}
+	return false
 }
 
 // setRuneAt safely sets a rune at a specific position if it's a rune
@@ -362,6 +390,7 @@ type Styles struct {
 	Cursor             CursorStyle
 	Attachment         lipgloss.Style
 	SelectedAttachment lipgloss.Style
+	Selection          lipgloss.Style
 }
 
 // StyleState that will be applied to the text area.
@@ -516,6 +545,12 @@ type Model struct {
 	// Cursor row.
 	row int
 
+	// Visual selection anchor.
+	selectActive   bool
+	selectRow      int
+	selectCol      int
+	selectLineMode bool
+
 	// Last character offset, used to maintain state when the cursor is moved
 	// vertically such that we can maintain the same navigating position.
 	lastCharOffset int
@@ -596,6 +631,9 @@ func DefaultStyles(isDark bool) Styles {
 	s.SelectedAttachment = lipgloss.NewStyle().
 		Background(lipgloss.Color("11")).
 		Foreground(lipgloss.Color("0"))
+	s.Selection = lipgloss.NewStyle().
+		Background(lightDark(lipgloss.Color("223"), lipgloss.Color("17"))).
+		Foreground(lightDark(lipgloss.Color("0"), lipgloss.Color("231")))
 	s.Cursor = CursorStyle{
 		Color: lipgloss.Color("7"),
 		Shape: tea.CursorBlock,
@@ -923,6 +961,417 @@ func (m Model) LastRuneIndex(r rune) int {
 	return -1
 }
 
+func (m *Model) BeginSelection() {
+	m.selectActive = true
+	m.selectRow = m.row
+	m.selectCol = m.col
+	m.selectLineMode = false
+}
+
+func (m *Model) ClearSelection() {
+	m.selectActive = false
+	m.selectLineMode = false
+}
+
+func (m *Model) BeginLineSelection() {
+	m.selectActive = true
+	m.selectLineMode = true
+	m.selectRow = m.row
+	m.selectCol = 0
+}
+
+func (m Model) SelectionActive() bool {
+	return m.selectActive
+}
+
+func (m Model) advancePosition(row, col int) (int, int) {
+	if row < 0 {
+		return 0, 0
+	}
+	if row >= len(m.value) {
+		return len(m.value), 0
+	}
+	if col < len(m.value[row]) {
+		return row, col + 1
+	}
+	return row + 1, 0
+}
+
+func (m Model) selectionBounds() (int, int, int, int, bool) {
+	if !m.selectActive || len(m.value) == 0 {
+		return 0, 0, 0, 0, false
+	}
+	startRow := clamp(m.selectRow, 0, len(m.value)-1)
+	endRow := clamp(m.row, 0, len(m.value)-1)
+	var startCol int
+	var endCol int
+	if m.selectLineMode {
+		startCol = 0
+		if endRow < len(m.value) {
+			endCol = len(m.value[endRow])
+		}
+	} else {
+		startCol = clamp(m.selectCol, 0, len(m.value[startRow]))
+		endCol = clamp(m.col, 0, len(m.value[endRow]))
+	}
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, endRow = endRow, startRow
+		startCol, endCol = endCol, startCol
+		if m.selectLineMode {
+			startCol = 0
+			if endRow < len(m.value) {
+				endCol = len(m.value[endRow])
+			}
+		}
+	}
+	if m.selectLineMode && startRow < len(m.value) {
+		startCol = 0
+		endCol = len(m.value[endRow])
+	}
+	er, ec := m.advancePosition(endRow, endCol)
+	return startRow, startCol, er, ec, true
+}
+
+func (m Model) selectionColumnsForRow(row int) (int, int, bool) {
+	if m.selectLineMode {
+		if len(m.value) == 0 {
+			return 0, 0, false
+		}
+		sr := clamp(m.selectRow, 0, len(m.value)-1)
+		er := clamp(m.row, 0, len(m.value)-1)
+		if sr > er {
+			sr, er = er, sr
+		}
+		if row < sr || row > er {
+			return 0, 0, false
+		}
+		if row >= len(m.value) {
+			return 0, 0, false
+		}
+		return 0, len(m.value[row]), true
+	}
+	sr, sc, er, ec, ok := m.selectionBounds()
+	if !ok {
+		return 0, 0, false
+	}
+	maxRow := er
+	maxCol := ec
+	if maxRow >= len(m.value) {
+		maxRow = len(m.value) - 1
+		if maxRow >= 0 {
+			maxCol = len(m.value[maxRow])
+		}
+	}
+	if row < sr || row > maxRow {
+		return 0, 0, false
+	}
+	start := 0
+	if row == sr {
+		start = sc
+	}
+	end := len(m.value[row])
+	if row == maxRow {
+		if maxCol <= start {
+			return 0, 0, false
+		}
+		if maxCol < end {
+			end = maxCol
+		}
+	}
+	if start >= end {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+func (m Model) SelectionText() string {
+	sr, sc, er, ec, ok := m.selectionBounds()
+	if !ok {
+		return ""
+	}
+	var b strings.Builder
+	row := sr
+	col := sc
+	for row < len(m.value) {
+		if row > er || (row == er && col >= ec) {
+			break
+		}
+		if col >= len(m.value[row]) {
+			if row < er && row < len(m.value)-1 {
+				b.WriteRune('\n')
+			}
+			row++
+			col = 0
+			continue
+		}
+		switch v := m.value[row][col].(type) {
+		case rune:
+			b.WriteRune(v)
+		case *attachment.Attachment:
+			b.WriteString(v.Display)
+		}
+		col++
+	}
+	return b.String()
+}
+
+func (m *Model) deleteRange(startRow, startCol, endRow, endCol int) {
+	if len(m.value) == 0 {
+		return
+	}
+	if endRow >= len(m.value) {
+		endRow = len(m.value) - 1
+		endCol = len(m.value[endRow])
+	}
+	if startRow >= len(m.value) {
+		startRow = len(m.value) - 1
+		startCol = len(m.value[startRow])
+	}
+	startCol = clamp(startCol, 0, len(m.value[startRow]))
+	if startRow == endRow {
+		end := clamp(endCol, startCol, len(m.value[startRow]))
+		m.value[startRow] = append(m.value[startRow][:startCol], m.value[startRow][end:]...)
+		m.row = startRow
+		m.SetCursorColumn(startCol)
+		return
+	}
+	head := append([]any{}, m.value[startRow][:startCol]...)
+	tail := []any{}
+	if endCol < len(m.value[endRow]) {
+		tail = append(tail, m.value[endRow][endCol:]...)
+	}
+	merged := append(head, tail...)
+	m.value[startRow] = merged
+	removeCount := endRow - startRow
+	copy(m.value[startRow+1:], m.value[endRow+1:])
+	m.value = m.value[:len(m.value)-removeCount]
+	if len(m.value) == 0 {
+		m.value = make([][]any, minHeight, maxLines)
+	}
+	m.row = startRow
+	m.SetCursorColumn(startCol)
+}
+
+func (m *Model) DeleteSelection() string {
+	if !m.selectActive {
+		return ""
+	}
+	text := m.SelectionText()
+	sr, sc, er, ec, ok := m.selectionBounds()
+	if !ok {
+		m.selectActive = false
+		m.selectLineMode = false
+		return text
+	}
+	m.deleteRange(sr, sc, er, ec)
+	m.selectActive = false
+	m.selectLineMode = false
+	return text
+}
+
+func (m *Model) MoveLeft() {
+	m.characterLeft(false)
+}
+
+func (m *Model) MoveRight() {
+	m.characterRight()
+}
+
+func (m *Model) MoveUp() {
+	m.CursorUp()
+}
+
+func (m *Model) MoveDown() {
+	m.CursorDown()
+}
+
+func (m *Model) MoveWordForward() {
+	m.wordRight()
+}
+
+func (m *Model) MoveWordBackward() {
+	m.wordLeft()
+}
+
+func (m *Model) MoveWordEnd() {
+	if len(m.value) == 0 {
+		return
+	}
+	if m.atWordEnd() {
+		m.characterRight()
+	}
+	// Skip leading whitespace to land on the start of the next word
+	for {
+		if m.row >= len(m.value) {
+			return
+		}
+		if m.col >= len(m.value[m.row]) {
+			if m.row == len(m.value)-1 {
+				return
+			}
+			m.row++
+			m.SetCursorColumn(0)
+			continue
+		}
+		if !isWhitespaceItem(m.value[m.row][m.col]) {
+			break
+		}
+		m.characterRight()
+	}
+
+	lastRow := m.row
+	lastCol := m.col
+	for {
+		if m.row >= len(m.value) {
+			break
+		}
+		if m.col >= len(m.value[m.row]) {
+			break
+		}
+		item := m.value[m.row][m.col]
+		if isWhitespaceItem(item) {
+			break
+		}
+		lastRow = m.row
+		lastCol = m.col
+		m.characterRight()
+	}
+
+	m.row = lastRow
+	m.SetCursorColumn(lastCol)
+}
+
+func (m *Model) atWordEnd() bool {
+	if len(m.value) == 0 || m.row >= len(m.value) {
+		return true
+	}
+	if m.col >= len(m.value[m.row]) {
+		return true
+	}
+	current := m.value[m.row][m.col]
+	if !isWordChar(current) {
+		return false
+	}
+	if m.col == len(m.value[m.row])-1 {
+		return true
+	}
+	nextItem := m.value[m.row][m.col+1]
+	return !isWordChar(nextItem)
+}
+
+func (m *Model) MoveLineStart() {
+	m.CursorStart()
+}
+
+func (m *Model) MoveFirstNonBlank() {
+	m.CursorStart()
+	if m.row >= len(m.value) {
+		return
+	}
+	for m.col < len(m.value[m.row]) && isSpaceAt(m.value[m.row], m.col) {
+		m.characterRight()
+	}
+}
+
+func (m *Model) MoveLineEnd() {
+	m.CursorEnd()
+}
+
+func (m *Model) InsertLineBelow(copyIndent bool) {
+	insertAt := m.row + 1
+	if insertAt > len(m.value) {
+		insertAt = len(m.value)
+	}
+	indent := ""
+	if copyIndent {
+		indent = m.leadingIndent(m.row)
+	}
+	if !m.insertBlankLine(insertAt) {
+		return
+	}
+	m.row = insertAt
+	m.SetCursorColumn(0)
+	if indent != "" {
+		m.InsertString(indent)
+	}
+	m.lastCharOffset = 0
+}
+
+func (m *Model) InsertLineAbove(copyIndent bool) {
+	row := clamp(m.row, 0, len(m.value))
+	indent := ""
+	if copyIndent {
+		indent = m.leadingIndent(row)
+	}
+	if !m.insertBlankLine(row) {
+		return
+	}
+	m.row = row
+	m.SetCursorColumn(0)
+	if indent != "" {
+		m.InsertString(indent)
+	}
+	m.lastCharOffset = 0
+}
+
+func (m *Model) DeleteUnderCursor() bool {
+	if m.row >= len(m.value) {
+		return false
+	}
+	if m.col >= len(m.value[m.row]) {
+		if m.row >= len(m.value)-1 {
+			return false
+		}
+		m.mergeLineBelow(m.row)
+		return true
+	}
+	if att, _, _ := m.isAttachmentAtCursor(); att != nil {
+		return m.removeAttachmentAtCursor()
+	}
+	m.value[m.row] = slices.Delete(m.value[m.row], m.col, m.col+1)
+	if m.col >= len(m.value[m.row]) && m.row < len(m.value)-1 {
+		m.mergeLineBelow(m.row)
+	}
+	return true
+}
+
+func (m *Model) ReplaceUnderCursor(r rune) bool {
+	if m.row >= len(m.value) {
+		return false
+	}
+	if m.col >= len(m.value[m.row]) {
+		return false
+	}
+	if _, ok := m.value[m.row][m.col].(rune); !ok {
+		return false
+	}
+	m.value[m.row][m.col] = r
+	return true
+}
+
+func (m *Model) DeleteCurrentLine() string {
+	if len(m.value) == 0 {
+		return ""
+	}
+	row := clamp(m.row, 0, len(m.value)-1)
+	lineText := interfacesToString(m.value[row])
+	m.value = append(m.value[:row], m.value[row+1:]...)
+	if len(m.value) == 0 {
+		m.value = append(m.value, make([]any, 0))
+	}
+	if row >= len(m.value) {
+		row = len(m.value) - 1
+	}
+	if row < 0 {
+		row = 0
+	}
+	m.row = row
+	m.SetCursorColumn(0)
+	m.lastCharOffset = 0
+	m.cache = NewMemoCache[line, [][]any](m.cache.Capacity())
+	return lineText
+}
+
 func (m *Model) Newline() {
 	if m.MaxHeight > 0 && len(m.value) >= m.MaxHeight {
 		return
@@ -1183,6 +1632,10 @@ func (m *Model) Reset() {
 	m.col = 0
 	m.row = 0
 	m.SetCursorColumn(0)
+	m.selectActive = false
+	m.selectRow = 0
+	m.selectCol = 0
+	m.selectLineMode = false
 }
 
 // san initializes or retrieves the rune sanitizer.
@@ -1722,6 +2175,7 @@ func (m Model) View() string {
 			style = styles.computedText()
 		}
 
+		lineOffset := 0
 		for wl, wrappedLine := range wrappedLines {
 			prompt := m.promptView(displayLine)
 			prompt = styles.computedPrompt().Render(prompt)
@@ -1766,6 +2220,8 @@ func (m Model) View() string {
 					m.renderLineWithAttachments(
 						wrappedLine[:lineInfo.ColumnOffset],
 						style,
+						l,
+						lineOffset,
 					),
 				)
 
@@ -1786,19 +2242,27 @@ func (m Model) View() string {
 					}
 
 					// Render the part of the line after the cursor
-					s.WriteString(m.renderLineWithAttachments(wrappedLine[lineInfo.ColumnOffset+1:], style))
+					s.WriteString(
+						m.renderLineWithAttachments(
+							wrappedLine[lineInfo.ColumnOffset+1:],
+							style,
+							l,
+							lineOffset+lineInfo.ColumnOffset+1,
+						),
+					)
 				} else {
 					// Cursor is at the end of the line
 					m.virtualCursor.SetChar(" ")
 					s.WriteString(style.Render(m.virtualCursor.View()))
 				}
 			} else {
-				s.WriteString(m.renderLineWithAttachments(wrappedLine, style))
+				s.WriteString(m.renderLineWithAttachments(wrappedLine, style, l, lineOffset))
 			}
 
 			s.WriteString(style.Render(strings.Repeat(" ", max(0, padding))))
 			s.WriteRune('\n')
 			newLines++
+			lineOffset += len(wrappedLine)
 		}
 	}
 
@@ -2067,6 +2531,37 @@ func (m *Model) splitLine(row, col int) {
 
 	m.col = 0
 	m.row++
+}
+
+func (m *Model) insertBlankLine(row int) bool {
+	if row < 0 {
+		row = 0
+	}
+	if row > len(m.value) {
+		row = len(m.value)
+	}
+	if (m.MaxHeight > 0 && len(m.value) >= m.MaxHeight) || len(m.value) >= maxLines {
+		return false
+	}
+	m.value = append(m.value, nil)
+	copy(m.value[row+1:], m.value[row:])
+	m.value[row] = make([]any, 0)
+	return true
+}
+
+func (m *Model) leadingIndent(row int) string {
+	if row < 0 || row >= len(m.value) {
+		return ""
+	}
+	var runes []rune
+	for _, item := range m.value[row] {
+		r, ok := item.(rune)
+		if !ok || !unicode.IsSpace(r) || r == '\n' || r == '\r' {
+			break
+		}
+		runes = append(runes, r)
+	}
+	return string(runes)
 }
 
 func itemWidth(item any) int {

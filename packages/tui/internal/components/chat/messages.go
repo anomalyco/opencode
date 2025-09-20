@@ -33,6 +33,12 @@ type MessagesComponent interface {
 	PageDown() (tea.Model, tea.Cmd)
 	HalfPageUp() (tea.Model, tea.Cmd)
 	HalfPageDown() (tea.Model, tea.Cmd)
+	LineUp() (tea.Model, tea.Cmd)
+	LineDown() (tea.Model, tea.Cmd)
+	MoveLeft() (tea.Model, tea.Cmd)
+	MoveRight() (tea.Model, tea.Cmd)
+	PrevUserMessage() (tea.Model, tea.Cmd)
+	NextUserMessage() (tea.Model, tea.Cmd)
 	ToolDetailsVisible() bool
 	ThinkingBlocksVisible() bool
 	GotoTop() (tea.Model, tea.Cmd)
@@ -1074,6 +1080,79 @@ func (m *messagesComponent) HalfPageUp() (tea.Model, tea.Cmd) {
 
 func (m *messagesComponent) HalfPageDown() (tea.Model, tea.Cmd) {
 	m.viewport.HalfViewDown()
+	return m, nil
+}
+
+func (m *messagesComponent) LineUp() (tea.Model, tea.Cmd) {
+	m.viewport.LineUp(1)
+	return m, nil
+}
+
+func (m *messagesComponent) LineDown() (tea.Model, tea.Cmd) {
+	m.viewport.LineDown(1)
+	return m, nil
+}
+
+func (m *messagesComponent) MoveLeft() (tea.Model, tea.Cmd) {
+	m.viewport.MoveLeft(1)
+	return m, nil
+}
+
+func (m *messagesComponent) MoveRight() (tea.Model, tea.Cmd) {
+	m.viewport.MoveRight(1)
+	return m, nil
+}
+
+func (m *messagesComponent) PrevUserMessage() (tea.Model, tea.Cmd) {
+	if len(m.app.Messages) == 0 {
+		return m, nil
+	}
+	current := m.viewport.YOffset
+	target := -1
+	for i := len(m.app.Messages) - 1; i >= 0; i-- {
+		message := m.app.Messages[i]
+		user, ok := message.Info.(opencode.UserMessage)
+		if !ok {
+			continue
+		}
+		pos, exists := m.messagePositions[user.ID]
+		if !exists {
+			continue
+		}
+		if pos < current {
+			target = pos
+			break
+		}
+	}
+	if target >= 0 {
+		m.viewport.SetYOffset(target)
+	}
+	return m, nil
+}
+
+func (m *messagesComponent) NextUserMessage() (tea.Model, tea.Cmd) {
+	if len(m.app.Messages) == 0 {
+		return m, nil
+	}
+	current := m.viewport.YOffset
+	target := -1
+	for _, message := range m.app.Messages {
+		user, ok := message.Info.(opencode.UserMessage)
+		if !ok {
+			continue
+		}
+		pos, exists := m.messagePositions[user.ID]
+		if !exists {
+			continue
+		}
+		if pos > current {
+			target = pos
+			break
+		}
+	}
+	if target >= 0 {
+		m.viewport.SetYOffset(target)
+	}
 	return m, nil
 }
 

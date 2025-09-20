@@ -48,6 +48,28 @@ type EditorComponent interface {
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 	RestoreFromHistory(index int)
+	MoveLeft()
+	MoveRight()
+	MoveUp()
+	MoveDown()
+	MoveWordForward()
+	MoveWordBackward()
+	MoveWordEnd()
+	MoveLineStart()
+	MoveFirstNonBlank()
+	MoveLineEnd()
+	DeleteUnderCursor() bool
+	ReplaceUnderCursor(r rune) bool
+	BeginSelection()
+	ClearSelection()
+	SelectionActive() bool
+	SelectionText() string
+	DeleteSelection() string
+	InsertLineBelow(copyIndent bool)
+	InsertLineAbove(copyIndent bool)
+	DeleteCurrentLine() string
+	BeginLineSelection()
+	IsCursorAtEnd() bool
 }
 
 type editorComponent struct {
@@ -727,6 +749,10 @@ func updateTextareaStyles(ta textarea.Model) textarea.Model {
 		Foreground(t.Text()).
 		Background(t.Secondary()).
 		Lipgloss()
+	ta.Styles.Selection = styles.NewStyle().
+		Foreground(t.Background()).
+		Background(t.Primary()).
+		Lipgloss()
 	ta.Styles.Cursor.Color = t.Primary()
 	return ta
 }
@@ -798,6 +824,94 @@ func (m *editorComponent) RestoreFromHistory(index int) {
 	}
 	entry := m.app.State.MessageHistory[index]
 	m.RestoreFromPrompt(entry)
+}
+
+func (m *editorComponent) MoveLeft() {
+	m.textarea.MoveLeft()
+}
+
+func (m *editorComponent) MoveRight() {
+	m.textarea.MoveRight()
+}
+
+func (m *editorComponent) MoveUp() {
+	m.textarea.MoveUp()
+}
+
+func (m *editorComponent) MoveDown() {
+	m.textarea.MoveDown()
+}
+
+func (m *editorComponent) MoveWordForward() {
+	m.textarea.MoveWordForward()
+}
+
+func (m *editorComponent) MoveWordBackward() {
+	m.textarea.MoveWordBackward()
+}
+
+func (m *editorComponent) MoveWordEnd() {
+	m.textarea.MoveWordEnd()
+}
+
+func (m *editorComponent) MoveLineStart() {
+	m.textarea.MoveLineStart()
+}
+
+func (m *editorComponent) MoveFirstNonBlank() {
+	m.textarea.MoveFirstNonBlank()
+}
+
+func (m *editorComponent) MoveLineEnd() {
+	m.textarea.MoveLineEnd()
+}
+
+func (m *editorComponent) DeleteUnderCursor() bool {
+	return m.textarea.DeleteUnderCursor()
+}
+
+func (m *editorComponent) ReplaceUnderCursor(r rune) bool {
+	return m.textarea.ReplaceUnderCursor(r)
+}
+
+func (m *editorComponent) BeginSelection() {
+	m.textarea.BeginSelection()
+}
+
+func (m *editorComponent) ClearSelection() {
+	m.textarea.ClearSelection()
+}
+
+func (m *editorComponent) SelectionActive() bool {
+	return m.textarea.SelectionActive()
+}
+
+func (m *editorComponent) SelectionText() string {
+	return m.textarea.SelectionText()
+}
+
+func (m *editorComponent) DeleteSelection() string {
+	return m.textarea.DeleteSelection()
+}
+
+func (m *editorComponent) InsertLineBelow(copyIndent bool) {
+	m.textarea.InsertLineBelow(copyIndent)
+}
+
+func (m *editorComponent) InsertLineAbove(copyIndent bool) {
+	m.textarea.InsertLineAbove(copyIndent)
+}
+
+func (m *editorComponent) DeleteCurrentLine() string {
+	return m.textarea.DeleteCurrentLine()
+}
+
+func (m *editorComponent) BeginLineSelection() {
+	m.textarea.BeginLineSelection()
+}
+
+func (m *editorComponent) IsCursorAtEnd() bool {
+	return m.textarea.IsCursorAtEnd()
 }
 
 func getMediaTypeFromExtension(ext string) string {
