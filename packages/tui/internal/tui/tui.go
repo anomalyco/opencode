@@ -291,6 +291,11 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		a.editor.InsertLineBelow(true)
 		cmd := a.setVimMode(VimModeInsert)
 		return true, cmd
+	case "p":
+		a.editor.InsertLineBelow(false)
+		updated, pasteCmd := a.editor.Paste()
+		a.setEditorModel(updated)
+		return true, pasteCmd
 	case "h":
 		a.editor.MoveLeft()
 		return true, nil
@@ -363,7 +368,7 @@ func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(clip)
-		return true, combineCmds(cmd, copyCmd)
+		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "d":
 		deleted := a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
@@ -371,7 +376,7 @@ func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(deleted)
-		return true, combineCmds(cmd, copyCmd)
+		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "h":
 		a.editor.MoveLeft()
 		return true, nil
@@ -438,7 +443,7 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(clip)
-		return true, combineCmds(cmd, copyCmd)
+		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "d":
 		deleted := a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
@@ -449,7 +454,7 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			deleted += "\n"
 		}
 		copyCmd := app.SetClipboard(deleted)
-		return true, combineCmds(cmd, copyCmd)
+		return true, combineCmds(cmd, copyCmd, toast.NewSuccessToast("Copied to clipboard"))
 	case "j":
 		a.editor.MoveDown()
 		a.editor.MoveLineStart()
