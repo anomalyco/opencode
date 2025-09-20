@@ -6,6 +6,7 @@ import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
+import { aiSdkTelemetrySettings } from "../util/telemetry"
 
 export namespace Agent {
   export const Info = z
@@ -170,6 +171,7 @@ export namespace Agent {
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),
+      experimental_telemetry: aiSdkTelemetrySettings,
     })
     return result.object
   }

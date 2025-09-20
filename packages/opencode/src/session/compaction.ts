@@ -13,6 +13,7 @@ import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
+import { aiSdkTelemetrySettings } from "../util/telemetry"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -143,6 +144,7 @@ export namespace SessionCompaction {
           ],
         },
       ],
+      experimental_telemetry: aiSdkTelemetrySettings,
     })
     const usage = Session.getUsage(model.info, generated.usage, generated.providerMetadata)
     msg.cost += usage.cost

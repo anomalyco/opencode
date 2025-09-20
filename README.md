@@ -90,6 +90,20 @@ $ bun dev
 
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the opencode team to generate a new stainless sdk for the clients.
 
+#### OpenTelemetry logs & metrics
+
+Support for using [OpenTelemetry (OTEL)](https://github.com/open-telemetry) has been added for observing logs & metrics. This functionality is strictly opt-in for security/privacy reasons and to avoid pulling native Node runtime dependencies in alternative runtimes.
+
+Currently, only the AI SDK is configured to emit anything. It will default to using OTEL's gRPC protocol on `localhost:4317`, though their SDK offers a rich variety of environment variables for configuring it (see [opentelemetry.io/docs/languages/sdk-configuration](https://opentelemetry.io/docs/languages/sdk-configuration) for more info).
+
+To take advantage of this functionality you'll need to run an OTEL listener/server; [otel-cli](https://github.com/equinix/otel-cli) is a good option for local use-cases.
+
+Example use:
+* Terminal 1: `otel-cli server json --stdout | jq -SCc`
+* Terminal 2: `USE_OTEL=1 opencode`
+
+Developers of `opencode` can run `script/otel-listener.sh`, a convenience script for running `otel-cli` and pretty-printing its output.
+
 ### FAQ
 
 #### How is this different than Claude Code?

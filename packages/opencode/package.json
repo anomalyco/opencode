@@ -57,6 +57,9 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@opentelemetry/sdk-node": "0.205.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "0.205.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.205.0"
   }
 }

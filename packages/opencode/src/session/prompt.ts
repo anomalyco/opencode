@@ -5,6 +5,7 @@ import z from "zod/v4"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
+import { aiSdkTelemetrySettings } from "../util/telemetry"
 import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
@@ -311,6 +312,7 @@ export namespace SessionPrompt {
             },
           ],
         }),
+        experimental_telemetry: aiSdkTelemetrySettings,
       })
       const result = await processor.process(stream)
       await processor.end()
@@ -1618,6 +1620,7 @@ export namespace SessionPrompt {
         ]),
       ],
       model: small.language,
+      experimental_telemetry: aiSdkTelemetrySettings,
     })
       .then((result) => {
         if (result.text)
