@@ -93,6 +93,38 @@ type Model struct {
 	vimPendingDeleteLine bool
 }
 
+func addCmd(list *[]tea.Cmd, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	*list = append(*list, cmd)
+}
+
+func combineCmds(cmds ...tea.Cmd) tea.Cmd {
+	var queue []tea.Cmd
+	for _, cmd := range cmds {
+		if cmd == nil {
+			continue
+		}
+		queue = append(queue, cmd)
+	}
+	if len(queue) == 0 {
+		return nil
+	}
+	if len(queue) == 1 {
+		return queue[0]
+	}
+	return tea.Batch(queue...)
+}
+
+func (a *Model) setEditorModel(mod tea.Model) {
+	a.editor = mod.(chat.EditorComponent)
+}
+
+func (a *Model) setMessagesModel(mod tea.Model) {
+	a.messages = mod.(chat.MessagesComponent)
+}
+
 func (a Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 	// https://github.com/charmbracelet/bubbletea/issues/1440
@@ -120,48 +152,35 @@ func (a *Model) setVimMode(mode VimMode) tea.Cmd {
 	}
 	if a.vimMode == VimModeScroll {
 		updated, cmd := a.editor.Focus()
-		a.editor = updated.(chat.EditorComponent)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		a.setEditorModel(updated)
+		addCmd(&cmds, cmd)
 	}
 	a.vimMode = mode
 	a.vimAwaitingReplace = false
 	a.vimPendingDeleteLine = false
+	focus := func() {
+		updated, cmd := a.editor.Focus()
+		a.setEditorModel(updated)
+		addCmd(&cmds, cmd)
+	}
 	switch mode {
 	case VimModeNormal:
-		updated, cmd := a.editor.Focus()
-		a.editor = updated.(chat.EditorComponent)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		focus()
 		if a.editor.SelectionActive() {
 			a.editor.ClearSelection()
 		}
 	case VimModeInsert:
-		updated, cmd := a.editor.Focus()
-		a.editor = updated.(chat.EditorComponent)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		focus()
 		if a.editor.SelectionActive() {
 			a.editor.ClearSelection()
 		}
 	case VimModeVisual:
-		updated, cmd := a.editor.Focus()
-		a.editor = updated.(chat.EditorComponent)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		focus()
 		if !a.editor.SelectionActive() {
 			a.editor.BeginSelection()
 		}
 	case VimModeVisualLine:
-		updated, cmd := a.editor.Focus()
-		a.editor = updated.(chat.EditorComponent)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		focus()
 		a.editor.BeginLineSelection()
 		a.editor.MoveLineStart()
 	case VimModeScroll:
@@ -171,10 +190,7 @@ func (a *Model) setVimMode(mode VimMode) tea.Cmd {
 		a.editor.Blur()
 	}
 	a.status.SetMode(string(mode))
-	if len(cmds) == 0 {
-		return nil
-	}
-	return tea.Batch(cmds...)
+	return combineCmds(cmds...)
 }
 
 func (a *Model) handleVimKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
@@ -259,9 +275,11 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		cmd := a.setVimMode(VimModeScroll)
 		return true, cmd
 	case "a":
-		if a.editor.IsCursorAtEnd() {
+		atEnd := a.editor.IsCursorAtEnd()
+		if atEnd {
 			a.editor.MoveLineEnd()
-		} else {
+		}
+		if !atEnd {
 			a.editor.MoveRight()
 		}
 		cmd := a.setVimMode(VimModeInsert)
@@ -345,13 +363,7 @@ func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(clip)
-		if cmd != nil && copyCmd != nil {
-			return true, tea.Batch(cmd, copyCmd)
-		}
-		if cmd != nil {
-			return true, cmd
-		}
-		return true, copyCmd
+		return true, combineCmds(cmd, copyCmd)
 	case "d":
 		deleted := a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
@@ -359,13 +371,7 @@ func (a *Model) handleVimVisual(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(deleted)
-		if cmd != nil && copyCmd != nil {
-			return true, tea.Batch(cmd, copyCmd)
-		}
-		if cmd != nil {
-			return true, cmd
-		}
-		return true, copyCmd
+		return true, combineCmds(cmd, copyCmd)
 	case "h":
 		a.editor.MoveLeft()
 		return true, nil
@@ -432,13 +438,7 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return true, cmd
 		}
 		copyCmd := app.SetClipboard(clip)
-		if cmd != nil && copyCmd != nil {
-			return true, tea.Batch(cmd, copyCmd)
-		}
-		if cmd != nil {
-			return true, cmd
-		}
-		return true, copyCmd
+		return true, combineCmds(cmd, copyCmd)
 	case "d":
 		deleted := a.editor.DeleteSelection()
 		cmd := a.setVimMode(VimModeNormal)
@@ -449,13 +449,7 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			deleted += "\n"
 		}
 		copyCmd := app.SetClipboard(deleted)
-		if cmd != nil && copyCmd != nil {
-			return true, tea.Batch(cmd, copyCmd)
-		}
-		if cmd != nil {
-			return true, cmd
-		}
-		return true, copyCmd
+		return true, combineCmds(cmd, copyCmd)
 	case "j":
 		a.editor.MoveDown()
 		a.editor.MoveLineStart()
@@ -491,92 +485,66 @@ func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		cmd := a.setVimMode(VimModeInsert)
 		return true, cmd
 	}
+	store := func(updated tea.Model, cmd tea.Cmd) tea.Cmd {
+		a.setMessagesModel(updated)
+		return cmd
+	}
 	switch key {
 	case "ctrl+d":
 		updated, cmd := a.messages.HalfPageDown()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "ctrl+u":
 		updated, cmd := a.messages.HalfPageUp()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "pgdown", "pagedown":
 		updated, cmd := a.messages.PageDown()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "pgup", "pageup":
 		updated, cmd := a.messages.PageUp()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "g":
 		updated, cmd := a.messages.GotoTop()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
-	case "G":
+		return true, store(updated, cmd)
+	case "G", "shift+g":
 		updated, cmd := a.messages.GotoBottom()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
-	case "shift+g":
-		updated, cmd := a.messages.GotoBottom()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "j", "down":
 		updated, cmd := a.messages.LineDown()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "k", "up":
 		updated, cmd := a.messages.LineUp()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "h", "left":
 		updated, cmd := a.messages.MoveLeft()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "l", "right":
 		updated, cmd := a.messages.MoveRight()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case " ", "space":
 		updated, cmd := a.messages.PageDown()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "shift+[":
 		updated, cmd := a.messages.PrevUserMessage()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	case "shift+]":
 		updated, cmd := a.messages.NextUserMessage()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
-	}
-	if lower == "g" {
-		updated, cmd := a.messages.GotoTop()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
-	}
-	if msg.Text == "G" {
-		updated, cmd := a.messages.GotoBottom()
-		a.messages = updated.(chat.MessagesComponent)
-		return true, cmd
+		return true, store(updated, cmd)
 	}
 	if text := msg.Text; text != "" {
 		switch text {
 		case "{":
 			updated, cmd := a.messages.PrevUserMessage()
-			a.messages = updated.(chat.MessagesComponent)
-			return true, cmd
+			return true, store(updated, cmd)
 		case "}":
 			updated, cmd := a.messages.NextUserMessage()
-			a.messages = updated.(chat.MessagesComponent)
-			return true, cmd
+			return true, store(updated, cmd)
 		case "a":
 			cmd := a.setVimMode(VimModeInsert)
 			return true, cmd
 		}
 	}
 	updated, cmd := a.messages.Update(msg)
-	a.messages = updated.(chat.MessagesComponent)
-	return true, cmd
+	return true, store(updated, cmd)
 }
 
 func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
