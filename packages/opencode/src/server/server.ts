@@ -969,6 +969,114 @@ export namespace Server {
         },
       )
       .get(
+        "/lsp/diagnostics",
+        describeRoute({
+          description: "Get LSP diagnostics (errors and warnings) from all active clients",
+          operationId: "lsp.diagnostics",
+          responses: {
+            200: {
+              description: "Diagnostics",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), z.array(LSP.DiagnosticSchema)).meta({ ref: "Diagnostics" })),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const result = await LSP.diagnostics()
+          return c.json(result)
+        },
+      )
+      .post(
+        "/lsp/hover",
+        describeRoute({
+          description: "Get hover information at a specific position",
+          operationId: "lsp.hover",
+          responses: {
+            200: {
+              description: "Hover information",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.HoverSchema.meta({ ref: "Hover" })),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            file: z.string(),
+            line: z.number(),
+            character: z.number(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid("json")
+          const result = await LSP.hover(body)
+          return c.json(result)
+        },
+      )
+      .get(
+        "/lsp/document-symbol",
+        describeRoute({
+          description: "Get document symbols for a specific file",
+          operationId: "lsp.documentSymbol",
+          responses: {
+            200: {
+              description: "Document symbols",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.union([LSP.DocumentSymbol, LSP.Symbol])).meta({ ref: "DocumentSymbols" })),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            uri: z.string(),
+          }),
+        ),
+        async (c) => {
+          const uri = c.req.valid("query").uri
+          const result = await LSP.documentSymbol(uri)
+          return c.json(result)
+        },
+      )
+      .post(
+        "/lsp/touch-file",
+        describeRoute({
+          description: "Touch a file to trigger LSP diagnostics",
+          operationId: "lsp.touchFile",
+          responses: {
+            200: {
+              description: "File touched successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            file: z.string(),
+            waitForDiagnostics: z.boolean().optional(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid("json")
+          await LSP.touchFile(body.file, body.waitForDiagnostics)
+          return c.json(true)
+        },
+      )
+      .get(
         "/file",
         describeRoute({
           description: "List files and directories",

@@ -53,6 +53,50 @@ export namespace LSP {
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
+  export const DiagnosticSchema = z.object({
+    range: z.object({
+      start: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+      end: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+    }),
+    message: z.string(),
+    severity: z.number().optional(),
+    code: z.union([z.number(), z.string()]).optional(),
+    source: z.string().optional(),
+  })
+
+  export const HoverSchema = z.union([
+    z.object({
+      contents: z.union([
+        z.object({
+          kind: z.literal("markdown"),
+          value: z.string(),
+        }),
+        z.object({
+          kind: z.literal("plaintext"),
+          value: z.string(),
+        }),
+        z.string(),
+        z.array(
+          z.union([
+            z.string(),
+            z.object({
+              language: z.string(),
+              value: z.string(),
+            }),
+          ]),
+        ),
+      ]),
+      range: Range.optional(),
+    }),
+    z.null(),
+  ])
+
   const state = Instance.state(
     async () => {
       const clients: LSPClient.Info[] = []
