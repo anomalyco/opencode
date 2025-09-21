@@ -126,6 +126,7 @@ export namespace LSP {
         result.push(match)
         continue
       }
+      log.info("spawning lsp server", { serverID: server.id })
       const handle = await server.spawn(root).catch((err) => {
         s.broken.add(root + server.id)
         log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
