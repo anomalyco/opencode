@@ -1,0 +1,125 @@
+---
+title: Custom tools
+description: Create custom tools to extend opencode capabilities.
+---
+
+Custom tools are functions you create that the LLM can call during conversations. They work alongside opencode's built-in tools like `read`, `write`, and `bash`.
+
+---
+
+## Tool structure
+
+Tools are defined as `.ts/.js` files in the `.opencode/tool/` directory. They
+can also be defined globally in `~/.config/opencode/tool/`.
+
+The easiest way to create tools is using the `tool()` helper which provides type safety and validation. Use `tool.schema` (which is just [Zod](https://zod.dev)) to define argument types:
+
+```ts title=".opencode/tool/database.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+You can also import [Zod](https://zod.dev) directly and return a plain object:
+
+```ts
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+The filename becomes the tool name. This creates a `database` tool.
+
+---
+
+## Multiple tools per file
+
+You can export multiple tools from a single file. Each export becomes a separate tool with the name `<filename>_<exportname>`:
+
+```ts title=".opencode/tool/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+This creates two tools: `math_add` and `math_multiply`.
+
+---
+
+## Arguments
+
+Use `tool.schema` (which is just [Zod](https://zod.dev)) to define tool arguments with validation and descriptions:
+
+```ts title=".opencode/tool/calculator.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Perform mathematical calculations",
+  args: {
+    expression: tool.schema.string().describe("Mathematical expression to evaluate"),
+    precision: tool.schema.number().optional().describe("Decimal precision"),
+  },
+  async execute(args) {
+    // Your calculation logic here
+    return `Result: ${eval(args.expression).toFixed(args.precision || 2)}`
+  },
+})
+```
+
+---
+
+## Context
+
+Tools receive context about the current session:
+
+```ts title=".opencode/tool/project.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}`
+  },
+})
+```

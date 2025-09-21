@@ -57,9 +57,26 @@ tested and verified to work well with opencode. [Learn more](/docs/zen).
 If you are new, we recommend starting with opencode zen.
 :::
 
-1. You sign in to **<a href={console}>opencode zen</a>** and get your API key.
-2. You run `opencode auth login` and select opencode and add your API key.
-3. Run `/models` in the TUI to see the list of models we recommend.
+1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+2. Sign in, add your billing details, and copy your API key.
+3. Paste your API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  opencode
+   │
+   ●  Create an api key at https://opencode.ai/auth
+   │
+   ◆  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run `/models` in the TUI to see the list of models we recommend.
 
 It works like any other provider in opencode. And is completely optional to use
 it.
@@ -724,6 +741,19 @@ monitor and improve Grok Code.
    │
    ◆  Select provider
    │  ● Z.AI
+   │  ...
+   └
+   ```
+
+   If you are subscribed to the **GLM Coding Plan**, select **Z.AI Coding Plan**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Z.AI Coding Plan
    │  ...
    └
    ```

@@ -4,7 +4,7 @@ new sst.cloudflare.StaticSite("Desktop", {
   domain: "desktop." + domain,
   path: "packages/app",
   build: {
-    command: "bun run build",
+    command: "bun turbo build",
     output: "./dist",
   },
 })

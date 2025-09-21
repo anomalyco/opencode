@@ -1,7 +1,6 @@
 import { Global } from "../../global"
 import { Provider } from "../../provider/provider"
 import { Server } from "../../server/server"
-import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import path from "path"
@@ -10,13 +9,13 @@ import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
-import { FileWatcher } from "../../file/watch"
+import { FileWatcher } from "../../file/watcher"
 import { Ide } from "../../ide"
 
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
-import { Instance } from "../../project/instance"
 import { $ } from "bun"
+import { bootstrap } from "../bootstrap"
 
 declare global {
   const OPENCODE_TUI_PATH: string
@@ -101,7 +100,6 @@ export const TuiCommand = cmd({
           }
           return undefined
         })()
-        FileWatcher.init()
         const providers = await Provider.list()
         if (Object.keys(providers).length === 0) {
           return "needs_provider"
@@ -152,7 +150,6 @@ export const TuiCommand = cmd({
             ...process.env,
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
-            OPENCODE_PROJECT: JSON.stringify(Instance.project),
           },
           onExit: () => {
             server.stop()
@@ -181,6 +178,7 @@ export const TuiCommand = cmd({
             .then(() => Bus.publish(Ide.Event.Installed, { ide }))
             .catch(() => {})
         })()
+        FileWatcher.init()
 
         await proc.exited
         server.stop()

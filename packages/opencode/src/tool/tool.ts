@@ -9,8 +9,8 @@ export namespace Tool {
     messageID: string
     triggerMessageID?: string
     agent: string
-    callID?: string
     abort: AbortSignal
+    callID?: string
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
   }

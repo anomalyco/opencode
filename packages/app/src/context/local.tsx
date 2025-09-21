@@ -24,22 +24,26 @@ function init() {
   const sdk = useSDK()
   const sync = useSync()
 
-  const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+  const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
   const agent = (() => {
     const [store, setStore] = createStore<{
       current: string
     }>({
-      current: agents()[0].name,
+      current: list()[0].name,
     })
     return {
+      list,
       current() {
-        return agents().find((x) => x.name === store.current)!
+        return list().find((x) => x.name === store.current)!
+      },
+      set(name: string | undefined) {
+        setStore("current", name ?? list()[0].name)
       },
       move(direction: 1 | -1) {
-        let next = agents().findIndex((x) => x.name === store.current) + direction
-        if (next < 0) next = agents().length - 1
-        if (next >= agents().length) next = 0
-        const value = agents()[next]
+        let next = list().findIndex((x) => x.name === store.current) + direction
+        if (next < 0) next = list().length - 1
+        if (next >= list().length) next = 0
+        const value = list()[next]
         setStore("current", value.name)
         if (value.model)
           model.set({
@@ -89,7 +93,12 @@ function init() {
       return store.model[agent.current().name] ?? (a.model ? a.model : fallback())
     })
 
+    const list = createMemo(() =>
+      sync.data.provider.flatMap((x) => Object.values(x.models).map((m) => ({ providerID: x.id, modelID: m.id }))),
+    )
+
     return {
+      list,
       current,
       recent() {
         return store.recent
@@ -103,10 +112,10 @@ function init() {
           model: model.name ?? value.modelID,
         }
       }),
-      set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+      set(model: { providerID: string; modelID: string } | undefined, options?: { recent?: boolean }) {
         batch(() => {
-          setStore("model", agent.current().name, model)
-          if (options?.recent) {
+          setStore("model", agent.current().name, model ?? fallback())
+          if (options?.recent && model) {
             const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
             if (uniq.length > 5) uniq.pop()
             setStore("recent", uniq)

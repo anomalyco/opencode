@@ -90,8 +90,9 @@ type Config struct {
 	// TUI specific settings
 	Tui ConfigTui `json:"tui"`
 	// Custom username to display in conversations instead of system username
-	Username string     `json:"username"`
-	JSON     configJSON `json:"-"`
+	Username string        `json:"username"`
+	Watcher  ConfigWatcher `json:"watcher"`
+	JSON     configJSON    `json:"-"`
 }
 
 // configJSON contains the JSON metadata for the struct [Config]
@@ -121,6 +122,7 @@ type configJSON struct {
 	Tools             apijson.Field
 	Tui               apijson.Field
 	Username          apijson.Field
+	Watcher           apijson.Field
 	raw               string
 	ExtraFields       map[string]apijson.Field
 }
@@ -1769,6 +1771,26 @@ func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
 }
 
 func (r configTuiJSON) RawJSON() string {
+	return r.raw
+}
+
+type ConfigWatcher struct {
+	Ignore []string          `json:"ignore"`
+	JSON   configWatcherJSON `json:"-"`
+}
+
+// configWatcherJSON contains the JSON metadata for the struct [ConfigWatcher]
+type configWatcherJSON struct {
+	Ignore      apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *ConfigWatcher) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r configWatcherJSON) RawJSON() string {
 	return r.raw
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "0.3.126",
+  "version": "0.11.1",
   "description": "",
   "type": "module",
   "scripts": {
@@ -29,7 +29,8 @@
     "@solidjs/router": "0.15.3",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "8.0.2",
-    "luxon": "3.7.1",
+    "fuzzysort": "catalog:",
+    "luxon": "catalog:",
     "marked": "16.2.0",
     "marked-shiki": "1.2.1",
     "remeda": "catalog:",

@@ -35,18 +35,19 @@ class ColorResolver {
 
     try {
       if (typeof value === "string") {
-        if (value.startsWith("#") || value === "none") {
-          return { dark: value, light: value }
+        if (value === "none") return { dark: value, light: value }
+        if (value.startsWith("#")) {
+          return { dark: value.toUpperCase(), light: value.toUpperCase() }
         }
         const resolved = this.resolveReference(value)
         return { dark: resolved, light: resolved }
       }
       if (typeof value === "object" && value !== null) {
         const dark = this.resolveColorValue(value.dark || value.light || "#000000")
-        const light = this.resolveColorValue(value.light || value.dark || "#ffffff")
+        const light = this.resolveColorValue(value.light || value.dark || "#FFFFFF")
         return { dark, light }
       }
-      return { dark: "#000000", light: "#ffffff" }
+      return { dark: "#000000", light: "#FFFFFF" }
     } finally {
       this.visited.delete(key)
     }
@@ -54,8 +55,9 @@ class ColorResolver {
 
   private resolveColorValue(value: any): string {
     if (typeof value === "string") {
-      if (value.startsWith("#") || value === "none") {
-        return value
+      if (value === "none") return value
+      if (value.startsWith("#")) {
+        return value.toUpperCase()
       }
       return this.resolveReference(value)
     }
@@ -68,8 +70,9 @@ class ColorResolver {
       throw new Error(`Color reference '${ref}' not found`)
     }
     if (typeof colorValue === "string") {
-      if (colorValue.startsWith("#") || colorValue === "none") {
-        return colorValue
+      if (colorValue === "none") return colorValue
+      if (colorValue.startsWith("#")) {
+        return colorValue.toUpperCase()
       }
       return this.resolveReference(colorValue)
     }

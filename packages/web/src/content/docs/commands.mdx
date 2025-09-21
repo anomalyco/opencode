@@ -227,6 +227,8 @@ This is shown as the description in the TUI when you type in the command.
 ### Agent
 
 Use the `agent` config to optionally specify which [agent](/docs/agents) should execute this command.
+If this is a [subagent](/docs/agents/#subagents) the command will trigger a subagent invocation by default.
+To disable this behavior, set `subtask` to `false`.
 
 ```json title="opencode.json"
 {
@@ -238,7 +240,26 @@ Use the `agent` config to optionally specify which [agent](/docs/agents) should 
 }
 ```
 
-This is an **optional** config option. If not specified, defaults to "build".
+This is an **optional** config option. If not specified, defaults to your current agent.
+
+---
+
+### Subtask
+
+Use the `subtask` boolean to force the command to trigger a [subagent](/docs/agents/#subagents) invocation.
+This useful if you want the command to not pollute your primary context.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+This is an **optional** config option.
 
 ---
 

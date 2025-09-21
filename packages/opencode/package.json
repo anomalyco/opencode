@@ -1,11 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.9.0",
+  "version": "0.11.1",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "build": "./script/build.ts",
     "dev": "bun run --conditions=development ./src/index.ts"
   },
   "bin": {
@@ -37,6 +38,7 @@
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
+    "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
     "gray-matter": "4.0.3",

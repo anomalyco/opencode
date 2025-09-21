@@ -269,7 +269,7 @@ export namespace SessionPrompt {
         maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
         abortSignal: abort.signal,
         providerOptions: {
-          [model.providerID]: params.options,
+          [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
         },
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
@@ -282,9 +282,19 @@ export namespace SessionPrompt {
             }),
           ),
           ...MessageV2.toModelMessage(
-            msgs.filter(
-              (m) => !(m.info.role === "assistant" && m.info.error && !MessageV2.AbortedError.isInstance(m.info.error)),
-            ),
+            msgs.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
           ),
         ],
         tools: model.info.tool_call === false ? undefined : tools,
@@ -322,7 +332,7 @@ export namespace SessionPrompt {
         item.callback(result)
       }
       state().queued.delete(input.sessionID)
-      // Session.prune(input)
+      SessionCompaction.prune(input)
       return result
     }
   }
@@ -337,12 +347,37 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
@@ -720,6 +755,15 @@ export namespace SessionPrompt {
         ]
       }),
     ).then((x) => x.flat())
+
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: info,
+        parts,
+      },
+    )
 
     await Session.updateMessage(info)
     for (const part of parts) {
@@ -1406,7 +1450,7 @@ export namespace SessionPrompt {
     })()
 
     const agent = await Agent.get(agentName)
-    if (agent.mode === "subagent" || command.subtask) {
+    if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
       using abort = lock(input.sessionID)
 
       const userMsg: MessageV2.User = {
@@ -1545,7 +1589,7 @@ export namespace SessionPrompt {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
     }
-    if (small.providerID === "openai") {
+    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
       options["reasoningEffort"] = "minimal"
     }
     if (small.providerID === "google") {
