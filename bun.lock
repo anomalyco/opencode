@@ -152,6 +152,7 @@
         "gray-matter": "4.0.3",
         "hono": "catalog:",
         "hono-openapi": "1.0.7",
+        "bun-pty": "https://github.com/CefBoud/bun-pty#feat-use-env",
         "ignore": "7.0.5",
         "jsonc-parser": "3.3.1",
         "minimatch": "10.0.3",
@@ -252,7 +253,7 @@
     "@types/node": "22.13.9",
     "ai": "5.0.8",
     "fuzzysort": "3.1.0",
-    "hono": "4.7.10",
+    "hono": "4.9.8",
     "luxon": "3.6.1",
     "remeda": "2.26.0",
     "solid-js": "1.9.9",
@@ -1310,6 +1311,8 @@
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
 
+    "bun-pty": ["bun-pty@github:CefBoud/bun-pty#77fa7ff", {}, "CefBoud-bun-pty-77fa7ff"],
+
     "bun-types": ["bun-types@1.2.21", "", { "dependencies": { "@types/node": "*" }, "peerDependencies": { "@types/react": "^19" } }, "sha512-sa2Tj77Ijc/NTLS0/Odjq/qngmEPZfbfnOERi0KRUYhT9R8M4VBioWVmMWE5GrYbKMc+5lVybXygLdibHaqVqw=="],
 
     "bundle-name": ["bundle-name@4.1.0", "", { "dependencies": { "run-applescript": "^7.0.0" } }, "sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q=="],
@@ -1768,7 +1771,7 @@
 
     "he": ["he@1.2.0", "", { "bin": { "he": "bin/he" } }, "sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw=="],
 
-    "hono": ["hono@4.7.10", "", {}, "sha512-QkACju9MiN59CKSY5JsGZCYmPZkA6sIW6OFCUp7qDjZu6S6KHtJHhAc9Uy9mV9F8PJ1/HQ3ybZF2yjCa/73fvQ=="],
+    "hono": ["hono@4.9.8", "", {}, "sha512-JW8Bb4RFWD9iOKxg5PbUarBYGM99IcxFl2FPBo2gSJO11jjUDqlP1Bmfyqt8Z/dGhIQ63PMA9LdcLefXyIasyg=="],
 
     "hono-openapi": ["hono-openapi@1.0.7", "", { "peerDependencies": { "@hono/standard-validator": "^0.1.2", "@standard-community/standard-json": "^0.3.1", "@standard-community/standard-openapi": "^0.2.4", "@types/json-schema": "^7.0.15", "hono": "^4.8.3", "openapi-types": "^12.1.3" }, "optionalPeers": ["@hono/standard-validator", "hono"] }, "sha512-rMn+nn4/HMisyi549L3zT7WCmVvmpiKsyt790GcGfqvJf9mJfhq6txw09l0IhSBxpJpA0pXVKxFijcsnGfshUA=="],
 

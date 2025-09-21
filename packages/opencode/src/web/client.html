@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Opencode</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <style>html,body,#terminal{height:100%;margin:0}</style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+    <script>
+      const term = new Terminal();
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById("terminal"));
+      fitAddon.fit(); // Fit to initial size
+    
+      // binary websocket so we can send/receive raw bytes
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+      socket.binaryType = "arraybuffer";
+
+      socket.addEventListener("open", () => {
+        console.log("ws open");
+        // trigger resize
+        window.dispatchEvent(new Event('resize'))
+
+      });
+
+      socket.addEventListener("message", (ev) => {
+        // ev.data is an ArrayBuffer or string
+        if (typeof ev.data === "string") {
+          term.write(ev.data);
+        } else {
+          const arr = new Uint8Array(ev.data);
+          // decode as bytes and write to xterm
+          const decoder = new TextDecoder();
+          term.write(decoder.decode(arr));
+        }
+      });
+
+      // send key presses to server
+      term.onData((data) => {
+        socket.send(data);
+      });
+
+      // resize -- tell backend if you support resizing (you need to implement)
+      window.addEventListener("resize", () => {
+        fitAddon.fit();
+        const cols = term.cols;
+        const rows = term.rows;
+        const msg = JSON.stringify({ type: "resize", cols, rows });
+        socket.send(msg);
+      });
+      
+    </script>
+  </body>
+</html>

@@ -3,6 +3,8 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
+import { upgradeWebSocket, websocket } from "hono/bun"
+import { spawn, type IPty } from "bun-pty"
 import { streamSSE } from "hono/streaming"
 import { Session } from "../session"
 import z from "zod/v4"
@@ -30,6 +32,8 @@ import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { TuiCmdArgs } from "../web"
+import ClientHTML from "../web/client.html" with { type: "text" }
 
 const ERRORS = {
   400: {
@@ -1176,6 +1180,91 @@ export namespace Server {
         }),
         async (c) => c.json(await callTui(c)),
       )
+      // HTML client endpoint - serves a web-based interface for interacting with opencode
+      // Provides session management, messaging, and permission handling through a browser
+      .get(
+        "/client",
+        describeRoute({
+          description:
+            "Serve the HTML client interface that spawns a PTY with TUI and displays it in the browser using xterm, streaming changes via WebSocket",
+          operationId: "client.serve",
+          responses: {
+            200: {
+              description: "HTML client interface",
+              content: {
+                "text/html": {
+                  schema: resolver(z.string()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          // const content = await Bun.file(new URL("../web/client.html", import.meta.url)).text()
+          return c.html(ClientHTML.toString())
+        },
+      )
+      .get(
+        "/ws",
+        describeRoute({
+          description:
+            "WebSocket endpoint for terminal streaming - spawns a PTY with TUI command and streams output to browser client using xterm",
+          operationId: "ws.terminal",
+          responses: {
+            101: {
+              description: "WebSocket connection established for terminal streaming",
+            },
+          },
+        }),
+        upgradeWebSocket((_c) => {
+          let terminal: IPty
+          return {
+            async onOpen(_event, ws) {
+              log.info("ws open")
+              const cmd = TuiCmdArgs.cmd as string[]
+              terminal = spawn(cmd[0], cmd.slice(1), {
+                name: "xterm-256color",
+                cwd: TuiCmdArgs.cwd,
+                env: (TuiCmdArgs.env as Record<string, string>) || {},
+              })
+              // PTY -> WebSocket
+              terminal.onData((data) => {
+                ws.send(data)
+              })
+              // Handle terminal exit
+              terminal.onExit(({ exitCode, signal }) => {
+                log.info(`Terminal process exited with code ${exitCode}, signal ${signal}`)
+                ws.close()
+              })
+            },
+            onClose: () => {
+              log.info("WS Connection closed")
+              terminal.kill()
+            },
+            onError: (error) => {
+              log.error("upgrade error", { error })
+            },
+            onMessage: (event) => {
+              try {
+                const msg = JSON.parse(event.data as string)
+                if (msg.type === "resize") {
+                  terminal.resize(msg.cols, msg.rows)
+                  return
+                }
+              } catch (error) {
+                // log.error("WS failed to parse JSON data", { error })
+              }
+
+              if (typeof event.data === "string") {
+                terminal.write(event.data)
+              } else {
+                // handle binary if needed
+                terminal.write(new TextDecoder().decode(event.data as AllowSharedBufferSource))
+              }
+            },
+          }
+        }),
+      )
       .post(
         "/tui/open-themes",
         describeRoute({
@@ -1396,6 +1485,7 @@ export namespace Server {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
+      websocket,
     })
     return server
   }

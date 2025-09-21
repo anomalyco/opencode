@@ -11,6 +11,7 @@ import { Bus } from "../../bus"
 import { Log } from "../../util/log"
 import { FileWatcher } from "../../file/watcher"
 import { Ide } from "../../ide"
+import { SetTuiCmdArgs, TuiCmdArgs } from "../../web"
 
 import { Flag } from "../../flag/flag"
 import { Session } from "../../session"
@@ -134,7 +135,8 @@ export const TuiCommand = cmd({
         Log.Default.info("tui", {
           cmd,
         })
-        const proc = Bun.spawn({
+
+        SetTuiCmdArgs({
           cmd: [
             ...cmd,
             ...(args.model ? ["--model", args.model] : []),
@@ -151,6 +153,9 @@ export const TuiCommand = cmd({
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
           },
+        })
+        const proc = Bun.spawn({
+          ...TuiCmdArgs,
           onExit: () => {
             server.stop()
           },

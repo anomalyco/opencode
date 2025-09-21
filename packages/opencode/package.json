@@ -38,6 +38,7 @@
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
+    "bun-pty": "https://github.com/CefBoud/bun-pty#feat-use-env",
     "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
