@@ -251,6 +251,7 @@ const sessions = await client.session.list()
 const result = await client.session.prompt({
   path: { id: session.id },
   body: {
+    agent: "my-custom-agent",
     model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
     parts: [{ type: "text", text: "Hello!" }],
   },
