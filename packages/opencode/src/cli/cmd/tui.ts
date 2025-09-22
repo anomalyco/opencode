@@ -148,6 +148,7 @@ export const TuiCommand = cmd({
           stdin: "inherit",
           env: {
             ...process.env,
+            TERM: "dumb",
             CGO_ENABLED: "0",
             OPENCODE_SERVER: server.url.toString(),
           },
