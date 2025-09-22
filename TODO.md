@@ -95,45 +95,45 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
 ### Phase 4: Feature Implementation
 
 #### 4.1 Core Client Implementation
-- [ ] Create `OpenCodeClient` wrapper class with:
-  - Default base URL configuration (`http://localhost:4096`)
-  - Authentication support (if needed)
-  - Custom headers support
-  - Timeout configuration
-  - Retry logic
+- [X] Create `OpenCodeClient` wrapper class with:
+  - [X] Default base URL configuration (`http://localhost:4096`)
+  - [X] Authentication support
+  - [X] Custom headers support
+  - [X] Timeout configuration
+  - [X] Retry logic
 
 #### 4.2 Implement Key SDK Features
 Based on existing SDKs, implement:
 - [ ] **Session Management**
-  - `session.list()`
-  - `session.get(id)`
-  - `session.create()`
-  - `session.delete(id)`
-  - `session.prompt(id, message)`
-  - `session.share(id)`
+  - [X] `session.list()`
+  - [ ] `session.get(id)`
+  - [ ] `session.create()`
+  - [ ] `session.delete(id)`
+  - [ ] `session.prompt(id, message)`
+  - [ ] `session.share(id)`
   
-- [ ] **Agent Operations**
-  - `agent.list()`
+- [X] **Agent Operations**
+  - [X] `agent.list()`
   
 - [ ] **File Operations**
-  - `file.list()`
-  - `file.read(path)`
-  - `file.status()`
+  - [ ] `file.list()`
+  - [ ] `file.read(path)`
+  - [X] `file.status()`
   
-- [ ] **Project Management**
-  - `project.list()`
-  - `project.current()`
+- [X] **Project Management**
+  - [X] `project.list()`
+  - [X] `project.current()`
   
-- [ ] **Configuration**
-  - `config.get()`
+- [X] **Configuration**
+  - [X] `config.get()`
   
-- [ ] **Event Streaming** (SSE)
-  - `event.subscribe()` with proper async/streaming support
+- [X] **Event Streaming** (SSE)
+  - [X] `event.subscribe()` with proper async/streaming support
 
 #### 4.3 Special Handling for Streaming
-- [ ] Implement SSE client for `/event` endpoint
-- [ ] Use `httpx` with SSE support or `sseclient-py`
-- [ ] Provide both sync and async interfaces
+- [X] Implement SSE client for `/event` endpoint
+- [X] Use `httpx` streaming APIs
+- [X] Provide both sync and async interfaces
 
 ### Phase 5: Testing and Documentation
 

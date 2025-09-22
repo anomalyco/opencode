@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 from typing import AsyncIterator, Dict, Iterator, Optional
+import time
 
 import httpx
 
-from opencode_ai.api.default import config_get, session_list
-from opencode_ai.client import Client
-from opencode_ai.types import UNSET, Unset
+from .client import Client
+from .api.default import (
+    app_agents,
+    command_list,
+    config_get,
+    config_providers,
+    file_status,
+    path_get,
+    project_current,
+    project_list,
+    session_list,
+    tool_ids,
+)
+from .types import UNSET, Unset
 
 
 class OpenCodeClient:
     """High-level convenience wrapper around the generated Client.
 
-    Provides sensible defaults and a couple of helper methods.
+    Provides sensible defaults and a couple of helper methods, with optional retries.
     """
 
     def __init__(
@@ -22,26 +34,81 @@ class OpenCodeClient:
         headers: Optional[Dict[str, str]] = None,
         timeout: Optional[float] = None,
         verify_ssl: bool | str | httpx.URLTypes | None = True,
+        token: Optional[str] = None,
+        auth_header_name: str = "Authorization",
+        auth_prefix: str = "Bearer",
+        retries: int = 0,
+        backoff_factor: float = 0.5,
+        status_forcelist: tuple[int, ...] = (429, 500, 502, 503, 504),
     ) -> None:
         httpx_timeout = None if timeout is None else httpx.Timeout(timeout)
+        all_headers = dict(headers or {})
+        if token:
+            all_headers[auth_header_name] = f"{auth_prefix} {token}".strip()
         self._client = Client(
             base_url=base_url,
-            headers=headers or {},
+            headers=all_headers,
             timeout=httpx_timeout,
             verify_ssl=verify_ssl if isinstance(verify_ssl, bool) else True,
         )
+        self._retries = max(0, int(retries))
+        self._backoff = float(backoff_factor)
+        self._status_forcelist = set(status_forcelist)
 
     @property
     def client(self) -> Client:
         return self._client
 
+    # ---- Internal retry helper ----
+
+    def _call_with_retries(self, fn, *args, **kwargs):
+        attempt = 0
+        while True:
+            try:
+                return fn(*args, **kwargs)
+            except httpx.RequestError:
+                pass
+            except httpx.HTTPStatusError as e:
+                if e.response is None or e.response.status_code not in self._status_forcelist:
+                    raise
+            if attempt >= self._retries:
+                # re-raise last exception if we have one
+                raise
+            sleep = self._backoff * (2 ** attempt)
+            time.sleep(sleep)
+            attempt += 1
+
     # ---- Convenience wrappers over generated endpoints ----
 
     def list_sessions(self, *, directory: str | Unset = UNSET):
-        return session_list.sync(client=self._client, directory=directory)
+        return self._call_with_retries(session_list.sync, client=self._client, directory=directory)
 
     def get_config(self, *, directory: str | Unset = UNSET):
-        return config_get.sync(client=self._client, directory=directory)
+        return self._call_with_retries(config_get.sync, client=self._client, directory=directory)
+
+    def list_agents(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(app_agents.sync, client=self._client, directory=directory)
+
+    def list_projects(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(project_list.sync, client=self._client, directory=directory)
+
+    def current_project(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(project_current.sync, client=self._client, directory=directory)
+
+    def file_status(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(file_status.sync, client=self._client, directory=directory)
+
+    def get_path(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(path_get.sync, client=self._client, directory=directory)
+
+    def config_providers(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(config_providers.sync, client=self._client, directory=directory)
+
+    def tool_ids(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(tool_ids.sync, client=self._client, directory=directory)
+
+    def list_commands(self, *, directory: str | Unset = UNSET):
+        return self._call_with_retries(command_list.sync, client=self._client, directory=directory)
 
     # ---- Server-Sent Events (SSE) streaming ----
 
