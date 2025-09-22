@@ -33,6 +33,10 @@ const (
 	maxLines = 10000
 )
 
+func init() {
+	rw.DefaultCondition.EastAsianWidth = false
+}
+
 // Helper functions for converting between runes and any slices
 
 // runesToInterfaces converts a slice of runes to a slice of interfaces
