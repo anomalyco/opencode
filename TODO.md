@@ -74,15 +74,8 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
 ### Phase 3: SDK Generation and Customization
 
 #### 3.1 Configure openapi-python-client
-- [ ] Create configuration for generation:
-  ```bash
-  openapi-python-client generate \
-    --path openapi.json \
-    --output-path src/ \
-    --overwrite \
-    --meta poetry  # or pdm, setup
-  ```
-- [ ] Set package name override to match `opencode_ai`
+- [X] Create configuration for generation (openapi-python-client.yaml with overrides)
+- [X] Set package name override to match `opencode_ai`
 
 #### 3.2 Custom Templates (if needed)
 - [ ] Create `templates/` directory for custom Jinja2 templates
@@ -93,11 +86,11 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
   - Streaming support for SSE endpoints
 
 #### 3.3 Post-Generation Processing
-- [ ] Create post-processing script to:
-  - Add custom client wrapper for better DX
-  - Implement streaming support for `/event` endpoint
-  - Add helper methods similar to Go/JS SDKs
-  - Format code with `black` and `isort`
+- [X] Create post-processing script to:
+  - [X] Add custom client wrapper for better DX
+  - [X] Implement streaming support for `/event` endpoint
+  - [X] Add helper methods similar to Go/JS SDKs (list_sessions, get_config)
+  - [X] Format code with `black` and `ruff` import fixes
 
 ### Phase 4: Feature Implementation
 

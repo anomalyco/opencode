@@ -38,7 +38,10 @@ This will:
 
 Usage (after generation)
 ```python
-from opencode_ai import Client  # naming may differ depending on generator output
+from opencode_ai import OpenCodeClient
+
+client = OpenCodeClient(base_url="http://localhost:4096")
+print(client.get_config())
 
 # See examples/basic_usage.py for more details
 ```
