@@ -722,7 +722,7 @@ export namespace LSPServer {
         .quiet()
         .nothrow()
         .then(({ stderr }) => {
-          const m = /"(\d+)\.\d+\.\d+"/.exec(stderr + "")
+          const m = /"(\d+)\.\d+\.\d+"/.exec(stderr.toString())
           return !m ? undefined : parseInt(m[1])
         })
       if (javaMajorVersion == null || javaMajorVersion < 21) {
@@ -747,7 +747,7 @@ export namespace LSPServer {
         .cwd(launcherDir)
         .quiet()
         .nothrow()
-        .then(({ stdout }) => (stdout + "").trim())
+        .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
       if (!(await fs.exists(launcherJar))) {
         log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
