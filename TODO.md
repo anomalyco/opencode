@@ -15,8 +15,8 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
 ### Phase 1: Setup and Infrastructure
 
 #### 1.1 Create Python SDK Package Structure
-- [ ] Create directory: `packages/sdk/python/`
-- [ ] Set up standard Python project structure:
+- [X] Create directory: `packages/sdk/python/`
+- [X] Set up standard Python project structure:
   ```
   packages/sdk/python/
   ├── .gitignore
@@ -36,14 +36,14 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
   ```
 
 #### 1.2 Install Development Dependencies
-- [ ] Install `openapi-python-client` globally or in dev environment:
+- [X] Install `openapi-python-client` globally or in dev environment:
   ```bash
   pipx install openapi-python-client --include-deps
   ```
-- [ ] Document installation in development setup guide
+- [X] Document installation in development setup guide
 
 #### 1.3 Configure Python Package Metadata
-- [ ] Create `pyproject.toml` with:
+- [X] Create `pyproject.toml` with:
   - Package name: `opencode-ai`
   - Module name: `opencode_ai`
   - Version synchronized with main project
@@ -54,20 +54,20 @@ This document outlines the plan to implement a Python SDK for the Opencode proje
 ### Phase 2: OpenAPI Specification Generation
 
 #### 2.1 Understand Current OpenAPI Generation
-- [ ] The server exposes OpenAPI spec at `/doc` endpoint
-- [ ] Generate command: `bun dev generate` outputs OpenAPI JSON
-- [ ] Server uses Hono's `generateSpecs` function for OpenAPI 3.1.1
+- [X] The server exposes OpenAPI spec at `/doc` endpoint
+- [X] Generate command: `bun dev generate` outputs OpenAPI JSON
+- [X] Server uses Hono's `generateSpecs` function for OpenAPI 3.1.1
 
 #### 2.2 Create Generation Script
-- [ ] Create `scripts/generate.py` that:
-  1. Starts the opencode server locally (or assumes it's running)
-  2. Fetches OpenAPI spec from `http://localhost:4096/doc` or generates via CLI
-  3. Saves to `openapi.json`
-  4. Runs `openapi-python-client` with appropriate configuration
-  5. Post-processes generated code if needed
+- [X] Create `scripts/generate.py` that:
+  - [X] Starts the opencode server locally (or assumes it's running)
+  - [X] Fetches OpenAPI spec from `http://localhost:4096/doc` or generates via CLI
+  - [X] Saves to `openapi.json`
+  - [X] Runs `openapi-python-client` with appropriate configuration
+  - [X] Post-processes generated code if needed
 
 #### 2.3 Handle OpenAPI Spec Compatibility
-- [ ] Verify OpenAPI 3.1.1 compatibility with `openapi-python-client`
+- [X] Verify OpenAPI 3.1.1 compatibility with `openapi-python-client`
 - [ ] Create transformation script if any adjustments needed
 - [ ] Document any spec modifications required
 
