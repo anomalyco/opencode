@@ -13,12 +13,13 @@ Requires:
 """
 from __future__ import annotations
 
+import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.request import urlopen
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -38,39 +39,83 @@ def find_repo_root(start: Path) -> Path:
     return start.parents[4]
 
 
+def write_json(path: Path, content: str) -> None:
+    # Validate JSON before writing
+    json.loads(content)
+    path.write_text(content)
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate the Opencode Python SDK from OpenAPI spec.")
+    parser.add_argument("--source", choices=["cli", "server"], default="cli", help="Where to fetch the OpenAPI spec from")
+    parser.add_argument(
+        "--server-url",
+        default="http://localhost:4096/doc",
+        help="OpenAPI document URL when --source=server",
+    )
+    parser.add_argument(
+        "--out-spec",
+        default=None,
+        help="Output path for the OpenAPI spec (defaults to packages/sdk/python/openapi.json)",
+    )
+    parser.add_argument(
+        "--only-spec",
+        action="store_true",
+        help="Only fetch and write the OpenAPI spec without generating the client",
+    )
+    args = parser.parse_args()
+
     script_dir = Path(__file__).resolve().parent
     sdk_dir = script_dir.parent
     repo_root = find_repo_root(script_dir)
     opencode_dir = repo_root / "packages" / "opencode"
 
-    openapi_json = sdk_dir / "openapi.json"
+    openapi_json = Path(args.out_spec) if args.out_spec else (sdk_dir / "openapi.json")
     build_dir = sdk_dir / ".build"
     out_pkg_dir = sdk_dir / "src" / "opencode_ai"
 
     build_dir.mkdir(parents=True, exist_ok=True)
     (sdk_dir / "src").mkdir(parents=True, exist_ok=True)
 
-    # 1) Generate OpenAPI spec using the CLI
-    print("Generating OpenAPI spec via 'bun dev generate' ...")
-    try:
-        proc = run(["bun", "dev", "generate"], cwd=opencode_dir)
-    except subprocess.CalledProcessError as e:
-        print(e.stdout)
-        print(e.stderr, file=sys.stderr)
-        print("ERROR: Failed to run 'bun dev generate'. Ensure Bun is installed and available in PATH.", file=sys.stderr)
-        return 1
+    # 1) Obtain OpenAPI spec
+    if args.source == "server":
+        print(f"Fetching OpenAPI spec from {args.server_url} ...")
+        try:
+            with urlopen(args.server_url) as resp:
+                if resp.status != 200:
+                    print(f"ERROR: GET {args.server_url} -> HTTP {resp.status}", file=sys.stderr)
+                    return 1
+                text = resp.read().decode("utf-8")
+        except Exception as e:
+            print(f"ERROR: Failed to fetch from server: {e}", file=sys.stderr)
+            return 1
+        try:
+            write_json(openapi_json, text)
+        except json.JSONDecodeError as je:
+            print("ERROR: Response from server was not valid JSON:", file=sys.stderr)
+            print(str(je), file=sys.stderr)
+            return 1
+        print(f"Wrote OpenAPI spec to {openapi_json}")
+    else:
+        print("Generating OpenAPI spec via 'bun dev generate' ...")
+        try:
+            proc = run(["bun", "dev", "generate"], cwd=opencode_dir)
+        except subprocess.CalledProcessError as e:
+            print(e.stdout)
+            print(e.stderr, file=sys.stderr)
+            print("ERROR: Failed to run 'bun dev generate'. Ensure Bun is installed and available in PATH.", file=sys.stderr)
+            return 1
+        try:
+            write_json(openapi_json, proc.stdout)
+        except json.JSONDecodeError as je:
+            print("ERROR: Output from 'bun dev generate' was not valid JSON:", file=sys.stderr)
+            print(str(je), file=sys.stderr)
+            return 1
+        print(f"Wrote OpenAPI spec to {openapi_json}")
 
-    try:
-        # Validate JSON before writing
-        json.loads(proc.stdout)
-    except json.JSONDecodeError as je:
-        print("ERROR: Output from 'bun dev generate' was not valid JSON:", file=sys.stderr)
-        print(str(je), file=sys.stderr)
-        return 1
-
-    openapi_json.write_text(proc.stdout)
-    print(f"Wrote OpenAPI spec to {openapi_json}")
+    if args.only_spec:
+        print("Spec written; skipping client generation (--only-spec).")
+        return 0
 
     # 2) Run openapi-python-client
     print("Running openapi-python-client generate ...")
@@ -98,13 +143,10 @@ def main() -> int:
         return 1
 
     # 3) Locate generated module directory and copy to src/opencode_ai
-    # The generator outputs a project directory containing the module
-    # Find a subdir containing an __init__.py and (ideally) a client module
     generated_module: Path | None = None
     for candidate in build_dir.rglob("__init__.py"):
         if candidate.parent.name.startswith("."):
             continue
-        # Heuristic: look for a typical client module next to __init__.py
         siblings = {p.name for p in candidate.parent.glob("*.py")}
         if "client.py" in siblings or "api_client.py" in siblings:
             generated_module = candidate.parent

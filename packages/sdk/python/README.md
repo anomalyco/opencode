@@ -20,13 +20,19 @@ Set up the environment (from this directory)
 uv sync --dev
 ```
 
-Generate client code
+Generate client code (from CLI-generated spec)
 ```bash
 # From repository root OR from this directory
-uv run python packages/sdk/python/scripts/generate.py
+uv run python packages/sdk/python/scripts/generate.py --source cli
 ```
+
+Alternatively, fetch spec from a running server
+```bash
+uv run python packages/sdk/python/scripts/generate.py --source server --server-url http://localhost:4096/doc
+```
+
 This will:
-1) Produce an OpenAPI spec from the local server/CLI
+1) Produce an OpenAPI spec from the local CLI or a running server
 2) Run openapi-python-client (via `uvx`) to generate client code
 3) Copy the generated Python package into src/opencode_ai
 
