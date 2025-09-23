@@ -44,6 +44,23 @@ client = OpenCodeClient(base_url="http://localhost:4096")
 print(client.get_config())
 
 # See examples/basic_usage.py for more details
+
+# Streaming events (sync)
+for event in client.subscribe_events():
+    print(event)
+    break
+
+# Async usage example
+# uv run --project packages/sdk/python python - <<'PY'
+# import asyncio
+# from opencode_ai import OpenCodeClient
+# async def main():
+#     client = OpenCodeClient()
+#     async for event in client.subscribe_events_async():
+#         print(event)
+#         break
+# asyncio.run(main())
+# PY
 ```
 
 Notes

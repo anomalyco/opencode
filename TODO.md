@@ -138,26 +138,25 @@ Based on existing SDKs, implement:
 ### Phase 5: Testing and Documentation
 
 #### 5.1 Create Test Suite
-- [ ] Unit tests for generated client
+- [X] Unit tests for wrapper and generated client wiring (imports, method availability)
 - [ ] Integration tests against local server
-- [ ] Mock tests for CI/CD
-- [ ] Test streaming functionality
-- [ ] Test error handling
+- [X] Mock tests for CI/CD (httpx.MockTransport)
+- [X] Test streaming functionality (SSE parsing with MockTransport)
+- [X] Test error handling (retry on request error)
 
 #### 5.2 Create Examples
-- [ ] Basic usage example
+- [X] Basic usage example
 - [ ] Session management example
-- [ ] Streaming events example
+- [X] Streaming events example
 - [ ] File operations example
-- [ ] Async usage example
+- [X] Async usage example (documented snippet)
 
 #### 5.3 Documentation
-- [ ] Create comprehensive README.md with:
-  - Installation instructions
-  - Quick start guide
-  - API reference
-  - Examples
-  - Error handling guide
+- [X] Create README.md updates with:
+  - [X] Installation instructions
+  - [X] Quick start guide
+  - [X] Examples (sync streaming and async snippet)
+  - [ ] Error handling guide
 - [ ] Generate API documentation using `sphinx` or `mkdocs`
 - [ ] Add inline docstrings to all public methods
 
