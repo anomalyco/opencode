@@ -64,11 +64,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "agent to use",
       })
-      .option("output-format", {
+      .option("format", {
         type: "string",
         choices: ["default", "json"],
         default: "default",
-        describe: "output format: default (formatted) or json (raw JSON events)",
+        describe: "format: default (formatted) or json (raw JSON events)",
       })
   },
   handler: async (args) => {
@@ -151,7 +151,7 @@ export const RunCommand = cmd({
       }
 
       function outputJsonEvent(type: string, data: any) {
-        if (args.outputFormat === "json") {
+        if (args.format === "json") {
           const jsonEvent = {
             type,
             timestamp: Date.now(),
