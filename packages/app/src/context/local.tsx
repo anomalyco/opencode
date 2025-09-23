@@ -1,7 +1,7 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createContext, createEffect, createMemo, useContext, type ParentProps } from "solid-js"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode } from "@opencode-ai/sdk"
+import type { FileContent, FileNode, Model, Provider } from "@opencode-ai/sdk"
 import { useSDK, useEvent, useSync } from "@/context"
 
 export type LocalFile = FileNode &
@@ -19,12 +19,17 @@ export type LocalFile = FileNode &
 export type TextSelection = LocalFile["selection"]
 export type View = LocalFile["view"]
 
+export type LocalModel = Omit<Model, "provider"> & {
+  provider: Provider
+}
+export type ModelKey = { providerID: string; modelID: string }
+
 function init() {
   const sdk = useSDK()
   const sync = useSync()
 
-  const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
   const agent = (() => {
+    const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
     const [store, setStore] = createStore<{
       current: string
     }>({
@@ -54,18 +59,14 @@ function init() {
   })()
 
   const model = (() => {
+    const list = createMemo(() =>
+      sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+    )
+    const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
+
     const [store, setStore] = createStore<{
-      model: Record<
-        string,
-        {
-          providerID: string
-          modelID: string
-        }
-      >
-      recent: {
-        providerID: string
-        modelID: string
-      }[]
+      model: Record<string, ModelKey>
+      recent: ModelKey[]
     }>({
       model: {},
       recent: [],
@@ -81,37 +82,21 @@ function init() {
       if (store.recent.length) return store.recent[0]
       const provider = sync.data.provider[0]
       const model = Object.values(provider.models)[0]
-      return {
-        providerID: provider.id,
-        modelID: model.id,
-      }
+      return { modelID: model.id, providerID: provider.id }
     })
 
     const current = createMemo(() => {
       const a = agent.current()
-      return store.model[agent.current().name] ?? (a.model ? a.model : fallback())
+      return find(store.model[agent.current().name]) ?? find(a.model ?? fallback())
     })
 
-    const list = createMemo(() =>
-      sync.data.provider.flatMap((x) => Object.values(x.models).map((m) => ({ providerID: x.id, modelID: m.id }))),
-    )
+    const recent = createMemo(() => store.recent.map(find).filter(Boolean))
 
     return {
       list,
       current,
-      recent() {
-        return store.recent
-      },
-      parsed: createMemo(() => {
-        const value = current()
-        const provider = sync.data.provider.find((x) => x.id === value.providerID)!
-        const model = provider.models[value.modelID]
-        return {
-          provider: provider.name ?? value.providerID,
-          model: model.name ?? value.modelID,
-        }
-      }),
-      set(model: { providerID: string; modelID: string } | undefined, options?: { recent?: boolean }) {
+      recent,
+      set(model: ModelKey | undefined, options?: { recent?: boolean }) {
         batch(() => {
           setStore("model", agent.current().name, model ?? fallback())
           if (options?.recent && model) {
@@ -234,6 +219,7 @@ function init() {
           break
         case "file.watcher.updated":
           load(event.properties.file)
+          sync.load.changes()
           break
       }
     })

@@ -1,281 +1,116 @@
-import { createSignal, createEffect, Show, For, createMemo, createResource, onCleanup } from "solid-js"
+import { createEffect, Show, For, createMemo, type JSX } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
-import { FileIcon, Icon, IconButton } from "@/ui"
-import { useLocal, useSDK, useSync } from "@/context"
-import type { FileNode } from "@opencode-ai/sdk"
+import { Icon, IconButton } from "@/ui"
+import { createStore } from "solid-js/store"
+import { entries, flatMap, groupBy, map, pipe } from "remeda"
+import fuzzysort from "fuzzysort"
 
-interface CommandPaletteProps {
+interface CommandPaletteProps<T> {
   open: boolean
   onOpenChange: (open: boolean) => void
+
+  items: T[]
+  key: (item: T) => string
+  render: (itemProps: { item: T }) => JSX.Element
+
+  current?: T
+  placeholder?: string
+  filter?:
+    | false
+    | {
+        placeholder?: string
+        keys: string[]
+      }
+  groupBy?: (x: T) => string
+  onFilter?: (query: string) => void
+  onSelect?: (value: T | undefined) => void
 }
 
-type CommandMode = "files" | "commands" | "models"
-
-interface Command {
-  id: string
-  name: string
-  description?: string
-  icon?: string
-  action: () => void
-}
-
-type FileItem = FileNode & { kind: "file" }
-interface CommandItem extends Command {
-  kind: "command"
-}
-interface ModelItem {
-  kind: "model"
-  id: string
-  providerID: string
-  modelID: string
-  name: string
-  provider: string
-  isRecent: boolean
-  searchText: string
-  action: () => void
-}
-
-type Item = FileItem | CommandItem | ModelItem
-
-function deriveMode(value: string, current: CommandMode): CommandMode {
-  if (value.startsWith(">")) return "commands"
-  if (current === "commands") return "files"
-  return current
-}
-
-export default function CommandPalette(props: CommandPaletteProps) {
-  const local = useLocal()
-  const sdk = useSDK()
-  const sync = useSync()
-
-  const [search, setSearch] = createSignal("")
-  const [debouncedSearch, setDebouncedSearch] = createSignal("")
-  const [selectedIndex, setSelectedIndex] = createSignal(0)
-  const [mode, setMode] = createSignal<CommandMode>("files")
-
+export default function CommandPalette<T>(props: CommandPaletteProps<T>) {
   let inputRef: HTMLInputElement | undefined
   let scrollRef: HTMLDivElement | undefined
-  let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-  onCleanup(() => {
-    if (searchTimer) clearTimeout(searchTimer)
+  // const local = useLocal()
+  // const sdk = useSDK()
+  // const sync = useSync()
+  const [store, setStore] = createStore({
+    filter: "",
+    selected: 0,
   })
 
-  const scrollToSelected = (index: number) => {
-    requestAnimationFrame(() => {
-      if (!scrollRef) return
-      const nodes = scrollRef.querySelectorAll("[data-cmd-item]")
-      const el = nodes[index] as HTMLElement | undefined
-      if (!el) return
-      el.scrollIntoView({ block: "nearest", behavior: "instant" })
-    })
-  }
-
-  const commands = createMemo<CommandItem[]>(() => [
-    {
-      id: "select-model",
-      name: "Select Model",
-      description: "Change the current AI model",
-      icon: "cpu",
-      action: () => {
-        setMode("models")
-        setSearch("")
-        setDebouncedSearch("")
-        setSelectedIndex(0)
-      },
-      kind: "command",
-    },
-  ])
-
-  const models = createMemo<ModelItem[]>(() => {
-    const providers = sync.data?.provider ?? []
-
-    const recentModels = local.model
-      .recent()
-      .slice(0, 4)
-      .map((recentModel) => {
-        const provider = providers.find((p) => p.id === recentModel.providerID)
-        const model = provider?.models?.[recentModel.modelID]
-        return {
-          kind: "model" as const,
-          id: `${recentModel.providerID}:${recentModel.modelID}`,
-          providerID: recentModel.providerID,
-          modelID: recentModel.modelID,
-          name: model?.name || recentModel.modelID,
-          provider: provider?.name || recentModel.providerID,
-          isRecent: true,
-          searchText: (
-            (model?.name || recentModel.modelID) +
-            " " +
-            (provider?.name || recentModel.providerID)
-          ).toLowerCase(),
-          action: () => {
-            local.model.set({ providerID: recentModel.providerID, modelID: recentModel.modelID }, { recent: true })
-            props.onOpenChange(false)
-            setSearch("")
-            setDebouncedSearch("")
-            setMode("files")
-          },
-        }
-      })
-
-    const allModels = providers.flatMap((provider) =>
-      Object.entries(provider.models ?? {}).map(([modelId, model]) => ({
-        kind: "model" as const,
-        id: `${provider.id}:${modelId}`,
-        providerID: provider.id,
-        modelID: modelId,
-        name: model.name || modelId,
-        provider: provider.name || provider.id,
-        isRecent: false,
-        searchText: ((model.name || modelId) + " " + (provider.name || provider.id)).toLowerCase(),
-        action: () => {
-          local.model.set({ providerID: provider.id, modelID: modelId }, { recent: true })
-          props.onOpenChange(false)
-          setSearch("")
-          setDebouncedSearch("")
-          setMode("files")
-        },
-      })),
+  const grouped = createMemo(() => {
+    const needle = store.filter.toLowerCase()
+    const result = pipe(
+      props.items,
+      (x) =>
+        !needle || !props.filter
+          ? x
+          : fuzzysort.go(needle, x, { keys: props.filter && props.filter.keys }).map((x) => x.obj),
+      groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
+      // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
+      entries(),
+      map(([k, v]) => ({ category: k, items: v })),
     )
-
-    const recentIds = new Set(recentModels.map((m) => m.id))
-    const otherModels = allModels.filter((m) => !recentIds.has(m.id))
-
-    return [...recentModels, ...otherModels]
+    return result
   })
-
-  const modelSplitIndex = createMemo(() => {
-    const list = models()
-    return list.findIndex((m) => !m.isRecent)
-  })
-
-  const [fileResults] = createResource(
-    () => {
-      if (mode() !== "files") return null
-      const q = debouncedSearch().trim()
-      if (q.length < 2) return ""
-      return q
-    },
-    async (query) => {
-      if (!query) return [] as FileItem[]
-
-      const res = await sdk.find.files({ query: { query } })
-      const paths: string[] = res.data ?? []
-      const files: FileItem[] = paths.map((path) => {
-        const name = path.split("/").pop() || path
-        const base: FileNode = { name, path, absolute: path, type: "file" as const, ignored: false }
-        const node = local.file.node(base.path) ?? base
-        return { ...(node as FileNode), kind: "file" }
-      })
-
-      return files
-    },
-    { initialValue: [] as FileItem[] },
-  )
-
-  const filteredCommands = createMemo<CommandItem[]>(() => {
-    const q = debouncedSearch().trim().toLowerCase()
-    if (!q) return commands()
-    return commands().filter((cmd) => cmd.name.toLowerCase().includes(q) || cmd.description?.toLowerCase().includes(q))
-  })
-
-  const filteredModels = createMemo<ModelItem[]>(() => {
-    const q = debouncedSearch().trim().toLowerCase()
-    if (!q) return models()
-    return models().filter((m) => m.searchText.includes(q))
-  })
-
-  const displayItems = createMemo<Item[]>(() => {
-    if (mode() === "files") return fileResults() ?? []
-    if (mode() === "commands") return filteredCommands()
-    return filteredModels()
+  const flat = createMemo(() => {
+    return pipe(
+      grouped(),
+      flatMap(({ items }) => items),
+    )
   })
 
   createEffect(() => {
-    if (props.open && inputRef) {
-      setTimeout(() => {
-        inputRef?.focus()
-        setSearch("")
-        setDebouncedSearch("")
-        setSelectedIndex(0)
-      }, 0)
-    } else if (!props.open) {
-      if (searchTimer) {
-        clearTimeout(searchTimer)
-        searchTimer = undefined
-      }
-    }
+    store.filter
+    scrollRef?.scrollTo(0, 0)
+    setStore("selected", 0)
   })
 
-  const handleSearchInput = (value: string) => {
-    setSearch(value)
-    const next = deriveMode(value, mode())
-    if (next !== mode()) setMode(next)
-    setSelectedIndex(0)
+  createEffect(() => {
+    const element = scrollRef?.querySelector(`[data-item-key="${props.key(flat()[store.selected])}"]`)
+    element?.scrollIntoView({ block: "center", behavior: "smooth" })
+  })
 
-    if (searchTimer) clearTimeout(searchTimer)
-
-    const q = value.startsWith(">") ? value.slice(1) : value
-    searchTimer = setTimeout(() => setDebouncedSearch(q), 150)
+  const handleInput = (value: string) => {
+    setStore("filter", value)
+    setStore("selected", 0)
   }
 
-  const handleSelect = (item: Item) => {
-    if (item.kind === "file") {
-      local.file.open(item.path)
-      props.onOpenChange(false)
-      setSearch("")
-      setDebouncedSearch("")
-      setMode("files")
-      return
-    }
-    item.action?.()
-  }
-
-  const updateIndex = (i: number) => {
-    const len = displayItems().length
-    if (len <= 0) {
-      setSelectedIndex(0)
-      return
-    }
-    const clamped = Math.min(Math.max(i, 0), len - 1)
-    setSelectedIndex(clamped)
-    scrollToSelected(clamped)
+  const handleSelect = (item: T) => {
+    props.onSelect?.(item)
   }
 
   const handleKey = (e: KeyboardEvent) => {
-    const items = displayItems()
-
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowUp") {
       e.preventDefault()
-      updateIndex(selectedIndex() + 1)
+      setStore("selected", Math.max(0, store.selected - 1))
       return
     }
 
-    if (e.key === "ArrowUp") {
+    if (e.key === "ArrowDown") {
       e.preventDefault()
-      updateIndex(selectedIndex() - 1)
+      setStore("selected", Math.min(flat().length - 1, store.selected + 1))
       return
     }
 
     if (e.key === "Enter") {
       e.preventDefault()
-      const selected = items[selectedIndex()]
+      const selected = props.items[store.selected]
       if (selected) handleSelect(selected)
       return
     }
 
     if (e.key === "Escape") {
       e.preventDefault()
-      if (mode() !== "files") {
-        setMode("files")
-        setSearch("")
-        setDebouncedSearch("")
-      } else {
-        props.onOpenChange(false)
-        setSearch("")
-        setDebouncedSearch("")
-      }
+      // if (mode() !== "files") {
+      //   setMode("files")
+      //   setSearch("")
+      //   setDebouncedSearch("")
+      // } else {
+      //   props.onOpenChange(false)
+      //   setSearch("")
+      //   setDebouncedSearch("")
+      // }
       return
     }
   }
@@ -286,45 +121,38 @@ export default function CommandPalette(props: CommandPaletteProps) {
         <Dialog.Overlay class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]" />
         <Dialog.Content
           class="fixed top-[20%] left-1/2 -translate-x-1/2 w-[90vw] max-w-2xl 
-                 bg-background border border-border-subtle rounded-lg shadow-2xl z-[101]
+                 shadow-[0_0_33px_rgba(0,0,0,0.8)]
+                 bg-background border border-border-subtle rounded-lg  z-[101]
                  max-h-[60vh] flex flex-col"
         >
-          <div class="p-4 border-b border-border-subtle">
+          <div class="border-b border-border-subtle">
             <div class="relative">
               <Icon name="command" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 ref={(el) => (inputRef = el)}
                 type="text"
-                value={search()}
-                onInput={(e) => handleSearchInput(e.currentTarget.value)}
+                value={store.filter}
+                onInput={(e) => handleInput(e.currentTarget.value)}
                 onKeyDown={handleKey}
-                placeholder={
-                  mode() === "commands"
-                    ? "Search commands..."
-                    : mode() === "models"
-                      ? "Search models..."
-                      : "Type > for commands or search files..."
-                }
-                class="w-full pl-10 pr-4 py-2 bg-background-element border border-border-subtle 
-                       rounded-md text-sm text-text placeholder-text-muted/70
-                       focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                placeholder={props.placeholder}
+                class="w-full pl-10 pr-4 py-2 rounded-t-md
+                       text-sm text-text placeholder-text-muted/70
+                       focus:outline-none"
               />
               <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <Show when={fileResults.loading && mode() === "files"}>
+                {/* <Show when={fileResults.loading && mode() === "files"}>
                   <div class="text-text-muted">
                     <Icon name="refresh" size={14} class="animate-spin" />
                   </div>
-                </Show>
-                <Show when={search() && !fileResults.loading}>
+                </Show> */}
+                <Show when={store.filter}>
                   <IconButton
                     size="xs"
                     variant="ghost"
                     class="text-text-muted hover:text-text"
                     onClick={() => {
-                      setSearch("")
-                      setDebouncedSearch("")
-                      setSelectedIndex(0)
-                      if (mode() === "commands") setMode("files")
+                      setStore("filter", "")
+                      setStore("selected", 0)
                     }}
                   >
                     <Icon name="close" size={14} />
@@ -333,98 +161,42 @@ export default function CommandPalette(props: CommandPaletteProps) {
               </div>
             </div>
           </div>
-
           <div ref={(el) => (scrollRef = el)} class="flex-1 overflow-y-auto p-2">
             <Show
-              when={displayItems().length > 0}
-              fallback={
-                <div class="text-center py-8 text-text-muted text-sm">
-                  {mode() === "commands" && search().length === 0
-                    ? "Available commands"
-                    : mode() === "models" && search().length === 0
-                      ? "Available models"
-                      : fileResults.loading && mode() === "files"
-                        ? "Searching..."
-                        : mode() === "files" && search().length < 2
-                          ? "Type > for commands or at least 2 characters to search files"
-                          : "No results found"}
-                </div>
-              }
+              when={flat().length > 0}
+              fallback={<div class="text-center py-8 text-text-muted text-sm">No results</div>}
             >
-              <For each={displayItems()}>
-                {(item, index) => (
+              <For each={grouped()}>
+                {(group, groupIndex) => (
                   <>
-                    <Show
-                      when={
-                        mode() === "models" &&
-                        (!search() || search().trim().length === 0) &&
-                        (item as ModelItem).kind === "model" &&
-                        (item as ModelItem).isRecent === true &&
-                        index() === 0
-                      }
-                    >
-                      <div class="px-2 py-1 text-xs font-medium text-text-muted uppercase tracking-wide">Recent</div>
-                    </Show>
-                    <Show
-                      when={
-                        mode() === "models" &&
-                        (!search() || search().trim().length === 0) &&
-                        index() === modelSplitIndex()
-                      }
-                    >
-                      <div class="border-t border-border-subtle my-2"></div>
-                      <div class="px-2 py-1 text-xs font-medium text-text-muted uppercase tracking-wide">All</div>
-                    </Show>
-                    <button
-                      data-cmd-item
-                      onClick={() => handleSelect(item as Item)}
-                      onMouseEnter={() => setSelectedIndex(index())}
-                      class="w-full px-3 py-2 flex items-center gap-3 rounded-md text-left
-                              transition-colors group"
-                      classList={{
-                        "bg-background-element": selectedIndex() === index(),
-                        "hover:bg-background-element": true,
-                      }}
-                    >
-                      <Show
-                        when={(item as Item).kind === "file"}
-                        fallback={
+                    <span>{group.category}</span>
+                    <For each={group.items}>
+                      {(item, index) => (
+                        <button
+                          data-item-key={props.key(item)}
+                          onClick={() => handleSelect(item)}
+                          classList={{
+                            "w-full px-3 py-2 flex items-center gap-3": true,
+                            "rounded-md text-left transition-colors group": true,
+                            "bg-background-element": store.selected === index() + groupIndex(),
+                            "hover:bg-background-element": true,
+                            "first:before:content-['']": true,
+                          }}
+                        >
+                          {props.render({ item })}
                           <Icon
-                            name={(item as Item).kind === "command" ? "command" : "cpu"}
-                            size={16}
-                            class="shrink-0 text-text-muted"
+                            name="arrow-right"
+                            size={14}
+                            class="shrink-0 opacity-0 group-hover:opacity-100 text-text-muted"
                           />
-                        }
-                      >
-                        <FileIcon node={item as FileNode} class="shrink-0" />
-                      </Show>
-                      <div class="flex-1 min-w-0">
-                        <div class="text-sm text-text truncate">
-                          {(item as Item).kind === "file"
-                            ? (item as FileItem).name
-                            : (item as CommandItem | ModelItem).name}
-                        </div>
-                        <div class="text-xs text-text-muted truncate">
-                          {(item as Item).kind === "file"
-                            ? (item as FileItem).path
-                            : (item as Item).kind === "command"
-                              ? (item as CommandItem).description
-                              : (item as ModelItem).provider}
-                        </div>
-                      </div>
-
-                      <Icon
-                        name="arrow-right"
-                        size={14}
-                        class="shrink-0 opacity-0 group-hover:opacity-100 text-text-muted"
-                      />
-                    </button>
+                        </button>
+                      )}
+                    </For>
                   </>
                 )}
               </For>
             </Show>
           </div>
-
           <div class="p-3 border-t border-border-subtle flex items-center justify-between text-xs text-text-muted">
             <div class="flex items-center gap-4">
               <span class="flex items-center gap-1">
@@ -444,9 +216,7 @@ export default function CommandPalette(props: CommandPaletteProps) {
                 Close
               </span>
             </div>
-            <span>
-              {fileResults.loading && mode() === "files" ? "Searching..." : `${displayItems().length} results`}
-            </span>
+            <span>{`${flat().length} results`}</span>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

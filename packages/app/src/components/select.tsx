@@ -178,7 +178,7 @@ export function Select<T>(props: SelectProps<T>) {
           <KobalteSelect.Listbox
             ref={(el) => (listboxRef = el)}
             classList={{
-              "overflow-y-auto max-h-48 no-scrollbar": true,
+              "overflow-y-auto max-h-48": true,
             }}
           />
         </KobalteSelect.Content>

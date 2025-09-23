@@ -94,20 +94,24 @@ function init() {
   })
 
   const sdk = useSDK()
-  Promise.all([
-    sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
-    sdk.path.get().then((x) => setStore("path", x.data!)),
-    sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-    sdk.session.list().then((x) =>
-      setStore(
-        "session",
-        (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+
+  const load = {
+    provider: () => sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
+    path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
+    agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+    session: () =>
+      sdk.session.list().then((x) =>
+        setStore(
+          "session",
+          (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+        ),
       ),
-    ),
-    sdk.config.get().then((x) => setStore("config", x.data!)),
-    sdk.file.status().then((x) => setStore("changes", x.data!)),
-    sdk.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
-  ]).then(() => setStore("ready", true))
+    config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+    changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
+    node: () => sdk.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
+  }
+
+  Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
 
   return {
     data: store,
@@ -138,6 +142,7 @@ function init() {
         )
       },
     },
+    load,
   }
 }
 

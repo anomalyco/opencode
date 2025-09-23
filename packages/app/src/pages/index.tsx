@@ -16,7 +16,7 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
-import type { LocalFile } from "@/context/local"
+import type { LocalFile, LocalModel } from "@/context/local"
 import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
 import { createStore } from "solid-js/store"
@@ -46,6 +46,11 @@ export default function Page() {
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.getModifierState(MOD) && e.shiftKey && e.key.toLowerCase() === "p") {
+      e.preventDefault()
+      setStore("commandPaletteOpen", true)
+      return
+    }
+    if (e.getModifierState(MOD) && e.key.toLowerCase() === "p") {
       e.preventDefault()
       setStore("commandPaletteOpen", true)
       return
@@ -198,7 +203,7 @@ export default function Page() {
       path: { id: session!.id },
       body: {
         agent: local.agent.current()!.name,
-        model: local.model.current(),
+        model: { modelID: local.model.current()!.id, providerID: local.model.current()!.provider.id },
         parts: [
           {
             type: "text",
@@ -273,7 +278,7 @@ export default function Page() {
           class="fixed top-0 right-0 h-full border-l border-border-subtle/30 flex flex-col overflow-hidden"
           style={`width: ${local.layout.rightWidth()}px`}
         >
-          <div class="relative flex-1 min-h-0 overflow-y-auto no-scrollbar">
+          <div class="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             <Show when={local.session.active()} fallback={<SessionList />}>
               {(activeSession) => (
                 <div class="relative">
@@ -490,7 +495,7 @@ export default function Page() {
                   size="sm"
                   class="uppercase"
                 />
-                <Select
+                {/*<Select
                   options={local.model.list()}
                   current={local.model.current()}
                   onSelect={local.model.set}
@@ -503,8 +508,8 @@ export default function Page() {
                   groupBy={(x) => x.providerID}
                   size="sm"
                   class="uppercase"
-                />
-                <span class="text-text-muted/70">{local.model.parsed().provider}</span>
+                />*/}
+                <span class="text-text-muted/70">{local.model.current()?.provider.name}</span>
               </div>
               <div class="flex gap-1 items-center">
                 <IconButton class="text-text-muted" size="xs" variant="ghost">
@@ -518,7 +523,35 @@ export default function Page() {
           </div>
         </form>
       </div>
-      <CommandPalette open={store.commandPaletteOpen} onOpenChange={(open) => setStore("commandPaletteOpen", open)} />
+      <Show when={store.commandPaletteOpen}>
+        <CommandPalette<LocalModel>
+          items={local.model.list()}
+          key={(x) => `${x.provider.id}:${x.id}`}
+          current={local.model.current()}
+          render={(itemProps) => (
+            <div class="flex items-center gap-x-1.5">
+              <img src={`https://models.dev/logos/${itemProps.item.provider.id}.svg`} class="w-6 h-6" />
+              <span
+                classList={{
+                  "text-xs": true,
+                  "text-primary":
+                    local.model.current()?.provider.id === itemProps.item.provider.id &&
+                    local.model.current()?.id === itemProps.item.id,
+                }}
+              >
+                {itemProps.item.name}
+              </span>
+            </div>
+          )}
+          filter={{
+            keys: ["provider.id", "provider.name", "id", "name"],
+            placeholder: "Filter models",
+          }}
+          groupBy={(x) => x.provider.name}
+          open={store.commandPaletteOpen}
+          onOpenChange={(open) => setStore("commandPaletteOpen", open)}
+        />
+      </Show>
     </div>
   )
 }
