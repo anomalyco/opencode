@@ -88,42 +88,48 @@ export namespace Provider {
         },
         async getModel(sdk: any, modelID: string) {
           let regionPrefix = region.split("-")[0]
+          const arn = modelID.startsWith("arn:")
+          const profile = modelID.includes("inference-profile/")
+          const prefixed = ["us.", "eu.", "apac."].some((prefix) => modelID.startsWith(prefix))
+          const skip = arn || profile || prefixed
 
-          switch (regionPrefix) {
-            case "us": {
-              const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
-              const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
+          if (!skip) {
+            switch (regionPrefix) {
+              case "us": {
+                const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
+                const isGovCloud = region.startsWith("us-gov")
+                if (modelRequiresPrefix && !isGovCloud) {
+                  modelID = `${regionPrefix}.${modelID}`
+                }
+                break
               }
-              break
-            }
-            case "eu": {
-              const regionRequiresPrefix = [
-                "eu-west-1",
-                "eu-west-3",
-                "eu-north-1",
-                "eu-central-1",
-                "eu-south-1",
-                "eu-south-2",
-              ].some((r) => region.includes(r))
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
-                modelID.includes(m),
-              )
-              if (regionRequiresPrefix && modelRequiresPrefix) {
-                modelID = `${regionPrefix}.${modelID}`
+              case "eu": {
+                const regionRequiresPrefix = [
+                  "eu-west-1",
+                  "eu-west-3",
+                  "eu-north-1",
+                  "eu-central-1",
+                  "eu-south-1",
+                  "eu-south-2",
+                ].some((r) => region.includes(r))
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (regionRequiresPrefix && modelRequiresPrefix) {
+                  modelID = `${regionPrefix}.${modelID}`
+                }
+                break
               }
-              break
-            }
-            case "ap": {
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                modelID.includes(m),
-              )
-              if (modelRequiresPrefix) {
-                regionPrefix = "apac"
-                modelID = `${regionPrefix}.${modelID}`
+              case "ap": {
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "apac"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
+                break
               }
-              break
             }
           }
 
