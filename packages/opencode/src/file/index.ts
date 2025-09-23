@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { Bus } from "../bus"
 import { $ } from "bun"
 import { formatPatch, structuredPatch } from "diff"
@@ -18,7 +18,7 @@ export namespace File {
       removed: z.number().int(),
       status: z.enum(["added", "deleted", "modified"]),
     })
-    .openapi({
+    .meta({
       ref: "File",
     })
 
@@ -32,7 +32,7 @@ export namespace File {
       type: z.enum(["file", "directory"]),
       ignored: z.boolean(),
     })
-    .openapi({
+    .meta({
       ref: "FileNode",
     })
   export type Node = z.infer<typeof Node>
@@ -60,7 +60,7 @@ export namespace File {
         })
         .optional(),
     })
-    .openapi({
+    .meta({
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
@@ -105,7 +105,7 @@ export namespace File {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(Instance.worktree, filepath)).text()
+          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -140,7 +140,7 @@ export namespace File {
 
     return changedFiles.map((x) => ({
       ...x,
-      path: path.relative(Instance.directory, path.join(Instance.worktree, x.path)),
+      path: path.relative(Instance.directory, x.path),
     }))
   }
 
@@ -153,11 +153,13 @@ export namespace File {
       .catch(() => "")
       .then((x) => x.trim())
     if (project.vcs === "git") {
-      const diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (diff.trim()) {
         const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
         const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
+          ignoreWhitespace: true,
         })
         const diff = formatPatch(patch)
         return { content, patch, diff }

@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
 	"github.com/sst/opencode-sdk-go/internal/param"
 	"github.com/sst/opencode-sdk-go/internal/requestconfig"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode-sdk-go/shared"
+	"github.com/tidwall/gjson"
 )
 
 // SessionPermissionService contains methods and other services that help with
@@ -60,7 +63,7 @@ type Permission struct {
 	Title     string                 `json:"title,required"`
 	Type      string                 `json:"type,required"`
 	CallID    string                 `json:"callID"`
-	Pattern   string                 `json:"pattern"`
+	Pattern   PermissionPatternUnion `json:"pattern"`
 	JSON      permissionJSON         `json:"-"`
 }
 
@@ -106,6 +109,30 @@ func (r *PermissionTime) UnmarshalJSON(data []byte) (err error) {
 func (r permissionTimeJSON) RawJSON() string {
 	return r.raw
 }
+
+// Union satisfied by [shared.UnionString] or [PermissionPatternArray].
+type PermissionPatternUnion interface {
+	ImplementsPermissionPatternUnion()
+}
+
+func init() {
+	apijson.RegisterUnion(
+		reflect.TypeOf((*PermissionPatternUnion)(nil)).Elem(),
+		"",
+		apijson.UnionVariant{
+			TypeFilter: gjson.String,
+			Type:       reflect.TypeOf(shared.UnionString("")),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(PermissionPatternArray{}),
+		},
+	)
+}
+
+type PermissionPatternArray []string
+
+func (r PermissionPatternArray) ImplementsPermissionPatternUnion() {}
 
 type SessionPermissionRespondParams struct {
 	Response  param.Field[SessionPermissionRespondParamsResponse] `json:"response,required"`

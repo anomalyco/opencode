@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 
@@ -10,8 +10,9 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       template: z.string(),
+      subtask: z.boolean().optional(),
     })
-    .openapi({
+    .meta({
       ref: "Command",
     })
   export type Info = z.infer<typeof Info>
@@ -28,6 +29,7 @@ export namespace Command {
         model: command.model,
         description: command.description,
         template: command.template,
+        subtask: command.subtask,
       }
     }
 

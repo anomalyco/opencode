@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+:root {
+  interpolate-size: allow-keywords;
+}
+
+@layer components {
+  [data-popper-positioner] {
+    pointer-events: none;
+  }
+
+  body {
+    line-height: 1;
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-primary) 33%, transparent);
+    /* background-color: var(--color-primary); */
+    /* color: var(--color-background); */
+  }
+
+  .prose h1 {
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    margin-bottom: calc(var(--spacing) * 3);
+  }
+  .prose h2 {
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    margin-bottom: calc(var(--spacing) * 3);
+  }
+  .prose h3 {
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose h4 {
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose h5 {
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose h6 {
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose p {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose strong {
+    color: var(--color-text);
+  }
+  .prose ul,
+  ol {
+    list-style-type: disc;
+    list-style-position: inside;
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+  .prose pre {
+    background-color: var(--color-background-panel);
+    padding: calc(var(--spacing) * 2);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-subtle);
+    overflow-x: auto;
+    white-space: pre;
+    margin-bottom: calc(var(--spacing) * 2);
+    @apply no-scrollbar;
+  }
+  .prose code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+  .prose blockquote {
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  & {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+}
+
+@theme {
+  --color-*: initial;
+  --color-primary: var(--theme-primary);
+  --color-secondary: var(--theme-secondary);
+  --color-accent: var(--theme-accent);
+  --color-error: var(--theme-error);
+  --color-warning: var(--theme-warning);
+  --color-success: var(--theme-success);
+  --color-info: var(--theme-info);
+  --color-text: var(--theme-text);
+  --color-text-muted: var(--theme-text-muted);
+  --color-background: var(--theme-background);
+  --color-background-panel: var(--theme-background-panel);
+  --color-background-element: var(--theme-background-element);
+  --color-border: var(--theme-border);
+  --color-border-active: var(--theme-border-active);
+  --color-border-subtle: var(--theme-border-subtle);
+  --color-diff-added: var(--theme-diff-added);
+  --color-diff-removed: var(--theme-diff-removed);
+  --color-diff-context: var(--theme-diff-context);
+  --color-diff-hunk-header: var(--theme-diff-hunk-header);
+  --color-diff-highlight-added: var(--theme-diff-highlight-added);
+  --color-diff-highlight-removed: var(--theme-diff-highlight-removed);
+  --color-diff-added-bg: var(--theme-diff-added-bg);
+  --color-diff-removed-bg: var(--theme-diff-removed-bg);
+  --color-diff-context-bg: var(--theme-diff-context-bg);
+  --color-diff-line-number: var(--theme-diff-line-number);
+  --color-diff-added-line-number-bg: var(--theme-diff-added-line-number-bg);
+  --color-diff-removed-line-number-bg: var(--theme-diff-removed-line-number-bg);
+  --color-markdown-text: var(--theme-markdown-text);
+  --color-markdown-heading: var(--theme-markdown-heading);
+  --color-markdown-link: var(--theme-markdown-link);
+  --color-markdown-link-text: var(--theme-markdown-link-text);
+  --color-markdown-code: var(--theme-markdown-code);
+  --color-markdown-block-quote: var(--theme-markdown-block-quote);
+  --color-markdown-emph: var(--theme-markdown-emph);
+  --color-markdown-strong: var(--theme-markdown-strong);
+  --color-markdown-horizontal-rule: var(--theme-markdown-horizontal-rule);
+  --color-markdown-list-item: var(--theme-markdown-list-item);
+  --color-markdown-list-enumeration: var(--theme-markdown-list-enumeration);
+  --color-markdown-image: var(--theme-markdown-image);
+  --color-markdown-image-text: var(--theme-markdown-image-text);
+  --color-markdown-code-block: var(--theme-markdown-code-block);
+  --color-syntax-comment: var(--theme-syntax-comment);
+  --color-syntax-keyword: var(--theme-syntax-keyword);
+  --color-syntax-function: var(--theme-syntax-function);
+  --color-syntax-variable: var(--theme-syntax-variable);
+  --color-syntax-string: var(--theme-syntax-string);
+  --color-syntax-number: var(--theme-syntax-number);
+  --color-syntax-type: var(--theme-syntax-type);
+  --color-syntax-operator: var(--theme-syntax-operator);
+  --color-syntax-punctuation: var(--theme-syntax-punctuation);
+}

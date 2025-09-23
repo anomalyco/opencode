@@ -47,6 +47,7 @@ type Command struct {
 	Agent       string      `json:"agent"`
 	Description string      `json:"description"`
 	Model       string      `json:"model"`
+	Subtask     bool        `json:"subtask"`
 	JSON        commandJSON `json:"-"`
 }
 
@@ -57,6 +58,7 @@ type commandJSON struct {
 	Agent       apijson.Field
 	Description apijson.Field
 	Model       apijson.Field
+	Subtask     apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }

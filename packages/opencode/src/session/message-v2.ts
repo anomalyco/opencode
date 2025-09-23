@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
@@ -8,7 +8,7 @@ import { LSP } from "../lsp"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
-  export const AbortedError = NamedError.create("MessageAbortedError", z.object({}))
+  export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -21,7 +21,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("pending"),
     })
-    .openapi({
+    .meta({
       ref: "ToolStatePending",
     })
 
@@ -32,12 +32,12 @@ export namespace MessageV2 {
       status: z.literal("running"),
       input: z.any(),
       title: z.string().optional(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
         start: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "ToolStateRunning",
     })
   export type ToolStateRunning = z.infer<typeof ToolStateRunning>
@@ -45,17 +45,17 @@ export namespace MessageV2 {
   export const ToolStateCompleted = z
     .object({
       status: z.literal("completed"),
-      input: z.record(z.any()),
+      input: z.record(z.string(), z.any()),
       output: z.string(),
       title: z.string(),
-      metadata: z.record(z.any()),
+      metadata: z.record(z.string(), z.any()),
       time: z.object({
         start: z.number(),
         end: z.number(),
         compacted: z.number().optional(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "ToolStateCompleted",
     })
   export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
@@ -63,22 +63,22 @@ export namespace MessageV2 {
   export const ToolStateError = z
     .object({
       status: z.literal("error"),
-      input: z.record(z.any()),
+      input: z.record(z.string(), z.any()),
       error: z.string(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
         start: z.number(),
         end: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "ToolStateError",
     })
   export type ToolStateError = z.infer<typeof ToolStateError>
 
   export const ToolState = z
     .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-    .openapi({
+    .meta({
       ref: "ToolState",
     })
 
@@ -91,7 +91,7 @@ export namespace MessageV2 {
   export const SnapshotPart = PartBase.extend({
     type: z.literal("snapshot"),
     snapshot: z.string(),
-  }).openapi({
+  }).meta({
     ref: "SnapshotPart",
   })
   export type SnapshotPart = z.infer<typeof SnapshotPart>
@@ -100,7 +100,7 @@ export namespace MessageV2 {
     type: z.literal("patch"),
     hash: z.string(),
     files: z.string().array(),
-  }).openapi({
+  }).meta({
     ref: "PatchPart",
   })
   export type PatchPart = z.infer<typeof PatchPart>
@@ -115,7 +115,7 @@ export namespace MessageV2 {
         end: z.number().optional(),
       })
       .optional(),
-  }).openapi({
+  }).meta({
     ref: "TextPart",
   })
   export type TextPart = z.infer<typeof TextPart>
@@ -123,12 +123,12 @@ export namespace MessageV2 {
   export const ReasoningPart = PartBase.extend({
     type: z.literal("reasoning"),
     text: z.string(),
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
     time: z.object({
       start: z.number(),
       end: z.number().optional(),
     }),
-  }).openapi({
+  }).meta({
     ref: "ReasoningPart",
   })
   export type ReasoningPart = z.infer<typeof ReasoningPart>
@@ -138,7 +138,7 @@ export namespace MessageV2 {
     callID: z.string(),
     tool: z.string(),
     state: ToolState,
-  }).openapi({
+  }).meta({
     ref: "ToolPart",
   })
   export type ToolPart = z.infer<typeof ToolPart>
@@ -150,7 +150,7 @@ export namespace MessageV2 {
         start: z.number().int(),
         end: z.number().int(),
       })
-      .openapi({
+      .meta({
         ref: "FilePartSourceText",
       }),
   })
@@ -158,7 +158,7 @@ export namespace MessageV2 {
   export const FileSource = FilePartSourceBase.extend({
     type: z.literal("file"),
     path: z.string(),
-  }).openapi({
+  }).meta({
     ref: "FileSource",
   })
 
@@ -168,11 +168,11 @@ export namespace MessageV2 {
     range: LSP.Range,
     name: z.string(),
     kind: z.number().int(),
-  }).openapi({
+  }).meta({
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).openapi({
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
     ref: "FilePartSource",
   })
 
@@ -182,7 +182,7 @@ export namespace MessageV2 {
     filename: z.string().optional(),
     url: z.string(),
     source: FilePartSource.optional(),
-  }).openapi({
+  }).meta({
     ref: "FilePart",
   })
   export type FilePart = z.infer<typeof FilePart>
@@ -197,14 +197,14 @@ export namespace MessageV2 {
         end: z.number().int(),
       })
       .optional(),
-  }).openapi({
+  }).meta({
     ref: "AgentPart",
   })
   export type AgentPart = z.infer<typeof AgentPart>
 
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
-  }).openapi({
+  }).meta({
     ref: "StepStartPart",
   })
   export type StepStartPart = z.infer<typeof StepStartPart>
@@ -221,7 +221,7 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
-  }).openapi({
+  }).meta({
     ref: "StepFinishPart",
   })
   export type StepFinishPart = z.infer<typeof StepFinishPart>
@@ -236,7 +236,7 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
     }),
-  }).openapi({
+  }).meta({
     ref: "UserMessage",
   })
   export type User = z.infer<typeof User>
@@ -253,7 +253,7 @@ export namespace MessageV2 {
       PatchPart,
       AgentPart,
     ])
-    .openapi({
+    .meta({
       ref: "Part",
     })
   export type Part = z.infer<typeof Part>
@@ -291,12 +291,12 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
-  }).openapi({
+  }).meta({
     ref: "AssistantMessage",
   })
   export type Assistant = z.infer<typeof Assistant>
 
-  export const Info = z.discriminatedUnion("role", [User, Assistant]).openapi({
+  export const Info = z.discriminatedUnion("role", [User, Assistant]).meta({
     ref: "Message",
   })
   export type Info = z.infer<typeof Info>
@@ -330,6 +330,12 @@ export namespace MessageV2 {
       }),
     ),
   }
+
+  export const WithParts = z.object({
+    info: Info,
+    parts: z.array(Part),
+  })
+  export type WithParts = z.infer<typeof WithParts>
 
   export function fromV1(v1: Message.Info) {
     if (v1.role === "assistant") {
@@ -543,6 +549,15 @@ export namespace MessageV2 {
                   },
                 ]
             }
+            if (part.type === "reasoning") {
+              return [
+                {
+                  type: "reasoning",
+                  text: part.text,
+                  providerMetadata: part.metadata,
+                },
+              ]
+            }
 
             return []
           }),
@@ -551,5 +566,11 @@ export namespace MessageV2 {
     }
 
     return convertToModelMessages(result)
+  }
+
+  export function filterSummarized(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
+    const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
+    if (i === -1) return msgs.slice()
+    return msgs.slice(i)
   }
 }

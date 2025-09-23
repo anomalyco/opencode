@@ -13,6 +13,9 @@ type Error = apierror.Error
 type MessageAbortedError = shared.MessageAbortedError
 
 // This is an alias to an internal type.
+type MessageAbortedErrorData = shared.MessageAbortedErrorData
+
+// This is an alias to an internal type.
 type MessageAbortedErrorName = shared.MessageAbortedErrorName
 
 // This is an alias to an internal value.

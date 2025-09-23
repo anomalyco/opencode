@@ -3,7 +3,7 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import { z } from "zod"
+import z from "zod/v4"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
@@ -82,7 +82,6 @@ export const EditTool = Tool.define("edit", {
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
-          pattern: filePath,
           title: "Edit this file: " + filePath,
           metadata: {
             filePath,

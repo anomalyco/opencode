@@ -4,6 +4,8 @@ description: Get started with opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../config.mjs"
+export const console = config.console
 
 [**opencode**](/) is an AI coding agent built for the terminal.
 
@@ -18,7 +20,6 @@ Let's get started.
 To use opencode, you'll need:
 
 1. A modern terminal emulator like:
-
    - [WezTerm](https://wezterm.org), cross-platform
    - [Alacritty](https://alacritty.org), cross-platform
    - [Ghostty](https://ghostty.org), Linux and macOS
@@ -61,7 +62,34 @@ You can also install it with the following:
 
 #### Windows
 
-Right now the automatic installation methods do not work properly on Windows. However you can grab the binary from the [Releases](https://github.com/sst/opencode/releases).
+- **Using Chocolatey**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **Using WinGet**
+
+  ```bash
+  winget install opencode
+  ```
+
+- **Using Scoop**
+
+  ```bash
+  scoop bucket add extras
+  scoop install extras/opencode
+  ```
+
+- **Using NPM**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+Support for installing opencode on Windows using Bun is currently in progress.
+
+You can also grab the binary from the [Releases](https://github.com/sst/opencode/releases).
 
 ---
 
@@ -69,26 +97,28 @@ Right now the automatic installation methods do not work properly on Windows. Ho
 
 With opencode you can use any LLM provider by configuring their API keys.
 
-We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max), it's the most cost-effective way to use opencode.
+If you are new to using LLM providers, we recommend using [opencode zen](/docs/zen).
+It's a curated list of models that have been tested and verified by the opencode
+team.
 
-Once you've signed up, run `opencode auth login` and select Anthropic.
+1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+2. Sign in, add your billing details, and copy your API key.
+3. Paste your API key.
 
-```bash
-$ opencode auth login
+   ```bash
+   $ opencode auth login
 
-┌  Add credential
-│
-◆  Select provider
-│  ● Anthropic
-│  ○ OpenAI
-│  ○ Google
-│  ○ Amazon Bedrock
-│  ○ Azure
-│  ○ DeepSeek
-│  ○ Groq
-│  ...
-└
-```
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  opencode
+   │
+   ●  Create an api key at https://opencode.ai/auth
+   │
+   ◆  Enter your API key
+   │  _
+   └
+   ```
 
 Alternatively, you can select one of the other providers. [Learn more](/docs/providers#directory).
 

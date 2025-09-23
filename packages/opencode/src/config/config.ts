@@ -1,7 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
-import { z } from "zod"
+import z from "zod/v4"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
@@ -14,6 +14,7 @@ import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
+import { LSPServer } from "../lsp/server"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -48,6 +49,14 @@ export namespace Config {
     }
 
     result.agent = result.agent || {}
+
+    const directories = [
+      Global.Path.config,
+      ...(await Array.fromAsync(
+        Filesystem.up({ targets: [".opencode"], start: Instance.directory, stop: Instance.worktree }),
+      )),
+    ]
+
     const markdownAgents = [
       ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
       ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, Instance.worktree)),
@@ -203,7 +212,10 @@ export namespace Config {
       result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
     }
 
-    return result
+    return {
+      config: result,
+      directories,
+    }
   })
 
   export const McpLocal = z
@@ -217,7 +229,7 @@ export namespace Config {
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "McpLocalConfig",
     })
 
@@ -229,7 +241,7 @@ export namespace Config {
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "McpRemoteConfig",
     })
 
@@ -244,6 +256,7 @@ export namespace Config {
     description: z.string().optional(),
     agent: z.string().optional(),
     model: z.string().optional(),
+    subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
@@ -266,7 +279,7 @@ export namespace Config {
         .optional(),
     })
     .catchall(z.any())
-    .openapi({
+    .meta({
       ref: "AgentConfig",
     })
   export type Agent = z.infer<typeof Agent>
@@ -341,7 +354,7 @@ export namespace Config {
       messages_revert: z.string().optional().default("none").describe("@deprecated use messages_undo. Revert message"),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "KeybindsConfig",
     })
 
@@ -349,7 +362,7 @@ export namespace Config {
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
   })
 
-  export const Layout = z.enum(["auto", "stretch"]).openapi({
+  export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
   export type Layout = z.infer<typeof Layout>
@@ -364,6 +377,11 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      watcher: z
+        .object({
+          ignore: z.array(z.string()).optional(),
+        })
+        .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z
@@ -406,9 +424,10 @@ export namespace Config {
         .describe("Agent configuration, see https://opencode.ai/docs/agent"),
       provider: z
         .record(
+          z.string(),
           ModelsDev.Provider.partial()
             .extend({
-              models: z.record(ModelsDev.Model.partial()).optional(),
+              models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
                   apiKey: z.string().optional(),
@@ -464,7 +483,22 @@ export namespace Config {
             }),
           ]),
         )
-        .optional(),
+        .optional()
+        .refine(
+          (data) => {
+            if (!data) return true
+            const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
+
+            return Object.entries(data).every(([id, config]) => {
+              if (config.disabled) return true
+              if (serverIds.has(id)) return true
+              return Boolean(config.extensions)
+            })
+          },
+          {
+            error: "For custom LSP servers, 'extensions' array is required.",
+          },
+        ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: z
@@ -504,7 +538,7 @@ export namespace Config {
         .optional(),
     })
     .strict()
-    .openapi({
+    .meta({
       ref: "Config",
     })
 
@@ -643,12 +677,16 @@ export namespace Config {
     "ConfigInvalidError",
     z.object({
       path: z.string(),
-      issues: z.custom<z.ZodIssue[]>().optional(),
+      issues: z.custom<z.core.$ZodIssue[]>().optional(),
       message: z.string().optional(),
     }),
   )
 
-  export function get() {
-    return state()
+  export async function get() {
+    return state().then((x) => x.config)
+  }
+
+  export async function directories() {
+    return state().then((x) => x.directories)
   }
 }
