@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import AsyncIterator, Dict, Iterator, Optional
 import time
+from typing import AsyncIterator, Dict, Iterator, Optional
 
 import httpx
 
-from .client import Client
 from .api.default import (
     app_agents,
     command_list,
@@ -18,6 +17,7 @@ from .api.default import (
     session_list,
     tool_ids,
 )
+from .client import Client
 from .types import UNSET, Unset
 
 
@@ -74,40 +74,53 @@ class OpenCodeClient:
             if attempt >= self._retries:
                 # re-raise last exception if we have one
                 raise
-            sleep = self._backoff * (2 ** attempt)
+            sleep = self._backoff * (2**attempt)
             time.sleep(sleep)
             attempt += 1
 
     # ---- Convenience wrappers over generated endpoints ----
 
     def list_sessions(self, *, directory: str | Unset = UNSET):
+        """Return sessions in the current project.
+
+        Wraps GET /session. Pass `directory` to target a specific project/directory if needed.
+        """
         return self._call_with_retries(session_list.sync, client=self._client, directory=directory)
 
     def get_config(self, *, directory: str | Unset = UNSET):
+        """Return opencode configuration for the current project (GET /config)."""
         return self._call_with_retries(config_get.sync, client=self._client, directory=directory)
 
     def list_agents(self, *, directory: str | Unset = UNSET):
+        """List configured agents (GET /agent)."""
         return self._call_with_retries(app_agents.sync, client=self._client, directory=directory)
 
     def list_projects(self, *, directory: str | Unset = UNSET):
+        """List known projects (GET /project)."""
         return self._call_with_retries(project_list.sync, client=self._client, directory=directory)
 
     def current_project(self, *, directory: str | Unset = UNSET):
+        """Return current project (GET /project/current)."""
         return self._call_with_retries(project_current.sync, client=self._client, directory=directory)
 
     def file_status(self, *, directory: str | Unset = UNSET):
+        """Return file status list (GET /file/status)."""
         return self._call_with_retries(file_status.sync, client=self._client, directory=directory)
 
     def get_path(self, *, directory: str | Unset = UNSET):
+        """Return opencode path info (GET /path)."""
         return self._call_with_retries(path_get.sync, client=self._client, directory=directory)
 
     def config_providers(self, *, directory: str | Unset = UNSET):
+        """Return configured providers (GET /config/providers)."""
         return self._call_with_retries(config_providers.sync, client=self._client, directory=directory)
 
     def tool_ids(self, *, directory: str | Unset = UNSET):
+        """Return tool identifiers for a provider/model pair (GET /experimental/tool)."""
         return self._call_with_retries(tool_ids.sync, client=self._client, directory=directory)
 
     def list_commands(self, *, directory: str | Unset = UNSET):
+        """List commands (GET /command)."""
         return self._call_with_retries(command_list.sync, client=self._client, directory=directory)
 
     # ---- Server-Sent Events (SSE) streaming ----

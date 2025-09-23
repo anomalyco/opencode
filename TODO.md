@@ -146,9 +146,9 @@ Based on existing SDKs, implement:
 
 #### 5.2 Create Examples
 - [X] Basic usage example
-- [ ] Session management example
+- [X] Session management example
 - [X] Streaming events example
-- [ ] File operations example
+- [X] File operations example
 - [X] Async usage example (documented snippet)
 
 #### 5.3 Documentation
@@ -156,7 +156,7 @@ Based on existing SDKs, implement:
   - [X] Installation instructions
   - [X] Quick start guide
   - [X] Examples (sync streaming and async snippet)
-  - [ ] Error handling guide
+  - [X] Error handling guide
 - [ ] Generate API documentation using `sphinx` or `mkdocs`
 - [ ] Add inline docstrings to all public methods
 

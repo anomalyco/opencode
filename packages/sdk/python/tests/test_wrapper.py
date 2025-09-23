@@ -5,6 +5,8 @@ import httpx
 import pytest
 
 from opencode_ai import OpenCodeClient
+from opencode_ai.api.default import config_get
+from opencode_ai.client import Client
 
 
 class _State:
@@ -80,9 +82,20 @@ def test_retry_on_request_error_then_success() -> None:
     assert result.directory == "/repo/project"
 
 
+def test_generated_config_get_via_mock() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/config"
+        return httpx.Response(200, json={})
+
+    transport = httpx.MockTransport(handler)
+    c = Client(base_url="http://test")
+    c.set_httpx_client(httpx.Client(base_url="http://test", transport=transport))
+    assert config_get.sync(client=c) is not None
+
+
 def test_sse_streaming_parses_events() -> None:
     # Prepare a simple SSE payload with one event
-    payload = b"data: {\"type\":\"server.connected\"}\n\n"
+    payload = b'data: {"type":"server.connected"}\n\n'
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/event"

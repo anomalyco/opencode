@@ -50,6 +50,10 @@ for event in client.subscribe_events():
     print(event)
     break
 
+# Error handling and retries
+# Set retries>0 to enable exponential backoff for transient errors like 429/5xx
+client = OpenCodeClient(retries=2, backoff_factor=0.1)
+
 # Async usage example
 # uv run --project packages/sdk/python python - <<'PY'
 # import asyncio
