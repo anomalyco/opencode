@@ -32,6 +32,8 @@ dev-dependencies = [
   "pytest",
   "pytest-asyncio",
   "sseclient-py",
+  "build",
+  "twine",
 ]
 
 [tool.black]

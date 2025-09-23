@@ -180,15 +180,15 @@ Based on existing SDKs, implement:
 ### Phase 7: Publishing and Distribution
 
 #### 7.1 PyPI Publishing Setup
-- [ ] Configure PyPI credentials (or use TestPyPI first)
-- [ ] Create `scripts/publish.py` for publishing workflow
-- [ ] Set up GitHub Actions for automated publishing
-- [ ] Implement version bumping strategy
+- [X] Configure PyPI credentials placeholder (use secret PYPI_API_TOKEN in CI)
+- [X] Create `scripts/publish.py` for publishing workflow (build + twine upload)
+- [X] Set up GitHub Actions for automated publishing (publish-python-sdk.yml)
+- [X] Implement version bumping strategy (set from release tag in workflow)
 
 #### 7.2 Package Distribution
-- [ ] Publish to PyPI as `opencode-ai`
-- [ ] Ensure package metadata is complete
-- [ ] Add badges to README (PyPI version, downloads, etc.)
+- [ ] Publish to PyPI as `opencode-ai` (pending credentials and release)
+- [X] Ensure package metadata is complete
+- [X] Add badges to README (PyPI version)
 
 ### Phase 8: Migration and Deprecation
 

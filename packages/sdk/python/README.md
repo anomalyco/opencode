@@ -4,6 +4,9 @@ This package provides a Python SDK for the Opencode API. It is generated using o
 
 Status: scaffolding in place; generation wired up via scripts/generate.py.
 
+Badges
+- PyPI: https://img.shields.io/pypi/v/opencode-ai?style=flat-square
+
 Requirements
 - Python 3.8+
 - uv (recommended) -> https://docs.astral.sh/uv/
