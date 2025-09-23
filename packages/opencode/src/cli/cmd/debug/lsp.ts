@@ -2,6 +2,7 @@ import { LSP } from "../../../lsp"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { Log } from "../../../util/log"
+import { UI } from "../../ui"
 
 export const LSPCommand = cmd({
   command: "lsp",
@@ -15,6 +16,10 @@ const DiagnosticsCommand = cmd({
   builder: (yargs) => yargs.positional("file", { type: "string", demandOption: true }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
+      if (!(await Bun.file(args.file).exists())) {
+        UI.error(`File ${args.file} does not exist`)
+        return
+      }
       await LSP.touchFile(args.file, true)
       console.log(JSON.stringify(await LSP.diagnostics(), null, 2))
     })
