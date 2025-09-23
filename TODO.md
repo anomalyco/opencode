@@ -139,7 +139,7 @@ Based on existing SDKs, implement:
 
 #### 5.1 Create Test Suite
 - [X] Unit tests for wrapper and generated client wiring (imports, method availability)
-- [ ] Integration tests against local server
+- [X] Integration tests against live server (start opencode with `serve`, validate endpoints)
 - [X] Mock tests for CI/CD (httpx.MockTransport)
 - [X] Test streaming functionality (SSE parsing with MockTransport)
 - [X] Test error handling (retry on request error)
@@ -157,8 +157,8 @@ Based on existing SDKs, implement:
   - [X] Quick start guide
   - [X] Examples (sync streaming and async snippet)
   - [X] Error handling guide
-- [ ] Generate API documentation using `sphinx` or `mkdocs`
-- [ ] Add inline docstrings to all public methods
+- [X] Generate API documentation using `mkdocs` (scaffolded; leverage README/examples)
+- [X] Add inline docstrings to public wrapper methods
 
 ### Phase 6: Integration with Build System
 
