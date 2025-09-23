@@ -14,12 +14,6 @@ targets:
   go:
     package_name: opencode
     production_repo: sst/opencode-sdk-go
-  python:
-    project_name: opencode-ai
-    package_name: opencode_ai
-    production_repo: sst/opencode-sdk-python
-    publish:
-      pypi: true
 
 environments:
   production: http://localhost:54321

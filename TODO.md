@@ -163,19 +163,19 @@ Based on existing SDKs, implement:
 ### Phase 6: Integration with Build System
 
 #### 6.1 Integrate with Monorepo Build
-- [ ] Add Python SDK to `packages/sdk/` structure
-- [ ] Update root `package.json` if needed for generation scripts
-- [ ] Create Bun script wrapper for Python generation (for consistency)
+- [X] Add Python SDK to `packages/sdk/` structure
+- [X] Update root `package.json` for Python generation scripts
+- [X] Create Bun/Node wrapper script (package.json) for Python generation
 
 #### 6.2 Update Generation Pipeline
-- [ ] Modify `bun run generate` to include Python SDK generation
-- [ ] Ensure generation works in CI/CD pipeline
-- [ ] Add generation verification tests
+- [X] Modify `bun run generate` to include Python SDK generation
+- [X] Ensure generation works in CI/CD pipeline (GitHub Actions job `python-sdk`)
+- [X] Add generation verification tests (pytest job runs unit + integration tests)
 
 #### 6.3 Remove Stainless Python Configuration
-- [ ] Remove Python-related configuration from `stainless.yml`
+- [X] Remove Python-related configuration from `stainless.yml`
 - [ ] Clean up any Stainless-specific Python artifacts
-- [ ] Update documentation to reflect new generation method
+- [X] Update documentation to reflect new generation method (README and TODO)
 
 ### Phase 7: Publishing and Distribution
 

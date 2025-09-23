@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.2.21",
-  "scripts": {
+"scripts": {
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
     "typecheck": "bun turbo typecheck",
-    "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
+    "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts) && uv run --project packages/sdk/python python packages/sdk/python/scripts/generate.py --source cli",
+    "generate:python": "uv run --project packages/sdk/python python packages/sdk/python/scripts/generate.py --source cli",
     "postinstall": "./script/hooks"
   },
   "workspaces": {
