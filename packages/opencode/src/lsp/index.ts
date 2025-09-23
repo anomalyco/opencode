@@ -72,7 +72,7 @@ export namespace LSP {
           ...existing,
           id: name,
           root: existing?.root ?? (async () => Instance.directory),
-          extensions: item.extensions ?? existing.extensions,
+          extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
