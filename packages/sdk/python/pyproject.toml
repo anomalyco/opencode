@@ -34,6 +34,8 @@ dev-dependencies = [
   "sseclient-py",
   "build",
   "twine",
+  "mkdocs",
+  "mkdocs-material",
 ]
 
 [tool.black]

@@ -4,6 +4,13 @@ This package provides a Python SDK for the Opencode API. It is generated using o
 
 Status: scaffolding in place; generation wired up via scripts/generate.py.
 
+Documentation
+- Full docs: see `mkdocs` site under `packages/sdk/python/docs/`
+- Preview locally:
+```bash
+uv run --project packages/sdk/python mkdocs serve -f packages/sdk/python/mkdocs.yml
+```
+
 Badges
 - PyPI: https://img.shields.io/pypi/v/opencode-ai?style=flat-square
 
