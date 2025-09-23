@@ -5,10 +5,6 @@
 
 declare module "sst" {
   export interface Resource {
-    ANTHROPIC_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
-    }
     AUTH_API_URL: {
       type: "sst.sst.Linkable"
       value: string
@@ -23,10 +19,6 @@ declare module "sst" {
     }
     AuthStorage: {
       type: "sst.cloudflare.Kv"
-    }
-    BASETEN_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
     }
     Bucket: {
       name: string
@@ -43,10 +35,6 @@ declare module "sst" {
       port: number
       type: "sst.sst.Linkable"
       username: string
-    }
-    FIREWORKS_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
     }
     GITHUB_APP_ID: {
       type: "sst.sst.Secret"
@@ -75,10 +63,6 @@ declare module "sst" {
     LogProcessor: {
       type: "sst.cloudflare.Worker"
     }
-    OPENAI_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
-    }
     STRIPE_SECRET_KEY: {
       type: "sst.sst.Secret"
       value: string
@@ -91,7 +75,7 @@ declare module "sst" {
       type: "sst.cloudflare.Astro"
       url: string
     }
-    XAI_API_KEY: {
+    ZEN_MODELS: {
       type: "sst.sst.Secret"
       value: string
     }

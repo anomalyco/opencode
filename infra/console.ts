@@ -99,11 +99,7 @@ export const stripeWebhook = new WebhookEndpoint("StripeWebhookEndpoint", {
   ],
 })
 
-const ANTHROPIC_API_KEY = new sst.Secret("ANTHROPIC_API_KEY")
-const OPENAI_API_KEY = new sst.Secret("OPENAI_API_KEY")
-const XAI_API_KEY = new sst.Secret("XAI_API_KEY")
-const BASETEN_API_KEY = new sst.Secret("BASETEN_API_KEY")
-const FIREWORKS_API_KEY = new sst.Secret("FIREWORKS_API_KEY")
+const ZEN_MODELS = new sst.Secret("ZEN_MODELS")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -128,17 +124,7 @@ if ($app.stage === "production" || $app.stage === "frank") {
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
-  link: [
-    database,
-    AUTH_API_URL,
-    STRIPE_WEBHOOK_SECRET,
-    STRIPE_SECRET_KEY,
-    ANTHROPIC_API_KEY,
-    OPENAI_API_KEY,
-    XAI_API_KEY,
-    BASETEN_API_KEY,
-    FIREWORKS_API_KEY,
-  ],
+  link: [database, AUTH_API_URL, STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY, ZEN_MODELS],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),

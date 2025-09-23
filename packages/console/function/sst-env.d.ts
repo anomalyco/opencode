@@ -6,16 +6,8 @@
 import "sst"
 declare module "sst" {
   export interface Resource {
-    ANTHROPIC_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
-    }
     AUTH_API_URL: {
       type: "sst.sst.Linkable"
-      value: string
-    }
-    BASETEN_API_KEY: {
-      type: "sst.sst.Secret"
       value: string
     }
     Console: {
@@ -29,10 +21,6 @@ declare module "sst" {
       port: number
       type: "sst.sst.Linkable"
       username: string
-    }
-    FIREWORKS_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
     }
     GITHUB_APP_ID: {
       type: "sst.sst.Secret"
@@ -58,10 +46,6 @@ declare module "sst" {
       type: "sst.sst.Secret"
       value: string
     }
-    OPENAI_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
-    }
     STRIPE_SECRET_KEY: {
       type: "sst.sst.Secret"
       value: string
@@ -74,7 +58,7 @@ declare module "sst" {
       type: "sst.cloudflare.Astro"
       url: string
     }
-    XAI_API_KEY: {
+    ZEN_MODELS: {
       type: "sst.sst.Secret"
       value: string
     }

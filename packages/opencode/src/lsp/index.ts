@@ -72,7 +72,7 @@ export namespace LSP {
           ...existing,
           id: name,
           root: existing?.root ?? (async () => Instance.directory),
-          extensions: item.extensions ?? existing.extensions,
+          extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
@@ -126,12 +126,22 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(root).catch((err) => {
-        s.broken.add(root + server.id)
-        log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
-        return undefined
-      })
+      const handle = await server
+        .spawn(root)
+        .then((h) => {
+          if (h === undefined) {
+            s.broken.add(root + server.id)
+          }
+          return h
+        })
+        .catch((err) => {
+          s.broken.add(root + server.id)
+          log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+          return undefined
+        })
       if (!handle) continue
+      log.info("spawned lsp server", { serverID: server.id })
+
       const client = await LSPClient.create({
         serverID: server.id,
         server: handle,

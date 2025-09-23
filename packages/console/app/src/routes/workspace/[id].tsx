@@ -31,3 +31,11 @@ export default function () {
     </div>
   )
 }
+
+export function isBeta(workspaceID: string) {
+  return [
+    "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // production
+    "wrk_01K4NFRR5P7FSYWH88307B4DDS", // dev
+    "wrk_01K4PJRKJ2WPQZN3FFYRV4673F", // frank
+  ].includes(workspaceID)
+}

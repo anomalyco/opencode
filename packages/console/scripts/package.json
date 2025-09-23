@@ -1,6 +1,6 @@
 {
   "name": "@opencode/console-scripts",
-  "version": "0.10.2",
+  "version": "0.11.1",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
