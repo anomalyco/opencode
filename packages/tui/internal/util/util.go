@@ -38,6 +38,31 @@ func IsWsl() bool {
 	return false
 }
 
+func CleanTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if !strings.HasPrefix(title, "```") || !strings.HasSuffix(title, "```") {
+		title = strings.ReplaceAll(title, "\n", " ")
+		return strings.TrimSpace(title)
+	}
+	if len(title) < 6 {
+		return ""
+	}
+	content := title[3 : len(title)-3]
+	if content == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 {
+		first := strings.TrimSpace(lines[0])
+		if first != "" && !strings.Contains(first, " ") && len(first) < 20 {
+			lines = lines[1:]
+		}
+	}
+	title = strings.Join(lines, "\n")
+	title = strings.ReplaceAll(title, "\n", " ")
+	return strings.TrimSpace(title)
+}
+
 func Measure(tag string) func(...any) {
 	startTime := time.Now()
 	return func(args ...any) {

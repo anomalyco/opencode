@@ -475,7 +475,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, toast.NewSuccessToast("Session deleted successfully")
 	case opencode.EventListResponseEventSessionUpdated:
 		if msg.Properties.Info.ID == a.app.Session.ID {
-			a.app.Session = &msg.Properties.Info
+			session := msg.Properties.Info
+			session.Title = util.CleanTitle(session.Title)
+			a.app.Session = &session
 		}
 	case opencode.EventListResponseEventMessagePartUpdated:
 		slog.Debug("message part updated", "message", msg.Properties.Part.MessageID, "part", msg.Properties.Part.ID)
