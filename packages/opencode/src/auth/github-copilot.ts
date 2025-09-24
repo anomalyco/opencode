@@ -37,7 +37,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": "GitHubCopilotChat/0.31.2",
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -60,7 +60,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": "GitHubCopilotChat/0.31.2",
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -101,9 +101,9 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${info.refresh}`,
-        "User-Agent": "GitHubCopilotChat/0.26.7",
-        "Editor-Version": "vscode/1.99.3",
-        "Editor-Plugin-Version": "copilot-chat/0.26.7",
+        "User-Agent": "GitHubCopilotChat/0.31.2",
+        "Editor-Version": "vscode/1.104.1",
+        "Editor-Plugin-Version": "copilot-chat/0.31.2",
       },
     })
 
