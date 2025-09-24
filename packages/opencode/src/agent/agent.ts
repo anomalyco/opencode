@@ -1,10 +1,10 @@
-import { App } from "../app/app"
 import { Config } from "../config/config"
-import z from "zod"
+import z from "zod/v4"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
+import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
 
 export namespace Agent {
@@ -28,15 +28,15 @@ export namespace Agent {
         })
         .optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.boolean()),
+      tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
     })
-    .openapi({
+    .meta({
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
 
-  const state = App.state("agent", async () => {
+  const state = Instance.state(async () => {
     const cfg = await Config.get()
     const defaultTools = cfg.tools ?? {}
     const defaultPermission: Info["permission"] = {
@@ -47,6 +47,15 @@ export namespace Agent {
       webfetch: "allow",
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
+
+    const planPermission = mergeAgentPermissions(
+      {
+        edit: "deny",
+        bash: "ask",
+        webfetch: "allow",
+      },
+      cfg.permission ?? {},
+    )
 
     const result: Record<string, Info> = {
       general: {
@@ -74,11 +83,8 @@ export namespace Agent {
       plan: {
         name: "plan",
         options: {},
-        permission: agentPermission,
+        permission: planPermission,
         tools: {
-          write: false,
-          edit: false,
-          patch: false,
           ...defaultTools,
         },
         mode: "primary",

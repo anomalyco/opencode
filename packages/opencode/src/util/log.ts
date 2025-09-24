@@ -1,10 +1,10 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
-import z from "zod"
+import z from "zod/v4"
 
 export namespace Log {
-  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).openapi({ ref: "LogLevel", description: "Log level" })
+  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
 
   const levelPriority: Record<Level, number> = {
@@ -83,6 +83,13 @@ export namespace Log {
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
+  function formatError(error: Error, depth = 0): string {
+    const result = error.message
+    return error.cause instanceof Error && depth < 10
+      ? result + " Caused by: " + formatError(error.cause, depth + 1)
+      : result
+  }
+
   let last = Date.now()
   export function create(tags?: Record<string, any>) {
     tags = tags || {}
@@ -101,7 +108,12 @@ export namespace Log {
         ...extra,
       })
         .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => `${key}=${typeof value === "object" ? JSON.stringify(value) : value}`)
+        .map(([key, value]) => {
+          const prefix = `${key}=`
+          if (value instanceof Error) return prefix + formatError(value)
+          if (typeof value === "object") return prefix + JSON.stringify(value)
+          return prefix + value
+        })
         .join(" ")
       const next = new Date()
       const diff = next.getTime() - last

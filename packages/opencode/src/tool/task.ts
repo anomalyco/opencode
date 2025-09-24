@@ -1,11 +1,12 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
-import { z } from "zod"
+import z from "zod/v4"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
+import { SessionPrompt } from "../session/prompt"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -49,13 +50,15 @@ export const TaskTool = Tool.define("task", async () => {
       }
 
       ctx.abort.addEventListener("abort", () => {
-        Session.abort(session.id)
+        SessionPrompt.abort(session.id)
       })
-      const result = await Session.chat({
+      const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
-        modelID: model.modelID,
-        providerID: model.providerID,
+        model: {
+          modelID: model.modelID,
+          providerID: model.providerID,
+        },
         agent: agent.name,
         tools: {
           todowrite: false,
@@ -72,12 +75,16 @@ export const TaskTool = Tool.define("task", async () => {
         ],
       })
       unsub()
+      let all
+      all = await Session.messages(session.id)
+      all = all.filter((x) => x.info.role === "assistant")
+      all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       return {
         title: params.description,
         metadata: {
-          summary: result.parts.filter((x) => x.type === "tool"),
+          summary: all,
         },
-        output: result.parts.findLast((x) => x.type === "text")?.text ?? "",
+        output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }
     },
   }

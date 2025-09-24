@@ -1,11 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.5.8",
+  "version": "0.11.3",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "build": "./script/build.ts",
     "dev": "bun run --conditions=development ./src/index.ts"
   },
   "bin": {
@@ -19,7 +20,7 @@
     "@octokit/webhooks-types": "7.6.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
-    "@types/bun": "latest",
+    "@types/bun": "catalog:",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "typescript": "catalog:",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
+    "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
@@ -36,12 +38,13 @@
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
+    "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
-    "hono-openapi": "0.4.8",
-    "isomorphic-git": "1.32.1",
+    "hono-openapi": "1.0.7",
+    "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",
@@ -54,7 +57,6 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:",
-    "zod-openapi": "4.1.0"
+    "zod": "catalog:"
   }
 }

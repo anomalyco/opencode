@@ -1,5 +1,5 @@
-import z from "zod"
-import { App } from "../app/app"
+import z from "zod/v4"
+import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type LanguageModel, type Provider as SDK } from "ai"
@@ -9,14 +9,14 @@ import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "../util/error"
 import { Auth } from "../auth"
+import { Instance } from "../project/instance"
+import { Global } from "../global"
+import { Flag } from "../flag/flag"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (
-    provider: ModelsDev.Provider,
-    api?: string,
-  ) => Promise<{
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
     getModel?: (sdk: any, modelID: string) => Promise<any>
     options?: Record<string, any>
@@ -36,9 +36,22 @@ export namespace Provider {
         },
       }
     },
-    async opencode() {
+    async opencode(input) {
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
       return {
-        autoload: true,
+        autoload: Object.keys(input.models).length > 0,
         options: {},
       }
     },
@@ -79,7 +92,8 @@ export namespace Provider {
           switch (regionPrefix) {
             case "us": {
               const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
-              if (modelRequiresPrefix) {
+              const isGovCloud = region.startsWith("us-gov")
+              if (modelRequiresPrefix && !isGovCloud) {
                 modelID = `${regionPrefix}.${modelID}`
               }
               break
@@ -141,7 +155,7 @@ export namespace Provider {
     },
   }
 
-  const state = App.state("provider", async () => {
+  const state = Instance.state(async () => {
     const config = await Config.get()
     const database = await ModelsDev.get()
 
@@ -153,8 +167,11 @@ export namespace Provider {
         options: Record<string, any>
       }
     } = {}
-    const models = new Map<string, { info: ModelsDev.Model; language: LanguageModel }>()
-    const sdk = new Map<string, SDK>()
+    const models = new Map<
+      string,
+      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
+    >()
+    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -228,6 +245,7 @@ export namespace Provider {
               context: 0,
               output: 0,
             },
+          provider: model.provider ?? existing?.provider,
         }
         parsed.models[modelID] = parsedModel
       }
@@ -282,12 +300,15 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
-      // Filter out blacklisted models
       const filteredModels = Object.fromEntries(
-        Object.entries(provider.info.models).filter(
-          ([modelID]) =>
-            modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
-        ),
+        Object.entries(provider.info.models)
+          // Filter out blacklisted models
+          .filter(
+            ([modelID]) =>
+              modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
+          )
+          // Filter out experimental models
+          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
       )
       provider.info.models = filteredModels
 
@@ -309,22 +330,30 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(provider: ModelsDev.Provider) {
+  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
     return (async () => {
       using _ = log.time("getSDK", {
         providerID: provider.id,
       })
       const s = await state()
-      const existing = s.sdk.get(provider.id)
+      const pkg = model.provider?.npm ?? provider.npm ?? provider.id
+      const options = { ...s.providers[provider.id]?.options }
+      const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
+      const existing = s.sdk.get(key)
       if (existing) return existing
-      const pkg = provider.npm ?? provider.id
       const mod = await import(await BunProc.install(pkg, "latest"))
+      if (options["timeout"] !== undefined) {
+        // Only override fetch if user explicitly sets timeout
+        options["fetch"] = async (input: any, init?: any) => {
+          return await fetch(input, { ...init, timeout: options["timeout"] })
+        }
+      }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
-        ...s.providers[provider.id]?.options,
+        ...options,
       })
-      s.sdk.set(provider.id, loaded)
+      s.sdk.set(key, loaded)
       return loaded as SDK
     })().catch((e) => {
       throw new InitError({ providerID: provider.id }, { cause: e })
@@ -349,18 +378,24 @@ export namespace Provider {
     if (!provider) throw new ModelNotFoundError({ providerID, modelID })
     const info = provider.info.models[modelID]
     if (!info) throw new ModelNotFoundError({ providerID, modelID })
-    const sdk = await getSDK(provider.info)
+    const sdk = await getSDK(provider.info, info)
 
     try {
       const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
+        providerID,
+        modelID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       })
       return {
+        modelID,
+        providerID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       }
     } catch (e) {
       if (e instanceof NoSuchModelError)
@@ -406,6 +441,43 @@ export namespace Provider {
   export async function defaultModel() {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
+
+    // this will be adjusted when migration to opentui is complete,
+    // for now we just read the tui state toml file directly
+    //
+    // NOTE: cannot just import file as toml without cleaning due to lack of
+    // support for date/time references in Bun toml parser: https://github.com/oven-sh/bun/issues/22426
+    const lastused = await Bun.file(path.join(Global.Path.state, "tui"))
+      .text()
+      .then((text) => {
+        // remove the date/time references since Bun toml parser doesn't support yet
+        const cleaned = text
+          .split("\n")
+          .filter((line) => !line.trim().startsWith("last_used ="))
+          .join("\n")
+        const state = Bun.TOML.parse(cleaned) as {
+          recently_used_models?: {
+            provider_id: string
+            model_id: string
+          }[]
+        }
+        const models = state?.recently_used_models ?? []
+        if (models.length > 0) {
+          return {
+            providerID: models[0].provider_id,
+            modelID: models[0].model_id,
+          }
+        }
+      })
+      .catch((error) => {
+        log.error("failed to find last used model", {
+          error,
+        })
+        return undefined
+      })
+
+    if (lastused) return lastused
+
     const provider = await list()
       .then((val) => Object.values(val))
       .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.info.id)))

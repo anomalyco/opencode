@@ -126,6 +126,12 @@
     gap: 1rem;
     flex-grow: 1;
     max-width: var(--md-tool-width);
+    position: relative;
+
+    [data-component="copy-button"] {
+      top: 0.5rem;
+      right: calc(0.5rem - 1px);
+    }
   }
 
   [data-component="assistant-reasoning"] {

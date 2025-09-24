@@ -1,0 +1,13 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "@cloudflare/workers-types": "^4.20250830.0",
+      },
+    },
+  },
+  "packages": {
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@4.20250830.0", "", {}, "sha512-uAGZFqEBFnCiwIokxMnrrtjIkT8qyGT1LACSScEUyW7nKmtD0Viykp9QZWrIlssyEp/MDB6XsdALF8y6upxpcg=="],
+  }
+}

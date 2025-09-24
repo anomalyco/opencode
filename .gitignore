@@ -1,5 +1,6 @@
 .DS_Store
 node_modules
+.worktrees
 .sst
 .env
 .idea
@@ -7,3 +8,5 @@ node_modules
 openapi.json
 playground
 tmp
+dist
+.turbo

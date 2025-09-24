@@ -29,7 +29,7 @@ func (cg *filesContextGroup) GetEmptyMessage() string {
 func (cg *filesContextGroup) getGitFiles() []CompletionSuggestion {
 	items := make([]CompletionSuggestion, 0)
 
-	status, _ := cg.app.Client.File.Status(context.Background())
+	status, _ := cg.app.Client.File.Status(context.Background(), opencode.FileStatusParams{})
 	if status != nil {
 		files := *status
 		sort.Slice(files, func(i, j int) bool {

@@ -5,67 +5,27 @@ import { $ } from "bun"
 
 import pkg from "../package.json"
 
-const dry = process.env["OPENCODE_DRY"] === "true"
-const version = process.env["OPENCODE_VERSION"]!
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
+let version = process.env["OPENCODE_VERSION"]
+const tag = process.env["OPENCODE_TAG"] ?? (snapshot ? "snapshot" : "latest")
+if (!version && snapshot) {
+  version = `0.0.0-${tag}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  process.env["OPENCODE_VERSION"] = version
+}
+if (!version) throw new Error("OPENCODE_VERSION is required")
 
 console.log(`publishing ${version}`)
 
-const GOARCH: Record<string, string> = {
-  arm64: "arm64",
-  x64: "amd64",
-  "x64-baseline": "amd64",
-}
-
-const targets = [
-  ["windows", "x64"],
-  ["linux", "arm64"],
-  ["linux", "x64"],
-  ["linux", "x64-baseline"],
-  ["darwin", "x64"],
-  ["darwin", "x64-baseline"],
-  ["darwin", "arm64"],
-]
-
-await $`rm -rf dist`
-
-const optionalDependencies: Record<string, string> = {}
-const npmTag = snapshot ? "snapshot" : "latest"
-for (const [os, arch] of targets) {
-  console.log(`building ${os}-${arch}`)
-  const name = `${pkg.name}-${os}-${arch}`
-  await $`mkdir -p dist/${name}/bin`
-  await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`.cwd(
-    "../tui",
-  )
-  await $`bun build --define OPENCODE_TUI_PATH="'../../../dist/${name}/bin/tui'" --define OPENCODE_VERSION="'${version}'" --compile --target=bun-${os}-${arch} --outfile=dist/${name}/bin/opencode ./src/index.ts`
-  // Run the binary only if it matches current OS/arch
-  if (
-    process.platform === (os === "windows" ? "win32" : os) &&
-    (process.arch === arch || (process.arch === "x64" && arch === "x64-baseline"))
-  ) {
-    console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-    await $`./dist/${name}/bin/opencode --version`
-  }
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
-    JSON.stringify(
-      {
-        name,
-        version,
-        os: [os === "windows" ? "win32" : os],
-        cpu: [arch],
-      },
-      null,
-      2,
-    ),
-  )
-  if (!dry) await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${npmTag}`
-  optionalDependencies[name] = version
+const { binaries } = await import("./build.ts")
+{
+  const name = `${pkg.name}-${process.platform}-${process.arch}`
+  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
+  await $`./dist/${name}/bin/opencode --version`
 }
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`cp ./script/preinstall.mjs ./dist/${pkg.name}/preinstall.mjs`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
@@ -75,19 +35,23 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
+        preinstall: "node ./preinstall.mjs",
         postinstall: "node ./postinstall.mjs",
       },
       version,
-      optionalDependencies,
+      optionalDependencies: binaries,
     },
     null,
     2,
   ),
 )
-if (!dry) await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${npmTag}`
+for (const [name] of Object.entries(binaries)) {
+  await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${tag}`
+}
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${tag}`
 
 if (!snapshot) {
-  for (const key of Object.keys(optionalDependencies)) {
+  for (const key of Object.keys(binaries)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
 
@@ -97,12 +61,11 @@ if (!snapshot) {
   const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
-  /* AUR package - commented out as AUR is down
-  const pkgbuild = [
+  const binaryPkgbuild = [
     "# Maintainer: dax",
     "# Maintainer: adam",
     "",
-    "pkgname='${pkg}'",
+    "pkgname='opencode-bin'",
     `pkgver=${version.split("-")[0]}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
@@ -126,17 +89,63 @@ if (!snapshot) {
     "",
   ].join("\n")
 
-  for (const pkg of ["opencode-bin"]) {
+  // Source-based PKGBUILD for opencode
+  const sourcePkgbuild = [
+    "# Maintainer: dax",
+    "# Maintainer: adam",
+    "",
+    "pkgname='opencode'",
+    `pkgver=${version.split("-")[0]}`,
+    "options=('!debug' '!strip')",
+    "pkgrel=1",
+    "pkgdesc='The AI coding agent built for the terminal.'",
+    "url='https://github.com/sst/opencode'",
+    "arch=('aarch64' 'x86_64')",
+    "license=('MIT')",
+    "provides=('opencode')",
+    "conflicts=('opencode-bin')",
+    "depends=('fzf' 'ripgrep')",
+    "makedepends=('git' 'bun-bin' 'go')",
+    "",
+    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v${version}.tar.gz")`,
+    `sha256sums=('SKIP')`,
+    "",
+    "build() {",
+    `  cd "opencode-\${pkgver}"`,
+    `  bun install`,
+    "  cd packages/tui",
+    `  CGO_ENABLED=0 go build -ldflags="-s -w -X main.Version=\${pkgver}" -o tui cmd/opencode/main.go`,
+    "  cd ../opencode",
+    `  bun build --define OPENCODE_TUI_PATH="'$(realpath ../tui/tui)'" --define OPENCODE_VERSION="'\${pkgver}'" --compile --target=bun-linux-x64 --outfile=opencode ./src/index.ts`,
+    "}",
+    "",
+    "package() {",
+    `  cd "opencode-\${pkgver}/packages/opencode"`,
+    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    "}",
+    "",
+  ].join("\n")
+
+  for (const [pkg, pkgbuild] of [
+    ["opencode-bin", binaryPkgbuild],
+    ["opencode", sourcePkgbuild],
+  ]) {
     await $`rm -rf ./dist/aur-${pkg}`
-    await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+    while (true) {
+      try {
+        await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+        break
+      } catch (e) {
+        continue
+      }
+    }
     await $`cd ./dist/aur-${pkg} && git checkout master`
-    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild.replace("${pkg}", pkg))
+    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
     await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
     await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
-    if (!dry) await $`cd ./dist/aur-${pkg} && git push`
+    await $`cd ./dist/aur-${pkg} && git push`
   }
-  */
 
   // Homebrew formula
   const homebrewFormula = [
@@ -194,5 +203,5 @@ if (!snapshot) {
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
   await $`cd ./dist/homebrew-tap && git commit -m "Update to v${version}"`
-  if (!dry) await $`cd ./dist/homebrew-tap && git push`
+  await $`cd ./dist/homebrew-tap && git push`
 }

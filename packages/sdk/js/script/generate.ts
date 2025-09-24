@@ -14,7 +14,7 @@ await createClient({
   input: "./openapi.json",
   output: {
     path: "./src/gen",
-    tsConfigPath: path.join(dir, 'tsconfig.json')
+    tsConfigPath: path.join(dir, "tsconfig.json"),
   },
   plugins: [
     {

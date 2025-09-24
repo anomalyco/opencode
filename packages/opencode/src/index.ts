@@ -1,4 +1,3 @@
-import "zod-openapi/extend"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -18,6 +17,8 @@ import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
+import { ExportCommand } from "./cli/cmd/export"
+import { AttachCommand } from "./cli/cmd/attach"
 
 const cancel = new AbortController()
 
@@ -71,6 +72,7 @@ const cli = yargs(hideBin(process.argv))
   .usage("\n" + UI.logo())
   .command(McpCommand)
   .command(TuiCommand)
+  .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
@@ -80,9 +82,14 @@ const cli = yargs(hideBin(process.argv))
   .command(ServeCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
+  .command(ExportCommand)
   .command(GithubCommand)
   .fail((msg) => {
-    if (msg.startsWith("Unknown argument") || msg.startsWith("Not enough non-option arguments")) {
+    if (
+      msg.startsWith("Unknown argument") ||
+      msg.startsWith("Not enough non-option arguments") ||
+      msg.startsWith("Invalid values:")
+    ) {
       cli.showHelp("log")
     }
     process.exit(1)
@@ -105,6 +112,7 @@ try {
       name: e.name,
       message: e.message,
       cause: e.cause?.toString(),
+      stack: e.stack,
     })
   }
 

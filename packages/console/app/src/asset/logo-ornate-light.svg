@@ -1,0 +1,18 @@
+<svg width="288" height="50" viewBox="0 0 288 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 16.5H24V33H8V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M48 16.5H64V33H48V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M120 16.5H136V33H120V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M160 16.5H176V33H160V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M192 16.5H208V33H192V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M232 16.5H248V33H232V16.5Z" fill="black" fill-opacity="0.15"/>
+<path d="M264 0H288V8.5H272V16.5H288V25H272V33H288V41.5H264V0Z" fill="black" fill-opacity="0.95"/>
+<path d="M248 0H224V41.5H248V33H232V8.5H248V0Z" fill="black" fill-opacity="0.95"/>
+<path d="M256 8.5H248V33H256V8.5Z" fill="black" fill-opacity="0.95"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M184 0H216V41.5H184V0ZM208 8.5H192V33H208V8.5Z" fill="black" fill-opacity="0.95"/>
+<path d="M144 8.5H136V41.5H144V8.5Z" fill="black" fill-opacity="0.55"/>
+<path d="M136 0H112V41.5H120V8.5H136V0Z" fill="black" fill-opacity="0.55"/>
+<path d="M80 0H104V8.5H88V16.5H104V25H88V33H104V41.5H80V0Z" fill="black" fill-opacity="0.55"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M40 0H72V41.5H48V49.5H40V0ZM64 8.5H48V33H64V8.5Z" fill="black" fill-opacity="0.55"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M0 0H32V41.5955H0V0ZM24 8.5H8V33H24V8.5Z" fill="black" fill-opacity="0.55"/>
+<path d="M152 0H176V8.5H160V33H176V41.5H152V0Z" fill="black" fill-opacity="0.95"/>
+</svg>

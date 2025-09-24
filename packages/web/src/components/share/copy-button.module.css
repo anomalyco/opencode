@@ -9,7 +9,6 @@
     background: none;
     border: none;
     padding: 0.125rem;
-    background-color: var(--sl-color-bg);
     color: var(--sl-color-text-secondary);
 
     svg {

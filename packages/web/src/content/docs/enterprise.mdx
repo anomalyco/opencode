@@ -1,0 +1,105 @@
+---
+title: Enterprise
+description: Using opencode in your organization.
+---
+
+import config from "../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode does not store any of your code or context data. This makes it easy for
+you to use opencode at your organization.
+
+To get started, we recommend:
+
+1. Do a trial internally with your team.
+2. **<a href={email}>Contact us</a>** to discuss pricing and implementation options.
+
+---
+
+## Trial
+
+Since opencode is open source and does not store any of your code or context data, your developers can simply [get started](/docs/) and carry out a trial.
+
+---
+
+### Data handling
+
+**opencode does not store your code or context data.** All processing happens locally or through direct API calls to your AI provider.
+
+The only caveat here is the optional `/share` feature.
+
+---
+
+#### Sharing conversations
+
+If a user enables the `/share` feature, the conversation and the data associated with it are sent to the service we use to host these shares pages at opencode.ai.
+
+The data is currently served through our CDN's edge network, and is cached on the edge near your users.
+
+We recommend you disable this for your trial.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[Learn more about sharing](/docs/share).
+
+---
+
+### Code ownership
+
+**You own all code produced by opencode.** There are no licensing restrictions or ownership claims.
+
+---
+
+## Deployment
+
+Once you have completed your trial and you are ready to self-host opencode at
+your organization, you can **<a href={email}>contact us</a>** to discuss
+pricing and implementation options.
+
+---
+
+### SSO
+
+SSO integration can be implemented for enterprise deployments after your trial.
+This will allow your team's session data and shared conversations to be protected
+by your enterprise's authentication system.
+
+---
+
+### Private NPM
+
+opencode supports private npm registries through Bun's native `.npmrc` file support. If your organization uses a private registry, such as JFrog Artifactory, Nexus, or similar, ensure developers are authenticated before running opencode.
+
+To set up authentication with your private registry:
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+This creates `~/.npmrc` with authentication details. opencode will automatically
+pick this up.
+
+:::caution
+You must be logged into the private registry before running opencode.
+:::
+
+Alternatively, you can manually configure a `.npmrc` file:
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+Developers must be logged into the private registry before running opencode to ensure packages can be installed from your enterprise registry.
+
+---
+
+### Self-hosting
+
+The share feature can be self-hosted and the share pages can be made accessible
+only after the user has been authenticated.

@@ -1,0 +1,139 @@
+---
+title: Plugins
+description: Write your own plugins to extend opencode.
+---
+
+Plugins allow you to extend opencode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify opencode's default behavior.
+
+---
+
+## Create a plugin
+
+A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
+functions. Each function receives a context object and returns a hooks object.
+
+---
+
+### Location
+
+Plugins are loaded from:
+
+1. `.opencode/plugin` directory either in your project
+2. Or, globally in `~/.config/opencode/plugin`
+
+---
+
+### Basic structure
+
+```js title=".opencode/plugin/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+The plugin function receives:
+
+- `project`: The current project information.
+- `directory`: The current working directory.
+- `worktree`: The git worktree path.
+- `client`: An opencode SDK client for interacting with the AI.
+- `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
+
+---
+
+### TypeScript support
+
+For TypeScript plugins, you can import types from the plugin package:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+## Examples
+
+Here are some examples of plugins you can use to extend opencode.
+
+---
+
+### Send notifications
+
+Send notifications when certain events occur:
+
+```js title=".opencode/plugin/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
+
+---
+
+### .env protection
+
+Prevent opencode from reading `.env` files:
+
+```javascript title=".opencode/plugin/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Custom tools
+
+Plugins can also add custom tools to opencode:
+
+```ts title=".opencode/plugin/custom-tools.ts"
+import type { Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, ctx) {
+          return `Hello ${args.foo}!`
+        },
+      }),
+    },
+  }
+}
+```
+
+The `tool` helper creates a custom tool that opencode can call. It takes a Zod schema function and returns a tool definition with:
+
+- `description`: What the tool does
+- `args`: Zod schema for the tool's arguments
+- `execute`: Function that runs when the tool is called
+
+Your custom tools will be available to opencode alongside built-in tools.

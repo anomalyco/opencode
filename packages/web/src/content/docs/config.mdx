@@ -1,0 +1,362 @@
+---
+title: Config
+description: Using the opencode JSON config.
+---
+
+You can configure opencode using a JSON config file.
+
+---
+
+## Format
+
+opencode supports both **JSON** and **JSONC** (JSON with Comments) formats.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Theme configuration
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "autoupdate": true,
+}
+```
+
+---
+
+## Locations
+
+You can place your config in a couple of different locations and they have a
+different order of precedence.
+
+---
+
+### Global
+
+Place your global opencode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+
+---
+
+### Per project
+
+You can also add a `opencode.json` in your project. It takes precedence over the global config. This is useful for configuring providers or modes specific to your project.
+
+:::tip
+Place project specific config in the root of your project.
+:::
+
+When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+
+This is also safe to be checked into Git and uses the same schema as the global one.
+
+---
+
+### Custom path
+
+You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. This takes precedence over the global and project configs.
+
+```bash
+export OPENCODE_CONFIG=/path/to/my/custom-config.json
+opencode run "Hello world"
+```
+
+---
+
+## Schema
+
+The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+
+Your editor should be able to validate and autocomplete based on the schema.
+
+---
+
+### Models
+
+You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {},
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "small_model": "anthropic/claude-3-5-haiku-20241022"
+}
+```
+
+The `small_model` option configures a separate model for lightweight tasks like title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+
+You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
+
+---
+
+### Themes
+
+You can configure the theme you want to use in your opencode config through the `theme` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "theme": ""
+}
+```
+
+[Learn more here](/docs/themes).
+
+---
+
+### Agents
+
+You can configure specialized agents for specific tasks through the `agent` option.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices and potential issues",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
+      "tools": {
+        // Disable file modification tools for review-only agent
+        "write": false,
+        "edit": false,
+      },
+    },
+  },
+}
+```
+
+You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
+
+---
+
+### Sharing
+
+You can configure the [share](/docs/share) feature through the `share` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+This takes:
+
+- `"manual"` - Allow manual sharing via commands (default)
+- `"auto"` - Automatically share new conversations
+- `"disabled"` - Disable sharing entirely
+
+By default, sharing is set to manual mode where you need to explicitly share conversations using the `/share` command.
+
+---
+
+### Commands
+
+You can configure custom commands for repetitive tasks through the `command` option.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022",
+    },
+    "component": {
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
+    },
+  },
+}
+```
+
+You can also define commands using markdown files in `~/.config/opencode/command/` or `.opencode/command/`. [Learn more here](/docs/commands).
+
+---
+
+### Keybinds
+
+You can customize your keybinds through the `keybinds` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "keybinds": {}
+}
+```
+
+[Learn more here](/docs/keybinds).
+
+---
+
+### Autoupdate
+
+opencode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false
+}
+```
+
+---
+
+### Formatters
+
+You can configure code formatters through the `formatter` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    },
+    "custom-prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    }
+  }
+}
+```
+
+[Learn more about formatters here](/docs/formatters).
+
+---
+
+### Permissions
+
+You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  }
+}
+```
+
+This allows you to configure explicit approval requirements for sensitive operations:
+
+- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
+- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
+
+[Learn more about permissions here](/docs/permissions).
+
+---
+
+### MCP servers
+
+You can configure MCP servers you want to use through the `mcp` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {}
+}
+```
+
+[Learn more here](/docs/mcp-servers).
+
+---
+
+### Instructions
+
+You can configure the instructions for the model you're using through the `instructions` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+This takes an array of paths and glob patterns to instruction files. [Learn more
+about rules here](/docs/rules).
+
+---
+
+### Disabled providers
+
+You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "disabled_providers": ["openai", "gemini"]
+}
+```
+
+The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
+
+- It won't be loaded even if environment variables are set.
+- It won't be loaded even if API keys are configured through `opencode auth login`.
+- The provider's models won't appear in the model selection list.
+
+---
+
+## Variables
+
+You can use variable substitution in your config files to reference environment variables and file contents.
+
+---
+
+### Env vars
+
+Use `{env:VARIABLE_NAME}` to substitute environment variables:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "{env:OPENCODE_MODEL}",
+  "provider": {
+    "anthropic": {
+      "models": {},
+      "options": {
+        "apiKey": "{env:ANTHROPIC_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+If the environment variable is not set, it will be replaced with an empty string.
+
+---
+
+### Files
+
+Use `{file:path/to/file}` to substitute the contents of a file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["./custom-instructions.md"],
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{file:~/.secrets/openai-key}"
+      }
+    }
+  }
+}
+```
+
+File paths can be:
+
+- Relative to the config file directory
+- Or absolute paths starting with `/` or `~`
+
+These are useful for:
+
+- Keeping sensitive data like API keys in separate files.
+- Including large instruction files without cluttering your config.
+- Sharing common configuration snippets across multiple config files.

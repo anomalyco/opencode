@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"log/slog"
 
@@ -27,7 +28,7 @@ type Message struct {
 }
 
 type App struct {
-	Info              opencode.App
+	Project           opencode.Project
 	Agents            []opencode.Agent
 	Providers         []opencode.Provider
 	Version           string
@@ -84,6 +85,10 @@ type SendPrompt = Prompt
 type SendShell = struct {
 	Command string
 }
+type SendCommand = struct {
+	Command string
+	Args    string
+}
 type SetEditorContentMsg struct {
 	Text string
 }
@@ -97,7 +102,8 @@ type PermissionRespondedToMsg struct {
 func New(
 	ctx context.Context,
 	version string,
-	appInfo opencode.App,
+	project *opencode.Project,
+	path *opencode.Path,
 	agents []opencode.Agent,
 	httpClient *opencode.Client,
 	initialModel *string,
@@ -105,10 +111,10 @@ func New(
 	initialAgent *string,
 	initialSession *string,
 ) (*App, error) {
-	util.RootPath = appInfo.Path.Root
-	util.CwdPath = appInfo.Path.Cwd
+	util.RootPath = project.Worktree
+	util.CwdPath, _ = os.Getwd()
 
-	configInfo, err := httpClient.Config.Get(ctx)
+	configInfo, err := httpClient.Config.Get(ctx, opencode.ConfigGetParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +123,7 @@ func New(
 		configInfo.Keybinds.Leader = "ctrl+x"
 	}
 
-	appStatePath := filepath.Join(appInfo.Path.State, "tui")
+	appStatePath := filepath.Join(path.State, "tui")
 	appState, err := LoadState(appStatePath)
 	if err != nil {
 		appState = NewState()
@@ -164,9 +170,9 @@ func New(
 	}
 
 	if err := theme.LoadThemesFromDirectories(
-		appInfo.Path.Config,
-		appInfo.Path.Root,
-		appInfo.Path.Cwd,
+		path.Config,
+		util.RootPath,
+		util.CwdPath,
 	); err != nil {
 		slog.Warn("Failed to load themes from directories", "error", err)
 	}
@@ -183,8 +189,13 @@ func New(
 
 	slog.Debug("Loaded config", "config", configInfo)
 
+	customCommands, err := httpClient.Command.List(ctx, opencode.CommandListParams{})
+	if err != nil {
+		return nil, err
+	}
+
 	app := &App{
-		Info:           appInfo,
+		Project:        *project,
 		Agents:         agents,
 		Version:        version,
 		StatePath:      appStatePath,
@@ -194,7 +205,7 @@ func New(
 		AgentIndex:     agentIndex,
 		Session:        &opencode.Session{},
 		Messages:       []Message{},
-		Commands:       commands.LoadFromConfig(configInfo),
+		Commands:       commands.LoadFromConfig(configInfo, *customCommands),
 		InitialModel:   initialModel,
 		InitialPrompt:  initialPrompt,
 		InitialAgent:   initialAgent,
@@ -450,7 +461,7 @@ func findProviderByID(providers []opencode.Provider, providerID string) *opencod
 }
 
 func (a *App) InitializeProvider() tea.Cmd {
-	providersResponse, err := a.Client.App.Providers(context.Background())
+	providersResponse, err := a.Client.App.Providers(context.Background(), opencode.AppProvidersParams{})
 	if err != nil {
 		slog.Error("Failed to list providers", "error", err)
 		// TODO: notify user
@@ -646,9 +657,19 @@ func (a *App) IsBusy() bool {
 	if len(a.Messages) == 0 {
 		return false
 	}
+	if a.IsCompacting() {
+		return true
+	}
 	lastMessage := a.Messages[len(a.Messages)-1]
 	if casted, ok := lastMessage.Info.(opencode.AssistantMessage); ok {
 		return casted.Time.Completed == 0
+	}
+	return false
+}
+
+func (a *App) IsCompacting() bool {
+	if time.Since(time.UnixMilli(int64(a.Session.Time.Compacting))) < time.Second*30 {
+		return true
 	}
 	return false
 }
@@ -740,12 +761,15 @@ func (a *App) CompactSession(ctx context.Context) tea.Cmd {
 }
 
 func (a *App) MarkProjectInitialized(ctx context.Context) error {
-	_, err := a.Client.App.Init(ctx)
-	if err != nil {
-		slog.Error("Failed to mark project as initialized", "error", err)
-		return err
-	}
 	return nil
+	/*
+		_, err := a.Client.App.Init(ctx)
+		if err != nil {
+			slog.Error("Failed to mark project as initialized", "error", err)
+			return err
+		}
+		return nil
+	*/
 }
 
 func (a *App) CreateSession(ctx context.Context) (*opencode.Session, error) {
@@ -773,17 +797,56 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 	a.Messages = append(a.Messages, message)
 
 	cmds = append(cmds, func() tea.Msg {
-		_, err := a.Client.Session.Chat(ctx, a.Session.ID, opencode.SessionChatParams{
-			ProviderID: opencode.F(a.Provider.ID),
-			ModelID:    opencode.F(a.Model.ID),
-			Agent:      opencode.F(a.Agent().Name),
-			MessageID:  opencode.F(messageID),
-			Parts:      opencode.F(message.ToSessionChatParams()),
+		_, err := a.Client.Session.Prompt(ctx, a.Session.ID, opencode.SessionPromptParams{
+			Model: opencode.F(opencode.SessionPromptParamsModel{
+				ProviderID: opencode.F(a.Provider.ID),
+				ModelID:    opencode.F(a.Model.ID),
+			}),
+			Agent:     opencode.F(a.Agent().Name),
+			MessageID: opencode.F(messageID),
+			Parts:     opencode.F(message.ToSessionChatParams()),
 		})
 		if err != nil {
 			errormsg := fmt.Sprintf("failed to send message: %v", err)
 			slog.Error(errormsg)
 			return toast.NewErrorToast(errormsg)()
+		}
+		return nil
+	})
+
+	// The actual response will come through SSE
+	// For now, just return success
+	return a, tea.Batch(cmds...)
+}
+
+func (a *App) SendCommand(ctx context.Context, command string, args string) (*App, tea.Cmd) {
+	var cmds []tea.Cmd
+	if a.Session.ID == "" {
+		session, err := a.CreateSession(ctx)
+		if err != nil {
+			return a, toast.NewErrorToast(err.Error())
+		}
+		a.Session = session
+		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
+	}
+
+	cmds = append(cmds, func() tea.Msg {
+		params := opencode.SessionCommandParams{
+			Command:   opencode.F(command),
+			Arguments: opencode.F(args),
+			Agent:     opencode.F(a.Agents[a.AgentIndex].Name),
+		}
+		if a.Provider != nil && a.Model != nil {
+			params.Model = opencode.F(a.Provider.ID + "/" + a.Model.ID)
+		}
+		_, err := a.Client.Session.Command(
+			context.Background(),
+			a.Session.ID,
+			params,
+		)
+		if err != nil {
+			slog.Error("Failed to execute command", "error", err)
+			return toast.NewErrorToast(fmt.Sprintf("Failed to execute command: %v", err))()
 		}
 		return nil
 	})
@@ -815,7 +878,7 @@ func (a *App) SendShell(ctx context.Context, command string) (*App, tea.Cmd) {
 		)
 		if err != nil {
 			slog.Error("Failed to submit shell command", "error", err)
-			return toast.NewErrorToast("Failed to submit shell command")()
+			return toast.NewErrorToast(fmt.Sprintf("Failed to submit shell command: %v", err))()
 		}
 		return nil
 	})
@@ -832,7 +895,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 		a.compactCancel = nil
 	}
 
-	_, err := a.Client.Session.Abort(ctx, sessionID)
+	_, err := a.Client.Session.Abort(ctx, sessionID, opencode.SessionAbortParams{})
 	if err != nil {
 		slog.Error("Failed to cancel session", "error", err)
 		return err
@@ -841,7 +904,7 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 }
 
 func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
-	response, err := a.Client.Session.List(ctx)
+	response, err := a.Client.Session.List(ctx, opencode.SessionListParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -853,7 +916,7 @@ func (a *App) ListSessions(ctx context.Context) ([]opencode.Session, error) {
 }
 
 func (a *App) DeleteSession(ctx context.Context, sessionID string) error {
-	_, err := a.Client.Session.Delete(ctx, sessionID)
+	_, err := a.Client.Session.Delete(ctx, sessionID, opencode.SessionDeleteParams{})
 	if err != nil {
 		slog.Error("Failed to delete session", "error", err)
 		return err
@@ -873,7 +936,7 @@ func (a *App) UpdateSession(ctx context.Context, sessionID string, title string)
 }
 
 func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, error) {
-	response, err := a.Client.Session.Messages(ctx, sessionId)
+	response, err := a.Client.Session.Messages(ctx, sessionId, opencode.SessionMessagesParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -895,7 +958,7 @@ func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, er
 }
 
 func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
-	response, err := a.Client.App.Providers(ctx)
+	response, err := a.Client.App.Providers(ctx, opencode.AppProvidersParams{})
 	if err != nil {
 		return nil, err
 	}

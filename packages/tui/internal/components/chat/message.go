@@ -55,6 +55,8 @@ func WithBackgroundColor(color compat.AdaptiveColor) renderingOption {
 func WithNoBorder() renderingOption {
 	return func(c *blockRenderer) {
 		c.border = false
+		c.paddingLeft++
+		c.paddingRight++
 	}
 }
 
@@ -185,7 +187,7 @@ func renderContentBlock(
 			style = style.BorderRightForeground(borderColor)
 		}
 	} else {
-		style = style.PaddingLeft(renderer.paddingLeft + 1).PaddingRight(renderer.paddingRight + 1)
+		style = style.PaddingLeft(renderer.paddingLeft).PaddingRight(renderer.paddingRight)
 	}
 
 	content = style.Render(content)
@@ -639,7 +641,10 @@ func renderToolDetails(
 			if todos != nil {
 				for _, item := range todos.([]any) {
 					todo := item.(map[string]any)
-					content := todo["content"].(string)
+					content := todo["content"]
+          if content == nil {
+            continue
+          }
 					switch todo["status"] {
 					case "completed":
 						body += fmt.Sprintf("- [x] %s\n", content)

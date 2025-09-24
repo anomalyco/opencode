@@ -1,9 +1,9 @@
-import { App } from "../app/app"
+import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
-  export const state = App.state("tool.filetimes", () => {
+  export const state = Instance.state(() => {
     const read: {
       [sessionID: string]: {
         [path: string]: Date | undefined
