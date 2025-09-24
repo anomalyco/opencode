@@ -8,7 +8,6 @@ export interface LinkProps extends ComponentProps<typeof A> {
 }
 
 export function Link(props: LinkProps) {
-  const [local, others] = splitProps(props, ["variant", "size", "class"])
-  // const classes = local.variant ? getButtonClasses(local.variant, local.size, local.class) : local.class
+  const [, others] = splitProps(props, ["variant", "size", "class"])
   return <A {...others} />
 }

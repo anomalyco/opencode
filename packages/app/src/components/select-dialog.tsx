@@ -23,7 +23,6 @@ interface SelectDialogProps<T> {
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
-  let inputRef: HTMLInputElement | undefined
   let scrollRef: HTMLDivElement | undefined
   const [store, setStore] = createStore({
     filter: "",
@@ -113,7 +112,6 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
             <div class="relative">
               <Icon name="command" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/80" />
               <input
-                ref={(el) => (inputRef = el)}
                 type="text"
                 value={store.filter}
                 onInput={(e) => handleInput(e.currentTarget.value)}
