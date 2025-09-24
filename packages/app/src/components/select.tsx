@@ -18,7 +18,6 @@ export interface SelectProps<T> {
 }
 
 export function Select<T>(props: SelectProps<T> & ButtonProps) {
-  let listboxRef: HTMLUListElement | undefined = undefined
   const grouped = createMemo(() => {
     const result = pipe(
       props.options,
@@ -100,12 +99,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             "data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95": true,
           }}
         >
-          <KobalteSelect.Listbox
-            ref={(el) => (listboxRef = el)}
-            classList={{
-              "overflow-y-auto max-h-48": true,
-            }}
-          />
+          <KobalteSelect.Listbox class="overflow-y-auto max-h-48" />
         </KobalteSelect.Content>
       </KobalteSelect.Portal>
     </KobalteSelect>
