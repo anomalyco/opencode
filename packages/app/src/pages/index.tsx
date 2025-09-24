@@ -1,9 +1,9 @@
-import { FileIcon, Icon, IconButton, Logo, Tooltip } from "@/ui"
+import { Button, FileIcon, Icon, IconButton, Logo, Tooltip } from "@/ui"
 import { Tabs } from "@/ui/tabs"
 import { Select } from "@/components/select"
 import FileTree from "@/components/file-tree"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
-import CommandPalette from "@/components/command-palette"
+import { SelectDialog } from "@/components/select-dialog"
 import { useLocal, useSDK } from "@/context"
 import { Code } from "@/components/code"
 import {
@@ -16,7 +16,7 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
-import type { LocalFile, LocalModel } from "@/context/local"
+import type { LocalFile } from "@/context/local"
 import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
 import { createStore } from "solid-js/store"
@@ -29,7 +29,7 @@ export default function Page() {
     activeItem: undefined as string | undefined,
     prompt: "",
     dragging: undefined as "left" | "right" | undefined,
-    commandPaletteOpen: false,
+    modelSelectOpen: false,
   })
 
   let inputRef: HTMLInputElement | undefined = undefined
@@ -47,12 +47,12 @@ export default function Page() {
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.getModifierState(MOD) && e.shiftKey && e.key.toLowerCase() === "p") {
       e.preventDefault()
-      setStore("commandPaletteOpen", true)
+      setStore("modelSelectOpen", true)
       return
     }
     if (e.getModifierState(MOD) && e.key.toLowerCase() === "p") {
       e.preventDefault()
-      setStore("commandPaletteOpen", true)
+      setStore("modelSelectOpen", true)
       return
     }
 
@@ -483,7 +483,7 @@ export default function Page() {
               type="text"
               value={store.prompt}
               onInput={(e) => setStore("prompt", e.currentTarget.value)}
-              placeholder="It all starts with a prompt..."
+              placeholder="Placeholder text..."
               class="w-full p-1 pb-4 text-text font-light placeholder-text-muted/70 text-sm focus:outline-none"
             />
             <div class="flex justify-between items-center text-xs text-text-muted">
@@ -492,24 +492,13 @@ export default function Page() {
                   options={local.agent.list().map((a) => a.name)}
                   current={local.agent.current().name}
                   onSelect={local.agent.set}
-                  size="sm"
                   class="uppercase"
                 />
-                {/*<Select
-                  options={local.model.list()}
-                  current={local.model.current()}
-                  onSelect={local.model.set}
-                  label={(x) => x.modelID}
-                  value={(x) => `${x.providerID}.${x.modelID}`}
-                  filter={{
-                    keys: ["providerID", "modelID"],
-                    placeholder: "Filter models",
-                  }}
-                  groupBy={(x) => x.providerID}
-                  size="sm"
-                  class="uppercase"
-                />*/}
-                <span class="text-text-muted/70">{local.model.current()?.provider.name}</span>
+                <Button onClick={() => setStore("modelSelectOpen", true)}>
+                  {local.model.current()?.name ?? "Select model"}
+                  <Icon name="chevron-down" size={24} class="text-text-muted" />
+                </Button>
+                <span class="text-text-muted/70 whitespace-nowrap">{local.model.current()?.provider.name}</span>
               </div>
               <div class="flex gap-1 items-center">
                 <IconButton class="text-text-muted" size="xs" variant="ghost">
@@ -523,33 +512,54 @@ export default function Page() {
           </div>
         </form>
       </div>
-      <Show when={store.commandPaletteOpen}>
-        <CommandPalette<LocalModel>
-          items={local.model.list()}
+      <Show when={store.modelSelectOpen}>
+        <SelectDialog
           key={(x) => `${x.provider.id}:${x.id}`}
+          items={local.model.list()}
           current={local.model.current()}
-          render={(itemProps) => (
-            <div class="flex items-center gap-x-1.5">
-              <img src={`https://models.dev/logos/${itemProps.item.provider.id}.svg`} class="w-6 h-6" />
-              <span
-                classList={{
-                  "text-xs": true,
-                  "text-primary":
-                    local.model.current()?.provider.id === itemProps.item.provider.id &&
-                    local.model.current()?.id === itemProps.item.id,
-                }}
-              >
-                {itemProps.item.name}
-              </span>
+          render={(i) => (
+            <div class="w-full flex items-center justify-between">
+              <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
+                <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-4 invert opacity-40" />
+                <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
+                <span class="text-xs text-text-muted/80 whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                  {i.id}
+                </span>
+              </div>
+              <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0">
+                <Tooltip forceMount={false} value="Reasoning">
+                  <Icon name="brain" size={16} classList={{ "text-accent": i.reasoning }} />
+                </Tooltip>
+                <Tooltip forceMount={false} value="Tools">
+                  <Icon name="hammer" size={16} classList={{ "text-secondary": i.tool_call }} />
+                </Tooltip>
+                <Tooltip forceMount={false} value="Attachments">
+                  <Icon name="photo" size={16} classList={{ "text-success": i.attachment }} />
+                </Tooltip>
+                <div class="rounded-full bg-text-muted/20 text-text-muted/80 w-9 h-4 flex items-center justify-center text-[10px]">
+                  {new Intl.NumberFormat("en-US", {
+                    notation: "compact",
+                    compactDisplay: "short",
+                  }).format(i.limit.context)}
+                </div>
+                <Tooltip forceMount={false} value={`$${i.cost?.input}/1M input, $${i.cost?.output}/1M output`}>
+                  <div class="rounded-full bg-success/20 text-success/80 w-9 h-4 flex items-center justify-center text-[10px]">
+                    <Switch fallback="FREE">
+                      <Match when={i.cost?.input > 10}>$$$</Match>
+                      <Match when={i.cost?.input > 1}>$$</Match>
+                      <Match when={i.cost?.input > 0.1}>$</Match>
+                    </Switch>
+                  </div>
+                </Tooltip>
+              </div>
             </div>
           )}
           filter={{
-            keys: ["provider.id", "provider.name", "id", "name"],
-            placeholder: "Filter models",
+            keys: ["provider.name", "name", "id"],
           }}
           groupBy={(x) => x.provider.name}
-          open={store.commandPaletteOpen}
-          onOpenChange={(open) => setStore("commandPaletteOpen", open)}
+          onClose={() => setStore("modelSelectOpen", false)}
+          onSelect={(x) => local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined)}
         />
       </Show>
     </div>

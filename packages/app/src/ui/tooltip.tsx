@@ -34,7 +34,7 @@ export function Tooltip(props: TooltipProps) {
       <KobalteTooltip.Portal>
         <KobalteTooltip.Content
           classList={{
-            "z-50 max-w-[320px] rounded-md bg-background-element px-2 py-1": true,
+            "z-[1000] max-w-[320px] rounded-md bg-background-element px-2 py-1": true,
             "text-xs font-medium text-text shadow-md pointer-events-none!": true,
             "transition-all duration-150 ease-out": true,
             "transform-gpu transform-origin-[var(--kb-tooltip-content-transform-origin)]": true,
