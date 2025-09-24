@@ -42,6 +42,54 @@ export namespace FileIgnore {
     // Coverage/test outputs
     "**/coverage/**",
     "**/.nyc_output/**",
+
+    // Binary files (regardless of size)
+    "**/*.exe",
+    "**/*.dll",
+    "**/*.so",
+    "**/*.dylib",
+    "**/*.app/**",
+    "**/*.dmg",
+    "**/*.pkg",
+    "**/*.msi",
+    "**/*.deb",
+    "**/*.rpm",
+    "**/*.jar",
+    "**/*.war",
+    "**/*.ear",
+    "**/*.class",
+    "**/*.o",
+    "**/*.a",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.wasm",
+
+    // Image files (binary by nature)
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.png",
+    "**/*.gif",
+    "**/*.bmp",
+    "**/*.tiff",
+    "**/*.webp",
+    "**/*.ico",
+
+    // Media files (binary by nature)
+    "**/*.mp4",
+    "**/*.avi",
+    "**/*.mkv",
+    "**/*.mov",
+    "**/*.mp3",
+    "**/*.wav",
+    "**/*.flac",
+    "**/*.pdf",
+
+    // Cache directories (can contain binary files)
+    "**/__pycache__/**",
+    "**/.cache/**",
+    "**/cache/**",
+    "**/.pytest_cache/**",
+    "**/.tox/**",
   ]
 
   const GLOBS = DEFAULT_PATTERNS.map((p) => new Bun.Glob(p))

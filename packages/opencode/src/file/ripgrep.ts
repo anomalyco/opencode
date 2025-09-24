@@ -204,7 +204,7 @@ export namespace Ripgrep {
   }
 
   export async function files(input: { cwd: string; query?: string; glob?: string[]; limit?: number }) {
-    const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*'`]
+    const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*' --max-filesize 1M`]
 
     if (input.glob) {
       for (const g of input.glob) {
