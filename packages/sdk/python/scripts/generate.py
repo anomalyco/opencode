@@ -47,7 +47,9 @@ def write_json(path: Path, content: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate the Opencode Python SDK from OpenAPI spec.")
-    parser.add_argument("--source", choices=["cli", "server"], default="cli", help="Where to fetch the OpenAPI spec from")
+    parser.add_argument(
+        "--source", choices=["cli", "server"], default="cli", help="Where to fetch the OpenAPI spec from"
+    )
     parser.add_argument(
         "--server-url",
         default="http://localhost:4096/doc",
@@ -103,7 +105,10 @@ def main() -> int:
         except subprocess.CalledProcessError as e:
             print(e.stdout)
             print(e.stderr, file=sys.stderr)
-            print("ERROR: Failed to run 'bun dev generate'. Ensure Bun is installed and available in PATH.", file=sys.stderr)
+            print(
+                "ERROR: Failed to run 'bun dev generate'. Ensure Bun is installed and available in PATH.",
+                file=sys.stderr,
+            )
             return 1
         try:
             write_json(openapi_json, proc.stdout)
@@ -121,9 +126,7 @@ def main() -> int:
     print("Running openapi-python-client generate ...")
     # Prefer uvx if available
     use_uvx = shutil.which("uvx") is not None
-    cmd = (
-        ["uvx", "openapi-python-client", "generate"] if use_uvx else ["openapi-python-client", "generate"]
-    ) + [
+    cmd = (["uvx", "openapi-python-client", "generate"] if use_uvx else ["openapi-python-client", "generate"]) + [
         "--path",
         str(openapi_json),
         "--output-path",
@@ -181,9 +184,9 @@ def main() -> int:
             "from .client import AuthenticatedClient, Client\n"
             "from .extras import OpenCodeClient\n\n"
             "__all__ = (\n"
-            "    \"AuthenticatedClient\",\n"
-            "    \"Client\",\n"
-            "    \"OpenCodeClient\",\n"
+            '    "AuthenticatedClient",\n'
+            '    "Client",\n'
+            '    "OpenCodeClient",\n'
             ")\n"
         )
         init_path.write_text(init_text)

@@ -4,8 +4,8 @@ from typing import AsyncIterator, Dict, Iterator, Optional
 
 import httpx
 
-from opencode_ai.client import Client
 from opencode_ai.api.default import config_get, session_list
+from opencode_ai.client import Client
 from opencode_ai.types import UNSET, Unset
 
 

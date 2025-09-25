@@ -2,7 +2,6 @@
 
 This package provides a Python SDK for the Opencode API. It is generated using openapi-python-client (not Stainless).
 
-Status: scaffolding in place; generation wired up via scripts/generate.py.
 
 Documentation
 - Full docs: see `mkdocs` site under `packages/sdk/python/docs/`

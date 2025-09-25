@@ -44,9 +44,7 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[
+def _parse_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Optional[
     Union[
         "EventFileEdited",
         "EventFileWatcherUpdated",
@@ -234,9 +232,7 @@ def _parse_response(
         return None
 
 
-def _build_response(
-    *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[
+def _build_response(*, client: Union[AuthenticatedClient, Client], response: httpx.Response) -> Response[
     Union[
         "EventFileEdited",
         "EventFileWatcherUpdated",

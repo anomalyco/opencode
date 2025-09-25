@@ -190,17 +190,12 @@ Based on existing SDKs, implement:
 - [X] Ensure package metadata is complete
 - [X] Add badges to README (PyPI version)
 
-### Phase 8: Migration and Deprecation
-
-#### 8.1 Migration Guide
-- [ ] Create migration guide from Stainless SDK (if one exists)
-- [ ] Document breaking changes
-- [ ] Provide code examples for migration
-
-#### 8.2 Cleanup
-- [ ] Remove Stainless Python configuration
-- [ ] Update all references in documentation
-- [ ] Archive any deprecated Python SDK repositories
+### Phase 8: Cleanup and Refactoring
+- [ ] Remove any remaining Stainless Python artifacts
+- [ ] Remove any unused, redundant, or outdated code anywhere inside `packages/sdk/python`
+- [ ] Write more comprehensive tests for the Python SDK
+- [ ] Write more comprehensive documentation for the Python SDK
+- [ ] Write more comprehensive examples for the Python SDK
 
 ## Technical Considerations
 
