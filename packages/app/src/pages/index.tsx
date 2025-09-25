@@ -241,7 +241,7 @@ export default function Page() {
   return (
     <div class="relative">
       <div
-        class="fixed top-0 left-0 h-full border-r border-border-subtle/30 flex flex-col overflow-hidden"
+        class="fixed top-0 left-0 h-full border-r border-border-subtle/30 flex flex-col overflow-hidden bg-background z-10"
         style={`width: ${local.layout.leftWidth()}px`}
       >
         <Tabs class="relative flex flex-col h-full" defaultValue="files">
@@ -261,7 +261,7 @@ export default function Page() {
           <Tabs.Content value="changes" class="grow min-h-0 py-2 bg-background">
             <Show
               when={local.file.changes().length}
-              fallback={<div class="px-2 text-xs text-text-muted">No changes yet</div>}
+              fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
             >
               <ul class="">
                 <For each={local.file.changes()}>
@@ -299,7 +299,7 @@ export default function Page() {
       </div>
       <Show when={local.layout.rightPane()}>
         <div
-          class="fixed top-0 right-0 h-full border-l border-border-subtle/30 flex flex-col overflow-hidden"
+          class="fixed top-0 right-0 h-full border-l border-border-subtle/30 flex flex-col overflow-hidden bg-background z-10"
           style={`width: ${local.layout.rightWidth()}px`}
         >
           <div class="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
@@ -609,24 +609,21 @@ export default function Page() {
 }
 
 const TabVisual = (props: { file: LocalFile }) => {
-  const local = useLocal()
   return (
     <div class="flex items-center gap-x-1.5">
       <FileIcon node={props.file} class="" />
-      <span
-        classList={{ "text-xs": true, "text-primary": local.file.changed(props.file.path), italic: !props.file.pinned }}
-      >
+      <span classList={{ "text-xs": true, "text-primary": !!props.file.status?.status, italic: !props.file.pinned }}>
         {props.file.name}
       </span>
       <span class="text-xs opacity-70">
         <Switch>
-          <Match when={local.file.status(props.file.path)?.status === "modified"}>
+          <Match when={props.file.status?.status === "modified"}>
             <span class="text-primary">M</span>
           </Match>
-          <Match when={local.file.status(props.file.path)?.status === "added"}>
+          <Match when={props.file.status?.status === "added"}>
             <span class="text-success">A</span>
           </Match>
-          <Match when={local.file.status(props.file.path)?.status === "deleted"}>
+          <Match when={props.file.status?.status === "deleted"}>
             <span class="text-error">D</span>
           </Match>
         </Switch>

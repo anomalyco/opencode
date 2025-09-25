@@ -6,8 +6,7 @@ function strip(text: string): string {
   const match = text.match(wrappedRe)
   return match ? match[2] : text
 }
-
-export default function Markdown(props: { text: string; class?: string }) {
+export function Markdown(props: { text: string; class?: string }) {
   const marked = useMarked()
   const [html] = createResource(
     () => strip(props.text),

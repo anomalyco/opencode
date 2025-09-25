@@ -1,7 +1,7 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createContext, createEffect, createMemo, useContext, type ParentProps } from "solid-js"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode, Model, Provider } from "@opencode-ai/sdk"
+import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk"
 import { useSDK, useEvent, useSync } from "@/context"
 
 export type LocalFile = FileNode &
@@ -15,6 +15,7 @@ export type LocalFile = FileNode &
     view: "raw" | "diff-unified" | "diff-split"
     folded: string[]
     selectedChange: number
+    status: FileStatus
   }>
 export type TextSelection = LocalFile["selection"]
 export type View = LocalFile["view"]
@@ -126,9 +127,33 @@ function init() {
     const opened = createMemo(() => store.opened.map((x) => store.node[x]))
     const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
     const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
-    const status = (path: string) => sync.data.changes.find((f) => f.path === path)
+
+    createEffect((prev: FileStatus[]) => {
+      const removed = prev.filter((p) => !sync.data.changes.find((c) => c.path === p.path))
+      for (const p of removed) {
+        setStore(
+          "node",
+          p.path,
+          produce((draft) => {
+            draft.status = undefined
+            draft.view = "raw"
+          }),
+        )
+        load(p.path)
+      }
+      for (const p of sync.data.changes) {
+        if (store.node[p.path] === undefined) {
+          fetch(p.path).then(() => setStore("node", p.path, "status", p))
+        } else {
+          setStore("node", p.path, "status", p)
+        }
+      }
+      return sync.data.changes
+    }, sync.data.changes)
 
     const changed = (path: string) => {
+      const node = store.node[path]
+      if (node?.status) return true
       const set = changeset()
       if (set.has(path)) return true
       for (const p of set) {
@@ -138,24 +163,17 @@ function init() {
     }
 
     const resetNode = (path: string) => {
-      setStore("node", path, {
-        loaded: undefined,
-        pinned: undefined,
-        content: undefined,
-        selection: undefined,
-        scrollTop: undefined,
-        folded: undefined,
-        view: undefined,
-        selectedChange: undefined,
-      })
+      setStore("node", path, undefined!)
     }
 
+    const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
+
     const load = async (path: string) => {
-      const relative = path.replace(sync.data.path.directory + "/", "")
-      sdk.file.read({ query: { path: relative } }).then((x) => {
+      const relativePath = relative(path)
+      sdk.file.read({ query: { path: relativePath } }).then((x) => {
         setStore(
           "node",
-          relative,
+          relativePath,
           produce((draft) => {
             draft.loaded = true
             draft.content = x.data
@@ -164,28 +182,31 @@ function init() {
       })
     }
 
-    const open = async (path: string, options?: { pinned?: boolean; view?: LocalFile["view"] }) => {
-      const relative = path.replace(sync.data.path.directory + "/", "")
-      if (!store.node[relative]) {
-        const parent = relative.split("/").slice(0, -1).join("/")
-        if (parent) {
-          await list(parent)
-        }
+    const fetch = async (path: string) => {
+      const relativePath = relative(path)
+      const parent = relativePath.split("/").slice(0, -1).join("/")
+      if (parent) {
+        await list(parent)
       }
+    }
+
+    const open = async (path: string, options?: { pinned?: boolean; view?: LocalFile["view"] }) => {
+      const relativePath = relative(path)
+      if (!store.node[relativePath]) await fetch(path)
       setStore("opened", (x) => {
-        if (x.includes(relative)) return x
+        if (x.includes(relativePath)) return x
         return [
           ...opened()
             .filter((x) => x.pinned)
             .map((x) => x.path),
-          relative,
+          relativePath,
         ]
       })
-      setStore("active", relative)
+      setStore("active", relativePath)
       if (options?.pinned) setStore("node", path, "pinned", true)
-      if (options?.view && store.node[relative].view === undefined) setStore("node", path, "view", options.view)
-      if (store.node[relative].loaded) return
-      return load(relative)
+      if (options?.view && store.node[relativePath].view === undefined) setStore("node", path, "view", options.view)
+      if (store.node[relativePath].loaded) return
+      return load(relativePath)
     }
 
     const list = async (path: string) => {
@@ -212,10 +233,9 @@ function init() {
           if (part.type === "tool" && part.state.status === "completed") {
             switch (part.tool) {
               case "read":
-                console.log("read", part.state.input)
                 break
               case "edit":
-                load(part.state.input["filePath"] as string)
+                // load(part.state.input["filePath"] as string)
                 break
               default:
                 break
@@ -223,8 +243,10 @@ function init() {
           }
           break
         case "file.watcher.updated":
-          load(event.properties.file)
-          sync.load.changes()
+          setTimeout(sync.load.changes, 1000)
+          const relativePath = relative(event.properties.file)
+          if (relativePath.startsWith(".git/")) return
+          load(relativePath)
           break
       }
     })
@@ -298,9 +320,8 @@ function init() {
       setChangeIndex(path: string, index: number | undefined) {
         setStore("node", path, "selectedChange", index)
       },
-      changed,
       changes,
-      status,
+      changed,
       children(path: string) {
         return Object.values(store.node).filter(
           (x) =>
@@ -310,6 +331,7 @@ function init() {
         )
       },
       search,
+      relative,
     }
   })()
 

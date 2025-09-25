@@ -435,7 +435,7 @@ function transformerUnifiedDiff(): ShikiTransformer {
         out.push(s)
       }
 
-      return out.join("\n")
+      return out.join("\n").trimEnd()
     },
     code(node) {
       if (isDiff) this.addClassToHast(node, "code-diff")

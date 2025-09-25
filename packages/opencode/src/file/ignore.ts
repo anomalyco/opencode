@@ -6,9 +6,6 @@ export namespace FileIgnore {
     "**/.pnpm-store/**",
     "**/vendor/**",
 
-    // vcs
-    "**/.git/**",
-
     // Build outputs
     "**/dist/**",
     "**/build/**",
@@ -50,8 +47,12 @@ export namespace FileIgnore {
     filepath: string,
     opts: {
       extra?: Bun.Glob[]
+      whitelist?: Bun.Glob[]
     },
   ) {
+    for (const glob of opts.whitelist || []) {
+      if (glob.match(filepath)) return false
+    }
     const extra = opts.extra || []
     for (const glob of [...GLOBS, ...extra]) {
       if (glob.match(filepath)) return true
