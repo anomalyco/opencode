@@ -208,7 +208,7 @@ export function Prompt(props: PromptProps) {
               </box>
             </Match>
             <Match when={true}>
-              <text live>
+              <text>
                 ctrl+p <span style={{ fg: Theme.textMuted }}>commands</span>
               </text>
             </Match>

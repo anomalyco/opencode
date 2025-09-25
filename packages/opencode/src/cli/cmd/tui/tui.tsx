@@ -17,7 +17,6 @@ import { CommandProvider, useCommandDialog } from "./component/dialog-command"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { KeybindProvider, useKeybind } from "./context/keybind"
-import { ShimmerProvider } from "./ui/shimmer"
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
@@ -68,23 +67,21 @@ export const TuiCommand = cmd({
       () => {
         return (
           <RouteProvider>
-            <ShimmerProvider>
-              <ThemeProvider>
-                <SDKProvider>
-                  <SyncProvider>
-                    <LocalProvider>
-                      <KeybindProvider>
-                        <DialogProvider>
-                          <CommandProvider>
-                            <App />
-                          </CommandProvider>
-                        </DialogProvider>
-                      </KeybindProvider>
-                    </LocalProvider>
-                  </SyncProvider>
-                </SDKProvider>
-              </ThemeProvider>
-            </ShimmerProvider>
+            <ThemeProvider>
+              <SDKProvider>
+                <SyncProvider>
+                  <LocalProvider>
+                    <KeybindProvider>
+                      <DialogProvider>
+                        <CommandProvider>
+                          <App />
+                        </CommandProvider>
+                      </DialogProvider>
+                    </KeybindProvider>
+                  </LocalProvider>
+                </SyncProvider>
+              </SDKProvider>
+            </ThemeProvider>
           </RouteProvider>
         )
       },

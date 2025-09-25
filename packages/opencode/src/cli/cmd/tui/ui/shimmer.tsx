@@ -1,6 +1,6 @@
-import { RGBA, Timeline } from "@opentui/core"
-import { createComponentTimeline, useTimeline } from "@opentui/solid"
-import { createContext, createMemo, useContext, type ParentProps } from "solid-js"
+import { RGBA } from "@opentui/core"
+import { useTimeline } from "@opentui/solid"
+import { createMemo, createSignal } from "solid-js"
 
 export type ShimmerProps = {
   text: string
@@ -9,42 +9,45 @@ export type ShimmerProps = {
 
 const DURATION = 2_500
 
-const context = createContext<Timeline>()
-
-export function ShimmerProvider(props: ParentProps) {
-  const timeline = createComponentTimeline({
+export function Shimmer(props: ShimmerProps) {
+  const timeline = useTimeline({
     duration: DURATION,
     loop: true,
   })
-  return <context.Provider value={timeline}>{props.children}</context.Provider>
-}
-
-export function Shimmer(props: ShimmerProps) {
-  const timeline = useContext(context)
   const characters = props.text.split("")
   const color = createMemo(() => RGBA.fromHex(props.color))
 
-  const animation = characters.map((_, i) =>
-    useTimeline(
-      timeline!,
-      { shimmer: 0.4 },
-      { shimmer: 1 },
+  const shimmerSignals = characters.map((_, i) => {
+    const [shimmer, setShimmer] = createSignal(0.4)
+    const target = {
+      shimmer: shimmer(),
+      setShimmer,
+    }
+
+    timeline!.add(
+      target,
       {
+        shimmer: 1,
         duration: DURATION / (props.text.length + 1),
         ease: "linear",
         alternate: true,
         loop: 2,
+        onUpdate: () => {
+          target.setShimmer(target.shimmer)
+        },
       },
       (i * (DURATION / (props.text.length + 1))) / 2,
-    ),
-  )
+    )
+
+    return shimmer
+  })
 
   return (
-    <text live>
+    <text>
       {(() => {
         return characters.map((ch, i) => {
-          const shimmer = animation[i]().shimmer
-          const fg = RGBA.fromInts(color().r * 255, color().g * 255, color().b * 255, shimmer * 255)
+          const shimmer = shimmerSignals[i]
+          const fg = RGBA.fromInts(color().r * 255, color().g * 255, color().b * 255, shimmer() * 255)
           return <span style={{ fg }}>{ch}</span>
         })
       })()}
