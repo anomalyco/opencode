@@ -14,6 +14,7 @@ htmlcov/
 .env
 .DS_Store
 openapi.json
+site/
 
 # IDE
 .vscode/
