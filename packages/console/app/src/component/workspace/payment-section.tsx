@@ -85,7 +85,9 @@ export function PaymentSection() {
                         {formatDateForTable(date)}
                       </td>
                       <td data-slot="payment-id">{payment.id}</td>
-                      <td data-slot="payment-amount">${((payment.amount ?? 0) / 100000000).toFixed(2)}</td>
+                      <td data-slot="payment-amount" data-refunded={!!payment.timeRefunded}>
+                        ${((payment.amount ?? 0) / 100000000).toFixed(2)}
+                      </td>
                       <td data-slot="payment-receipt">
                         <button
                           onClick={async () => {

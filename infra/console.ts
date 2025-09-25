@@ -75,6 +75,7 @@ export const stripeWebhook = new WebhookEndpoint("StripeWebhookEndpoint", {
     "checkout.session.async_payment_succeeded",
     "checkout.session.completed",
     "checkout.session.expired",
+    "charge.refunded",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -93,9 +94,6 @@ export const stripeWebhook = new WebhookEndpoint("StripeWebhookEndpoint", {
     "customer.subscription.resumed",
     "customer.subscription.trial_will_end",
     "customer.subscription.updated",
-    "customer.tax_id.created",
-    "customer.tax_id.deleted",
-    "customer.tax_id.updated",
   ],
 })
 

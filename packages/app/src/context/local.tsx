@@ -1,9 +1,8 @@
 import { createStore, produce, reconcile } from "solid-js/store"
 import { batch, createContext, createEffect, createMemo, useContext, type ParentProps } from "solid-js"
-import { useSync } from "./sync"
 import { uniqueBy } from "remeda"
-import type { FileContent, FileNode } from "@opencode-ai/sdk"
-import { useSDK } from "./sdk"
+import type { FileContent, FileNode, Model, Provider } from "@opencode-ai/sdk"
+import { useSDK, useEvent, useSync } from "@/context"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -20,12 +19,17 @@ export type LocalFile = FileNode &
 export type TextSelection = LocalFile["selection"]
 export type View = LocalFile["view"]
 
+export type LocalModel = Omit<Model, "provider"> & {
+  provider: Provider
+}
+export type ModelKey = { providerID: string; modelID: string }
+
 function init() {
   const sdk = useSDK()
   const sync = useSync()
 
-  const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
   const agent = (() => {
+    const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
     const [store, setStore] = createStore<{
       current: string
     }>({
@@ -55,18 +59,14 @@ function init() {
   })()
 
   const model = (() => {
+    const list = createMemo(() =>
+      sync.data.provider.flatMap((p) => Object.values(p.models).map((m) => ({ ...m, provider: p }) as LocalModel)),
+    )
+    const find = (key: ModelKey) => list().find((m) => m.id === key?.modelID && m.provider.id === key.providerID)
+
     const [store, setStore] = createStore<{
-      model: Record<
-        string,
-        {
-          providerID: string
-          modelID: string
-        }
-      >
-      recent: {
-        providerID: string
-        modelID: string
-      }[]
+      model: Record<string, ModelKey>
+      recent: ModelKey[]
     }>({
       model: {},
       recent: [],
@@ -82,37 +82,21 @@ function init() {
       if (store.recent.length) return store.recent[0]
       const provider = sync.data.provider[0]
       const model = Object.values(provider.models)[0]
-      return {
-        providerID: provider.id,
-        modelID: model.id,
-      }
+      return { modelID: model.id, providerID: provider.id }
     })
 
     const current = createMemo(() => {
       const a = agent.current()
-      return store.model[agent.current().name] ?? (a.model ? a.model : fallback())
+      return find(store.model[agent.current().name]) ?? find(a.model ?? fallback())
     })
 
-    const list = createMemo(() =>
-      sync.data.provider.flatMap((x) => Object.values(x.models).map((m) => ({ providerID: x.id, modelID: m.id }))),
-    )
+    const recent = createMemo(() => store.recent.map(find).filter(Boolean))
 
     return {
       list,
       current,
-      recent() {
-        return store.recent
-      },
-      parsed: createMemo(() => {
-        const value = current()
-        const provider = sync.data.provider.find((x) => x.id === value.providerID)!
-        const model = provider.models[value.modelID]
-        return {
-          provider: provider.name ?? value.providerID,
-          model: model.name ?? value.modelID,
-        }
-      }),
-      set(model: { providerID: string; modelID: string } | undefined, options?: { recent?: boolean }) {
+      recent,
+      set(model: ModelKey | undefined, options?: { recent?: boolean }) {
         batch(() => {
           setStore("model", agent.current().name, model ?? fallback())
           if (options?.recent && model) {
@@ -140,11 +124,12 @@ function init() {
       return store.node[store.active]
     })
     const opened = createMemo(() => store.opened.map((x) => store.node[x]))
-    const changes = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
+    const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
+    const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
     const status = (path: string) => sync.data.changes.find((f) => f.path === path)
 
     const changed = (path: string) => {
-      const set = changes()
+      const set = changeset()
       if (set.has(path)) return true
       for (const p of set) {
         if (p.startsWith(path ? path + "/" : "")) return true
@@ -165,19 +150,21 @@ function init() {
       })
     }
 
-    const load = async (path: string) =>
-      sdk.file.read({ query: { path } }).then((x) => {
+    const load = async (path: string) => {
+      const relative = path.replace(sync.data.path.directory + "/", "")
+      sdk.file.read({ query: { path: relative } }).then((x) => {
         setStore(
           "node",
-          path,
+          relative,
           produce((draft) => {
             draft.loaded = true
             draft.content = x.data
           }),
         )
       })
+    }
 
-    const open = async (path: string) => {
+    const open = async (path: string, options?: { pinned?: boolean; view?: LocalFile["view"] }) => {
       const relative = path.replace(sync.data.path.directory + "/", "")
       if (!store.node[relative]) {
         const parent = relative.split("/").slice(0, -1).join("/")
@@ -195,6 +182,8 @@ function init() {
         ]
       })
       setStore("active", relative)
+      if (options?.pinned) setStore("node", path, "pinned", true)
+      if (options?.view && store.node[relative].view === undefined) setStore("node", path, "view", options.view)
       if (store.node[relative].loaded) return
       return load(relative)
     }
@@ -213,27 +202,30 @@ function init() {
       })
     }
 
-    sdk.event.subscribe().then(async (events) => {
-      for await (const event of events.stream) {
-        switch (event.type) {
-          case "message.part.updated":
-            const part = event.properties.part
-            if (part.type === "tool" && part.state.status === "completed") {
-              switch (part.tool) {
-                case "read":
-                  console.log("read", part.state.input)
-                  break
-                case "edit":
-                  const absolute = part.state.input["filePath"] as string
-                  const path = absolute.replace(sync.data.path.directory + "/", "")
-                  load(path)
-                  break
-                default:
-                  break
-              }
+    const search = (query: string) => sdk.find.files({ query: { query } }).then((x) => x.data!)
+
+    const bus = useEvent()
+    bus.listen((event) => {
+      switch (event.type) {
+        case "message.part.updated":
+          const part = event.properties.part
+          if (part.type === "tool" && part.state.status === "completed") {
+            switch (part.tool) {
+              case "read":
+                console.log("read", part.state.input)
+                break
+              case "edit":
+                load(part.state.input["filePath"] as string)
+                break
+              default:
+                break
             }
-            break
-        }
+          }
+          break
+        case "file.watcher.updated":
+          load(event.properties.file)
+          sync.load.changes()
+          break
       }
     })
 
@@ -307,6 +299,7 @@ function init() {
         setStore("node", path, "selectedChange", index)
       },
       changed,
+      changes,
       status,
       children(path: string) {
         return Object.values(store.node).filter(
@@ -316,6 +309,7 @@ function init() {
             !x.path.replace(new RegExp(`^${path + "/"}`), "").includes("/"),
         )
       },
+      search,
     }
   })()
 

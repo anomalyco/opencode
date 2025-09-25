@@ -1,6 +1,6 @@
 import { Billing } from "@opencode/console-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
-import { Database, eq, sql } from "@opencode/console-core/drizzle/index.js"
+import { and, Database, eq, sql } from "@opencode/console-core/drizzle/index.js"
 import { BillingTable, PaymentTable } from "@opencode/console-core/schema/billing.sql.js"
 import { Identifier } from "@opencode/console-core/identifier.js"
 import { centsToMicroCents } from "@opencode/console-core/util/price.js"
@@ -41,12 +41,14 @@ export async function POST(input: APIEvent) {
     const workspaceID = body.data.object.metadata?.workspaceID
     const customerID = body.data.object.customer as string
     const paymentID = body.data.object.payment_intent as string
+    const invoiceID = body.data.object.invoice as string
     const amount = body.data.object.amount_total
 
     if (!workspaceID) throw new Error("Workspace ID not found")
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
     if (!paymentID) throw new Error("Payment ID not found")
+    if (!invoiceID) throw new Error("Invoice ID not found")
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
@@ -86,9 +88,43 @@ export async function POST(input: APIEvent) {
           id: Identifier.create("payment"),
           amount: centsToMicroCents(Billing.CHARGE_AMOUNT),
           paymentID,
+          invoiceID,
           customerID,
         })
       })
+    })
+  }
+  if (body.type === "charge.refunded") {
+    const customerID = body.data.object.customer as string
+    const paymentIntentID = body.data.object.payment_intent as string
+    if (!customerID) throw new Error("Customer ID not found")
+    if (!paymentIntentID) throw new Error("Payment ID not found")
+
+    const workspaceID = await Database.use((tx) =>
+      tx
+        .select({
+          workspaceID: BillingTable.workspaceID,
+        })
+        .from(BillingTable)
+        .where(eq(BillingTable.customerID, customerID))
+        .then((rows) => rows[0]?.workspaceID),
+    )
+    if (!workspaceID) throw new Error("Workspace ID not found")
+
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(PaymentTable)
+        .set({
+          timeRefunded: new Date(body.created * 1000),
+        })
+        .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
+
+      await tx
+        .update(BillingTable)
+        .set({
+          balance: sql`${BillingTable.balance} - ${centsToMicroCents(Billing.CHARGE_AMOUNT)}`,
+        })
+        .where(eq(BillingTable.workspaceID, workspaceID))
     })
   }
 

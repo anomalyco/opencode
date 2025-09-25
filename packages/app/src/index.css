@@ -19,6 +19,19 @@
     /* color: var(--color-background); */
   }
 
+  ::-webkit-scrollbar-track {
+    background: var(--theme-background-panel);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--theme-border-subtle);
+    border-radius: 6px;
+  }
+
+  * {
+    scrollbar-color: var(--theme-border-subtle) var(--theme-background-panel);
+  }
+
   .prose h1 {
     color: var(--color-text);
     font-size: var(--text-sm);

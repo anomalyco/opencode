@@ -1,6 +1,6 @@
 {
   "name": "@opencode/console-function",
-  "version": "0.10.2",
+  "version": "0.11.3",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",

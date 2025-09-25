@@ -14,7 +14,10 @@ export namespace Storage {
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
-      for await (const projectDir of new Bun.Glob("*").scan({ cwd: project, onlyFiles: false })) {
+      for await (const projectDir of new Bun.Glob("*").scan({
+        cwd: project,
+        onlyFiles: false,
+      })) {
         log.info(`migrating project ${projectDir}`)
         let projectID = projectDir
         const fullProjectDir = path.join(project, projectDir)

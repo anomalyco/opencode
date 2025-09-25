@@ -185,6 +185,9 @@ Redo a previously undone message. Only available after using `/undo`.
 Any file changes will also be restored.
 :::
 
+Internally, this uses Git to manage the file changes. So your project **needs to
+be a Git repository**.
+
 ```bash frame="none"
 /redo
 ```
@@ -237,6 +240,9 @@ Undo last message in the conversation. Removes the most recent user message, all
 Any file changes made will also be reverted.
 :::
 
+Internally, this uses Git to manage the file changes. So your project **needs to
+be a Git repository**.
+
 ```bash frame="none"
 /undo
 ```
@@ -266,7 +272,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     export EDITOR=nano
     export EDITOR=vim
 
-    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     export EDITOR="code --wait"
     ```
 
@@ -279,7 +286,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```bash
     set EDITOR=notepad
 
-    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     set EDITOR=code --wait
     ```
 
@@ -292,7 +300,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     ```powershell
     $env:EDITOR = "notepad"
 
-    # For GUI editors (VS Code, Cursor, VSCodium, Windsurf, Zed, etc.) include --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     $env:EDITOR = "code --wait"
     ```
 

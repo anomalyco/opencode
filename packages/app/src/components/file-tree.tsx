@@ -18,7 +18,7 @@ export default function FileTree(props: {
     <Dynamic
       component={p.as ?? "div"}
       classList={{
-        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-panel cursor-pointer": true,
+        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element cursor-pointer": true,
         "bg-background-element": local.file.active()?.path === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}

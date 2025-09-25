@@ -7,7 +7,6 @@ export const WorkspaceTable = mysqlTable(
     id: ulid("id").notNull().primaryKey(),
     slug: varchar("slug", { length: 255 }),
     name: varchar("name", { length: 255 }),
-    dataShare: boolean("data_share"),
     ...timestamps,
   },
   (table) => [uniqueIndex("slug").on(table.slug)],

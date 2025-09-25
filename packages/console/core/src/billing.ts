@@ -10,6 +10,8 @@ import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 
 export namespace Billing {
+  export const CHARGE_NAME = "opencode credits"
+  export const CHARGE_FEE_NAME = "processing fee"
   export const CHARGE_AMOUNT = 2000 // $20
   export const CHARGE_FEE = 123 // Stripe fee 4.4% + $0.30
   export const CHARGE_THRESHOLD = 500 // $5
@@ -73,22 +75,39 @@ export namespace Billing {
         .then((rows) => rows[0]),
     )
     const paymentID = Identifier.create("payment")
-    let charge
+    let invoice
     try {
-      charge = await Billing.stripe().paymentIntents.create(
-        {
-          amount: Billing.CHARGE_AMOUNT + Billing.CHARGE_FEE,
-          currency: "usd",
-          customer: customerID!,
-          payment_method: paymentMethodID!,
-          off_session: true,
-          confirm: true,
-        },
-        { idempotencyKey: paymentID },
-      )
-
-      if (charge.status !== "succeeded") throw new Error(charge.last_payment_error?.message)
+      const draft = await Billing.stripe().invoices.create({
+        customer: customerID!,
+        auto_advance: false,
+        default_payment_method: paymentMethodID!,
+        collection_method: "charge_automatically",
+        currency: "usd",
+      })
+      await Billing.stripe().invoiceItems.create({
+        amount: Billing.CHARGE_AMOUNT,
+        currency: "usd",
+        customer: customerID!,
+        description: CHARGE_NAME,
+        invoice: draft.id!,
+      })
+      await Billing.stripe().invoiceItems.create({
+        amount: Billing.CHARGE_FEE,
+        currency: "usd",
+        customer: customerID!,
+        description: CHARGE_FEE_NAME,
+        invoice: draft.id!,
+      })
+      await Billing.stripe().invoices.finalizeInvoice(draft.id!)
+      invoice = await Billing.stripe().invoices.pay(draft.id!, {
+        off_session: true,
+        payment_method: paymentMethodID!,
+        expand: ["payments"],
+      })
+      if (invoice.status !== "paid" || invoice.payments?.data.length !== 1)
+        throw new Error(invoice.last_finalization_error?.message)
     } catch (e: any) {
+      console.error(e)
       await Database.use((tx) =>
         tx
           .update(BillingTable)
@@ -114,7 +133,8 @@ export namespace Billing {
         workspaceID: Actor.workspace(),
         id: paymentID,
         amount: centsToMicroCents(CHARGE_AMOUNT),
-        paymentID: charge.id,
+        invoiceID: invoice.id!,
+        paymentID: invoice.payments?.data[0].payment.payment_intent as string,
         customerID,
       })
     })
@@ -155,12 +175,13 @@ export namespace Billing {
       const customer = await Billing.get()
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
+        billing_address_collection: "required",
         line_items: [
           {
             price_data: {
               currency: "usd",
               product_data: {
-                name: "opencode credits",
+                name: CHARGE_NAME,
               },
               unit_amount: CHARGE_AMOUNT,
             },
@@ -170,16 +191,13 @@ export namespace Billing {
             price_data: {
               currency: "usd",
               product_data: {
-                name: "processing fee",
+                name: CHARGE_FEE_NAME,
               },
               unit_amount: CHARGE_FEE,
             },
             quantity: 1,
           },
         ],
-        payment_intent_data: {
-          setup_future_usage: "on_session",
-        },
         ...(customer.customerID
           ? {
               customer: customer.customerID,
@@ -192,6 +210,12 @@ export namespace Billing {
           workspaceID: Actor.workspace(),
         },
         currency: "usd",
+        invoice_creation: {
+          enabled: true,
+        },
+        payment_intent_data: {
+          setup_future_usage: "on_session",
+        },
         payment_method_types: ["card"],
         payment_method_data: {
           allow_redisplay: "always",

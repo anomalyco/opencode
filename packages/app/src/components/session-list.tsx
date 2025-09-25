@@ -7,7 +7,7 @@ export default function SessionList() {
   const local = useLocal()
 
   return (
-    <VList data={sync.data.session} class="p-2 no-scrollbar">
+    <VList data={sync.data.session} class="p-2">
       {(session) => (
         <Tooltip placement="right" value={session.title} class="w-full min-w-0">
           <Button
