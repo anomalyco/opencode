@@ -12,6 +12,7 @@ import (
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
+	"github.com/sst/opencode/internal/components/toast"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
@@ -194,6 +195,14 @@ func (n *timelineDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					util.CmdHandler(modal.CloseModalMsg{}),
 				)
 			}
+		case "c":
+			// Copy selected message content to clipboard
+			if item, idx := n.list.GetSelectedItem(); idx >= 0 {
+				return n, tea.Sequence(
+					app.SetClipboard(item.content),
+					toast.NewSuccessToast("Message copied to clipboard!"),
+				)
+			}
 		case "enter":
 			// Keep Enter functionality for closing the modal
 			if _, idx := n.list.GetSelectedItem(); idx >= 0 {
@@ -226,7 +235,11 @@ func (n *timelineDialog) Render(background string) string {
 	) + keyStyle(
 		"r",
 	) + mutedStyle(
-		" restore",
+		" restore   ",
+	) + keyStyle(
+		"c",
+	) + mutedStyle(
+		" copy",
 	)
 
 	bgColor := t.BackgroundPanel()
