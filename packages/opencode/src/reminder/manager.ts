@@ -203,6 +203,9 @@ export namespace ReminderManager {
     Storage.list(["reminder", Instance.project.id])
       .then(async (reminderKeys) => {
         const projectState = await state()
+        let restoredCount = 0
+        let cancelledCount = 0
+        let healthyCount = 0
 
         for (const key of reminderKeys) {
           try {
@@ -210,24 +213,66 @@ export namespace ReminderManager {
             if (reminder && reminder.status === "active") {
               projectState.reminders.set(reminder.id, reminder)
 
+              // Validate session still exists
+              try {
+                const session = await Session.get(reminder.sessionID)
+                if (!session) {
+                  await cancel(reminder.id)
+                  cancelledCount++
+                  log.info("cancelled reminder: session no longer exists", {
+                    id: reminder.id,
+                    sessionID: reminder.sessionID,
+                  })
+                  continue
+                }
+              } catch (error) {
+                await cancel(reminder.id)
+                cancelledCount++
+                log.info("cancelled reminder: session validation failed", {
+                  id: reminder.id,
+                  error: error instanceof Error ? error.message : String(error),
+                })
+                continue
+              }
+
               // Only reschedule if not expired by too much (1 hour grace period)
               const now = Date.now()
               const gracePeriod = 60 * 60 * 1000 // 1 hour
 
               if (reminder.time.nextExecution + gracePeriod > now) {
                 await scheduleTimer(reminder)
-                log.info("restored reminder from storage", { id: reminder.id })
+
+                // Validate timer was actually created
+                const isHealthy = projectState.timers.has(reminder.id)
+                if (isHealthy) {
+                  restoredCount++
+                  healthyCount++
+                  log.info("restored and validated reminder from storage", { id: reminder.id })
+                } else {
+                  await cancel(reminder.id)
+                  cancelledCount++
+                  log.warn("timer restoration failed, cancelled reminder", { id: reminder.id })
+                }
               } else {
                 // Remove expired reminders
                 await cancel(reminder.id)
+                cancelledCount++
                 log.info("removed expired reminder", { id: reminder.id })
               }
             }
           } catch (error) {
+            cancelledCount++
             log.warn("failed to restore reminder", { key, error })
             await Storage.remove(key)
           }
         }
+
+        log.info("timer persistence validation completed", {
+          total: reminderKeys.length,
+          restored: restoredCount,
+          cancelled: cancelledCount,
+          healthy: healthyCount,
+        })
       })
       .catch((error) => {
         log.warn("failed to initialize reminders", { error })
