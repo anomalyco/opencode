@@ -221,9 +221,13 @@ Reminder messages appear as **agent messages** in the originating session (poste
 When reminders need user permissions (e.g., bash tool access):
 
 - **Current session only**: Permission requests are only shown if the session is currently active
-- **Non-current sessions**: If a reminder requires permission while session is inactive, the reminder is automatically cancelled and removed
+- **Non-current sessions**: If a reminder requires permission while session is inactive:
+  - Permission requests are treated as "deny" (not shown to user)
+  - Agent posts an explanatory message to the session about what went wrong
+  - The reminder is automatically cancelled and removed (one-time) or skips execution (recurring)
 - **Simple handling**: No session blocking, queuing, or complex state management
 - **Recurring reminders**: Will continue to be rescheduled if recurring, even if individual executions are cancelled due to permissions
+- **User feedback**: When opening the session later, user sees agent's explanation of permission failures
 
 ### Background notifications
 
@@ -241,6 +245,11 @@ When reminders trigger in inactive sessions:
 ### Failed executions
 
 Errors during reminder execution are logged and posted as error messages to the originating session.
+
+**Permission failures**: When reminders fail due to permissions in non-current sessions, agents post clear explanatory messages such as:
+
+- "I couldn't check the logs because this session wasn't active when the reminder triggered and I need bash permission. The reminder will try again later." (recurring)
+- "I couldn't run the deployment script because this session wasn't active and I need bash permission. The one-time reminder has been cancelled." (one-time)
 
 ### Resource management
 
