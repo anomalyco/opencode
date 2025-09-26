@@ -220,12 +220,10 @@ Reminder messages appear as **agent messages** in the originating session (poste
 
 When reminders need user permissions (e.g., bash tool access):
 
-- **Single request**: Each reminder can only request permission once - no duplicate prompts
-- **Session blocking**: All reminders in that session pause until permission is granted/denied
-- **Permission granted**: Reminder waits for its next scheduled time, other reminders resume
-- **Permission denied**: Reminder is automatically cancelled/removed
-- **Other sessions unaffected**: Reminders in other sessions continue normally
-- **Clean state**: Once permission resolved, normal reminder scheduling resumes for remaining reminders
+- **Current session only**: Permission requests are only shown if the session is currently active
+- **Non-current sessions**: If a reminder requires permission while session is inactive, the reminder is automatically cancelled and removed
+- **Simple handling**: No session blocking, queuing, or complex state management
+- **Recurring reminders**: Will continue to be rescheduled if recurring, even if individual executions are cancelled due to permissions
 
 ### Background notifications
 
@@ -415,16 +413,3 @@ When user opens Session A:
 - Can interrupt/cancel ongoing agent processing normally
 - Red dot indicator disappears
 - Toast notifications stop
-
----
-
-## Implementation phases
-
-### Implementation scope
-
-- Basic timer management (setTimeout/setInterval)
-- Tool-agnostic message queuing system
-- Session binding and background execution
-- In-memory reminder management
-- Toast notifications and red dot indicators
-- Configuration system integration
