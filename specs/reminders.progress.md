@@ -1,7 +1,7 @@
 # Reminder Feature Implementation Progress Report
 
 _Generated: September 26, 2025_  
-_Updated: September 26, 2025 - Tool Availability Control completed_
+_Updated: September 26, 2025 - Tool Availability Control and Timer Persistence are now complete. Recent changes: Implemented actual config-based tool filtering (bcd71599), fixed circular dependency issues in reminder tool tests (8f50f0fb), added comprehensive tool availability test suite; ToolRegistry.enabled now properly respects config.reminders.enabled; see git history for details._
 
 ## Executive Summary
 
@@ -9,7 +9,7 @@ _Updated: September 26, 2025 - Tool Availability Control completed_
 
 The reminder feature has been **substantially implemented** with core functionality working and key operational controls in place.
 
-**Overall Implementation: 90% Complete**
+**Overall Implementation: 85% Complete**
 
 ---
 
@@ -61,6 +61,7 @@ The reminder feature has been **substantially implemented** with core functional
 - **Clean Agent Experience**: Disabled tools are invisible to agent (no error messages)
 - **Graceful Recovery**: Re-enabling restores all saved reminders
 - **Architecture Consistency**: Uses identical pattern to permission-based tool filtering
+- **Test Coverage**: Dedicated tests verify tool filtering for both enabled and disabled config states
 
 ---
 
@@ -108,19 +109,7 @@ The reminder feature has been **substantially implemented** with core functional
 
 - No flags in `Flag` namespace
 - No runtime disable mechanism
-- Tools always available regardless of config
-
-### **3. Tool Availability Control (20% Complete)**
-
-**✅ Implemented:**
-
-- Config schema has `enabled` field
-
-**❌ Missing:**
-
-- Tools don't check `config.reminders.enabled`
-- No graceful degradation when disabled
-- No error messages when feature is disabled
+- ✅ Tool availability now respects config settings
 
 ---
 
@@ -188,19 +177,20 @@ The implementation **perfectly follows opencode patterns**:
 
 ## **📊 Implementation Completeness Score**
 
-| Component                 | Specification | Implementation | Score    |
-| ------------------------- | ------------- | -------------- | -------- |
-| **Core Architecture**     | ✅ Complete   | ✅ Complete    | **100%** |
-| **Tool Implementation**   | ✅ Complete   | ✅ Complete    | **100%** |
-| **Configuration**         | ✅ Complete   | ✅ Complete    | **100%** |
-| **Storage & Persistence** | ✅ Complete   | ✅ Complete    | **100%** |
-| **Timer Persistence**     | ✅ Complete   | ✅ Complete    | **100%** |
-| **Permission Handling**   | ✅ Complete   | ⚠️ Partial     | **80%**  |
-| **UI/Notifications**      | ✅ Required   | ❌ Missing     | **0%**   |
-| **Runtime Controls**      | ✅ Required   | ❌ Missing     | **0%**   |
-| **Testing Coverage**      | ✅ Required   | ⚠️ Partial     | **70%**  |
+| Component                     | Specification | Implementation | Score    |
+| ----------------------------- | ------------- | -------------- | -------- |
+| **Core Architecture**         | ✅ Complete   | ✅ Complete    | **100%** |
+| **Tool Implementation**       | ✅ Complete   | ✅ Complete    | **100%** |
+| **Configuration**             | ✅ Complete   | ✅ Complete    | **100%** |
+| **Storage & Persistence**     | ✅ Complete   | ✅ Complete    | **100%** |
+| **Timer Persistence**         | ✅ Complete   | ✅ Complete    | **100%** |
+| **Permission Handling**       | ✅ Complete   | ⚠️ Partial     | **80%**  |
+| **UI/Notifications**          | ✅ Required   | ❌ Missing     | **0%**   |
+| **Runtime Controls**          | ✅ Required   | ❌ Missing     | **0%**   |
+| **Tool Availability Control** | ✅ Complete   | ✅ Complete    | **100%** |
+| **Testing Coverage**          | ✅ Required   | ⚠️ Partial     | **70%**  |
 
-**Overall Implementation: 80% Complete**
+**Overall Implementation: 85% Complete**
 
 ---
 
@@ -210,7 +200,7 @@ The implementation **perfectly follows opencode patterns**:
 
 1. **Fix circular dependencies** in tests
 2. **Add runtime disable flags** (`--disable-reminders`)
-3. **Implement tool availability checks** (respect `config.reminders.enabled`)
+3. ~~**Implement tool availability checks** (respect `config.reminders.enabled`)~~ ✅ **COMPLETED**
 
 ### **Short Term (User Experience)**
 
@@ -357,7 +347,7 @@ if (!isCurrentSession) {
 
 - ❌ UI components don't exist (no files found in app/console packages)
 - ❌ Runtime flags aren't implemented (not in Flag namespace)
-- ❌ Tool availability control is incomplete (no checks in tool execute methods)
+- ✅ Tool availability control is now complete (ToolRegistry.enabled respects config)
 - ❌ Notification system not integrated
 - ❌ Session indicators not implemented
 
