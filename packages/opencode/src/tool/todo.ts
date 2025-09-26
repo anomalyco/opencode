@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { Tool } from "./tool"
 import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Instance } from "../project/instance"

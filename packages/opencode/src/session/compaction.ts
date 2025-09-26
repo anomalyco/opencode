@@ -7,12 +7,16 @@ import { defer } from "../util/defer"
 import { MessageV2 } from "./message-v2"
 import { SystemPrompt } from "./system"
 import { Bus } from "../bus"
-import z from "zod"
+import z from "zod/v4"
 import type { ModelsDev } from "../provider/models"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
+import { Token } from "../util/token"
+import { Log } from "../util/log"
 
 export namespace SessionCompaction {
+  const log = Log.create({ service: "session.compaction" })
+
   export const Event = {
     Compacted: Bus.event(
       "session.compacted",
@@ -30,6 +34,52 @@ export namespace SessionCompaction {
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = context - output
     return count > usable
+  }
+
+  export const PRUNE_MINIMUM = 20_000
+  export const PRUNE_PROTECT = 40_000
+
+  // goes backwards through parts until there are 40_000 tokens worth of tool
+  // calls. then erases output of previous tool calls. idea is to throw away old
+  // tool calls that are no longer relevant.
+  export async function prune(input: { sessionID: string }) {
+    if (Flag.OPENCODE_DISABLE_PRUNE) return
+    log.info("pruning")
+    const msgs = await Session.messages(input.sessionID)
+    let total = 0
+    let pruned = 0
+    const toPrune = []
+    let turns = 0
+
+    loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
+      const msg = msgs[msgIndex]
+      if (msg.info.role === "user") turns++
+      if (turns < 2) continue
+      if (msg.info.role === "assistant" && msg.info.summary) break loop
+      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = msg.parts[partIndex]
+        if (part.type === "tool")
+          if (part.state.status === "completed") {
+            if (part.state.time.compacted) break loop
+            const estimate = Token.estimate(part.state.output)
+            total += estimate
+            if (total > PRUNE_PROTECT) {
+              pruned += estimate
+              toPrune.push(part)
+            }
+          }
+      }
+    }
+    log.info("found", { pruned, total })
+    if (pruned > PRUNE_MINIMUM) {
+      for (const part of toPrune) {
+        if (part.state.status === "completed") {
+          part.state.time.compacted = Date.now()
+          await Session.updatePart(part)
+        }
+      }
+      log.info("pruned", { count: toPrune.length })
+    }
   }
 
   export async function run(input: { sessionID: string; providerID: string; modelID: string }) {

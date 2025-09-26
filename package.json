@@ -6,14 +6,13 @@
   "packageManager": "bun@1.2.21",
   "scripts": {
     "dev": "bun run --conditions=development packages/opencode/src/index.ts",
-    "typecheck": "bun run --filter='*' typecheck",
-    "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
-    "postinstall": "./script/hooks"
+    "typecheck": "bun turbo typecheck",
+    "prepare": "husky"
   },
   "workspaces": {
     "packages": [
-      "cloud/*",
       "packages/*",
+      "packages/console/*",
       "packages/sdk/js"
     ],
     "catalog": {
@@ -23,18 +22,19 @@
       "@tsconfig/node22": "22.0.2",
       "ai": "5.0.8",
       "hono": "4.7.10",
+      "fuzzysort": "3.1.0",
+      "luxon": "3.6.1",
       "typescript": "5.8.2",
-      "zod": "3.25.76",
+      "zod": "4.1.8",
       "remeda": "2.26.0",
       "solid-js": "1.9.9"
     }
   },
-  "dependencies": {
-    "pulumi-stripe": "0.0.24"
-  },
   "devDependencies": {
-    "prettier": "3.5.3",
-    "sst": "3.17.13"
+    "husky": "9.1.7",
+    "prettier": "3.6.2",
+    "sst": "3.17.13",
+    "turbo": "2.5.6"
   },
   "repository": {
     "type": "git",
@@ -53,9 +53,6 @@
     "tree-sitter-bash",
     "web-tree-sitter"
   ],
-  "overrides": {
-    "zod": "3.25.76"
-  },
   "patchedDependencies": {
     "@solidjs/start@1.1.7": "patches/@solidjs%2Fstart@1.1.7.patch"
   }

@@ -1,0 +1,50 @@
+name: snapshot
+
+on:
+  push:
+    branches:
+      - dev
+      - opentui
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --force --tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ">=1.24.0"
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.21
+
+      - name: Cache ~/.bun
+        id: cache-bun
+        uses: actions/cache@v3
+        with:
+          path: ~/.bun
+          key: ${{ runner.os }}-bun-1-2-21-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-1-2-21-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Publish
+        run: |
+          ./packages/opencode/script/publish.ts
+        env:
+          OPENCODE_SNAPSHOT: true
+          OPENCODE_TAG: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

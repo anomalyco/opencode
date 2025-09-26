@@ -1,5 +1,5 @@
 import { Decimal } from "decimal.js"
-import { z } from "zod"
+import z from "zod/v4"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
@@ -16,7 +16,6 @@ import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { Project } from "../project/project"
 import { Instance } from "../project/instance"
-import { Token } from "../util/token"
 import { SessionPrompt } from "./prompt"
 
 export namespace Session {
@@ -56,7 +55,7 @@ export namespace Session {
         })
         .optional(),
     })
-    .openapi({
+    .meta({
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
@@ -66,7 +65,7 @@ export namespace Session {
       secret: z.string(),
       url: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "SessionShare",
     })
   export type ShareInfo = z.output<typeof ShareInfo>
@@ -291,34 +290,6 @@ export namespace Session {
       part,
     })
     return part
-  }
-
-  // goes backwards through parts until there are 40_000 tokens worth of tool
-  // calls. then erases output of previous tool calls. idea is to throw away old
-  // tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: string }) {
-    const msgs = await messages(input.sessionID)
-    let sum = 0
-    for (let msgIndex = msgs.length - 2; msgIndex >= 0; msgIndex--) {
-      const msg = msgs[msgIndex]
-      if (msg.info.role === "assistant" && msg.info.summary) return
-      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
-        const part = msg.parts[partIndex]
-        if (part.type === "tool")
-          if (part.state.status === "completed") {
-            if (part.state.time.compacted) return
-            sum += Token.estimate(part.state.output)
-            if (sum > 40_000) {
-              log.info("pruning", {
-                sum,
-                id: part.id,
-              })
-              part.state.time.compacted = Date.now()
-              await updatePart(part)
-            }
-          }
-      }
-    }
   }
 
   export function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {

@@ -1,19 +1,19 @@
-import { z, type ZodSchema } from "zod"
+import z from "zod/v4"
 // import { Log } from "./log"
 
 // const log = Log.create()
 
 export abstract class NamedError extends Error {
-  abstract schema(): ZodSchema
+  abstract schema(): z.core.$ZodType
   abstract toObject(): { name: string; data: any }
 
-  static create<Name extends string, Data extends ZodSchema>(name: Name, data: Data) {
+  static create<Name extends string, Data extends z.core.$ZodType>(name: Name, data: Data) {
     const schema = z
       .object({
         name: z.literal(name),
         data,
       })
-      .openapi({
+      .meta({
         ref: name,
       })
     const result = class extends NamedError {

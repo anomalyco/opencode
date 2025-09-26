@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.15.0 (2025-09-16)
+
+Full Changelog: [v0.14.0...v0.15.0](https://github.com/sst/opencode-sdk-go/compare/v0.14.0...v0.15.0)
+
+### Features
+
+- **api:** api update ([397048f](https://github.com/sst/opencode-sdk-go/commit/397048faca7a1de7a028edd2254a0ad7797b151f))
+
+## 0.14.0 (2025-09-14)
+
+Full Changelog: [v0.13.0...v0.14.0](https://github.com/sst/opencode-sdk-go/compare/v0.13.0...v0.14.0)
+
+### Features
+
+- **api:** api update ([dad0bc3](https://github.com/sst/opencode-sdk-go/commit/dad0bc3da99f20a0d002a6b94e049fb70f8e6a77))
+
+## 0.13.0 (2025-09-14)
+
+Full Changelog: [v0.12.0...v0.13.0](https://github.com/sst/opencode-sdk-go/compare/v0.12.0...v0.13.0)
+
+### Features
+
+- **api:** api update ([80da4fb](https://github.com/sst/opencode-sdk-go/commit/80da4fb4ea9c6afb51a7e7135d9f5560ce6f2a6c))
+
+## 0.12.0 (2025-09-14)
+
+Full Changelog: [v0.11.0...v0.12.0](https://github.com/sst/opencode-sdk-go/compare/v0.11.0...v0.12.0)
+
+### Features
+
+- **api:** api update ([7e3808b](https://github.com/sst/opencode-sdk-go/commit/7e3808ba349dc653174b32b48a1120c18d2975c2))
+
+## 0.11.0 (2025-09-14)
+
+Full Changelog: [v0.10.0...v0.11.0](https://github.com/sst/opencode-sdk-go/compare/v0.10.0...v0.11.0)
+
+### Features
+
+- **api:** api update ([a3d37f5](https://github.com/sst/opencode-sdk-go/commit/a3d37f5671545866547d351fc21b49809cc8b3c2))
+
+## 0.10.0 (2025-09-11)
+
+Full Changelog: [v0.9.0...v0.10.0](https://github.com/sst/opencode-sdk-go/compare/v0.9.0...v0.10.0)
+
+### Features
+
+- **api:** api update ([0dc01f6](https://github.com/sst/opencode-sdk-go/commit/0dc01f6695c9b8400a4dc92166c5002bb120cf50))
+
 ## 0.9.0 (2025-09-10)
 
 Full Changelog: [v0.8.0...v0.9.0](https://github.com/sst/opencode-sdk-go/compare/v0.8.0...v0.9.0)

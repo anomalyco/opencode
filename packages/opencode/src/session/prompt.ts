@@ -1,7 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import z, { ZodSchema } from "zod"
+import z from "zod/v4"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -19,6 +19,7 @@ import {
   type StreamTextResult,
   LoadAPIKeyError,
   stepCountIs,
+  jsonSchema,
 } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
@@ -38,6 +39,7 @@ import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
+import { TaskTool } from "../tool/task"
 import { FileTime } from "../file/time"
 import { Permission } from "../permission"
 import { Snapshot } from "../snapshot"
@@ -94,7 +96,7 @@ export namespace SessionPrompt {
       .optional(),
     agent: z.string().optional(),
     system: z.string().optional(),
-    tools: z.record(z.boolean()).optional(),
+    tools: z.record(z.string(), z.boolean()).optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -104,7 +106,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "TextPartInput",
           }),
         MessageV2.FilePart.omit({
@@ -114,7 +116,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "FilePartInput",
           }),
         MessageV2.AgentPart.omit({
@@ -124,7 +126,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "AgentPartInput",
           }),
       ]),
@@ -266,7 +268,7 @@ export namespace SessionPrompt {
         maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
         abortSignal: abort.signal,
         providerOptions: {
-          [model.providerID]: params.options,
+          [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
         },
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
@@ -278,7 +280,21 @@ export namespace SessionPrompt {
               content: x,
             }),
           ),
-          ...MessageV2.toModelMessage(msgs.filter((m) => !(m.info.role === "assistant" && m.info.error))),
+          ...MessageV2.toModelMessage(
+            msgs.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
+          ),
         ],
         tools: model.info.tool_call === false ? undefined : tools,
         model: wrapLanguageModel({
@@ -315,7 +331,7 @@ export namespace SessionPrompt {
         item.callback(result)
       }
       state().queued.delete(input.sessionID)
-      // Session.prune(input)
+      SessionCompaction.prune(input)
       return result
     }
   }
@@ -330,12 +346,37 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
@@ -388,10 +429,11 @@ export namespace SessionPrompt {
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
+      const schema = ProviderTransform.schema(input.providerID, input.modelID, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
-        inputSchema: item.parameters as ZodSchema,
+        inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           await Plugin.trigger(
             "tool.execute.before",
@@ -709,6 +751,15 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat())
 
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: info,
+        parts,
+      },
+    )
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
@@ -841,6 +892,7 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
@@ -848,6 +900,7 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text += value.text
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   if (part.text) await Session.updatePart(part)
                 }
                 break
@@ -856,11 +909,12 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text = part.text.trimEnd()
-                  part.metadata = value.providerMetadata
+
                   part.time = {
                     ...part.time,
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
@@ -900,6 +954,7 @@ export namespace SessionPrompt {
                         start: Date.now(),
                       },
                     },
+                    metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
@@ -1002,12 +1057,14 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
                 }
                 break
@@ -1019,6 +1076,7 @@ export namespace SessionPrompt {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   await Session.updatePart(currentText)
                 }
                 currentText = undefined
@@ -1311,7 +1369,7 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agent = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? "build"
 
     let template = command.template.replace("$ARGUMENTS", input.arguments)
 
@@ -1381,22 +1439,134 @@ export namespace SessionPrompt {
         return Provider.parseModel(command.model)
       }
       if (command.agent) {
-        const agent = await Agent.get(command.agent)
-        if (agent.model) {
-          return agent.model
+        const cmdAgent = await Agent.get(command.agent)
+        if (cmdAgent.model) {
+          return cmdAgent.model
         }
       }
       if (input.model) {
         return Provider.parseModel(input.model)
       }
-      return undefined
+      return await Provider.defaultModel()
     })()
+
+    const agent = await Agent.get(agentName)
+    if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
+      using abort = lock(input.sessionID)
+
+      const userMsg: MessageV2.User = {
+        id: Identifier.ascending("message"),
+        sessionID: input.sessionID,
+        time: {
+          created: Date.now(),
+        },
+        role: "user",
+      }
+      await Session.updateMessage(userMsg)
+      const userPart: MessageV2.Part = {
+        type: "text",
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        text: "The following tool was executed by the user",
+        synthetic: true,
+      }
+      await Session.updatePart(userPart)
+
+      const assistantMsg: MessageV2.Assistant = {
+        id: Identifier.ascending("message"),
+        sessionID: input.sessionID,
+        system: [],
+        mode: agentName,
+        cost: 0,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        time: {
+          created: Date.now(),
+        },
+        role: "assistant",
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: model.modelID,
+        providerID: model.providerID,
+      }
+      await Session.updateMessage(assistantMsg)
+
+      const args = {
+        description: "Consulting " + agent.name,
+        subagent_type: agent.name,
+        prompt: template,
+      }
+      const toolPart: MessageV2.ToolPart = {
+        type: "tool",
+        id: Identifier.ascending("part"),
+        messageID: assistantMsg.id,
+        sessionID: input.sessionID,
+        tool: "task",
+        callID: ulid(),
+        state: {
+          status: "running",
+          time: {
+            start: Date.now(),
+          },
+          input: {
+            description: args.description,
+            subagent_type: args.subagent_type,
+            // truncate prompt to preserve context
+            prompt: args.prompt.length > 100 ? args.prompt.substring(0, 97) + "..." : args.prompt,
+          },
+        },
+      }
+      await Session.updatePart(toolPart)
+
+      const result = await TaskTool.init().then((t) =>
+        t.execute(args, {
+          sessionID: input.sessionID,
+          abort: abort.signal,
+          agent: agent.name,
+          messageID: assistantMsg.id,
+          extra: {},
+          metadata: async (metadata) => {
+            if (toolPart.state.status === "running") {
+              toolPart.state.metadata = metadata.metadata
+              toolPart.state.title = metadata.title
+              await Session.updatePart(toolPart)
+            }
+          },
+        }),
+      )
+
+      assistantMsg.time.completed = Date.now()
+      await Session.updateMessage(assistantMsg)
+      if (toolPart.state.status === "running") {
+        toolPart.state = {
+          status: "completed",
+          time: {
+            ...toolPart.state.time,
+            end: Date.now(),
+          },
+          input: toolPart.state.input,
+          title: "",
+          metadata: result.metadata,
+          output: result.output,
+        }
+        await Session.updatePart(toolPart)
+      }
+
+      return { info: assistantMsg, parts: [toolPart] }
+    }
 
     return prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
       model,
-      agent,
+      agent: agentName,
       parts,
     })
   }
@@ -1419,7 +1589,7 @@ export namespace SessionPrompt {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
     }
-    if (small.providerID === "openai") {
+    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
       options["reasoningEffort"] = "minimal"
     }
     if (small.providerID === "google") {

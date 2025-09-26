@@ -6,13 +6,11 @@ import type {
   ProjectListResponses,
   ProjectCurrentData,
   ProjectCurrentResponses,
-  EventSubscribeData,
-  EventSubscribeResponses,
   ConfigGetData,
   ConfigGetResponses,
-  ToolRegisterData,
-  ToolRegisterResponses,
-  ToolRegisterErrors,
+  ConfigUpdateData,
+  ConfigUpdateResponses,
+  ConfigUpdateErrors,
   ToolIdsData,
   ToolIdsResponses,
   ToolIdsErrors,
@@ -58,8 +56,8 @@ import type {
   SessionRevertResponses,
   SessionUnrevertData,
   SessionUnrevertResponses,
-  PostSessionByIdPermissionsByPermissionIdData,
-  PostSessionByIdPermissionsByPermissionIdResponses,
+  PostSessionIdPermissionsPermissionIdData,
+  PostSessionIdPermissionsPermissionIdResponses,
   CommandListData,
   CommandListResponses,
   ConfigProvidersData,
@@ -101,6 +99,8 @@ import type {
   AuthSetData,
   AuthSetResponses,
   AuthSetErrors,
+  EventSubscribeData,
+  EventSubscribeResponses,
 } from "./types.gen.js"
 import { client as _heyApiClient } from "./client.gen.js"
 
@@ -153,18 +153,6 @@ class Project extends _HeyApiClient {
   }
 }
 
-class Event extends _HeyApiClient {
-  /**
-   * Get events
-   */
-  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
-    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
-      url: "/event",
-      ...options,
-    })
-  }
-}
-
 class Config extends _HeyApiClient {
   /**
    * Get config info
@@ -173,6 +161,20 @@ class Config extends _HeyApiClient {
     return (options?.client ?? this._client).get<ConfigGetResponses, unknown, ThrowOnError>({
       url: "/config",
       ...options,
+    })
+  }
+
+  /**
+   * Update config
+   */
+  public update<ThrowOnError extends boolean = false>(options?: Options<ConfigUpdateData, ThrowOnError>) {
+    return (options?.client ?? this._client).patch<ConfigUpdateResponses, ConfigUpdateErrors, ThrowOnError>({
+      url: "/config",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
     })
   }
 
@@ -188,20 +190,6 @@ class Config extends _HeyApiClient {
 }
 
 class Tool extends _HeyApiClient {
-  /**
-   * Register a new HTTP callback tool
-   */
-  public register<ThrowOnError extends boolean = false>(options?: Options<ToolRegisterData, ThrowOnError>) {
-    return (options?.client ?? this._client).post<ToolRegisterResponses, ToolRegisterErrors, ThrowOnError>({
-      url: "/experimental/tool/register",
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    })
-  }
-
   /**
    * List all tool IDs (including built-in and dynamically registered)
    */
@@ -671,18 +659,26 @@ class Auth extends _HeyApiClient {
   }
 }
 
+class Event extends _HeyApiClient {
+  /**
+   * Get events
+   */
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<EventSubscribeData, ThrowOnError>) {
+    return (options?.client ?? this._client).get.sse<EventSubscribeResponses, unknown, ThrowOnError>({
+      url: "/event",
+      ...options,
+    })
+  }
+}
+
 export class OpencodeClient extends _HeyApiClient {
   /**
    * Respond to a permission request
    */
-  public postSessionByIdPermissionsByPermissionId<ThrowOnError extends boolean = false>(
-    options: Options<PostSessionByIdPermissionsByPermissionIdData, ThrowOnError>,
+  public postSessionIdPermissionsPermissionId<ThrowOnError extends boolean = false>(
+    options: Options<PostSessionIdPermissionsPermissionIdData, ThrowOnError>,
   ) {
-    return (options.client ?? this._client).post<
-      PostSessionByIdPermissionsByPermissionIdResponses,
-      unknown,
-      ThrowOnError
-    >({
+    return (options.client ?? this._client).post<PostSessionIdPermissionsPermissionIdResponses, unknown, ThrowOnError>({
       url: "/session/{id}/permissions/{permissionID}",
       ...options,
       headers: {
@@ -692,7 +688,6 @@ export class OpencodeClient extends _HeyApiClient {
     })
   }
   project = new Project({ client: this._client })
-  event = new Event({ client: this._client })
   config = new Config({ client: this._client })
   tool = new Tool({ client: this._client })
   path = new Path({ client: this._client })
@@ -703,4 +698,5 @@ export class OpencodeClient extends _HeyApiClient {
   app = new App({ client: this._client })
   tui = new Tui({ client: this._client })
   auth = new Auth({ client: this._client })
+  event = new Event({ client: this._client })
 }

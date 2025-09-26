@@ -3,7 +3,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
-import { z } from "zod"
+import z from "zod/v4"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+bun prettier --write --ignore-unknown $(git diff --name-only HEAD~1 HEAD)
+bun run typecheck

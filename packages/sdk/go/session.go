@@ -518,7 +518,7 @@ func (r assistantMessageTokensCacheJSON) RawJSON() string {
 
 type AssistantMessageError struct {
 	// This field can have the runtime type of [shared.ProviderAuthErrorData],
-	// [shared.UnknownErrorData], [interface{}].
+	// [shared.UnknownErrorData], [interface{}], [shared.MessageAbortedErrorData].
 	Data  interface{}               `json:"data,required"`
 	Name  AssistantMessageErrorName `json:"name,required"`
 	JSON  assistantMessageErrorJSON `json:"-"`
@@ -566,26 +566,22 @@ type AssistantMessageErrorUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*AssistantMessageErrorUnion)(nil)).Elem(),
-		"name",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.ProviderAuthError{}),
-			DiscriminatorValue: "ProviderAuthError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.ProviderAuthError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.UnknownError{}),
-			DiscriminatorValue: "UnknownError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.UnknownError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AssistantMessageErrorMessageOutputLengthError{}),
-			DiscriminatorValue: "MessageOutputLengthError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AssistantMessageErrorMessageOutputLengthError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.MessageAbortedError{}),
-			DiscriminatorValue: "MessageAbortedError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.MessageAbortedError{}),
 		},
 	)
 }
@@ -778,16 +774,14 @@ type FilePartSourceUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*FilePartSourceUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(FileSource{}),
-			DiscriminatorValue: "file",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(FileSource{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(SymbolSource{}),
-			DiscriminatorValue: "symbol",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(SymbolSource{}),
 		},
 	)
 }
@@ -986,16 +980,14 @@ type MessageUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*MessageUnion)(nil)).Elem(),
-		"role",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(UserMessage{}),
-			DiscriminatorValue: "user",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(UserMessage{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AssistantMessage{}),
-			DiscriminatorValue: "assistant",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AssistantMessage{}),
 		},
 	)
 }
@@ -1107,51 +1099,42 @@ type PartUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*PartUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(TextPart{}),
-			DiscriminatorValue: "text",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(TextPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ReasoningPart{}),
-			DiscriminatorValue: "reasoning",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ReasoningPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(FilePart{}),
-			DiscriminatorValue: "file",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(FilePart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolPart{}),
-			DiscriminatorValue: "tool",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepStartPart{}),
-			DiscriminatorValue: "step-start",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepStartPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepFinishPart{}),
-			DiscriminatorValue: "step-finish",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepFinishPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(SnapshotPart{}),
-			DiscriminatorValue: "snapshot",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(SnapshotPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(PartPatchPart{}),
-			DiscriminatorValue: "patch",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(PartPatchPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AgentPart{}),
-			DiscriminatorValue: "agent",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AgentPart{}),
 		},
 	)
 }
@@ -1941,26 +1924,22 @@ type ToolPartStateUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*ToolPartStateUnion)(nil)).Elem(),
-		"status",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStatePending{}),
-			DiscriminatorValue: "pending",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStatePending{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateRunning{}),
-			DiscriminatorValue: "running",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateRunning{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateCompleted{}),
-			DiscriminatorValue: "completed",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateCompleted{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateError{}),
-			DiscriminatorValue: "error",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateError{}),
 		},
 	)
 }
@@ -2044,9 +2023,10 @@ func (r ToolStateCompletedStatus) IsKnown() bool {
 }
 
 type ToolStateCompletedTime struct {
-	End   float64                    `json:"end,required"`
-	Start float64                    `json:"start,required"`
-	JSON  toolStateCompletedTimeJSON `json:"-"`
+	End       float64                    `json:"end,required"`
+	Start     float64                    `json:"start,required"`
+	Compacted float64                    `json:"compacted"`
+	JSON      toolStateCompletedTimeJSON `json:"-"`
 }
 
 // toolStateCompletedTimeJSON contains the JSON metadata for the struct
@@ -2054,6 +2034,7 @@ type ToolStateCompletedTime struct {
 type toolStateCompletedTimeJSON struct {
 	End         apijson.Field
 	Start       apijson.Field
+	Compacted   apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -2171,9 +2152,9 @@ func (r ToolStatePendingStatus) IsKnown() bool {
 }
 
 type ToolStateRunning struct {
+	Input    interface{}            `json:"input,required"`
 	Status   ToolStateRunningStatus `json:"status,required"`
 	Time     ToolStateRunningTime   `json:"time,required"`
-	Input    interface{}            `json:"input"`
 	Metadata map[string]interface{} `json:"metadata"`
 	Title    string                 `json:"title"`
 	JSON     toolStateRunningJSON   `json:"-"`
@@ -2182,9 +2163,9 @@ type ToolStateRunning struct {
 // toolStateRunningJSON contains the JSON metadata for the struct
 // [ToolStateRunning]
 type toolStateRunningJSON struct {
+	Input       apijson.Field
 	Status      apijson.Field
 	Time        apijson.Field
-	Input       apijson.Field
 	Metadata    apijson.Field
 	Title       apijson.Field
 	raw         string

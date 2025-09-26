@@ -1,4 +1,4 @@
-name: Typecheck
+name: typecheck
 
 on:
   pull_request:

@@ -68,10 +68,45 @@ function findBinary() {
   }
 }
 
-function main() {
+async function regenerateWindowsCmdWrappers() {
+  console.log("Windows + npm detected: Forcing npm to rebuild bin links")
+
+  try {
+    const { execSync } = require("child_process")
+    const pkgPath = path.join(__dirname, "..")
+
+    // npm_config_global is string | undefined
+    // if it exists, the value is true
+    const isGlobal = process.env.npm_config_global === "true" || pkgPath.includes(path.join("npm", "node_modules"))
+
+    // The npm rebuild command does 2 things - Execute lifecycle scripts and rebuild bin links
+    // We want to skip lifecycle scripts to avoid infinite loops, so we use --ignore-scripts
+    const cmd = `npm rebuild opencode-ai --ignore-scripts${isGlobal ? " -g" : ""}`
+    const opts = {
+      stdio: "inherit",
+      shell: true,
+      ...(isGlobal ? {} : { cwd: path.join(pkgPath, "..", "..") }), // For local, run from project root
+    }
+
+    console.log(`Running: ${cmd}`)
+    execSync(cmd, opts)
+    console.log("Successfully rebuilt npm bin links")
+  } catch (error) {
+    console.error("Error rebuilding npm links:", error.message)
+    console.error("npm rebuild failed. You may need to manually run: npm rebuild opencode-ai --ignore-scripts")
+  }
+}
+
+async function main() {
   try {
     if (os.platform() === "win32") {
-      console.log("Windows detected, skipping postinstall")
+      // NPM eg format - npm/11.4.2 node/v24.4.1 win32 x64
+      // Bun eg format - bun/1.2.19 npm/? node/v24.3.0 win32 x64
+      if (process.env.npm_config_user_agent.startsWith("npm")) {
+        await regenerateWindowsCmdWrappers()
+      } else {
+        console.log("Windows detected but not npm, skipping postinstall")
+      }
       return
     }
 
@@ -92,4 +127,9 @@ function main() {
   }
 }
 
-main()
+try {
+  main()
+} catch (error) {
+  console.error("Postinstall script error:", error.message)
+  process.exit(0)
+}

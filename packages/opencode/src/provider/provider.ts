@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -16,10 +16,7 @@ import { Flag } from "../flag/flag"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (
-    provider: ModelsDev.Provider,
-    api?: string,
-  ) => Promise<{
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
     getModel?: (sdk: any, modelID: string) => Promise<any>
     options?: Record<string, any>
@@ -40,6 +37,19 @@ export namespace Provider {
       }
     },
     async opencode(input) {
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
       return {
         autoload: Object.keys(input.models).length > 0,
         options: {},
@@ -159,7 +169,7 @@ export namespace Provider {
     } = {}
     const models = new Map<
       string,
-      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
+      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
     >()
     const sdk = new Map<number, SDK>()
 
@@ -328,6 +338,9 @@ export namespace Provider {
       const s = await state()
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
       const options = { ...s.providers[provider.id]?.options }
+      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
+        options["includeUsage"] = true
+      }
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
@@ -378,12 +391,14 @@ export namespace Provider {
         modelID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       })
       return {
         modelID,
         providerID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       }
     } catch (e) {
       if (e instanceof NoSuchModelError)
