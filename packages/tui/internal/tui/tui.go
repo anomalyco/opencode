@@ -91,6 +91,7 @@ type Model struct {
 	vimMode              VimMode
 	vimAwaitingReplace   bool
 	vimPendingDeleteLine bool
+	vimAwaitingScrollTop bool
 }
 
 func addCmd(list *[]tea.Cmd, cmd tea.Cmd) {
@@ -158,6 +159,7 @@ func (a *Model) setVimMode(mode VimMode) tea.Cmd {
 	a.vimMode = mode
 	a.vimAwaitingReplace = false
 	a.vimPendingDeleteLine = false
+	a.vimAwaitingScrollTop = false
 	focus := func() {
 		updated, cmd := a.editor.Focus()
 		a.setEditorModel(updated)
@@ -468,7 +470,19 @@ func (a *Model) handleVimVisualLine(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	key := msg.String()
-	lower := strings.ToLower(msg.Text)
+	text := msg.Text
+	lower := strings.ToLower(text)
+	store := func(updated tea.Model, cmd tea.Cmd) tea.Cmd {
+		a.setMessagesModel(updated)
+		return cmd
+	}
+	if a.vimAwaitingScrollTop {
+		a.vimAwaitingScrollTop = false
+		if key == "g" || lower == "g" {
+			updated, cmd := a.messages.GotoTop()
+			return true, store(updated, cmd)
+		}
+	}
 	if key == "esc" {
 		cmd := a.setVimMode(VimModeNormal)
 		return true, cmd
@@ -476,10 +490,6 @@ func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if lower == "i" {
 		cmd := a.setVimMode(VimModeInsert)
 		return true, cmd
-	}
-	store := func(updated tea.Model, cmd tea.Cmd) tea.Cmd {
-		a.setMessagesModel(updated)
-		return cmd
 	}
 	switch key {
 	case "ctrl+d":
@@ -495,8 +505,8 @@ func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		updated, cmd := a.messages.PageUp()
 		return true, store(updated, cmd)
 	case "g":
-		updated, cmd := a.messages.GotoTop()
-		return true, store(updated, cmd)
+		a.vimAwaitingScrollTop = true
+		return true, nil
 	case "G", "shift+g":
 		updated, cmd := a.messages.GotoBottom()
 		return true, store(updated, cmd)
@@ -522,7 +532,7 @@ func (a *Model) handleVimScroll(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		updated, cmd := a.messages.NextUserMessage()
 		return true, store(updated, cmd)
 	}
-	if text := msg.Text; text != "" {
+	if text != "" {
 		switch text {
 		case "{":
 			updated, cmd := a.messages.PrevUserMessage()
