@@ -123,6 +123,7 @@ export namespace Config {
     for await (const item of UNEXPECTED_DIR_GLOB.scan({
       absolute: true,
       followSymlinks: true,
+      dot: true,
       cwd: dir,
       onlyFiles: false,
     })) {
@@ -139,7 +140,7 @@ export namespace Config {
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
-    for await (const item of COMMAND_GLOB.scan({ absolute: true, followSymlinks: true, cwd: dir })) {
+    for await (const item of COMMAND_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
@@ -174,7 +175,7 @@ export namespace Config {
   async function loadAgent(dir: string) {
     const result: Record<string, Agent> = {}
 
-    for await (const item of AGENT_GLOB.scan({ absolute: true, followSymlinks: true, cwd: dir })) {
+    for await (const item of AGENT_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
@@ -212,7 +213,7 @@ export namespace Config {
   const MODE_GLOB = new Bun.Glob("mode/*.md")
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
-    for await (const item of MODE_GLOB.scan({ absolute: true, followSymlinks: true, cwd: dir })) {
+    for await (const item of MODE_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
       const content = await Bun.file(item).text()
       const md = matter(content)
       if (!md.data) continue
@@ -238,7 +239,7 @@ export namespace Config {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for await (const item of PLUGIN_GLOB.scan({ absolute: true, followSymlinks: true, cwd: dir })) {
+    for await (const item of PLUGIN_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
       plugins.push("file://" + item)
     }
     return plugins
