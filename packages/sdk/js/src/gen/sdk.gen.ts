@@ -27,6 +27,8 @@ import type {
   SessionGetResponses,
   SessionUpdateData,
   SessionUpdateResponses,
+  SessionStateData,
+  SessionStateResponses,
   SessionChildrenData,
   SessionChildrenResponses,
   SessionInitData,
@@ -262,6 +264,16 @@ class Session extends _HeyApiClient {
         "Content-Type": "application/json",
         ...options.headers,
       },
+    })
+  }
+
+  /**
+   * Get a session's state
+   */
+  public state<ThrowOnError extends boolean = false>(options: Options<SessionStateData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionStateResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/state",
+      ...options,
     })
   }
 

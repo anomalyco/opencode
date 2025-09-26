@@ -70,6 +70,16 @@ export namespace Session {
     })
   export type ShareInfo = z.output<typeof ShareInfo>
 
+  export const StateInfo = z
+    .object({
+      busy: z.boolean(),
+      queued: z.number(),
+    })
+    .meta({
+      ref: "SessionState",
+    })
+  export type StateInfo = z.output<typeof StateInfo>
+
   export const Event = {
     Updated: Bus.event(
       "session.updated",
@@ -145,6 +155,11 @@ export namespace Session {
 
   export async function getShare(id: string) {
     return Storage.read<ShareInfo>(["share", id])
+  }
+
+  export async function getState(id: string) {
+    const state = SessionPrompt.getState(id)
+    return state as StateInfo
   }
 
   export async function share(id: string) {

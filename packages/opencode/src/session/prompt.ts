@@ -1153,6 +1153,13 @@ export namespace SessionPrompt {
     return state().pending.has(sessionID)
   }
 
+  export function getState(sessionID: string) {
+    return {
+      busy: isBusy(sessionID),
+      queued: state().queued.get(sessionID)?.length ?? 0,
+    }
+  }
+
   export function abort(sessionID: string) {
     const controller = state().pending.get(sessionID)
     if (!controller) return false

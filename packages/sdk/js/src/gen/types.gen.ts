@@ -550,6 +550,11 @@ export type Session = {
   }
 }
 
+export type SessionState = {
+  busy: boolean
+  queued: number
+}
+
 export type UserMessage = {
   id: string
   sessionID: string
@@ -1383,6 +1388,26 @@ export type SessionUpdateResponses = {
 }
 
 export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
+
+export type SessionStateData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/state"
+}
+
+export type SessionStateResponses = {
+  /**
+   * State object
+   */
+  200: SessionState
+}
+
+export type SessionStateResponse = SessionStateResponses[keyof SessionStateResponses]
 
 export type SessionChildrenData = {
   body?: never

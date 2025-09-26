@@ -292,6 +292,34 @@ export namespace Server {
         },
       )
       .get(
+        "/session/:id/state",
+        describeRoute({
+          description: "Get a session's state",
+          operationId: "session.state",
+          responses: {
+            200: {
+              description: "State object",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.StateInfo),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const session = await Session.getState(sessionID)
+          return c.json(session)
+        },
+      )
+      .get(
         "/session/:id/children",
         describeRoute({
           description: "Get a session's children",
