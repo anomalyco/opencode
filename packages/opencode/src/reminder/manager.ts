@@ -202,6 +202,16 @@ export namespace ReminderManager {
     // Initialize reminders from storage asynchronously
     Storage.list(["reminder", Instance.project.id])
       .then(async (reminderKeys) => {
+        // Check if reminders are enabled before restoring timers
+        const { Config } = await import("../config/config")
+        const config = await Config.get()
+
+        if (config.reminders?.enabled === false) {
+          log.info("reminders disabled in config, preserving storage but not restoring timers")
+          log.info("found stored reminders while disabled", { count: reminderKeys.length })
+          return
+        }
+
         const projectState = await state()
         let restoredCount = 0
         let cancelledCount = 0

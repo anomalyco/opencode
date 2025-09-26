@@ -126,11 +126,11 @@ Three tools that agents can discover and use autonomously:
 
 #### Storage integration
 
-Reminders are stored in memory only during session execution. No persistent storage - reminders are removed when:
+Reminders are **persistently stored** across application restarts and are restored when opencode starts up. Reminders are removed when:
 
 - Session is deleted
-- Application exits
-- Session becomes inactive (implementation dependent)
+- Reminder is explicitly cancelled
+- Reminder expires (one-time reminders after execution)
 
 #### Session integration
 
@@ -253,14 +253,96 @@ Errors during reminder execution are logged and posted as error messages to the 
 
 ### Resource management
 
-- **Session lifecycle**: Reminders exist ONLY while their session is alive
+- **Session lifecycle**: Reminders exist while their session is alive
   - Session deleted → All reminders for that session automatically removed
-  - Application exit → All reminders lost (no persistence)
+  - Application restart → All reminders restored from storage (unless disabled)
 - **Reminder limit**: Maximum `max_reminders_per_project` active reminders per session (configurable, default 50)
   - When limit reached, tool returns error with current reminder list for user to choose what to stop
 - **Minimum intervals**: `min_interval_seconds` minimum (configurable, default 30 seconds, not enforced as overload protection)
 - **Message queuing**: Multiple timer messages queue naturally in session message flow
 - **User control**: Standard session interrupt/cancel works on timer-triggered messages
+
+---
+
+## Configuration Control
+
+### Feature Enable/Disable
+
+The reminder system can be disabled via configuration:
+
+```json
+{
+  "reminders": {
+    "enabled": false,
+    "max_reminders_per_project": 50,
+    "min_interval_seconds": 30
+  }
+}
+```
+
+### Disabled State Behavior
+
+When `config.reminders.enabled` is `false`:
+
+#### Tool Visibility
+
+- **Filtered Out**: Reminder tools don't appear in agent's available tools
+- **No Confusion**: Agent cannot attempt to use unavailable functionality
+- **Clean Experience**: No error messages or failed tool calls
+
+#### Example User Experience
+
+```
+User: "Remind me to check logs in 5 minutes"
+Agent: "I don't have the ability to set reminders in this configuration. You could set a manual timer or ask me to help with the logs directly."
+```
+
+**vs. the previous approach where agent would see tools but get errors**
+
+#### Technical Implementation
+
+- Uses `ToolRegistry.enabled()` filtering mechanism
+- Identical pattern to permission-based tool control
+- No runtime performance overhead
+
+### Storage and Restart Behavior
+
+**Critical Design Decision**: When reminders are disabled, **storage is preserved but timers are not restored**.
+
+#### Scenario 1: Disabling reminders
+
+1. User has active reminders running
+2. User sets `"reminders": { "enabled": false }` in config
+3. User restarts opencode
+4. **Result**:
+   - All reminder data remains in storage
+   - No timers are scheduled during initialization
+   - Tools are filtered out (invisible to agent)
+
+#### Scenario 2: Re-enabling reminders
+
+1. User sets `"reminders": { "enabled": true }` in config
+2. User restarts opencode
+3. **Result**:
+   - All previously saved reminders are restored from storage
+   - Timers resume normal scheduling and execution
+   - Tools become fully functional again
+
+**Rationale**: This design allows users to temporarily disable reminders (e.g., during maintenance, testing, or policy compliance) without losing their reminder configurations. When the feature is re-enabled, all previous reminders resume exactly where they left off.
+
+### Enterprise Use Cases
+
+#### Compliance Scenarios
+
+- **Policy Changes**: Disable reminders temporarily during compliance audits
+- **Resource Management**: Disable during high-load periods
+- **Security Reviews**: Disable during security assessments of automated behavior
+
+#### User Experience
+
+- **No Data Loss**: Users don't lose carefully configured reminder setups
+- **Easy Recovery**: Single config change re-enables full functionality
+- **Clear Feedback**: Tools provide clear explanation when disabled
 
 ---
 

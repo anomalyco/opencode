@@ -131,6 +131,14 @@ export namespace ToolRegistry {
       result["webfetch"] = false
     }
 
+    // Reminder configuration control
+    const config = await Config.get()
+    if (config.reminders?.enabled === false) {
+      result["add_reminder"] = false
+      result["list_reminders"] = false
+      result["remove_reminder"] = false
+    }
+
     return result
   }
 }

@@ -342,11 +342,39 @@ reminders: z.object({
 3. Project config (`opencode.json` in project)
 4. Runtime flags (`--disable-reminders`)
 
-### Runtime control
+### Tool Availability Control
 
-**Flag integration**: Add `Flag.OPENCODE_DISABLE_REMINDERS` support
+**Location**: `src/tool/registry.ts`
 
-**Tool availability**: When disabled, reminder tools return error messages instead of executing
+Tool availability is controlled via the `ToolRegistry.enabled()` function, following the same pattern as permission-based tool filtering:
+
+```typescript
+export async function enabled(
+  _providerID: string,
+  _modelID: string,
+  agent: Agent.Info,
+): Promise<Record<string, boolean>> {
+  const result: Record<string, boolean> = {}
+
+  // Existing permission checks...
+
+  // Reminder configuration control
+  const config = await Config.get()
+  if (config.reminders?.enabled === false) {
+    result["add_reminder"] = false
+    result["list_reminders"] = false
+    result["remove_reminder"] = false
+  }
+
+  return result
+}
+```
+
+**Behavior when disabled:**
+
+- Tools are filtered out before agent sees them
+- No runtime config checks needed in tool execution
+- Follows identical pattern to edit/bash/webfetch permission filtering
 
 ---
 
@@ -381,8 +409,19 @@ export function init() {
     await cleanupSession(properties.info.id)
   })
 
-  // Async initialization kicked off but not awaited
-  Storage.list(["reminder", Instance.project.id]).then(/* restore reminders */).catch(/* handle errors */)
+  // Check configuration before timer restoration
+  Storage.list(["reminder", Instance.project.id])
+    .then(async (reminderKeys) => {
+      const config = await Config.get()
+      if (config.reminders?.enabled === false) {
+        log.info("reminders disabled in config, preserving storage but not restoring timers")
+        log.info("found stored reminders while disabled", { count: reminderKeys.length })
+        return
+      }
+
+      // ... existing restoration logic only runs when enabled
+    })
+    .catch(/* handle errors */)
 }
 ```
 
@@ -429,6 +468,61 @@ export function init() {
 6. **Namespace structure**: `export namespace ReminderManager` with public API functions
 7. **Storage integration**: Uses existing `Storage.read/write/delete` with consistent key patterns
 
+## Configuration Control and Restart Behavior
+
+### Enabled/Disabled State Management
+
+When `config.reminders.enabled` is `false`:
+
+**Tool Behavior:**
+
+- Tools are filtered out via `ToolRegistry.enabled()` before agent sees them
+- Uses identical pattern to permission-based tool control (edit/bash/webfetch)
+- No runtime config checks needed in tool execution
+
+**Manager Initialization:**
+
+```typescript
+export function init() {
+  log.info("init")
+
+  Bus.subscribe(Session.Event.Deleted, async ({ properties }) => {
+    await cleanupSession(properties.info.id)
+  })
+
+  // Check configuration before timer restoration
+  Storage.list(["reminder", Instance.project.id])
+    .then(async (reminderKeys) => {
+      const config = await Config.get()
+      if (config.reminders?.enabled === false) {
+        log.info("reminders disabled in config, preserving storage but not restoring timers")
+        log.info("found stored reminders while disabled", { count: reminderKeys.length })
+        return
+      }
+
+      // ... existing restoration logic only runs when enabled
+    })
+    .catch((error) => {
+      log.warn("failed to check reminder config", { error })
+    })
+}
+```
+
+### Restart Behavior Specification
+
+**Data Preservation Strategy:**
+
+- When reminders are disabled, storage data is preserved but not acted upon
+- Timer scheduling is completely skipped during initialization
+- Re-enabling reminders restores all previously saved reminder configurations
+
+**Implementation Guarantees:**
+
+1. **No Data Loss**: Disabling reminders never deletes stored reminder data
+2. **Clean Shutdown**: All active timers are cleared when feature is disabled
+3. **Graceful Restoration**: Re-enabling immediately restores all saved reminders
+4. **Session Isolation**: Session cleanup continues regardless of enabled state
+
 ## Implementation decisions
 
 1. **Timer persistence across restarts**: ✅ **IMPLEMENTED** - Reminders persist in storage and are restored on startup with 1-hour grace period
@@ -436,3 +530,4 @@ export function init() {
 3. **Agent context**: Uses originating session's agent context (preserved through SessionPrompt.prompt)
 4. **Error handling**: Cancels reminders on repeated failures, logs via standard Log system
 5. **Concurrent execution**: Uses existing session message queuing - no special handling needed
+6. **Tool availability control**: ✅ **IMPLEMENTED** - Uses registration filtering pattern following opencode standards
