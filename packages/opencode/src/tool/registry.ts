@@ -5,6 +5,7 @@ import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
 import { PatchTool } from "./patch"
 import { ReadTool } from "./read"
+import { AddReminderTool, ListRemindersTool, RemoveReminderTool } from "./reminder"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -88,6 +89,9 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      AddReminderTool,
+      ListRemindersTool,
+      RemoveReminderTool,
       ...custom,
     ]
   }

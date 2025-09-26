@@ -1156,7 +1156,7 @@ export namespace SessionPrompt {
     return result
   }
 
-  function isBusy(sessionID: string) {
+  export function isBusy(sessionID: string) {
     return state().pending.has(sessionID)
   }
 
