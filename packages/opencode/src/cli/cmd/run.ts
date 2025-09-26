@@ -186,6 +186,14 @@ export const RunCommand = cmd({
           }
         }
 
+        if (part.type === "step-start") {
+          if (outputJsonEvent("step_start", { part })) return
+        }
+
+        if (part.type === "step-finish") {
+          if (outputJsonEvent("step_finish", { part })) return
+        }
+
         if (part.type === "text") {
           text = part.text
 
