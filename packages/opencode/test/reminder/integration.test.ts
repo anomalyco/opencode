@@ -1,12 +1,12 @@
 import { test, expect, describe } from "bun:test"
 
-const mockContext = {
-  sessionID: "ses_integration_test",
-  messageID: "msg_integration_test",
-  agent: "test",
-  abort: AbortSignal.any([]),
-  metadata: () => {},
-}
+// const mockContext = {
+//   sessionID: "ses_integration_test",
+//   messageID: "msg_integration_test",
+//   agent: "test",
+//   abort: AbortSignal.any([]),
+//   metadata: () => {},
+// }
 
 describe("Reminder Tools Integration", () => {
   test("tool modules can be imported", async () => {

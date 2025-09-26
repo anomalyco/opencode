@@ -1,6 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import { Reminder } from "../../src/reminder/reminder"
-import z from "zod/v4"
 
 describe("Reminder namespace", () => {
   test("Info schema validation", () => {
