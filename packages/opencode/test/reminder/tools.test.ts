@@ -1,5 +1,4 @@
-import { test, expect, describe, beforeEach } from "bun:test"
-// Use dynamic imports to avoid circular dependency issues
+import { test, expect, describe } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
 import { $ } from "bun"
@@ -27,28 +26,33 @@ const mockContext = {
   metadata: () => {},
 }
 
-describe("Reminder Tools", () => {
-  beforeEach(async () => {
-    // Clear any existing reminders
-    try {
-      const reminders = await ReminderManager.list()
-      for (const reminder of reminders) {
-        await ReminderManager.cancel(reminder.id)
-      }
-    } catch (e) {
-      // Ignore if manager not initialized
+async function cleanupReminders() {
+  try {
+    const { ReminderManager } = await import("../../src/reminder/manager")
+    const existing = await ReminderManager.list()
+    for (const reminder of existing) {
+      await ReminderManager.cancel(reminder.id)
     }
-  })
+  } catch (e) {
+    // Ignore if no reminders exist or manager not initialized
+  }
+}
 
+describe("Reminder Tools", () => {
   describe("AddReminderTool", () => {
     test("successfully creates a one-time reminder", async () => {
       await using tmp = await createTestProject()
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
-          ReminderManager.init()
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool } = await import("../../src/tool/reminder")
 
-          const result = await AddReminderTool.execute(
+          ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+
+          const result = await addTool.execute(
             {
               interval_seconds: 300, // 5 minutes
               type: "one-time",
@@ -76,9 +80,14 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
-          ReminderManager.init()
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool } = await import("../../src/tool/reminder")
 
-          const result = await AddReminderTool.execute(
+          ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+
+          const result = await addTool.execute(
             {
               interval_seconds: 3600, // 1 hour
               type: "recurring",
@@ -106,11 +115,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
 
           // This should be caught by Zod schema validation
           expect(async () => {
-            await AddReminderTool.execute(
+            await addTool.execute(
               {
                 interval_seconds: 10, // Below minimum of 30
                 type: "one-time",
@@ -129,7 +143,12 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
 
           // Create max reminders (default is 50, but let's test with 2 for speed)
           const maxReminders = 2
@@ -148,7 +167,7 @@ describe("Reminder Tools", () => {
           try {
             // Create max number of reminders
             for (let i = 0; i < maxReminders; i++) {
-              await AddReminderTool.execute(
+              await addTool.execute(
                 {
                   interval_seconds: 60,
                   type: "one-time",
@@ -160,7 +179,7 @@ describe("Reminder Tools", () => {
             }
 
             // Try to create one more - should fail
-            const result = await AddReminderTool.execute(
+            const result = await addTool.execute(
               {
                 interval_seconds: 60,
                 type: "one-time",
@@ -188,9 +207,14 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
-          ReminderManager.init()
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { ListRemindersTool } = await import("../../src/tool/reminder")
 
-          const result = await ListRemindersTool.execute({}, mockContext)
+          ReminderManager.init()
+          await cleanupReminders()
+          const listTool = await ListRemindersTool.init()
+
+          const result = await listTool.execute({}, mockContext)
 
           expect(result.title).toBe("No active reminders")
           expect(result.output).toBe("No active reminders in this session.")
@@ -204,10 +228,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool, ListRemindersTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+          const listTool = await ListRemindersTool.init()
 
           // Create a few reminders
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 300,
               type: "one-time",
@@ -217,7 +247,7 @@ describe("Reminder Tools", () => {
             mockContext,
           )
 
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 600,
               type: "recurring",
@@ -227,7 +257,7 @@ describe("Reminder Tools", () => {
             mockContext,
           )
 
-          const result = await ListRemindersTool.execute({}, mockContext)
+          const result = await listTool.execute({}, mockContext)
 
           expect(result.title).toBe("2 active reminders")
           expect(result.output).toContain("Active reminders:")
@@ -245,10 +275,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+          const removeTool = await RemoveReminderTool.init()
 
           // Create a reminder
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 300,
               type: "recurring",
@@ -259,7 +295,7 @@ describe("Reminder Tools", () => {
           )
 
           // Remove it
-          const result = await RemoveReminderTool.execute(
+          const result = await removeTool.execute(
             {
               description_pattern: "email",
             },
@@ -282,10 +318,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+          const removeTool = await RemoveReminderTool.init()
 
           // Create a reminder
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 300,
               type: "one-time",
@@ -296,7 +338,7 @@ describe("Reminder Tools", () => {
           )
 
           // Remove by matching original prompt
-          const result = await RemoveReminderTool.execute(
+          const result = await removeTool.execute(
             {
               description_pattern: "critical errors",
             },
@@ -314,10 +356,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+          const removeTool = await RemoveReminderTool.init()
 
           // Create a reminder
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 300,
               type: "one-time",
@@ -328,7 +376,7 @@ describe("Reminder Tools", () => {
           )
 
           // Try to remove non-matching pattern
-          const result = await RemoveReminderTool.execute(
+          const result = await removeTool.execute(
             {
               description_pattern: "email",
             },
@@ -351,10 +399,16 @@ describe("Reminder Tools", () => {
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
+          const { ReminderManager } = await import("../../src/reminder/manager")
+          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+
           ReminderManager.init()
+          await cleanupReminders()
+          const addTool = await AddReminderTool.init()
+          const removeTool = await RemoveReminderTool.init()
 
           // Create multiple reminders with similar descriptions
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 300,
               type: "one-time",
@@ -364,7 +418,7 @@ describe("Reminder Tools", () => {
             mockContext,
           )
 
-          await AddReminderTool.execute(
+          await addTool.execute(
             {
               interval_seconds: 600,
               type: "recurring",
@@ -375,7 +429,7 @@ describe("Reminder Tools", () => {
           )
 
           // Try to remove with ambiguous pattern
-          const result = await RemoveReminderTool.execute(
+          const result = await removeTool.execute(
             {
               description_pattern: "log",
             },
