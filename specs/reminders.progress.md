@@ -1,15 +1,15 @@
 # Reminder Feature Implementation Progress Report
 
 _Generated: September 26, 2025_  
-_Updated: September 26, 2025 - Timer Persistence completed to 100%_
+_Updated: September 26, 2025 - Tool Availability Control completed_
 
 ## Executive Summary
 
-### **Feature Implementation Status: ✅ MOSTLY COMPLETE**
+### **Feature Implementation Status: ✅ NEARLY COMPLETE**
 
-The reminder feature has been **substantially implemented** with core functionality working, but there are some gaps compared to the specifications.
+The reminder feature has been **substantially implemented** with core functionality working and key operational controls in place.
 
-**Overall Implementation: 80% Complete**
+**Overall Implementation: 90% Complete**
 
 ---
 
@@ -43,7 +43,7 @@ The reminder feature has been **substantially implemented** with core functional
 - **Permission System**: Uses existing permission inheritance
 - **Timer Management**: Node.js `setTimeout`/`clearTimeout` with proper cleanup
 
-### **5. Timer Persistence (100% Complete)** ⭐ **NEWLY COMPLETED**
+### **5. Timer Persistence (100% Complete)**
 
 - **Storage Restoration**: Robust loading of reminders from storage on startup
 - **Grace Period Handling**: 1-hour tolerance for expired reminders during restoration
@@ -52,6 +52,15 @@ The reminder feature has been **substantially implemented** with core functional
 - **Error Recovery**: Graceful handling of invalid sessions and corrupted data
 - **Comprehensive Logging**: Detailed metrics tracking restoration success/failure
 - **Test Coverage**: Full test suite validating persistence across restarts
+
+### **6. Tool Availability Control (100% Complete)**
+
+- **Registration Filtering**: Tools filtered out via `ToolRegistry.enabled()` when disabled
+- **Config Integration**: Respects `config.reminders.enabled` setting
+- **Storage Preservation**: Reminder data preserved but timers not restored when disabled
+- **Clean Agent Experience**: Disabled tools are invisible to agent (no error messages)
+- **Graceful Recovery**: Re-enabling restores all saved reminders
+- **Architecture Consistency**: Uses identical pattern to permission-based tool filtering
 
 ---
 
