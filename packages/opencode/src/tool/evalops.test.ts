@@ -3,39 +3,44 @@ import { EvalOps, EvalOpsTool } from "./evalops"
 import z from "zod/v4"
 import { Tool } from "./tool"
 
-
 // Mock dependencies
 mock.module("../config/config", () => ({
   Config: {
-    get: mock(() => Promise.resolve({
-      evalops: {
-        enabled: true,
-        autoRun: false,
-        telemetry: false,
-        defaultSuite: "test-suite",
-      },
-    })),
+    get: mock(() =>
+      Promise.resolve({
+        evalops: {
+          enabled: true,
+          autoRun: false,
+          telemetry: false,
+          defaultSuite: "test-suite",
+        },
+      }),
+    ),
   },
 }))
 
 mock.module("../session", () => ({
   Session: {
-    get: mock(() => Promise.resolve({
-      id: "session-123",
-      parentID: null,
-    })),
-    messages: mock(() => Promise.resolve([
-      {
-        id: "msg-1",
-        role: "user",
-        parts: [{ type: "text", text: "Test message" }],
-      },
-      {
-        id: "msg-2",
-        role: "assistant",
-        parts: [{ type: "text", text: "Response" }],
-      },
-    ])),
+    get: mock(() =>
+      Promise.resolve({
+        id: "session-123",
+        parentID: null,
+      }),
+    ),
+    messages: mock(() =>
+      Promise.resolve([
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [{ type: "text", text: "Test message" }],
+        },
+        {
+          id: "msg-2",
+          role: "assistant",
+          parts: [{ type: "text", text: "Response" }],
+        },
+      ]),
+    ),
   },
 }))
 
@@ -68,14 +73,16 @@ describe("EvalOps Tool", () => {
   test("should handle auto-run when enabled", async () => {
     mock.module("../config/config", () => ({
       Config: {
-        get: mock(() => Promise.resolve({
-          evalops: {
-            enabled: true,
-            autoRun: true,
-            telemetry: false,
-            defaultSuite: "test-suite",
-          },
-        })),
+        get: mock(() =>
+          Promise.resolve({
+            evalops: {
+              enabled: true,
+              autoRun: true,
+              telemetry: false,
+              defaultSuite: "test-suite",
+            },
+          }),
+        ),
       },
     }))
 
@@ -94,11 +101,13 @@ describe("EvalOps Tool", () => {
   test("EvalOpsTool should handle disabled state", async () => {
     mock.module("../config/config", () => ({
       Config: {
-        get: mock(() => Promise.resolve({
-          evalops: {
-            enabled: false,
-          },
-        })),
+        get: mock(() =>
+          Promise.resolve({
+            evalops: {
+              enabled: false,
+            },
+          }),
+        ),
       },
     }))
 
@@ -111,10 +120,7 @@ describe("EvalOps Tool", () => {
       metadata: () => {},
     }
 
-    const result = await toolDef.execute(
-      { suite: "test-suite" },
-      context
-    )
+    const result = await toolDef.execute({ suite: "test-suite" }, context)
 
     expect(result.title).toBe("EvalOps Disabled")
     expect(result.output).toContain("not enabled")
@@ -150,11 +156,11 @@ describe("EvalOps Tool", () => {
       Promise.resolve({
         ok: true,
         status: 200,
-        statusText: 'OK',
+        statusText: "OK",
         headers: new Headers(),
-        url: '',
+        url: "",
         redirected: false,
-        type: 'basic',
+        type: "basic",
         body: null,
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -163,20 +169,22 @@ describe("EvalOps Tool", () => {
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
         text: () => Promise.resolve(JSON.stringify(mockResults)),
-        clone: () => ({} as Response),
+        clone: () => ({}) as Response,
         preconnect: () => Promise.resolve(),
-      } as Response)
+      } as Response),
     ) as any
 
     mock.module("../config/config", () => ({
       Config: {
-        get: mock(() => Promise.resolve({
-          evalops: {
-            enabled: true,
-            apiUrl: "https://evalops.api",
-            apiToken: "test-token",
-          },
-        })),
+        get: mock(() =>
+          Promise.resolve({
+            evalops: {
+              enabled: true,
+              apiUrl: "https://evalops.api",
+              apiToken: "test-token",
+            },
+          }),
+        ),
       },
     }))
 
@@ -189,10 +197,7 @@ describe("EvalOps Tool", () => {
     }
 
     const toolDef = await EvalOpsTool.init()
-    const result = await toolDef.execute(
-      { suite: "test-suite" },
-      context
-    )
+    const result = await toolDef.execute({ suite: "test-suite" }, context)
 
     expect(result.title).toContain("test-suite")
     expect(result.output).toContain("1/2 passed")
@@ -208,9 +213,9 @@ describe("EvalOps Tool", () => {
         status: 500,
         statusText: "Internal Server Error",
         headers: new Headers(),
-        url: '',
+        url: "",
         redirected: false,
-        type: 'basic',
+        type: "basic",
         body: null,
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -219,20 +224,22 @@ describe("EvalOps Tool", () => {
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve({}),
         text: () => Promise.resolve(""),
-        clone: () => ({} as Response),
+        clone: () => ({}) as Response,
         preconnect: () => Promise.resolve(),
-      } as Response)
+      } as Response),
     ) as any
 
     mock.module("../config/config", () => ({
       Config: {
-        get: mock(() => Promise.resolve({
-          evalops: {
-            enabled: true,
-            apiUrl: "https://evalops.api",
-            apiToken: "test-token",
-          },
-        })),
+        get: mock(() =>
+          Promise.resolve({
+            evalops: {
+              enabled: true,
+              apiUrl: "https://evalops.api",
+              apiToken: "test-token",
+            },
+          }),
+        ),
       },
     }))
 
@@ -245,10 +252,7 @@ describe("EvalOps Tool", () => {
     }
 
     const toolDef = await EvalOpsTool.init()
-    const result = await toolDef.execute(
-      { suite: "test-suite" },
-      context
-    )
+    const result = await toolDef.execute({ suite: "test-suite" }, context)
 
     expect(result.title).toContain("Failed")
     expect(result.output).toContain("Evaluation failed")
@@ -281,11 +285,11 @@ describe("EvalOps Tool", () => {
       Promise.resolve({
         ok: true,
         status: 200,
-        statusText: 'OK',
+        statusText: "OK",
         headers: new Headers(),
-        url: '',
+        url: "",
         redirected: false,
-        type: 'basic',
+        type: "basic",
         body: null,
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
@@ -294,19 +298,21 @@ describe("EvalOps Tool", () => {
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
         text: () => Promise.resolve(JSON.stringify(mockResults)),
-        clone: () => ({} as Response),
+        clone: () => ({}) as Response,
         preconnect: () => Promise.resolve(),
-      } as Response)
+      } as Response),
     ) as any
 
     mock.module("../config/config", () => ({
       Config: {
-        get: mock(() => Promise.resolve({
-          evalops: {
-            enabled: true,
-            apiUrl: "https://evalops.api",
-          },
-        })),
+        get: mock(() =>
+          Promise.resolve({
+            evalops: {
+              enabled: true,
+              apiUrl: "https://evalops.api",
+            },
+          }),
+        ),
       },
     }))
 

@@ -12,7 +12,7 @@ export namespace EvalOpsTheme {
       200: "#C7D2FE",
       300: "#A5B4FC",
       400: "#818CF8",
-      500: "#6366F1",  // Main brand color
+      500: "#6366F1", // Main brand color
       600: "#4F46E5",
       700: "#4338CA",
       800: "#3730A3",
@@ -91,12 +91,12 @@ export namespace EvalOpsTheme {
 
     // Foreground colors
     fg: {
-      primary: "\x1b[38;5;99m",   // Indigo
-      success: "\x1b[38;5;42m",   // Green
-      warning: "\x1b[38;5;214m",  // Orange
-      danger: "\x1b[38;5;196m",   // Red
-      info: "\x1b[38;5;33m",      // Blue
-      muted: "\x1b[38;5;245m",    // Gray
+      primary: "\x1b[38;5;99m", // Indigo
+      success: "\x1b[38;5;42m", // Green
+      warning: "\x1b[38;5;214m", // Orange
+      danger: "\x1b[38;5;196m", // Red
+      info: "\x1b[38;5;33m", // Blue
+      muted: "\x1b[38;5;245m", // Gray
     },
 
     // Background colors
@@ -109,23 +109,17 @@ export namespace EvalOpsTheme {
     },
 
     // Styled components
-    header: (text: string) =>
-      `${terminal.bold}${terminal.fg.primary}${brand.logo} ${text}${terminal.reset}`,
+    header: (text: string) => `${terminal.bold}${terminal.fg.primary}${brand.logo} ${text}${terminal.reset}`,
 
-    success: (text: string) =>
-      `${terminal.fg.success}✅ ${text}${terminal.reset}`,
+    success: (text: string) => `${terminal.fg.success}✅ ${text}${terminal.reset}`,
 
-    error: (text: string) =>
-      `${terminal.fg.danger}❌ ${text}${terminal.reset}`,
+    error: (text: string) => `${terminal.fg.danger}❌ ${text}${terminal.reset}`,
 
-    warning: (text: string) =>
-      `${terminal.fg.warning}⚠️  ${text}${terminal.reset}`,
+    warning: (text: string) => `${terminal.fg.warning}⚠️  ${text}${terminal.reset}`,
 
-    info: (text: string) =>
-      `${terminal.fg.info}ℹ️  ${text}${terminal.reset}`,
+    info: (text: string) => `${terminal.fg.info}ℹ️  ${text}${terminal.reset}`,
 
-    muted: (text: string) =>
-      `${terminal.fg.muted}${text}${terminal.reset}`,
+    muted: (text: string) => `${terminal.fg.muted}${text}${terminal.reset}`,
 
     brand: () =>
       `${terminal.bold}${terminal.fg.primary}${brand.logo} ${brand.name}${terminal.reset} - ${terminal.dim}"${brand.tagline}"${terminal.reset}`,
@@ -193,9 +187,8 @@ ${terminal.brand()}
       const empty = width - filled
 
       const bar = "█".repeat(filled) + "░".repeat(empty)
-      const color = percentage >= 0.8 ? terminal.fg.success :
-                    percentage >= 0.5 ? terminal.fg.warning :
-                    terminal.fg.danger
+      const color =
+        percentage >= 0.8 ? terminal.fg.success : percentage >= 0.5 ? terminal.fg.warning : terminal.fg.danger
 
       return `${color}[${bar}]${terminal.reset} ${formatScore(percentage * 100)}`
     },
@@ -214,17 +207,14 @@ Run ${terminal.fg.info}evalops${terminal.reset} tool to start an evaluation.
 ${terminal.muted("Documentation: https://evalops.ai/docs")}
 `,
 
-    starting: (suite: string) =>
-      `${terminal.header(`Starting evaluation: ${suite}`)}`,
+    starting: (suite: string) => `${terminal.header(`Starting evaluation: ${suite}`)}`,
 
     completed: (suite: string, score: number) =>
       `${terminal.header(`Evaluation complete: ${suite}`)} ${formatScore(score)}`,
 
-    failed: (error: string) =>
-      `${terminal.error(`Evaluation failed: ${error}`)}`,
+    failed: (error: string) => `${terminal.error(`Evaluation failed: ${error}`)}`,
 
-    disabled: () =>
-      `${terminal.warning("EvalOps is disabled. Enable it in your configuration.")}`,
+    disabled: () => `${terminal.warning("EvalOps is disabled. Enable it in your configuration.")}`,
   } as const
 }
 

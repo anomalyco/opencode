@@ -284,7 +284,8 @@ export namespace EvalOps {
 
       return results
     } catch (error) {
-      const errorMessage = (error && typeof error === 'object' && 'message' in error) ? String((error as any).message) : String(error);
+      const errorMessage =
+        error && typeof error === "object" && "message" in error ? String((error as any).message) : String(error)
       await Bus.publish(Event.TestFailed, {
         sessionID: context.sessionID,
         messageID: context.messageID,
@@ -393,7 +394,8 @@ export namespace EvalOps {
           const validated = Results.schema.parse(results)
           resolve(validated)
         } catch (error) {
-          const errorMessage = (error && typeof error === 'object' && 'message' in error) ? String((error as any).message) : String(error);
+          const errorMessage =
+            error && typeof error === "object" && "message" in error ? String((error as any).message) : String(error)
           reject(new Error.Disabled({ message: `Invalid evaluation output: ${errorMessage}` }))
         }
       })
@@ -473,11 +475,11 @@ export namespace EvalOps {
 
 // Define metadata type for the tool
 interface EvalOpsToolMetadata {
-  results?: EvalOps.Results.Type;
-  suite?: string;
-  passed?: boolean;
-  score?: number;
-  error?: string;
+  results?: EvalOps.Results.Type
+  suite?: string
+  passed?: boolean
+  score?: number
+  error?: string
 }
 
 const EvalOpsParameters = z.object({

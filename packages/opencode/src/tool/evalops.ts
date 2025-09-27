@@ -69,17 +69,16 @@ export namespace EvalOps {
 
   export async function getConfig(): Promise<EvalOpsConfig> {
     const config = await Config.get()
-    return (config as any).evalops ?? {
-      enabled: false,
-      autoRun: false,
-      telemetry: true,
-    }
+    return (
+      (config as any).evalops ?? {
+        enabled: false,
+        autoRun: false,
+        telemetry: true,
+      }
+    )
   }
 
-  export async function runEvaluation(
-    suite: string,
-    context: Tool.Context,
-  ): Promise<Results.Type> {
+  export async function runEvaluation(suite: string, context: Tool.Context): Promise<Results.Type> {
     const config = await getConfig()
     const startTime = Date.now()
 
@@ -94,17 +93,25 @@ export namespace EvalOps {
       suite,
       sessionID: context.sessionID,
       messageID: context.messageID,
-      messages: messages.map(msg => ({
+      messages: messages.map((msg) => ({
         role: msg.info.role,
-        content: msg.info.role === "user" ? msg.parts.map(p => {
-          if (p.type === "text") return p.text || ""
-          return ""
-        }).join("\n") :
-                 msg.info.role === "assistant" ? msg.parts.map(p => {
-                   if (p.type === "text") return p.text || ""
-                   if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
-                   return ""
-                 }).join("\n") : "",
+        content:
+          msg.info.role === "user"
+            ? msg.parts
+                .map((p) => {
+                  if (p.type === "text") return p.text || ""
+                  return ""
+                })
+                .join("\n")
+            : msg.info.role === "assistant"
+              ? msg.parts
+                  .map((p) => {
+                    if (p.type === "text") return p.text || ""
+                    if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
+                    return ""
+                  })
+                  .join("\n")
+              : "",
       })),
       timestamp: new Date().toISOString(),
       project: Instance.directory,
@@ -162,10 +169,7 @@ export namespace EvalOps {
     return results
   }
 
-  async function runLocalEvaluation(
-    suite: string,
-    payload: any,
-  ): Promise<Results.Type> {
+  async function runLocalEvaluation(suite: string, payload: any): Promise<Results.Type> {
     // Look for evaluation scripts in .opencode/evaluations/
     const evalDir = path.join(Instance.directory, ".opencode", "evaluations")
     const suiteFile = path.join(evalDir, `${suite}.js`)
@@ -251,7 +255,7 @@ export namespace EvalOps {
     log.info("auto-running evaluation", {
       sessionID: sessionID,
       messageID,
-      suite: config.defaultSuite
+      suite: config.defaultSuite,
     })
 
     try {
@@ -272,10 +276,10 @@ export namespace EvalOps {
 
 // Define metadata type for the tool
 interface EvalOpsToolMetadata {
-  results?: EvalOps.Results.Type;
-  suite?: string;
-  passed?: boolean;
-  error?: string;
+  results?: EvalOps.Results.Type
+  suite?: string
+  passed?: boolean
+  error?: string
 }
 
 const EvalOpsParameters = z.object({
@@ -291,59 +295,56 @@ const EvalOpsParameters = z.object({
 
 type EvalOpsArgs = z.infer<typeof EvalOpsParameters>
 
-export const EvalOpsTool = Tool.define<typeof EvalOpsParameters, EvalOpsToolMetadata>(
-  "evalops",
-  {
-    description: "Run EvalOps evaluation suite to test code quality, performance, and correctness",
-    parameters: EvalOpsParameters,
-    async execute(args: EvalOpsArgs, ctx) {
-      const config = await EvalOps.getConfig()
+export const EvalOpsTool = Tool.define<typeof EvalOpsParameters, EvalOpsToolMetadata>("evalops", {
+  description: "Run EvalOps evaluation suite to test code quality, performance, and correctness",
+  parameters: EvalOpsParameters,
+  async execute(args: EvalOpsArgs, ctx) {
+    const config = await EvalOps.getConfig()
 
-      if (!config.enabled) {
-        return {
-          title: "EvalOps Disabled",
-          metadata: {},
-          output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
-        }
+    if (!config.enabled) {
+      return {
+        title: "EvalOps Disabled",
+        metadata: {},
+        output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
       }
+    }
 
-      // Emit start event
-      await Bus.publish(EvalOps.Event.TestStarted, {
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        suite: args.suite,
-        tests: [], // Will be populated by the evaluation suite
-      })
+    // Emit start event
+    await Bus.publish(EvalOps.Event.TestStarted, {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      suite: args.suite,
+      tests: [], // Will be populated by the evaluation suite
+    })
 
-      try {
-        const results = await EvalOps.runEvaluation(args.suite, ctx)
+    try {
+      const results = await EvalOps.runEvaluation(args.suite, ctx)
 
-        // Format output
-        const output = formatResults(results)
+      // Format output
+      const output = formatResults(results)
 
-        return {
-          title: `EvalOps: ${args.suite}`,
-          metadata: {
-            results,
-            suite: args.suite,
-            passed: results.summary.passed === results.summary.total,
-          },
-          output,
-        }
-      } catch (error) {
-        return {
-          title: `EvalOps Failed: ${args.suite}`,
-          metadata: {
-            error: error instanceof Error ? error.message : String(error),
-            suite: args.suite,
-            passed: false,
-          },
-          output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
-        }
+      return {
+        title: `EvalOps: ${args.suite}`,
+        metadata: {
+          results,
+          suite: args.suite,
+          passed: results.summary.passed === results.summary.total,
+        },
+        output,
       }
-    },
+    } catch (error) {
+      return {
+        title: `EvalOps Failed: ${args.suite}`,
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+          suite: args.suite,
+          passed: false,
+        },
+        output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
   },
-)
+})
 
 function formatResults(results: EvalOps.Results.Type): string {
   const { summary, tests } = results
