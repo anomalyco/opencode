@@ -6,90 +6,134 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
-	"github.com/charmbracelet/lipgloss/v2/compat"
 	"github.com/sst/opencode/internal/app"
+	"github.com/sst/opencode/internal/components/list"
 	"github.com/sst/opencode/internal/components/modal"
 	"github.com/sst/opencode/internal/layout"
 	"github.com/sst/opencode/internal/styles"
 	"github.com/sst/opencode/internal/theme"
-	"github.com/sst/opencode/internal/viewport"
+	"github.com/sst/opencode/internal/util"
 )
 
-type evalsDialog struct {
-	width    int
-	height   int
-	modal    *modal.Modal
-	app      *app.App
-	viewport viewport.Model
-	
-	// Evaluation state
-	suites       []string
-	selectedSuite int
-	results      []EvalResult
-	isRunning    bool
-	lastRun      time.Time
+const (
+	numVisibleEvals = 10
+	minEvalsWidth   = 40
+	maxEvalsWidth   = 80
+)
+
+// EvalsDialog interface for the evaluation dashboard
+type EvalsDialog interface {
+	layout.Modal
 }
 
-type EvalResult struct {
-	Suite     string
-	Status    string // "running", "passed", "failed", "pending"
-	Score     float64
-	Tests     int
-	Passed    int
-	Failed    int
-	Duration  time.Duration
-	Timestamp time.Time
+type evalsDialog struct {
+	app          *app.App
+	width        int
+	height       int
+	modal        *modal.Modal
+	searchDialog *SearchDialog
+	dialogWidth  int
+}
+
+// evalItem is a custom list item for evaluation suites
+type evalItem struct {
+	Name        string
+	Status      string // "idle", "running", "passed", "failed"
+	LastRun     time.Time
+	LastScore   float64
+	Tests       int
+	Passed      int
+	Failed      int
+	Duration    time.Duration
+}
+
+func (e evalItem) Render(selected bool, width int, baseStyle styles.Style) string {
+	if selected {
+		baseStyle = baseStyle.Background(theme.CurrentTheme().BackgroundElement()).
+			Foreground(theme.CurrentTheme().Primary())
+	}
+	
+	// Status indicator (clean, minimal)
+	var prefix string
+	switch e.Status {
+	case "running":
+		prefix = "● "
+	case "passed":
+		prefix = "✓ "
+	case "failed":
+		prefix = "✗ "
+	default:
+		prefix = "  "
+	}
+	
+	// Suite name with truncation
+	name := e.Name
+	if len(name) > width-20 {
+		name = name[:width-23] + "..."
+	}
+	
+	// Score (if available)
+	scoreText := ""
+	if e.LastScore > 0 {
+		scoreText = fmt.Sprintf(" %.0f%%", e.LastScore)
+	}
+	
+	content := prefix + name + scoreText
+	return baseStyle.Render(content)
+}
+
+func (e evalItem) Selectable() bool {
+	return true
+}
+
+func (e evalItem) FilterValue() string {
+	return e.Name
 }
 
 func (e *evalsDialog) Init() tea.Cmd {
-	return e.viewport.Init()
+	e.setupEvalsList()
+	return e.searchDialog.Init()
 }
 
 func (e *evalsDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
+	case SearchSelectionMsg:
+		// Handle selection from search dialog
+		if item, ok := msg.Item.(evalItem); ok {
+			return e, tea.Sequence(
+				util.CmdHandler(modal.CloseModalMsg{}),
+				e.runEvaluation(item.Name),
+			)
+		}
+		return e, util.CmdHandler(modal.CloseModalMsg{})
+		
+	case SearchCancelledMsg:
+		return e, util.CmdHandler(modal.CloseModalMsg{})
+
+	case SearchQueryChangedMsg:
+		// Update the list based on search query
+		items := e.buildDisplayList(msg.Query)
+		e.searchDialog.SetItems(items)
+		return e, nil
+
 	case tea.WindowSizeMsg:
 		e.width = msg.Width
 		e.height = msg.Height
-		// Set viewport size for the modal
-		maxWidth := min(90, msg.Width-8)
-		e.viewport = viewport.New(viewport.WithWidth(maxWidth-4), viewport.WithHeight(msg.Height-6))
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "j", "down":
-			if e.selectedSuite < len(e.suites)-1 {
-				e.selectedSuite++
-			}
-		case "k", "up":
-			if e.selectedSuite > 0 {
-				e.selectedSuite--
-			}
-		case "enter":
-			if len(e.suites) > 0 {
-				// TODO: Trigger evaluation run
-				e.runEvaluation(e.suites[e.selectedSuite])
-			}
-		case "r":
-			// Refresh/reload evaluations
-			e.refreshResults()
-		}
+		e.dialogWidth = min(maxEvalsWidth, max(minEvalsWidth, msg.Width-8))
+		e.searchDialog.SetWidth(e.dialogWidth)
+		e.searchDialog.SetHeight(msg.Height)
 	}
 
-	// Update viewport content
-	e.viewport.SetContent(e.buildContent())
+	updatedDialog, cmd := e.searchDialog.Update(msg)
+	if searchDialog, ok := updatedDialog.(*SearchDialog); ok {
+		e.searchDialog = searchDialog
+	}
 
-	// Update viewport
-	var vpCmd tea.Cmd
-	e.viewport, vpCmd = e.viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
-
-	return e, tea.Batch(cmds...)
+	return e, cmd
 }
 
 func (e *evalsDialog) View() string {
-	return e.viewport.View()
+	return e.searchDialog.View()
 }
 
 func (e *evalsDialog) Render(background string) string {
@@ -100,264 +144,67 @@ func (e *evalsDialog) Close() tea.Cmd {
 	return nil
 }
 
-func (e *evalsDialog) buildContent() string {
-	var content strings.Builder
-
-	// Header with EvalOps branding
-	header := e.buildHeader()
-	content.WriteString(header)
-	content.WriteString("\n\n")
-
-	// Quick stats overview
-	stats := e.buildQuickStats()
-	content.WriteString(stats)
-	content.WriteString("\n\n")
-
-	// Available suites
-	if len(e.suites) > 0 {
-		suitesSection := e.buildSuitesSection()
-		content.WriteString(suitesSection)
-		content.WriteString("\n\n")
-	}
-
-	// Recent results
-	if len(e.results) > 0 {
-		resultsSection := e.buildResultsSection()
-		content.WriteString(resultsSection)
-		content.WriteString("\n\n")
-	}
-
-	// Controls
-	controls := e.buildControls()
-	content.WriteString(controls)
-
-	return content.String()
+func (e *evalsDialog) runEvaluation(suiteName string) tea.Cmd {
+	// TODO: Integrate with actual EvalOps tool execution
+	return nil
 }
 
-func (e *evalsDialog) buildHeader() string {
-	t := theme.CurrentTheme()
-	
-	// Eye-catching but elegant header
-	icon := styles.Strong.Render("🎯")
-	title := styles.H1.Render("EvalOps Dashboard")
-	subtitle := styles.Muted.Render("Continuous Evaluation & Trust Verification")
-	
-	// Create a subtle highlight box around the header
-	headerContent := fmt.Sprintf("%s %s\n%s", icon, title, subtitle)
-	
-	return styles.NewStyle().
-		Background(t.BackgroundElement()).
-		Foreground(t.Text()).
-		Padding(styles.SpY, styles.SpX).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(t.BorderSubtle()).
-		Width(80).
-		AlignHorizontal(lipgloss.Center).
-		Render(headerContent)
+func (e *evalsDialog) setupEvalsList() {
+	items := e.buildDisplayList("")
+	e.searchDialog.SetItems(items)
 }
 
-func (e *evalsDialog) buildQuickStats() string {
-	t := theme.CurrentTheme()
-	
-	totalRuns := len(e.results)
-	passedRuns := 0
-	avgScore := 0.0
-	
-	for _, result := range e.results {
-		if result.Status == "passed" {
-			passedRuns++
+func (e *evalsDialog) buildDisplayList(query string) []list.Item {
+	allEvals := []evalItem{
+		{
+			Name: "code-quality.js", Status: "passed",
+			LastRun: time.Now().Add(-10 * time.Minute), LastScore: 94.5,
+			Tests: 15, Passed: 14, Failed: 1, Duration: 2300 * time.Millisecond,
+		},
+		{
+			Name: "security-scan.js", Status: "failed",
+			LastRun: time.Now().Add(-25 * time.Minute), LastScore: 67.8,
+			Tests: 8, Passed: 5, Failed: 3, Duration: 1800 * time.Millisecond,
+		},
+		{
+			Name: "performance-test.js", Status: "passed",
+			LastRun: time.Now().Add(-1 * time.Hour), LastScore: 89.2,
+			Tests: 12, Passed: 11, Failed: 1, Duration: 3100 * time.Millisecond,
+		},
+		{
+			Name: "integration-test.js", Status: "idle",
+			LastRun: time.Now().Add(-3 * time.Hour), LastScore: 0,
+			Tests: 0, Passed: 0, Failed: 0, Duration: 0,
+		},
+	}
+
+	// Filter based on query if provided
+	var filtered []evalItem
+	if query == "" {
+		filtered = allEvals
+	} else {
+		for _, eval := range allEvals {
+			if matchesQuery(eval.Name, query) {
+				filtered = append(filtered, eval)
+			}
 		}
-		avgScore += result.Score
 	}
-	
-	if totalRuns > 0 {
-		avgScore /= float64(totalRuns)
+
+	// Convert to list.Items
+	items := make([]list.Item, len(filtered))
+	for i, eval := range filtered {
+		items[i] = eval
 	}
-	
-	// Create stat cards
-	totalCard := e.buildStatCard("Total Runs", fmt.Sprintf("%d", totalRuns), t.Info())
-	passedCard := e.buildStatCard("Passed", fmt.Sprintf("%d", passedRuns), t.Success())
-	failedCard := e.buildStatCard("Failed", fmt.Sprintf("%d", totalRuns-passedRuns), t.Error())
-	scoreCard := e.buildStatCard("Avg Score", fmt.Sprintf("%.1f%%", avgScore), t.Primary())
-	
-	// Arrange cards horizontally
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		totalCard, "  ",
-		passedCard, "  ", 
-		failedCard, "  ",
-		scoreCard,
-	)
+
+	return items
 }
 
-func (e *evalsDialog) buildStatCard(label, value string, color compat.AdaptiveColor) string {
-	t := theme.CurrentTheme()
-	
-	labelStyle := styles.Muted.Render(label)
-	valueStyle := styles.NewStyle().
-		Foreground(color).
-		Bold(true).
-		Render(value)
-	
-	cardContent := fmt.Sprintf("%s\n%s", labelStyle, valueStyle)
-	
-	return styles.NewStyle().
-		Background(t.BackgroundElement()).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(t.BorderSubtle()).
-		Padding(styles.SpY, styles.SpX).
-		Width(16).
-		AlignHorizontal(lipgloss.Center).
-		Render(cardContent)
+func matchesQuery(name, query string) bool {
+	// Simple substring matching
+	return query == "" || strings.Contains(strings.ToLower(name), strings.ToLower(query))
 }
 
-func (e *evalsDialog) buildSuitesSection() string {
-	t := theme.CurrentTheme()
-	
-	var content strings.Builder
-	
-	// Section header
-	header := styles.H2.Render("📋 Available Test Suites")
-	content.WriteString(header)
-	content.WriteString("\n\n")
-	
-	// Suite list
-	for i, suite := range e.suites {
-		prefix := "  "
-		style := styles.Body
-		
-		if i == e.selectedSuite {
-			prefix = "❯ "
-			style = styles.Strong.Background(t.BackgroundElement())
-		}
-		
-		line := style.Render(prefix + suite)
-		content.WriteString(line)
-		content.WriteString("\n")
-	}
-	
-	return content.String()
-}
-
-func (e *evalsDialog) buildResultsSection() string {
-	var content strings.Builder
-	
-	// Section header
-	header := styles.H2.Render("📊 Recent Results")
-	content.WriteString(header)
-	content.WriteString("\n\n")
-	
-	// Results table header
-	headerRow := fmt.Sprintf("%-20s %-10s %-8s %-12s %-8s",
-		"Suite", "Status", "Score", "Tests", "Duration")
-	content.WriteString(styles.Strong.Render(headerRow))
-	content.WriteString("\n")
-	
-	// Separator line
-	separator := strings.Repeat("─", 65)
-	content.WriteString(styles.Separator().Render(separator))
-	content.WriteString("\n")
-	
-	// Results rows (show last 5)
-	start := 0
-	if len(e.results) > 5 {
-		start = len(e.results) - 5
-	}
-	
-	for _, result := range e.results[start:] {
-		row := e.buildResultRow(result)
-		content.WriteString(row)
-		content.WriteString("\n")
-	}
-	
-	return content.String()
-}
-
-func (e *evalsDialog) buildResultRow(result EvalResult) string {
-	t := theme.CurrentTheme()
-	
-	// Status with color coding
-	var statusIcon string
-	var statusText string
-	
-	switch result.Status {
-	case "passed":
-		statusIcon = "✅ Passed"
-		statusText = styles.NewStyle().Foreground(t.Success()).Render(statusIcon)
-	case "failed":
-		statusIcon = "❌ Failed"  
-		statusText = styles.NewStyle().Foreground(t.Error()).Render(statusIcon)
-	case "running":
-		statusIcon = "🔄 Running"
-		statusText = styles.NewStyle().Foreground(t.Warning()).Render(statusIcon)
-	default:
-		statusIcon = "⏳ Pending"
-		statusText = styles.Muted.Render(statusIcon)
-	}
-	
-	score := styles.NewStyle().Foreground(e.getScoreColor(result.Score)).Render(fmt.Sprintf("%.1f%%", result.Score))
-	tests := styles.Body.Render(fmt.Sprintf("%d/%d", result.Passed, result.Tests))
-	duration := styles.Muted.Render(result.Duration.Truncate(time.Millisecond).String())
-	
-	return fmt.Sprintf("%-20s %-18s %-8s %-12s %-8s",
-		result.Suite, statusText, score, tests, duration)
-}
-
-func (e *evalsDialog) getScoreColor(score float64) compat.AdaptiveColor {
-	t := theme.CurrentTheme()
-	
-	if score >= 90 {
-		return t.Success()
-	} else if score >= 70 {
-		return t.Warning()
-	}
-	return t.Error()
-}
-
-func (e *evalsDialog) buildControls() string {
-	var content strings.Builder
-	
-	// Control hints with eye-catching styling
-	controls := []string{
-		styles.Strong.Render("↑↓") + styles.Muted.Render(" navigate"),
-		styles.Strong.Render("Enter") + styles.Muted.Render(" run suite"),
-		styles.Strong.Render("r") + styles.Muted.Render(" refresh"),
-		styles.Strong.Render("Esc") + styles.Muted.Render(" close"),
-	}
-	
-	controlsText := strings.Join(controls, "  •  ")
-	content.WriteString(styles.Muted.Render("Controls: "))
-	content.WriteString(controlsText)
-	
-	return content.String()
-}
-
-func (e *evalsDialog) runEvaluation(suite string) {
-	// TODO: Integrate with EvalOps tool execution
-	e.isRunning = true
-	e.lastRun = time.Now()
-	
-	// Simulate running evaluation (replace with actual EvalOps integration)
-	result := EvalResult{
-		Suite:     suite,
-		Status:    "running",
-		Score:     0,
-		Tests:     0,
-		Passed:    0,
-		Failed:    0,
-		Duration:  0,
-		Timestamp: time.Now(),
-	}
-	
-	e.results = append(e.results, result)
-}
-
-func (e *evalsDialog) refreshResults() {
-	// TODO: Fetch latest evaluation results
-	e.lastRun = time.Now()
-}
-
-// Helper function for min
+// Helper functions
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -365,46 +212,22 @@ func min(a, b int) int {
 	return b
 }
 
-type EvalsDialog interface {
-	layout.Modal
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func NewEvalsDialog(app *app.App) EvalsDialog {
-	// Sample data for demonstration
-	suites := []string{
-		"code-quality.js",
-		"security-scan.js", 
-		"performance-test.js",
-		"integration-test.js",
+	dialog := &evalsDialog{
+		app:         app,
+		modal:       modal.New(modal.WithTitle("EvalOps"), modal.WithMaxWidth(80)),
+		dialogWidth: maxEvalsWidth,
 	}
 	
-	sampleResults := []EvalResult{
-		{
-			Suite: "code-quality.js", Status: "passed", Score: 94.5,
-			Tests: 15, Passed: 14, Failed: 1, Duration: 2300 * time.Millisecond,
-			Timestamp: time.Now().Add(-10 * time.Minute),
-		},
-		{
-			Suite: "security-scan.js", Status: "failed", Score: 67.8,
-			Tests: 8, Passed: 5, Failed: 3, Duration: 1800 * time.Millisecond,
-			Timestamp: time.Now().Add(-25 * time.Minute),
-		},
-		{
-			Suite: "performance-test.js", Status: "passed", Score: 89.2,
-			Tests: 12, Passed: 11, Failed: 1, Duration: 3100 * time.Millisecond,
-			Timestamp: time.Now().Add(-1 * time.Hour),
-		},
-	}
+	// Initialize search dialog with proper parameters
+	dialog.searchDialog = NewSearchDialog("Search evaluation suites...", numVisibleEvals)
 	
-	vp := viewport.New(viewport.WithHeight(20))
-	
-	return &evalsDialog{
-		app:       app,
-		modal:     modal.New(modal.WithTitle("🎯 EvalOps Dashboard"), modal.WithMaxWidth(90)),
-		viewport:  vp,
-		suites:    suites,
-		results:   sampleResults,
-		isRunning: false,
-		lastRun:   time.Now().Add(-10 * time.Minute),
-	}
+	return dialog
 }
