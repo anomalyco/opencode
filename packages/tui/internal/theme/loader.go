@@ -37,6 +37,9 @@ type colorRef struct {
 }
 
 func LoadThemesFromJSON() error {
+	// Ensure EvalOps theme is registered first (it's already registered in evalops.go init())
+	// This makes it the default if no other theme is explicitly set
+	
 	entries, err := themesFS.ReadDir("themes")
 	if err != nil {
 		return fmt.Errorf("failed to read themes directory: %w", err)

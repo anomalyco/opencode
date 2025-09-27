@@ -30,15 +30,15 @@ var globalManager = &Manager{
 }
 
 // RegisterTheme adds a new theme to the registry.
-// If this is the first theme registered, it becomes the default.
+// EvalOps theme is always the default regardless of registration order.
 func RegisterTheme(name string, theme Theme) {
 	globalManager.mu.Lock()
 	defer globalManager.mu.Unlock()
 
 	globalManager.themes[name] = theme
 
-	// If this is the first theme, make it the default
-	if globalManager.currentName == "" {
+	// EvalOps theme is always the default, or first theme if EvalOps doesn't exist yet
+	if globalManager.currentName == "" || name == "evalops" {
 		globalManager.currentName = name
 		globalManager.currentUsesAnsiCache = themeUsesAnsiColors(theme)
 	}
@@ -93,6 +93,12 @@ func AvailableThemes() []string {
 		names = append(names, name)
 	}
 	slices.SortFunc(names, func(a, b string) int {
+		// EvalOps theme should be first (default)
+		if a == "evalops" {
+			return -1
+		} else if b == "evalops" {
+			return 1
+		}
 		if a == "opencode" {
 			return -1
 		} else if b == "opencode" {
