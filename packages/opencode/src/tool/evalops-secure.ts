@@ -507,7 +507,7 @@ export const EvalOpsTool = Tool.define("evalops", {
         },
       }
     } catch (error) {
-      if (error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized") {
+      if (error instanceof Error error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized"error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized" error.name === "EvalOpsUnauthorized") {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Authentication Required`,
           output: "Please configure EVALOPS_API_TOKEN environment variable",
@@ -515,7 +515,7 @@ export const EvalOpsTool = Tool.define("evalops", {
         }
       }
 
-      if (error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited") {
+      if (error instanceof Error error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited"error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited" error.name === "EvalOpsRateLimited") {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Rate Limited`,
           output: `Too many evaluations running. Retry in ${error.data.retryAfter / 1000}s`,
