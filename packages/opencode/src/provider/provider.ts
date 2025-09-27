@@ -215,7 +215,7 @@ export namespace Provider {
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[modelID]
         const parsedModel: ModelsDev.Model = {
-          id: modelID,
+          id: model.id ?? modelID,
           name: model.name ?? existing?.name ?? modelID,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
