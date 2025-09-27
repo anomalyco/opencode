@@ -146,7 +146,7 @@ ${terminal.dim}Trust, but Verify™${terminal.reset}
 
   // Evaluation result formatting
   export function formatScore(score: number): string {
-    let color = terminal.fg.danger
+    let color: string = terminal.fg.danger
     let emoji = "🔴"
 
     if (score >= 90) {

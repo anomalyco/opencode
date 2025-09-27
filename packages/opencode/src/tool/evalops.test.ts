@@ -1,6 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test"
 import { EvalOps, EvalOpsTool } from "./evalops"
-
+import z from "zod/v4"
 import { Tool } from "./tool"
 
 
@@ -87,8 +87,8 @@ describe("EvalOps Tool", () => {
     const toolDef = await EvalOpsTool.init()
 
     expect(toolDef.description).toContain("EvalOps evaluation")
-    expect(toolDef.parameters.shape).toHaveProperty("suite")
-    expect(toolDef.parameters.shape).toHaveProperty("options")
+    expect((toolDef.parameters as z.ZodObject<any>).shape).toHaveProperty("suite")
+    expect((toolDef.parameters as z.ZodObject<any>).shape).toHaveProperty("options")
   })
 
   test("EvalOpsTool should handle disabled state", async () => {
@@ -159,13 +159,14 @@ describe("EvalOps Tool", () => {
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
+        bytes: () => Promise.resolve(new Uint8Array()),
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
         text: () => Promise.resolve(JSON.stringify(mockResults)),
         clone: () => ({} as Response),
         preconnect: () => Promise.resolve(),
       } as Response)
-    )
+    ) as any
 
     mock.module("../config/config", () => ({
       Config: {
@@ -214,13 +215,14 @@ describe("EvalOps Tool", () => {
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
+        bytes: () => Promise.resolve(new Uint8Array()),
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve({}),
         text: () => Promise.resolve(""),
         clone: () => ({} as Response),
         preconnect: () => Promise.resolve(),
       } as Response)
-    )
+    ) as any
 
     mock.module("../config/config", () => ({
       Config: {
@@ -288,13 +290,14 @@ describe("EvalOps Tool", () => {
         bodyUsed: false,
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
         blob: () => Promise.resolve(new Blob()),
+        bytes: () => Promise.resolve(new Uint8Array()),
         formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
         text: () => Promise.resolve(JSON.stringify(mockResults)),
         clone: () => ({} as Response),
         preconnect: () => Promise.resolve(),
       } as Response)
-    )
+    ) as any
 
     mock.module("../config/config", () => ({
       Config: {

@@ -236,7 +236,7 @@ export namespace EvalOps {
     }
   }
 
-  export async function shouldAutoRun(sessionID: string): Promise<boolean> {
+  export async function shouldAutoRun(_sessionID: string): Promise<boolean> {
     const config = await getConfig()
     if (!config.enabled || !config.autoRun) return false
 
@@ -270,28 +270,40 @@ export namespace EvalOps {
   }
 }
 
-export const EvalOpsTool = Tool.define(
+// Define metadata type for the tool
+interface EvalOpsToolMetadata {
+  results?: EvalOps.Results.Type;
+  suite?: string;
+  passed?: boolean;
+  error?: string;
+}
+
+const EvalOpsParameters = z.object({
+  suite: z.string().describe("The evaluation suite to run"),
+  options: z
+    .object({
+      timeout: z.number().optional().describe("Timeout in milliseconds"),
+      parallel: z.boolean().optional().describe("Run tests in parallel"),
+      filter: z.string().optional().describe("Filter tests by pattern"),
+    })
+    .optional(),
+})
+
+type EvalOpsArgs = z.infer<typeof EvalOpsParameters>
+
+export const EvalOpsTool = Tool.define<typeof EvalOpsParameters, EvalOpsToolMetadata>(
   "evalops",
   {
     description: "Run EvalOps evaluation suite to test code quality, performance, and correctness",
-    parameters: z.object({
-      suite: z.string().describe("The evaluation suite to run"),
-      options: z
-        .object({
-          timeout: z.number().optional().describe("Timeout in milliseconds"),
-          parallel: z.boolean().optional().describe("Run tests in parallel"),
-          filter: z.string().optional().describe("Filter tests by pattern"),
-        })
-        .optional(),
-    }),
-    async execute(args, ctx) {
+    parameters: EvalOpsParameters,
+    async execute(args: EvalOpsArgs, ctx) {
       const config = await EvalOps.getConfig()
 
       if (!config.enabled) {
         return {
           title: "EvalOps Disabled",
-          output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
           metadata: {},
+          output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
         }
       }
 
@@ -311,22 +323,22 @@ export const EvalOpsTool = Tool.define(
 
         return {
           title: `EvalOps: ${args.suite}`,
-          output,
           metadata: {
             results,
             suite: args.suite,
             passed: results.summary.passed === results.summary.total,
           },
+          output,
         }
       } catch (error) {
         return {
           title: `EvalOps Failed: ${args.suite}`,
-          output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
           metadata: {
             error: error instanceof Error ? error.message : String(error),
             suite: args.suite,
             passed: false,
           },
+          output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
         }
       }
     },

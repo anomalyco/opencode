@@ -284,10 +284,11 @@ export namespace EvalOps {
 
       return results
     } catch (error) {
+      const errorMessage = (error && typeof error === 'object' && 'message' in error) ? String((error as any).message) : String(error);
       await Bus.publish(Event.TestFailed, {
         sessionID: context.sessionID,
         messageID: context.messageID,
-        error: error instanceof Error ? error.message : String(error as any),
+        error: errorMessage,
         suite,
       })
       throw error
@@ -392,7 +393,8 @@ export namespace EvalOps {
           const validated = Results.schema.parse(results)
           resolve(validated)
         } catch (error) {
-          reject(new Error.Disabled({ message: `Invalid evaluation output: ${error instanceof Error ? error.message : String(error as any)}` }))
+          const errorMessage = (error && typeof error === 'object' && 'message' in error) ? String((error as any).message) : String(error);
+          reject(new Error.Disabled({ message: `Invalid evaluation output: ${errorMessage}` }))
         }
       })
 
@@ -469,26 +471,39 @@ export namespace EvalOps {
   }
 }
 
-export const EvalOpsTool = Tool.define("evalops", {
+// Define metadata type for the tool
+interface EvalOpsToolMetadata {
+  results?: EvalOps.Results.Type;
+  suite?: string;
+  passed?: boolean;
+  score?: number;
+  error?: string;
+}
+
+const EvalOpsParameters = z.object({
+  suite: z.string().describe("The evaluation suite to run"),
+  options: z
+    .object({
+      timeout: z.number().optional().describe("Timeout in milliseconds"),
+      parallel: z.boolean().optional().describe("Run tests in parallel"),
+      filter: z.string().optional().describe("Filter tests by pattern"),
+    })
+    .optional(),
+})
+
+type EvalOpsArgs = z.infer<typeof EvalOpsParameters>
+
+export const EvalOpsTool = Tool.define<typeof EvalOpsParameters, EvalOpsToolMetadata>("evalops", {
   description: `🎯 EvalOps - Run automated evaluation suites to test code quality, performance, and correctness. Powered by EvalOps™.`,
-  parameters: z.object({
-    suite: z.string().describe("The evaluation suite to run"),
-    options: z
-      .object({
-        timeout: z.number().optional().describe("Timeout in milliseconds"),
-        parallel: z.boolean().optional().describe("Run tests in parallel"),
-        filter: z.string().optional().describe("Filter tests by pattern"),
-      })
-      .optional(),
-  }),
-  async execute(args, ctx) {
+  parameters: EvalOpsParameters,
+  async execute(args: EvalOpsArgs, ctx) {
     const config = await EvalOps.getConfig()
 
     if (!config.enabled) {
       return {
         title: `${EvalOps.BRAND.logo} EvalOps Disabled`,
-        output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
         metadata: {},
+        output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
       }
     }
 
@@ -498,39 +513,39 @@ export const EvalOpsTool = Tool.define("evalops", {
 
       return {
         title: `${EvalOps.BRAND.logo} EvalOps: ${args.suite}`,
-        output,
         metadata: {
           results,
           suite: args.suite,
           passed: results.summary.passed === results.summary.total,
           score: results.summary.score,
         },
+        output,
       }
     } catch (error) {
-      if (error instanceof Error && (error instanceof EvalOps.Error.Unauthorized || error.name === "EvalOpsUnauthorized")) {
+      if (error instanceof Error && error.name === "EvalOpsUnauthorized") {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Authentication Required`,
-          output: "Please configure EVALOPS_API_TOKEN environment variable",
           metadata: { error: "unauthorized" },
+          output: "Please configure EVALOPS_API_TOKEN environment variable",
         }
       }
 
       if (error instanceof Error && error.name === "EvalOpsRateLimited") {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Rate Limited`,
-          output: `Too many evaluations running. Please retry later.`,
           metadata: { error: "rate_limited" },
+          output: `Too many evaluations running. Please retry later.`,
         }
       }
 
       return {
         title: `${EvalOps.BRAND.logo} EvalOps Failed: ${args.suite}`,
-        output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
         metadata: {
           error: error instanceof Error ? error.message : String(error),
           suite: args.suite,
           passed: false,
         },
+        output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
   },
