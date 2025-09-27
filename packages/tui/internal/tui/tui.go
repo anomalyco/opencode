@@ -463,7 +463,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		/*
 			case opencode.EventListResponseEventIdeInstalled:
 				return a, toast.NewSuccessToast(
-					"Installed the opencode extension in "+msg.Properties.Ide,
+					"Installed the grimoire extension in "+msg.Properties.Ide,
 					toast.WithTitle(msg.Properties.Ide+" extension installed"),
 				)
 		*/

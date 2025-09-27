@@ -21,7 +21,7 @@ func TestLoadThemesFromJSON(t *testing.T) {
 	}
 
 	// Check for expected themes
-	expectedThemes := []string{"tokyonight", "opencode", "everforest", "ayu"}
+	expectedThemes := []string{"tokyonight", "grimoire", "everforest", "ayu"}
 	for _, expected := range expectedThemes {
 		found := slices.Contains(themes, expected)
 		if !found {
@@ -77,7 +77,7 @@ func TestLoadThemesFromDirectories(t *testing.T) {
 	cwd := filepath.Join(tempDir, "cwd")
 
 	// Create theme directories
-	os.MkdirAll(filepath.Join(userConfig, "opencode", "themes"), 0755)
+	os.MkdirAll(filepath.Join(userConfig, "grimoire", "themes"), 0755)
 	os.MkdirAll(filepath.Join(projectRoot, ".opencode", "themes"), 0755)
 	os.MkdirAll(filepath.Join(cwd, ".opencode", "themes"), 0755)
 
@@ -116,7 +116,7 @@ func TestLoadThemesFromDirectories(t *testing.T) {
 	}`
 
 	// Write themes to different directories
-	os.WriteFile(filepath.Join(userConfig, "opencode", "themes", "override-test.json"), []byte(testTheme1), 0644)
+	os.WriteFile(filepath.Join(userConfig, "grimoire", "themes", "override-test.json"), []byte(testTheme1), 0644)
 	os.WriteFile(filepath.Join(projectRoot, ".opencode", "themes", "override-test.json"), []byte(testTheme2), 0644)
 	os.WriteFile(filepath.Join(cwd, ".opencode", "themes", "override-test.json"), []byte(testTheme3), 0644)
 

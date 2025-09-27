@@ -89,7 +89,7 @@ func (c *commandsComponent) View() string {
 			// },
 			commands.Command{
 				Name:        commands.CommandName(util.Ide()),
-				Description: "open opencode",
+				Description: "open grimoire",
 				Keybindings: []commands.Keybinding{
 					{Key: ctrlKey + "+esc", RequiresLeader: false},
 				},

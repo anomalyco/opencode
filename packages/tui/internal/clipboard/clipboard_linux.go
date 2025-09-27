@@ -90,7 +90,7 @@ func initialize() error {
 
 	if selectedTool < 0 {
 		slog.Warn(
-			"No clipboard utility found on system. Copy/paste functionality will be disabled. See https://opencode.ai/docs/troubleshooting/ for more information.",
+			"No clipboard utility found on system. Copy/paste functionality will be disabled. See https://grimoire.ai/docs/troubleshooting/ for more information.",
 		)
 		return fmt.Errorf(`%w: No clipboard utility found. Install one of the following:
 

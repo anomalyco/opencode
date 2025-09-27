@@ -760,7 +760,7 @@ func renderToolName(name string) string {
 		return "Invalid"
 	default:
 		normalizedName := name
-		if after, ok := strings.CutPrefix(name, "opencode_"); ok {
+		if after, ok := strings.CutPrefix(name, "grimoire_"); ok {
 			normalizedName = after
 		}
 		return cases.Title(language.Und).String(normalizedName)

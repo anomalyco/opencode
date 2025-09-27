@@ -238,7 +238,7 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 		},
 		{
 			Name:        EvalOpsCommand,
-			Description: "🎯 open EvalOps dashboard",
+			Description: "open EvalOps dashboard",
 			Keybindings: parseBindings("<leader>v"),
 			Trigger:     []string{"evals", "evalops", "dashboard", "verify"},
 		},

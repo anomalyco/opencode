@@ -99,9 +99,9 @@ func AvailableThemes() []string {
 		} else if b == "evalops" {
 			return 1
 		}
-		if a == "opencode" {
+		if a == "grimoire" {
 			return -1
-		} else if b == "opencode" {
+		} else if b == "grimoire" {
 			return 1
 		}
 		if a == "system" {
