@@ -134,11 +134,20 @@ func New(
 		appState.AgentModel = make(map[string]AgentModel)
 	}
 
+	// Default to EvalOps theme
+	if appState.Theme == "" {
+		appState.Theme = "evalops"
+	}
+
 	if configInfo.Theme != "" {
 		appState.Theme = configInfo.Theme
 	}
 
-	themeEnv := os.Getenv("OPENCODE_THEME")
+	// Allow environment override for theme
+	themeEnv := os.Getenv("EVALOPS_THEME")
+	if themeEnv == "" {
+		themeEnv = os.Getenv("OPENCODE_THEME") // Backward compatibility
+	}
 	if themeEnv != "" {
 		appState.Theme = themeEnv
 	}
@@ -177,14 +186,24 @@ func New(
 		slog.Warn("Failed to load themes from directories", "error", err)
 	}
 
-	if appState.Theme != "" {
-		if appState.Theme == "system" && styles.Terminal != nil {
-			theme.UpdateSystemTheme(
-				styles.Terminal.Background,
-				styles.Terminal.BackgroundIsDark,
-			)
+	// Always set a theme (defaults to evalops)
+	if appState.Theme == "" {
+		appState.Theme = "evalops"
+	}
+
+	if appState.Theme == "system" && styles.Terminal != nil {
+		theme.UpdateSystemTheme(
+			styles.Terminal.Background,
+			styles.Terminal.BackgroundIsDark,
+		)
+	}
+
+	// Set the theme (will use evalops if not found)
+	if err := theme.SetTheme(appState.Theme); err != nil {
+		slog.Warn("Failed to set theme, falling back to evalops", "theme", appState.Theme, "error", err)
+		if err := theme.SetTheme("evalops"); err != nil {
+			slog.Error("Failed to set default EvalOps theme", "error", err)
 		}
-		theme.SetTheme(appState.Theme)
 	}
 
 	slog.Debug("Loaded config", "config", configInfo)

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/schema.json",
+  "model": "anthropic/claude-3-5-sonnet-20241022",
+  "theme": "github-dark",
+
+  "evalops": {
+    "enabled": true,
+    "defaultSuite": "code-quality",
+    "autoRun": true,
+    "telemetry": true,
+    "apiUrl": "https://evalops.example.com/api",
+    "apiToken": "your-evalops-api-token-here"
+  },
+
+  "agent": {
+    "general": {
+      "prompt": "You are a helpful coding assistant with EvalOps integration.",
+      "temperature": 0.7
+    },
+    "evalops": {
+      "prompt": "You are an evaluation specialist focused on code quality and testing.",
+      "description": "Specialized agent for running and analyzing EvalOps evaluations",
+      "mode": "subagent",
+      "temperature": 0.3
+    }
+  },
+
+  "experimental": {
+    "hook": {
+      "session_completed": [
+        {
+          "command": ["echo", "Running EvalOps evaluation..."],
+          "environment": {
+            "EVALOPS_ENABLED": "true"
+          }
+        }
+      ]
+    }
+  },
+
+  "keybinds": {
+    "evalops_run": "ctrl+e",
+    "evalops_results": "ctrl+shift+e"
+  },
+
+  "plugin": [
+    "@evalops/opencode-plugin"
+  ]
+}

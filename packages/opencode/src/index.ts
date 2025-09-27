@@ -38,7 +38,7 @@ process.on("uncaughtException", (e) => {
 })
 
 const cli = yargs(hideBin(process.argv))
-  .scriptName("opencode")
+  .scriptName("evalops")
   .help("help", "show help")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
@@ -62,9 +62,10 @@ const cli = yargs(hideBin(process.argv))
       })(),
     })
 
-    process.env["OPENCODE"] = "1"
+    process.env["EVALOPS"] = "1"
+    process.env["OPENCODE"] = "1" // Backward compatibility
 
-    Log.Default.info("opencode", {
+    Log.Default.info("evalops", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })

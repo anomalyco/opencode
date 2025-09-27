@@ -35,7 +35,11 @@ func main() {
 	var sessionID *string = flag.String("session", "", "session ID")
 	flag.Parse()
 
-	url := os.Getenv("OPENCODE_SERVER")
+	// Try EvalOps first, fall back to OpenCode for compatibility
+	url := os.Getenv("EVALOPS_SERVER")
+	if url == "" {
+		url = os.Getenv("OPENCODE_SERVER")
+	}
 
 	stat, err := os.Stdin.Stat()
 	if err != nil {

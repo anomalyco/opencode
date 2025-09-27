@@ -563,6 +563,17 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
+      evalops: z
+        .object({
+          enabled: z.boolean().default(false).describe("Enable EvalOps integration for automatic evaluation"),
+          apiUrl: z.string().optional().describe("EvalOps API endpoint for remote evaluation"),
+          apiToken: z.string().optional().describe("Authentication token for EvalOps API"),
+          defaultSuite: z.string().optional().describe("Default evaluation suite to run automatically"),
+          autoRun: z.boolean().default(false).describe("Automatically run evaluations after sessions"),
+          telemetry: z.boolean().default(true).describe("Send telemetry data to EvalOps for aggregation"),
+        })
+        .optional()
+        .describe("EvalOps integration configuration"),
     })
     .strict()
     .meta({

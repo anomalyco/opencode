@@ -49,6 +49,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $ } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
+import { EvalOps } from "../tool/evalops"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -1184,6 +1185,23 @@ export namespace SessionPrompt {
 
         const session = await Session.get(sessionID)
         if (session.parentID) return
+
+        // Check if EvalOps should auto-run with error boundary
+        try {
+          const shouldRun = await EvalOps.shouldAutoRun(sessionID)
+          if (shouldRun) {
+            const messages = await Session.messages(sessionID)
+            const lastMessage = messages[messages.length - 1]
+            if (lastMessage) {
+              // Run asynchronously to not block session cleanup
+              EvalOps.autoRun(sessionID, lastMessage.id).catch(error => {
+                log.warn("EvalOps auto-run failed", { sessionID, error })
+              })
+            }
+          }
+        } catch (error) {
+          log.warn("Failed to check EvalOps auto-run", { sessionID, error })
+        }
 
         Bus.publish(Event.Idle, {
           sessionID,

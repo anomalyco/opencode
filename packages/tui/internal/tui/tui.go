@@ -457,7 +457,7 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.showCompletionDialog = false
 	case opencode.EventListResponseEventInstallationUpdated:
 		return a, toast.NewSuccessToast(
-			"opencode updated to "+msg.Properties.Version+", restart to apply.",
+			"EvalOps updated to "+msg.Properties.Version+", restart to apply.",
 			toast.WithTitle("New version installed"),
 		)
 		/*
@@ -951,26 +951,31 @@ func (a Model) Cleanup() {
 func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
-	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
-	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
+	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 
-	open := `
-                    
-█▀▀█ █▀▀█ █▀▀█ █▀▀▄ 
-█░░█ █░░█ █▀▀▀ █░░█ 
-▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ `
+	// EvalOps ASCII art
+	evalOps := `
+🎯 ███████╗██╗   ██╗ █████╗ ██╗      ██████╗ ██████╗ ███████╗
+   ██╔════╝██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔════╝
+   █████╗  ██║   ██║███████║██║     ██║   ██║██████╔╝███████╗
+   ██╔══╝  ╚██╗ ██╔╝██╔══██║██║     ██║   ██║██╔═══╝ ╚════██║
+   ███████╗ ╚████╔╝ ██║  ██║███████╗╚██████╔╝██║     ███████║
+   ╚══════╝  ╚═══╝  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝     ╚══════╝`
 
-	code := `
-             ▄
-█▀▀▀ █▀▀█ █▀▀█ █▀▀█
-█░░░ █░░█ █░░█ █▀▀▀
-▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`
+	tagline := `Trust, but Verify™`
 
-	logo := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		muted(open),
-		base(code),
+	// Create logo with gradient colors
+	primaryStyle := styles.NewStyle().Foreground(t.Primary()).Background(t.Background())
+
+	logo := primaryStyle.Render(evalOps)
+	taglineRendered := muted(tagline)
+
+	// Combine logo and tagline
+	logoWithTagline := lipgloss.JoinVertical(
+		lipgloss.Center,
+		logo,
+		taglineRendered,
 	)
 	// cwd := app.Info.Path.Cwd
 	// config := app.Info.Path.Config
@@ -978,11 +983,11 @@ func (a Model) home() (string, int, int) {
 	versionStyle := styles.NewStyle().
 		Foreground(t.TextMuted()).
 		Background(t.Background()).
-		Width(lipgloss.Width(logo)).
+		Width(lipgloss.Width(logoWithTagline)).
 		Align(lipgloss.Right)
 	version := versionStyle.Render(a.app.Version)
 
-	logoAndVersion := strings.Join([]string{logo, version}, "\n")
+	logoAndVersion := strings.Join([]string{logoWithTagline, version}, "\n")
 	logoAndVersion = lipgloss.PlaceHorizontal(
 		effectiveWidth,
 		lipgloss.Center,

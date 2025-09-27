@@ -28,12 +28,12 @@ if (typeof OPENCODE_TUI_PATH !== "undefined") {
 
 export const TuiCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start EvalOps - continuous evaluation for AI-generated code",
   builder: (yargs) =>
     yargs
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start EvalOps in",
       })
       .option("model", {
         type: "string",
@@ -148,7 +148,8 @@ export const TuiCommand = cmd({
           env: {
             ...process.env,
             CGO_ENABLED: "0",
-            OPENCODE_SERVER: server.url.toString(),
+            EVALOPS_SERVER: server.url.toString(),
+            OPENCODE_SERVER: server.url.toString(), // Backward compatibility
           },
           onExit: () => {
             server.stop()

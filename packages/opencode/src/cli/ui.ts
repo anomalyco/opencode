@@ -4,9 +4,13 @@ import { NamedError } from "../util/error"
 
 export namespace UI {
   const LOGO = [
-    [`█▀▀█ █▀▀█ █▀▀ █▀▀▄ `, `█▀▀ █▀▀█ █▀▀▄ █▀▀`],
-    [`█░░█ █░░█ █▀▀ █░░█ `, `█░░ █░░█ █░░█ █▀▀`],
-    [`▀▀▀▀ █▀▀▀ ▀▀▀ ▀  ▀ `, `▀▀▀ ▀▀▀▀ ▀▀▀  ▀▀▀`],
+    [`🎯 `, `███████╗██╗   ██╗ █████╗ ██╗      ██████╗ ██████╗ ███████╗`],
+    [`  `, `██╔════╝██║   ██║██╔══██╗██║     ██╔═══██╗██╔══██╗██╔════╝`],
+    [`  `, `█████╗  ██║   ██║███████║██║     ██║   ██║██████╔╝███████╗`],
+    [`  `, `██╔══╝  ╚██╗ ██╔╝██╔══██║██║     ██║   ██║██╔═══╝ ╚════██║`],
+    [`  `, `███████╗ ╚████╔╝ ██║  ██║███████╗╚██████╔╝██║     ███████║`],
+    [`  `, `╚══════╝  ╚═══╝  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝     ╚══════╝`],
+    [`  `, `                    Trust, but Verify™`],
   ]
 
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -47,12 +51,22 @@ export namespace UI {
 
   export function logo(pad?: string) {
     const result = []
-    for (const row of LOGO) {
+    const colors = [
+      "\x1b[38;5;99m",  // Indigo
+      "\x1b[38;5;105m", // Light indigo
+      "\x1b[38;5;141m", // Purple
+      "\x1b[38;5;147m", // Light purple
+      "\x1b[38;5;183m", // Light purple
+      "\x1b[38;5;219m", // Very light purple
+      "\x1b[38;5;245m", // Gray for tagline
+    ]
+    for (let i = 0; i < LOGO.length; i++) {
+      const row = LOGO[i]
       if (pad) result.push(pad)
-      result.push(Bun.color("gray", "ansi"))
       result.push(row[0])
-      result.push("\x1b[0m")
+      result.push(colors[i] || "\x1b[38;5;99m")
       result.push(row[1])
+      result.push("\x1b[0m")
       result.push(EOL)
     }
     return result.join("").trimEnd()

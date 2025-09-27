@@ -62,18 +62,32 @@ func (m *statusComponent) logo() string {
 	t := theme.CurrentTheme()
 	base := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
 	emphasis := styles.NewStyle().
-		Foreground(t.Text()).
+		Foreground(t.Primary()).
 		Background(t.BackgroundElement()).
 		Bold(true).
 		Render
+	logo := styles.NewStyle().
+		Foreground(t.Accent()).
+		Background(t.BackgroundElement()).
+		Render
 
-	open := base("open")
-	code := emphasis("code")
+	// EvalOps branding
+	icon := logo("🎯")
+	eval := emphasis("Eval")
+	ops := styles.NewStyle().
+		Foreground(t.Secondary()).
+		Background(t.BackgroundElement()).
+		Bold(true).
+		Render("Ops")
 	version := base(" " + m.app.Version)
 
-	content := open + code
-	if m.width > 40 {
+	content := icon + " " + eval + ops
+	if m.width > 50 {
 		content += version
+	}
+	if m.width > 80 {
+		tagline := base(" • Trust, but Verify™")
+		content += tagline
 	}
 	return styles.NewStyle().
 		Background(t.BackgroundElement()).

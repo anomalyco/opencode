@@ -30,6 +30,9 @@ import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { EvalOps } from "../tool/evalops"
+import { Identifier } from "../id/id"
+import { Tool } from "../tool/tool"
 
 const ERRORS = {
   400: {
@@ -105,9 +108,9 @@ export namespace Server {
         openAPIRouteHandler(app, {
           documentation: {
             info: {
-              title: "opencode",
+              title: "evalops",
               version: "0.0.3",
-              description: "opencode api",
+              description: "EvalOps API - Continuous evaluation for AI-generated code",
             },
             openapi: "3.1.1",
           },
@@ -1237,6 +1240,30 @@ export namespace Server {
         async (c) => c.json(await callTui(c)),
       )
       .post(
+        "/tui/open-evalops",
+        describeRoute({
+          description: "Open the EvalOps results dialog",
+          operationId: "tui.openEvalOps",
+          responses: {
+            200: {
+              description: "EvalOps dialog opened successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            sessionID: Identifier.schema("session").optional(),
+          }),
+        ),
+        async (c) => c.json(await callTui(c)),
+      )
+      .post(
         "/tui/submit-prompt",
         describeRoute({
           description: "Submit the prompt",
@@ -1352,6 +1379,110 @@ export namespace Server {
           const info = c.req.valid("json")
           await Auth.set(id, info)
           return c.json(true)
+        },
+      )
+      .post(
+        "/evalops/run",
+        describeRoute({
+          description: "Run EvalOps evaluation suite",
+          operationId: "evalops.run",
+          responses: {
+            200: {
+              description: "Evaluation results",
+              content: {
+                "application/json": {
+                  schema: resolver(EvalOps.Results.schema),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            sessionID: Identifier.schema("session"),
+            suite: z.string(),
+            options: z
+              .object({
+                timeout: z.number().optional(),
+                parallel: z.boolean().optional(),
+                filter: z.string().optional(),
+              })
+              .optional(),
+          }),
+        ),
+        async (c) => {
+          const { sessionID, suite, options } = c.req.valid("json")
+
+          const context: Tool.Context = {
+            sessionID,
+            messageID: Identifier.ascending("message"),
+            agent: "evalops-api",
+            abort: new AbortController().signal,
+            metadata: () => {},
+          }
+
+          const results = await EvalOps.runEvaluation(suite, context)
+          return c.json(results)
+        },
+      )
+      .get(
+        "/evalops/config",
+        describeRoute({
+          description: "Get EvalOps configuration",
+          operationId: "evalops.config",
+          responses: {
+            200: {
+              description: "EvalOps configuration",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      enabled: z.boolean(),
+                      apiUrl: z.string().optional(),
+                      defaultSuite: z.string().optional(),
+                      autoRun: z.boolean(),
+                      telemetry: z.boolean(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const config = await EvalOps.getConfig()
+          return c.json(config)
+        },
+      )
+      .get(
+        "/evalops/results/:sessionID",
+        describeRoute({
+          description: "Get evaluation results for a session",
+          operationId: "evalops.results",
+          responses: {
+            200: {
+              description: "Evaluation results history",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(EvalOps.Results.schema)),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: Identifier.schema("session"),
+          }),
+        ),
+        async (c) => {
+          const { sessionID } = c.req.valid("param")
+          // TODO: Implement result storage and retrieval
+          // For now, return empty array
+          return c.json([])
         },
       )
       .get(
