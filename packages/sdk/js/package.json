@@ -13,7 +13,8 @@
     "./server": "./src/server.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "devDependencies": {
     "typescript": "catalog:",
