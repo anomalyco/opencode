@@ -68,8 +68,9 @@ func (e evalItem) Render(selected bool, width int, baseStyle styles.Style) strin
 	
 	// Suite name with truncation
 	name := e.Name
-	if len(name) > width-20 {
-		name = name[:width-23] + "..."
+	maxNameLength := width - 20
+	if maxNameLength > 3 && len(name) > maxNameLength {
+		name = name[:maxNameLength-3] + "..."
 	}
 	
 	// Score (if available)
@@ -228,6 +229,13 @@ func NewEvalsDialog(app *app.App) EvalsDialog {
 	
 	// Initialize search dialog with proper parameters
 	dialog.searchDialog = NewSearchDialog("Search evaluation suites...", numVisibleEvals)
+	
+	// Set initial width and height
+	dialog.searchDialog.SetWidth(dialog.dialogWidth)
+	dialog.searchDialog.SetHeight(numVisibleEvals + 4)
+	
+	// Set up initial items
+	dialog.setupEvalsList()
 	
 	return dialog
 }
