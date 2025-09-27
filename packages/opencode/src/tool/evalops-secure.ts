@@ -22,18 +22,18 @@ export namespace EvalOps {
   const log = Log.create({ service: "tool.evalops" })
 
   // 🔒 Security: Store sensitive data separately
-  const EVALOPS_API_TOKEN = process.env.EVALOPS_API_TOKEN
-  const EVALOPS_API_URL = process.env.EVALOPS_API_URL
+  const EVALOPS_API_TOKEN = process.env["EVALOPS_API_TOKEN"]
+  const EVALOPS_API_URL = process.env["EVALOPS_API_URL"]
 
   // 🎨 EvalOps Brand Colors
   export const BRAND = {
-    primary: "#6366F1",    // Indigo
-    success: "#10B981",    // Emerald
-    warning: "#F59E0B",    // Amber
-    danger: "#EF4444",     // Red
-    dark: "#1F2937",       // Gray-800
-    light: "#F9FAFB",      // Gray-50
-    logo: "🎯"
+    primary: "#6366F1", // Indigo
+    success: "#10B981", // Emerald
+    warning: "#F59E0B", // Amber
+    danger: "#EF4444", // Red
+    dark: "#1F2937", // Gray-800
+    light: "#F9FAFB", // Gray-50
+    logo: "🎯",
   } as const
 
   // 🔐 Secure configuration interface
@@ -55,7 +55,6 @@ export namespace EvalOps {
 
   // 🔄 Concurrency control
   const runningEvals = new Map<string, Promise<Results.Type>>()
-
 
   export const Event = {
     TestStarted: Bus.event(
@@ -117,22 +116,10 @@ export namespace EvalOps {
   }
 
   export const Error = {
-    Disabled: NamedError.create(
-      "EvalOpsDisabled",
-      z.object({ message: z.string() })
-    ),
-    Unauthorized: NamedError.create(
-      "EvalOpsUnauthorized",
-      z.object({ message: z.string() })
-    ),
-    RateLimited: NamedError.create(
-      "EvalOpsRateLimited",
-      z.object({ retryAfter: z.number() })
-    ),
-    Timeout: NamedError.create(
-      "EvalOpsTimeout",
-      z.object({ suite: z.string(), duration: z.number() })
-    ),
+    Disabled: NamedError.create("EvalOpsDisabled", z.object({ message: z.string() })),
+    Unauthorized: NamedError.create("EvalOpsUnauthorized", z.object({ message: z.string() })),
+    RateLimited: NamedError.create("EvalOpsRateLimited", z.object({ retryAfter: z.number() })),
+    Timeout: NamedError.create("EvalOpsTimeout", z.object({ suite: z.string(), duration: z.number() })),
   }
 
   export async function getConfig(): Promise<EvalOpsConfig> {
@@ -151,14 +138,11 @@ export namespace EvalOps {
     }
   }
 
-  export async function runEvaluation(
-    suite: string,
-    context: Tool.Context,
-  ): Promise<Results.Type> {
+  export async function runEvaluation(suite: string, context: Tool.Context): Promise<Results.Type> {
     const config = await getConfig()
 
     if (!config.enabled) {
-      throw new Error.Disabled({ message: "EvalOps is not enabled" })
+      throw Error.Disabled({ message: "EvalOps is not enabled" })
     }
 
     // Check for cached results
@@ -183,7 +167,7 @@ export namespace EvalOps {
 
     // Check concurrent limit
     if (runningEvals.size >= (config.maxConcurrent || 3)) {
-      throw new Error.RateLimited({ retryAfter: 5000 })
+      throw Error.RateLimited({ retryAfter: 5000 })
     }
 
     const evalPromise = runEvaluationInternal(suite, context, config)
@@ -234,7 +218,7 @@ export namespace EvalOps {
     // Set up timeout
     const timeoutMs = config.timeout || 60000
     const timeout = setTimeout(() => {
-      throw new Error.Timeout({ suite, duration: timeoutMs })
+      throw Error.Timeout({ suite, duration: timeoutMs }, "Evaluation timed out")
     }, timeoutMs)
 
     try {
@@ -256,7 +240,7 @@ export namespace EvalOps {
         suite: safeSuite,
         sessionID: context.sessionID,
         messageID: context.messageID,
-        messages: messages.map(msg => ({
+        messages: messages.map((msg) => ({
           role: msg.info.role,
           content: extractMessageContent(msg),
         })),
@@ -279,9 +263,7 @@ export namespace EvalOps {
 
       // Track telemetry asynchronously
       if (config.telemetry) {
-        sendTelemetry(results).catch(err =>
-          log.warn("Failed to send telemetry", { error: err })
-        )
+        sendTelemetry(results).catch((err) => log.warn("Failed to send telemetry", { error: err }))
       }
 
       // Emit completion event
@@ -316,34 +298,35 @@ export namespace EvalOps {
 
   function extractMessageContent(msg: MessageV2.WithParts): string {
     if (msg.info.role === "user") {
-      return msg.parts.map(p => {
-        if (p.type === "text") return p.text || ""
-        return ""
-      }).join("\n")
+      return msg.parts
+        .map((p) => {
+          if (p.type === "text") return p.text || ""
+          return ""
+        })
+        .join("\n")
     }
     if (msg.info.role === "assistant") {
-      return msg.parts.map(p => {
-        if (p.type === "text") return p.text || ""
-        if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
-        return ""
-      }).join("\n")
+      return msg.parts
+        .map((p) => {
+          if (p.type === "text") return p.text || ""
+          if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
+          return ""
+        })
+        .join("\n")
     }
     return ""
   }
 
-  async function callExternalAPI(
-    payload: any,
-    abort: AbortSignal,
-  ): Promise<Results.Type> {
+  async function callExternalAPI(payload: any, abort: AbortSignal): Promise<Results.Type> {
     if (!EVALOPS_API_TOKEN) {
-      throw new Error.Unauthorized({ message: "API token not configured" })
+      throw Error.Unauthorized({ message: "API token not configured" })
     }
 
     const response = await fetch(`${EVALOPS_API_URL}/evaluate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${EVALOPS_API_TOKEN}`,
+        Authorization: `Bearer ${EVALOPS_API_TOKEN}`,
         "X-EvalOps-Version": "1.0.0",
       },
       body: JSON.stringify(payload),
@@ -351,12 +334,12 @@ export namespace EvalOps {
     })
 
     if (response.status === 401) {
-      throw new Error.Unauthorized({ message: "Invalid API token" })
+      throw Error.Unauthorized({ message: "Invalid API token" })
     }
 
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get("Retry-After") || "60") * 1000
-      throw new Error.RateLimited({ retryAfter })
+      throw Error.RateLimited({ retryAfter })
     }
 
     if (!response.ok) {
@@ -366,11 +349,7 @@ export namespace EvalOps {
     return response.json()
   }
 
-  async function runLocalEvaluation(
-    suite: string,
-    payload: any,
-    abort: AbortSignal,
-  ): Promise<Results.Type> {
+  async function runLocalEvaluation(suite: string, payload: any, abort: AbortSignal): Promise<Results.Type> {
     const evalDir = path.join(Instance.directory, ".opencode", "evaluations")
     const suiteFile = path.join(evalDir, `${suite}.js`)
 
@@ -429,7 +408,7 @@ export namespace EvalOps {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${EVALOPS_API_TOKEN}`,
+          Authorization: `Bearer ${EVALOPS_API_TOKEN}`,
         },
         body: JSON.stringify({
           results,
@@ -464,19 +443,19 @@ export namespace EvalOps {
     return !!config.defaultSuite
   }
 
-  export async function autoRun(_sessionID: string, messageID: string) {
+  export async function autoRun(sessionID: string, messageID: string) {
     const config = await getConfig()
     if (!config.defaultSuite) return
 
     log.info(`${BRAND.logo} EvalOps: Auto-running evaluation`, {
-      sessionID: _sessionID,
+      sessionID: sessionID,
       messageID,
       suite: config.defaultSuite,
     })
 
     try {
       const context: Tool.Context = {
-        sessionID: _sessionID,
+        sessionID: sessionID,
         messageID,
         agent: "evalops-auto",
         abort: new AbortController().signal,
@@ -490,75 +469,72 @@ export namespace EvalOps {
   }
 }
 
-export const EvalOpsTool = Tool.define(
-  "evalops",
-  {
-    description: `🎯 EvalOps - Run automated evaluation suites to test code quality, performance, and correctness. Powered by EvalOps™.`,
-    parameters: z.object({
-      suite: z.string().describe("The evaluation suite to run"),
-      options: z
-        .object({
-          timeout: z.number().optional().describe("Timeout in milliseconds"),
-          parallel: z.boolean().optional().describe("Run tests in parallel"),
-          filter: z.string().optional().describe("Filter tests by pattern"),
-        })
-        .optional(),
-    }),
-    async execute(args, ctx) {
-      const config = await EvalOps.getConfig()
+export const EvalOpsTool = Tool.define("evalops", {
+  description: `🎯 EvalOps - Run automated evaluation suites to test code quality, performance, and correctness. Powered by EvalOps™.`,
+  parameters: z.object({
+    suite: z.string().describe("The evaluation suite to run"),
+    options: z
+      .object({
+        timeout: z.number().optional().describe("Timeout in milliseconds"),
+        parallel: z.boolean().optional().describe("Run tests in parallel"),
+        filter: z.string().optional().describe("Filter tests by pattern"),
+      })
+      .optional(),
+  }),
+  async execute(args, ctx) {
+    const config = await EvalOps.getConfig()
 
-      if (!config.enabled) {
+    if (!config.enabled) {
+      return {
+        title: `${EvalOps.BRAND.logo} EvalOps Disabled`,
+        output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
+        metadata: {},
+      }
+    }
+
+    try {
+      const results = await EvalOps.runEvaluation(args.suite, ctx)
+      const output = formatResults(results)
+
+      return {
+        title: `${EvalOps.BRAND.logo} EvalOps: ${args.suite}`,
+        output,
+        metadata: {
+          results,
+          suite: args.suite,
+          passed: results.summary.passed === results.summary.total,
+          score: results.summary.score,
+        },
+      }
+    } catch (error) {
+      if (error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized") {
         return {
-          title: `${EvalOps.BRAND.logo} EvalOps Disabled`,
-          output: "EvalOps is not enabled. Set evalops.enabled to true in your configuration.",
-          metadata: {},
+          title: `${EvalOps.BRAND.logo} EvalOps: Authentication Required`,
+          output: "Please configure EVALOPS_API_TOKEN environment variable",
+          metadata: { error: "unauthorized" },
         }
       }
 
-      try {
-        const results = await EvalOps.runEvaluation(args.suite, ctx)
-        const output = formatResults(results)
-
+      if (error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited") {
         return {
-          title: `${EvalOps.BRAND.logo} EvalOps: ${args.suite}`,
-          output,
-          metadata: {
-            results,
-            suite: args.suite,
-            passed: results.summary.passed === results.summary.total,
-            score: results.summary.score,
-          },
-        }
-      } catch (error) {
-        if (error instanceof EvalOps.Error.Unauthorized) {
-          return {
-            title: `${EvalOps.BRAND.logo} EvalOps: Authentication Required`,
-            output: "Please configure EVALOPS_API_TOKEN environment variable",
-            metadata: { error: "unauthorized" },
-          }
-        }
-
-        if (error instanceof EvalOps.Error.RateLimited) {
-          return {
-            title: `${EvalOps.BRAND.logo} EvalOps: Rate Limited`,
-            output: `Too many evaluations running. Retry in ${error.data.retryAfter / 1000}s`,
-            metadata: { error: "rate_limited" },
-          }
-        }
-
-        return {
-          title: `${EvalOps.BRAND.logo} EvalOps Failed: ${args.suite}`,
-          output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
-          metadata: {
-            error: error instanceof Error ? error.message : String(error),
-            suite: args.suite,
-            passed: false,
-          },
+          title: `${EvalOps.BRAND.logo} EvalOps: Rate Limited`,
+          output: `Too many evaluations running. Retry in ${error.data.retryAfter / 1000}s`,
+          metadata: { error: "rate_limited" },
         }
       }
-    },
+
+      return {
+        title: `${EvalOps.BRAND.logo} EvalOps Failed: ${args.suite}`,
+        output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+          suite: args.suite,
+          passed: false,
+        },
+      }
+    }
   },
-)
+})
 
 function formatResults(results: EvalOps.Results.Type): string {
   const { summary, tests } = results

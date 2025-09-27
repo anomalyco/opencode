@@ -244,19 +244,19 @@ export namespace EvalOps {
     return !!config.defaultSuite
   }
 
-  export async function autoRun(_sessionID: string, messageID: string) {
+  export async function autoRun(sessionID: string, messageID: string) {
     const config = await getConfig()
     if (!config.defaultSuite) return
 
     log.info("auto-running evaluation", {
-      sessionID: _sessionID,
+      sessionID: sessionID,
       messageID,
       suite: config.defaultSuite
     })
 
     try {
       const context: Tool.Context = {
-        sessionID: _sessionID,
+        sessionID: sessionID,
         messageID,
         agent: "evalops",
         abort: new AbortController().signal,
