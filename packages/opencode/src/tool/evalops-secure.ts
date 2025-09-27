@@ -20,7 +20,9 @@ export namespace EvalOps {
   const log = Log.create({ service: "tool.evalops" })
 
   // 🔒 Security: Store sensitive data separately
+  // biome-ignore lint/complexity/useLiteralKeys: TypeScript requires bracket notation for process.env
   const EVALOPS_API_TOKEN = process.env["EVALOPS_API_TOKEN"]
+  // biome-ignore lint/complexity/useLiteralKeys: TypeScript requires bracket notation for process.env
   const EVALOPS_API_URL = process.env["EVALOPS_API_URL"]
 
   // 🎨 EvalOps Brand Colors
