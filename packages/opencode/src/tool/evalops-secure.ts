@@ -109,7 +109,7 @@ export namespace EvalOps {
         score: z.number().min(0).max(100),
       }),
       timestamp: z.string(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
     })
 
     export type Type = z.infer<typeof schema>
@@ -142,7 +142,7 @@ export namespace EvalOps {
     const config = await getConfig()
 
     if (!config.enabled) {
-      throw Error.Disabled({ message: "EvalOps is not enabled" })
+      throw new Error.Disabled({ message: "EvalOps is not enabled" })
     }
 
     // Check for cached results
@@ -167,7 +167,7 @@ export namespace EvalOps {
 
     // Check concurrent limit
     if (runningEvals.size >= (config.maxConcurrent || 3)) {
-      throw Error.RateLimited({ retryAfter: 5000 })
+      throw new Error.RateLimited({ retryAfter: 5000 })
     }
 
     const evalPromise = runEvaluationInternal(suite, context, config)
@@ -218,13 +218,13 @@ export namespace EvalOps {
     // Set up timeout
     const timeoutMs = config.timeout || 60000
     const timeout = setTimeout(() => {
-      throw Error.Timeout({ suite, duration: timeoutMs }, "Evaluation timed out")
+      throw new Error.Timeout({ suite, duration: timeoutMs })
     }, timeoutMs)
 
     try {
       // Check abort signal
       if (context.abort.aborted) {
-        throw new Error("Evaluation aborted")
+        throw new Error.Disabled({ message: "Evaluation aborted" })
       }
 
       await Session.get(context.sessionID)
@@ -233,7 +233,7 @@ export namespace EvalOps {
       // Validate suite path to prevent directory traversal
       const safeSuite = path.basename(suite)
       if (safeSuite !== suite) {
-        throw new Error("Invalid suite name")
+        throw new Error.Disabled({ message: "Invalid suite name" })
       }
 
       const payload = {
@@ -287,7 +287,7 @@ export namespace EvalOps {
       await Bus.publish(Event.TestFailed, {
         sessionID: context.sessionID,
         messageID: context.messageID,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error as any),
         suite,
       })
       throw error
@@ -319,7 +319,7 @@ export namespace EvalOps {
 
   async function callExternalAPI(payload: any, abort: AbortSignal): Promise<Results.Type> {
     if (!EVALOPS_API_TOKEN) {
-      throw Error.Unauthorized({ message: "API token not configured" })
+      throw new Error.Unauthorized({ message: "API token not configured" })
     }
 
     const response = await fetch(`${EVALOPS_API_URL}/evaluate`, {
@@ -334,16 +334,16 @@ export namespace EvalOps {
     })
 
     if (response.status === 401) {
-      throw Error.Unauthorized({ message: "Invalid API token" })
+      throw new Error.Unauthorized({ message: "Invalid API token" })
     }
 
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get("Retry-After") || "60") * 1000
-      throw Error.RateLimited({ retryAfter })
+      throw new Error.RateLimited({ retryAfter })
     }
 
     if (!response.ok) {
-      throw new Error(`EvalOps API error: ${response.statusText}`)
+      throw new Error.Disabled({ message: `EvalOps API error: ${response.statusText}` })
     }
 
     return response.json()
@@ -356,7 +356,7 @@ export namespace EvalOps {
     // Validate file exists and is within evalDir
     const realPath = await fs.realpath(suiteFile).catch(() => null)
     if (!realPath || !realPath.startsWith(evalDir)) {
-      throw new Error(`Invalid evaluation suite: ${suite}`)
+      throw new Error.Disabled({ message: `Invalid evaluation suite: ${suite}` })
     }
 
     const proc = spawn("bun", ["run", "--", suiteFile], {
@@ -383,7 +383,7 @@ export namespace EvalOps {
     return new Promise((resolve, reject) => {
       proc.on("close", (code) => {
         if (code !== 0) {
-          reject(new Error(`Evaluation failed (code ${code}): ${errorOutput}`))
+          reject(new Error.Disabled({ message: `Evaluation failed (code ${code}): ${errorOutput}` }))
           return
         }
 
@@ -392,7 +392,7 @@ export namespace EvalOps {
           const validated = Results.schema.parse(results)
           resolve(validated)
         } catch (error) {
-          reject(new Error(`Invalid evaluation output: ${error instanceof Error ? error.message : String(error)}`))
+          reject(new Error.Disabled({ message: `Invalid evaluation output: ${error instanceof Error ? error.message : String(error as any)}` }))
         }
       })
 
@@ -437,7 +437,7 @@ export namespace EvalOps {
     return resultStore.get(sessionID) || []
   }
 
-  export async function shouldAutoRun(sessionID: string): Promise<boolean> {
+  export async function shouldAutoRun(_sessionID: string): Promise<boolean> {
     const config = await getConfig()
     if (!config.enabled || !config.autoRun) return false
     return !!config.defaultSuite
@@ -507,7 +507,7 @@ export const EvalOpsTool = Tool.define("evalops", {
         },
       }
     } catch (error) {
-      if (error instanceof Error error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized"error instanceof Error error instanceof EvalOps.Error.Unauthorizederror instanceof EvalOps.Error.Unauthorized error.name === "EvalOpsUnauthorized" error.name === "EvalOpsUnauthorized") {
+      if (error instanceof Error && (error instanceof EvalOps.Error.Unauthorized || error.name === "EvalOpsUnauthorized")) {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Authentication Required`,
           output: "Please configure EVALOPS_API_TOKEN environment variable",
@@ -515,10 +515,10 @@ export const EvalOpsTool = Tool.define("evalops", {
         }
       }
 
-      if (error instanceof Error error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited"error instanceof Error error instanceof EvalOps.Error.RateLimitederror instanceof EvalOps.Error.RateLimited error.name === "EvalOpsRateLimited" error.name === "EvalOpsRateLimited") {
+      if (error instanceof Error && error.name === "EvalOpsRateLimited") {
         return {
           title: `${EvalOps.BRAND.logo} EvalOps: Rate Limited`,
-          output: `Too many evaluations running. Retry in ${error.data.retryAfter / 1000}s`,
+          output: `Too many evaluations running. Please retry later.`,
           metadata: { error: "rate_limited" },
         }
       }

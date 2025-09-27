@@ -1413,7 +1413,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { suite, options } = c.req.valid("json")
+          const { suite } = c.req.valid("json")
           const sessionID = "temp-session"
           
           const context: Tool.Context = {
