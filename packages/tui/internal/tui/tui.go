@@ -1144,6 +1144,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.AppHelpCommand:
 		helpDialog := dialog.NewHelpDialog(a.app)
 		a.modal = helpDialog
+	case commands.EvalOpsCommand:
+		evalsDialog := dialog.NewEvalsDialog(a.app)
+		a.modal = evalsDialog
 	case commands.AgentCycleCommand:
 		updated, cmd := a.app.SwitchAgent()
 		a.app = updated

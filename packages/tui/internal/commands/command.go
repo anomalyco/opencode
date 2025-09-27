@@ -69,9 +69,10 @@ func (r CommandRegistry) Sorted() []Command {
 		priorityOrder := map[CommandName]int{
 			SessionNewCommand:   0,
 			AppHelpCommand:      1,
-			SessionShareCommand: 2,
-			ModelListCommand:    3,
-			AgentListCommand:    4,
+			EvalOpsCommand:      2,
+			SessionShareCommand: 3,
+			ModelListCommand:    4,
+			AgentListCommand:    5,
 		}
 
 		aPriority, aHasPriority := priorityOrder[a.Name]
@@ -138,6 +139,7 @@ const (
 	AgentListCommand                CommandName = "agent_list"
 	ModelCycleRecentCommand         CommandName = "model_cycle_recent"
 	ThemeListCommand                CommandName = "theme_list"
+	EvalOpsCommand                  CommandName = "evalops"
 	FileListCommand                 CommandName = "file_list"
 	FileCloseCommand                CommandName = "file_close"
 	FileSearchCommand               CommandName = "file_search"
@@ -233,6 +235,12 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 			Description: "share session",
 			Keybindings: parseBindings("<leader>s"),
 			Trigger:     []string{"share"},
+		},
+		{
+			Name:        EvalOpsCommand,
+			Description: "🎯 open EvalOps dashboard",
+			Keybindings: parseBindings("<leader>v"),
+			Trigger:     []string{"evals", "evalops", "dashboard", "verify"},
 		},
 		{
 			Name:        SessionUnshareCommand,
