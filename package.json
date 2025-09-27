@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "bun run packages/opencode/src/index.ts",
     "typecheck": "bun turbo typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
     "prepare": "husky"
   },
   "workspaces": {
@@ -31,6 +34,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.4",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "sst": "3.17.13",

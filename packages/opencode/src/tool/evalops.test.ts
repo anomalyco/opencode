@@ -1,7 +1,7 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
+import type z from "zod/v4"
 import { EvalOps, EvalOpsTool } from "./evalops"
-import z from "zod/v4"
-import { Tool } from "./tool"
+import type { Tool } from "./tool"
 
 // Mock dependencies
 mock.module("../config/config", () => ({
@@ -117,7 +117,9 @@ describe("EvalOps Tool", () => {
       messageID: "msg-123",
       agent: "test",
       abort: new AbortController().signal,
-      metadata: () => {},
+      metadata: () => {
+        /* no-op */
+      },
     }
 
     const result = await toolDef.execute({ suite: "test-suite" }, context)
@@ -193,7 +195,9 @@ describe("EvalOps Tool", () => {
       messageID: "msg-123",
       agent: "test",
       abort: new AbortController().signal,
-      metadata: () => {},
+      metadata: () => {
+        /* no-op */
+      },
     }
 
     const toolDef = await EvalOpsTool.init()
@@ -203,7 +207,7 @@ describe("EvalOps Tool", () => {
     expect(result.output).toContain("1/2 passed")
     expect(result.output).toContain("✅")
     expect(result.output).toContain("❌")
-    expect(result.metadata["passed"]).toBe(false)
+    expect(result.metadata.passed).toBe(false)
   })
 
   test("should handle API errors gracefully", async () => {
@@ -248,7 +252,9 @@ describe("EvalOps Tool", () => {
       messageID: "msg-123",
       agent: "test",
       abort: new AbortController().signal,
-      metadata: () => {},
+      metadata: () => {
+        /* no-op */
+      },
     }
 
     const toolDef = await EvalOpsTool.init()
@@ -256,7 +262,7 @@ describe("EvalOps Tool", () => {
 
     expect(result.title).toContain("Failed")
     expect(result.output).toContain("Evaluation failed")
-    expect(result.metadata["passed"]).toBe(false)
+    expect(result.metadata.passed).toBe(false)
   })
 
   test("should emit correct events", async () => {
@@ -321,7 +327,9 @@ describe("EvalOps Tool", () => {
       messageID: "msg-123",
       agent: "test",
       abort: new AbortController().signal,
-      metadata: () => {},
+      metadata: () => {
+        /* no-op */
+      },
     }
 
     await EvalOps.runEvaluation("test-suite", context)

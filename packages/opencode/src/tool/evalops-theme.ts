@@ -59,26 +59,26 @@ export namespace EvalOpsTheme {
   // UI components styling
   export const components = {
     badge: {
-      success: `bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold`,
-      warning: `bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs font-semibold`,
-      danger: `bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-semibold`,
-      info: `bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-semibold`,
+      success: "bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold",
+      warning: "bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs font-semibold",
+      danger: "bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-semibold",
+      info: "bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-semibold",
     },
     button: {
-      primary: `bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors`,
-      secondary: `bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors`,
-      danger: `bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors`,
+      primary: "bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg transition-colors",
+      secondary: "bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors",
+      danger: "bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors",
     },
     card: {
-      DEFAULT: `bg-white rounded-xl shadow-sm border border-gray-200 p-6`,
-      dark: `bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6`,
-      branded: `bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-xl p-6`,
+      DEFAULT: "bg-white rounded-xl shadow-sm border border-gray-200 p-6",
+      dark: "bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6",
+      branded: "bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-xl p-6",
     },
     status: {
-      running: `animate-pulse text-indigo-600`,
-      success: `text-green-600`,
-      failed: `text-red-600`,
-      pending: `text-gray-400`,
+      running: "animate-pulse text-indigo-600",
+      success: "text-green-600",
+      failed: "text-red-600",
+      pending: "text-gray-400",
     },
   } as const
 
@@ -181,7 +181,7 @@ ${terminal.brand()}
   // Progress indicators
   export const progress = {
     spinner: ["🎯", "🎯.", "🎯..", "🎯..."],
-    bar: (current: number, total: number, width: number = 20) => {
+    bar: (current: number, total: number, width = 20) => {
       const percentage = current / total
       const filled = Math.floor(percentage * width)
       const empty = width - filled

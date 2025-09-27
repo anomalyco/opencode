@@ -1,15 +1,13 @@
+import { spawn } from "node:child_process"
+import fs from "node:fs/promises"
+import path from "node:path"
 import z from "zod/v4"
-import { Tool } from "./tool"
-import { Log } from "../util/log"
-import { Config } from "../config/config"
-import { Session } from "../session"
-
 import { Bus } from "../bus"
-
-import { spawn } from "child_process"
-import fs from "fs/promises"
-import path from "path"
+import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Session } from "../session"
+import { Log } from "../util/log"
+import { Tool } from "./tool"
 
 export namespace EvalOps {
   const log = Log.create({ service: "tool.evalops" })
@@ -99,15 +97,21 @@ export namespace EvalOps {
           msg.info.role === "user"
             ? msg.parts
                 .map((p) => {
-                  if (p.type === "text") return p.text || ""
+                  if (p.type === "text") {
+                    return p.text || ""
+                  }
                   return ""
                 })
                 .join("\n")
             : msg.info.role === "assistant"
               ? msg.parts
                   .map((p) => {
-                    if (p.type === "text") return p.text || ""
-                    if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
+                    if (p.type === "text") {
+                      return p.text || ""
+                    }
+                    if (p.type === "tool") {
+                      return `Tool: ${p.tool}(${JSON.stringify(p)})`
+                    }
                     return ""
                   })
                   .join("\n")
@@ -242,7 +246,9 @@ export namespace EvalOps {
 
   export async function shouldAutoRun(_sessionID: string): Promise<boolean> {
     const config = await getConfig()
-    if (!config.enabled || !config.autoRun) return false
+    if (!config.enabled || !config.autoRun) {
+      return false
+    }
 
     // Check if there's a default suite configured
     return !!config.defaultSuite
@@ -250,7 +256,9 @@ export namespace EvalOps {
 
   export async function autoRun(sessionID: string, messageID: string) {
     const config = await getConfig()
-    if (!config.defaultSuite) return
+    if (!config.defaultSuite) {
+      return
+    }
 
     log.info("auto-running evaluation", {
       sessionID: sessionID,
@@ -264,7 +272,9 @@ export namespace EvalOps {
         messageID,
         agent: "evalops",
         abort: new AbortController().signal,
-        metadata: () => {},
+        metadata: () => {
+          /* no-op */
+        },
       }
 
       await runEvaluation(config.defaultSuite, context)
@@ -354,7 +364,7 @@ function formatResults(results: EvalOps.Results.Type): string {
   output += `**Summary:** ${summary.passed}/${summary.total} passed (${passRate}%)\n`
   output += `**Duration:** ${summary.duration}ms\n\n`
 
-  output += `### Test Results\n\n`
+  output += "### Test Results\n\n"
 
   for (const test of tests) {
     const icon = test.passed ? "✅" : "❌"
@@ -368,7 +378,7 @@ function formatResults(results: EvalOps.Results.Type): string {
       output += `   Output: ${test.output.slice(0, 200)}${test.output.length > 200 ? "..." : ""}\n`
     }
 
-    output += `\n`
+    output += "\n"
   }
 
   return output
