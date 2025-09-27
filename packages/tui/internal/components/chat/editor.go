@@ -407,6 +407,9 @@ func (m *editorComponent) Content() string {
 	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		status := "working"
+		if m.app.IsCompacting() {
+			status = "compacting"
+		}
 		if m.app.CurrentPermission.ID != "" {
 			status = "waiting for permission"
 		}
@@ -526,7 +529,10 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		commandName := strings.Split(expandedValue, " ")[0]
 		command := m.app.Commands[commands.CommandName(commandName)]
 		if command.Custom {
-			args := strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
+			args := ""
+			if strings.HasPrefix(expandedValue, command.PrimaryTrigger()+" ") {
+				args = strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
+			}
 			cmds = append(
 				cmds,
 				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
@@ -681,6 +687,14 @@ func (m *editorComponent) getExitKeyText() string {
 
 // shouldSummarizePastedText determines if pasted text should be summarized
 func (m *editorComponent) shouldSummarizePastedText(text string) bool {
+	if m.app.IsBashMode {
+		return false
+	}
+
+	if m.app.Config != nil && m.app.Config.Experimental.DisablePasteSummary {
+		return false
+	}
+
 	lines := strings.Split(text, "\n")
 	lineCount := len(lines)
 	charCount := len(text)

@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { EOL } from "os"
 import { NamedError } from "../util/error"
 

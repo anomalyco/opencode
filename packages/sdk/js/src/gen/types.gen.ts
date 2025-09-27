@@ -10,523 +10,298 @@ export type Project = {
   }
 }
 
-export type Event =
-  | ({
-      type: "installation.updated"
-    } & EventInstallationUpdated)
-  | ({
-      type: "lsp.client.diagnostics"
-    } & EventLspClientDiagnostics)
-  | ({
-      type: "message.updated"
-    } & EventMessageUpdated)
-  | ({
-      type: "message.removed"
-    } & EventMessageRemoved)
-  | ({
-      type: "message.part.updated"
-    } & EventMessagePartUpdated)
-  | ({
-      type: "message.part.removed"
-    } & EventMessagePartRemoved)
-  | ({
-      type: "permission.updated"
-    } & EventPermissionUpdated)
-  | ({
-      type: "permission.replied"
-    } & EventPermissionReplied)
-  | ({
-      type: "file.edited"
-    } & EventFileEdited)
-  | ({
-      type: "session.updated"
-    } & EventSessionUpdated)
-  | ({
-      type: "session.deleted"
-    } & EventSessionDeleted)
-  | ({
-      type: "session.idle"
-    } & EventSessionIdle)
-  | ({
-      type: "session.error"
-    } & EventSessionError)
-  | ({
-      type: "server.connected"
-    } & EventServerConnected)
-
-export type EventInstallationUpdated = {
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
+/**
+ * Custom keybind configurations
+ */
+export type KeybindsConfig = {
+  /**
+   * Leader key for keybind combinations
+   */
+  leader?: string
+  /**
+   * Show help dialog
+   */
+  app_help?: string
+  /**
+   * Exit the application
+   */
+  app_exit?: string
+  /**
+   * Open external editor
+   */
+  editor_open?: string
+  /**
+   * List available themes
+   */
+  theme_list?: string
+  /**
+   * Create/update AGENTS.md
+   */
+  project_init?: string
+  /**
+   * Toggle tool details
+   */
+  tool_details?: string
+  /**
+   * Toggle thinking blocks
+   */
+  thinking_blocks?: string
+  /**
+   * Export session to editor
+   */
+  session_export?: string
+  /**
+   * Create a new session
+   */
+  session_new?: string
+  /**
+   * List all sessions
+   */
+  session_list?: string
+  /**
+   * Show session timeline
+   */
+  session_timeline?: string
+  /**
+   * Share current session
+   */
+  session_share?: string
+  /**
+   * Unshare current session
+   */
+  session_unshare?: string
+  /**
+   * Interrupt current session
+   */
+  session_interrupt?: string
+  /**
+   * Compact the session
+   */
+  session_compact?: string
+  /**
+   * Cycle to next child session
+   */
+  session_child_cycle?: string
+  /**
+   * Cycle to previous child session
+   */
+  session_child_cycle_reverse?: string
+  /**
+   * Scroll messages up by one page
+   */
+  messages_page_up?: string
+  /**
+   * Scroll messages down by one page
+   */
+  messages_page_down?: string
+  /**
+   * Scroll messages up by half page
+   */
+  messages_half_page_up?: string
+  /**
+   * Scroll messages down by half page
+   */
+  messages_half_page_down?: string
+  /**
+   * Navigate to first message
+   */
+  messages_first?: string
+  /**
+   * Navigate to last message
+   */
+  messages_last?: string
+  /**
+   * Copy message
+   */
+  messages_copy?: string
+  /**
+   * Undo message
+   */
+  messages_undo?: string
+  /**
+   * Redo message
+   */
+  messages_redo?: string
+  /**
+   * List available models
+   */
+  model_list?: string
+  /**
+   * Next recent model
+   */
+  model_cycle_recent?: string
+  /**
+   * Previous recent model
+   */
+  model_cycle_recent_reverse?: string
+  /**
+   * List agents
+   */
+  agent_list?: string
+  /**
+   * Next agent
+   */
+  agent_cycle?: string
+  /**
+   * Previous agent
+   */
+  agent_cycle_reverse?: string
+  /**
+   * Clear input field
+   */
+  input_clear?: string
+  /**
+   * Paste from clipboard
+   */
+  input_paste?: string
+  /**
+   * Submit input
+   */
+  input_submit?: string
+  /**
+   * Insert newline in input
+   */
+  input_newline?: string
+  /**
+   * @deprecated use agent_cycle. Next mode
+   */
+  switch_mode?: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous mode
+   */
+  switch_mode_reverse?: string
+  /**
+   * @deprecated use agent_cycle. Next agent
+   */
+  switch_agent?: string
+  /**
+   * @deprecated use agent_cycle_reverse. Previous agent
+   */
+  switch_agent_reverse?: string
+  /**
+   * @deprecated Currently not available. List files
+   */
+  file_list?: string
+  /**
+   * @deprecated Close file
+   */
+  file_close?: string
+  /**
+   * @deprecated Search file
+   */
+  file_search?: string
+  /**
+   * @deprecated Split/unified diff
+   */
+  file_diff_toggle?: string
+  /**
+   * @deprecated Navigate to previous message
+   */
+  messages_previous?: string
+  /**
+   * @deprecated Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * @deprecated Toggle layout
+   */
+  messages_layout_toggle?: string
+  /**
+   * @deprecated use messages_undo. Revert message
+   */
+  messages_revert?: string
 }
 
-export type EventLspClientDiagnostics = {
-  type: "lsp.client.diagnostics"
-  properties: {
-    serverID: string
-    path: string
+export type AgentConfig = {
+  model?: string
+  temperature?: number
+  top_p?: number
+  prompt?: string
+  tools?: {
+    [key: string]: boolean
   }
+  disable?: boolean
+  /**
+   * Description of when to use the agent
+   */
+  description?: string
+  mode?: "subagent" | "primary" | "all"
+  permission?: {
+    edit?: "ask" | "allow" | "deny"
+    bash?:
+      | ("ask" | "allow" | "deny")
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
+    webfetch?: "ask" | "allow" | "deny"
+  }
+  [key: string]:
+    | unknown
+    | string
+    | number
+    | {
+        [key: string]: boolean
+      }
+    | boolean
+    | ("subagent" | "primary" | "all")
+    | {
+        edit?: "ask" | "allow" | "deny"
+        bash?:
+          | ("ask" | "allow" | "deny")
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
+        webfetch?: "ask" | "allow" | "deny"
+      }
+    | undefined
 }
 
-export type EventMessageUpdated = {
-  type: "message.updated"
-  properties: {
-    info: Message
+export type McpLocalConfig = {
+  /**
+   * Type of MCP server connection
+   */
+  type: "local"
+  /**
+   * Command and arguments to run the MCP server
+   */
+  command: Array<string>
+  /**
+   * Environment variables to set when running the MCP server
+   */
+  environment?: {
+    [key: string]: string
   }
+  /**
+   * Enable or disable the MCP server on startup
+   */
+  enabled?: boolean
 }
 
-export type Message =
-  | ({
-      role: "user"
-    } & UserMessage)
-  | ({
-      role: "assistant"
-    } & AssistantMessage)
-
-export type UserMessage = {
-  id: string
-  sessionID: string
-  role: "user"
-  time: {
-    created: number
-  }
-}
-
-export type AssistantMessage = {
-  id: string
-  sessionID: string
-  role: "assistant"
-  time: {
-    created: number
-    completed?: number
-  }
-  error?:
-    | ({
-        name: "ProviderAuthError"
-      } & ProviderAuthError)
-    | ({
-        name: "UnknownError"
-      } & UnknownError)
-    | ({
-        name: "MessageOutputLengthError"
-      } & MessageOutputLengthError)
-    | ({
-        name: "MessageAbortedError"
-      } & MessageAbortedError)
-  system: Array<string>
-  modelID: string
-  providerID: string
-  mode: string
-  path: {
-    cwd: string
-    root: string
-  }
-  summary?: boolean
-  cost: number
-  tokens: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-}
-
-export type ProviderAuthError = {
-  name: "ProviderAuthError"
-  data: {
-    providerID: string
-    message: string
-  }
-}
-
-export type UnknownError = {
-  name: "UnknownError"
-  data: {
-    message: string
-  }
-}
-
-export type MessageOutputLengthError = {
-  name: "MessageOutputLengthError"
-  data: {
-    [key: string]: unknown
-  }
-}
-
-export type MessageAbortedError = {
-  name: "MessageAbortedError"
-  data: {
-    [key: string]: unknown
-  }
-}
-
-export type EventMessageRemoved = {
-  type: "message.removed"
-  properties: {
-    sessionID: string
-    messageID: string
-  }
-}
-
-export type EventMessagePartUpdated = {
-  type: "message.part.updated"
-  properties: {
-    part: Part
-  }
-}
-
-export type Part =
-  | ({
-      type: "text"
-    } & TextPart)
-  | ({
-      type: "reasoning"
-    } & ReasoningPart)
-  | ({
-      type: "file"
-    } & FilePart)
-  | ({
-      type: "tool"
-    } & ToolPart)
-  | ({
-      type: "step-start"
-    } & StepStartPart)
-  | ({
-      type: "step-finish"
-    } & StepFinishPart)
-  | ({
-      type: "snapshot"
-    } & SnapshotPart)
-  | ({
-      type: "patch"
-    } & PatchPart)
-  | ({
-      type: "agent"
-    } & AgentPart)
-
-export type TextPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "text"
-  text: string
-  synthetic?: boolean
-  time?: {
-    start: number
-    end?: number
-  }
-}
-
-export type ReasoningPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "reasoning"
-  text: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-    end?: number
-  }
-}
-
-export type FilePart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "file"
-  mime: string
-  filename?: string
+export type McpRemoteConfig = {
+  /**
+   * Type of MCP server connection
+   */
+  type: "remote"
+  /**
+   * URL of the remote MCP server
+   */
   url: string
-  source?: FilePartSource
-}
-
-export type FilePartSource =
-  | ({
-      type: "file"
-    } & FileSource)
-  | ({
-      type: "symbol"
-    } & SymbolSource)
-
-export type FileSource = {
-  text: FilePartSourceText
-  type: "file"
-  path: string
-}
-
-export type FilePartSourceText = {
-  value: string
-  start: number
-  end: number
-}
-
-export type SymbolSource = {
-  text: FilePartSourceText
-  type: "symbol"
-  path: string
-  range: Range
-  name: string
-  kind: number
-}
-
-export type Range = {
-  start: {
-    line: number
-    character: number
-  }
-  end: {
-    line: number
-    character: number
+  /**
+   * Enable or disable the MCP server on startup
+   */
+  enabled?: boolean
+  /**
+   * Headers to send with the request
+   */
+  headers?: {
+    [key: string]: string
   }
 }
 
-export type ToolPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "tool"
-  callID: string
-  tool: string
-  state: ToolState
-}
-
-export type ToolState =
-  | ({
-      status: "pending"
-    } & ToolStatePending)
-  | ({
-      status: "running"
-    } & ToolStateRunning)
-  | ({
-      status: "completed"
-    } & ToolStateCompleted)
-  | ({
-      status: "error"
-    } & ToolStateError)
-
-export type ToolStatePending = {
-  status: "pending"
-}
-
-export type ToolStateRunning = {
-  status: "running"
-  input?: unknown
-  title?: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-  }
-}
-
-export type ToolStateCompleted = {
-  status: "completed"
-  input: {
-    [key: string]: unknown
-  }
-  output: string
-  title: string
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-    end: number
-  }
-}
-
-export type ToolStateError = {
-  status: "error"
-  input: {
-    [key: string]: unknown
-  }
-  error: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    start: number
-    end: number
-  }
-}
-
-export type StepStartPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-start"
-}
-
-export type StepFinishPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "step-finish"
-  cost: number
-  tokens: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-}
-
-export type SnapshotPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "snapshot"
-  snapshot: string
-}
-
-export type PatchPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "patch"
-  hash: string
-  files: Array<string>
-}
-
-export type AgentPart = {
-  id: string
-  sessionID: string
-  messageID: string
-  type: "agent"
-  name: string
-  source?: {
-    value: string
-    start: number
-    end: number
-  }
-}
-
-export type EventMessagePartRemoved = {
-  type: "message.part.removed"
-  properties: {
-    sessionID: string
-    messageID: string
-    partID: string
-  }
-}
-
-export type EventPermissionUpdated = {
-  type: "permission.updated"
-  properties: Permission
-}
-
-export type Permission = {
-  id: string
-  type: string
-  pattern?: string
-  sessionID: string
-  messageID: string
-  callID?: string
-  title: string
-  metadata: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-  }
-}
-
-export type EventPermissionReplied = {
-  type: "permission.replied"
-  properties: {
-    sessionID: string
-    permissionID: string
-    response: string
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventSessionUpdated = {
-  type: "session.updated"
-  properties: {
-    info: Session
-  }
-}
-
-export type Session = {
-  id: string
-  projectID: string
-  directory: string
-  parentID?: string
-  share?: {
-    url: string
-  }
-  title: string
-  version: string
-  time: {
-    created: number
-    updated: number
-  }
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-  }
-}
-
-export type EventSessionDeleted = {
-  type: "session.deleted"
-  properties: {
-    info: Session
-  }
-}
-
-export type EventSessionIdle = {
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventSessionError = {
-  type: "session.error"
-  properties: {
-    sessionID?: string
-    error?:
-      | ({
-          name: "ProviderAuthError"
-        } & ProviderAuthError)
-      | ({
-          name: "UnknownError"
-        } & UnknownError)
-      | ({
-          name: "MessageOutputLengthError"
-        } & MessageOutputLengthError)
-      | ({
-          name: "MessageAbortedError"
-        } & MessageAbortedError)
-  }
-}
-
-export type EventServerConnected = {
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
+/**
+ * @deprecated Always uses stretch layout.
+ */
+export type LayoutConfig = "auto" | "stretch"
 
 export type Config = {
   /**
@@ -537,9 +312,6 @@ export type Config = {
    * Theme name to use for the interface
    */
   theme?: string
-  /**
-   * Custom keybind configurations
-   */
   keybinds?: KeybindsConfig
   /**
    * TUI specific settings
@@ -548,7 +320,7 @@ export type Config = {
     /**
      * TUI scroll speed
      */
-    scroll_speed: number
+    scroll_speed?: number
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands
@@ -559,7 +331,11 @@ export type Config = {
       description?: string
       agent?: string
       model?: string
+      subtask?: boolean
     }
+  }
+  watcher?: {
+    ignore?: Array<string>
   }
   plugin?: Array<string>
   snapshot?: boolean
@@ -637,8 +413,12 @@ export type Config = {
             context: number
             output: number
           }
+          experimental?: boolean
           options?: {
             [key: string]: unknown
+          }
+          provider?: {
+            npm: string
           }
         }
       }
@@ -657,13 +437,7 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]:
-      | ({
-          type: "local"
-        } & McpLocalConfig)
-      | ({
-          type: "remote"
-        } & McpRemoteConfig)
+    [key: string]: McpLocalConfig | McpRemoteConfig
   }
   formatter?: {
     [key: string]: {
@@ -696,9 +470,6 @@ export type Config = {
    * Additional instruction files or patterns to include
    */
   instructions?: Array<string>
-  /**
-   * @deprecated Always uses stretch layout.
-   */
   layout?: LayoutConfig
   permission?: {
     edit?: "ask" | "allow" | "deny"
@@ -729,329 +500,25 @@ export type Config = {
         }
       }>
     }
+    disable_paste_summary?: boolean
   }
 }
 
-export type KeybindsConfig = {
-  /**
-   * Leader key for keybind combinations
-   */
-  leader: string
-  /**
-   * Show help dialog
-   */
-  app_help: string
-  /**
-   * Exit the application
-   */
-  app_exit: string
-  /**
-   * Open external editor
-   */
-  editor_open: string
-  /**
-   * List available themes
-   */
-  theme_list: string
-  /**
-   * Create/update AGENTS.md
-   */
-  project_init: string
-  /**
-   * Toggle tool details
-   */
-  tool_details: string
-  /**
-   * Toggle thinking blocks
-   */
-  thinking_blocks: string
-  /**
-   * Export session to editor
-   */
-  session_export: string
-  /**
-   * Create a new session
-   */
-  session_new: string
-  /**
-   * List all sessions
-   */
-  session_list: string
-  /**
-   * Show session timeline
-   */
-  session_timeline: string
-  /**
-   * Share current session
-   */
-  session_share: string
-  /**
-   * Unshare current session
-   */
-  session_unshare: string
-  /**
-   * Interrupt current session
-   */
-  session_interrupt: string
-  /**
-   * Compact the session
-   */
-  session_compact: string
-  /**
-   * Cycle to next child session
-   */
-  session_child_cycle: string
-  /**
-   * Cycle to previous child session
-   */
-  session_child_cycle_reverse: string
-  /**
-   * Scroll messages up by one page
-   */
-  messages_page_up: string
-  /**
-   * Scroll messages down by one page
-   */
-  messages_page_down: string
-  /**
-   * Scroll messages up by half page
-   */
-  messages_half_page_up: string
-  /**
-   * Scroll messages down by half page
-   */
-  messages_half_page_down: string
-  /**
-   * Navigate to first message
-   */
-  messages_first: string
-  /**
-   * Navigate to last message
-   */
-  messages_last: string
-  /**
-   * Copy message
-   */
-  messages_copy: string
-  /**
-   * Undo message
-   */
-  messages_undo: string
-  /**
-   * Redo message
-   */
-  messages_redo: string
-  /**
-   * List available models
-   */
-  model_list: string
-  /**
-   * Next recent model
-   */
-  model_cycle_recent: string
-  /**
-   * Previous recent model
-   */
-  model_cycle_recent_reverse: string
-  /**
-   * List agents
-   */
-  agent_list: string
-  /**
-   * Next agent
-   */
-  agent_cycle: string
-  /**
-   * Previous agent
-   */
-  agent_cycle_reverse: string
-  /**
-   * Clear input field
-   */
-  input_clear: string
-  /**
-   * Paste from clipboard
-   */
-  input_paste: string
-  /**
-   * Submit input
-   */
-  input_submit: string
-  /**
-   * Insert newline in input
-   */
-  input_newline: string
-  /**
-   * @deprecated use agent_cycle. Next mode
-   */
-  switch_mode: string
-  /**
-   * @deprecated use agent_cycle_reverse. Previous mode
-   */
-  switch_mode_reverse: string
-  /**
-   * @deprecated use agent_cycle. Next agent
-   */
-  switch_agent: string
-  /**
-   * @deprecated use agent_cycle_reverse. Previous agent
-   */
-  switch_agent_reverse: string
-  /**
-   * @deprecated Currently not available. List files
-   */
-  file_list: string
-  /**
-   * @deprecated Close file
-   */
-  file_close: string
-  /**
-   * @deprecated Search file
-   */
-  file_search: string
-  /**
-   * @deprecated Split/unified diff
-   */
-  file_diff_toggle: string
-  /**
-   * @deprecated Navigate to previous message
-   */
-  messages_previous: string
-  /**
-   * @deprecated Navigate to next message
-   */
-  messages_next: string
-  /**
-   * @deprecated Toggle layout
-   */
-  messages_layout_toggle: string
-  /**
-   * @deprecated use messages_undo. Revert message
-   */
-  messages_revert: string
-}
-
-export type AgentConfig = {
-  model?: string
-  temperature?: number
-  top_p?: number
-  prompt?: string
-  tools?: {
-    [key: string]: boolean
-  }
-  disable?: boolean
-  /**
-   * Description of when to use the agent
-   */
-  description?: string
-  mode?: "subagent" | "primary" | "all"
-  permission?: {
-    edit?: "ask" | "allow" | "deny"
-    bash?:
-      | ("ask" | "allow" | "deny")
-      | {
-          [key: string]: "ask" | "allow" | "deny"
-        }
-    webfetch?: "ask" | "allow" | "deny"
-  }
-  [key: string]:
-    | unknown
-    | string
-    | number
-    | {
-        [key: string]: boolean
-      }
-    | boolean
-    | ("subagent" | "primary" | "all")
-    | {
-        edit?: "ask" | "allow" | "deny"
-        bash?:
-          | ("ask" | "allow" | "deny")
-          | {
-              [key: string]: "ask" | "allow" | "deny"
-            }
-        webfetch?: "ask" | "allow" | "deny"
-      }
-    | undefined
-}
-
-export type Provider = {
-  api?: string
-  name: string
-  env: Array<string>
-  id: string
-  npm?: string
-  models: {
-    [key: string]: Model
-  }
-}
-
-export type Model = {
-  id: string
-  name: string
-  release_date: string
-  attachment: boolean
-  reasoning: boolean
-  temperature: boolean
-  tool_call: boolean
-  cost: {
-    input: number
-    output: number
-    cache_read?: number
-    cache_write?: number
-  }
-  limit: {
-    context: number
-    output: number
-  }
-  options: {
+export type _Error = {
+  data: {
     [key: string]: unknown
   }
 }
 
-export type McpLocalConfig = {
-  /**
-   * Type of MCP server connection
-   */
-  type: "local"
-  /**
-   * Command and arguments to run the MCP server
-   */
-  command: Array<string>
-  /**
-   * Environment variables to set when running the MCP server
-   */
-  environment?: {
-    [key: string]: string
-  }
-  /**
-   * Enable or disable the MCP server on startup
-   */
-  enabled?: boolean
+export type ToolIds = Array<string>
+
+export type ToolListItem = {
+  id: string
+  description: string
+  parameters: unknown
 }
 
-export type McpRemoteConfig = {
-  /**
-   * Type of MCP server connection
-   */
-  type: "remote"
-  /**
-   * URL of the remote MCP server
-   */
-  url: string
-  /**
-   * Enable or disable the MCP server on startup
-   */
-  enabled?: boolean
-  /**
-   * Headers to send with the request
-   */
-  headers?: {
-    [key: string]: string
-  }
-}
-
-export type LayoutConfig = "auto" | "stretch"
+export type ToolList = Array<ToolListItem>
 
 export type Path = {
   state: string
@@ -1060,11 +527,302 @@ export type Path = {
   directory: string
 }
 
-export type _Error = {
+export type Session = {
+  id: string
+  projectID: string
+  directory: string
+  parentID?: string
+  share?: {
+    url: string
+  }
+  title: string
+  version: string
+  time: {
+    created: number
+    updated: number
+    compacting?: number
+  }
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+  }
+}
+
+export type UserMessage = {
+  id: string
+  sessionID: string
+  role: "user"
+  time: {
+    created: number
+  }
+}
+
+export type ProviderAuthError = {
+  name: "ProviderAuthError"
+  data: {
+    providerID: string
+    message: string
+  }
+}
+
+export type UnknownError = {
+  name: "UnknownError"
+  data: {
+    message: string
+  }
+}
+
+export type MessageOutputLengthError = {
+  name: "MessageOutputLengthError"
   data: {
     [key: string]: unknown
   }
 }
+
+export type MessageAbortedError = {
+  name: "MessageAbortedError"
+  data: {
+    message: string
+  }
+}
+
+export type AssistantMessage = {
+  id: string
+  sessionID: string
+  role: "assistant"
+  time: {
+    created: number
+    completed?: number
+  }
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+  system: Array<string>
+  modelID: string
+  providerID: string
+  mode: string
+  path: {
+    cwd: string
+    root: string
+  }
+  summary?: boolean
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+}
+
+export type Message = UserMessage | AssistantMessage
+
+export type TextPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "text"
+  text: string
+  synthetic?: boolean
+  time?: {
+    start: number
+    end?: number
+  }
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type ReasoningPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "reasoning"
+  text: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    start: number
+    end?: number
+  }
+}
+
+export type FilePartSourceText = {
+  value: string
+  start: number
+  end: number
+}
+
+export type FileSource = {
+  text: FilePartSourceText
+  type: "file"
+  path: string
+}
+
+export type Range = {
+  start: {
+    line: number
+    character: number
+  }
+  end: {
+    line: number
+    character: number
+  }
+}
+
+export type SymbolSource = {
+  text: FilePartSourceText
+  type: "symbol"
+  path: string
+  range: Range
+  name: string
+  kind: number
+}
+
+export type FilePartSource = FileSource | SymbolSource
+
+export type FilePart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "file"
+  mime: string
+  filename?: string
+  url: string
+  source?: FilePartSource
+}
+
+export type ToolStatePending = {
+  status: "pending"
+}
+
+export type ToolStateRunning = {
+  status: "running"
+  input: unknown
+  title?: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    start: number
+  }
+}
+
+export type ToolStateCompleted = {
+  status: "completed"
+  input: {
+    [key: string]: unknown
+  }
+  output: string
+  title: string
+  metadata: {
+    [key: string]: unknown
+  }
+  time: {
+    start: number
+    end: number
+    compacted?: number
+  }
+}
+
+export type ToolStateError = {
+  status: "error"
+  input: {
+    [key: string]: unknown
+  }
+  error: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    start: number
+    end: number
+  }
+}
+
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
+
+export type ToolPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "tool"
+  callID: string
+  tool: string
+  state: ToolState
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
+export type StepStartPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "step-start"
+}
+
+export type StepFinishPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "step-finish"
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+}
+
+export type SnapshotPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "snapshot"
+  snapshot: string
+}
+
+export type PatchPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "patch"
+  hash: string
+  files: Array<string>
+}
+
+export type AgentPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "agent"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
+export type Part =
+  | TextPart
+  | ReasoningPart
+  | FilePart
+  | ToolPart
+  | StepStartPart
+  | StepFinishPart
+  | SnapshotPart
+  | PatchPart
+  | AgentPart
 
 export type TextPartInput = {
   id?: string
@@ -1074,6 +832,9 @@ export type TextPartInput = {
   time?: {
     start: number
     end?: number
+  }
+  metadata?: {
+    [key: string]: unknown
   }
 }
 
@@ -1103,6 +864,45 @@ export type Command = {
   agent?: string
   model?: string
   template: string
+  subtask?: boolean
+}
+
+export type Model = {
+  id: string
+  name: string
+  release_date: string
+  attachment: boolean
+  reasoning: boolean
+  temperature: boolean
+  tool_call: boolean
+  cost: {
+    input: number
+    output: number
+    cache_read?: number
+    cache_write?: number
+  }
+  limit: {
+    context: number
+    output: number
+  }
+  experimental?: boolean
+  options: {
+    [key: string]: unknown
+  }
+  provider?: {
+    npm: string
+  }
+}
+
+export type Provider = {
+  api?: string
+  name: string
+  env: Array<string>
+  id: string
+  npm?: string
+  models: {
+    [key: string]: Model
+  }
 }
 
 export type Symbol = {
@@ -1175,17 +975,6 @@ export type Agent = {
   }
 }
 
-export type Auth =
-  | ({
-      type: "oauth"
-    } & OAuth)
-  | ({
-      type: "api"
-    } & ApiAuth)
-  | ({
-      type: "wellknown"
-    } & WellKnownAuth)
-
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -1203,6 +992,168 @@ export type WellKnownAuth = {
   key: string
   token: string
 }
+
+export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type EventInstallationUpdated = {
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventLspClientDiagnostics = {
+  type: "lsp.client.diagnostics"
+  properties: {
+    serverID: string
+    path: string
+  }
+}
+
+export type EventMessageUpdated = {
+  type: "message.updated"
+  properties: {
+    info: Message
+  }
+}
+
+export type EventMessageRemoved = {
+  type: "message.removed"
+  properties: {
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type EventMessagePartUpdated = {
+  type: "message.part.updated"
+  properties: {
+    part: Part
+  }
+}
+
+export type EventMessagePartRemoved = {
+  type: "message.part.removed"
+  properties: {
+    sessionID: string
+    messageID: string
+    partID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type Permission = {
+  id: string
+  type: string
+  pattern?: string | Array<string>
+  sessionID: string
+  messageID: string
+  callID?: string
+  title: string
+  metadata: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+  }
+}
+
+export type EventPermissionUpdated = {
+  type: "permission.updated"
+  properties: Permission
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    permissionID: string
+    response: string
+  }
+}
+
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventSessionUpdated = {
+  type: "session.updated"
+  properties: {
+    info: Session
+  }
+}
+
+export type EventSessionDeleted = {
+  type: "session.deleted"
+  properties: {
+    info: Session
+  }
+}
+
+export type EventSessionError = {
+  type: "session.error"
+  properties: {
+    sessionID?: string
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventServerConnected = {
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventIdeInstalled = {
+  type: "ide.installed"
+  properties: {
+    ide: string
+  }
+}
+
+export type Event =
+  | EventInstallationUpdated
+  | EventLspClientDiagnostics
+  | EventMessageUpdated
+  | EventMessageRemoved
+  | EventMessagePartUpdated
+  | EventMessagePartRemoved
+  | EventSessionCompacted
+  | EventPermissionUpdated
+  | EventPermissionReplied
+  | EventFileEdited
+  | EventSessionIdle
+  | EventSessionUpdated
+  | EventSessionDeleted
+  | EventSessionError
+  | EventFileWatcherUpdated
+  | EventServerConnected
+  | EventIdeInstalled
 
 export type ProjectListData = {
   body?: never
@@ -1240,24 +1191,6 @@ export type ProjectCurrentResponses = {
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
 
-export type EventSubscribeData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-  }
-  url: "/event"
-}
-
-export type EventSubscribeResponses = {
-  /**
-   * Event stream
-   */
-  200: Event
-}
-
-export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
-
 export type ConfigGetData = {
   body?: never
   path?: never
@@ -1275,6 +1208,89 @@ export type ConfigGetResponses = {
 }
 
 export type ConfigGetResponse = ConfigGetResponses[keyof ConfigGetResponses]
+
+export type ConfigUpdateData = {
+  body?: Config
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/config"
+}
+
+export type ConfigUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ConfigUpdateError = ConfigUpdateErrors[keyof ConfigUpdateErrors]
+
+export type ConfigUpdateResponses = {
+  /**
+   * Successfully updated config
+   */
+  200: Config
+}
+
+export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type ToolIdsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/tool/ids"
+}
+
+export type ToolIdsErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ToolIdsError = ToolIdsErrors[keyof ToolIdsErrors]
+
+export type ToolIdsResponses = {
+  /**
+   * Tool IDs
+   */
+  200: ToolIds
+}
+
+export type ToolIdsResponse = ToolIdsResponses[keyof ToolIdsResponses]
+
+export type ToolListData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    provider: string
+    model: string
+  }
+  url: "/experimental/tool"
+}
+
+export type ToolListErrors = {
+  /**
+   * Bad request
+   */
+  400: _Error
+}
+
+export type ToolListError = ToolListErrors[keyof ToolListErrors]
+
+export type ToolListResponses = {
+  /**
+   * Tools
+   */
+  200: ToolList
+}
+
+export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
 
 export type PathGetData = {
   body?: never
@@ -1575,17 +1591,7 @@ export type SessionPromptData = {
     tools?: {
       [key: string]: boolean
     }
-    parts: Array<
-      | ({
-          type: "text"
-        } & TextPartInput)
-      | ({
-          type: "file"
-        } & FilePartInput)
-      | ({
-          type: "agent"
-        } & AgentPartInput)
-    >
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput>
   }
   path: {
     /**
@@ -1742,7 +1748,7 @@ export type SessionUnrevertResponses = {
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
 
-export type PostSessionByIdPermissionsByPermissionIdData = {
+export type PostSessionIdPermissionsPermissionIdData = {
   body?: {
     response: "once" | "always" | "reject"
   }
@@ -1756,15 +1762,15 @@ export type PostSessionByIdPermissionsByPermissionIdData = {
   url: "/session/{id}/permissions/{permissionID}"
 }
 
-export type PostSessionByIdPermissionsByPermissionIdResponses = {
+export type PostSessionIdPermissionsPermissionIdResponses = {
   /**
    * Permission processed successfully
    */
   200: boolean
 }
 
-export type PostSessionByIdPermissionsByPermissionIdResponse =
-  PostSessionByIdPermissionsByPermissionIdResponses[keyof PostSessionByIdPermissionsByPermissionIdResponses]
+export type PostSessionIdPermissionsPermissionIdResponse =
+  PostSessionIdPermissionsPermissionIdResponses[keyof PostSessionIdPermissionsPermissionIdResponses]
 
 export type CommandListData = {
   body?: never
@@ -2189,6 +2195,24 @@ export type AuthSetResponses = {
 }
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
+export type EventSubscribeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/event"
+}
+
+export type EventSubscribeResponses = {
+  /**
+   * Event stream
+   */
+  200: Event
+}
+
+export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
 
 export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})

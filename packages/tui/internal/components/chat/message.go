@@ -641,7 +641,10 @@ func renderToolDetails(
 			if todos != nil {
 				for _, item := range todos.([]any) {
 					todo := item.(map[string]any)
-					content := todo["content"].(string)
+					content := todo["content"]
+          if content == nil {
+            continue
+          }
 					switch todo["status"] {
 					case "completed":
 						body += fmt.Sprintf("- [x] %s\n", content)
