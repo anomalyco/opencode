@@ -369,9 +369,9 @@ func (m *editorComponent) Content() string {
 	textarea = styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Width(width).
-		PaddingTop(1).
-		PaddingBottom(1).
-		BorderStyle(lipgloss.ThickBorder()).
+		PaddingTop(styles.SpY).
+		PaddingBottom(styles.SpY).
+		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(borderForeground).
 		BorderBackground(t.Background()).
 		BorderLeft(true).

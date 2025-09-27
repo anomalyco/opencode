@@ -202,15 +202,16 @@ func (c *completionDialogComponent) View() string {
 	c.list.SetMaxWidth(c.width)
 
 	return styles.NewStyle().
-		Padding(0, 1).
+		Padding(styles.SpY, styles.SpX).
 		Foreground(t.Text()).
 		Background(t.BackgroundElement()).
-		BorderStyle(lipgloss.ThickBorder()).
+		BorderStyle(lipgloss.RoundedBorder()).
 		BorderLeft(true).
 		BorderRight(true).
 		BorderForeground(t.Border()).
 		BorderBackground(t.Background()).
 		Width(c.width).
+		MaxWidth(60).
 		Render(c.list.View())
 }
 

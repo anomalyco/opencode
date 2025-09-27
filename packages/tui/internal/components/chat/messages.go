@@ -980,13 +980,13 @@ func (m *messagesComponent) renderHeader() string {
 	header = styles.NewStyle().
 		Background(bgColor).
 		Width(headerWidth).
-		PaddingLeft(2).
-		PaddingRight(2).
+		PaddingLeft(styles.SpX).
+		PaddingRight(styles.SpX).
 		BorderLeft(true).
 		BorderRight(true).
 		BorderBackground(t.Background()).
 		BorderForeground(borderColor).
-		BorderStyle(lipgloss.ThickBorder()).
+		BorderStyle(lipgloss.RoundedBorder()).
 		Render(header)
 
 	return "\n" + header + "\n"

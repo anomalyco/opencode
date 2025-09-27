@@ -60,38 +60,27 @@ func (m *statusComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *statusComponent) logo() string {
 	t := theme.CurrentTheme()
-	base := styles.NewStyle().Foreground(t.TextMuted()).Background(t.BackgroundElement()).Render
-	emphasis := styles.NewStyle().
-		Foreground(t.Primary()).
+	
+	// Use new typography system
+	icon := styles.Strong.Background(t.BackgroundElement()).Render("🎯")
+	eval := styles.H1.Background(t.BackgroundElement()).Render("Eval")
+	ops := styles.H1.
 		Background(t.BackgroundElement()).
-		Bold(true).
-		Render
-	logo := styles.NewStyle().
-		Foreground(t.Accent()).
-		Background(t.BackgroundElement()).
-		Render
-
-	// EvalOps branding
-	icon := logo("🎯")
-	eval := emphasis("Eval")
-	ops := styles.NewStyle().
 		Foreground(t.Secondary()).
-		Background(t.BackgroundElement()).
-		Bold(true).
 		Render("Ops")
-	version := base(" " + m.app.Version)
+	version := styles.Muted.Background(t.BackgroundElement()).Render(" " + m.app.Version)
 
 	content := icon + " " + eval + ops
 	if m.width > 50 {
 		content += version
 	}
 	if m.width > 80 {
-		tagline := base(" • Trust, but Verify™")
+		tagline := styles.Muted.Background(t.BackgroundElement()).Render(" • Trust, but Verify™")
 		content += tagline
 	}
 	return styles.NewStyle().
 		Background(t.BackgroundElement()).
-		Padding(0, 1).
+		Padding(0, styles.SpX).
 		Render(content)
 }
 
@@ -133,15 +122,20 @@ func (m *statusComponent) View() string {
 	logo := m.logo()
 	logoWidth := lipgloss.Width(logo)
 
+	// Subtle separator
+	sep := styles.Separator().Render(" │ ")
+	sepWidth := lipgloss.Width(sep)
+
+	// Agent styling with refined approach
+	agentColor := util.GetAgentColor(m.app.AgentIndex)
 	var modeBackground compat.AdaptiveColor
 	var modeForeground compat.AdaptiveColor
 
-	agentColor := util.GetAgentColor(m.app.AgentIndex)
-
 	if m.app.AgentIndex == 0 {
-		modeBackground = t.BackgroundElement()
+		modeBackground = t.BackgroundPanel()
 		modeForeground = agentColor
 	} else {
+		// Active agent - inverted colors for prominence
 		modeBackground = agentColor
 		modeForeground = t.BackgroundPanel()
 	}
@@ -153,26 +147,29 @@ func (m *statusComponent) View() string {
 		key = m.app.Config.Keybinds.Leader + " " + kb.Key
 	}
 
-	agentStyle := styles.NewStyle().Background(modeBackground).Foreground(modeForeground)
-	agentNameStyle := agentStyle.Bold(true).Render
-	agentDescStyle := agentStyle.Render
-	agent := agentNameStyle(strings.ToUpper(m.app.Agent().Name)) + agentDescStyle(" AGENT")
-	agent = agentStyle.
-		Padding(0, 1).
-		BorderLeft(true).
-		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(modeBackground).
-		BorderBackground(t.BackgroundPanel()).
-		Render(agent)
+	// Agent display with cleaner styling
+	agentName := styles.NewStyle().
+		Background(modeBackground).
+		Foreground(modeForeground).
+		Bold(true).
+		Render(strings.ToUpper(m.app.Agent().Name))
+	agentDesc := styles.NewStyle().
+		Background(modeBackground).
+		Foreground(modeForeground).
+		Render(" AGENT")
+	agent := styles.NewStyle().
+		Background(modeBackground).
+		Padding(0, styles.SpX).
+		Render(agentName + agentDesc)
 
-	faintStyle := styles.NewStyle().
-		Faint(true).
+	keyHint := styles.Strong.
 		Background(t.BackgroundPanel()).
-		Foreground(t.TextMuted())
-	agent = faintStyle.Render(key+" ") + agent
+		Render(key + " ")
+	agent = keyHint + agent
 	modeWidth := lipgloss.Width(agent)
 
-	availableWidth := m.width - logoWidth - modeWidth
+	// Path and branch display
+	availableWidth := m.width - logoWidth - modeWidth - sepWidth*2
 	branchSuffix := ""
 	if m.branch != "" {
 		branchSuffix = ":" + m.branch
@@ -182,14 +179,18 @@ func (m *statusComponent) View() string {
 	cwdDisplay := m.collapsePath(m.cwd, maxCwdWidth)
 
 	if m.branch != "" && availableWidth > lipgloss.Width(cwdDisplay)+lipgloss.Width(branchSuffix) {
-		cwdDisplay += faintStyle.Render(branchSuffix)
+		cwdDisplay += styles.Muted.Background(t.BackgroundPanel()).Render(branchSuffix)
 	}
 
-	cwd := styles.NewStyle().
+	cwd := styles.Body.
 		Foreground(t.TextMuted()).
 		Background(t.BackgroundPanel()).
-		Padding(0, 1).
+		Padding(0, styles.SpX).
 		Render(cwdDisplay)
+
+	// Assemble status bar with separators
+	leftPart := logo + sep + cwd
+	rightPart := agent
 
 	background := t.BackgroundPanel()
 	status := layout.Render(
@@ -201,10 +202,10 @@ func (m *statusComponent) View() string {
 			Width:      m.width,
 		},
 		layout.FlexItem{
-			View: logo + cwd,
+			View: leftPart,
 		},
 		layout.FlexItem{
-			View: agent,
+			View: rightPart,
 		},
 	)
 

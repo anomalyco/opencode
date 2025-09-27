@@ -172,7 +172,7 @@ func renderContentBlock(
 
 	if renderer.border {
 		style = style.
-			BorderStyle(lipgloss.ThickBorder()).
+			BorderStyle(lipgloss.RoundedBorder()).
 			BorderLeft(true).
 			BorderRight(true).
 			BorderLeftForeground(t.BackgroundPanel()).
