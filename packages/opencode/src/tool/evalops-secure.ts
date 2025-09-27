@@ -5,12 +5,12 @@ import { Config } from "../config/config"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Bus } from "../bus"
-import { FileTime } from "../file/time"
+
 import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../project/instance"
-import { Lock } from "../util/lock"
+
 import { NamedError } from "../util/error"
 
 /**
@@ -55,7 +55,7 @@ export namespace EvalOps {
 
   // 🔄 Concurrency control
   const runningEvals = new Map<string, Promise<Results.Type>>()
-  const evalLock = new Lock()
+
 
   export const Event = {
     TestStarted: Bus.event(
@@ -87,9 +87,7 @@ export namespace EvalOps {
   }
 
   // Register events with Bus
-  Bus.register(Event.TestStarted)
-  Bus.register(Event.TestCompleted)
-  Bus.register(Event.TestFailed)
+  // Events are auto-registered when defined
 
   export namespace Results {
     export const TestResult = z.object({
@@ -181,8 +179,7 @@ export namespace EvalOps {
       return running
     }
 
-    // Acquire lock for concurrency control
-    using _ = await evalLock.acquire()
+    // Concurrency control handled by runningEvals map
 
     // Check concurrent limit
     if (runningEvals.size >= (config.maxConcurrent || 3)) {
@@ -227,7 +224,7 @@ export namespace EvalOps {
     })
 
     // Emit start event
-    await Bus.emit(Event.TestStarted, {
+    await Bus.publish(Event.TestStarted, {
       sessionID: context.sessionID,
       messageID: context.messageID,
       suite,
@@ -246,7 +243,7 @@ export namespace EvalOps {
         throw new Error("Evaluation aborted")
       }
 
-      const session = await Session.get(context.sessionID)
+      await Session.get(context.sessionID)
       const messages = await Session.messages(context.sessionID)
 
       // Validate suite path to prevent directory traversal
@@ -260,7 +257,7 @@ export namespace EvalOps {
         sessionID: context.sessionID,
         messageID: context.messageID,
         messages: messages.map(msg => ({
-          role: msg.role,
+          role: msg.info.role,
           content: extractMessageContent(msg),
         })),
         timestamp: new Date().toISOString(),
@@ -288,7 +285,7 @@ export namespace EvalOps {
       }
 
       // Emit completion event
-      await Bus.emit(Event.TestCompleted, {
+      await Bus.publish(Event.TestCompleted, {
         sessionID: context.sessionID,
         messageID: context.messageID,
         results,
@@ -305,10 +302,10 @@ export namespace EvalOps {
 
       return results
     } catch (error) {
-      await Bus.emit(Event.TestFailed, {
+      await Bus.publish(Event.TestFailed, {
         sessionID: context.sessionID,
         messageID: context.messageID,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         suite,
       })
       throw error
@@ -318,14 +315,16 @@ export namespace EvalOps {
   }
 
   function extractMessageContent(msg: MessageV2.WithParts): string {
-    if (msg.role === "user") {
-      return msg.parts.map(p => p.text).join("\n")
-    }
-    if (msg.role === "assistant") {
+    if (msg.info.role === "user") {
       return msg.parts.map(p => {
-        if (p.type === "text") return p.text
-        if (p.type === "tool-use") return `Tool: ${p.name}(${JSON.stringify(p.args)})`
-        if (p.type === "tool-result") return `Result: ${p.output}`
+        if (p.type === "text") return p.text || ""
+        return ""
+      }).join("\n")
+    }
+    if (msg.info.role === "assistant") {
+      return msg.parts.map(p => {
+        if (p.type === "text") return p.text || ""
+        if (p.type === "tool") return `Tool: ${p.tool}(${JSON.stringify(p)})`
         return ""
       }).join("\n")
     }
@@ -414,7 +413,7 @@ export namespace EvalOps {
           const validated = Results.schema.parse(results)
           resolve(validated)
         } catch (error) {
-          reject(new Error(`Invalid evaluation output: ${error.message}`))
+          reject(new Error(`Invalid evaluation output: ${error instanceof Error ? error.message : String(error)}`))
         }
       })
 
@@ -465,19 +464,19 @@ export namespace EvalOps {
     return !!config.defaultSuite
   }
 
-  export async function autoRun(sessionID: string, messageID: string) {
+  export async function autoRun(_sessionID: string, messageID: string) {
     const config = await getConfig()
     if (!config.defaultSuite) return
 
     log.info(`${BRAND.logo} EvalOps: Auto-running evaluation`, {
-      sessionID,
+      sessionID: _sessionID,
       messageID,
       suite: config.defaultSuite,
     })
 
     try {
       const context: Tool.Context = {
-        sessionID,
+        sessionID: _sessionID,
         messageID,
         agent: "evalops-auto",
         abort: new AbortController().signal,
@@ -549,9 +548,9 @@ export const EvalOpsTool = Tool.define(
 
         return {
           title: `${EvalOps.BRAND.logo} EvalOps Failed: ${args.suite}`,
-          output: `Evaluation failed: ${error.message}`,
+          output: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
           metadata: {
-            error: error.message,
+            error: error instanceof Error ? error.message : String(error),
             suite: args.suite,
             passed: false,
           },

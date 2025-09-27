@@ -1194,7 +1194,7 @@ export namespace SessionPrompt {
             const lastMessage = messages[messages.length - 1]
             if (lastMessage) {
               // Run asynchronously to not block session cleanup
-              EvalOps.autoRun(sessionID, lastMessage.id).catch(error => {
+              EvalOps.autoRun(sessionID, lastMessage.info.id).catch(error => {
                 log.warn("EvalOps auto-run failed", { sessionID, error })
               })
             }

@@ -1,11 +1,8 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test"
 import { EvalOps, EvalOpsTool } from "./evalops"
-import { Config } from "../config/config"
-import { Session } from "../session"
-import { Bus } from "../bus"
-import { Instance } from "../project/instance"
+
 import { Tool } from "./tool"
-import { Identifier } from "../id/id"
+
 
 // Mock dependencies
 mock.module("../config/config", () => ({
@@ -152,8 +149,22 @@ describe("EvalOps Tool", () => {
     global.fetch = mock(() =>
       Promise.resolve({
         ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        url: '',
+        redirected: false,
+        type: 'basic',
+        body: null,
+        bodyUsed: false,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        blob: () => Promise.resolve(new Blob()),
+        formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
-      })
+        text: () => Promise.resolve(JSON.stringify(mockResults)),
+        clone: () => ({} as Response),
+        preconnect: () => Promise.resolve(),
+      } as Response)
     )
 
     mock.module("../config/config", () => ({
@@ -186,15 +197,29 @@ describe("EvalOps Tool", () => {
     expect(result.output).toContain("1/2 passed")
     expect(result.output).toContain("✅")
     expect(result.output).toContain("❌")
-    expect(result.metadata.passed).toBe(false)
+    expect(result.metadata["passed"]).toBe(false)
   })
 
   test("should handle API errors gracefully", async () => {
     global.fetch = mock(() =>
       Promise.resolve({
         ok: false,
+        status: 500,
         statusText: "Internal Server Error",
-      })
+        headers: new Headers(),
+        url: '',
+        redirected: false,
+        type: 'basic',
+        body: null,
+        bodyUsed: false,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        blob: () => Promise.resolve(new Blob()),
+        formData: () => Promise.resolve(new FormData()),
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+        clone: () => ({} as Response),
+        preconnect: () => Promise.resolve(),
+      } as Response)
     )
 
     mock.module("../config/config", () => ({
@@ -225,7 +250,7 @@ describe("EvalOps Tool", () => {
 
     expect(result.title).toContain("Failed")
     expect(result.output).toContain("Evaluation failed")
-    expect(result.metadata.passed).toBe(false)
+    expect(result.metadata["passed"]).toBe(false)
   })
 
   test("should emit correct events", async () => {
@@ -253,8 +278,22 @@ describe("EvalOps Tool", () => {
     global.fetch = mock(() =>
       Promise.resolve({
         ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        url: '',
+        redirected: false,
+        type: 'basic',
+        body: null,
+        bodyUsed: false,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+        blob: () => Promise.resolve(new Blob()),
+        formData: () => Promise.resolve(new FormData()),
         json: () => Promise.resolve(mockResults),
-      })
+        text: () => Promise.resolve(JSON.stringify(mockResults)),
+        clone: () => ({} as Response),
+        preconnect: () => Promise.resolve(),
+      } as Response)
     )
 
     mock.module("../config/config", () => ({

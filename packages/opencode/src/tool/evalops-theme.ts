@@ -153,7 +153,7 @@ ${terminal.dim}Trust, but Verify™${terminal.reset}
       color = terminal.fg.success
       emoji = "🟢"
     } else if (score >= 70) {
-      color = `\x1b[38;5;40m` // Bright green
+      color = terminal.fg.success // Use consistent type
       emoji = "🟡"
     } else if (score >= 50) {
       color = terminal.fg.warning

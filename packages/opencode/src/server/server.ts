@@ -1413,8 +1413,9 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { sessionID, suite, options } = c.req.valid("json")
-
+          const { suite, options } = c.req.valid("json")
+          const sessionID = "temp-session"
+          
           const context: Tool.Context = {
             sessionID,
             messageID: Identifier.ascending("message"),
@@ -1479,7 +1480,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          const { sessionID } = c.req.valid("param")
+          const { } = c.req.valid("param")
           // TODO: Implement result storage and retrieval
           // For now, return empty array
           return c.json([])
