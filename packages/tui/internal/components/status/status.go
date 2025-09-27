@@ -147,66 +147,30 @@ func (m *statusComponent) View() string {
 		key = m.app.Config.Keybinds.Leader + " " + kb.Key
 	}
 
-	agentColor := util.GetAgentColor(m.app.AgentIndex)
-
-	agentStyle := styles.NewStyle().Background(agentColor).Foreground(t.BackgroundPanel())
-	agentNameStyle := agentStyle.Bold(true).Render
-	agentDescStyle := agentStyle.Render
-	agentText := agentNameStyle(strings.ToUpper(m.app.Agent().Name)) + agentDescStyle(" AGENT")
-	agent := agentStyle.
-		Padding(0, 1).
-		BorderLeft(true).
-		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(agentColor).
-		BorderBackground(t.BackgroundPanel()).
-		Render(agentText)
-
-	modePill := ""
-	if m.modeLabel != "" {
-		modeStyle := styles.NewStyle().
-			Background(t.BackgroundElement()).
-			Foreground(t.TextMuted()).
-			Bold(true)
-		tagStyle := styles.NewStyle().
-			Background(t.BackgroundElement()).
-			Foreground(t.TextMuted())
-		modeContent := modeStyle.Render(m.modeLabel) + tagStyle.Render(" MODE")
-		modePill = styles.NewStyle().
-			Background(t.BackgroundElement()).
-			Foreground(t.TextMuted()).
-			Padding(0, 1).
-			BorderLeft(true).
-			BorderStyle(lipgloss.ThickBorder()).
-			BorderForeground(t.BackgroundElement()).
-			BorderBackground(t.BackgroundPanel()).
-			Render(modeContent)
-	}
-
 	faintStyle := styles.NewStyle().
 		Faint(true).
 		Background(t.BackgroundPanel()).
 		Foreground(t.TextMuted())
-	var modeSegments []string
-	if m.modeKey != "" {
-		modeKeyTag := faintStyle.Render(" " + m.modeKey + " ")
-		modeSegments = append(modeSegments, modeKeyTag)
-	}
+
+	modePill := m.vimModePillView(t, faintStyle)
+	agentPill := m.agentPillView(t, key, faintStyle)
+
+	pillSegments := make([]string, 0, 3)
 	if modePill != "" {
-		modeSegments = append(modeSegments, modePill)
+		pillSegments = append(pillSegments, modePill)
+	}
+	if agentPill != "" {
+		if len(pillSegments) > 0 {
+			gap := styles.NewStyle().Background(t.BackgroundPanel()).Render(" ")
+			pillSegments = append(pillSegments, gap)
+		}
+		pillSegments = append(pillSegments, agentPill)
 	}
 
-	agentKeyTag := faintStyle.Render(" " + key + " ")
-	agentSegments := []string{agentKeyTag, agent}
-
-	segments := make([]string, 0, len(modeSegments)+len(agentSegments)+1)
-	segments = append(segments, modeSegments...)
-	if len(modeSegments) > 0 {
-		gap := styles.NewStyle().Background(t.BackgroundPanel()).Render(" ")
-		segments = append(segments, gap)
+	pillWithKey := ""
+	if len(pillSegments) > 0 {
+		pillWithKey = lipgloss.JoinHorizontal(lipgloss.Left, pillSegments...)
 	}
-	segments = append(segments, agentSegments...)
-	joinedPills := lipgloss.JoinHorizontal(lipgloss.Left, segments...)
-	pillWithKey := joinedPills
 
 	pillWidth := lipgloss.Width(pillWithKey)
 
@@ -250,9 +214,71 @@ func (m *statusComponent) View() string {
 	return blank + "\n" + status
 }
 
+func (m *statusComponent) vimModePillView(t theme.Theme, faint styles.Style) string {
+	if m.modeLabel == "" {
+		return ""
+	}
+
+	label := styles.NewStyle().
+		Background(t.BackgroundElement()).
+		Foreground(t.TextMuted()).
+		Bold(true).
+		Render(m.modeLabel)
+
+	modeTag := styles.NewStyle().
+		Background(t.BackgroundElement()).
+		Foreground(t.TextMuted()).
+		Render(" MODE")
+
+	content := label + modeTag
+
+	pill := styles.NewStyle().
+		Background(t.BackgroundElement()).
+		Foreground(t.TextMuted()).
+		Padding(0, 1).
+		BorderLeft(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(t.BackgroundElement()).
+		BorderBackground(t.BackgroundPanel()).
+		Render(content)
+
+	if m.modeKey == "" {
+		return pill
+	}
+
+	keyTag := faint.Render(" " + m.modeKey + " ")
+	return lipgloss.JoinHorizontal(lipgloss.Left, keyTag, pill)
+}
+
+func (m *statusComponent) agentPillView(t theme.Theme, key string, faint styles.Style) string {
+	agentColor := util.GetAgentColor(m.app.AgentIndex)
+	agentStyle := styles.NewStyle().
+		Background(agentColor).
+		Foreground(t.BackgroundPanel())
+
+	name := agentStyle.Bold(true).Render(strings.ToUpper(m.app.Agent().Name))
+	label := agentStyle.Render(" AGENT")
+	content := name + label
+
+	pill := agentStyle.
+		Padding(0, 1).
+		BorderLeft(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(agentColor).
+		BorderBackground(t.BackgroundPanel()).
+		Render(content)
+
+	if key == "" {
+		return pill
+	}
+
+	keyTag := faint.Render(" " + key + " ")
+	return lipgloss.JoinHorizontal(lipgloss.Left, keyTag, pill)
+}
+
 func (m *statusComponent) startGitWatcher() tea.Cmd {
 	cmd := util.CmdHandler(
-		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(util.CwdPath)},
+		GitBranchUpdatedMsg{Branch: getCurrentGitBranch(m.app.Project.Worktree)},
 	)
 	if err := m.initWatcher(); err != nil {
 		return cmd
@@ -261,7 +287,7 @@ func (m *statusComponent) startGitWatcher() tea.Cmd {
 }
 
 func (m *statusComponent) initWatcher() error {
-	gitDir := filepath.Join(util.CwdPath, ".git")
+	gitDir := filepath.Join(m.app.Project.Worktree, ".git")
 	headFile := filepath.Join(gitDir, "HEAD")
 	if info, err := os.Stat(gitDir); err != nil || !info.IsDir() {
 		return err
@@ -278,7 +304,7 @@ func (m *statusComponent) initWatcher() error {
 	}
 
 	// Also watch the ref file if HEAD points to a ref
-	refFile := getGitRefFile(util.CwdPath)
+	refFile := getGitRefFile(m.app.Project.Worktree)
 	if refFile != headFile && refFile != "" {
 		if _, err := os.Stat(refFile); err == nil {
 			watcher.Add(refFile) // Ignore error, HEAD watching is sufficient
@@ -299,7 +325,7 @@ func (m *statusComponent) watchForGitChanges() tea.Cmd {
 		for {
 			select {
 			case event, ok := <-m.watcher.Events:
-				branch := getCurrentGitBranch(util.CwdPath)
+				branch := getCurrentGitBranch(m.app.Project.Worktree)
 				if !ok {
 					return GitBranchUpdatedMsg{Branch: branch}
 				}
@@ -328,8 +354,8 @@ func (m *statusComponent) updateWatchedFiles() {
 	if m.watcher == nil {
 		return
 	}
-	refFile := getGitRefFile(util.CwdPath)
-	headFile := filepath.Join(util.CwdPath, ".git", "HEAD")
+	refFile := getGitRefFile(m.app.Project.Worktree)
+	headFile := filepath.Join(m.app.Project.Worktree, ".git", "HEAD")
 	if refFile != headFile && refFile != "" {
 		if _, err := os.Stat(refFile); err == nil {
 			// Try to add the new ref file (ignore error if already watching)
