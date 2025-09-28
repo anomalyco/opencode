@@ -230,6 +230,17 @@ export namespace SessionPrompt {
       await using _ = defer(async () => {
         await processor.end()
       })
+      const providerKey = model.npm === "@ai-sdk/openai" ? "openai" : model.providerID
+      const filteredOptions = (() => {
+        if (!params.options) return undefined
+        if (providerKey !== "cerebras") return params.options
+        const items = Object.entries(params.options).filter(([key]) => key !== "options")
+        if (items.length === 0) return undefined
+        return Object.fromEntries(items)
+      })()
+      const providerOptions = filteredOptions
+        ? { [providerKey]: filteredOptions }
+        : undefined
       const stream = streamText({
         onError(error) {
           log.error("stream error", {
@@ -268,9 +279,7 @@ export namespace SessionPrompt {
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
         maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
         abortSignal: abort.signal,
-        providerOptions: {
-          [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
-        },
+        providerOptions,
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
