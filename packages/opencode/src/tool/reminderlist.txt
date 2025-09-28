@@ -1,0 +1,1 @@
+List all active reminders in this session. Use when user asks 'what reminders do I have' or wants to see scheduled actions.

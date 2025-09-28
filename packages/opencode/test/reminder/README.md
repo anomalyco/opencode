@@ -55,9 +55,9 @@ Tests the ReminderManager functionality:
 
 Tests the three reminder tools with full integration:
 
-- AddReminderTool functionality
-- ListReminderTool output
-- RemoveReminderTool matching
+- ReminderAddTool functionality
+- ReminderListTool output
+- ReminderRemoveTool matching
 - Parameter validation
 - Error handling
 

@@ -288,7 +288,7 @@ test/reminder/
 
 5. **Tool Definition Pattern**
    ```typescript
-   export const AddReminderTool = Tool.define("add_reminder", {
+   export const ReminderAddTool = Tool.define("reminderadd", {
      description: "...",
      parameters: z.object({
        /* ... */

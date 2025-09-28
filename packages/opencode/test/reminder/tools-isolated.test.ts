@@ -3,24 +3,26 @@ import { test, expect, describe } from "bun:test"
 // Test the reminder tools in isolation without triggering registry imports
 describe("Reminder Tools - Isolated", () => {
   test("tool modules can be defined", async () => {
-    // Test the actual tool definition module without circular dependencies
-    const toolModule = await import("../../src/tool/reminder")
+    // Test the actual tool definition modules without circular dependencies
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const { ReminderListTool } = await import("../../src/tool/reminderlist")
+    const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
-    expect(toolModule.AddReminderTool).toBeDefined()
-    expect(toolModule.ListRemindersTool).toBeDefined()
-    expect(toolModule.RemoveReminderTool).toBeDefined()
+    expect(ReminderAddTool).toBeDefined()
+    expect(ReminderListTool).toBeDefined()
+    expect(ReminderRemoveTool).toBeDefined()
 
-    expect(toolModule.AddReminderTool.id).toBe("add_reminder")
-    expect(toolModule.ListRemindersTool.id).toBe("list_reminders")
-    expect(toolModule.RemoveReminderTool.id).toBe("remove_reminder")
+    expect(ReminderAddTool.id).toBe("reminderadd")
+    expect(ReminderListTool.id).toBe("reminderlist")
+    expect(ReminderRemoveTool.id).toBe("reminderremove")
   })
 
   test("add reminder tool parameters are correct", async () => {
-    const { AddReminderTool } = await import("../../src/tool/reminder")
-    const tool = await AddReminderTool.init()
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const tool = await ReminderAddTool.init()
 
     expect(tool.description).toContain("Set up a reminder")
-    expect(tool.description).toContain("actually perform the action")
+    expect(tool.description).toContain("Actually performs the action")
 
     const params = tool.parameters.shape as any
     expect(params.interval_seconds).toBeDefined()
@@ -50,8 +52,8 @@ describe("Reminder Tools - Isolated", () => {
   })
 
   test("list reminders tool has correct structure", async () => {
-    const { ListRemindersTool } = await import("../../src/tool/reminder")
-    const tool = await ListRemindersTool.init()
+    const { ReminderListTool } = await import("../../src/tool/reminderlist")
+    const tool = await ReminderListTool.init()
 
     expect(tool.description).toContain("List all active reminders")
     expect(tool.description).toContain("what reminders do I have")
@@ -62,8 +64,8 @@ describe("Reminder Tools - Isolated", () => {
   })
 
   test("remove reminder tool has correct structure", async () => {
-    const { RemoveReminderTool } = await import("../../src/tool/reminder")
-    const tool = await RemoveReminderTool.init()
+    const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
+    const tool = await ReminderRemoveTool.init()
 
     expect(tool.description).toContain("Cancel a scheduled reminder")
     expect(tool.description).toContain("stop checking")

@@ -5,10 +5,12 @@ import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
 import { PatchTool } from "./patch"
 import { ReadTool } from "./read"
-import { AddReminderTool, ListRemindersTool, RemoveReminderTool } from "./reminder"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
+import { ReminderAddTool } from "./reminderadd"
+import { ReminderListTool } from "./reminderlist"
+import { ReminderRemoveTool } from "./reminderremove"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
@@ -89,9 +91,9 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
-      AddReminderTool,
-      ListRemindersTool,
-      RemoveReminderTool,
+      ReminderAddTool,
+      ReminderListTool,
+      ReminderRemoveTool,
       ...custom,
     ]
   }
@@ -134,9 +136,9 @@ export namespace ToolRegistry {
     // Reminder configuration control
     const config = await Config.get()
     if (config.reminders?.enabled === false) {
-      result["add_reminder"] = false
-      result["list_reminders"] = false
-      result["remove_reminder"] = false
+      result["reminderadd"] = false
+      result["reminderlist"] = false
+      result["reminderremove"] = false
     }
 
     return result

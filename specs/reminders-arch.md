@@ -6,7 +6,7 @@ Structured background scheduling system implementation for opencode
 
 ## Overview
 
-The Reminders system adds three core tools (`add_reminder`, `list_reminders`, `remove_reminder`) that enable agents to schedule delayed or recurring message executions within sessions. The architecture leverages opencode's existing storage, state management, session messaging, and tool systems.
+The Reminders system adds three core tools (`reminderadd`, `reminderlist`, `reminderremove`) that enable agents to schedule delayed or recurring message executions within sessions. The architecture leverages opencode's existing storage, state management, session messaging, and tool systems.
 
 ---
 
@@ -173,16 +173,16 @@ async function executeReminder(reminderID: string) {
 
 ---
 
-## Tool implementation
+### Tool implementation
 
 ### Location
 
-**File**: `src/tool/reminder.ts`
+**File**: `src/tool/reminderadd.ts`, `src/tool/reminderlist.ts`, `src/tool/reminderremove.ts`
 
 ### Tool definitions
 
 ```typescript
-export const AddReminderTool = Tool.define("add_reminder", {
+export const ReminderAddTool = Tool.define("reminderadd", {
   description:
     "Set up a reminder that will make me re-execute an action later. Use when user asks to 'remind me to...' or 'check X every Y time'. I'll actually perform the action when reminded, not just notify.",
   parameters: z.object({
@@ -229,7 +229,7 @@ export const AddReminderTool = Tool.define("add_reminder", {
   },
 })
 
-export const ListRemindersTool = Tool.define("list_reminders", {
+export const ReminderListTool = Tool.define("reminderlist", {
   description:
     "List all active reminders in this session. Use when user asks 'what reminders do I have' or wants to see scheduled actions.",
   parameters: z.object({}),
@@ -260,7 +260,7 @@ export const ListRemindersTool = Tool.define("list_reminders", {
   },
 })
 
-export const RemoveReminderTool = Tool.define("remove_reminder", {
+export const ReminderRemoveTool = Tool.define("reminderremove", {
   description:
     "Cancel a scheduled reminder. Use when user asks to 'stop checking X' or 'cancel the reminder for Y'. Will attempt to match user's description to existing reminders.",
   parameters: z.object({
@@ -311,9 +311,9 @@ Add to `BUILTIN` array:
 ```typescript
 const BUILTIN = [
   // ... existing tools
-  AddReminderTool,
-  ListRemindersTool,
-  RemoveReminderTool,
+  ReminderAddTool,
+  ReminderListTool,
+  ReminderRemoveTool,
 ]
 ```
 
@@ -361,9 +361,9 @@ export async function enabled(
   // Reminder configuration control
   const config = await Config.get()
   if (config.reminders?.enabled === false) {
-    result["add_reminder"] = false
-    result["list_reminders"] = false
-    result["remove_reminder"] = false
+  result["reminderadd"] = false
+  result["reminderlist"] = false
+  result["reminderremove"] = false
   }
 
   return result

@@ -39,18 +39,18 @@ async function cleanupReminders() {
 }
 
 describe("Reminder Tools", () => {
-  describe("AddReminderTool", () => {
+  describe("ReminderAddTool", () => {
     test("successfully creates a one-time reminder", async () => {
       await using tmp = await createTestProject()
       await Instance.provide({
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
+          const addTool = await ReminderAddTool.init()
 
           const result = await addTool.execute(
             {
@@ -81,11 +81,11 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
+          const addTool = await ReminderAddTool.init()
 
           const result = await addTool.execute(
             {
@@ -116,11 +116,11 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
+          const addTool = await ReminderAddTool.init()
 
           // This should be caught by Zod schema validation
           expect(async () => {
@@ -144,11 +144,11 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
+          const addTool = await ReminderAddTool.init()
 
           // Create max reminders (default is 50, but let's test with 2 for speed)
           const maxReminders = 2
@@ -208,11 +208,11 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { ListRemindersTool } = await import("../../src/tool/reminder")
+          const { ReminderListTool } = await import("../../src/tool/reminderlist")
 
           ReminderManager.init()
           await cleanupReminders()
-          const listTool = await ListRemindersTool.init()
+          const listTool = await ReminderListTool.init()
 
           const result = await listTool.execute({}, mockContext)
 
@@ -229,12 +229,13 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool, ListRemindersTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+          const { ReminderListTool } = await import("../../src/tool/reminderlist")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
-          const listTool = await ListRemindersTool.init()
+          const addTool = await ReminderAddTool.init()
+          const listTool = await ReminderListTool.init()
 
           // Create a few reminders
           await addTool.execute(
@@ -276,12 +277,13 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+          const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
-          const removeTool = await RemoveReminderTool.init()
+          const addTool = await ReminderAddTool.init()
+          const removeTool = await ReminderRemoveTool.init()
 
           // Create a reminder
           await addTool.execute(
@@ -319,12 +321,13 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+          const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
-          const removeTool = await RemoveReminderTool.init()
+          const addTool = await ReminderAddTool.init()
+          const removeTool = await ReminderRemoveTool.init()
 
           // Create a reminder
           await addTool.execute(
@@ -357,12 +360,13 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+          const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
-          const removeTool = await RemoveReminderTool.init()
+          const addTool = await ReminderAddTool.init()
+          const removeTool = await ReminderRemoveTool.init()
 
           // Create a reminder
           await addTool.execute(
@@ -400,12 +404,13 @@ describe("Reminder Tools", () => {
         directory: tmp.dir,
         fn: async () => {
           const { ReminderManager } = await import("../../src/reminder/manager")
-          const { AddReminderTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+          const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+          const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
           ReminderManager.init()
           await cleanupReminders()
-          const addTool = await AddReminderTool.init()
-          const removeTool = await RemoveReminderTool.init()
+          const addTool = await ReminderAddTool.init()
+          const removeTool = await ReminderRemoveTool.init()
 
           // Create multiple reminders with similar descriptions
           await addTool.execute(

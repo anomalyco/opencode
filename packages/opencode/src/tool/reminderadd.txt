@@ -1,0 +1,13 @@
+- Set up a reminder that will make me re-execute an action later
+- Takes interval, type, action prompt, and description as input
+- Schedules a reminder to perform the action at the specified interval
+- Use when user asks to 'remind me to...' or 'check X every Y time'
+- Actually performs the action when reminded, not just notifies
+
+Usage notes:
+  - Minimum interval is 30 seconds
+  - Maximum reminders per project is configurable
+  - Description should be human-readable for easy identification
+  - Action prompt must be fully resolved (no vague references)
+  - Reminders can be one-time or recurring
+  - Listing/removing reminders uses the description for matching

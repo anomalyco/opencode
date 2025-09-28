@@ -39,9 +39,9 @@ describe("Tool Availability Control", () => {
     try {
       const enabledTools = await ToolRegistry.enabled("openai", "gpt-4", mockAgent)
 
-      expect(enabledTools["add_reminder"]).toBe(false)
-      expect(enabledTools["list_reminders"]).toBe(false)
-      expect(enabledTools["remove_reminder"]).toBe(false)
+      expect(enabledTools["reminderadd"]).toBe(false)
+      expect(enabledTools["reminderlist"]).toBe(false)
+      expect(enabledTools["reminderremove"]).toBe(false)
     } finally {
       // Restore original function
       Config.get = originalGet
@@ -62,9 +62,9 @@ describe("Tool Availability Control", () => {
       const enabledTools = await ToolRegistry.enabled("openai", "gpt-4", mockAgent)
 
       // Should not explicitly disable reminder tools (undefined means enabled)
-      expect(enabledTools["add_reminder"]).toBeUndefined()
-      expect(enabledTools["list_reminders"]).toBeUndefined()
-      expect(enabledTools["remove_reminder"]).toBeUndefined()
+      expect(enabledTools["reminderadd"]).toBeUndefined()
+      expect(enabledTools["reminderlist"]).toBeUndefined()
+      expect(enabledTools["reminderremove"]).toBeUndefined()
     } finally {
       // Restore original function
       Config.get = originalGet

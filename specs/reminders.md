@@ -8,9 +8,9 @@ A background scheduling system for opencode that allows agents to set up delayed
 
 The Reminders system provides three core functions:
 
-- `add_reminder()` - Schedule a future reminder
-- `list_reminders()` - View active reminders
-- `remove_reminder()` - Cancel scheduled reminders
+- `reminderadd()` - Schedule a future reminder
+- `reminderlist()` - View active reminders
+- `reminderremove()` - Cancel scheduled reminders
 
 ---
 
@@ -104,7 +104,7 @@ export namespace ReminderManager {
 
 Three tools that agents can discover and use autonomously:
 
-**`add_reminder`**
+**`reminderadd`**
 
 - Description: "Set up a reminder that will make me re-execute an action later. Use when user asks to 'remind me to...' or 'check X every Y time'. I'll actually perform the action when reminded, not just notify."
 - Parameters: `interval_seconds`, `type` (one-time/recurring), `action_prompt`, `description`
@@ -112,12 +112,12 @@ Three tools that agents can discover and use autonomously:
 - Success: Returns confirmation like "Reminder set: I'll check your email in 1 hour" or "Reminder set: I'll monitor the log file every 5 minutes"
 - Error: When limit reached, returns "Can't set more reminders, too many reminders already active." along with list of current reminders, suggesting user choose which to remove first
 
-**`list_reminders`**
+**`reminderlist`**
 
 - Description: "List all active reminders in this session. Use when user asks 'what reminders do I have' or wants to see scheduled actions."
 - Returns: Array of active reminders with descriptions and next execution times
 
-**`remove_reminder`**
+**`reminderremove`**
 
 - Description: "Cancel a scheduled reminder. Use when user asks to 'stop checking X' or 'cancel the reminder for Y'. Will attempt to match user's description to existing reminders."
 - Parameters: `description_pattern` - What the user wants to stop
@@ -395,7 +395,7 @@ User: "Wait for 5 minutes and check this file again for instructions"
 Agent recognizes the pattern and calls:
 
 ```typescript
-add_reminder({
+reminderadd({
   interval_seconds: 300,
   type: "one-time",
   action_prompt: "check /workspace/last-login.log file again for instructions",
@@ -444,7 +444,7 @@ User: "Check my email every hour and reply that I'm busy"
 Agent calls:
 
 ```typescript
-add_reminder({
+reminderadd({
   interval_seconds: 3600,
   type: "recurring",
   action_prompt: "Check my email and reply that I'm busy",
@@ -466,7 +466,7 @@ Agent decides to use available email tools (e.g., MCP email server's `check_mail
 
 ```
 User: "Remind me to check the logs in 10 minutes"
-Agent: [calls add_reminder]
+Agent: [calls reminderadd]
 Tool: "Reminder set: I'll check the logs in 10 minutes"
 Agent: "Got it! Reminder set - I'll check the logs in 10 minutes."
 ```
@@ -475,7 +475,7 @@ Agent: "Got it! Reminder set - I'll check the logs in 10 minutes."
 
 ```
 User: "Stop checking my email"
-Agent: [calls remove_reminder]
+Agent: [calls reminderremove]
 Tool: "Reminder cancelled: No longer checking your email every hour"
 Agent: "Done! I've cancelled the email checking reminder."
 ```

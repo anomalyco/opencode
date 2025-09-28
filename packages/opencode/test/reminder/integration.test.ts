@@ -1,22 +1,16 @@
 import { test, expect, describe } from "bun:test"
 
-// const mockContext = {
-//   sessionID: "ses_integration_test",
-//   messageID: "msg_integration_test",
-//   agent: "test",
-//   abort: AbortSignal.any([]),
-//   metadata: () => {},
-// }
-
 describe("Reminder Tools Integration", () => {
   test("tool modules can be imported", async () => {
     // Dynamic import to avoid circular dependency during test load
-    const { AddReminderTool, ListRemindersTool, RemoveReminderTool } = await import("../../src/tool/reminder")
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const { ReminderListTool } = await import("../../src/tool/reminderlist")
+    const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
 
     // Test that tools can be initialized
-    const addTool = await AddReminderTool.init()
-    const listTool = await ListRemindersTool.init()
-    const removeTool = await RemoveReminderTool.init()
+    const addTool = await ReminderAddTool.init()
+    const listTool = await ReminderListTool.init()
+    const removeTool = await ReminderRemoveTool.init()
 
     expect(addTool).toBeDefined()
     expect(addTool.description).toContain("Set up a reminder")
@@ -33,8 +27,8 @@ describe("Reminder Tools Integration", () => {
   })
 
   test("parameter validation works", async () => {
-    const { AddReminderTool } = await import("../../src/tool/reminder")
-    const addTool = await AddReminderTool.init()
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const addTool = await ReminderAddTool.init()
 
     // Test minimum interval validation
     const invalidArgs = {
@@ -63,15 +57,17 @@ describe("Reminder Tools Integration", () => {
   })
 
   test("tool descriptions are informative", async () => {
-    const { AddReminderTool, ListRemindersTool, RemoveReminderTool } = await import("../../src/tool/reminder")
-    const addTool = await AddReminderTool.init()
-    const listTool = await ListRemindersTool.init()
-    const removeTool = await RemoveReminderTool.init()
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const { ReminderListTool } = await import("../../src/tool/reminderlist")
+    const { ReminderRemoveTool } = await import("../../src/tool/reminderremove")
+    const addTool = await ReminderAddTool.init()
+    const listTool = await ReminderListTool.init()
+    const removeTool = await ReminderRemoveTool.init()
 
     // Check that descriptions guide agents properly
     expect(addTool.description).toContain("remind me to")
     expect(addTool.description).toContain("check X every Y time")
-    expect(addTool.description).toContain("actually perform the action")
+    expect(addTool.description).toContain("Actually performs the action")
 
     expect(listTool.description).toContain("what reminders do I have")
     expect(listTool.description).toContain("scheduled actions")
@@ -81,8 +77,8 @@ describe("Reminder Tools Integration", () => {
   })
 
   test("parameter schemas have proper descriptions", async () => {
-    const { AddReminderTool } = await import("../../src/tool/reminder")
-    const addTool = await AddReminderTool.init()
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const addTool = await ReminderAddTool.init()
 
     const schema = addTool.parameters
     const shape = schema.shape as any
@@ -95,8 +91,8 @@ describe("Reminder Tools Integration", () => {
   })
 
   test("enum values are properly defined", async () => {
-    const { AddReminderTool } = await import("../../src/tool/reminder")
-    const addTool = await AddReminderTool.init()
+    const { ReminderAddTool } = await import("../../src/tool/reminderadd")
+    const addTool = await ReminderAddTool.init()
     const schema = addTool.parameters.shape as any
 
     const typeEnum = schema.type
