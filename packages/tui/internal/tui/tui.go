@@ -230,8 +230,23 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	lower := strings.ToLower(text)
 	if a.vimPendingDeleteLine {
 		a.vimPendingDeleteLine = false
-		if lower == "d" || key == "d" {
+		switch lower {
+		case "d":
 			a.editor.DeleteCurrentLine()
+			return true, nil
+		case "b":
+			a.editor.DeleteWordBackward()
+			return true, nil
+		case "w", "e":
+			a.editor.DeleteWordForward()
+			return true, nil
+		}
+		switch text {
+		case "$":
+			a.editor.DeleteToLineEnd()
+			return true, nil
+		case "0":
+			a.editor.DeleteToLineStart()
 			return true, nil
 		}
 	}

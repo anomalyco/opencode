@@ -1169,6 +1169,51 @@ func (m *Model) DeleteSelection() string {
 	return text
 }
 
+func (m *Model) DeleteWordBackward() {
+	if len(m.value) == 0 {
+		return
+	}
+	m.deleteWordLeft()
+}
+
+func (m *Model) DeleteWordForward() {
+	if len(m.value) == 0 {
+		return
+	}
+	m.deleteWordRight()
+}
+
+func (m *Model) DeleteToLineEnd() {
+	if len(m.value) == 0 {
+		return
+	}
+	row := clamp(m.row, 0, len(m.value)-1)
+	limit := len(m.value[row])
+	if limit == 0 {
+		return
+	}
+	start := clamp(m.col, 0, limit)
+	if start >= limit {
+		return
+	}
+	m.deleteRange(row, start, row, limit)
+}
+
+func (m *Model) DeleteToLineStart() {
+	if len(m.value) == 0 {
+		return
+	}
+	row := clamp(m.row, 0, len(m.value)-1)
+	if len(m.value[row]) == 0 {
+		return
+	}
+	end := clamp(m.col, 0, len(m.value[row]))
+	if end <= 0 {
+		return
+	}
+	m.deleteRange(row, 0, row, end)
+}
+
 func (m *Model) MoveLeft() {
 	m.characterLeft(false)
 }

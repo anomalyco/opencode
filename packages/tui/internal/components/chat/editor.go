@@ -69,6 +69,10 @@ type EditorComponent interface {
 	InsertLineAbove(copyIndent bool)
 	DeleteCurrentLine() string
 	BeginLineSelection()
+	DeleteWordBackward()
+	DeleteWordForward()
+	DeleteToLineEnd()
+	DeleteToLineStart()
 	IsCursorAtEnd() bool
 }
 
@@ -906,6 +910,22 @@ func (m *editorComponent) SelectionText() string {
 
 func (m *editorComponent) DeleteSelection() string {
 	return m.textarea.DeleteSelection()
+}
+
+func (m *editorComponent) DeleteWordBackward() {
+	m.textarea.DeleteWordBackward()
+}
+
+func (m *editorComponent) DeleteWordForward() {
+	m.textarea.DeleteWordForward()
+}
+
+func (m *editorComponent) DeleteToLineEnd() {
+	m.textarea.DeleteToLineEnd()
+}
+
+func (m *editorComponent) DeleteToLineStart() {
+	m.textarea.DeleteToLineStart()
 }
 
 func (m *editorComponent) InsertLineBelow(copyIndent bool) {
