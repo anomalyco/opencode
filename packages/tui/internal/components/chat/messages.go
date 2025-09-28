@@ -1087,12 +1087,20 @@ func (m *messagesComponent) HalfPageDown() (tea.Model, tea.Cmd) {
 }
 
 func (m *messagesComponent) LineUp() (tea.Model, tea.Cmd) {
-	m.viewport.LineUp(1)
+	step := m.app.ScrollSpeed
+	if step < 1 {
+		step = 3
+	}
+	m.viewport.LineUp(step)
 	return m, nil
 }
 
 func (m *messagesComponent) LineDown() (tea.Model, tea.Cmd) {
-	m.viewport.LineDown(1)
+	step := m.app.ScrollSpeed
+	if step < 1 {
+		step = 3
+	}
+	m.viewport.LineDown(step)
 	return m, nil
 }
 
