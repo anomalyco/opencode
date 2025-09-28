@@ -307,7 +307,7 @@ export async function handler(
 
     const modelCost =
       modelInfo.cost200K &&
-      usage.inputTokens + usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens > 200_000
+      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
         ? modelInfo.cost200K
         : modelInfo.cost
 
