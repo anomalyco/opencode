@@ -249,10 +249,10 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if a.editor.SelectionActive() {
 			a.editor.ClearSelection()
 		}
-		return true, nil
+		return false, nil
 	}
 	if key == "enter" {
-		return true, nil
+		return false, nil
 	}
 	if a.vimAwaitingReplace {
 		if text != "" {
@@ -292,7 +292,6 @@ func (a *Model) handleVimNormal(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		cmd := a.setVimMode(VimModeInsert)
 		return true, cmd
 	case "p":
-		a.editor.InsertLineBelow(false)
 		updated, pasteCmd := a.editor.Paste()
 		a.setEditorModel(updated)
 		return true, pasteCmd
