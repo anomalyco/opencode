@@ -108,49 +108,47 @@ func writeText(buf []byte) error {
 // if presents. The caller is responsible for opening/closing the
 // clipboard before calling this function.
 func readImage() ([]byte, error) {
-	hMem, _, err := getClipboardData.Call(cFmtDIBV5)
-	if hMem == 0 {
-		// second chance to try FmtDIB
-		return readImageDib()
-	}
-	p, _, err := gLock.Call(hMem)
-	if p == 0 {
-		return nil, err
-	}
-	defer gUnlock.Call(hMem)
+	hMem, _, _ := getClipboardData.Call(cFmtDIBV5)
+	if hMem != 0 {
+		p, _, _ := gLock.Call(hMem)
+		if p != 0 {
+			defer gUnlock.Call(hMem)
 
-	// inspect header information
-	info := (*bitmapV5Header)(unsafe.Pointer(p))
+			// inspect header information
+			info := (*bitmapV5Header)(unsafe.Pointer(p))
 
-	// maybe deal with other formats?
-	if info.BitCount != 32 {
-		return nil, errUnsupported
-	}
-
-	var data []byte
-	sh := (*reflect.SliceHeader)(unsafe.Pointer(&data))
-	sh.Data = uintptr(p)
-	sh.Cap = int(info.Size + 4*uint32(info.Width)*uint32(info.Height))
-	sh.Len = int(info.Size + 4*uint32(info.Width)*uint32(info.Height))
-	img := image.NewRGBA(image.Rect(0, 0, int(info.Width), int(info.Height)))
-	offset := int(info.Size)
-	stride := int(info.Width)
-	for y := 0; y < int(info.Height); y++ {
-		for x := 0; x < int(info.Width); x++ {
-			idx := offset + 4*(y*stride+x)
-			xhat := (x + int(info.Width)) % int(info.Width)
-			yhat := int(info.Height) - 1 - y
-			r := data[idx+2]
-			g := data[idx+1]
-			b := data[idx+0]
-			a := data[idx+3]
-			img.SetRGBA(xhat, yhat, color.RGBA{r, g, b, a})
+			// validate format
+			if info.BitCount == 32 {
+				var data []byte
+				sh := (*reflect.SliceHeader)(unsafe.Pointer(&data))
+				sh.Data = uintptr(p)
+				sh.Cap = int(info.Size + 4*uint32(info.Width)*uint32(info.Height))
+				sh.Len = int(info.Size + 4*uint32(info.Width)*uint32(info.Height))
+				img := image.NewRGBA(image.Rect(0, 0, int(info.Width), int(info.Height)))
+				offset := int(info.Size)
+				stride := int(info.Width)
+				for y := 0; y < int(info.Height); y++ {
+					for x := 0; x < int(info.Width); x++ {
+						idx := offset + 4*(y*stride+x)
+						xhat := (x + int(info.Width)) % int(info.Width)
+						yhat := int(info.Height) - 1 - y
+						r := data[idx+2]
+						g := data[idx+1]
+						b := data[idx+0]
+						a := data[idx+3]
+						img.SetRGBA(xhat, yhat, color.RGBA{r, g, b, a})
+					}
+				}
+				// always use PNG encoding.
+				var buf bytes.Buffer
+				png.Encode(&buf, img)
+				return buf.Bytes(), nil
+			}
 		}
 	}
-	// always use PNG encoding.
-	var buf bytes.Buffer
-	png.Encode(&buf, img)
-	return buf.Bytes(), nil
+
+	// Fallback to DIB format if DIBv5 is unavailable or unsupported
+	return readImageDib()
 }
 
 func readImageDib() ([]byte, error) {
