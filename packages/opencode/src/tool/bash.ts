@@ -149,6 +149,8 @@ export const BashTool = Tool.define("bash", {
     const process = exec(params.command, {
       cwd: Instance.directory,
       signal: ctx.abort,
+      // Inherit the environment variables. May be important if user set env vars before starting the process.
+      env: { ...globalThis.process.env },
       timeout,
     })
 
