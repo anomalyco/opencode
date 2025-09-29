@@ -3,6 +3,8 @@ package completions
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,11 +39,21 @@ func (cg *filesContextGroup) getGitFiles() []CompletionSuggestion {
 		})
 
 		for _, file := range files {
+			// Convert path from relative to git repo root to relative to current working directory
+			relativePath := file.Path
+			if cwd, err := os.Getwd(); err == nil {
+				if absPath := filepath.Join(cg.app.Project.Worktree, file.Path); absPath != "" {
+					if relPath, err := filepath.Rel(cwd, absPath); err == nil {
+						relativePath = relPath
+					}
+				}
+			}
+
 			displayFunc := func(s styles.Style) string {
 				t := theme.CurrentTheme()
 				green := s.Foreground(t.Success()).Render
 				red := s.Foreground(t.Error()).Render
-				display := file.Path
+				display := relativePath
 				if file.Added > 0 {
 					display += green(" +" + strconv.Itoa(int(file.Added)))
 				}
@@ -52,7 +64,7 @@ func (cg *filesContextGroup) getGitFiles() []CompletionSuggestion {
 			}
 			item := CompletionSuggestion{
 				Display:    displayFunc,
-				Value:      file.Path,
+				Value:      relativePath,
 				ProviderID: cg.GetId(),
 				RawData:    file,
 			}
