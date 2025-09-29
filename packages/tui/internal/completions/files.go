@@ -38,10 +38,11 @@ func (cg *filesContextGroup) getGitFiles() []CompletionSuggestion {
 			return files[i].Added+files[i].Removed > files[j].Added+files[j].Removed
 		})
 
+		cwd, err := os.Getwd()
 		for _, file := range files {
 			// Convert path from relative to git repo root to relative to current working directory
 			relativePath := file.Path
-			if cwd, err := os.Getwd(); err == nil {
+			if err == nil {
 				if absPath := filepath.Join(cg.app.Project.Worktree, file.Path); absPath != "" {
 					if relPath, err := filepath.Rel(cwd, absPath); err == nil {
 						relativePath = relPath
