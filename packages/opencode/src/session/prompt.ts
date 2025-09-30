@@ -580,13 +580,7 @@ export namespace SessionPrompt {
               }
               break
             case "file:":
-              // have to normalize, symbol search returns absolute paths
-              // Decode the pathname since URL constructor doesn't automatically decode it
-              // let filePath = decodeURIComponent(url.pathname)
-              // if (process.platform === "win32" && /^\/[a-zA-Z]:/.test(filePath)) {
-              //   filePath = filePath.slice(1)
-              // }
-              let filePath = fileURLToPath(part.url)
+              const filePath = fileURLToPath(part.url)
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -596,14 +590,14 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
+                  const filePathURI = part.url.split("?")[0]
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
+                    const symbols = await LSP.documentSymbol(filePathURI)
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
