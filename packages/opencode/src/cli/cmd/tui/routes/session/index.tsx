@@ -4,8 +4,8 @@ import path from "path"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
-import { Theme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { syntaxTheme, Theme } from "@tui/context/theme"
+import { BoxRenderable, pathToFiletype, ScrollBoxRenderable } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -648,22 +648,6 @@ ToolRegistry.register<typeof BashTool>({
   },
 })
 
-/*
-const syntax = new SyntaxStyle({
-  keyword: { fg: RGBA.fromHex(Theme.syntaxKeyword), bold: true },
-  string: { fg: RGBA.fromHex(Theme.syntaxString) },
-  comment: { fg: RGBA.fromHex(Theme.syntaxComment), italic: true },
-  number: { fg: RGBA.fromHex(Theme.syntaxNumber) },
-  function: { fg: RGBA.fromHex(Theme.syntaxFunction) },
-  type: { fg: RGBA.fromHex(Theme.syntaxType) },
-  operator: { fg: RGBA.fromHex(Theme.syntaxOperator) },
-  variable: { fg: RGBA.fromHex(Theme.syntaxVariable) },
-  bracket: { fg: RGBA.fromHex(Theme.syntaxPunctuation) },
-  punctuation: { fg: RGBA.fromHex(Theme.syntaxPunctuation) },
-  default: { fg: RGBA.fromHex(Theme.syntaxVariable) },
-})
-*/
-
 ToolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
@@ -708,7 +692,7 @@ ToolRegistry.register<typeof WriteTool>({
             <For each={numbers()}>{(value) => <text style={{ fg: Theme.textMuted }}>{value}</text>}</For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
-            <text>{code()}</text>
+            <code filetype={pathToFiletype(props.input.filePath!)} syntaxStyle={syntaxTheme} content={code()} />
           </box>
         </box>
       </>
@@ -819,13 +803,21 @@ ToolRegistry.register<typeof EditTool>({
           </Match>
           <Match when={code()}>
             <box paddingLeft={1}>
-              <text>{code()}</text>
+              <code filetype={pathToFiletype(props.input.filePath!)} syntaxStyle={syntaxTheme} content={code()} />
             </box>
           </Match>
           <Match when={props.input.newString && props.input.oldString}>
             <box paddingLeft={1}>
-              <text>{props.input.oldString}</text>
-              <text>{props.input.newString}</text>
+              <code
+                filetype={pathToFiletype(props.input.filePath!)}
+                syntaxStyle={syntaxTheme}
+                content={props.input.oldString}
+              />
+              <code
+                filetype={pathToFiletype(props.input.filePath!)}
+                syntaxStyle={syntaxTheme}
+                content={props.input.newString}
+              />
             </box>
           </Match>
         </Switch>

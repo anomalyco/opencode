@@ -1,3 +1,5 @@
+import { SyntaxStyle } from "@opentui/core"
+
 const OPENCODE_THEME = {
   primary: {
     dark: "#fab283",
@@ -243,18 +245,191 @@ type Theme = {
   markdownImage: string
   markdownImageText: string
   markdownCodeBlock: string
-  syntaxComment: string
-  syntaxKeyword: string
-  syntaxFunction: string
-  syntaxVariable: string
-  syntaxString: string
-  syntaxNumber: string
-  syntaxType: string
-  syntaxOperator: string
-  syntaxPunctuation: string
 }
 
 export const Theme = Object.entries(OPENCODE_THEME).reduce((acc, [key, value]) => {
   acc[key as keyof Theme] = value.dark
   return acc
 }, {} as Theme)
+
+const syntaxThemeDark = [
+  {
+    scope: ["prompt"],
+    style: {
+      foreground: "#56b6c2",
+    },
+  },
+  {
+    scope: ["comment"],
+    style: {
+      foreground: "#808080",
+      italic: true,
+    },
+  },
+  {
+    scope: ["comment.documentation"],
+    style: {
+      foreground: "#808080",
+      italic: true,
+    },
+  },
+  {
+    scope: ["string", "symbol"],
+    style: {
+      foreground: "#7fd88f",
+    },
+  },
+  {
+    scope: ["number", "boolean"],
+    style: {
+      foreground: "#f5a742",
+    },
+  },
+  {
+    scope: ["character.special"],
+    style: {
+      foreground: "#7fd88f",
+    },
+  },
+  {
+    scope: ["keyword.return", "keyword.conditional", "keyword.repeat", "keyword.coroutine"],
+    style: {
+      foreground: "#9d7cd8",
+      italic: true,
+    },
+  },
+  {
+    scope: ["keyword.type"],
+    style: {
+      foreground: "#e5c07b",
+      bold: true,
+      italic: true,
+    },
+  },
+  {
+    scope: ["keyword.function", "function.method"],
+    style: {
+      foreground: "#fab283",
+    },
+  },
+  {
+    scope: ["keyword"],
+    style: {
+      foreground: "#9d7cd8",
+      italic: true,
+    },
+  },
+  {
+    scope: ["keyword.import"],
+    style: {
+      foreground: "#9d7cd8",
+    },
+  },
+  {
+    scope: ["operator", "keyword.operator", "punctuation.delimiter"],
+    style: {
+      foreground: "#56b6c2",
+    },
+  },
+  {
+    scope: ["keyword.conditional.ternary"],
+    style: {
+      foreground: "#56b6c2",
+    },
+  },
+  {
+    scope: ["variable", "variable.parameter", "function.method.call", "function.call"],
+    style: {
+      foreground: "#e06c75",
+    },
+  },
+  {
+    scope: ["variable.member", "function", "constructor"],
+    style: {
+      foreground: "#fab283",
+    },
+  },
+  {
+    scope: ["type", "module"],
+    style: {
+      foreground: "#e5c07b",
+    },
+  },
+  {
+    scope: ["constant"],
+    style: {
+      foreground: "#e06c75",
+    },
+  },
+  {
+    scope: ["property"],
+    style: {
+      foreground: "#e06c75",
+    },
+  },
+  {
+    scope: ["class"],
+    style: {
+      foreground: "#e5c07b",
+    },
+  },
+  {
+    scope: ["parameter"],
+    style: {
+      foreground: "#eeeeee",
+    },
+  },
+  {
+    scope: ["punctuation", "punctuation.bracket"],
+    style: {
+      foreground: "#eeeeee",
+    },
+  },
+  {
+    scope: ["variable.builtin", "type.builtin", "function.builtin", "module.builtin", "constant.builtin"],
+    style: {
+      foreground: "#7fd88f",
+    },
+  },
+  {
+    scope: ["variable.super"],
+    style: {
+      foreground: "#e06c75",
+    },
+  },
+  {
+    scope: ["string.escape", "string.regexp"],
+    style: {
+      foreground: "#7fd88f",
+    },
+  },
+  {
+    scope: ["keyword.directive"],
+    style: {
+      foreground: "#9d7cd8",
+      italic: true,
+    },
+  },
+  {
+    scope: ["punctuation.special"],
+    style: {
+      foreground: "#56b6c2",
+    },
+  },
+  {
+    scope: ["keyword.modifier"],
+    style: {
+      foreground: "#9d7cd8",
+      italic: true,
+    },
+  },
+  {
+    scope: ["keyword.exception"],
+    style: {
+      foreground: "#9d7cd8",
+      italic: true,
+    },
+  },
+]
+
+export const syntaxTheme = SyntaxStyle.fromTheme(syntaxThemeDark)
