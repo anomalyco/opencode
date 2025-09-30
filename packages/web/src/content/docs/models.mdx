@@ -100,9 +100,40 @@ You can globally configure a model's options through the config.
 }
 ```
 
-Here we're configuring global settings for two models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
+Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.  
+The built-in provider and model names can be found on [Models.dev](https://models.dev).
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
+
+You can also define custom models that extend built-in ones and can optionally use specific options by referring to their id:
+
+```jsonc title="opencode.jsonc" {6-20}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5-high": {
+          "id": "gpt-5",
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto"
+          }
+        },
+        "gpt-5-low": {
+          "id": "gpt-5",
+          "options": {
+            "reasoningEffort": "low",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto"
+          }
+        }
+      }
+    }
+  }
+}
+```
 
 ---
 

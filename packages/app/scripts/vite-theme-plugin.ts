@@ -37,7 +37,7 @@ class ColorResolver {
       if (typeof value === "string") {
         if (value === "none") return { dark: value, light: value }
         if (value.startsWith("#")) {
-          return { dark: value.toUpperCase(), light: value.toUpperCase() }
+          return { dark: value.toLowerCase(), light: value.toLowerCase() }
         }
         const resolved = this.resolveReference(value)
         return { dark: resolved, light: resolved }
@@ -57,7 +57,7 @@ class ColorResolver {
     if (typeof value === "string") {
       if (value === "none") return value
       if (value.startsWith("#")) {
-        return value.toUpperCase()
+        return value.toLowerCase()
       }
       return this.resolveReference(value)
     }
@@ -72,7 +72,7 @@ class ColorResolver {
     if (typeof colorValue === "string") {
       if (colorValue === "none") return colorValue
       if (colorValue.startsWith("#")) {
-        return colorValue.toUpperCase()
+        return colorValue.toLowerCase()
       }
       return this.resolveReference(colorValue)
     }

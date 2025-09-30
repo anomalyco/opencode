@@ -8,6 +8,9 @@ import type {
   ProjectCurrentResponses,
   ConfigGetData,
   ConfigGetResponses,
+  ConfigUpdateData,
+  ConfigUpdateResponses,
+  ConfigUpdateErrors,
   ToolIdsData,
   ToolIdsResponses,
   ToolIdsErrors,
@@ -158,6 +161,20 @@ class Config extends _HeyApiClient {
     return (options?.client ?? this._client).get<ConfigGetResponses, unknown, ThrowOnError>({
       url: "/config",
       ...options,
+    })
+  }
+
+  /**
+   * Update config
+   */
+  public update<ThrowOnError extends boolean = false>(options?: Options<ConfigUpdateData, ThrowOnError>) {
+    return (options?.client ?? this._client).patch<ConfigUpdateResponses, ConfigUpdateErrors, ThrowOnError>({
+      url: "/config",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
     })
   }
 

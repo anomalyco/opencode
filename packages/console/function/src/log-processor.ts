@@ -9,7 +9,12 @@ export default {
       if (event.event.request.method !== "POST") continue
 
       const url = new URL(event.event.request.url)
-      if (url.pathname !== "/zen/v1/chat/completions") return
+      if (
+        url.pathname !== "/zen/v1/chat/completions" &&
+        url.pathname !== "/zen/v1/messages" &&
+        url.pathname !== "/zen/v1/responses"
+      )
+        return
 
       let metrics = {
         event_type: "completions",

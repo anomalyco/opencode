@@ -11,6 +11,7 @@ console.log("=== publishing ===\n")
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 const version = await (async () => {
   if (snapshot) return `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
   const [major, minor, patch] = (await $`gh release list --limit 1 --json tagName --jq '.[0].tagName'`.text())
     .trim()
     .replace(/^v/, "")

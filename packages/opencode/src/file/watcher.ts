@@ -28,9 +28,9 @@ export namespace FileWatcher {
       const ignore = (cfg.watcher?.ignore ?? []).map((v) => new Bun.Glob(v))
       const watcher = chokidar.watch(Instance.directory, {
         ignoreInitial: true,
-        awaitWriteFinish: true,
         ignored: (filepath) => {
           return FileIgnore.match(filepath, {
+            whitelist: [new Bun.Glob("**/.git/{index,logs/HEAD}")],
             extra: ignore,
           })
         },

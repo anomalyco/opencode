@@ -40,6 +40,10 @@
 
       &[data-slot="payment-amount"] {
         color: var(--color-text);
+
+        &[data-refunded="true"] {
+          text-decoration: line-through;
+        }
       }
     }
 

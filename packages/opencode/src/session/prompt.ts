@@ -48,6 +48,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
+import { ConfigMarkdown } from "../config/markdown"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -890,6 +891,7 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
@@ -911,6 +913,7 @@ export namespace SessionPrompt {
                     ...part.time,
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
@@ -950,6 +953,7 @@ export namespace SessionPrompt {
                         start: Date.now(),
                       },
                     },
+                    metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
@@ -1052,12 +1056,14 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
                 }
                 break
@@ -1069,6 +1075,7 @@ export namespace SessionPrompt {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   await Session.updatePart(currentText)
                 }
                 currentText = undefined
@@ -1356,7 +1363,6 @@ export namespace SessionPrompt {
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
-  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
@@ -1365,10 +1371,10 @@ export namespace SessionPrompt {
 
     let template = command.template.replace("$ARGUMENTS", input.arguments)
 
-    const bash = Array.from(template.matchAll(bashRegex))
-    if (bash.length > 0) {
+    const shell = ConfigMarkdown.shell(template)
+    if (shell.length > 0) {
       const results = await Promise.all(
-        bash.map(async ([, cmd]) => {
+        shell.map(async ([, cmd]) => {
           try {
             return await $`${{ raw: cmd }}`.nothrow().text()
           } catch (error) {
@@ -1387,9 +1393,9 @@ export namespace SessionPrompt {
       },
     ] as PromptInput["parts"]
 
-    const matches = Array.from(template.matchAll(fileRegex))
+    const files = ConfigMarkdown.files(template)
     await Promise.all(
-      matches.map(async (match) => {
+      files.map(async (match) => {
         const name = match[1]
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))

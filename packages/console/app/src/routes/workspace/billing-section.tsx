@@ -4,6 +4,8 @@ import { Billing } from "@opencode/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCreditCard } from "~/component/icon"
 import styles from "./billing-section.module.css"
+import { Database, eq } from "@opencode/console-core/drizzle/index.js"
+import { BillingTable } from "@opencode/console-core/schema/billing.sql.js"
 
 const createCheckoutUrl = action(async (workspaceID: string, successUrl: string, cancelUrl: string) => {
   "use server"
@@ -17,12 +19,23 @@ const reload = action(async (form: FormData) => {
   return json(await withActor(() => Billing.reload(), workspaceID), { revalidate: getBillingInfo.key })
 }, "billing.reload")
 
-const disableReload = action(async (form: FormData) => {
+const setReload = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
   if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(await withActor(() => Billing.disableReload(), workspaceID), { revalidate: getBillingInfo.key })
-}, "billing.disableReload")
+  const reload = form.get("reload")?.toString() === "true"
+  return json(
+    await Database.use((tx) =>
+      tx
+        .update(BillingTable)
+        .set({
+          reload,
+        })
+        .where(eq(BillingTable.workspaceID, workspaceID)),
+    ),
+    { revalidate: getBillingInfo.key },
+  )
+}, "billing.setReload")
 
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
@@ -44,7 +57,7 @@ export function BillingSection() {
   const createCheckoutUrlSubmission = useSubmission(createCheckoutUrl)
   const createSessionUrlAction = useAction(createSessionUrl)
   const createSessionUrlSubmission = useSubmission(createSessionUrl)
-  const disableReloadSubmission = useSubmission(disableReload)
+  const setReloadSubmission = useSubmission(setReload)
   const reloadSubmission = useSubmission(reload)
 
   // DUMMY DATA FOR TESTING - UNCOMMENT ONE OF THE SCENARIOS BELOW
@@ -87,6 +100,10 @@ export function BillingSection() {
 
   const balanceAmount = createMemo(() => {
     return ((balanceInfo()?.balance ?? 0) / 100000000).toFixed(2)
+  })
+
+  const hasBalance = createMemo(() => {
+    return (balanceInfo()?.balance ?? 0) > 0 && balanceAmount() !== "0.00"
   })
 
   return (
@@ -136,19 +153,32 @@ export function BillingSection() {
             <Show
               when={balanceInfo()?.reload}
               fallback={
-                <button
-                  data-color="primary"
-                  disabled={createCheckoutUrlSubmission.pending}
-                  onClick={async () => {
-                    const baseUrl = window.location.href
-                    const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
-                    if (checkoutUrl) {
-                      window.location.href = checkoutUrl
-                    }
-                  }}
+                <Show
+                  when={hasBalance()}
+                  fallback={
+                    <button
+                      data-color="primary"
+                      disabled={createCheckoutUrlSubmission.pending}
+                      onClick={async () => {
+                        const baseUrl = window.location.href
+                        const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
+                        if (checkoutUrl) {
+                          window.location.href = checkoutUrl
+                        }
+                      }}
+                    >
+                      {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable Billing"}
+                    </button>
+                  }
                 >
-                  {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable Billing"}
-                </button>
+                  <form action={setReload} method="post" data-slot="create-form">
+                    <input type="hidden" name="workspaceID" value={params.id} />
+                    <input type="hidden" name="reload" value="true" />
+                    <button data-color="primary" type="submit" disabled={setReloadSubmission.pending}>
+                      {setReloadSubmission.pending ? "Enabling..." : "Enable Billing"}
+                    </button>
+                  </form>
+                </Show>
               }
             >
               <button
@@ -164,21 +194,31 @@ export function BillingSection() {
               >
                 {createSessionUrlSubmission.pending ? "Loading..." : "Manage Payment Methods"}
               </button>
-              <form action={disableReload} method="post" data-slot="create-form">
+              <form action={setReload} method="post" data-slot="create-form">
                 <input type="hidden" name="workspaceID" value={params.id} />
-                <button data-color="ghost" type="submit" disabled={disableReloadSubmission.pending}>
-                  {disableReloadSubmission.pending ? "Disabling..." : "Disable"}
+                <input type="hidden" name="reload" value="false" />
+                <button data-color="ghost" type="submit" disabled={setReloadSubmission.pending}>
+                  {setReloadSubmission.pending ? "Disabling..." : "Disable"}
                 </button>
               </form>
             </Show>
           </div>
         </div>
         <div data-slot="usage">
-          <Show when={!balanceInfo()?.reload && !(balanceAmount() === "0.00" || balanceAmount() === "-0.00")}>
-            <p>
-              You have <b data-slot="value">${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b> remaining in
-              your account. You can continue using the API with your remaining balance.
-            </p>
+          <Show when={!balanceInfo()?.reload}>
+            <Show
+              when={hasBalance()}
+              fallback={
+                <p>
+                  We'll load <b>$20</b> (+$1.23 processing fee) and reload it when it reaches <b>$5</b>.
+                </p>
+              }
+            >
+              <p>
+                You have <b data-slot="value">${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b> remaining in
+                your account. You can continue using the API with your remaining balance.
+              </p>
+            </Show>
           </Show>
           <Show when={balanceInfo()?.reload && !balanceInfo()?.reloadError}>
             <p>

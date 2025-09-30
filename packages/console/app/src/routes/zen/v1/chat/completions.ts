@@ -5,6 +5,9 @@ type Usage = {
   prompt_tokens?: number
   completion_tokens?: number
   total_tokens?: number
+  // used by moonshot
+  cached_tokens?: number
+  // used by xai
   prompt_tokens_details?: {
     text_tokens?: number
     audio_tokens?: number
@@ -48,7 +51,7 @@ export function POST(input: APIEvent) {
       inputTokens: usage.prompt_tokens ?? 0,
       outputTokens: usage.completion_tokens ?? 0,
       reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
-      cacheReadTokens: usage.prompt_tokens_details?.cached_tokens ?? undefined,
+      cacheReadTokens: usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined,
     }),
   })
 }

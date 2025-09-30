@@ -99,6 +99,55 @@
       "when": 1757956978089,
       "tag": "0013_absurd_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1758289919722,
+      "tag": "0014_demonic_princess_powerful",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1758428484500,
+      "tag": "0015_cloudy_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1758663086739,
+      "tag": "0016_cold_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1758755183232,
+      "tag": "0017_woozy_thaddeus_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1759077265040,
+      "tag": "0018_nervous_iron_lad",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1759103696975,
+      "tag": "0019_dazzling_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1759169697658,
+      "tag": "0020_supreme_jack_power",
+      "breakpoints": true
     }
   ]
 }

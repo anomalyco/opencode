@@ -1,65 +1,32 @@
 import { Select as KobalteSelect } from "@kobalte/core/select"
-import { createEffect, createMemo, Show } from "solid-js"
+import { createMemo } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { Icon } from "@/ui/icon"
-import fuzzysort from "fuzzysort"
 import { pipe, groupBy, entries, map } from "remeda"
-import { createStore } from "solid-js/store"
+import { Button, type ButtonProps } from "@/ui"
 
 export interface SelectProps<T> {
-  variant?: "default" | "outline"
-  size?: "sm" | "md" | "lg"
   placeholder?: string
-  filter?:
-    | false
-    | {
-        placeholder?: string
-        keys: string[]
-      }
   options: T[]
   current?: T
   value?: (x: T) => string
   label?: (x: T) => string
   groupBy?: (x: T) => string
-  onFilter?: (query: string) => void
   onSelect?: (value: T | undefined) => void
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
 }
 
-export function Select<T>(props: SelectProps<T>) {
-  let inputRef: HTMLInputElement | undefined = undefined
-  let listboxRef: HTMLUListElement | undefined = undefined
-  const [store, setStore] = createStore({
-    filter: "",
-  })
+export function Select<T>(props: SelectProps<T> & ButtonProps) {
   const grouped = createMemo(() => {
-    const needle = store.filter.toLowerCase()
     const result = pipe(
       props.options,
-      (x) =>
-        !needle || !props.filter
-          ? x
-          : fuzzysort.go(needle, x, { keys: props.filter && props.filter.keys }).map((x) => x.obj),
       groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
       // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
       entries(),
       map(([k, v]) => ({ category: k, options: v })),
     )
     return result
-  })
-  // const flat = createMemo(() => {
-  //   return pipe(
-  //     grouped(),
-  //     flatMap(({ options }) => options),
-  //   )
-  // })
-
-  createEffect(() => {
-    store.filter
-    listboxRef?.scrollTo(0, 0)
-    // setStore("selected", 0)
-    // scroll.scrollTo(0)
   })
 
   return (
@@ -89,36 +56,21 @@ export function Select<T>(props: SelectProps<T>) {
           <KobalteSelect.ItemLabel>
             {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </KobalteSelect.ItemLabel>
-          <KobalteSelect.ItemIndicator
-            classList={{
-              "ml-auto": true,
-            }}
-          >
+          <KobalteSelect.ItemIndicator class="ml-auto">
             <Icon name="checkmark" size={16} />
           </KobalteSelect.ItemIndicator>
         </KobalteSelect.Item>
       )}
       onChange={(v) => {
-        if (props.onSelect) props.onSelect(v ?? undefined)
-        if (v !== null) {
-          // close the select
-        }
+        props.onSelect?.(v ?? undefined)
       }}
-      onOpenChange={(v) => v || setStore("filter", "")}
     >
       <KobalteSelect.Trigger
+        as={Button}
+        size={props.size || "sm"}
+        variant={props.variant || "secondary"}
         classList={{
           ...(props.classList ?? {}),
-          "flex w-full items-center justify-between rounded-md transition-colors": true,
-          "focus-visible:outline-none focus-visible:ring focus-visible:ring-border-active/30": true,
-          "disabled:cursor-not-allowed disabled:opacity-50": true,
-          "data-[placeholder-shown]:text-text-muted cursor-pointer": true,
-          "hover:bg-background-element focus-visible:ring-border-active": true,
-          "bg-background-element text-text": props.variant === "default" || !props.variant,
-          "border-2 border-border bg-transparent text-text": props.variant === "outline",
-          "h-6 pl-2 text-xs": props.size === "sm",
-          "h-8 pl-3 text-sm": props.size === "md" || !props.size,
-          "h-10 pl-4 text-base": props.size === "lg",
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -140,13 +92,6 @@ export function Select<T>(props: SelectProps<T>) {
       </KobalteSelect.Trigger>
       <KobalteSelect.Portal>
         <KobalteSelect.Content
-          onKeyDown={(e) => {
-            if (!props.filter) return
-            if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Escape") {
-              return
-            }
-            inputRef?.focus()
-          }}
           classList={{
             "min-w-32 overflow-hidden rounded-md border border-border-subtle/40": true,
             "bg-background-panel p-1 shadow-md z-50": true,
@@ -154,33 +99,7 @@ export function Select<T>(props: SelectProps<T>) {
             "data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95": true,
           }}
         >
-          <Show when={props.filter}>
-            <input
-              ref={(el) => (inputRef = el)}
-              id="select-filter"
-              type="text"
-              placeholder={props.filter ? props.filter.placeholder : "Filter items"}
-              value={store.filter}
-              onInput={(e) => setStore("filter", e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Escape") {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  listboxRef?.focus()
-                }
-              }}
-              classList={{
-                "w-full": true,
-                "px-2 pb-2 text-text font-light placeholder-text-muted/70 text-xs focus:outline-none": true,
-              }}
-            />
-          </Show>
-          <KobalteSelect.Listbox
-            ref={(el) => (listboxRef = el)}
-            classList={{
-              "overflow-y-auto max-h-48 no-scrollbar": true,
-            }}
-          />
+          <KobalteSelect.Listbox class="overflow-y-auto max-h-48" />
         </KobalteSelect.Content>
       </KobalteSelect.Portal>
     </KobalteSelect>

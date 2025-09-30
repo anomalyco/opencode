@@ -5,10 +5,9 @@
   "type": "module",
   "packageManager": "bun@1.2.21",
   "scripts": {
-    "dev": "bun run --conditions=development packages/opencode/src/index.ts",
+    "dev": "bun run packages/opencode/src/index.ts",
     "typecheck": "bun turbo typecheck",
-    "generate": "(cd packages/sdk && ./js/script/generate.ts) && (cd packages/sdk/stainless && ./generate.ts)",
-    "postinstall": "./script/hooks"
+    "prepare": "husky"
   },
   "workspaces": {
     "packages": [
@@ -31,10 +30,8 @@
       "solid-js": "1.9.9"
     }
   },
-  "dependencies": {
-    "pulumi-stripe": "0.0.24"
-  },
   "devDependencies": {
+    "husky": "9.1.7",
     "prettier": "3.6.2",
     "sst": "3.17.13",
     "turbo": "2.5.6"

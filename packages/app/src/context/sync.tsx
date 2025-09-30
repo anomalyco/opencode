@@ -1,7 +1,7 @@
 import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { useSDK } from "./sdk"
-import { createContext, Show, useContext, type ParentProps } from "solid-js"
+import { createContext, createMemo, Show, useContext, type ParentProps } from "solid-js"
+import { useSDK, useEvent } from "@/context"
 import { Binary } from "@/utils/binary"
 
 function init() {
@@ -33,83 +33,88 @@ function init() {
     changes: [],
   })
 
-  const sdk = useSDK()
-
-  sdk.event.subscribe().then(async (events) => {
-    for await (const event of events.stream) {
-      switch (event.type) {
-        case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "session",
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
+  const bus = useEvent()
+  bus.listen((event) => {
+    switch (event.type) {
+      case "session.updated": {
+        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        if (result.found) {
+          setStore("session", result.index, reconcile(event.properties.info))
           break
         }
-        case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
-          if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
-            break
-          }
-          const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
-          if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "message",
-            event.properties.info.sessionID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
+        setStore(
+          "session",
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties.info)
+          }),
+        )
+        break
+      }
+      case "message.updated": {
+        const messages = store.message[event.properties.info.sessionID]
+        if (!messages) {
+          setStore("message", event.properties.info.sessionID, [event.properties.info])
           break
         }
-        case "message.part.updated": {
-          const parts = store.part[event.properties.part.messageID]
-          if (!parts) {
-            setStore("part", event.properties.part.messageID, [event.properties.part])
-            break
-          }
-          const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
-          if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
-            break
-          }
-          setStore(
-            "part",
-            event.properties.part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
-            }),
-          )
+        const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
+        if (result.found) {
+          setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
           break
         }
+        setStore(
+          "message",
+          event.properties.info.sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties.info)
+          }),
+        )
+        break
+      }
+      case "message.part.updated": {
+        const parts = store.part[event.properties.part.messageID]
+        if (!parts) {
+          setStore("part", event.properties.part.messageID, [event.properties.part])
+          break
+        }
+        const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
+        if (result.found) {
+          setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+          break
+        }
+        setStore(
+          "part",
+          event.properties.part.messageID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties.part)
+          }),
+        )
+        break
       }
     }
   })
 
-  Promise.all([
-    sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
-    sdk.path.get().then((x) => setStore("path", x.data!)),
-    sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-    sdk.session.list().then((x) =>
-      setStore(
-        "session",
-        (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+  const sdk = useSDK()
+
+  const load = {
+    provider: () => sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
+    path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
+    agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+    session: () =>
+      sdk.session.list().then((x) =>
+        setStore(
+          "session",
+          (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+        ),
       ),
-    ),
-    sdk.config.get().then((x) => setStore("config", x.data!)),
-    sdk.file.status().then((x) => setStore("changes", x.data!)),
-    sdk.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
-  ]).then(() => setStore("ready", true))
+    config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
+    changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
+    node: () => sdk.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
+  }
+
+  Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+
+  const sanitizer = createMemo(() => new RegExp(`${store.path.directory}/`, "g"))
+  const sanitize = (text: string) => text.replace(sanitizer(), "")
 
   return {
     data: store,
@@ -140,6 +145,8 @@ function init() {
         )
       },
     },
+    load,
+    sanitize,
   }
 }
 

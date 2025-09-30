@@ -9,7 +9,6 @@ import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
-import { FileWatcher } from "../../file/watcher"
 import { Ide } from "../../ide"
 
 import { Flag } from "../../flag/flag"
@@ -178,7 +177,6 @@ export const TuiCommand = cmd({
             .then(() => Bus.publish(Ide.Event.Installed, { ide }))
             .catch(() => {})
         })()
-        FileWatcher.init()
 
         await proc.exited
         server.stop()

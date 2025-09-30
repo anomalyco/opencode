@@ -1,6 +1,8 @@
-import { text, mysqlTable, uniqueIndex, varchar, int } from "drizzle-orm/mysql-core"
+import { mysqlTable, uniqueIndex, varchar, int, mysqlEnum } from "drizzle-orm/mysql-core"
 import { timestamps, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
+
+export const UserRole = ["admin", "member"] as const
 
 export const UserTable = mysqlTable(
   "user",
@@ -11,6 +13,7 @@ export const UserTable = mysqlTable(
     name: varchar("name", { length: 255 }).notNull(),
     timeSeen: utc("time_seen"),
     color: int("color"),
+    role: mysqlEnum("role", UserRole).notNull(),
   },
   (table) => [...workspaceIndexes(table), uniqueIndex("user_email").on(table.workspaceID, table.email)],
 )

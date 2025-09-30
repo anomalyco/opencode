@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.10.2",
+  "version": "0.13.5",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "build": "./script/build.ts",
-    "dev": "bun run --conditions=development ./src/index.ts"
+    "dev": "bun run ./src/index.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
