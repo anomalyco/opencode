@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import solidPlugin from "../../../node_modules/@opentui/solid/scripts/solid-plugin"
-import multiEntryPlugin from "./plugin"
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
@@ -45,7 +44,7 @@ for (const [os, arch] of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin, multiEntryPlugin],
+    plugins: [solidPlugin],
     compile: {
       target: `bun-${os}-${arch}` as any,
       outfile: `dist/${name}/bin/opencode`,
