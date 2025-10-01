@@ -26,8 +26,10 @@ const parser = lazy(async () => {
     p.setLanguage(Bash.language as any)
     return p
   } catch (e) {
-    const { default: Parser } = await import("web-tree-sitter")
-    const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, { with: { type: "wasm" } })
+    const { Parser, Language } = await import("web-tree-sitter")
+    const { default: treeWasm } = await import("web-tree-sitter/web-tree-sitter.wasm" as string, {
+      with: { type: "wasm" },
+    })
     await Parser.init({
       locateFile() {
         return treeWasm
@@ -36,7 +38,7 @@ const parser = lazy(async () => {
     const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
       with: { type: "wasm" },
     })
-    const bashLanguage = await Parser.Language.load(bashWasm)
+    const bashLanguage = await Language.load(bashWasm)
     const p = new Parser()
     p.setLanguage(bashLanguage)
     return p
@@ -57,6 +59,9 @@ export const BashTool = Tool.define("bash", {
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const tree = await parser().then((p) => p.parse(params.command))
+    if (!tree) {
+      throw new Error("Failed to parse command")
+    }
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
     const askPatterns = new Set<string>()
