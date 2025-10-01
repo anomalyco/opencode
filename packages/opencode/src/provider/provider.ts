@@ -40,16 +40,14 @@ export namespace Provider {
       return {
         autoload: true,
         async getModel(sdk: any, modelID: string) {
-          // Prefer Responses API for GPT-5 family when available. If Responses is available but fails, throw.
-          if (modelID.includes("gpt-5") && typeof sdk.responses === "function") {
-            return sdk
-              .responses(modelID)
-              .catch((e: any) => {
-                throw new Error(
-                  "github-copilot: Responses API failed for gpt-5 model; this model requires /v1/responses and cannot fall back to Chat Completions",
-                  { cause: e },
-                )
-              })
+          // Use Responses API only for GPT-5-Codex on Copilot. Other GPT-5 models use Chat Completions.
+          if ((modelID.includes("gpt-5-codex") || modelID.endsWith("/gpt-5-codex")) && typeof sdk.responses === "function") {
+            return sdk.responses(modelID).catch((e: any) => {
+              throw new Error(
+                "github-copilot: Responses API failed for gpt-5-codex; this model requires /responses and cannot fall back to Chat Completions",
+                { cause: e },
+              )
+            })
           }
           return sdk.languageModel(modelID)
         },
