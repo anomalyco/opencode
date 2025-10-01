@@ -36,6 +36,26 @@ export namespace Provider {
         },
       }
     },
+    "github-copilot": async () => {
+      return {
+        autoload: true,
+        async getModel(sdk: any, modelID: string) {
+          // Prefer Responses API for GPT-5 family when available. If Responses is available but fails, throw.
+          if (modelID.includes("gpt-5") && typeof sdk.responses === "function") {
+            return sdk
+              .responses(modelID)
+              .catch((e: any) => {
+                throw new Error(
+                  "github-copilot: Responses API failed for gpt-5 model; this model requires /v1/responses and cannot fall back to Chat Completions",
+                  { cause: e },
+                )
+              })
+          }
+          return sdk.languageModel(modelID)
+        },
+        options: {},
+      }
+    },
     async opencode(input) {
       const hasKey = await (async () => {
         if (input.env.some((item) => process.env[item])) return true
