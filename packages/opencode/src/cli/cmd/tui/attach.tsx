@@ -14,81 +14,34 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
-import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import { Theme } from "@tui/context/theme"
-
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 
-export const TuiCommand = cmd({
-  command: "$0 [project]",
-  describe: "start opencode tui",
+export const AttachCommand = cmd({
+  command: "attach <url>",
+  describe: "attach to a running opencode server",
   builder: (yargs) =>
     yargs
-      .positional("project", {
+      .positional("url", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "http://localhost:4096",
+        demandOption: true,
       })
-      .option("model", {
+      .option("dir", {
         type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
-      .option("continue", {
-        alias: ["c"],
-        describe: "continue the last session",
-        type: "boolean",
-      })
-      .option("session", {
-        alias: ["s"],
-        describe: "session id to continue",
-        type: "string",
-      })
-      .option("prompt", {
-        alias: ["p"],
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
-      })
-      .option("port", {
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        alias: ["h"],
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
+        description: "directory to run in",
       }),
-  handler: async () => {
-    await Instance.provide({
-      directory: process.cwd(),
-      fn: () => Config.get(),
-    })
-
-    const worker = new Worker("./src/cli/cmd/tui/worker.ts")
-    worker.onerror = console.log
-    worker.onmessageerror = console.log
-    const url = await new Promise<string>((resolve) => {
-      worker.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-        if (data.type === "ready") {
-          resolve(data.url)
-        }
-      }
-    })
+  handler: async (args) => {
+    if (args.dir) process.chdir(args.dir)
     await render(
       () => {
         return (
           <RouteProvider>
-            <SDKProvider url={url}>
+            <SDKProvider url={args.url}>
               <SyncProvider>
                 <LocalProvider>
                   <KeybindProvider>
@@ -97,7 +50,7 @@ export const TuiCommand = cmd({
                         <PromptHistoryProvider>
                           <App
                             onExit={() => {
-                              worker.terminate()
+                              process.exit(0)
                             }}
                           />
                         </PromptHistoryProvider>
