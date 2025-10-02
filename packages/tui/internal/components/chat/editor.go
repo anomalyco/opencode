@@ -160,7 +160,7 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if filePath := strings.TrimSpace(strings.TrimPrefix(text, "@")); strings.HasPrefix(text, "@") && filePath != "" {
 			statPath := filePath
 			if !filepath.IsAbs(filePath) {
-				statPath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+				statPath = filepath.Join(util.CwdPath, filePath)
 			}
 			if _, err := os.Stat(statPath); err == nil {
 				attachment := m.createAttachmentFromPath(filePath)
@@ -385,6 +385,9 @@ func (m *editorComponent) Content() string {
 	} else if m.app.IsBusy() {
 		keyText := m.getInterruptKeyText()
 		status := "working"
+		if m.app.IsCompacting() {
+			status = "compacting"
+		}
 		if m.app.CurrentPermission.ID != "" {
 			status = "waiting for permission"
 		}
@@ -504,7 +507,10 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 		commandName := strings.Split(expandedValue, " ")[0]
 		command := m.app.Commands[commands.CommandName(commandName)]
 		if command.Custom {
-			args := strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
+			args := ""
+			if strings.HasPrefix(expandedValue, command.PrimaryTrigger()+" ") {
+				args = strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
+			}
 			cmds = append(
 				cmds,
 				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
@@ -623,7 +629,7 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 			if end > start {
 				filePath := value[start:end]
 				slog.Debug("test", "filePath", filePath)
-				if _, err := os.Stat(filepath.Join(m.app.Info.Path.Cwd, filePath)); err == nil {
+				if _, err := os.Stat(filepath.Join(util.CwdPath, filePath)); err == nil {
 					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
@@ -659,6 +665,14 @@ func (m *editorComponent) getExitKeyText() string {
 
 // shouldSummarizePastedText determines if pasted text should be summarized
 func (m *editorComponent) shouldSummarizePastedText(text string) bool {
+	if m.app.IsBashMode {
+		return false
+	}
+
+	if m.app.Config != nil && m.app.Config.Experimental.DisablePasteSummary {
+		return false
+	}
+
 	lines := strings.Split(text, "\n")
 	lineCount := len(lines)
 	charCount := len(text)
@@ -818,7 +832,7 @@ func (m *editorComponent) createAttachmentFromFile(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(ext)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+		absolutePath = filepath.Join(util.CwdPath, filePath)
 	}
 
 	// For text files, create a simple file reference
@@ -872,7 +886,7 @@ func (m *editorComponent) createAttachmentFromPath(filePath string) *attachment.
 	mediaType := getMediaTypeFromExtension(extension)
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
-		absolutePath = filepath.Join(m.app.Info.Path.Cwd, filePath)
+		absolutePath = filepath.Join(util.CwdPath, filePath)
 	}
 	return &attachment.Attachment{
 		ID:        uuid.NewString(),

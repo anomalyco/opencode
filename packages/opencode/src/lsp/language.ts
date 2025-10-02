@@ -81,6 +81,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".zsh": "shellscript",
   ".ksh": "shellscript",
   ".sql": "sql",
+  ".svelte": "svelte",
   ".swift": "swift",
   ".ts": "typescript",
   ".tsx": "typescriptreact",

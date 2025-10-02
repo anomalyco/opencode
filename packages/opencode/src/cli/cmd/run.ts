@@ -10,6 +10,8 @@ import { bootstrap } from "../bootstrap"
 import { MessageV2 } from "../../session/message-v2"
 import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
+import { Command } from "../../command"
+import { SessionPrompt } from "../../session/prompt"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -35,6 +37,10 @@ export const RunCommand = cmd({
         array: true,
         default: [],
       })
+      .option("command", {
+        describe: "the command to run, use message for args",
+        type: "string",
+      })
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",
@@ -58,18 +64,31 @@ export const RunCommand = cmd({
         type: "string",
         describe: "agent to use",
       })
+      .option("format", {
+        type: "string",
+        choices: ["default", "json"],
+        default: "default",
+        describe: "format: default (formatted) or json (raw JSON events)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
-    if (message.trim().length === 0) {
-      UI.error("Message cannot be empty")
-      return
+    if (message.trim().length === 0 && !args.command) {
+      UI.error("You must provide a message or a command")
+      process.exit(1)
     }
 
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
+      if (args.command) {
+        const exists = await Command.get(args.command)
+        if (!exists) {
+          UI.error(`Command "${args.command}" not found`)
+          process.exit(1)
+        }
+      }
       const session = await (async () => {
         if (args.continue) {
           const it = Session.list()
@@ -92,7 +111,7 @@ export const RunCommand = cmd({
 
       if (!session) {
         UI.error("Session not found")
-        return
+        process.exit(1)
       }
 
       const cfg = await Config.get()
@@ -131,24 +150,55 @@ export const RunCommand = cmd({
         )
       }
 
+      function outputJsonEvent(type: string, data: any) {
+        if (args.format === "json") {
+          const jsonEvent = {
+            type,
+            timestamp: Date.now(),
+            sessionID: session?.id,
+            ...data,
+          }
+          process.stdout.write(JSON.stringify(jsonEvent) + "\n")
+          return true
+        }
+        return false
+      }
+
       let text = ""
+
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         if (evt.properties.part.sessionID !== session.id) return
         if (evt.properties.part.messageID === messageID) return
         const part = evt.properties.part
 
         if (part.type === "tool" && part.state.status === "completed") {
+          if (outputJsonEvent("tool_use", { part })) return
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
             part.state.title ||
             (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
+
           printEvent(color, tool, title)
+
+          if (part.tool === "bash" && part.state.output && part.state.output.trim()) {
+            UI.println()
+            UI.println(part.state.output)
+          }
+        }
+
+        if (part.type === "step-start") {
+          if (outputJsonEvent("step_start", { part })) return
+        }
+
+        if (part.type === "step-finish") {
+          if (outputJsonEvent("step_finish", { part })) return
         }
 
         if (part.type === "text") {
           text = part.text
 
           if (part.time?.end) {
+            if (outputJsonEvent("text", { part })) return
             UI.empty()
             UI.println(UI.markdown(text))
             UI.empty()
@@ -169,15 +219,30 @@ export const RunCommand = cmd({
         }
         errorMsg = errorMsg ? errorMsg + "\n" + err : err
 
+        if (outputJsonEvent("error", { error })) return
         UI.error(err)
       })
 
+      if (args.command) {
+        await SessionPrompt.command({
+          messageID: Identifier.ascending("message"),
+          sessionID: session.id,
+          agent: agent.name,
+          model: providerID + "/" + modelID,
+          command: args.command,
+          arguments: message,
+        })
+        return
+      }
+
       const messageID = Identifier.ascending("message")
-      const result = await Session.chat({
+      const result = await SessionPrompt.prompt({
         sessionID: session.id,
         messageID,
-        providerID,
-        modelID,
+        model: {
+          providerID,
+          modelID,
+        },
         agent: agent.name,
         parts: [
           {
@@ -190,11 +255,13 @@ export const RunCommand = cmd({
 
       const isPiped = !process.stdout.isTTY
       if (isPiped) {
-        const match = result.parts.findLast((x) => x.type === "text")
+        const match = result.parts.findLast((x: any) => x.type === "text") as any
+        if (outputJsonEvent("text", { text: match })) return
         if (match) process.stdout.write(UI.markdown(match.text))
         if (errorMsg) process.stdout.write(errorMsg)
       }
       UI.empty()
+      if (errorMsg) process.exit(1)
     })
   },
 })

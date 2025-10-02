@@ -1,7 +1,6 @@
 import { Global } from "../../../global"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
-import { AppCommand } from "./app"
 import { FileCommand } from "./file"
 import { LSPCommand } from "./lsp"
 import { RipgrepCommand } from "./ripgrep"
@@ -12,7 +11,6 @@ export const DebugCommand = cmd({
   command: "debug",
   builder: (yargs) =>
     yargs
-      .command(AppCommand)
       .command(LSPCommand)
       .command(RipgrepCommand)
       .command(FileCommand)
@@ -22,7 +20,7 @@ export const DebugCommand = cmd({
       .command({
         command: "wait",
         async handler() {
-          await bootstrap({ cwd: process.cwd() }, async () => {
+          await bootstrap(process.cwd(), async () => {
             await new Promise((resolve) => setTimeout(resolve, 1_000 * 60 * 60 * 24))
           })
         },

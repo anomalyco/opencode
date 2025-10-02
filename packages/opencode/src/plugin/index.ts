@@ -1,31 +1,33 @@
-import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
-import { App } from "../app/app"
+import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
+import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = App.state("plugin", async (app) => {
+  const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.app().fetch(...args),
+      fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
     const hooks = []
-    const input = {
+    const input: PluginInput = {
       client,
-      app,
+      project: Instance.project,
+      worktree: Instance.worktree,
+      directory: Instance.directory,
       $: Bun.$,
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth@0.0.2")
+      plugins.push("opencode-copilot-auth@0.0.3")
       plugins.push("opencode-anthropic-auth@0.0.2")
     }
     for (let plugin of plugins) {
@@ -48,7 +50,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {

@@ -1,24 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.5.29",
+  "version": "0.13.8",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "./script/build.ts"
   },
   "exports": {
-    ".": {
-      "development": "./src/index.ts",
-      "import": "./dist/index.js"
-    },
-    "./client": {
-      "development": "./src/client.ts",
-      "import": "./dist/client.js"
-    },
-    "./server": {
-      "development": "./src/server.ts",
-      "import": "./dist/server.js"
-    }
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./server": "./src/server.ts"
   },
   "files": [
     "dist"
@@ -30,5 +22,8 @@
   },
   "dependencies": {
     "@hey-api/openapi-ts": "0.81.0"
+  },
+  "publishConfig": {
+    "directory": "dist"
   }
 }

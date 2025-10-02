@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/console-mail",
+  "version": "0.13.8",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@jsx-email/all": "2.2.3",
+    "@jsx-email/cli": "1.4.3",
+    "@types/react": "18.0.25",
+    "react": "18.2.0"
+  },
+  "exports": {
+    "./*": "./emails/templates/*"
+  },
+  "scripts": {
+    "dev": "email preview emails/templates"
+  }
+}

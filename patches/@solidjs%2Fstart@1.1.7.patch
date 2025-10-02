@@ -1,0 +1,18 @@
+diff --git a/dist/server/StartServer.jsx b/dist/server/StartServer.jsx
+index 0c6a9fe3121a88520db252570a8b5997a36e0452..b3479cdb78c70d7a655d302d8e6ab536b4ff07a3 100644
+--- a/dist/server/StartServer.jsx
++++ b/dist/server/StartServer.jsx
+@@ -52,11 +52,11 @@ export function StartServer(props) {
+             else if (import.meta.env.DEV)
+                 console.warn("No route matched for preloading js assets");
+         }
+-        assets = await Promise.all(assetPromises).then(a => 
++        assets = await Promise.all(assetPromises).then(a =>
+         // dedupe assets
+         [...new Map(a.flat().map(item => [item.attrs.key, item])).values()].filter(asset => import.meta.env.START_ISLANDS
+             ? false
+-            : asset.attrs.rel === "modulepreload" &&
++            : (asset.attrs.rel === "modulepreload" || asset.attrs.rel === "stylesheet") &&
+                 !context.assets.find((a) => a.attrs.key === asset.attrs.key)));
+     });
+     useAssets(() => (assets.length ? assets.map(m => renderAsset(m)) : undefined));

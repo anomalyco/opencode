@@ -1,5 +1,5 @@
-import { App } from "../../../app/app"
 import { Ripgrep } from "../../../file/ripgrep"
+import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
@@ -16,9 +16,8 @@ const TreeCommand = cmd({
       type: "number",
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
-      const app = App.info()
-      console.log(await Ripgrep.tree({ cwd: app.path.cwd, limit: args.limit }))
+    await bootstrap(process.cwd(), async () => {
+      console.log(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }))
     })
   },
 })
@@ -40,14 +39,15 @@ const FilesCommand = cmd({
         description: "Limit number of results",
       }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
-      const app = App.info()
-      const files = await Ripgrep.files({
-        cwd: app.path.cwd,
-        query: args.query,
+    await bootstrap(process.cwd(), async () => {
+      const files: string[] = []
+      for await (const file of Ripgrep.files({
+        cwd: Instance.directory,
         glob: args.glob ? [args.glob] : undefined,
-        limit: args.limit,
-      })
+      })) {
+        files.push(file)
+        if (args.limit && files.length >= args.limit) break
+      }
       console.log(files.join("\n"))
     })
   },

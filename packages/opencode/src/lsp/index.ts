@@ -1,11 +1,11 @@
-import { App } from "../app/app"
 import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import { z } from "zod"
+import z from "zod/v4"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
+import { Instance } from "../project/instance"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
@@ -21,7 +21,7 @@ export namespace LSP {
         character: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Range",
     })
   export type Range = z.infer<typeof Range>
@@ -35,7 +35,7 @@ export namespace LSP {
         range: Range,
       }),
     })
-    .openapi({
+    .meta({
       ref: "Symbol",
     })
   export type Symbol = z.infer<typeof Symbol>
@@ -48,13 +48,12 @@ export namespace LSP {
       range: Range,
       selectionRange: Range,
     })
-    .openapi({
+    .meta({
       ref: "DocumentSymbol",
     })
   export type DocumentSymbol = z.infer<typeof DocumentSymbol>
 
-  const state = App.state(
-    "lsp",
+  const state = Instance.state(
     async () => {
       const clients: LSPClient.Info[] = []
       const servers: Record<string, LSPServer.Info> = {}
@@ -71,9 +70,10 @@ export namespace LSP {
         }
         servers[name] = {
           ...existing,
-          root: existing?.root ?? (async (_file, app) => app.path.root),
-          extensions: item.extensions ?? existing.extensions,
-          spawn: async (_app, root) => {
+          id: name,
+          root: existing?.root ?? (async () => Instance.directory),
+          extensions: item.extensions ?? existing?.extensions ?? [],
+          spawn: async (root) => {
             return {
               process: spawn(item.command[0], item.command.slice(1), {
                 cwd: root,
@@ -117,7 +117,7 @@ export namespace LSP {
     const result: LSPClient.Info[] = []
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
-      const root = await server.root(file, App.info())
+      const root = await server.root(file)
       if (!root) continue
       if (s.broken.has(root + server.id)) continue
 
@@ -126,12 +126,22 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server.spawn(App.info(), root).catch((err) => {
-        s.broken.add(root + server.id)
-        log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
-        return undefined
-      })
+      const handle = await server
+        .spawn(root)
+        .then((h) => {
+          if (h === undefined) {
+            s.broken.add(root + server.id)
+          }
+          return h
+        })
+        .catch((err) => {
+          s.broken.add(root + server.id)
+          log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+          return undefined
+        })
       if (!handle) continue
+      log.info("spawned lsp server", { serverID: server.id })
+
       const client = await LSPClient.create({
         serverID: server.id,
         server: handle,

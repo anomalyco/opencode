@@ -1,13 +1,12 @@
 import { Log } from "../util/log"
 import { Bus } from "../bus"
-import { describeRoute, generateSpecs, openAPISpecs } from "hono-openapi"
+import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
+import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { Session } from "../session"
-import { resolver, validator as zValidator } from "hono-openapi/zod"
-import { z } from "zod"
+import z from "zod/v4"
 import { Provider } from "../provider/provider"
-import { App } from "../app/app"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
 import { ModelsDev } from "../provider/models"
@@ -18,10 +17,19 @@ import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
 import { callTui, TuiRoute } from "./tui"
 import { Permission } from "../permission"
-import { lazy } from "../util/lazy"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Command } from "../command"
+import { Global } from "../global"
+import { ProjectRoute } from "./project"
+import { ToolRegistry } from "../tool/registry"
+import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionPrompt } from "../session/prompt"
+import { SessionCompaction } from "../session/compaction"
+import { SessionRevert } from "../session/revert"
+import { lazy } from "../util/lazy"
+import { InstanceBootstrap } from "../project/bootstrap"
 
 const ERRORS = {
   400: {
@@ -33,7 +41,7 @@ const ERRORS = {
             .object({
               data: z.record(z.string(), z.any()),
             })
-            .openapi({
+            .meta({
               ref: "Error",
             }),
         ),
@@ -45,17 +53,17 @@ const ERRORS = {
 export namespace Server {
   const log = Log.create({ service: "server" })
 
-  export type Routes = ReturnType<typeof app>
-
   export const Event = {
     Connected: Bus.event("server.connected", z.object({})),
   }
 
-  export const app = lazy(() => {
-    const app = new Hono()
-
-    const result = app
+  const app = new Hono()
+  export const App = lazy(() =>
+    app
       .onError((err, c) => {
+        log.error("failed", {
+          error: err,
+        })
         if (err instanceof NamedError) {
           return c.json(err.toObject(), {
             status: 400,
@@ -81,9 +89,20 @@ export namespace Server {
           })
         }
       })
+      .use(async (c, next) => {
+        const directory = c.req.query("directory") ?? process.cwd()
+        return Instance.provide({
+          directory,
+          init: InstanceBootstrap,
+          async fn() {
+            return next()
+          },
+        })
+      })
+      .use(cors())
       .get(
         "/doc",
-        openAPISpecs(app, {
+        openAPIRouteHandler(app, {
           documentation: {
             info: {
               title: "opencode",
@@ -94,91 +113,8 @@ export namespace Server {
           },
         }),
       )
-      .get(
-        "/event",
-        describeRoute({
-          description: "Get events",
-          operationId: "event.subscribe",
-          responses: {
-            200: {
-              description: "Event stream",
-              content: {
-                "text/event-stream": {
-                  schema: resolver(
-                    Bus.payloads().openapi({
-                      ref: "Event",
-                    }),
-                  ),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          log.info("event connected")
-          return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-            })
-            await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
-            })
-          })
-        },
-      )
-      .get(
-        "/app",
-        describeRoute({
-          description: "Get app info",
-          operationId: "app.get",
-          responses: {
-            200: {
-              description: "200",
-              content: {
-                "application/json": {
-                  schema: resolver(App.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(App.info())
-        },
-      )
-      .post(
-        "/app/init",
-        describeRoute({
-          description: "Initialize the app",
-          operationId: "app.init",
-          responses: {
-            200: {
-              description: "Initialize the app",
-              content: {
-                "application/json": {
-                  schema: resolver(z.boolean()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          await App.initialize()
-          return c.json(true)
-        },
-      )
+      .use(validator("query", z.object({ directory: z.string().optional() })))
+      .route("/project", ProjectRoute)
       .get(
         "/config",
         describeRoute({
@@ -197,6 +133,136 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Config.get())
+        },
+      )
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update config",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Successfully updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator("json", Config.Info),
+        async (c) => {
+          const config = c.req.valid("json")
+          await Config.update(config)
+          return c.json(config)
+        },
+      )
+      .get(
+        "/experimental/tool/ids",
+        describeRoute({
+          description: "List all tool IDs (including built-in and dynamically registered)",
+          operationId: "tool.ids",
+          responses: {
+            200: {
+              description: "Tool IDs",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string()).meta({ ref: "ToolIDs" })),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        async (c) => {
+          return c.json(await ToolRegistry.ids())
+        },
+      )
+      .get(
+        "/experimental/tool",
+        describeRoute({
+          description: "List tools with JSON schema parameters for a provider/model",
+          operationId: "tool.list",
+          responses: {
+            200: {
+              description: "Tools",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .array(
+                        z
+                          .object({
+                            id: z.string(),
+                            description: z.string(),
+                            parameters: z.any(),
+                          })
+                          .meta({ ref: "ToolListItem" }),
+                      )
+                      .meta({ ref: "ToolList" }),
+                  ),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            provider: z.string(),
+            model: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { provider, model } = c.req.valid("query")
+          const tools = await ToolRegistry.tools(provider, model)
+          return c.json(
+            tools.map((t) => ({
+              id: t.id,
+              description: t.description,
+              // Handle both Zod schemas and plain JSON schemas
+              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+            })),
+          )
+        },
+      )
+      .get(
+        "/path",
+        describeRoute({
+          description: "Get the current path",
+          operationId: "path.get",
+          responses: {
+            200: {
+              description: "Path",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        state: z.string(),
+                        config: z.string(),
+                        worktree: z.string(),
+                        directory: z.string(),
+                      })
+                      .meta({
+                        ref: "Path",
+                      }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json({
+            state: Global.Path.state,
+            config: Global.Path.config,
+            worktree: Instance.worktree,
+            directory: Instance.directory,
+          })
         },
       )
       .get(
@@ -237,7 +303,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -265,7 +331,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -294,7 +360,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "json",
           z
             .object({
@@ -325,7 +391,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -352,13 +418,13 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator(
+        validator(
           "json",
           z.object({
             title: z.string().optional(),
@@ -393,13 +459,13 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator(
+        validator(
           "json",
           z.object({
             messageID: z.string(),
@@ -430,14 +496,14 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
         async (c) => {
-          return c.json(Session.abort(c.req.valid("param").id))
+          return c.json(SessionPrompt.abort(c.req.valid("param").id))
         },
       )
       .post(
@@ -456,7 +522,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -485,7 +551,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -514,13 +580,13 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator(
+        validator(
           "json",
           z.object({
             providerID: z.string(),
@@ -530,7 +596,7 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           const body = c.req.valid("json")
-          await Session.summarize({ ...body, sessionID: id })
+          await SessionCompaction.run({ ...body, sessionID: id })
           return c.json(true)
         },
       )
@@ -544,23 +610,16 @@ export namespace Server {
               description: "List of messages",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z
-                      .object({
-                        info: MessageV2.Info,
-                        parts: MessageV2.Part.array(),
-                      })
-                      .array(),
-                  ),
+                  schema: resolver(MessageV2.WithParts.array()),
                 },
               },
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
         async (c) => {
@@ -589,11 +648,11 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
-            messageID: z.string().openapi({ description: "Message ID" }),
+            id: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
           }),
         ),
         async (c) => {
@@ -606,7 +665,7 @@ export namespace Server {
         "/session/:id/message",
         describeRoute({
           description: "Create and send a new message to a session",
-          operationId: "session.chat",
+          operationId: "session.prompt",
           responses: {
             200: {
               description: "Created message",
@@ -623,17 +682,17 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.ChatInput.omit({ sessionID: true })),
+        validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.chat({ ...body, sessionID })
+          const msg = await SessionPrompt.prompt({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -658,17 +717,17 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.CommandInput.omit({ sessionID: true })),
+        validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.command({ ...body, sessionID })
+          const msg = await SessionPrompt.command({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -688,17 +747,17 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
-            id: z.string().openapi({ description: "Session ID" }),
+            id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        zValidator("json", Session.ShellInput.omit({ sessionID: true })),
+        validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
-          const msg = await Session.shell({ ...body, sessionID })
+          const msg = await SessionPrompt.shell({ ...body, sessionID })
           return c.json(msg)
         },
       )
@@ -718,17 +777,17 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator("json", Session.RevertInput.omit({ sessionID: true })),
+        validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
         async (c) => {
           const id = c.req.valid("param").id
           log.info("revert", c.req.valid("json"))
-          const session = await Session.revert({ sessionID: id, ...c.req.valid("json") })
+          const session = await SessionRevert.revert({ sessionID: id, ...c.req.valid("json") })
           return c.json(session)
         },
       )
@@ -748,7 +807,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
@@ -756,7 +815,7 @@ export namespace Server {
         ),
         async (c) => {
           const id = c.req.valid("param").id
-          const session = await Session.unrevert({ sessionID: id })
+          const session = await SessionRevert.unrevert({ sessionID: id })
           return c.json(session)
         },
       )
@@ -775,14 +834,14 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
             permissionID: z.string(),
           }),
         ),
-        zValidator("json", z.object({ response: Permission.Response })),
+        validator("json", z.object({ response: Permission.Response })),
         async (c) => {
           const params = c.req.valid("param")
           const id = params.id
@@ -857,17 +916,16 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             pattern: z.string(),
           }),
         ),
         async (c) => {
-          const app = App.info()
           const pattern = c.req.valid("query").pattern
           const result = await Ripgrep.search({
-            cwd: app.path.cwd,
+            cwd: Instance.directory,
             pattern,
             limit: 10,
           })
@@ -890,7 +948,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             query: z.string(),
@@ -898,13 +956,11 @@ export namespace Server {
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const app = App.info()
-          const result = await Ripgrep.files({
-            cwd: app.path.cwd,
+          const results = await File.search({
             query,
             limit: 10,
           })
-          return c.json(result)
+          return c.json(results)
         },
       )
       .get(
@@ -923,7 +979,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             query: z.string(),
@@ -951,7 +1007,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             path: z.string(),
@@ -973,18 +1029,13 @@ export namespace Server {
               description: "File content",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z.object({
-                      type: z.enum(["raw", "patch"]),
-                      content: z.string(),
-                    }),
-                  ),
+                  schema: resolver(File.Content),
                 },
               },
             },
           },
         }),
-        zValidator(
+        validator(
           "query",
           z.object({
             path: z.string(),
@@ -1033,16 +1084,16 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "json",
           z.object({
-            service: z.string().openapi({ description: "Service name for the log entry" }),
-            level: z.enum(["debug", "info", "error", "warn"]).openapi({ description: "Log level" }),
-            message: z.string().openapi({ description: "Log message" }),
+            service: z.string().meta({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
+            message: z.string().meta({ description: "Log message" }),
             extra: z
               .record(z.string(), z.any())
               .optional()
-              .openapi({ description: "Additional metadata for the log entry" }),
+              .meta({ description: "Additional metadata for the log entry" }),
           }),
         ),
         async (c) => {
@@ -1104,7 +1155,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "json",
           z.object({
             text: z.string(),
@@ -1236,7 +1287,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "json",
           z.object({
             command: z.string(),
@@ -1260,7 +1311,7 @@ export namespace Server {
             },
           },
         }),
-        zValidator(
+        validator(
           "json",
           z.object({
             title: z.string().optional(),
@@ -1288,13 +1339,13 @@ export namespace Server {
             ...ERRORS,
           },
         }),
-        zValidator(
+        validator(
           "param",
           z.object({
             id: z.string(),
           }),
         ),
-        zValidator("json", Auth.Info),
+        validator("json", Auth.Info),
         async (c) => {
           const id = c.req.valid("param").id
           const info = c.req.valid("json")
@@ -1302,13 +1353,54 @@ export namespace Server {
           return c.json(true)
         },
       )
-
-    return result
-  })
+      .get(
+        "/event",
+        describeRoute({
+          description: "Get events",
+          operationId: "event.subscribe",
+          responses: {
+            200: {
+              description: "Event stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(
+                    Bus.payloads().meta({
+                      ref: "Event",
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          log.info("event connected")
+          return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: "server.connected",
+                properties: {},
+              }),
+            })
+            const unsub = Bus.subscribeAll(async (event) => {
+              await stream.writeSSE({
+                data: JSON.stringify(event),
+              })
+            })
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                unsub()
+                resolve()
+                log.info("event disconnected")
+              })
+            })
+          })
+        },
+      ),
+  )
 
   export async function openapi() {
-    const a = app()
-    const result = await generateSpecs(a, {
+    const result = await generateSpecs(App(), {
       documentation: {
         info: {
           title: "opencode",
@@ -1326,7 +1418,7 @@ export namespace Server {
       port: opts.port,
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: app().fetch,
+      fetch: App().fetch,
     })
     return server
   }

@@ -1,7 +1,7 @@
 import type {
   Event,
   createOpencodeClient,
-  App,
+  Project,
   Model,
   Provider,
   Permission,
@@ -10,18 +10,28 @@ import type {
   Auth,
   Config,
 } from "@opencode-ai/sdk"
+
 import type { BunShell } from "./shell"
+import { type ToolDefinition } from "./tool"
+
+export * from "./tool"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
-  app: App
+  project: Project
+  directory: string
+  worktree: string
   $: BunShell
 }
+
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
+  tool?: {
+    [key: string]: ToolDefinition
+  }
   auth?: {
     provider: string
     loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>

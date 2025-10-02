@@ -1,12 +1,14 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { Bus } from "../bus"
 import { $ } from "bun"
-import { createPatch } from "diff"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
-import { App } from "../app/app"
 import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
+import { Instance } from "../project/instance"
+import { Ripgrep } from "./ripgrep"
+import fuzzysort from "fuzzysort"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -18,7 +20,7 @@ export namespace File {
       removed: z.number().int(),
       status: z.enum(["added", "deleted", "modified"]),
     })
-    .openapi({
+    .meta({
       ref: "File",
     })
 
@@ -28,13 +30,42 @@ export namespace File {
     .object({
       name: z.string(),
       path: z.string(),
+      absolute: z.string(),
       type: z.enum(["file", "directory"]),
       ignored: z.boolean(),
     })
-    .openapi({
+    .meta({
       ref: "FileNode",
     })
   export type Node = z.infer<typeof Node>
+
+  export const Content = z
+    .object({
+      content: z.string(),
+      diff: z.string().optional(),
+      patch: z
+        .object({
+          oldFileName: z.string(),
+          newFileName: z.string(),
+          oldHeader: z.string().optional(),
+          newHeader: z.string().optional(),
+          hunks: z.array(
+            z.object({
+              oldStart: z.number(),
+              oldLines: z.number(),
+              newStart: z.number(),
+              newLines: z.number(),
+              lines: z.array(z.string()),
+            }),
+          ),
+          index: z.string().optional(),
+        })
+        .optional(),
+    })
+    .meta({
+      ref: "FileContent",
+    })
+  export type Content = z.infer<typeof Content>
 
   export const Event = {
     Edited: Bus.event(
@@ -45,11 +76,53 @@ export namespace File {
     ),
   }
 
-  export async function status() {
-    const app = App.info()
-    if (!app.git) return []
+  const state = Instance.state(async () => {
+    type Entry = { files: string[]; dirs: string[] }
+    let cache: Entry = { files: [], dirs: [] }
+    let fetching = false
+    const fn = async (result: Entry) => {
+      fetching = true
+      const set = new Set<string>()
+      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+        result.files.push(file)
+        let current = file
+        while (true) {
+          const dir = path.dirname(current)
+          if (dir === ".") break
+          if (dir === current) break
+          current = dir
+          if (set.has(dir)) continue
+          set.add(dir)
+          result.dirs.push(dir + "/")
+        }
+      }
+      cache = result
+      fetching = false
+    }
+    fn(cache)
 
-    const diffOutput = await $`git diff --numstat HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    return {
+      async files() {
+        if (!fetching) {
+          fn({
+            files: [],
+            dirs: [],
+          })
+        }
+        return cache
+      },
+    }
+  })
+
+  export function init() {
+    state()
+  }
+
+  export async function status() {
+    const project = Instance.project
+    if (project.vcs !== "git") return []
+
+    const diffOutput = await $`git diff --numstat HEAD`.cwd(Instance.directory).quiet().nothrow().text()
 
     const changedFiles: Info[] = []
 
@@ -66,13 +139,17 @@ export namespace File {
       }
     }
 
-    const untrackedOutput = await $`git ls-files --others --exclude-standard`.cwd(app.path.cwd).quiet().nothrow().text()
+    const untrackedOutput = await $`git ls-files --others --exclude-standard`
+      .cwd(Instance.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     if (untrackedOutput.trim()) {
       const untrackedFiles = untrackedOutput.trim().split("\n")
       for (const filepath of untrackedFiles) {
         try {
-          const content = await Bun.file(path.join(app.path.root, filepath)).text()
+          const content = await Bun.file(path.join(Instance.directory, filepath)).text()
           const lines = content.split("\n").length
           changedFiles.push({
             path: filepath,
@@ -87,7 +164,11 @@ export namespace File {
     }
 
     // Get deleted files
-    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`.cwd(app.path.cwd).quiet().nothrow().text()
+    const deletedOutput = await $`git diff --name-only --diff-filter=D HEAD`
+      .cwd(Instance.directory)
+      .quiet()
+      .nothrow()
+      .text()
 
     if (deletedOutput.trim()) {
       const deletedFiles = deletedOutput.trim().split("\n")
@@ -103,56 +184,58 @@ export namespace File {
 
     return changedFiles.map((x) => ({
       ...x,
-      path: path.relative(app.path.cwd, path.join(app.path.root, x.path)),
+      path: path.relative(Instance.directory, x.path),
     }))
   }
 
   export async function read(file: string) {
     using _ = log.time("read", { file })
-    const app = App.info()
-    const full = path.join(app.path.cwd, file)
+    const project = Instance.project
+    const full = path.join(Instance.directory, file)
     const content = await Bun.file(full)
       .text()
       .catch(() => "")
       .then((x) => x.trim())
-    if (app.git) {
-      const rel = path.relative(app.path.root, full)
-      const diff = await $`git diff ${rel}`.cwd(app.path.root).quiet().nothrow().text()
+    if (project.vcs === "git") {
+      let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
+      if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (diff.trim()) {
-        const original = await $`git show HEAD:${rel}`.cwd(app.path.root).quiet().nothrow().text()
-        const patch = createPatch(file, original, content, "old", "new", {
+        const original = await $`git show HEAD:${file}`.cwd(Instance.directory).quiet().nothrow().text()
+        const patch = structuredPatch(file, file, original, content, "old", "new", {
           context: Infinity,
+          ignoreWhitespace: true,
         })
-        return { type: "patch", content: patch }
+        const diff = formatPatch(patch)
+        return { content, patch, diff }
       }
     }
-    return { type: "raw", content }
+    return { content }
   }
 
   export async function list(dir?: string) {
     const exclude = [".git", ".DS_Store"]
-    const app = App.info()
+    const project = Instance.project
     let ignored = (_: string) => false
-    if (app.git) {
-      const gitignore = Bun.file(path.join(app.path.root, ".gitignore"))
+    if (project.vcs === "git") {
+      const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
       if (await gitignore.exists()) {
         const ig = ignore().add(await gitignore.text())
         ignored = ig.ignores.bind(ig)
       }
     }
-    const resolved = dir ? path.join(app.path.cwd, dir) : app.path.cwd
+    const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
     const nodes: Node[] = []
     for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true })) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(app.path.cwd, fullPath)
-      const relativeToRoot = path.relative(app.path.root, fullPath)
+      const relativePath = path.relative(Instance.directory, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({
         name: entry.name,
         path: relativePath,
+        absolute: fullPath,
         type,
-        ignored: ignored(type === "directory" ? relativeToRoot + "/" : relativeToRoot),
+        ignored: ignored(type === "directory" ? relativePath + "/" : relativePath),
       })
     }
     return nodes.sort((a, b) => {
@@ -161,5 +244,16 @@ export namespace File {
       }
       return a.name.localeCompare(b.name)
     })
+  }
+
+  export async function search(input: { query: string; limit?: number }) {
+    log.info("search", { query: input.query })
+    const limit = input.limit ?? 100
+    const result = await state().then((x) => x.files())
+    if (!input.query) return result.dirs.toSorted().slice(0, limit)
+    const items = [...result.files, ...result.dirs]
+    const sorted = fuzzysort.go(input.query, items, { limit: limit }).map((r) => r.target)
+    log.info("search", { query: input.query, results: sorted.length })
+    return sorted
   }
 }

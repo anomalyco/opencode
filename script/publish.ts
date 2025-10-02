@@ -2,15 +2,26 @@
 
 import { $ } from "bun"
 
+if (process.versions.bun !== "1.2.21") {
+  throw new Error("This script requires bun@1.2.21")
+}
+
 console.log("=== publishing ===\n")
 
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
-const version = snapshot
-  ? `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  : process.env["OPENCODE_VERSION"]
-if (!version) {
-  throw new Error("OPENCODE_VERSION is required")
-}
+const version = await (async () => {
+  if (snapshot) return `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
+  const [major, minor, patch] = (await $`gh release list --limit 1 --json tagName --jq '.[0].tagName'`.text())
+    .trim()
+    .replace(/^v/, "")
+    .split(".")
+    .map((x) => Number(x) || 0)
+  const t = process.env["OPENCODE_BUMP"]?.toLowerCase()
+  if (t === "major") return `${major + 1}.0.0`
+  if (t === "minor") return `${major}.${minor + 1}.0`
+  return `${major}.${minor}.${patch + 1}`
+})()
 process.env["OPENCODE_VERSION"] = version
 console.log("version:", version)
 

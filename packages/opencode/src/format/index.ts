@@ -1,4 +1,3 @@
-import { App } from "../app/app"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { Log } from "../util/log"
@@ -7,11 +6,12 @@ import path from "path"
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
 import { mergeDeep } from "remeda"
+import { Instance } from "../project/instance"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
 
-  const state = App.state("format", async () => {
+  const state = Instance.state(async () => {
     const enabled: Record<string, boolean> = {}
     const cfg = await Config.get()
 
@@ -71,7 +71,7 @@ export namespace Format {
         try {
           const proc = Bun.spawn({
             cmd: item.command.map((x) => x.replace("$FILE", file)),
-            cwd: App.info().path.cwd,
+            cwd: Instance.directory,
             env: { ...process.env, ...item.environment },
             stdout: "ignore",
             stderr: "ignore",

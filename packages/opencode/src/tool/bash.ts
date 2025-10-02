@@ -1,15 +1,15 @@
-import { z } from "zod"
+import z from "zod/v4"
 import { exec } from "child_process"
 
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
-import { App } from "../app/app"
 import { Permission } from "../permission"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
 import { Wildcard } from "../util/wildcard"
 import { $ } from "bun"
+import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 
 const MAX_OUTPUT_LENGTH = 30_000
@@ -56,11 +56,10 @@ export const BashTool = Tool.define("bash", {
   }),
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
-    const app = App.info()
     const tree = await parser().then((p) => p.parse(params.command))
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
-    let needsAsk = false
+    const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {
       const command = []
       for (let i = 0; i < node.childCount; i++) {
@@ -88,42 +87,67 @@ export const BashTool = Tool.define("bash", {
             .text()
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
-          if (resolved && !Filesystem.contains(app.path.cwd, resolved)) {
+          if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
             throw new Error(
-              `This command references paths outside of ${app.path.cwd} so it is not allowed to be executed.`,
+              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
             )
           }
         }
       }
 
       // always allow cd if it passes above check
-      if (!needsAsk && command[0] !== "cd") {
+      if (command[0] !== "cd") {
         const action = Wildcard.all(node.text, permissions)
         if (action === "deny") {
           throw new Error(
             `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
           )
         }
-        if (action === "ask") needsAsk = true
+        if (action === "ask") {
+          const pattern = (() => {
+            let head = ""
+            let sub: string | undefined
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i)
+              if (!child) continue
+              if (child.type === "command_name") {
+                if (!head) {
+                  head = child.text
+                }
+                continue
+              }
+              if (!sub && child.type === "word") {
+                if (!child.text.startsWith("-")) sub = child.text
+              }
+            }
+            if (!head) return
+            return sub ? `${head} ${sub} *` : `${head} *`
+          })()
+          if (pattern) {
+            askPatterns.add(pattern)
+          }
+        }
       }
     }
 
-    if (needsAsk) {
+    if (askPatterns.size > 0) {
+      const patterns = Array.from(askPatterns)
       await Permission.ask({
         type: "bash",
-        pattern: params.command,
+        pattern: patterns,
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
         callID: ctx.callID,
         title: params.command,
         metadata: {
           command: params.command,
+          patterns,
         },
       })
     }
 
     const process = exec(params.command, {
-      cwd: app.path.cwd,
+      cwd: Instance.directory,
       signal: ctx.abort,
       timeout,
     })

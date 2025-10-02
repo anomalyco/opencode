@@ -2,6 +2,7 @@ import { domain } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
+export const EMAILOCTOPUS_API_KEY = new sst.Secret("EMAILOCTOPUS_API_KEY")
 const bucket = new sst.cloudflare.Bucket("Bucket")
 
 export const api = new sst.cloudflare.Worker("Api", {
@@ -33,8 +34,8 @@ export const api = new sst.cloudflare.Worker("Api", {
   },
 })
 
-export const web = new sst.cloudflare.x.Astro("Web", {
-  domain,
+new sst.cloudflare.x.Astro("Web", {
+  domain: "docs." + domain,
   path: "packages/web",
   environment: {
     // For astro config

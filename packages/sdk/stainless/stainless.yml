@@ -45,18 +45,26 @@ resources:
           # This method is always streaming.
           param_discriminator: null
 
+  path:
+    models:
+      path: Path
+    methods:
+      get: get /path
+
   app:
     models:
       app: App
       provider: Provider
       model: Model
+    methods:
+      log: post /log
+      providers: get /config/providers
+
+  agent:
+    models:
       agent: Agent
     methods:
-      get: get /app
-      init: post /app/init
-      log: post /log
-      agents: get /agent
-      providers: get /config/providers
+      list: get /agent
 
   find:
     models:
@@ -91,6 +99,13 @@ resources:
       command: Command
     methods:
       list: get /command
+
+  project:
+    models:
+      project: Project
+    methods:
+      list: get /project
+      current: get /project/current
 
   session:
     models:
@@ -132,7 +147,7 @@ resources:
       summarize: post /session/{id}/summarize
       message: get /session/{id}/message/{messageID}
       messages: get /session/{id}/message
-      chat: post /session/{id}/message
+      prompt: post /session/{id}/message
       command: post /session/{id}/command
       shell: post /session/{id}/shell
       update: patch /session/{id}
