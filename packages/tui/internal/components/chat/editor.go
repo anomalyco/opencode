@@ -360,7 +360,7 @@ func (m *editorComponent) Content() string {
 		prompt = promptStyle.Render("!")
 	}
 
-	m.textarea.SetWidth(width - 6)
+	m.textarea.SetWidth(width)
 	textarea := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		prompt,
@@ -369,8 +369,8 @@ func (m *editorComponent) Content() string {
 	textarea = styles.NewStyle().
 		Background(t.BackgroundElement()).
 		Width(width).
-		PaddingTop(1).
-		PaddingBottom(1).
+		PaddingTop(0).
+		PaddingBottom(0).
 		BorderStyle(lipgloss.ThickBorder()).
 		BorderForeground(borderForeground).
 		BorderBackground(t.Background()).
