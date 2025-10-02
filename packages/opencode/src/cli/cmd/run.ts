@@ -165,6 +165,7 @@ export const RunCommand = cmd({
       }
 
       let text = ""
+      const messageID = Identifier.ascending("message")
 
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         if (evt.properties.part.sessionID !== session.id) return
@@ -223,35 +224,34 @@ export const RunCommand = cmd({
         UI.error(err)
       })
 
-      if (args.command) {
-        await SessionPrompt.command({
-          messageID: Identifier.ascending("message"),
+      const result = await (async () => {
+        if (args.command) {
+          return await SessionPrompt.command({
+            messageID,
+            sessionID: session.id,
+            agent: agent.name,
+            model: providerID + "/" + modelID,
+            command: args.command,
+            arguments: message,
+          })
+        }
+        return await SessionPrompt.prompt({
           sessionID: session.id,
-          agent: agent.name,
-          model: providerID + "/" + modelID,
-          command: args.command,
-          arguments: message,
-        })
-        return
-      }
-
-      const messageID = Identifier.ascending("message")
-      const result = await SessionPrompt.prompt({
-        sessionID: session.id,
-        messageID,
-        model: {
-          providerID,
-          modelID,
-        },
-        agent: agent.name,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: message,
+          messageID,
+          model: {
+            providerID,
+            modelID,
           },
-        ],
-      })
+          agent: agent.name,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: message,
+            },
+          ],
+        })
+      })()
 
       const isPiped = !process.stdout.isTTY
       if (isPiped) {
