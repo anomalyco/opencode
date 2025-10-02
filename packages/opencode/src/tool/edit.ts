@@ -13,9 +13,9 @@ import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { PathValidation } from "../workspace/validate"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -35,9 +35,13 @@ export const EditTool = Tool.define("edit", {
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
-    }
+
+    // Validate path access (checks workspace + requests permission if needed)
+    await PathValidation.validate(filePath, {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+    })
 
     const agent = await Agent.get(ctx.agent)
     let diff = ""

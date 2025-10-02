@@ -7,9 +7,9 @@ import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
 import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { PathValidation } from "../workspace/validate"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -19,9 +19,13 @@ export const WriteTool = Tool.define("write", {
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filepath)) {
-      throw new Error(`File ${filepath} is not in the current working directory`)
-    }
+
+    // Validate path access (checks workspace + requests permission if needed)
+    await PathValidation.validate(filepath, {
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      callID: ctx.callID,
+    })
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
