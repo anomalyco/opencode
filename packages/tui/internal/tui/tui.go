@@ -426,6 +426,19 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.app, cmd = a.app.SendCommand(context.Background(), msg.Command, msg.Args)
 			cmds = append(cmds, cmd)
 		}
+	case app.AddWorkspaceDir:
+		// TODO: Regenerate SDK to include workspace endpoints
+		// Expected SDK method: a.app.Client.Workspace.AddDirectory(ctx, WorkspaceAddDirectoryParams{Directory: F(msg.Directory)})
+		return a, func() tea.Msg {
+			// PLACEHOLDER: This will be replaced once SDK is regenerated
+			// The SDK generator should create:
+			// - WorkspaceService with AddDirectory, RemoveDirectory, List methods
+			// - WorkspaceAddDirectoryParams struct
+			// Based on the /workspace/directories endpoints in server.ts
+
+			slog.Warn("Workspace operations not yet available - SDK needs regeneration")
+			return toast.NewErrorToast("Workspace operations require SDK regeneration. Please run: bun run sdk:generate")()
+		}
 	case app.SendShell:
 		// If we're in a child session, switch back to parent before sending prompt
 		if a.app.Session.ParentID != "" {

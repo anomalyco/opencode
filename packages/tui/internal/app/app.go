@@ -89,6 +89,9 @@ type SendCommand = struct {
 	Command string
 	Args    string
 }
+type AddWorkspaceDir = struct {
+	Directory string
+}
 type SetEditorContentMsg struct {
 	Text string
 }

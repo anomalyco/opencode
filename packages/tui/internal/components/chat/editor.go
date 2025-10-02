@@ -230,6 +230,12 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			// Special handling for commands that need arguments
+			if command.Name == commands.WorkspaceAddDirCommand {
+				m.SetValue("/" + command.PrimaryTrigger() + " ")
+				return m, nil
+			}
+
 			updated, cmd := m.Clear()
 			m = updated.(*editorComponent)
 			cmds = append(cmds, cmd)
@@ -514,6 +520,28 @@ func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 			cmds = append(
 				cmds,
 				util.CmdHandler(app.SendCommand{Command: string(command.Name), Args: args}),
+			)
+
+			updated, cmd := m.Clear()
+			m = updated.(*editorComponent)
+			cmds = append(cmds, cmd)
+
+			return m, tea.Batch(cmds...)
+		}
+
+		// Handle workspace add-dir command with arguments
+		if command.Name == commands.WorkspaceAddDirCommand {
+			args := ""
+			if strings.HasPrefix(expandedValue, command.PrimaryTrigger()+" ") {
+				args = strings.TrimPrefix(expandedValue, command.PrimaryTrigger()+" ")
+			}
+			if args == "" {
+				return m, toast.NewErrorToast("Please provide a directory path")
+			}
+
+			cmds = append(
+				cmds,
+				util.CmdHandler(app.AddWorkspaceDir{Directory: args}),
 			)
 
 			updated, cmd := m.Clear()

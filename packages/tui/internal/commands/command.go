@@ -160,6 +160,7 @@ const (
 	MessagesUndoCommand             CommandName = "messages_undo"
 	MessagesRedoCommand             CommandName = "messages_redo"
 	AppExitCommand                  CommandName = "app_exit"
+	WorkspaceAddDirCommand          CommandName = "workspace_add_dir"
 )
 
 func (k Command) Matches(msg tea.KeyPressMsg, leader bool) bool {
@@ -384,6 +385,12 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 			Description: "redo message",
 			Keybindings: parseBindings("<leader>r"),
 			Trigger:     []string{"redo"},
+		},
+		{
+			Name:        WorkspaceAddDirCommand,
+			Description: "add directory to workspace",
+			Keybindings: parseBindings(),
+			Trigger:     []string{"add-dir"},
 		},
 		{
 			Name:        AppExitCommand,
