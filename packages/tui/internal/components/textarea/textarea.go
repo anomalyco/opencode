@@ -678,6 +678,14 @@ func (m *Model) removeAttachmentAtCursor() bool {
 	if att == nil {
 		return false
 	}
+
+	if att.Type == "file" || att.Type == "symbol" || att.Type == "agent" {
+		m.value[m.row] = slices.Delete(m.value[m.row], startIdx, startIdx+1)
+		m.col = startIdx
+		m.SetCursorColumn(m.col)
+		return true
+	}
+
 	// Replace the attachment element with the display runes
 	before := m.value[m.row][:startIdx]
 	after := m.value[m.row][startIdx+1:]
