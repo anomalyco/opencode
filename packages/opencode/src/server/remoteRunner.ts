@@ -1,5 +1,5 @@
 export async function remoteExec(command: string) {
-  const url = process.env.VERCEL_EXEC_URL || "https://your-app.vercel.app/api/exec"\;
+  const url = process.env.VERCEL_EXEC_URL || "https://your-app.vercel.app/api/exec";
   const token = process.env.VERCEL_EXEC_TOKEN || "";
 
   const res = await fetch(url, {
