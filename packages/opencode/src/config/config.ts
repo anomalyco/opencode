@@ -409,6 +409,17 @@ export namespace Config {
           ignore: z.array(z.string()).optional(),
         })
         .optional(),
+      workspace: z
+        .object({
+          directories: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Additional directories to allow access to. Can be absolute paths or relative to the project root.",
+            ),
+        })
+        .optional()
+        .describe("Workspace configuration for multi-directory access"),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z
