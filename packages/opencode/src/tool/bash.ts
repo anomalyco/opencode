@@ -58,7 +58,6 @@ export const BashTool = Tool.define("bash", {
       ),
   }),
   async execute(params, ctx) {
-    const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const tree = await parser().then((p) => p.parse(params.command))
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
