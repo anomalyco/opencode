@@ -1,7 +1,8 @@
 import { exec as localExec } from "child_process";
 import { remoteExec } from "./remoteRunner";
 
-const EXEC_MODE = process.env.EXEC_MODE || "local";
+const EXEC_MODE = process.env["EXEC_MODE"] || "local";
+
 
 export async function runCommand(command: string) {
   if (EXEC_MODE === "remote") {
