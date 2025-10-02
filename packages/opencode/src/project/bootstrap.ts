@@ -6,6 +6,7 @@ import { Snapshot } from "../snapshot"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
 import { Flag } from "../flag/flag"
+import { ReminderManager } from "../reminder/manager"
 
 export async function InstanceBootstrap() {
   if (Flag.OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP) return
@@ -16,4 +17,5 @@ export async function InstanceBootstrap() {
   Snapshot.init()
   FileWatcher.init()
   File.init()
+  ReminderManager.init()
 }

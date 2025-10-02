@@ -8,12 +8,16 @@ import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
+import { ReminderAddTool } from "./reminderadd"
+import { ReminderListTool } from "./reminderlist"
+import { ReminderRemoveTool } from "./reminderremove"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
+import { Flag } from "../flag/flag"
 import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod/v4"
@@ -88,6 +92,9 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      ReminderAddTool,
+      ReminderListTool,
+      ReminderRemoveTool,
       ...custom,
     ]
   }
@@ -125,6 +132,14 @@ export namespace ToolRegistry {
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+    }
+
+    // Reminder configuration control
+    const config = await Config.get()
+    if (config.reminders?.enabled === false || Flag.OPENCODE_DISABLE_REMINDERS) {
+      result["reminderadd"] = false
+      result["reminderlist"] = false
+      result["reminderremove"] = false
     }
 
     return result

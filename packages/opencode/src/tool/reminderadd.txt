@@ -1,0 +1,43 @@
+Set up a reminder to re-execute an action later. Use when user asks to 'remind me to...' or 'check X every Y time'. Actually performs the action when triggered, not just notifies.
+
+Parameters:
+  - `interval_seconds` - Time between executions (minimum 30 seconds)
+  - `type` - Either "one-time" or "recurring"
+  - `action_prompt` - The action to perform when triggered
+  - `description` - Human-readable label for identifying this reminder
+
+CRITICAL - Action Prompt Requirements:
+  - Must contain fully resolved information (absolute paths, specific names, concrete data)
+  - Context may change over time, so avoid vague references
+  - Include all necessary details for standalone execution
+
+User Pattern Recognition:
+  - "in 5 minutes do X" → one-time, 5min delay
+  - "every hour do Y" → recurring, 1hr interval
+  - "regularly check Z" → recurring, 1min default interval
+
+Examples:
+
+```
+"Wait for 5 min and check this file again for instructions"
+```
+Creates one-time reminder after 5 minutes to review /workspace/last-login.log
+
+```
+"Check this website regularly and let me know when it has new information"
+```
+Sets recurring 1-minute timer to fetch URL and detect content changes
+
+```
+"Check my email every hour and reply that I'm busy"
+```
+Creates recurring 1-hour timer to check email and send automated responses
+
+Response Format:
+  - Success: "Reminder set: I'll check your email in 1 hour"
+  - Error (limit reached): Returns "Can't set more reminders, too many reminders already active." with list of current reminders
+
+Usage notes:
+  - Maximum reminders per project is configurable
+  - Use description for matching when listing/removing reminders
+  - Reminders persist only for current session

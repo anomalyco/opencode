@@ -1,0 +1,20 @@
+Cancel a scheduled reminder. Use when user asks to 'stop checking X' or 'cancel the reminder for Y'. Matches user's description pattern to existing reminders.
+
+Parameters:
+  - `description_pattern` - Text pattern to match against reminder descriptions
+
+Example Usage:
+
+```
+"Stop checking my email"
+```
+Identifies and removes matching reminder based on description pattern
+
+Response Format:
+  - Success: "Reminder cancelled: No longer checking your email every hour"
+  - Error: "No matching reminder found" if pattern doesn't match any active reminders
+
+Usage notes:
+  - Pattern matching is flexible and attempts to find best match
+  - Use reminderlist first to see available reminders if uncertain
+  - Only removes reminders from current session

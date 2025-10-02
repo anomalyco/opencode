@@ -1,0 +1,17 @@
+List all active reminders in this session. Use when user asks 'what reminders do I have' or wants to see scheduled actions.
+
+Returns:
+  - Array of active reminders with descriptions
+  - Next execution time for each reminder
+  - Reminder type (one-time or recurring)
+
+Example Usage:
+
+```
+"Show me what I'm waiting for"
+```
+
+Usage notes:
+  - Takes no parameters
+  - Shows all reminders for current session only
+  - Use descriptions to identify reminders for removal

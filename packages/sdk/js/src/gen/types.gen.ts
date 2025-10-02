@@ -488,6 +488,23 @@ export type Config = {
   tools?: {
     [key: string]: boolean
   }
+  /**
+   * Reminder system configuration
+   */
+  reminders?: {
+    /**
+     * Enable reminder functionality
+     */
+    enabled?: boolean
+    /**
+     * Maximum active reminders per project
+     */
+    max_reminders_per_project?: number
+    /**
+     * Minimum interval between reminder executions
+     */
+    min_interval_seconds?: number
+  }
   experimental?: {
     hook?: {
       file_edited?: {

@@ -557,6 +557,14 @@ export namespace Config {
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      reminders: z
+        .object({
+          enabled: z.boolean().default(true).describe("Enable reminder functionality"),
+          max_reminders_per_project: z.number().default(50).describe("Maximum active reminders per project"),
+          min_interval_seconds: z.number().default(30).describe("Minimum interval between reminder executions"),
+        })
+        .optional()
+        .describe("Reminder system configuration"),
       experimental: z
         .object({
           hook: z
