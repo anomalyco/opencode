@@ -30,6 +30,7 @@ import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { Workspace } from "../workspace"
 
 const ERRORS = {
   400: {
@@ -157,6 +158,75 @@ export namespace Server {
           const config = c.req.valid("json")
           await Config.update(config)
           return c.json(config)
+        },
+      )
+      .get(
+        "/workspace/directories",
+        describeRoute({
+          description: "List workspace directories",
+          operationId: "workspace.list",
+          responses: {
+            200: {
+              description: "List of allowed workspace directories",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string()).meta({ ref: "WorkspaceDirectories" })),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const directories = await Workspace.getAllowedDirectories()
+          return c.json(directories)
+        },
+      )
+      .post(
+        "/workspace/directories",
+        describeRoute({
+          description: "Add directory to workspace",
+          operationId: "workspace.addDirectory",
+          responses: {
+            200: {
+              description: "Successfully added directory",
+              content: {
+                "application/json": {
+                  schema: resolver(Workspace.Info),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator("json", z.object({ directory: z.string() })),
+        async (c) => {
+          const { directory } = c.req.valid("json")
+          const workspace = await Workspace.addDirectory(directory)
+          return c.json(workspace)
+        },
+      )
+      .delete(
+        "/workspace/directories",
+        describeRoute({
+          description: "Remove directory from workspace",
+          operationId: "workspace.removeDirectory",
+          responses: {
+            200: {
+              description: "Successfully removed directory",
+              content: {
+                "application/json": {
+                  schema: resolver(Workspace.Info.nullable()),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator("json", z.object({ directory: z.string() })),
+        async (c) => {
+          const { directory } = c.req.valid("json")
+          const workspace = await Workspace.removeDirectory(directory)
+          return c.json(workspace)
         },
       )
       .get(
