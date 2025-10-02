@@ -16,8 +16,7 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 
 const MAX_OUTPUT_LENGTH = 30_000
-const DEFAULT_TIMEOUT = 1 * 60 * 1000
-const MAX_TIMEOUT = 10 * 60 * 1000
+
 
 const log = Log.create({ service: "bash-tool" })
 
