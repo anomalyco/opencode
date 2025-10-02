@@ -42,6 +42,7 @@ export namespace File {
   export const Content = z
     .object({
       content: z.string(),
+      encoding: z.enum(["utf8", "base64"]).optional(),
       diff: z.string().optional(),
       patch: z
         .object({
@@ -66,6 +67,31 @@ export namespace File {
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
+
+  async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+    const ext = path.extname(filepath).toLowerCase()
+
+    if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico"].includes(ext)) {
+      return true
+    }
+
+    if ([".zip", ".tar", ".gz", ".exe", ".dll", ".so", ".pdf", ".wasm"].includes(ext)) {
+      return true
+    }
+
+    const stat = await file.stat()
+    if (stat.size === 0) return false
+
+    const bufferSize = Math.min(512, stat.size)
+    const buffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+
+    for (let i = 0; i < bytes.length; i++) {
+      if (bytes[i] === 0) return true
+    }
+
+    return false
+  }
 
   export const Event = {
     Edited: Bus.event(
@@ -192,10 +218,21 @@ export namespace File {
     using _ = log.time("read", { file })
     const project = Instance.project
     const full = path.join(Instance.directory, file)
-    const content = await Bun.file(full)
+    const bunFile = Bun.file(full)
+
+    const isBinary = await isBinaryFile(full, bunFile)
+
+    if (isBinary) {
+      const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+      const content = Buffer.from(buffer).toString("base64")
+      return { content, encoding: "base64" as const }
+    }
+
+    const content = await bunFile
       .text()
       .catch(() => "")
       .then((x) => x.trim())
+
     if (project.vcs === "git") {
       let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()
@@ -206,10 +243,10 @@ export namespace File {
           ignoreWhitespace: true,
         })
         const diff = formatPatch(patch)
-        return { content, patch, diff }
+        return { content, encoding: "utf8" as const, patch, diff }
       }
     }
-    return { content }
+    return { content, encoding: "utf8" as const }
   }
 
   export async function list(dir?: string) {
