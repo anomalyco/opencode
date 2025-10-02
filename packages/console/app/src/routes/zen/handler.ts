@@ -10,6 +10,7 @@ import { Resource } from "@opencode/console-resource"
 import { Billing } from "../../../../core/src/billing"
 import { Actor } from "@opencode/console-core/actor.js"
 import { WorkspaceTable } from "@opencode/console-core/schema/workspace.sql.js"
+import { ZenModel } from "@opencode/console-core/model.js"
 
 export async function handler(
   input: APIEvent,
@@ -34,32 +35,7 @@ export async function handler(
   class MonthlyLimitError extends Error {}
   class ModelError extends Error {}
 
-  const ModelCostSchema = z.object({
-    input: z.number(),
-    output: z.number(),
-    cacheRead: z.number().optional(),
-    cacheWrite5m: z.number().optional(),
-    cacheWrite1h: z.number().optional(),
-  })
-
-  const ModelSchema = z.object({
-    cost: ModelCostSchema,
-    cost200K: ModelCostSchema.optional(),
-    allowAnonymous: z.boolean().optional(),
-    providers: z.array(
-      z.object({
-        id: z.string(),
-        api: z.string(),
-        apiKey: z.string(),
-        model: z.string(),
-        weight: z.number().optional(),
-        headerMappings: z.record(z.string(), z.string()).optional(),
-        disabled: z.boolean().optional(),
-      }),
-    ),
-  })
-
-  type Model = z.infer<typeof ModelSchema>
+  type Model = z.infer<typeof ZenModel.ModelSchema>
 
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
@@ -93,7 +69,7 @@ export async function handler(
 
     // Request to model provider
     const startTimestamp = Date.now()
-    const res = await fetch(path.posix.join(providerInfo.api, url.pathname.replace(/^\/zen/, "") + url.search), {
+    const res = await fetch(path.posix.join(providerInfo.api, url.pathname.replace(/^\/zen\/v1/, "") + url.search), {
       method: "POST",
       headers: (() => {
         const headers = input.request.headers
@@ -147,7 +123,10 @@ export async function handler(
           return (
             reader?.read().then(async ({ done, value }) => {
               if (done) {
-                logger.metric({ response_length: responseLength })
+                logger.metric({
+                  response_length: responseLength,
+                  "timestamp.last_byte": Date.now(),
+                })
                 const usage = opts.getStreamUsage()
                 if (usage) {
                   await trackUsage(authInfo, modelInfo, providerInfo.id, usage)
@@ -158,10 +137,13 @@ export async function handler(
               }
 
               if (responseLength === 0) {
-                logger.metric({ time_to_first_byte: Date.now() - startTimestamp })
+                const now = Date.now()
+                logger.metric({
+                  time_to_first_byte: now - startTimestamp,
+                  "timestamp.first_byte": now,
+                })
               }
               responseLength += value.length
-              console.log(decoder.decode(value, { stream: true }))
               buffer += decoder.decode(value, { stream: true })
 
               const parts = buffer.split("\n\n")
@@ -224,7 +206,7 @@ export async function handler(
   function validateModel(reqModel: string) {
     const json = JSON.parse(Resource.ZEN_MODELS.value)
 
-    const allModels = z.record(z.string(), ModelSchema).parse(json)
+    const allModels = ZenModel.ModelsSchema.parse(json)
 
     if (!(reqModel in allModels)) {
       throw new ModelError(`Model ${reqModel} not supported`)
@@ -325,7 +307,7 @@ export async function handler(
 
     const modelCost =
       modelInfo.cost200K &&
-      usage.inputTokens + usage.cacheReadTokens + usage.cacheWrite5mTokens + usage.cacheWrite1hTokens > 200_000
+      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
         ? modelInfo.cost200K
         : modelInfo.cost
 

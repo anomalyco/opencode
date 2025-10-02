@@ -325,3 +325,22 @@ Some editors like VS Code need to be started with the `--wait` flag.
 :::
 
 Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
+
+---
+
+## Configure
+
+You can customize TUI behavior through your opencode config file.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3
+  }
+}
+```
+
+### Options
+
+- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (default: `2`, minimum: `1`)

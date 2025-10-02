@@ -135,6 +135,30 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update config",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Successfully updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...ERRORS,
+          },
+        }),
+        validator("json", Config.Info),
+        async (c) => {
+          const config = c.req.valid("json")
+          await Config.update(config)
+          return c.json(config)
+        },
+      )
       .get(
         "/experimental/tool/ids",
         describeRoute({
@@ -932,12 +956,11 @@ export namespace Server {
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const result = await Ripgrep.files({
-            cwd: Instance.directory,
+          const results = await File.search({
             query,
             limit: 10,
           })
-          return c.json(result)
+          return c.json(results)
         },
       )
       .get(

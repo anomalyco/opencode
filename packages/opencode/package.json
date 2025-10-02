@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.11.3",
+  "version": "0.14.0",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "build": "./script/build.ts",
-    "dev": "bun run --conditions=development ./src/index.ts"
+    "dev": "bun run ./src/index.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -41,6 +42,7 @@
     "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
+    "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
     "hono-openapi": "1.0.7",

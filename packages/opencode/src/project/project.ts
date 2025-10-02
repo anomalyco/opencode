@@ -62,14 +62,12 @@ export namespace Project {
       await Storage.write<Info>(["project", "global"], project)
       return project
     }
-    worktree = path.dirname(
-      await $`git rev-parse --path-format=absolute --git-common-dir`
-        .quiet()
-        .nothrow()
-        .cwd(worktree)
-        .text()
-        .then((x) => x.trim()),
-    )
+    worktree = await $`git rev-parse --path-format=absolute --show-toplevel`
+      .quiet()
+      .nothrow()
+      .cwd(worktree)
+      .text()
+      .then((x) => x.trim())
     const project: Info = {
       id,
       worktree,

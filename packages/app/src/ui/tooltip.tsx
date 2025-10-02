@@ -30,7 +30,9 @@ export function Tooltip(props: TooltipProps) {
 
   return (
     <KobalteTooltip forceMount {...others} open={open()} onOpenChange={setOpen}>
-      <KobalteTooltip.Trigger as={"div"}>{c()}</KobalteTooltip.Trigger>
+      <KobalteTooltip.Trigger as={"div"} class="flex items-center">
+        {c()}
+      </KobalteTooltip.Trigger>
       <KobalteTooltip.Portal>
         <KobalteTooltip.Content
           classList={{

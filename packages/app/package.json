@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "0.11.3",
+  "version": "0.14.0",
   "description": "",
   "type": "module",
   "scripts": {
@@ -21,7 +21,7 @@
     "vite-plugin-solid": "^2.11.6"
   },
   "dependencies": {
-    "@kobalte/core": "0.13.11",
+    "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/event-bus": "1.1.2",

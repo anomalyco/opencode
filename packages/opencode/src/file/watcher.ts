@@ -30,6 +30,7 @@ export namespace FileWatcher {
         ignoreInitial: true,
         ignored: (filepath) => {
           return FileIgnore.match(filepath, {
+            whitelist: [new Bun.Glob("**/.git/{index,logs/HEAD}")],
             extra: ignore,
           })
         },

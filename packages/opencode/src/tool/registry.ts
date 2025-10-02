@@ -20,29 +20,12 @@ import z from "zod/v4"
 import { Plugin } from "../plugin"
 
 export namespace ToolRegistry {
-  // Built-in tools that ship with opencode
-  const BUILTIN = [
-    InvalidTool,
-    BashTool,
-    EditTool,
-    WebFetchTool,
-    GlobTool,
-    GrepTool,
-    ListTool,
-    PatchTool,
-    ReadTool,
-    WriteTool,
-    TodoWriteTool,
-    TodoReadTool,
-    TaskTool,
-  ]
-
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({ cwd: dir, absolute: true })) {
+      for await (const match of glob.scan({ cwd: dir, absolute: true, followSymlinks: true, dot: true })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
@@ -91,7 +74,22 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
-    return [...BUILTIN, ...custom]
+    return [
+      InvalidTool,
+      BashTool,
+      EditTool,
+      WebFetchTool,
+      GlobTool,
+      GrepTool,
+      ListTool,
+      PatchTool,
+      ReadTool,
+      WriteTool,
+      TodoWriteTool,
+      TodoReadTool,
+      TaskTool,
+      ...custom,
+    ]
   }
 
   export async function ids() {

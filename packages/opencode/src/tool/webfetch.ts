@@ -44,12 +44,29 @@ export const WebFetchTool = Tool.define("webfetch", {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
 
+    // Build Accept header based on requested format with q parameters for fallbacks
+    let acceptHeader = "*/*"
+    switch (params.format) {
+      case "markdown":
+        acceptHeader = "text/markdown;q=1.0, text/x-markdown;q=0.9, text/plain;q=0.8, text/html;q=0.7, */*;q=0.1"
+        break
+      case "text":
+        acceptHeader = "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1"
+        break
+      case "html":
+        acceptHeader = "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
+        break
+      default:
+        acceptHeader =
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+    }
+
     const response = await fetch(params.url, {
       signal: AbortSignal.any([controller.signal, ctx.abort]),
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        Accept: acceptHeader,
         "Accept-Language": "en-US,en;q=0.9",
       },
     })
@@ -75,7 +92,24 @@ export const WebFetchTool = Tool.define("webfetch", {
     const contentType = response.headers.get("content-type") || ""
 
     const title = `${params.url} (${contentType})`
+
+    // Handle content based on requested format and actual content type
     switch (params.format) {
+      case "markdown":
+        if (contentType.includes("text/html")) {
+          const markdown = convertHTMLToMarkdown(content)
+          return {
+            output: markdown,
+            title,
+            metadata: {},
+          }
+        }
+        return {
+          output: content,
+          title,
+          metadata: {},
+        }
+
       case "text":
         if (contentType.includes("text/html")) {
           const text = await extractTextFromHTML(content)
@@ -87,21 +121,6 @@ export const WebFetchTool = Tool.define("webfetch", {
         }
         return {
           output: content,
-          title,
-          metadata: {},
-        }
-
-      case "markdown":
-        if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
-          return {
-            output: markdown,
-            title,
-            metadata: {},
-          }
-        }
-        return {
-          output: "```\n" + content + "\n```",
           title,
           metadata: {},
         }

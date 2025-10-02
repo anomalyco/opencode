@@ -1,6 +1,6 @@
 import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { createContext, Show, useContext, type ParentProps } from "solid-js"
+import { createContext, createMemo, Show, useContext, type ParentProps } from "solid-js"
 import { useSDK, useEvent } from "@/context"
 import { Binary } from "@/utils/binary"
 
@@ -113,6 +113,10 @@ function init() {
 
   Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
 
+  const sanitizer = createMemo(() => new RegExp(`${store.path.directory}/`, "g"))
+  const sanitize = (text: string) => text.replace(sanitizer(), "")
+  const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
+
   return {
     data: store,
     set: setStore,
@@ -143,6 +147,8 @@ function init() {
       },
     },
     load,
+    absolute,
+    sanitize,
   }
 }
 
