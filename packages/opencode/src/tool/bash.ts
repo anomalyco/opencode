@@ -1,5 +1,5 @@
 import z from "zod/v4"
-import { exec } from "child_process"
+// import { exec } from "child_process"
 
 // new
 import { runCommand } from "../server/runCommand";
