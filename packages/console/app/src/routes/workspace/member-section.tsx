@@ -2,32 +2,49 @@ import { json, query, action, useParams, createAsync, useSubmission } from "@sol
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
-import { formatDateUTC, formatDateForTable } from "./common"
 import styles from "./member-section.module.css"
-import { and, Database, eq, sql } from "@opencode/console-core/drizzle/index.js"
+import { and, Database, eq, isNull, sql } from "@opencode/console-core/drizzle/index.js"
 import { UserTable, UserRole } from "@opencode/console-core/schema/user.sql.js"
 import { Identifier } from "@opencode/console-core/identifier.js"
+import { Actor } from "@opencode/console-core/actor.js"
+import { AWS } from "@opencode/console-core/aws.js"
 
-const removeMember = action(async (form: FormData) => {
+const assertAdmin = async (workspaceID: string) => {
+  const actor = Actor.use()
+  if (actor.type !== "user") throw new Error(`Expected admin user, got ${actor.type}`)
+  const user = await Database.use((tx) =>
+    tx
+      .select()
+      .from(UserTable)
+      .where(and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, actor.properties.userID))),
+  ).then((x) => x[0])
+  if (user?.role !== "admin") throw new Error(`Expected admin user, got ${user?.role}`)
+  return actor
+}
+
+const assertNotSelf = (id: string) => {
+  const actor = Actor.use()
+  if (actor.type === "user" && actor.properties.userID === id) {
+    throw new Error(`Expected not self actor, got self actor`)
+  }
+  return actor
+}
+
+const listMembers = query(async (workspaceID: string) => {
   "use server"
-  const id = form.get("id")?.toString()
-  if (!id) return { error: "ID is required" }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
-  return json(
-    await withActor(
-      () =>
-        Database.use((tx) =>
-          tx
-            .update(UserTable)
-            .set({ timeDeleted: sql`now()` })
-            .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, workspaceID))),
-        ),
-      workspaceID,
-    ),
-    { revalidate: listMembers.key },
-  )
-}, "member.remove")
+  return withActor(async () => {
+    const actor = await assertAdmin(workspaceID)
+    return Database.use((tx) =>
+      tx
+        .select()
+        .from(UserTable)
+        .where(and(eq(UserTable.workspaceID, workspaceID), isNull(UserTable.timeDeleted))),
+    ).then((members) => ({
+      members,
+      currentUserID: actor.properties.userID,
+    }))
+  }, workspaceID)
+}, "member.list")
 
 const inviteMember = action(async (form: FormData) => {
   "use server"
@@ -38,34 +55,105 @@ const inviteMember = action(async (form: FormData) => {
   const role = form.get("role")?.toString() as (typeof UserRole)[number]
   if (!role) return { error: "Role is required" }
   return json(
-    await withActor(
-      () =>
-        Database.use((tx) =>
-          tx
-            .insert(UserTable)
-            .values({
-              id: Identifier.create("user"),
-              name: "",
-              email,
-              workspaceID,
-              role,
+    await withActor(async () => {
+      await assertAdmin(workspaceID)
+      return Database.use((tx) =>
+        tx
+          .insert(UserTable)
+          .values({
+            id: Identifier.create("user"),
+            name: "",
+            email,
+            workspaceID,
+            role,
+          })
+          .then((data) => ({ error: undefined, data }))
+          .then(async (data) => {
+            const { render } = await import("@jsx-email/render")
+            const { InviteEmail } = await import("@opencode/console-mail/InviteEmail.jsx")
+            await AWS.sendEmail({
+              to: email,
+              subject: `You've been invited to join the ${workspaceID} workspace on OpenCode Zen`,
+              body: render(
+                // @ts-ignore
+                InviteEmail({
+                  assetsUrl: `https://opencode.ai/email`,
+                  workspace: workspaceID,
+                }),
+              ),
             })
-            .then((data) => ({ error: undefined, data }))
-            .catch((e) => ({ error: e.message as string })),
-        ),
-      workspaceID,
-    ),
+            return data
+          })
+          .catch((e) => {
+            let error = e.message
+            if (error.match(/Duplicate entry '.*' for key 'user.user_email'/))
+              error = "A user with this email has already been invited."
+            return { error }
+          }),
+      )
+    }, workspaceID),
     { revalidate: listMembers.key },
   )
 }, "member.create")
 
-const listMembers = query(async (workspaceID: string) => {
+const removeMember = action(async (form: FormData) => {
   "use server"
-  return withActor(
-    () => Database.use((tx) => tx.select().from(UserTable).where(eq(UserTable.workspaceID, workspaceID))),
-    workspaceID,
+  const id = form.get("id")?.toString()
+  if (!id) return { error: "ID is required" }
+  const workspaceID = form.get("workspaceID")?.toString()
+  if (!workspaceID) return { error: "Workspace ID is required" }
+  return json(
+    await withActor(async () => {
+      await assertAdmin(workspaceID)
+      assertNotSelf(id)
+      return Database.transaction(async (tx) => {
+        const email = await tx
+          .select({ email: UserTable.email })
+          .from(UserTable)
+          .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, workspaceID)))
+          .execute()
+          .then((rows) => rows[0].email)
+        if (!email) return { error: "User not found" }
+        await tx
+          .update(UserTable)
+          .set({
+            oldEmail: email,
+            email: null,
+            timeDeleted: sql`now()`,
+          })
+          .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, workspaceID)))
+      })
+        .then(() => ({ error: undefined }))
+        .catch((e) => ({ error: e.message as string }))
+    }, workspaceID),
+    { revalidate: listMembers.key },
   )
-}, "member.list")
+}, "member.remove")
+
+const updateMemberRole = action(async (form: FormData) => {
+  "use server"
+  const id = form.get("id")?.toString()
+  if (!id) return { error: "ID is required" }
+  const workspaceID = form.get("workspaceID")?.toString()
+  if (!workspaceID) return { error: "Workspace ID is required" }
+  const role = form.get("role")?.toString() as (typeof UserRole)[number]
+  if (!role) return { error: "Role is required" }
+  return json(
+    await withActor(async () => {
+      await assertAdmin(workspaceID)
+      if (role === "member") assertNotSelf(id)
+      return Database.use((tx) =>
+        tx
+          .update(UserTable)
+          .set({ role })
+          .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, workspaceID)))
+          .then((data) => ({ error: undefined, data }))
+          .catch((e) => ({ error: e.message as string })),
+      )
+    }, workspaceID),
+    { revalidate: listMembers.key },
+  )
+}, "member.updateRole")
 
 export function MemberCreateForm() {
   const params = useParams()
@@ -144,9 +232,89 @@ export function MemberCreateForm() {
   )
 }
 
+function MemberRow(props: { member: any; workspaceID: string; currentUserID: string | null }) {
+  const [editing, setEditing] = createSignal(false)
+  const submission = useSubmission(updateMemberRole)
+  const isCurrentUser = () => props.currentUserID === props.member.id
+
+  createEffect(() => {
+    if (!submission.pending && submission.result && !submission.result.error) {
+      setEditing(false)
+    }
+  })
+
+  return (
+    <Show
+      when={editing()}
+      fallback={
+        <tr>
+          <td data-slot="member-email">{props.member.email}</td>
+          <td data-slot="member-role">{props.member.role}</td>
+          <Show when={!props.member.timeSeen} fallback={<td data-slot="member-joined"></td>}>
+            <td data-slot="member-joined">invited</td>
+          </Show>
+          <td data-slot="member-actions">
+            <button data-color="ghost" onClick={() => setEditing(true)}>
+              Edit
+            </button>
+            <Show when={!isCurrentUser()}>
+              <form action={removeMember} method="post">
+                <input type="hidden" name="id" value={props.member.id} />
+                <input type="hidden" name="workspaceID" value={props.workspaceID} />
+                <button data-color="ghost">Delete</button>
+              </form>
+            </Show>
+          </td>
+        </tr>
+      }
+    >
+      <tr>
+        <td colspan="4">
+          <form action={updateMemberRole} method="post">
+            <div data-slot="edit-member-email">{props.member.email}</div>
+            <input type="hidden" name="id" value={props.member.id} />
+            <input type="hidden" name="workspaceID" value={props.workspaceID} />
+            <Show when={!isCurrentUser()} fallback={<div data-slot="current-user-role">Role: {props.member.role}</div>}>
+              <div data-slot="role-selector">
+                <label>
+                  <input type="radio" name="role" value="admin" checked={props.member.role === "admin"} />
+                  <div>
+                    <strong>Admin</strong>
+                    <p>Can manage models, members, and billing</p>
+                  </div>
+                </label>
+                <label>
+                  <input type="radio" name="role" value="member" checked={props.member.role === "member"} />
+                  <div>
+                    <strong>Member</strong>
+                    <p>Can only generate API keys for themselves</p>
+                  </div>
+                </label>
+              </div>
+            </Show>
+            <Show when={submission.result && submission.result.error}>
+              {(err) => <div data-slot="form-error">{err()}</div>}
+            </Show>
+            <div data-slot="form-actions">
+              <button type="button" data-color="ghost" onClick={() => setEditing(false)}>
+                Cancel
+              </button>
+              <Show when={!isCurrentUser()}>
+                <button type="submit" data-color="primary" disabled={submission.pending}>
+                  {submission.pending ? "Saving..." : "Save"}
+                </button>
+              </Show>
+            </div>
+          </form>
+        </td>
+      </tr>
+    </Show>
+  )
+}
+
 export function MemberSection() {
   const params = useParams()
-  const members = createAsync(() => listMembers(params.id))
+  const data = createAsync(() => listMembers(params.id))
 
   return (
     <section class={styles.root}>
@@ -157,7 +325,7 @@ export function MemberSection() {
       <MemberCreateForm />
       <div data-slot="members-table">
         <Show
-          when={members()?.length}
+          when={data()?.members.length}
           fallback={
             <div data-component="empty-state">
               <p>Invite a member to your workspace</p>
@@ -169,32 +337,15 @@ export function MemberSection() {
               <tr>
                 <th>Email</th>
                 <th>Role</th>
-                <th>Joined</th>
+                <th></th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <For each={members()!}>
-                {(member) => {
-                  return (
-                    <tr>
-                      <td data-slot="member-email">{member.email}</td>
-                      <td data-slot="member-role">{member.role}</td>
-                      <Show when={member.timeSeen} fallback={<td data-slot="member-joined">invited</td>}>
-                        <td data-slot="member-joined" title={formatDateUTC(member.timeSeen!)}>
-                          {formatDateForTable(member.timeSeen!)}
-                        </td>
-                      </Show>
-                      <td data-slot="member-actions">
-                        <form action={removeMember} method="post">
-                          <input type="hidden" name="id" value={member.id} />
-                          <input type="hidden" name="workspaceID" value={params.id} />
-                          <button data-color="ghost">Delete</button>
-                        </form>
-                      </td>
-                    </tr>
-                  )
-                }}
+              <For each={data()!.members}>
+                {(member) => (
+                  <MemberRow member={member} workspaceID={params.id} currentUserID={data()!.currentUserID} />
+                )}
               </For>
             </tbody>
           </table>

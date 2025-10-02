@@ -9,7 +9,8 @@ export const UserTable = mysqlTable(
   {
     ...workspaceColumns,
     ...timestamps,
-    email: varchar("email", { length: 255 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    oldEmail: varchar("old_email", { length: 255 }),
     name: varchar("name", { length: 255 }).notNull(),
     timeSeen: utc("time_seen"),
     color: int("color"),

@@ -34,38 +34,21 @@ export function IconLogo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
 
 export function IconCopy(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
-    <svg {...props} viewBox="0 0 512 512">
-      <rect
-        width="336"
-        height="336"
-        x="128"
-        y="128"
-        fill="none"
-        stroke="currentColor"
-        stroke-linejoin="round"
-        stroke-width="32"
-        rx="57"
-        ry="57"
-      ></rect>
+    <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        fill="none"
-        stroke="currentColor"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="32"
-        d="m383.5 128l.5-24a56.16 56.16 0 0 0-56-56H112a64.19 64.19 0 0 0-64 64v216a56.16 56.16 0 0 0 56 56h24"
-      ></path>
+        d="M8.75 8.75V2.75H21.25V15.25H15.25M15.25 8.75H2.75V21.25H15.25V8.75Z"
+        stroke="#8E8B8B"
+        stroke-width="1.5"
+        stroke-linecap="square"
+      />
     </svg>
   )
 }
 
 export function IconCheck(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
-    <svg {...props} viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M9 16.17L5.53 12.7a.996.996 0 1 0-1.41 1.41l4.18 4.18c.39.39 1.02.39 1.41 0L20.29 7.71a.996.996 0 1 0-1.41-1.41z"
-      ></path>
+    <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2.75 15.0938L9 20.25L21.25 3.75" stroke="#03B000" stroke-width="2" stroke-linecap="square" />
     </svg>
   )
 }

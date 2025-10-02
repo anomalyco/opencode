@@ -1115,6 +1115,14 @@ export type EventFileEdited = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
 export type EventTodoUpdated = {
   type: "todo.updated"
   properties: {
@@ -1152,14 +1160,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -1178,12 +1178,12 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
+  | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventSessionIdle
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
-  | EventFileWatcherUpdated
   | EventServerConnected
 
 export type ProjectListData = {

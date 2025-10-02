@@ -5,11 +5,11 @@ import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile } from "fs/promises"
-import type { FilePart } from "@opencode-ai/sdk"
+import type { AgentPart, FilePart } from "@opencode-ai/sdk"
 
 export type PromptInfo = {
   input: string
-  parts: Omit<FilePart, "id" | "messageID" | "sessionID">[]
+  parts: (Omit<FilePart, "id" | "messageID" | "sessionID"> | Omit<AgentPart, "id" | "messageID" | "sessionID">)[]
 }
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({

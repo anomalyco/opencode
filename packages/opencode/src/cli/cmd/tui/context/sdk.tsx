@@ -1,17 +1,11 @@
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { Server } from "@/server/server"
 import { createSimpleContext } from "./helper"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: () => {
+  init: (props: { url: string }) => {
     const client = createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-      // @ts-ignore
-      fetch: async (r) => {
-        // @ts-ignore
-        return Server.App().fetch(r)
-      },
+      baseUrl: props.url,
     })
     return client
   },

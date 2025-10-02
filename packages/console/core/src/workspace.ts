@@ -21,7 +21,6 @@ export namespace Workspace {
         id: Identifier.create("user"),
         email: account.properties.email,
         name: "",
-        timeSeen: sql`now()`,
         role: "admin",
       })
       await tx.insert(BillingTable).values({

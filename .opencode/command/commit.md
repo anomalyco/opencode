@@ -8,4 +8,8 @@ ci:
 ignore:
 wip:
 
-the message should prefer to explain WHY something was changed rather than WHAT was changed
+prefer to explain WHY something was done from an end user perspective instead of
+WHAT was done.
+
+do not do generic messages like "improvied agent experience" be very specific
+about what user facing changes were made

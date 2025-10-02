@@ -1,5 +1,4 @@
 import { Context } from "./context"
-import { UserRole } from "./schema/user.sql"
 import { Log } from "./util/log"
 
 export namespace Actor {
@@ -21,7 +20,6 @@ export namespace Actor {
     properties: {
       userID: string
       workspaceID: string
-      role: (typeof UserRole)[number]
     }
   }
 

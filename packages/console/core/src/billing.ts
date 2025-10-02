@@ -206,7 +206,7 @@ export namespace Billing {
               },
             }
           : {
-              customer_email: user.email,
+              customer_email: user.email!,
               customer_creation: "always",
             }),
         currency: "usd",

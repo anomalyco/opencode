@@ -533,166 +533,54 @@ test("restore function", async () => {
   })
 })
 
-test("revert with absolute paths bug", async () => {
+test("revert should not delete files that existed but were deleted in snapshot", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
+      const snapshot1 = await Snapshot.track()
+      expect(snapshot1).toBeTruthy()
 
-      // Modify existing file
-      await Bun.write(`${tmp.path}/a.txt`, "modified content")
-      
-      // Get the patch - this now returns relative paths
-      const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(`a.txt`)
-      
-      // Now that patch returns relative paths, revert works correctly
+      await $`rm ${tmp.path}/a.txt`.quiet()
+
+      const snapshot2 = await Snapshot.track()
+      expect(snapshot2).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/a.txt`, "recreated content")
+
+      const patch = await Snapshot.patch(snapshot2!)
+      expect(patch.files).toContain(`${tmp.path}/a.txt`)
+
       await Snapshot.revert([patch])
-      
-      // If the bug exists, the file won't be reverted
-      const content = await Bun.file(`${tmp.path}/a.txt`).text()
-      
-      // The file should be reverted to original content
-      expect(content).toBe(tmp.extra.aContent)
+
+      expect(await Bun.file(`${tmp.path}/a.txt`).exists()).toBe(false)
     },
   })
 })
 
-test("subdirectory tracking only tracks subdir files", async () => {
+test("revert preserves file that existed in snapshot when deleted then recreated", async () => {
   await using tmp = await bootstrap()
-  
-  // Create subdirectory with files
-  await $`mkdir -p ${tmp.path}/subdir`.quiet()
-  await Bun.write(`${tmp.path}/subdir/sub1.txt`, "sub1")
-  await Bun.write(`${tmp.path}/subdir/sub2.txt`, "sub2")
-  
-  // Track from subdirectory
   await Instance.provide({
-    directory: `${tmp.path}/subdir`,
+    directory: tmp.path,
     fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-      
-      // Modify files in both root and subdir
-      await Bun.write(`${tmp.path}/a.txt`, "modified root file")
-      await Bun.write(`${tmp.path}/subdir/sub1.txt`, "modified sub1")
-      await Bun.write(`${tmp.path}/subdir/new.txt`, "new in subdir")
-      await Bun.write(`${tmp.path}/root-new.txt`, "new in root")
-      
-      const patch = await Snapshot.patch(before!)
-      
-      // Should only track subdir changes (paths relative to worktree root)
-      expect(patch.files).toContain("subdir/sub1.txt")
-      expect(patch.files).toContain("subdir/new.txt")
-      expect(patch.files).not.toContain("a.txt")
-      expect(patch.files).not.toContain("root-new.txt")
-      expect(patch.files).not.toContain("sub1.txt") // Not relative to subdir
-      expect(patch.files).not.toContain("new.txt") // Not relative to subdir
-    },
-  })
-})
+      await Bun.write(`${tmp.path}/existing.txt`, "original content")
 
-test("subdirectory revert with relative paths", async () => {
-  await using tmp = await bootstrap()
-  
-  // Create subdirectory structure
-  await $`mkdir -p ${tmp.path}/subdir/nested`.quiet()
-  await Bun.write(`${tmp.path}/subdir/file1.txt`, "original1")
-  await Bun.write(`${tmp.path}/subdir/nested/file2.txt`, "original2")
-  
-  await Instance.provide({
-    directory: `${tmp.path}/subdir`,
-    fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-      
-      // Make changes
-      await Bun.write(`${tmp.path}/subdir/file1.txt`, "modified1")
-      await Bun.write(`${tmp.path}/subdir/nested/file2.txt`, "modified2")
-      await Bun.write(`${tmp.path}/subdir/new.txt`, "new file")
-      
-      const patch = await Snapshot.patch(before!)
-      // Paths are relative to worktree root
-      expect(patch.files).toContain("subdir/file1.txt")
-      expect(patch.files).toContain("subdir/nested/file2.txt")
-      expect(patch.files).toContain("subdir/new.txt")
-      
-      // Revert should work with these worktree-relative paths
+      const snapshot = await Snapshot.track()
+      expect(snapshot).toBeTruthy()
+
+      await $`rm ${tmp.path}/existing.txt`.quiet()
+      await Bun.write(`${tmp.path}/existing.txt`, "recreated")
+      await Bun.write(`${tmp.path}/newfile.txt`, "new")
+
+      const patch = await Snapshot.patch(snapshot!)
+      expect(patch.files).toContain(`${tmp.path}/existing.txt`)
+      expect(patch.files).toContain(`${tmp.path}/newfile.txt`)
+
       await Snapshot.revert([patch])
-      
-      // Check files were reverted
-      expect(await Bun.file(`${tmp.path}/subdir/file1.txt`).text()).toBe("original1")
-      expect(await Bun.file(`${tmp.path}/subdir/nested/file2.txt`).text()).toBe("original2")
-      expect(await Bun.file(`${tmp.path}/subdir/new.txt`).exists()).toBe(false)
-    },
-  })
-})
 
-test("nested subdirectory tracking", async () => {
-  await using tmp = await bootstrap()
-  
-  // Create nested structure
-  await $`mkdir -p ${tmp.path}/level1/level2/level3`.quiet()
-  await Bun.write(`${tmp.path}/level1/file1.txt`, "l1")
-  await Bun.write(`${tmp.path}/level1/level2/file2.txt`, "l2")
-  await Bun.write(`${tmp.path}/level1/level2/level3/file3.txt`, "l3")
-  
-  // Track from level2
-  await Instance.provide({
-    directory: `${tmp.path}/level1/level2`,
-    fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-      
-      // Modify files at different levels
-      await Bun.write(`${tmp.path}/a.txt`, "modified root")
-      await Bun.write(`${tmp.path}/level1/file1.txt`, "modified l1")
-      await Bun.write(`${tmp.path}/level1/level2/file2.txt`, "modified l2")
-      await Bun.write(`${tmp.path}/level1/level2/level3/file3.txt`, "modified l3")
-      await Bun.write(`${tmp.path}/level1/level2/new.txt`, "new in l2")
-      
-      const patch = await Snapshot.patch(before!)
-      
-      // Should only track level2 and below (paths relative to worktree root)
-      expect(patch.files).toContain("level1/level2/file2.txt")
-      expect(patch.files).toContain("level1/level2/level3/file3.txt")
-      expect(patch.files).toContain("level1/level2/new.txt")
-      expect(patch.files).not.toContain("file1.txt")
-      expect(patch.files).not.toContain("level1/file1.txt")
-      expect(patch.files).not.toContain("a.txt")
-    },
-  })
-})
-
-test("path consistency between patch and revert", async () => {
-  await using tmp = await bootstrap()
-  
-  await $`mkdir -p ${tmp.path}/workspace/src`.quiet()
-  await Bun.write(`${tmp.path}/workspace/src/code.js`, "const x = 1")
-  
-  await Instance.provide({
-    directory: `${tmp.path}/workspace`,
-    fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-      
-      // Create and modify files
-      await Bun.write(`${tmp.path}/workspace/src/code.js`, "const x = 2")
-      await Bun.write(`${tmp.path}/workspace/src/new.js`, "const y = 3")
-      
-      const patch = await Snapshot.patch(before!)
-      
-      // Paths should be relative to worktree root
-      expect(patch.files).toContain("workspace/src/code.js")
-      expect(patch.files).toContain("workspace/src/new.js")
-      
-      // These relative paths should work correctly with revert
-      await Snapshot.revert([patch])
-      
-      expect(await Bun.file(`${tmp.path}/workspace/src/code.js`).text()).toBe("const x = 1")
-      expect(await Bun.file(`${tmp.path}/workspace/src/new.js`).exists()).toBe(false)
+      expect(await Bun.file(`${tmp.path}/newfile.txt`).exists()).toBe(false)
+      expect(await Bun.file(`${tmp.path}/existing.txt`).exists()).toBe(true)
+      expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe("original content")
     },
   })
 })

@@ -4,6 +4,7 @@ import { Format } from "../format"
 import { LSP } from "../lsp"
 import { Snapshot } from "../snapshot"
 import { FileWatcher } from "../file/watcher"
+import { File } from "../file"
 
 export async function InstanceBootstrap() {
   await Plugin.init()
@@ -12,4 +13,5 @@ export async function InstanceBootstrap() {
   LSP.init()
   Snapshot.init()
   FileWatcher.init()
+  File.init()
 }

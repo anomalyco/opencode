@@ -3,19 +3,24 @@
 import type { Auth, AuthToken } from "./auth.gen.js"
 import type { BodySerializer, QuerySerializer, QuerySerializerOptions } from "./bodySerializer.gen.js"
 
-export type HttpMethod = "connect" | "delete" | "get" | "head" | "options" | "patch" | "post" | "put" | "trace"
-
-export type Client<RequestFn = never, Config = unknown, MethodFn = never, BuildUrlFn = never, SseFn = never> = {
+export interface Client<RequestFn = never, Config = unknown, MethodFn = never, BuildUrlFn = never> {
   /**
    * Returns the final request URL.
    */
   buildUrl: BuildUrlFn
+  connect: MethodFn
+  delete: MethodFn
+  get: MethodFn
   getConfig: () => Config
+  head: MethodFn
+  options: MethodFn
+  patch: MethodFn
+  post: MethodFn
+  put: MethodFn
   request: RequestFn
   setConfig: (config: Config) => Config
-} & {
-  [K in HttpMethod]: MethodFn
-} & ([SseFn] extends [never] ? { sse?: never } : { sse: { [K in HttpMethod]: SseFn } })
+  trace: MethodFn
+}
 
 export interface Config {
   /**
@@ -42,7 +47,7 @@ export interface Config {
    *
    * {@link https://developer.mozilla.org/docs/Web/API/fetch#method See more}
    */
-  method?: Uppercase<HttpMethod>
+  method?: "CONNECT" | "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT" | "TRACE"
   /**
    * A function for serializing request query parameters. By default, arrays
    * will be exploded in form style, objects will be exploded in deepObject

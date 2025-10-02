@@ -6,7 +6,6 @@ import type { KeybindsConfig } from "@opencode-ai/sdk"
 import type { ParsedKey, Renderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-import { Instance } from "@/project/instance"
 import { createSimpleContext } from "./helper"
 
 export const { use: useKeybind, provider: KeybindProvider } = createSimpleContext({
@@ -61,11 +60,6 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
           }
           leader(false)
         })
-      }
-
-      if (result.match("app_exit", evt)) {
-        await Instance.disposeAll()
-        renderer.destroy()
       }
     })
 

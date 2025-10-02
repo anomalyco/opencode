@@ -88,6 +88,7 @@ export namespace File {
         let current = file
         while (true) {
           const dir = path.dirname(current)
+          if (dir === ".") break
           if (dir === current) break
           current = dir
           if (set.has(dir)) continue
@@ -112,6 +113,10 @@ export namespace File {
       },
     }
   })
+
+  export function init() {
+    state()
+  }
 
   export async function status() {
     const project = Instance.project
@@ -244,10 +249,13 @@ export namespace File {
   }
 
   export async function search(input: { query: string; limit?: number }) {
+    log.info("search", { query: input.query })
     const limit = input.limit ?? 100
     const result = await state().then((x) => x.files())
-    const items = input.query ? [...result.files, ...result.dirs] : [...result.dirs]
+    if (!input.query) return result.dirs.toSorted().slice(0, limit)
+    const items = [...result.files, ...result.dirs]
     const sorted = fuzzysort.go(input.query, items, { limit: limit }).map((r) => r.target)
+    log.info("search", { query: input.query, results: sorted.length })
     return sorted
   }
 }

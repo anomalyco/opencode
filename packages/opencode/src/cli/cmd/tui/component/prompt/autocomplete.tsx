@@ -42,7 +42,7 @@ export function Autocomplete(props: {
     position: { x: 0, y: 0, width: 0 },
   })
   const filter = createMemo(() => {
-    if (!store.visible) return ""
+    if (!store.visible) return
     return props.value.substring(store.index + 1).split(" ")[0]
   })
 
@@ -51,45 +51,83 @@ export function Autocomplete(props: {
     async () => {
       if (!store.visible) return []
       if (store.visible === "/") return []
+
+      // Get files from SDK
       const result = await sdk.find.files({
         query: {
-          query: filter(),
+          query: filter() ?? "",
         },
       })
-      if (result.error) return []
-      return (result.data ?? []).map(
-        (item): AutocompleteOption => ({
-          display: item,
-          onSelect: () => {
-            const part: PromptInfo["parts"][number] = {
-              type: "file",
-              mime: "text/plain",
-              filename: item,
-              url: `file://${process.cwd()}/${item}`,
-              source: {
-                type: "file",
-                text: {
-                  start: store.index,
-                  end: store.index + item.length + 1,
-                  value: "@" + item,
-                },
-                path: item,
+
+      const options: AutocompleteOption[] = []
+
+      // Add file options
+      if (!result.error && result.data) {
+        options.push(
+          ...result.data.map(
+            (item): AutocompleteOption => ({
+              display: item,
+              onSelect: () => {
+                const part: PromptInfo["parts"][number] = {
+                  type: "file",
+                  mime: "text/plain",
+                  filename: item,
+                  url: `file://${process.cwd()}/${item}`,
+                  source: {
+                    type: "file",
+                    text: {
+                      start: store.index,
+                      end: store.index + item.length + 1,
+                      value: "@" + item,
+                    },
+                    path: item,
+                  },
+                }
+                props.setPrompt((draft) => {
+                  const append = "@" + item + " "
+                  if (store.index === 0) draft.input = append
+                  if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
+                  draft.parts.push(part)
+                })
               },
-            }
-            props.setPrompt((draft) => {
-              const append = "@" + item + " "
-              if (store.index === 0) draft.input = append
-              if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
-              draft.parts.push(part)
-            })
-          },
-        }),
-      )
+            }),
+          ),
+        )
+      }
+
+      return options
     },
     {
       initialValue: [],
     },
   )
+
+  const agents = createMemo(() => {
+    if (store.index !== 0) return []
+    const agents = sync.data.agent
+    return agents
+      .filter((agent) => !agent.builtIn && agent.mode !== "primary")
+      .map(
+        (agent): AutocompleteOption => ({
+          display: "@" + agent.name,
+          onSelect: () => {
+            props.setPrompt((draft) => {
+              const append = "@" + agent.name + " "
+              draft.input = append
+              draft.parts.push({
+                type: "agent",
+                source: {
+                  start: store.index,
+                  end: store.index + agent.name.length + 1,
+                  value: "@" + agent.name,
+                },
+                name: agent.name,
+              })
+            })
+          },
+        }),
+      )
+  })
 
   const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
   const commands = createMemo((): AutocompleteOption[] => {
@@ -162,12 +200,14 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo(() => {
-    const mixed: AutocompleteOption[] = (store.visible === "@" ? [...files()] : [...commands()]).filter(
+    console.log(agents())
+    const mixed: AutocompleteOption[] = (store.visible === "@" ? [...agents(), ...files()] : [...commands()]).filter(
       (x) => x.disabled !== true,
     )
-    if (!filter()) return mixed
-    const result = fuzzysort.go(filter(), mixed, {
+    if (!filter()) return mixed.slice(0, 10)
+    const result = fuzzysort.go(filter()!, mixed, {
       keys: ["display", "description"],
+      limit: 10,
     })
     return result.map((arr) => arr.obj)
   })

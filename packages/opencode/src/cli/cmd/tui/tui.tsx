@@ -72,18 +72,34 @@ export const TuiCommand = cmd({
       directory: process.cwd(),
       fn: () => Config.get(),
     })
+
+    const worker = new Worker("./src/cli/cmd/tui/worker.ts")
+    worker.onerror = console.log
+    worker.onmessageerror = console.log
+    const url = await new Promise<string>((resolve) => {
+      worker.onmessage = (event) => {
+        const data = JSON.parse(event.data)
+        if (data.type === "ready") {
+          resolve(data.url)
+        }
+      }
+    })
     await render(
       () => {
         return (
           <RouteProvider>
-            <SDKProvider>
+            <SDKProvider url={url}>
               <SyncProvider>
                 <LocalProvider>
                   <KeybindProvider>
                     <DialogProvider>
                       <CommandProvider>
                         <PromptHistoryProvider>
-                          <App />
+                          <App
+                            onExit={() => {
+                              worker.terminate()
+                            }}
+                          />
                         </PromptHistoryProvider>
                       </CommandProvider>
                     </DialogProvider>
@@ -104,7 +120,7 @@ export const TuiCommand = cmd({
   },
 })
 
-function App() {
+function App(props: { onExit: () => void }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -130,6 +146,11 @@ function App() {
     if (evt.meta && evt.name === "d") {
       renderer.console.toggle()
       return
+    }
+    if (keybind.match("app_exit", evt)) {
+      await Instance.disposeAll()
+      renderer.destroy()
+      props.onExit()
     }
   })
 

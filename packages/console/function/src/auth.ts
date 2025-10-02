@@ -111,11 +111,7 @@ export default {
         } else if (response.provider === "google") {
           if (!response.id.email_verified) throw new Error("Google email not verified")
           email = response.id.email as string
-        }
-        //if (response.provider === "email") {
-        //  email = response.claims.email
-        //}
-        else throw new Error("Unsupported provider")
+        } else throw new Error("Unsupported provider")
 
         if (!email) throw new Error("No email found")
 

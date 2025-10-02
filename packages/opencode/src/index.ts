@@ -21,9 +21,6 @@ import { ExportCommand } from "./cli/cmd/export"
 
 const cancel = new AbortController()
 
-try {
-} catch (e) {}
-
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,

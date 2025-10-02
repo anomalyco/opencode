@@ -22,6 +22,7 @@
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
       "@openauthjs/openauth": "0.0.0-20250322224806",
+      "@kobalte/core": "0.13.11",
       "@types/node": "22.13.9",
       "@tsconfig/node22": "22.0.2",
       "ai": "5.0.8",

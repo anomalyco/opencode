@@ -12,6 +12,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { Clipboard } from "@/util/clipboard"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { iife } from "@/util/iife"
 
 export type PromptProps = {
   sessionID?: string
@@ -113,17 +114,17 @@ export function Prompt(props: PromptProps) {
                     for (let i = 0; i < draft.parts.length; i++) {
                       const part = draft.parts[i]
                       if (!part.source) continue
-                      if (part.source.text.start >= input.cursorPosition) {
-                        part.source.text.start += diff
-                        part.source.text.end += diff
+                      const source = part.type === "agent" ? part.source : part.source.text
+                      if (source.start >= input.cursorPosition) {
+                        source.start += diff
+                        source.end += diff
                       }
-                      const sliced = draft.input.slice(part.source.text.start, part.source.text.end)
-                      if (sliced != part.source.text.value && diff < 0) {
-                        diff -= part.source.text.value.length
-                        draft.input =
-                          draft.input.slice(0, part.source.text.start) + draft.input.slice(part.source.text.end)
+                      const sliced = draft.input.slice(source.start, source.end)
+                      if (sliced != source.value && diff < 0) {
+                        diff -= source.value.length
+                        draft.input = draft.input.slice(0, source.start) + draft.input.slice(source.end)
                         draft.parts.splice(i, 1)
-                        input.cursorPosition = Math.max(0, part.source.text.start - 1)
+                        input.cursorPosition = Math.max(0, source.start - 1)
                         i--
                       }
                     }
@@ -160,13 +161,18 @@ export function Prompt(props: PromptProps) {
                   const position = input.cursorPosition
                   const direction = Math.sign(old - position)
                   for (const part of store.parts) {
-                    if (part.source && part.source.type === "file") {
-                      if (position >= part.source.text.start && position < part.source.text.end) {
+                    const source = iife(() => {
+                      if (part.type === "agent") return part.source
+                      if (part.type === "file") return part.source?.text
+                      return
+                    })
+                    if (source) {
+                      if (position >= source.start && position < source.end) {
                         if (direction === 1) {
-                          input.cursorPosition = Math.max(0, part.source.text.start - 1)
+                          input.cursorPosition = Math.max(0, source.start - 1)
                         }
                         if (direction === -1) {
-                          input.cursorPosition = part.source.text.end
+                          input.cursorPosition = source.end
                         }
                       }
                     }
