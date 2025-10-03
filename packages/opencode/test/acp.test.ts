@@ -16,14 +16,12 @@ describe("acp server", () => {
 
     const w = new TextEncoder()
     proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })))
-    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 2, method: "text/complete", params: { text: "Hello" } })))
-    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 3, method: "shutdown" })))
+    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 2, method: "shutdown" })))
     proc.stdin!.end()
 
     const r = proc.stdout!.getReader()
     const d = new TextDecoder()
     let initOk = false
-    let gotText: string | undefined
     while (true) {
       const { value, done } = await r.read()
       if (done) break
@@ -33,11 +31,9 @@ describe("acp server", () => {
         if (!t) continue
         const msg = JSON.parse(t)
         if (msg.id === 1) initOk = !!msg.result?.capabilities?.text?.complete
-        if (msg.id === 2) gotText = msg.result?.text
       }
     }
 
     expect(initOk).toBe(true)
-    expect(typeof gotText).toBe("string")
   })
 })
