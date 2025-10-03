@@ -457,6 +457,21 @@ export namespace TimeSeries {
   }
 
   /**
+   * Clear all time-series data for a specific metric.
+   * Useful for testing and data cleanup.
+   * 
+   * @param metricID - The metric ID to clear data for
+   */
+  export async function clearMetric(metricID: string): Promise<void> {
+    const prefix = ["timeseries", metricID]
+    const keys = await Storage.list(prefix)
+    
+    for (const key of keys) {
+      await Storage.remove(key)
+    }
+  }
+
+  /**
    * Get period duration in milliseconds.
    */
   function getPeriodMilliseconds(period: "hour" | "day" | "week" | "month"): number {

@@ -3,17 +3,7 @@ import { EvaluationIntegration } from "../../src/evaluation/integration"
 import { Metric } from "../../src/evaluation/metric"
 import { Baseline } from "../../src/evaluation/baseline"
 import { TimeSeries } from "../../src/evaluation/timeseries"
-import { Trace } from "../../src/trace"
 import type { Trace as TraceType } from "../../src/trace"
-import { Instance } from "../../src/project/instance"
-
-// Helper to run test within Instance context (needed for Trace.materialize and Trace.get)
-async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
-  return Instance.provide({
-    directory: process.cwd(),
-    fn,
-  })
-}
 
 // Helper to create mock traces
 function createMockTrace(overrides?: Partial<TraceType.Complete>): TraceType.Complete {
@@ -70,6 +60,9 @@ describe("EvaluationIntegration", () => {
       } catch {}
       try {
         await Baseline.remove(id)
+      } catch {}
+      try {
+        await TimeSeries.clearMetric(id)
       } catch {}
     }
     testIds.length = 0
@@ -188,7 +181,7 @@ describe("EvaluationIntegration", () => {
 
     test("onAnomaly receives anomaly alerts", async () => {
       const metric: Metric.Definition = {
-        id: "anomaly-metric",
+        id: `anomaly-metric-${Date.now()}-${Math.random()}`,
         name: "Anomaly Metric",
         description: "Test metric for anomaly detection",
         version: "1.0.0",
@@ -681,7 +674,7 @@ describe("EvaluationIntegration", () => {
 
     test("handles all identical values in time series", async () => {
       const metric: Metric.Definition = {
-        id: "identical-values-metric",
+        id: `identical-values-metric-${Date.now()}-${Math.random()}`,
         name: "Identical Values Metric",
         description: "Test with all identical values",
         version: "1.0.0",
@@ -798,7 +791,7 @@ describe("EvaluationIntegration", () => {
   describe("edge cases - callback management", () => {
     test("handles multiple callbacks for same alert type", async () => {
       const metric: Metric.Definition = {
-        id: "multi-callback-metric",
+        id: `multi-callback-metric-${Date.now()}-${Math.random()}`,
         name: "Multi Callback Metric",
         description: "Test multiple callbacks",
         version: "1.0.0",
@@ -860,7 +853,7 @@ describe("EvaluationIntegration", () => {
 
     test("handles callback errors gracefully", async () => {
       const metric: Metric.Definition = {
-        id: "callback-error-metric",
+        id: `callback-error-metric-${Date.now()}-${Math.random()}`,
         name: "Callback Error Metric",
         description: "Test callback error handling",
         version: "1.0.0",
