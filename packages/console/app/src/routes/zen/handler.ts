@@ -69,7 +69,7 @@ export async function handler(
 
     // Request to model provider
     const startTimestamp = Date.now()
-    const res = await fetch(path.posix.join(providerInfo.api, url.pathname.replace(/^\/zen/, "") + url.search), {
+    const res = await fetch(path.posix.join(providerInfo.api, url.pathname.replace(/^\/zen\/v1/, "") + url.search), {
       method: "POST",
       headers: (() => {
         const headers = input.request.headers

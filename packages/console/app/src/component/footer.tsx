@@ -1,4 +1,4 @@
-import { A, createAsync } from "@solidjs/router"
+import { createAsync } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { github } from "~/lib/github"
 
@@ -16,18 +16,18 @@ export function Footer() {
   return (
     <footer data-component="footer">
       <div data-slot="cell">
-        <A href="https://github.com/sst/opencode" target="_blank">
+        <a href="https://github.com/sst/opencode" target="_blank">
           GitHub <span>[{starCount()}]</span>
-        </A>
+        </a>
       </div>
       <div data-slot="cell">
-        <A href="/docs">Docs</A>
+        <a href="/docs">Docs</a>
       </div>
       <div data-slot="cell">
-        <A href="/discord">Discord</A>
+        <a href="/discord">Discord</a>
       </div>
       <div data-slot="cell">
-        <A href="https://x.com/opencode">X</A>
+        <a href="https://x.com/opencode">X</a>
       </div>
     </footer>
   )

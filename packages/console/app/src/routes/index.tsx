@@ -56,7 +56,7 @@ export default function Home() {
     <main data-page="opencode">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
       <Title>OpenCode | The AI coding agent built for the terminal</Title>
-      <Link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">
@@ -647,7 +647,7 @@ export default function Home() {
 
                 <p>
                   OpenCode does not store any of your code or context data, so that it can operate in privacy sensitive
-                  environments. Learn more about <a href="/docs/enterprise/ ">privacy and enterprise</a>.
+                  environments. Learn more about <a href="/docs/enterprise/ ">privacy</a>.
                 </p>
               </div>
             </div>
@@ -798,6 +798,8 @@ export default function Home() {
               </A>
             </div>
           </section>
+
+          <EmailSignup />
 
           <Footer />
         </div>

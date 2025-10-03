@@ -38,7 +38,7 @@ const logout = action(async () => {
       event!.locals.actor = undefined
       return val
     })
-  throw redirect("/")
+  throw redirect("/zen")
 })
 
 export default function WorkspaceLayout(props: RouteSectionProps) {

@@ -29,9 +29,9 @@ export function Header(props: { zen?: boolean }) {
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <A href="https://github.com/sst/opencode" target="_blank">
+            <a href="https://github.com/sst/opencode" target="_blank">
               GitHub <span>[{starCount()}]</span>
-            </A>
+            </a>
           </li>
           <li>
             <a href="/docs">Docs</a>
@@ -100,17 +100,17 @@ export function Header(props: { zen?: boolean }) {
                   <A href="/">Home</A>
                 </li>
                 <li>
-                  <A href="https://github.com/sst/opencode" target="_blank">
+                  <a href="https://github.com/sst/opencode" target="_blank">
                     GitHub <span>[{starCount()}]</span>
-                  </A>
+                  </a>
                 </li>
                 <li>
-                  <A href="/docs">Docs</A>
+                  <a href="/docs">Docs</a>
                 </li>
                 <li>
                   <Switch>
                     <Match when={props.zen}>
-                      <A href="/auth">Login</A>
+                      <a href="/auth">Login</a>
                     </Match>
                     <Match when={!props.zen}>
                       <A href="/zen">Zen</A>

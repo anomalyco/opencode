@@ -10,24 +10,14 @@ import { Show } from "solid-js"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { Actor } from "@opencode/console-core/actor.js"
 import { withActor } from "~/context/auth.withActor"
-import { and, Database, eq } from "@opencode/console-core/drizzle/index.js"
-import { UserTable } from "@opencode/console-core/schema/user.sql.js"
+import { User } from "@opencode/console-core/user.js"
 
 const getUser = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
-    const actor = Actor.use()
-    const isAdmin = await (async () => {
-      if (actor.type !== "user") return false
-      const role = await Database.use((tx) =>
-        tx
-          .select({ role: UserTable.role })
-          .from(UserTable)
-          .where(and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, actor.properties.userID))),
-      ).then((x) => x[0]?.role)
-      return role === "admin"
-    })()
-    return { isAdmin }
+    const actor = Actor.assert("user")
+    const user = await User.fromID(actor.properties.userID)
+    return { isAdmin: user?.role === "admin" }
   }, workspaceID)
 }, "user.get")
 

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { fn } from "./util/fn"
 import { Actor } from "./actor"
-import { Database, sql } from "./drizzle"
+import { Database } from "./drizzle"
 import { Identifier } from "./identifier"
 import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
@@ -19,7 +19,7 @@ export namespace Workspace {
       await tx.insert(UserTable).values({
         workspaceID,
         id: Identifier.create("user"),
-        email: account.properties.email,
+        accountID: account.properties.accountID,
         name: "",
         role: "admin",
       })
@@ -34,9 +34,7 @@ export namespace Workspace {
       {
         workspaceID,
       },
-      async () => {
-        await Key.create({ name: "Default API Key" })
-      },
+      () => Key.create({ name: "Default API Key" }),
     )
     return workspaceID
   })

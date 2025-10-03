@@ -12,7 +12,7 @@
     },
     "packages/app": {
       "name": "@opencode/app",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -48,11 +48,9 @@
       "name": "@opencode/console-app",
       "dependencies": {
         "@ibm/plex": "6.4.1",
-        "@jsx-email/render": "1.1.1",
         "@kobalte/core": "catalog:",
         "@openauthjs/openauth": "0.0.0-20250322224806",
         "@opencode/console-core": "workspace:*",
-        "@opencode/console-mail": "workspace:*",
         "@solidjs/meta": "^0.29.4",
         "@solidjs/router": "^0.15.0",
         "@solidjs/start": "^1.1.0",
@@ -63,9 +61,11 @@
     },
     "packages/console/core": {
       "name": "@opencode/console-core",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
+        "@jsx-email/render": "1.1.1",
+        "@opencode/console-mail": "workspace:*",
         "@opencode/console-resource": "workspace:*",
         "@planetscale/database": "1.19.0",
         "aws4fetch": "1.0.20",
@@ -81,7 +81,7 @@
     },
     "packages/console/function": {
       "name": "@opencode/console-function",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -101,7 +101,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode/console-mail",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -117,7 +117,7 @@
     },
     "packages/console/scripts": {
       "name": "@opencode/console-scripts",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@opencode/console-core": "workspace:*",
         "tsx": "4.20.5",
@@ -129,7 +129,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "22.0.0",
@@ -144,7 +144,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -197,7 +197,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "zod": "catalog:",
@@ -209,7 +209,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@hey-api/openapi-ts": "0.81.0",
       },
@@ -221,7 +221,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "0.13.8",
+      "version": "0.14.0",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",

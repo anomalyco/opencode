@@ -50,11 +50,21 @@
   }
 }
 
+body {
+  background: var(--color-background);
+}
+
+@supports (background: -webkit-named-image(i)) {
+  [data-page="opencode"] {
+    border-top: 1px solid var(--color-border-weak);
+  }
+}
+
+
 [data-page="zen"] {
   background: var(--color-background);
   --padding: 5rem;
   --vertical-padding: 4rem;
-  border-top: 1px solid var(--color-border-weak);
 
   @media (max-width: 60rem) {
     --padding: 1.5rem;
@@ -77,6 +87,10 @@
 
   p {
     line-height: 200%;
+
+    @media (max-width: 60rem) {
+      line-height: 180%;
+    }
   }
 
   @media (max-width: 60rem) {
@@ -89,6 +103,16 @@
   input:-webkit-autofill:active {
     transition: background-color 5000000s ease-in-out 0s;
   }
+
+  input:-webkit-autofill {
+    -webkit-text-fill-color: var(--color-text-strong) !important;
+  }
+
+  input:-moz-autofill {
+    -moz-text-fill-color: var(--color-text-strong) !important;
+  }
+
+
 
 
   [data-component="container"] {
@@ -148,6 +172,14 @@
         display: none;
       }
     }
+
+    [data-component="nav-mobile"] {
+      button > svg {
+        color: var(--color-icon);
+      }
+    }
+
+
 
     [data-component="nav-mobile-toggle"] {
       border: none;
@@ -434,6 +466,10 @@
       span {
         color: var(--color-icon);
         line-height: 200%;
+
+        @media (max-width: 60rem) {
+          line-height: 180%;
+        }
       }
 
       div {
@@ -482,13 +518,28 @@
         border-radius: 6px;
         border: 1px solid var(--color-border-weak);
         padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
         width: 100%;
+
+        /* Use color, not -moz-text-fill-color, for normal text */
+        color: var(--color-text-strong);
 
         @media (max-width: 30rem) {
           padding-bottom: 80px;
+        }
+
+        &:not(:focus) {
+          color: var(--color-text-strong);
+        }
+
+        &::placeholder {
+          color: var(--color-text-weak);
+          opacity: 1;
+        }
+
+        /* Optional legacy */
+        &::-moz-placeholder {
+          color: var(--color-text-weak);
+          opacity: 1;
         }
       }
 
@@ -514,6 +565,8 @@
         color: var(--color-text-inverted);
         border-radius: 4px;
         font-weight: 500;
+        border: none;
+        outline: none;
         cursor: pointer;
         top: 50%;
         margin-top: -20px;
@@ -539,6 +592,10 @@
         list-style: none;
         margin-bottom: 24px;
         line-height: 200%;
+
+        @media (max-width: 60rem) {
+          line-height: 180%;
+        }
       }
     }
 
@@ -555,6 +612,9 @@
 
       [data-slot="faq-icon-plus"] {
         flex-shrink: 0;
+        color: var(--color-text-weak);
+        margin-top: 2px;
+
         [data-closed] & {
           display: block;
         }
@@ -564,6 +624,9 @@
       }
       [data-slot="faq-icon-minus"] {
         flex-shrink: 0;
+        color: var(--color-text-weak);
+        margin-top: 2px;
+
         [data-closed] & {
           display: none;
         }
@@ -590,14 +653,10 @@
     flex-direction: column;
     gap: 20px;
 
-    @media (max-width: 60rem) {
-      --padding: 1rem;
-      --vertical-padding: 1rem;
-    }
-
     a {
       text-decoration: none;
     }
+
     [data-slot="testimonial"] {
       background: var(--color-background-weak);
       border-radius: 6px;
@@ -607,10 +666,9 @@
       flex-direction: column;
       gap: 12px;
 
-      @media (max-width: 60rem) {
+      @media (max-width: 30rem) {
         flex-direction: column-reverse;
         gap: 24px;
-        padding: 24px 48px;
       }
 
       [data-slot="name"] {
@@ -619,13 +677,14 @@
 
         strong {
           font-weight: 500;
+          flex: 0 0 auto;
         }
 
         span {
           color: var(--color-text);
         }
 
-        @media (max-width: 60rem) {
+        @media (max-width: 30rem) {
           flex-direction: column;
           gap: 8px;
         }
@@ -644,7 +703,7 @@
       [data-slot="quote"] {
         margin-left: 40px;
 
-        @media (max-width: 60rem) {
+        @media (max-width: 30rem) {
           margin-left: 0;
         }
         span {
@@ -751,6 +810,10 @@
 
     [data-slot="cell"] + [data-slot="cell"] {
       border-left: 1px solid var(--color-border-weak);
+
+      @media (max-width: 40rem) {
+        border-left: none;
+      }
     }
 
     /* Mobile: third column on its own row */

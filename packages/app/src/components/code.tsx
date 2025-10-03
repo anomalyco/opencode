@@ -1,7 +1,10 @@
 import { bundledLanguages, type BundledLanguage, type ShikiTransformer } from "shiki"
 import { splitProps, type ComponentProps, createEffect, onMount, onCleanup, createMemo, createResource } from "solid-js"
 import { useLocal, useShiki } from "@/context"
+import type { TextSelection } from "@/context/local"
 import { getFileExtension, getNodeOffsetInLine, getSelectionInContainer } from "@/utils"
+
+type DefinedSelection = Exclude<TextSelection, undefined>
 
 interface Props extends ComponentProps<"div"> {
   code: string
@@ -21,16 +24,65 @@ export function Code(props: Props) {
   let container: HTMLDivElement | undefined
   let isProgrammaticSelection = false
 
-  const [html] = createResource(async () => {
-    if (!highlighter.getLoadedLanguages().includes(lang())) {
-      await highlighter.loadLanguage(lang() as BundledLanguage)
+  const ranges = createMemo<DefinedSelection[]>(() => {
+    const items = ctx.context.all() as Array<{ type: "file"; path: string; selection?: DefinedSelection }>
+    const result: DefinedSelection[] = []
+    for (const item of items) {
+      if (item.path !== local.path) continue
+      const selection = item.selection
+      if (!selection) continue
+      result.push(selection)
     }
-    return highlighter.codeToHtml(local.code || "", {
-      lang: lang() && lang() in bundledLanguages ? lang() : "text",
-      theme: "opencode",
-      transformers: [transformerUnifiedDiff(), transformerDiffGroups()],
-    }) as string
+    return result
   })
+
+  const createLineNumberTransformer = (selections: DefinedSelection[]): ShikiTransformer => {
+    const highlighted = new Set<number>()
+    for (const selection of selections) {
+      const startLine = selection.startLine
+      const endLine = selection.endLine
+      const start = Math.max(1, Math.min(startLine, endLine))
+      const end = Math.max(start, Math.max(startLine, endLine))
+      const count = end - start + 1
+      if (count <= 0) continue
+      const values = Array.from({ length: count }, (_, index) => start + index)
+      for (const value of values) highlighted.add(value)
+    }
+    return {
+      name: "line-number-highlight",
+      line(node, index) {
+        if (!highlighted.has(index)) return
+        this.addClassToHast(node, "line-number-highlight")
+        const children = node.children
+        if (!Array.isArray(children)) return
+        for (const child of children) {
+          if (!child || typeof child !== "object") continue
+          const element = child as { type?: string; properties?: { className?: string[] } }
+          if (element.type !== "element") continue
+          const className = element.properties?.className
+          if (!Array.isArray(className)) continue
+          const matches = className.includes("diff-oldln") || className.includes("diff-newln")
+          if (!matches) continue
+          if (className.includes("line-number-highlight")) continue
+          className.push("line-number-highlight")
+        }
+      },
+    }
+  }
+
+  const [html] = createResource(
+    () => ranges(),
+    async (activeRanges) => {
+      if (!highlighter.getLoadedLanguages().includes(lang())) {
+        await highlighter.loadLanguage(lang() as BundledLanguage)
+      }
+      return highlighter.codeToHtml(local.code || "", {
+        lang: lang() && lang() in bundledLanguages ? lang() : "text",
+        theme: "opencode",
+        transformers: [transformerUnifiedDiff(), transformerDiffGroups(), createLineNumberTransformer(activeRanges)],
+      }) as string
+    },
+  )
 
   onMount(() => {
     if (!container) return
@@ -283,7 +335,7 @@ export function Code(props: Props) {
           [&]:[counter-reset:line]
           [&_pre]:focus-visible:outline-none
           [&_pre]:overflow-x-auto [&_pre]:no-scrollbar
-          [&_code]:min-w-full [&_code]:inline-block [&_code]:pb-40
+          [&_code]:min-w-full [&_code]:inline-block 
           [&_.tab]:relative
           [&_.tab::before]:content['⇥']
           [&_.tab::before]:absolute
@@ -303,6 +355,9 @@ export function Code(props: Props) {
           [&_.line::before]:select-none
           [&_.line::before]:[counter-increment:line]
           [&_.line::before]:content-[counter(line)]
+          [&_.line-number-highlight]:bg-accent/20
+          [&_.line-number-highlight::before]:bg-accent/40!
+          [&_.line-number-highlight::before]:text-background-panel!
           [&_code.code-diff_.line::before]:content-['']
           [&_code.code-diff_.line::before]:w-0
           [&_code.code-diff_.line::before]:pr-0

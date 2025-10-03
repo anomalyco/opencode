@@ -1,6 +1,6 @@
 import { action, useSubmission } from "@solidjs/router"
 import dock from "../asset/lander/dock.png"
-import { Resource } from "sst"
+import { Resource } from "@opencode/console-resource"
 import { Show } from "solid-js"
 
 const emailSignup = action(async (formData: FormData) => {
@@ -39,7 +39,9 @@ export function EmailSignup() {
         </button>
       </form>
       <Show when={submission.result}>
-        <div style="color: #03B000; margin-top: 24px;">Almost done, check your inbox and confirm your email address</div>
+        <div style="color: #03B000; margin-top: 24px;">
+          Almost done, check your inbox and confirm your email address
+        </div>
       </Show>
       <Show when={submission.error}>
         <div style="color: #FF408F; margin-top: 24px;">{submission.error}</div>

@@ -101,11 +101,7 @@ function EditToolPart(props: { part: ToolPart }) {
               </>
             }
           >
-            <Code
-              path={state().input["filePath"] as string}
-              code={state().metadata["diff"] as string}
-              class="[&_code]:pb-0!"
-            />
+            <Code path={state().input["filePath"] as string} code={state().metadata["diff"] as string} />
           </CollapsiblePart>
         )}
       </Match>
@@ -412,7 +408,7 @@ export default function SessionTimeline(props: { session: string; class?: string
                     </div>
                   </Collapsible.Trigger>
                   <Collapsible.Content>
-                    <Code path="session.json" code={JSON.stringify(session(), null, 2)} class="[&_code]:pb-0!" />
+                    <Code path="session.json" code={JSON.stringify(session(), null, 2)} />
                   </Collapsible.Content>
                 </Collapsible>
               </li>
@@ -429,15 +425,11 @@ export default function SessionTimeline(props: { session: string; class?: string
                           </div>
                         </Collapsible.Trigger>
                         <Collapsible.Content>
-                          <Code
-                            path={message.id + ".json"}
-                            code={JSON.stringify(message, null, 2)}
-                            class="[&_code]:pb-0!"
-                          />
+                          <Code path={message.id + ".json"} code={JSON.stringify(message, null, 2)} />
                         </Collapsible.Content>
                       </Collapsible>
                     </li>
-                    <For each={sync.data.part[message.id]?.filter(valid)}>
+                    <For each={sync.data.part[message.id]}>
                       {(part) => (
                         <li>
                           <Collapsible>
@@ -449,11 +441,7 @@ export default function SessionTimeline(props: { session: string; class?: string
                               </div>
                             </Collapsible.Trigger>
                             <Collapsible.Content>
-                              <Code
-                                path={message.id + "." + part.id + ".json"}
-                                code={JSON.stringify(part, null, 2)}
-                                class="[&_code]:pb-0!"
-                              />
+                              <Code path={message.id + "." + part.id + ".json"} code={JSON.stringify(part, null, 2)} />
                             </Collapsible.Content>
                           </Collapsible>
                         </li>

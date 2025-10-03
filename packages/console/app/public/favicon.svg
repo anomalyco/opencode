@@ -1,5 +1,4 @@
 <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="400" height="400" fill="#0E0E0E"/>
-<path d="M252 278H148V174H252V278Z" fill="#6A6565"/>
-<path d="M252 122H148V278H252V122ZM304 330H96V70H304V330Z" fill="white"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M312 340H88V60H312V340ZM256 116H144V284H256V116Z" fill="white"/>
 </svg>

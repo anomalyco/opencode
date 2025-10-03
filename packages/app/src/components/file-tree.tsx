@@ -23,6 +23,30 @@ export default function FileTree(props: {
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}
       style={`padding-left: ${level * 10}px`}
+      draggable={true}
+      onDragStart={(e: any) => {
+        const evt = e as globalThis.DragEvent
+        evt.dataTransfer!.effectAllowed = "copy"
+        evt.dataTransfer!.setData("text/plain", `file:${p.node.path}`)
+
+        // Create custom drag image without margins
+        const dragImage = document.createElement("div")
+        dragImage.className =
+          "flex items-center gap-x-2 px-2 py-1 bg-background-element rounded-md border border-border-1"
+        dragImage.style.position = "absolute"
+        dragImage.style.top = "-1000px"
+
+        // Copy only the icon and text content without padding
+        const icon = e.currentTarget.querySelector("svg")
+        const text = e.currentTarget.querySelector("span")
+        if (icon && text) {
+          dragImage.innerHTML = icon.outerHTML + text.outerHTML
+        }
+
+        document.body.appendChild(dragImage)
+        evt.dataTransfer!.setDragImage(dragImage, 0, 12)
+        setTimeout(() => document.body.removeChild(dragImage), 0)
+      }}
       {...p}
     >
       {p.children}
@@ -51,6 +75,7 @@ export default function FileTree(props: {
             <Switch>
               <Match when={node.type === "directory"}>
                 <Collapsible
+                  class="w-full"
                   forceMount={false}
                   open={local.file.node(node.path)?.expanded}
                   onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}

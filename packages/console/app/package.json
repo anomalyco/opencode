@@ -7,15 +7,13 @@
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
     "start": "vinxi start",
-    "version": "0.13.8"
+    "version": "0.14.0"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
-    "@jsx-email/render": "1.1.1",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "@opencode/console-core": "workspace:*",
-    "@opencode/console-mail": "workspace:*",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",

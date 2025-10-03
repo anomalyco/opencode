@@ -54,7 +54,7 @@ export namespace Account {
         .select(getTableColumns(WorkspaceTable))
         .from(WorkspaceTable)
         .innerJoin(UserTable, eq(UserTable.workspaceID, WorkspaceTable.id))
-        .where(and(eq(UserTable.email, actor.properties.email), isNull(WorkspaceTable.timeDeleted)))
+        .where(and(eq(UserTable.accountID, actor.properties.accountID), isNull(WorkspaceTable.timeDeleted)))
         .execute(),
     )
   }
