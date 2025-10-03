@@ -268,6 +268,47 @@ export namespace Baseline {
   }
 
   /**
+   * Add multiple traces to a baseline in a single batch operation.
+   * Much faster than calling addTrace() in a loop.
+   * 
+   * @param baselineID - The baseline ID
+   * @param traces - Array of traces to add
+   * 
+   * @example
+   * ```typescript
+   * const historicalTraces = loadHistoricalData()
+   * await Baseline.addTraces("prod-baseline", historicalTraces)
+   * ```
+   */
+  export async function addTraces(
+    baselineID: string,
+    traces: Trace.Complete[]
+  ): Promise<void> {
+    const baseline = await get(baselineID)
+    const { Metric } = await import("./metric")
+    
+    // Get all metrics for this baseline
+    const metrics = await Promise.all(baseline.metricIDs.map((id) => Metric.get(id)))
+    
+    // Evaluate all traces in parallel
+    await Promise.all(
+      traces.map(async (trace) => {
+        await EvaluationEngine.evaluateMany(trace, metrics)
+      })
+    )
+    
+    // Add all trace IDs
+    baseline.traceIDs.push(...traces.map((t) => t.id))
+    
+    // Update statistics once for all new data
+    baseline.statistics = await computeStatistics(baselineID, baseline.metricIDs)
+    baseline.updatedAt = Date.now()
+    
+    await Storage.write(["baseline", baselineID], baseline)
+    Bus.publish(Event.Updated, { baselineID })
+  }
+
+  /**
    * Compare a trace against a baseline.
    * 
    * Evaluates the trace and compares each metric against the baseline's

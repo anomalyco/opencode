@@ -77,6 +77,13 @@ export namespace Metric {
     threshold: Threshold.optional(),
     higherIsBetter: z.boolean(),
     tags: z.array(z.string()).default([]),
+    semantics: z
+      .object({
+        unit: z.string().optional(),
+        interpretSlope: z.function().optional(),
+        formatValue: z.function().optional(),
+      })
+      .optional(),
   })
   export type Definition = z.infer<typeof Definition>
 

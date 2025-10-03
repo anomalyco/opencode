@@ -2,6 +2,7 @@ import z from "zod/v4"
 import { Storage } from "../storage/storage"
 import type { Trace } from "../trace"
 import { EvaluationEngine } from "./engine"
+import { TimeUtils } from "./time-utils"
 
 /**
  * Time-series analysis for tracking metric trends over time.
@@ -129,18 +130,78 @@ export namespace TimeSeries {
     // Evaluate the metric
     const result = await EvaluationEngine.evaluate(trace, metric)
     
+    // Validate and use trace timestamp
+    const timestamp = TimeUtils.validateTimestamp(
+      trace.createdAt || Date.now(),
+      `TimeSeries.record(${metricID}, ${trace.id})`,
+      { warnIfOlderThanDays: 90 }
+    )
+
     const dataPoint: DataPoint = {
       metricID,
       traceID: trace.id,
       value: result.score,
-      timestamp: trace.createdAt || Date.now(),
+      timestamp,
       tags,
     }
     
     // Store in time-series bucket
-    const timestamp = dataPoint.timestamp
     const hourBucket = Math.floor(timestamp / (60 * 60 * 1000)) // Hourly buckets
     await Storage.write(["timeseries", metricID, hourBucket.toString(), trace.id], dataPoint)
+  }
+
+  /**
+   * Record multiple traces efficiently in a single batch operation.
+   * Much faster than calling record() in a loop.
+   * 
+   * @param metricID - The metric ID
+   * @param traces - Array of traces to record
+   * @param tags - Optional tags to apply to all data points
+   * 
+   * @example
+   * ```typescript
+   * const traces = generateHistoricalTraces(100)
+   * await TimeSeries.recordBatch("cost-metric", traces)
+   * ```
+   */
+  export async function recordBatch(
+    metricID: string,
+    traces: Trace.Complete[],
+    tags?: Record<string, string>
+  ): Promise<void> {
+    const { Metric } = await import("./metric")
+    const metric = await Metric.get(metricID)
+
+    // Evaluate all traces in parallel
+    const dataPoints = await Promise.all(
+      traces.map(async (trace) => {
+        const result = await EvaluationEngine.evaluate(trace, metric)
+        const timestamp = TimeUtils.validateTimestamp(
+          trace.createdAt || Date.now(),
+          `TimeSeries.recordBatch(${metricID})`,
+          { warnIfOlderThanDays: 90 }
+        )
+
+        return {
+          metricID,
+          traceID: trace.id,
+          value: result.score,
+          timestamp,
+          tags,
+        }
+      })
+    )
+
+    // Write all data points in parallel
+    await Promise.all(
+      dataPoints.map(async (point) => {
+        const hourBucket = Math.floor(point.timestamp / (60 * 60 * 1000))
+        await Storage.write(
+          ["timeseries", metricID, hourBucket.toString(), point.traceID],
+          point
+        )
+      })
+    )
   }
 
   /**
@@ -292,6 +353,7 @@ export namespace TimeSeries {
       since?: number
       until?: number
       anomalyThreshold?: number // Sigma threshold for anomaly detection
+      skipQualityCheck?: boolean // Skip data quality checks (for testing)
     },
   ): Promise<TrendAnalysis> {
     const { Metric } = await import("./metric")
@@ -301,6 +363,22 @@ export namespace TimeSeries {
     const end = options.until || Date.now()
     const days = options.days || 7
     const start = options.since || end - days * 24 * 60 * 60 * 1000
+    
+    // Check data quality first (unless explicitly skipped)
+    if (!options.skipQualityCheck) {
+      const quality = await checkDataQuality(metricID, { since: start, until: end })
+      
+      if (quality.totalPoints === 0) {
+        throw new Error(`No data points available for trend analysis`)
+      }
+      
+      if (quality.warnings.length > 0) {
+        console.warn(
+          `[TimeSeries] Data quality issues for ${metricID}:\n` +
+          quality.warnings.map(w => `  - ${w}`).join('\n')
+        )
+      }
+    }
     
     // Get data points
     const points = await getDataPoints(metricID, { since: start, until: end })
@@ -468,6 +546,133 @@ export namespace TimeSeries {
     
     for (const key of keys) {
       await Storage.remove(key)
+    }
+  }
+
+  /**
+   * Data quality report for a metric's time-series data.
+   */
+  export interface DataQualityReport {
+    totalPoints: number
+    timeRange: {
+      start: number
+      end: number
+      durationDays: number
+    }
+    gaps: Array<{
+      start: number
+      end: number
+      durationHours: number
+    }>
+    duplicates: number
+    outOfOrderPoints: number
+    warnings: string[]
+  }
+
+  /**
+   * Analyze data quality for a metric.
+   * Helps identify issues before they cause analysis failures.
+   * 
+   * @param metricID - The metric ID
+   * @param options - Query options
+   * @returns Data quality report with warnings
+   * 
+   * @example
+   * ```typescript
+   * const quality = await TimeSeries.checkDataQuality("cost-metric")
+   * if (quality.warnings.length > 0) {
+   *   console.warn("Data issues:", quality.warnings)
+   * }
+   * ```
+   */
+  export async function checkDataQuality(
+    metricID: string,
+    options?: { since?: number; until?: number }
+  ): Promise<DataQualityReport> {
+    const points = await getDataPoints(metricID, options)
+
+    if (points.length === 0) {
+      return {
+        totalPoints: 0,
+        timeRange: { start: 0, end: 0, durationDays: 0 },
+        gaps: [],
+        duplicates: 0,
+        outOfOrderPoints: 0,
+        warnings: ["No data points found"],
+      }
+    }
+
+    const sorted = [...points].sort((a, b) => a.timestamp - b.timestamp)
+    const start = sorted[0].timestamp
+    const end = sorted[sorted.length - 1].timestamp
+    const durationDays = (end - start) / (24 * 60 * 60 * 1000)
+
+    // Detect gaps (> 2 hours between points)
+    const gaps: DataQualityReport["gaps"] = []
+    for (let i = 1; i < sorted.length; i++) {
+      const gapMs = sorted[i].timestamp - sorted[i - 1].timestamp
+      const gapHours = gapMs / (60 * 60 * 1000)
+      if (gapHours > 2) {
+        gaps.push({
+          start: sorted[i - 1].timestamp,
+          end: sorted[i].timestamp,
+          durationHours: gapHours,
+        })
+      }
+    }
+
+    // Detect duplicates (same timestamp)
+    const timestamps = new Set()
+    let duplicates = 0
+    for (const point of points) {
+      if (timestamps.has(point.timestamp)) {
+        duplicates++
+      }
+      timestamps.add(point.timestamp)
+    }
+
+    // Detect out-of-order points (from original array)
+    let outOfOrderPoints = 0
+    for (let i = 0; i < points.length - 1; i++) {
+      if (points[i].timestamp > points[i + 1].timestamp) {
+        outOfOrderPoints++
+      }
+    }
+
+    // Generate warnings
+    const warnings: string[] = []
+    if (points.length < 10) {
+      warnings.push(
+        `Only ${points.length} data points - need more for reliable analysis`
+      )
+    }
+    if (durationDays < 1) {
+      warnings.push(
+        `Data spans only ${durationDays.toFixed(1)} days - trends may not be reliable`
+      )
+    }
+    if (gaps.length > 0) {
+      const largestGap = Math.max(...gaps.map((g) => g.durationHours))
+      warnings.push(
+        `${gaps.length} data gaps detected (largest: ${largestGap.toFixed(1)}h) - may affect trend analysis`
+      )
+    }
+    if (duplicates > 0) {
+      warnings.push(`${duplicates} duplicate timestamps - may skew statistics`)
+    }
+    if (outOfOrderPoints > 0) {
+      warnings.push(
+        `${outOfOrderPoints} out-of-order points - data may be corrupted`
+      )
+    }
+
+    return {
+      totalPoints: points.length,
+      timeRange: { start, end, durationDays },
+      gaps,
+      duplicates,
+      outOfOrderPoints,
+      warnings,
     }
   }
 
