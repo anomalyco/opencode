@@ -192,28 +192,33 @@ export namespace ACPServer {
         const reader = process.stdin
         reader.setEncoding("utf8")
 
-        let buf = ""
-        reader.on("data", async (chunk: string) => {
-          buf += chunk
-          const parts = buf.split("\n")
-          buf = parts.pop() ?? ""
-          for (const line of parts) {
-            const trimmed = line.trim()
-            if (!trimmed) continue
-            let msg: z.infer<typeof RpcReq> | undefined
-            try {
-              const parsed = JSON.parse(trimmed)
-              const r = RpcReq.safeParse(parsed)
-              if (!r.success) continue
-              msg = r.data
-            } catch (_) {
-              continue
+        await new Promise<void>((resolve) => {
+          let buf = ""
+          reader.on("data", async (chunk: string) => {
+            buf += chunk
+            const parts = buf.split("\n")
+            buf = parts.pop() ?? ""
+            for (const line of parts) {
+              const trimmed = line.trim()
+              if (!trimmed) continue
+              let msg: z.infer<typeof RpcReq> | undefined
+              try {
+                const parsed = JSON.parse(trimmed)
+                const r = RpcReq.safeParse(parsed)
+                if (!r.success) continue
+                msg = r.data
+              } catch (_) {
+                continue
+              }
+              const result = await handle(msg.method, msg.params)
+              if (msg.id === undefined) continue
+              write({ jsonrpc: "2.0", id: msg.id, result })
+              if (msg.method === "shutdown") {
+                resolve()
+                process.exit(0)
+              }
             }
-            const result = await handle(msg.method, msg.params)
-            if (msg.id === undefined) continue
-            write({ jsonrpc: "2.0", id: msg.id, result })
-            if (msg.method === "shutdown") process.exit(0)
-          }
+          })
         })
       },
     })

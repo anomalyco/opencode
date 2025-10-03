@@ -7,10 +7,10 @@ function line(obj: unknown) {
 describe("acp server", () => {
   test("initialize and complete", async () => {
     const proc = Bun.spawn({
-      cmd: ["bun", "run", "--conditions=development", "packages/opencode/src/index.ts", "--acp"],
+      cmd: ["bun", "run", "--conditions=development", "src/index.ts", "--acp"],
       stdin: "pipe",
       stdout: "pipe",
-      stderr: "ignore",
+      stderr: "pipe",
       env: { ...process.env, OPENCODE: "1" },
     })
 
