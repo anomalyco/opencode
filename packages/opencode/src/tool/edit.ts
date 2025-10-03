@@ -13,9 +13,9 @@ import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { guard } from "./workspace"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -34,10 +34,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
-    }
+    const filePath = guard(params.filePath)
 
     const agent = await Agent.get(ctx.agent)
     let diff = ""

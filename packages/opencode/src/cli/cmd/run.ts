@@ -12,6 +12,7 @@ import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
 import { SessionPrompt } from "../../session/prompt"
+import { ToolTelemetry } from "../../tool/telemetry"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -150,6 +151,11 @@ export const RunCommand = cmd({
         )
       }
 
+      function formatDuration(duration: number) {
+        if (duration < 1000) return `${duration.toFixed(0)}ms`
+        return `${(duration / 1000).toFixed(2)}s`
+      }
+
       function outputJsonEvent(type: string, data: any) {
         if (args.format === "json") {
           const jsonEvent = {
@@ -207,6 +213,19 @@ export const RunCommand = cmd({
             return
           }
         }
+      })
+
+      Bus.subscribe(ToolTelemetry.Event.Sampled, async (evt) => {
+        const info = evt.properties
+        if (info.sessionID !== session.id) return
+        if (outputJsonEvent("tool_telemetry", { telemetry: info })) return
+        const [label, defaultColor] = TOOL[info.id] ?? [info.id, UI.Style.TEXT_INFO_BOLD]
+        const color = info.status === "success" ? defaultColor : UI.Style.TEXT_DANGER_BOLD
+        let title = `${label} ${formatDuration(info.duration)}`
+        if (info.status === "error" && info.error) {
+          title += ` – ${info.error}`
+        }
+        printEvent(color, "tele", title)
       })
 
       let errorMsg: string | undefined

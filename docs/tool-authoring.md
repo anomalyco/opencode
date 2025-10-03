@@ -5,10 +5,16 @@ This project now ships shared helpers so every tool behaves consistently.
 ## Instrumentation
 - Wrap long-running work with `measure({ id, ctx, params, run })` from `packages/opencode/src/tool/telemetry.ts`.
 - Each call logs execution duration, call id, and status, helping us spot slow or flaky commands while developing with `bun dev`.
+- `measure()` also publishes a `tool.telemetry` bus event. The TUI subscribes and renders these entries in real time (`tele  | ToolName 0.42s`). Tap into the same stream via `Bus.subscribe(ToolTelemetry.Event.Sampled, ...)` for custom dashboards.
 
 ## Workspace Safety
 - Use `guard()` from `packages/opencode/src/tool/workspace.ts` to resolve paths and enforce the workspace boundary.
 - Pass `message` if you need a custom error; pass `bypass: true` only for trusted internal flows.
+
+## Troubleshooting
+- If you see `tool.telemetry` entries with `status=error`, inspect the associated `error` string—it's propagated from the thrown exception.
+- Workspace errors typically originate from `guard()`. Confirm the tool receives absolute paths rooted in `Instance.directory` or set `bypass` explicitly for trusted cases (e.g., generated temp files).
+- When adding tests around I/O, use `tmpdir()` to create and clean up isolated directories; the helper ensures telemetry logs stay focused on the test workspace.
 
 ## Plugin Tools
 - Plugin authors can return either a plain string or `{ output, title?, metadata? }`.
