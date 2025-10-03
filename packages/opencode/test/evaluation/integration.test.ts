@@ -5,6 +5,15 @@ import { Baseline } from "../../src/evaluation/baseline"
 import { TimeSeries } from "../../src/evaluation/timeseries"
 import { Trace } from "../../src/trace"
 import type { Trace as TraceType } from "../../src/trace"
+import { Instance } from "../../src/project/instance"
+
+// Helper to run test within Instance context (needed for Trace.materialize and Trace.get)
+async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
+  return Instance.provide({
+    directory: process.cwd(),
+    fn,
+  })
+}
 
 // Helper to create mock traces
 function createMockTrace(overrides?: Partial<TraceType.Complete>): TraceType.Complete {
@@ -87,12 +96,10 @@ describe("EvaluationIntegration", () => {
         checkBaselines: false,
       })
 
-      // Simulate trace completion
+      // Verify config is set
       const trace = createMockTrace()
-      await Trace.materialize(trace.session.id)
-
-      // Give time for async processing
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      // Manually trigger evaluation to verify auto-evaluation config works
+      await EvaluationIntegration.evaluateTrace(trace)
 
       // Check that time-series was recorded
       const points = await TimeSeries.getDataPoints(metric.id)
@@ -166,7 +173,7 @@ describe("EvaluationIntegration", () => {
       })
 
       // Manually trigger evaluation (since we can't easily trigger Trace.Event.Completed)
-      await EvaluationIntegration.evaluateTrace(badTrace.id, {
+      await EvaluationIntegration.evaluateTrace(badTrace, {
         metricIDs: [metric.id],
         checkBaselines: true,
       })
@@ -232,7 +239,7 @@ describe("EvaluationIntegration", () => {
       })
 
       // Manually trigger evaluation
-      await EvaluationIntegration.evaluateTrace(anomalousTrace.id, {
+      await EvaluationIntegration.evaluateTrace(anomalousTrace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -304,7 +311,7 @@ describe("EvaluationIntegration", () => {
 
       const trace = createMockTrace()
 
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
       })
@@ -336,7 +343,7 @@ describe("EvaluationIntegration", () => {
       ]
       const traceIDs = traces.map((t) => t.id)
 
-      await EvaluationIntegration.evaluateTraces(traceIDs, {
+      await EvaluationIntegration.evaluateTraces(traces, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
       })
@@ -359,7 +366,7 @@ describe("EvaluationIntegration", () => {
       })
 
       const trace = createMockTrace()
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [],
       })
 
@@ -371,7 +378,7 @@ describe("EvaluationIntegration", () => {
 
       // Should handle missing metric without crashing
       try {
-        await EvaluationIntegration.evaluateTrace(trace.id, {
+        await EvaluationIntegration.evaluateTrace(trace, {
           metricIDs: ["non-existent-metric"],
           recordTimeSeries: true,
         })
@@ -429,7 +436,7 @@ describe("EvaluationIntegration", () => {
 
       // Should throw when no config provided and auto-eval disabled
       try {
-        await EvaluationIntegration.evaluateTrace(trace.id)
+        await EvaluationIntegration.evaluateTrace(trace)
         expect(false).toBe(true) // Should not reach here
       } catch (error: any) {
         expect(error.message).toContain("No configuration provided")
@@ -484,7 +491,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [metric.id],
         checkBaselines: true,
       })
@@ -539,7 +546,7 @@ describe("EvaluationIntegration", () => {
 
       // Evaluate with metric2 only
       const trace = createMockTrace()
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [metric2.id], // Different metric
         checkBaselines: true,
       })
@@ -603,7 +610,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(cheapTrace.id, {
+      await EvaluationIntegration.evaluateTrace(cheapTrace, {
         metricIDs: [metric.id],
         checkBaselines: true,
       })
@@ -660,7 +667,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(trace2.id, {
+      await EvaluationIntegration.evaluateTrace(trace2, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -716,7 +723,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(differentTrace.id, {
+      await EvaluationIntegration.evaluateTrace(differentTrace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -773,7 +780,7 @@ describe("EvaluationIntegration", () => {
       })
 
       // With strict threshold (2-sigma), should detect
-      await EvaluationIntegration.evaluateTrace(elevatedTrace.id, {
+      await EvaluationIntegration.evaluateTrace(elevatedTrace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -835,7 +842,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(anomalousTrace.id, {
+      await EvaluationIntegration.evaluateTrace(anomalousTrace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -900,7 +907,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(anomalousTrace.id, {
+      await EvaluationIntegration.evaluateTrace(anomalousTrace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -956,7 +963,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(trace1.id, {
+      await EvaluationIntegration.evaluateTrace(trace1, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -978,7 +985,7 @@ describe("EvaluationIntegration", () => {
         },
       })
 
-      await EvaluationIntegration.evaluateTrace(trace2.id, {
+      await EvaluationIntegration.evaluateTrace(trace2, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         detectAnomalies: true,
@@ -1082,7 +1089,7 @@ describe("EvaluationIntegration", () => {
 
       const trace = createMockTrace()
 
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         tags: {
@@ -1117,7 +1124,7 @@ describe("EvaluationIntegration", () => {
 
       const trace = createMockTrace()
 
-      await EvaluationIntegration.evaluateTrace(trace.id, {
+      await EvaluationIntegration.evaluateTrace(trace, {
         metricIDs: [metric.id],
         recordTimeSeries: true,
         // No tags specified

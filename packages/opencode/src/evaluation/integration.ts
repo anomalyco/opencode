@@ -248,15 +248,7 @@ export namespace EvaluationIntegration {
       resultsCount: results.length,
     })
 
-    // 2. Record in time-series if enabled
-    if (cfg.recordTimeSeries) {
-      for (const result of results) {
-        await TimeSeries.record(result.metricID, trace, cfg.tags)
-      }
-      log.debug("recorded time-series", { traceID: trace.id })
-    }
-
-    // 3. Check for anomalies if enabled
+    // 2. Check for anomalies if enabled (BEFORE recording to time-series)
     if (cfg.detectAnomalies) {
       for (const result of results) {
         try {
@@ -282,6 +274,14 @@ export namespace EvaluationIntegration {
           // Not enough data for anomaly detection
         }
       }
+    }
+
+    // 3. Record in time-series if enabled (AFTER anomaly detection)
+    if (cfg.recordTimeSeries) {
+      for (const result of results) {
+        await TimeSeries.record(result.metricID, trace, cfg.tags)
+      }
+      log.debug("recorded time-series", { traceID: trace.id })
     }
 
     // 4. Compare against baselines if enabled
@@ -365,11 +365,11 @@ export namespace EvaluationIntegration {
    * Useful for re-evaluating historical traces or evaluating traces
    * that were completed before auto-evaluation was enabled.
    * 
-   * @param traceID - The trace to evaluate
+   * @param traceOrID - The trace object or trace ID to evaluate
    * @param cfg - Optional configuration (uses global config if not provided)
    */
-  export async function evaluateTrace(traceID: string, cfg?: Config) {
-    const trace = await Trace.get(traceID)
+  export async function evaluateTrace(traceOrID: string | Trace.Complete, cfg?: Config) {
+    const trace = typeof traceOrID === "string" ? await Trace.get(traceOrID) : traceOrID
     const evalConfig = cfg ?? config
     if (!evalConfig) {
       throw new Error("No configuration provided and auto-evaluation not enabled")
@@ -380,20 +380,21 @@ export namespace EvaluationIntegration {
   /**
    * Batch evaluate multiple traces.
    * 
-   * @param traceIDs - Array of trace IDs to evaluate
+   * @param tracesOrIDs - Array of trace objects or trace IDs to evaluate
    * @param cfg - Optional configuration
    */
-  export async function evaluateTraces(traceIDs: string[], cfg?: Config) {
+  export async function evaluateTraces(tracesOrIDs: (string | Trace.Complete)[], cfg?: Config) {
     const evalConfig = cfg ?? config
     if (!evalConfig) {
       throw new Error("No configuration provided and auto-evaluation not enabled")
     }
 
-    for (const traceID of traceIDs) {
+    for (const traceOrID of tracesOrIDs) {
       try {
-        await evaluateTrace(traceID, evalConfig)
+        await evaluateTrace(traceOrID, evalConfig)
       } catch (error) {
-        log.error("failed to evaluate trace", { error, traceID })
+        const id = typeof traceOrID === "string" ? traceOrID : traceOrID.id
+        log.error("failed to evaluate trace", { error, traceID: id })
       }
     }
   }
