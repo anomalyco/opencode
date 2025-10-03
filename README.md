@@ -62,7 +62,18 @@ opencode stats --json            # machine-readable output
 opencode stats --telemetry all   # include recent tool runs
 opencode stats --limit 50        # show more history
 opencode stats --clear           # reset stored telemetry data
+opencode stats --details         # show telemetry metadata fields
+opencode stats --details-format ndjson --fields status,final_url
+opencode stats --status error --since 1d
+opencode stats --compare baseline.json --warn-latency 2000
 ```
+
+Advanced telemetry usage tips:
+
+- Capture a baseline for comparison with `opencode stats --json --telemetry all --limit 500 > baseline.json`, then diff with `--compare baseline.json`.
+- Export metadata for dashboards using `--details-format csv` or `--details-format ndjson`.
+- Focus on specific signals by pairing `--status`, `--since`, `--until`, and `--fields` filters.
+- Gate builds by combining `--warn-latency` or `--warn-errors` with CI scripts.
 
 The telemetry section lists recent tool executions (duration, status, error message) gathered from persisted `tool.telemetry` events.
 

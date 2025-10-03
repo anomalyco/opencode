@@ -1171,8 +1171,12 @@ func (a Model) chat() (string, int, int) {
 	)
 
 	telemetryView := renderTelemetry(a.app.Telemetry, a.app.Usage, effectiveWidth)
-	mainLayout := messagesView + "\n" + editorView
+	telemetryHeight := 0
 	if telemetryView != "" {
+		telemetryHeight = lipgloss.Height(telemetryView)
+	}
+	mainLayout := messagesView + "\n" + editorView
+	if telemetryHeight > 0 {
 		mainLayout = telemetryView + "\n" + mainLayout
 	}
 	editorX := max(0, (effectiveWidth-editorWidth)/2)
@@ -1181,13 +1185,13 @@ func (a Model) chat() (string, int, int) {
 	if lines > 1 {
 		content := a.editor.Content()
 		editorHeight := lipgloss.Height(content)
-		if editorY+editorHeight > a.height {
-			difference := (editorY + editorHeight) - a.height
+		if editorY+telemetryHeight+editorHeight > a.height {
+			difference := (editorY + telemetryHeight + editorHeight) - a.height
 			editorY -= difference
 		}
 		mainLayout = layout.PlaceOverlay(
 			editorX,
-			editorY,
+			editorY+telemetryHeight,
 			content,
 			mainLayout,
 		)
@@ -1197,17 +1201,17 @@ func (a Model) chat() (string, int, int) {
 		a.completions.SetWidth(editorWidth)
 		overlay := a.completions.View()
 		overlayHeight := lipgloss.Height(overlay)
-		editorY := a.height - editorHeight + 1
+		editorYOverlay := editorY + telemetryHeight + 1
 
 		mainLayout = layout.PlaceOverlay(
 			editorX,
-			editorY-overlayHeight,
+			editorYOverlay-overlayHeight,
 			overlay,
 			mainLayout,
 		)
 	}
 
-	return mainLayout, editorX + 5, editorY + 2
+	return mainLayout, editorX + 5, editorY + telemetryHeight + 2
 }
 
 func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
