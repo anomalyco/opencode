@@ -4,10 +4,14 @@ import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Instance } from "../project/instance"
 
 const TodoInfo = z.object({
-  content: z.string().describe("Brief description of the task"),
-  status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
-  priority: z.string().describe("Priority level of the task: high, medium, low"),
+  content: z.string().max(500).describe("Brief description of the task (max 500 characters)"),
+  status: z.enum(["pending", "in_progress", "completed", "cancelled"]).describe("Current status of the task"),
+  priority: z.enum(["high", "medium", "low"]).optional().describe("Priority level of the task"),
   id: z.string().describe("Unique identifier for the todo item"),
+  activeForm: z.string().max(500).describe("Present continuous form shown during execution (e.g., 'Running tests')"),
+  tags: z.array(z.string()).optional().describe("Optional tags for categorization"),
+  dependencies: z.array(z.string()).optional().describe("IDs of todos that must be completed first"),
+  estimate_minutes: z.number().min(1).optional().describe("Estimated time in minutes"),
 })
 type TodoInfo = z.infer<typeof TodoInfo>
 
@@ -21,9 +25,57 @@ const state = Instance.state(() => {
 export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,
   parameters: z.object({
-    todos: z.array(TodoInfo).describe("The updated todo list"),
+    todos: z.array(TodoInfo).max(50).describe("The updated todo list (max 50 items)"),
   }),
   async execute(params, opts) {
+    // Validate unique IDs
+    const ids = params.todos.map((t) => t.id)
+    const uniqueIds = new Set(ids)
+    if (ids.length !== uniqueIds.size) {
+      throw new Error("Todo items must have unique IDs")
+    }
+
+    // Validate dependencies exist
+    const idSet = new Set(ids)
+    for (const todo of params.todos) {
+      if (todo.dependencies) {
+        for (const depId of todo.dependencies) {
+          if (!idSet.has(depId)) {
+            throw new Error(`Todo '${todo.id}' has invalid dependency '${depId}' (not found in todo list)`)
+          }
+        }
+      }
+    }
+
+    // Detect circular dependencies
+    const visited = new Set<string>()
+    const recursionStack = new Set<string>()
+    const todoMap = new Map(params.todos.map((t) => [t.id, t]))
+
+    function hasCycle(todoId: string): boolean {
+      if (recursionStack.has(todoId)) return true
+      if (visited.has(todoId)) return false
+
+      visited.add(todoId)
+      recursionStack.add(todoId)
+
+      const todo = todoMap.get(todoId)
+      if (todo?.dependencies) {
+        for (const depId of todo.dependencies) {
+          if (hasCycle(depId)) return true
+        }
+      }
+
+      recursionStack.delete(todoId)
+      return false
+    }
+
+    for (const todo of params.todos) {
+      if (hasCycle(todo.id)) {
+        throw new Error(`Circular dependency detected involving todo '${todo.id}'`)
+      }
+    }
+
     const todos = state()
     todos[opts.sessionID] = params.todos
     return {

@@ -1,0 +1,23 @@
+Enter specification/planning mode to analyze requirements and create an implementation plan.
+
+Use this tool when:
+- User asks you to plan or design a feature before implementing
+- Complex tasks requiring architectural decisions
+- Need to gather requirements and outline approach
+- Breaking down large features into smaller tasks
+
+Actions:
+- `enter` - Enter spec mode and start a new planning session
+- `add_requirement` - Add a requirement to the current session
+- `add_note` - Add a planning note to the current session
+- `get_status` - View all requirements and notes collected so far
+- `clear` - Exit spec mode and clear all requirements/notes
+
+Workflow:
+1. Use `enter` to start spec mode
+2. Use `add_requirement` and `add_note` to collect information
+3. Use `get_status` to review what you've collected
+4. Use ExitSpecMode tool to present your final plan (automatically includes context)
+5. Or use `clear` to discard and start over
+
+The ExitSpecMode tool will automatically include all requirements and notes you collected in the final plan output.

@@ -1,0 +1,24 @@
+Exit specification/planning mode and present your final implementation plan.
+
+Integration with SpecMode:
+- If you used SpecMode to collect requirements and notes, this tool will automatically include them in the output
+- The requirements and notes are prepended to your plan as context
+- Set `include_context: false` if you don't want the requirements/notes included
+- This tool deactivates the spec session after use
+
+Usage:
+- `plan` (required) - Your markdown-formatted implementation plan
+- `title` (optional) - Title for the plan (defaults to "Implementation Plan")
+- `include_context` (optional) - Include SpecMode requirements/notes (defaults to true)
+
+IMPORTANT: Only use this tool when the task requires planning the implementation steps of a task that requires writing code. For research tasks where you're gathering information, searching files, reading files or in general trying to understand the codebase - do NOT use this tool.
+
+Examples:
+1. Initial task: "Search for and understand the implementation of vim mode in the codebase" - Do not use this tool because you are not planning the implementation steps of a task.
+2. Initial task: "Help me implement yank mode for vim" - Use this tool after you have finished planning the implementation steps of the task.
+
+Workflow:
+1. Optionally use SpecMode to collect requirements and notes
+2. Create your implementation plan
+3. Use this tool to present the plan and exit spec mode
+4. The output will include SpecMode context (if collected) followed by your plan

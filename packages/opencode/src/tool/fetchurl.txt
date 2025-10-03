@@ -1,0 +1,13 @@
+URL content fetching and scraping tool with integration support
+
+Features:
+- Generic webpage scraping with markdown conversion
+- Integration support for: Google Docs, Notion, Linear, GitHub, GitLab, Jira, PagerDuty, Slack, Sentry
+- Returns content in markdown format
+- Security: Blocks localhost and private IP addresses
+- Configurable timeout and size limits
+
+Usage notes:
+- Automatically detects and handles platform-specific content formats
+- Supports both public URLs and authenticated endpoints (when credentials are provided)
+- Returns structured markdown for better readability

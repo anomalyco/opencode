@@ -1,13 +1,19 @@
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
+import { ExitSpecModeTool } from "./exitspecmode"
+import { FetchUrlTool } from "./fetchurl"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ListTool } from "./ls"
+import { LspDiagnosticTool } from "./lsp-diagnostics"
+import { LspHoverTool } from "./lsp-hover"
+import { MultiEditTool } from "./multiedit"
 import { PatchTool } from "./patch"
 import { ReadTool } from "./read"
+import { SpecModeTool } from "./specmode"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
-import { WebFetchTool } from "./webfetch"
+import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import type { Agent } from "../agent/agent"
@@ -78,10 +84,16 @@ export namespace ToolRegistry {
       InvalidTool,
       BashTool,
       EditTool,
-      WebFetchTool,
+      MultiEditTool,
+      SpecModeTool,
+      ExitSpecModeTool,
+      FetchUrlTool,
+      WebSearchTool,
       GlobTool,
       GrepTool,
       ListTool,
+      LspDiagnosticTool,
+      LspHoverTool,
       PatchTool,
       ReadTool,
       WriteTool,
@@ -123,8 +135,11 @@ export namespace ToolRegistry {
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
       result["bash"] = false
     }
-    if (agent.permission.webfetch === "deny") {
-      result["webfetch"] = false
+    if (agent.permission.fetchurl === "deny") {
+      result["fetchurl"] = false
+    }
+    if (agent.permission.websearch === "deny") {
+      result["websearch"] = false
     }
 
     return result

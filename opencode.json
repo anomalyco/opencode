@@ -1,3 +1,13 @@
 {
-  "$schema": "https://opencode.ai/config.json"
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "claude-context": {
+      "type": "local",
+      "command": ["npx", "@zilliz/claude-context-mcp@latest"],
+      "environment": {
+        "OPENAI_API_KEY": "{env:OPENAI_API_KEY}",
+        "MILVUS_TOKEN": "{env:MILVUS_TOKEN}"
+      }
+    }
+  }
 }
