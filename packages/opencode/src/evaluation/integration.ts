@@ -48,6 +48,8 @@ export namespace EvaluationIntegration {
     detectAnomalies?: boolean
     /** Anomaly detection threshold (sigma) */
     anomalyThreshold?: number
+    /** Whether to collect telemetry data (default: true) */
+    collectTelemetry?: boolean
   }
 
   export type RegressionAlert = {
@@ -238,6 +240,14 @@ export namespace EvaluationIntegration {
    */
   async function processTrace(trace: Trace.Complete, cfg: Config) {
     log.debug("processing trace", { traceID: trace.id })
+
+    // 0. Enrich trace with telemetry (non-blocking)
+    if (cfg.collectTelemetry !== false) {
+      const { Telemetry } = await import("./telemetry")
+      Telemetry.enrichTrace(trace).catch((error) => {
+        log.warn("telemetry enrichment failed", { traceID: trace.id, error })
+      })
+    }
 
     // 1. Evaluate all configured metrics
     const metrics = await Promise.all(cfg.metricIDs.map((id) => Metric.get(id)))
