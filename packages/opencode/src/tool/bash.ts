@@ -3,13 +3,14 @@ import z from "zod/v4"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { Permission } from "../permission"
-import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
 import { Wildcard } from "../util/wildcard"
 import { $ } from "bun"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { measure } from "./telemetry"
+import { guard } from "./workspace"
 
 const MAX_OUTPUT_LENGTH = 30_000
 const DEFAULT_TIMEOUT = 1 * 60 * 1000
@@ -62,12 +63,19 @@ export const BashTool = Tool.define<typeof parameters, BashMetadata>("bash", {
   description: DESCRIPTION,
   parameters,
   async execute(params, ctx) {
-    const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
-    const tree = await parser().then((p) => p.parse(params.command))
-    const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
+    const extra = { description: params.description }
+    return measure({
+      id: "bash",
+      ctx,
+      params,
+      extra,
+      async run() {
+        const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
+        const tree = await parser().then((p) => p.parse(params.command))
+        const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
-    const askPatterns = new Set<string>()
-    for (const node of tree.rootNode.descendantsOfType("command")) {
+        const askPatterns = new Set<string>()
+        for (const node of tree.rootNode.descendantsOfType("command")) {
       const command = []
       for (let i = 0; i < node.childCount; i++) {
         const child = node.child(i)
@@ -94,11 +102,10 @@ export const BashTool = Tool.define<typeof parameters, BashMetadata>("bash", {
             .text()
             .then((x) => x.trim())
           log.info("resolved path", { arg, resolved })
-          if (resolved && !Filesystem.contains(Instance.directory, resolved)) {
-            throw new Error(
-              `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
-            )
-          }
+          if (resolved)
+            guard(resolved, {
+              message: `This command references paths outside of ${Instance.directory} so it is not allowed to be executed.`,
+            })
         }
       }
 
@@ -137,7 +144,7 @@ export const BashTool = Tool.define<typeof parameters, BashMetadata>("bash", {
       }
     }
 
-    if (askPatterns.size > 0) {
+        if (askPatterns.size > 0) {
       const patterns = Array.from(askPatterns)
       await Permission.ask({
         type: "bash",
@@ -153,72 +160,74 @@ export const BashTool = Tool.define<typeof parameters, BashMetadata>("bash", {
       })
     }
 
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeout)
-    const signal = AbortSignal.any([ctx.abort, controller.signal])
-    const shell = process.env["SHELL"] || "/bin/sh"
-    const proc = Bun.spawn([shell, "-lc", params.command], {
-      cwd: Instance.directory,
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-    })
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeout)
+        const signal = AbortSignal.any([ctx.abort, controller.signal])
+        const shell = process.env["SHELL"] || "/bin/sh"
+        const proc = Bun.spawn([shell, "-lc", params.command], {
+          cwd: Instance.directory,
+          stdout: "pipe",
+          stderr: "pipe",
+          signal,
+        })
 
-    const state = { output: "" }
-    const decoder = () => new TextDecoder()
-    const pump = async (stream: ReadableStream<Uint8Array> | undefined) => {
-      if (!stream) return
-      const textDecoder = decoder()
-      await stream.pipeTo(
-        new WritableStream<Uint8Array>({
-          write(chunk) {
-            const text = textDecoder.decode(chunk, { stream: true })
-            if (!text) return
-            state.output += text
-            ctx.metadata({
-              metadata: {
-                output: state.output,
-                description: params.description,
+        const state = { output: "" }
+        const decoder = () => new TextDecoder()
+        const pump = async (stream: ReadableStream<Uint8Array> | undefined) => {
+          if (!stream) return
+          const textDecoder = decoder()
+          await stream.pipeTo(
+            new WritableStream<Uint8Array>({
+              write(chunk) {
+                const text = textDecoder.decode(chunk, { stream: true })
+                if (!text) return
+                state.output += text
+                ctx.metadata({
+                  metadata: {
+                    output: state.output,
+                    description: params.description,
+                  },
+                })
               },
-            })
+            }),
+          )
+        }
+
+        ctx.metadata({
+          metadata: {
+            output: "",
+            description: params.description,
           },
-        }),
-      )
-    }
+        })
 
-    ctx.metadata({
-      metadata: {
-        output: "",
-        description: params.description,
+        await Promise.all([pump(proc.stdout), pump(proc.stderr)])
+        const exit = await proc.exited
+        clearTimeout(timer)
+
+        ctx.metadata({
+          metadata: {
+            output: state.output,
+            exit,
+            description: params.description,
+          },
+        })
+
+        let finalOutput = state.output
+        if (finalOutput.length > MAX_OUTPUT_LENGTH) {
+          finalOutput = finalOutput.slice(0, MAX_OUTPUT_LENGTH)
+          finalOutput += "\n\n(Output was truncated due to length limit)"
+        }
+
+        return {
+          title: params.command,
+          metadata: {
+            output: finalOutput,
+            exit,
+            description: params.description,
+          },
+          output: finalOutput,
+        }
       },
     })
-
-    await Promise.all([pump(proc.stdout), pump(proc.stderr)])
-    const exit = await proc.exited
-    clearTimeout(timer)
-
-    ctx.metadata({
-      metadata: {
-        output: state.output,
-        exit,
-        description: params.description,
-      },
-    })
-
-    let finalOutput = state.output
-    if (finalOutput.length > MAX_OUTPUT_LENGTH) {
-      finalOutput = finalOutput.slice(0, MAX_OUTPUT_LENGTH)
-      finalOutput += "\n\n(Output was truncated due to length limit)"
-    }
-
-    return {
-      title: params.command,
-      metadata: {
-        output: finalOutput,
-        exit,
-        description: params.description,
-      },
-      output: finalOutput,
-    }
   },
 })

@@ -5,8 +5,9 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { guard } from "./workspace"
+import { measure } from "./telemetry"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -19,68 +20,71 @@ export const ReadTool = Tool.define("read", {
     limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(Instance.directory, params.filePath)
-    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      throw new Error(`File ${filepath} is not in the current working directory`)
-    }
+    return measure({
+      id: "read",
+      ctx,
+      params,
+      async run() {
+        const filepath = guard(params.filePath, {
+          bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+        })
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
-      const dir = path.dirname(filepath)
-      const base = path.basename(filepath)
+        const file = Bun.file(filepath)
+        if (!(await file.exists())) {
+          const dir = path.dirname(filepath)
+          const base = path.basename(filepath)
 
-      const dirEntries = await fs.readdir(dir).catch(() => [] as string[])
-      const suggestions = dirEntries
-        .filter(
-          (entry) =>
-            entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
-        )
-        .map((entry) => path.join(dir, entry))
-        .slice(0, 3)
+          const dirEntries = await fs.readdir(dir).catch(() => [] as string[])
+          const suggestions = dirEntries
+            .filter(
+              (entry) =>
+                entry.toLowerCase().includes(base.toLowerCase()) || base.toLowerCase().includes(entry.toLowerCase()),
+            )
+            .map((entry) => path.join(dir, entry))
+            .slice(0, 3)
 
-      if (suggestions.length > 0) {
-        throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
-      }
+          if (suggestions.length > 0) {
+            throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
+          }
 
-      throw new Error(`File not found: ${filepath}`)
-    }
+          throw new Error(`File not found: ${filepath}`)
+        }
 
-    const limit = params.limit ?? DEFAULT_READ_LIMIT
-    const offset = params.offset || 0
-    const isImage = isImageFile(filepath)
-    if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
-    const isBinary = await isBinaryFile(filepath, file)
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
-    const lines = await file.text().then((text) => text.split("\n"))
-    const raw = lines.slice(offset, offset + limit).map((line) => {
-      return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
-    })
-    const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
-    })
-    const preview = raw.slice(0, 20).join("\n")
+        const limit = params.limit ?? DEFAULT_READ_LIMIT
+        const offset = params.offset || 0
+        const isImage = isImageFile(filepath)
+        if (isImage) throw new Error(`This is an image file of type: ${isImage}\nUse a different tool to process images`)
+        const isBinary = await isBinaryFile(filepath, file)
+        if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+        const lines = await file.text().then((text) => text.split("\n"))
+        const raw = lines.slice(offset, offset + limit).map((line) => {
+          return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
+        })
+        const content = raw.map((line, index) => {
+          return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
+        })
+        const preview = raw.slice(0, 20).join("\n")
 
-    let output = "<file>\n"
-    output += content.join("\n")
+        let output = "<file>\n"
+        output += content.join("\n")
 
-    if (lines.length > offset + content.length) {
-      output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
-    }
-    output += "\n</file>"
+        if (lines.length > offset + content.length) {
+          output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${offset + content.length})`
+        }
+        output += "\n</file>"
 
-    // just warms the lsp client
-    LSP.touchFile(filepath, false)
-    FileTime.read(ctx.sessionID, filepath)
+        LSP.touchFile(filepath, false)
+        FileTime.read(ctx.sessionID, filepath)
 
-    return {
-      title: path.relative(Instance.worktree, filepath),
-      output,
-      metadata: {
-        preview,
+        return {
+          title: path.relative(Instance.worktree, filepath),
+          output,
+          metadata: {
+            preview,
+          },
+        }
       },
-    }
+    })
   },
 })
 

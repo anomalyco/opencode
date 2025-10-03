@@ -22,6 +22,7 @@
 - **Tools**: Implement `Tool.Info` interface with `execute()` method
 - **Metadata**: Use `Tool.define<typeof schema, MyMetadata>` and keep `ctx.metadata({ metadata })` payloads JSON-safe
 - **Plugins**: Custom tool hooks may return a string or `{ output, title?, metadata? }` which is forwarded directly to the agent
+- **Telemetry**: Wrap tool execution in `measure()` to emit duration logs; resolve file paths via `guard()` before touching the filesystem. See `docs/tool-authoring.md` for patterns.
 - **Context**: Pass `sessionID` in tool context, use `App.provide()` for DI
 - **Validation**: All inputs validated with Zod schemas
 - **Logging**: Use `Log.create({ service: "name" })` pattern

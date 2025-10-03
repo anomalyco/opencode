@@ -11,7 +11,13 @@ export const ExamplePlugin: Plugin = async (ctx) => {
           foo: tool.schema.string().describe("foo"),
         },
         async execute(args) {
-          return `Hello ${args.foo}!`
+          return {
+            title: "Greeting",
+            output: `Hello ${args.foo}!`,
+            metadata: {
+              length: args.foo.length,
+            },
+          }
         },
       }),
     },
