@@ -544,11 +544,10 @@ export namespace Baseline {
    */
   async function computeStatistics(baselineID: string, metricIDs: string[]): Promise<Statistics[]> {
     const stats: Statistics[] = []
-    
+    const baseline = await get(baselineID)
+
     for (const metricID of metricIDs) {
-      // Get all evaluation results for this metric in this baseline
       const results = await EvaluationEngine.getResultsForMetric(metricID)
-      const baseline = await get(baselineID)
       
       // Filter to only results from baseline traces
       const baselineResults = results.filter((r) => baseline.traceIDs.includes(r.traceID))

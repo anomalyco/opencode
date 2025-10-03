@@ -40,7 +40,10 @@ export namespace Snapshot {
         .nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git -c core.excludesFile=/dev/null --git-dir ${git} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
     const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(Instance.directory).nothrow().text()
     log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
@@ -54,7 +57,10 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git -c core.excludesFile=/dev/null --git-dir ${git} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
     const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.quiet().cwd(Instance.directory).nothrow()
 
     // If git diff fails, return empty patch
@@ -64,6 +70,8 @@ export namespace Snapshot {
     }
 
     const files = result.text()
+    const directoryDisplay = Instance.directory
+    const directoryReal = await fs.realpath(directoryDisplay).catch(() => directoryDisplay)
     return {
       hash,
       files: files
@@ -71,7 +79,8 @@ export namespace Snapshot {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean)
-        .map((x) => path.join(Instance.worktree, x)),
+        .map((x) => path.join(Instance.worktree, x))
+        .map((abs) => (abs.startsWith(directoryReal) ? directoryDisplay + abs.slice(directoryReal.length) : abs)),
     }
   }
 
