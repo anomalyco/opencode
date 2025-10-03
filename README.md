@@ -1,15 +1,26 @@
 # Grimoire
 
-> A fork of [OpenCode](https://github.com/sst/opencode) - The AI coding agent built for the terminal.
+> A fork of [OpenCode](https://github.com/sst/opencode) by [EvalOps](https://evalops.dev) - The AI coding agent built for the terminal.
 
 ## About This Fork
 
-**Grimoire** is a public fork of OpenCode, rebranded for personal use. This fork maintains the core functionality of OpenCode while providing a customized experience. OpenCode is open source and permissively licensed (MIT), and we're grateful to the SST team for building such an amazing tool.
+**Grimoire** is a public fork of OpenCode maintained by [EvalOps](https://evalops.dev), a platform for shipping LLM changes without surprises. As a company focused on LLM evaluation, quality gates, and preventing regressions in AI systems, we use OpenCode extensively for our development workflows and maintain this fork for internal customization and experimentation.
+
+This fork maintains the core functionality of OpenCode while providing a customized experience. OpenCode is open source and permissively licensed (MIT), and we're grateful to the SST team for building such an amazing tool.
+
+### Why Fork?
+
+At EvalOps, we build tools for evaluating and improving LLM applications. Having a customized development environment that aligns with our workflows and allows us to experiment with AI-assisted development patterns is valuable for:
+
+- Testing our own LLM evaluation methodologies in a real development context
+- Experimenting with custom agents and workflows
+- Contributing improvements back to the OpenCode ecosystem
 
 ### Key Changes
 
 - **UI Rebranding**: Terminal interface displays "Grimoire" instead of "OpenCode"
 - All core features and functionality remain intact
+- May include experimental features or configurations specific to our use cases
 
 ### Upstream
 
