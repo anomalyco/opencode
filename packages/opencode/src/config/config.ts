@@ -131,7 +131,7 @@ export namespace Config {
       if (!ALLOWED_DIRS.has(dirname)) {
         throw new InvalidError({
           path: dir,
-          message: `Unexpected directory "${dirname}" found in "${dir}". Only ${ALLOWED_DIRS.values().toArray().join(", ")} directories are allowed.`,
+          message: `Unexpected directory "${dirname}" found in "${dir}". Only ${Array.from(ALLOWED_DIRS).join(", ")} directories are allowed.`,
         })
       }
     }

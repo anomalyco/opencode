@@ -195,7 +195,6 @@ export namespace File {
     const content = await Bun.file(full)
       .text()
       .catch(() => "")
-      .then((x) => x.trim())
     if (project.vcs === "git") {
       let diff = await $`git diff ${file}`.cwd(Instance.directory).quiet().nothrow().text()
       if (!diff.trim()) diff = await $`git diff --staged ${file}`.cwd(Instance.directory).quiet().nothrow().text()

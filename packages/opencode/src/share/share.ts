@@ -21,19 +21,20 @@ export namespace Share {
     pending.set(key, content)
     queue = queue
       .then(async () => {
-        const content = pending.get(key)
-        if (content === undefined) return
-        pending.delete(key)
-
-        return fetch(`${URL}/share_sync`, {
+        const payload = pending.get(key)
+        if (payload === undefined) return
+        const response = await fetch(`${URL}/share_sync`, {
           method: "POST",
           body: JSON.stringify({
             sessionID: sessionID,
             secret,
             key: key,
-            content,
+            content: payload,
           }),
         })
+        if (!response.ok) return response
+        pending.delete(key)
+        return response
       })
       .then((x) => {
         if (x) {
@@ -42,6 +43,12 @@ export namespace Share {
             status: x.status,
           })
         }
+      })
+      .catch((error) => {
+        log.error("sync_failed", {
+          key: key,
+          error,
+        })
       })
   }
 

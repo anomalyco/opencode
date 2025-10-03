@@ -84,6 +84,7 @@ if (!snapshot) {
       notes.push(line)
     }
   }
+  console.log(notes)
   server.close()
 }
 

@@ -178,7 +178,7 @@ export namespace Storage {
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
-    using _ = await Lock.write("storage")
+    using _ = await Lock.write(target)
     const content = await Bun.file(target).json()
     fn(content)
     await Bun.write(target, JSON.stringify(content, null, 2))
@@ -188,7 +188,7 @@ export namespace Storage {
   export async function write<T>(key: string[], content: T) {
     const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
-    using _ = await Lock.write("storage")
+    using _ = await Lock.write(target)
     await fs.mkdir(path.dirname(target), { recursive: true }).catch(() => {})
     await Bun.write(target, JSON.stringify(content, null, 2))
   }
