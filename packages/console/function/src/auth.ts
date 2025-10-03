@@ -6,9 +6,9 @@ import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage, type CloudflareStorageOptions } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode/console-core/account"
-import { Workspace } from "@opencode/console-core/workspace"
-import { Actor } from "@opencode/console-core/actor"
+import { Account } from "@opencode/console-core/account.js"
+import { Workspace } from "@opencode/console-core/workspace.js"
+import { Actor } from "@opencode/console-core/actor.js"
 import { Resource } from "@opencode/console-resource"
 
 type Env = {
@@ -114,7 +114,7 @@ export default {
 
         if (!email) throw new Error("No email found")
 
-        let accountID = await Account.fromEmail(email).then((x) => x?.id)
+        let accountID = await Account.fromEmail(email).then((x: any) => x?.id)
         if (!accountID) {
           console.log("creating account for", email)
           accountID = await Account.create({
