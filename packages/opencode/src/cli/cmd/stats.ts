@@ -1,5 +1,9 @@
 import { cmd } from "./cmd"
 import { ToolHistory } from "../../tool/history"
+import type { TelemetryEvent } from "../../tool/telemetry-event"
+import { bootstrap } from "../bootstrap"
+import { Session } from "../../session"
+import { MessageV2 } from "../../session/message-v2"
 
 interface SessionStats {
   totalSessions: number
@@ -31,40 +35,125 @@ interface SessionStats {
   costPerDay: number
 }
 
-export const StatsCommand = cmd({
-  command: "stats",
-  handler: async () => {
-    const history = await ToolHistory.read()
-    const toolUsage = Object.fromEntries(
-      Object.entries(history.tools).map(([tool, data]) => [tool, data.runs]),
-    )
-    const timestamps = history.events.map((event) => event.timestamp)
-    const earliest = timestamps.length > 0 ? Math.min(...timestamps) : Date.now()
-    const latest = timestamps.length > 0 ? Math.max(...timestamps) : earliest
-    const days = Math.max(1, Math.ceil((latest - earliest) / (1000 * 60 * 60 * 24)))
+type StatsArgs = {
+  json?: boolean
+  telemetry?: string
+  limit?: number
+}
 
-    const stats: SessionStats = {
-      totalSessions: 0,
-      totalMessages: 0,
-      totalCost: 0,
-      totalTokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: {
-          read: 0,
-          write: 0,
-        },
-      },
-      toolUsage,
-      toolTelemetry: history.tools,
-      dateRange: { earliest, latest },
-      days,
-      costPerDay: 0,
-    }
-    displayStats(stats)
+export const StatsCommand = cmd<StatsArgs, StatsArgs>({
+  command: "stats",
+  describe: "Show session and telemetry statistics",
+  builder: (yargs) =>
+    yargs
+      .option("json", {
+        describe: "Output raw JSON instead of formatted tables",
+        type: "boolean",
+        default: false,
+      })
+      .option("telemetry", {
+        describe: "Filter telemetry events by tool id (use 'all' for everything)",
+        type: "string",
+      })
+      .option("limit", {
+        describe: "Number of telemetry events to display",
+        type: "number",
+        default: 20,
+      }),
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const history = await ToolHistory.read()
+      const toolUsage = Object.fromEntries(
+        Object.entries(history.tools).map(([tool, data]) => [tool, data.runs]),
+      )
+      const telemetryFilter = args.telemetry?.trim()
+      const telemetryEvents = (() => {
+        if (!telemetryFilter) return history.events
+        if (telemetryFilter === "all") return history.events
+        return history.events.filter((event) => event.id === telemetryFilter)
+      })()
+      const limit = Math.max(1, args.limit ?? 20)
+      const limitedTelemetry = telemetryEvents.slice(-limit)
+
+      const sessionMetrics = await aggregateSessions()
+      const stats: SessionStats = {
+        ...sessionMetrics,
+        toolUsage,
+        toolTelemetry: history.tools,
+      }
+
+      if (args.json) {
+        const json = {
+          stats,
+          telemetry: limitedTelemetry,
+        }
+        console.log(JSON.stringify(json, null, 2))
+        return
+      }
+
+      displayStats(stats)
+      if (telemetryFilter) displayTelemetryEvents(limitedTelemetry)
+    })
   },
 })
+
+async function aggregateSessions(): Promise<Omit<SessionStats, "toolUsage" | "toolTelemetry">> {
+  const sessions: Session.Info[] = []
+  for await (const info of Session.list()) {
+    sessions.push(info)
+  }
+
+  let totalMessages = 0
+  let totalCost = 0
+  let inputTokens = 0
+  let outputTokens = 0
+  let reasoningTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+
+  let earliest = sessions.length > 0 ? Math.min(...sessions.map((s) => s.time.created)) : Date.now()
+  let latest = sessions.length > 0 ? Math.max(...sessions.map((s) => s.time.updated)) : earliest
+
+  for (const session of sessions) {
+    earliest = Math.min(earliest, session.time.created)
+    latest = Math.max(latest, session.time.updated)
+    const messages = await Session.messages(session.id)
+    totalMessages += messages.length
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      const assistant = message.info as MessageV2.Assistant
+      totalCost += assistant.cost ?? 0
+      inputTokens += assistant.tokens?.input ?? 0
+      outputTokens += assistant.tokens?.output ?? 0
+      reasoningTokens += assistant.tokens?.reasoning ?? 0
+      cacheReadTokens += assistant.tokens?.cache?.read ?? 0
+      cacheWriteTokens += assistant.tokens?.cache?.write ?? 0
+    }
+  }
+
+  const totalSessions = sessions.length
+  const dayMillis = 1000 * 60 * 60 * 24
+  const days = totalSessions > 0 ? Math.max(1, Math.ceil((latest - earliest) / dayMillis)) : 1
+  const costPerDay = days > 0 ? totalCost / days : 0
+
+  return {
+    totalSessions,
+    totalMessages,
+    totalCost,
+    totalTokens: {
+      input: inputTokens,
+      output: outputTokens,
+      reasoning: reasoningTokens,
+      cache: {
+        read: cacheReadTokens,
+        write: cacheWriteTokens,
+      },
+    },
+    dateRange: { earliest, latest },
+    days,
+    costPerDay,
+  }
+}
 
 export function displayStats(stats: SessionStats) {
   const width = 56
@@ -150,4 +239,23 @@ function formatNumber(num: number): string {
     return (num / 1000).toFixed(1) + "K"
   }
   return num.toString()
+}
+
+function displayTelemetryEvents(events: TelemetryEvent[]) {
+  if (events.length === 0) {
+    console.log("No telemetry events match the provided filter.")
+    return
+  }
+  console.log("┌──────────────────────── TELEMETRY EVENTS ───────────────────────┐")
+  console.log("│ Time                 Tool        Status   Duration   Message     │")
+  console.log("├─────────────────────────────────────────────────────────────────┤")
+  for (const event of events) {
+    const date = new Date(event.timestamp).toISOString().replace("T", " ").split(".")[0]
+    const status = event.status === "success" ? "OK" : "ERR"
+    const duration = event.duration < 1000 ? `${event.duration.toFixed(0)}ms` : `${(event.duration / 1000).toFixed(2)}s`
+    const message = event.error ? event.error.slice(0, 24) : ""
+    const line = `│ ${date} ${event.id.padEnd(10)} ${status.padEnd(7)} ${duration.padEnd(9)} ${message.padEnd(11)} │`
+    console.log(line)
+  }
+  console.log("└─────────────────────────────────────────────────────────────────┘")
 }

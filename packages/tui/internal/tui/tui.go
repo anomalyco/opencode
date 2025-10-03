@@ -661,6 +661,24 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Properties.SessionID == a.app.Session.ID {
 			return a, toast.NewSuccessToast("Session compacted successfully")
 		}
+	case opencode.EventListResponseEventToolTelemetry:
+		duration := time.Duration(msg.Properties.Duration * float64(time.Millisecond))
+		if duration < 0 {
+			duration = 0
+		}
+		timestamp := time.UnixMilli(int64(msg.Properties.Timestamp))
+		errorMessage := ""
+		if msg.Properties.Error != nil {
+			errorMessage = *msg.Properties.Error
+		}
+		a.app.RecordTelemetry(app.TelemetryEntry{
+			Tool:      msg.Properties.ID,
+			Status:    msg.Properties.Status,
+			Duration:  duration,
+			Timestamp: timestamp,
+			Error:     errorMessage,
+		})
+		return a, nil
 	case tea.WindowSizeMsg:
 		msg.Height -= 2 // Make space for the status bar
 		a.width, a.height = msg.Width, msg.Height
@@ -948,6 +966,54 @@ func (a Model) Cleanup() {
 	a.status.Cleanup()
 }
 
+func renderTelemetry(entries []app.TelemetryEntry, width int) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	const limit = 5
+	start := len(entries) - limit
+	if start < 0 {
+		start = 0
+	}
+
+	t := theme.CurrentTheme()
+	headStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background())
+	rowStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background())
+	lines := []string{headStyle.Render("telemetry")}
+	for _, entry := range entries[start:] {
+		status := entry.Status
+		if status == "success" {
+			status = "ok"
+		}
+		duration := formatTelemetryDuration(entry.Duration)
+		timestamp := entry.Timestamp.Format("15:04:05")
+		message := fmt.Sprintf("%s %-10s %-4s %6s", timestamp, entry.Tool, status, duration)
+		if entry.Error != "" {
+			message += " • " + entry.Error
+		}
+		lines = append(lines, rowStyle.Render(message))
+	}
+
+	bloc := strings.Join(lines, "\n")
+	return lipgloss.PlaceHorizontal(
+		width,
+		lipgloss.Left,
+		bloc,
+		styles.WhitespaceStyle(t.Background()),
+	)
+}
+
+func formatTelemetryDuration(d time.Duration) string {
+	if d <= 0 {
+		return "0ms"
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d/time.Millisecond)
+	}
+	return fmt.Sprintf("%.2fs", d.Seconds())
+}
+
 func (a Model) home() (string, int, int) {
 	t := theme.CurrentTheme()
 	effectiveWidth := a.width - 4
@@ -1094,7 +1160,11 @@ func (a Model) chat() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
+	telemetryView := renderTelemetry(a.app.Telemetry, effectiveWidth)
 	mainLayout := messagesView + "\n" + editorView
+	if telemetryView != "" {
+		mainLayout = telemetryView + "\n" + mainLayout
+	}
 	editorX := max(0, (effectiveWidth-editorWidth)/2)
 	editorY := a.height - editorHeight
 

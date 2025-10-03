@@ -110,7 +110,7 @@ func (r *EventListResponse) UnmarshalJSON(data []byte) (err error) {
 // [EventListResponseEventSessionIdle], [EventListResponseEventSessionUpdated],
 // [EventListResponseEventSessionDeleted], [EventListResponseEventSessionError],
 // [EventListResponseEventServerConnected],
-// [EventListResponseEventFileWatcherUpdated],
+// [EventListResponseEventFileWatcherUpdated], [EventListResponseEventToolTelemetry] or
 // [EventListResponseEventIdeInstalled].
 func (r EventListResponse) AsUnion() EventListResponseUnion {
 	return r.union
@@ -200,6 +200,10 @@ func init() {
 		apijson.UnionVariant{
 			TypeFilter: gjson.JSON,
 			Type:       reflect.TypeOf(EventListResponseEventFileWatcherUpdated{}),
+		},
+		apijson.UnionVariant{
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(EventListResponseEventToolTelemetry{}),
 		},
 		apijson.UnionVariant{
 			TypeFilter: gjson.JSON,
@@ -1235,6 +1239,78 @@ func (r eventListResponseEventFileWatcherUpdatedJSON) RawJSON() string {
 
 func (r EventListResponseEventFileWatcherUpdated) implementsEventListResponse() {}
 
+type EventListResponseEventToolTelemetry struct {
+	Properties EventListResponseEventToolTelemetryProperties `json:"properties,required"`
+	Type       EventListResponseEventToolTelemetryType       `json:"type,required"`
+	JSON       eventListResponseEventToolTelemetryJSON       `json:"-"`
+}
+
+// eventListResponseEventToolTelemetryJSON contains the JSON metadata for the struct [EventListResponseEventToolTelemetry]
+type eventListResponseEventToolTelemetryJSON struct {
+	Properties  apijson.Field
+	Type        apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventToolTelemetry) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventToolTelemetryJSON) RawJSON() string {
+	return r.raw
+}
+
+func (r EventListResponseEventToolTelemetry) implementsEventListResponse() {}
+
+type EventListResponseEventToolTelemetryProperties struct {
+	CallID    *string                                           `json:"callID,omitempty"`
+	Duration  float64                                           `json:"duration,required"`
+	Error     *string                                           `json:"error,omitempty"`
+	Extra     map[string]any                                    `json:"extra,omitempty"`
+	ID        string                                            `json:"id,required"`
+	SessionID string                                            `json:"sessionID,required"`
+	Status    string                                            `json:"status,required"`
+	Timestamp float64                                           `json:"timestamp,required"`
+	JSON      eventListResponseEventToolTelemetryPropertiesJSON `json:"-"`
+}
+
+// eventListResponseEventToolTelemetryPropertiesJSON contains the JSON metadata for the struct [EventListResponseEventToolTelemetryProperties]
+type eventListResponseEventToolTelemetryPropertiesJSON struct {
+	CallID      apijson.Field
+	Duration    apijson.Field
+	Error       apijson.Field
+	Extra       apijson.Field
+	ID          apijson.Field
+	SessionID   apijson.Field
+	Status      apijson.Field
+	Timestamp   apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *EventListResponseEventToolTelemetryProperties) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r eventListResponseEventToolTelemetryPropertiesJSON) RawJSON() string {
+	return r.raw
+}
+
+type EventListResponseEventToolTelemetryType string
+
+const (
+	EventListResponseEventToolTelemetryTypeToolTelemetry EventListResponseEventToolTelemetryType = "tool.telemetry"
+)
+
+func (r EventListResponseEventToolTelemetryType) IsKnown() bool {
+	switch r {
+	case EventListResponseEventToolTelemetryTypeToolTelemetry:
+		return true
+	}
+	return false
+}
+
 type EventListResponseEventFileWatcherUpdatedProperties struct {
 	Event EventListResponseEventFileWatcherUpdatedPropertiesEvent `json:"event,required"`
 	File  string                                                  `json:"file,required"`
@@ -1368,11 +1444,12 @@ const (
 	EventListResponseTypeServerConnected      EventListResponseType = "server.connected"
 	EventListResponseTypeFileWatcherUpdated   EventListResponseType = "file.watcher.updated"
 	EventListResponseTypeIdeInstalled         EventListResponseType = "ide.installed"
+	EventListResponseTypeToolTelemetry        EventListResponseType = "tool.telemetry"
 )
 
 func (r EventListResponseType) IsKnown() bool {
 	switch r {
-	case EventListResponseTypeInstallationUpdated, EventListResponseTypeLspClientDiagnostics, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeMessagePartRemoved, EventListResponseTypeSessionCompacted, EventListResponseTypePermissionUpdated, EventListResponseTypePermissionReplied, EventListResponseTypeFileEdited, EventListResponseTypeSessionIdle, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionError, EventListResponseTypeServerConnected, EventListResponseTypeFileWatcherUpdated, EventListResponseTypeIdeInstalled:
+	case EventListResponseTypeInstallationUpdated, EventListResponseTypeLspClientDiagnostics, EventListResponseTypeMessageUpdated, EventListResponseTypeMessageRemoved, EventListResponseTypeMessagePartUpdated, EventListResponseTypeMessagePartRemoved, EventListResponseTypeSessionCompacted, EventListResponseTypePermissionUpdated, EventListResponseTypePermissionReplied, EventListResponseTypeFileEdited, EventListResponseTypeSessionIdle, EventListResponseTypeSessionUpdated, EventListResponseTypeSessionDeleted, EventListResponseTypeSessionError, EventListResponseTypeServerConnected, EventListResponseTypeFileWatcherUpdated, EventListResponseTypeIdeInstalled, EventListResponseTypeToolTelemetry:
 		return true
 	}
 	return false

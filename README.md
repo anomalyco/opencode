@@ -52,6 +52,18 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
 
+### Usage Stats
+
+You can inspect local usage history and tool telemetry with the built-in stats command:
+
+```bash
+opencode stats            # pretty summary
+opencode stats --json     # machine-readable output
+opencode stats --telemetry all --limit 10
+```
+
+The telemetry section lists recent tool executions (duration, status, error message) gathered from `tool.telemetry` events.
+
 ### Contributing
 
 OpenCode is an opinionated tool so any fundamental feature needs to go through a

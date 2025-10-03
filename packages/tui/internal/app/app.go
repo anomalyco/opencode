@@ -27,6 +27,14 @@ type Message struct {
 	Parts []opencode.PartUnion
 }
 
+type TelemetryEntry struct {
+	Tool      string
+	Status    string
+	Duration  time.Duration
+	Timestamp time.Time
+	Error     string
+}
+
 type App struct {
 	Project           opencode.Project
 	Agents            []opencode.Agent
@@ -52,6 +60,7 @@ type App struct {
 	IsLeaderSequence  bool
 	IsBashMode        bool
 	ScrollSpeed       int
+	Telemetry         []TelemetryEntry
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -214,6 +223,14 @@ func New(
 	}
 
 	return app, nil
+}
+
+func (a *App) RecordTelemetry(entry TelemetryEntry) {
+	const maxEntries = 20
+	a.Telemetry = append(a.Telemetry, entry)
+	if len(a.Telemetry) > maxEntries {
+		a.Telemetry = a.Telemetry[len(a.Telemetry)-maxEntries:]
+	}
 }
 
 func (a *App) Keybind(commandName commands.CommandName) string {
