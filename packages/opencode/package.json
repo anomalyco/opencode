@@ -47,6 +47,7 @@
     "@opencode-ai/sdk": "workspace:*",
     "@parcel/watcher": "2.5.1",
     "@standard-schema/spec": "1.0.0",
+    "@zed-industries/agent-client-protocol": "0.4.5",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "chokidar": "4.0.3",
