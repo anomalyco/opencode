@@ -115,7 +115,10 @@ export namespace Storage {
   function getStorageDir(): string {
     try {
       const { Instance } = require("../project/instance")
-      // If we're in an Instance context, use Instance-specific storage
+      const pending = Instance.pending
+      if (pending) {
+        return path.join(pending, ".opencode-storage")
+      }
       const instanceDir = Instance.directory
       if (instanceDir) {
         return path.join(instanceDir, ".opencode-storage")
