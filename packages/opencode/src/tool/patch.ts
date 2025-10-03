@@ -9,8 +9,8 @@ import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Patch } from "../patch"
-import { Filesystem } from "../util/filesystem"
 import { createTwoFilesPatch } from "diff"
+import { guard } from "./workspace"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -54,11 +54,7 @@ export const PatchTool = Tool.define<typeof PatchParams, PatchMetadata>("patch",
     let totalDiff = ""
 
     for (const hunk of hunks) {
-      const filePath = path.resolve(Instance.directory, hunk.path)
-      
-      if (!Filesystem.contains(Instance.directory, filePath)) {
-        throw new Error(`File ${filePath} is not in the current working directory`)
-      }
+      const filePath = guard(hunk.path)
 
       switch (hunk.type) {
         case "add":
@@ -99,13 +95,13 @@ export const PatchTool = Tool.define<typeof PatchParams, PatchMetadata>("patch",
           }
           
           const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
-          
+
           fileChanges.push({
             filePath,
             oldContent,
             newContent,
             type: hunk.move_path ? "move" : "update",
-            movePath: hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined,
+            movePath: hunk.move_path ? guard(hunk.move_path) : undefined,
           })
           
           totalDiff += diff + "\n"
