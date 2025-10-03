@@ -2,10 +2,11 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { Session } from "../session"
+import { SessionPrompt } from "../session/prompt"
 import { ToolRegistry } from "../tool/registry"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
-import { z } from "zod"
+import z from "zod/v4"
 import { MessageV2 } from "../session/message-v2"
 
 export namespace ACPServer {
@@ -74,9 +75,15 @@ export namespace ACPServer {
     }
 
     if (method === "diagnostics/log") {
-      const input = z
-        .object({ level: z.string().optional(), message: z.string(), data: z.record(z.unknown()).optional() })
-        .parse(params ?? {})
+      const parsed = z
+        .object({
+          level: z.string().optional(),
+          message: z.string(),
+          data: z.record(z.string(), z.unknown()).optional(),
+        })
+        .safeParse(params ?? {})
+      if (!parsed.success) return { ok: false }
+      const input = parsed.data
       const lvl = (input.level ?? "info").toUpperCase()
       if (lvl === "DEBUG") log.debug(input.message, input.data ?? {})
       if (lvl === "INFO") log.info(input.message, input.data ?? {})
@@ -152,11 +159,16 @@ export namespace ACPServer {
         .object({ text: z.string(), sessionId: z.string().optional(), agent: z.string().optional() })
         .parse(params ?? {})
       const id = input.sessionId ?? (await ensureSession())
-      const res = await Session.prompt({
+      const res = await SessionPrompt.prompt({
         sessionID: id,
-        agent: input.agent ?? "build",
+        messageID: Identifier.ascending("message"),
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-3-5-sonnet-20241022",
+        },
         parts: [
           {
+            id: Identifier.ascending("part"),
             type: "text",
             text: input.text,
           },
@@ -173,34 +185,37 @@ export namespace ACPServer {
   }
 
   export async function start() {
-    await Instance.provide(process.cwd(), async () => {
-      log.info("starting", { cwd: process.cwd() })
-      const reader = process.stdin
-      reader.setEncoding("utf8")
+    await Instance.provide({
+      directory: process.cwd(),
+      fn: async () => {
+        log.info("starting", { cwd: process.cwd() })
+        const reader = process.stdin
+        reader.setEncoding("utf8")
 
-      let buf = ""
-      reader.on("data", async (chunk: string) => {
-        buf += chunk
-        const parts = buf.split("\n")
-        buf = parts.pop() ?? ""
-        for (const line of parts) {
-          const trimmed = line.trim()
-          if (!trimmed) continue
-          let msg: z.infer<typeof RpcReq> | undefined
-          try {
-            const parsed = JSON.parse(trimmed)
-            const r = RpcReq.safeParse(parsed)
-            if (!r.success) continue
-            msg = r.data
-          } catch (_) {
-            continue
+        let buf = ""
+        reader.on("data", async (chunk: string) => {
+          buf += chunk
+          const parts = buf.split("\n")
+          buf = parts.pop() ?? ""
+          for (const line of parts) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+            let msg: z.infer<typeof RpcReq> | undefined
+            try {
+              const parsed = JSON.parse(trimmed)
+              const r = RpcReq.safeParse(parsed)
+              if (!r.success) continue
+              msg = r.data
+            } catch (_) {
+              continue
+            }
+            const result = await handle(msg.method, msg.params)
+            if (msg.id === undefined) continue
+            write({ jsonrpc: "2.0", id: msg.id, result })
+            if (msg.method === "shutdown") process.exit(0)
           }
-          const result = await handle(msg.method, msg.params)
-          if (msg.id === undefined) continue
-          write({ jsonrpc: "2.0", id: msg.id, result })
-          if (msg.method === "shutdown") process.exit(0)
-        }
-      })
+        })
+      },
     })
   }
 }
