@@ -230,13 +230,20 @@ describe("Telemetry", () => {
         await Telemetry.enrichTrace(trace1)
         await Telemetry.enrichTrace(trace2)
 
+        // Query with time range and then filter to our specific traces
         const results = await Telemetry.query({
           since: now - 8000,
-          limit: 10,
+          limit: 100, // Get more results to ensure we find ours
         })
 
-        // Should only include trace2 (created after threshold)
-        expect(results.some((r) => r.traceID === trace2.id)).toBe(true)
+        // Filter to only our test traces to avoid pollution from other tests
+        const ourResults = results.filter(
+          (r) => r.traceID === trace1.id || r.traceID === trace2.id
+        )
+
+        // Should only include trace2 (created after threshold), not trace1
+        expect(ourResults.some((r) => r.traceID === trace2.id)).toBe(true)
+        expect(ourResults.some((r) => r.traceID === trace1.id)).toBe(false)
       }))
 
     test("queries telemetry by task type", () =>

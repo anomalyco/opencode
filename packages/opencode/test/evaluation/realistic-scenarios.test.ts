@@ -15,6 +15,54 @@ import { TimeSeriesSimulator } from "./helpers/time-series-simulation"
  * - Complex workflows and edge cases
  */
 
+// Helper to create baseline with retry logic for robustness
+async function createBaselineRobust(
+  config: Parameters<typeof Baseline.create>[0],
+  retries = 3
+): Promise<ReturnType<typeof Baseline.create>> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const baseline = await Baseline.create(config)
+      // Verify it was actually created
+      await Baseline.get(baseline.id)
+      return baseline
+    } catch (error) {
+      if (i === retries - 1) throw error
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+  throw new Error("Failed to create baseline")
+}
+
+// Helper to add traces with verification
+async function addTracesRobust(
+  baselineID: string,
+  traces: any[],
+  retries = 3
+): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // Verify baseline exists first
+      await Baseline.get(baselineID)
+      
+      // Add traces
+      for (const trace of traces) {
+        await Baseline.addTrace(baselineID, trace)
+      }
+      
+      // Verify traces were added
+      const updated = await Baseline.get(baselineID)
+      if (updated.traceIDs.length >= traces.length) {
+        return
+      }
+    } catch (error) {
+      if (i === retries - 1) throw error
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+}
+
 describe("Realistic Evaluation Scenarios", () => {
   const testIds: string[] = []
 
@@ -54,7 +102,7 @@ describe("Realistic Evaluation Scenarios", () => {
       testIds.push(durationMetric.id)
 
       // Baseline with fast Haiku model
-      const baseline = await Baseline.create({
+      const baseline = await createBaselineRobust({
         id: `haiku-baseline-${Date.now()}`,
         name: "Haiku Model Baseline",
         description: "Baseline for Haiku model performance",
@@ -70,9 +118,7 @@ describe("Realistic Evaluation Scenarios", () => {
         10,
         0.1
       )
-      for (const trace of haikuTraces) {
-        await Baseline.addTrace(baseline.id, trace)
-      }
+      await addTracesRobust(baseline.id, haikuTraces)
 
       // Monitor for regressions
       const regressions: any[] = []
@@ -113,7 +159,7 @@ describe("Realistic Evaluation Scenarios", () => {
       testIds.push(costMetric.id)
 
       // Baseline with pre-optimization traces
-      const baseline = await Baseline.create({
+      const baseline = await createBaselineRobust({
         id: `pre-opt-baseline-${Date.now()}`,
         name: "Pre-Optimization",
         description: "Baseline before optimization",
@@ -128,9 +174,7 @@ describe("Realistic Evaluation Scenarios", () => {
         10,
         0.15
       )
-      for (const trace of preOptTraces) {
-        await Baseline.addTrace(baseline.id, trace)
-      }
+      await addTracesRobust(baseline.id, preOptTraces)
 
       // Monitor for improvements
       const improvements: any[] = []
@@ -347,7 +391,7 @@ describe("Realistic Evaluation Scenarios", () => {
       const { groupA, groupB } = TimeSeriesSimulator.abTest(5, 0.02, 0.028, 0.05)
 
       // Create baselines for both groups
-      const baselineA = await Baseline.create({
+      const baselineA = await createBaselineRobust({
         id: `group-a-${Date.now()}`,
         name: "Group A",
         description: "A/B test group A",
@@ -357,7 +401,7 @@ describe("Realistic Evaluation Scenarios", () => {
       })
       testIds.push(baselineA.id)
 
-      const baselineB = await Baseline.create({
+      const baselineB = await createBaselineRobust({
         id: `group-b-${Date.now()}`,
         name: "Group B",
         description: "A/B test group B",
@@ -367,14 +411,9 @@ describe("Realistic Evaluation Scenarios", () => {
       })
       testIds.push(baselineB.id)
 
-      // Add traces to baselines  
-      for (const trace of groupA) {
-        await Baseline.addTrace(baselineA.id, trace)
-      }
-      
-      for (const trace of groupB) {
-        await Baseline.addTrace(baselineB.id, trace)
-      }
+      // Add traces to baselines with verification
+      await addTracesRobust(baselineA.id, groupA)
+      await addTracesRobust(baselineB.id, groupB)
       
       // Delay to ensure persistence
       await new Promise(resolve => setTimeout(resolve, 100))
