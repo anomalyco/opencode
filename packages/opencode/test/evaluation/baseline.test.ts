@@ -1,7 +1,18 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import { Baseline } from "../../src/evaluation/baseline"
 import { Metric } from "../../src/evaluation/metric"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 import type { Trace } from "../../src/trace"
+
+// Helper to wrap tests with Instance context for storage isolation
+async function withInstance(fn: () => Promise<void>) {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn,
+  })
+}
 
 const testIds: string[] = []
 
@@ -287,7 +298,7 @@ describe("Baseline", () => {
   })
 
   describe("compareAB", () => {
-    test("compares two baselines for A/B testing", async () => {
+    test("compares two baselines for A/B testing", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: "ab-test-metric",
         name: "AB Test Metric",
@@ -360,6 +371,6 @@ describe("Baseline", () => {
       expect(metricComparison.metricID).toBe(metric.id)
       expect(metricComparison.winner).toBe("B")
       expect(metricComparison.meanB).toBeLessThan(metricComparison.meanA)
-    })
+    }))
   })
 })

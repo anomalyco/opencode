@@ -3,7 +3,18 @@ import { EvaluationIntegration } from "../../src/evaluation/integration"
 import { Metric } from "../../src/evaluation/metric"
 import { Baseline } from "../../src/evaluation/baseline"
 import { TimeSeries } from "../../src/evaluation/timeseries"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 import type { Trace as TraceType } from "../../src/trace"
+
+// Helper to wrap tests with Instance context for storage isolation
+async function withInstance(fn: () => Promise<void>) {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn,
+  })
+}
 
 // Helper to create mock traces
 function createMockTrace(overrides?: Partial<TraceType.Complete>): TraceType.Complete {
@@ -548,7 +559,7 @@ describe("EvaluationIntegration", () => {
       expect(true).toBe(true)
     })
 
-    test("detects improvement alerts", async () => {
+    test("detects improvement alerts", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: "improvement-metric",
         name: "Improvement Metric",
@@ -614,7 +625,7 @@ describe("EvaluationIntegration", () => {
       expect(improvements[0].currentValue).toBeLessThan(improvements[0].baselineValue)
 
       unsubscribe()
-    })
+    }))
   })
 
   describe("edge cases - anomaly detection", () => {
