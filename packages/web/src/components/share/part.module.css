@@ -360,7 +360,7 @@
         border-bottom: none;
       }
 
-      & > span {
+      & > [data-slot="checkbox"] {
         position: absolute;
         display: inline-block;
         left: 0.5rem;
@@ -374,6 +374,21 @@
         }
       }
 
+      [data-slot="content"] {
+        display: block;
+        position: static;
+        font-weight: 500;
+        color: var(--sl-color-text);
+      }
+
+      [data-slot="active"] {
+        display: block;
+        margin-top: 0.125rem;
+        font-size: 0.7rem;
+        font-style: italic;
+        color: var(--sl-color-orange);
+      }
+
       &[data-status="pending"] {
         color: var(--sl-color-text);
       }
@@ -381,11 +396,11 @@
       &[data-status="in_progress"] {
         color: var(--sl-color-text);
 
-        & > span {
+        & > [data-slot="checkbox"] {
           border-color: var(--sl-color-orange);
         }
 
-        & > span::before {
+        & > [data-slot="checkbox"]::before {
           content: "";
           position: absolute;
           top: 2px;
@@ -399,11 +414,11 @@
       &[data-status="completed"] {
         color: var(--sl-color-text-secondary);
 
-        & > span {
+        & > [data-slot="checkbox"] {
           border-color: var(--sl-color-green-low);
         }
 
-        & > span::before {
+        & > [data-slot="checkbox"]::before {
           content: "";
           position: absolute;
           top: 2px;

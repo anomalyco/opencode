@@ -636,30 +636,35 @@ func renderToolDetails(
 					body = util.ToMarkdown(body, width, backgroundColor)
 				}
 			}
-		case "todowrite":
-			todos := metadata["todos"]
-			if todos != nil {
-				for _, item := range todos.([]any) {
-					todo := item.(map[string]any)
-					content := todo["content"]
-          if content == nil {
-            continue
-          }
-					switch todo["status"] {
-					case "completed":
-						body += fmt.Sprintf("- [x] %s\n", content)
-					case "cancelled":
-						// strike through cancelled todo
-						body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
-					case "in_progress":
-						// highlight in progress todo
-						body += fmt.Sprintf("- [ ] `%s`\n", content)
-					default:
-						body += fmt.Sprintf("- [ ] %s\n", content)
-					}
+	case "todowrite":
+		todos := metadata["todos"]
+		if todos != nil {
+			for _, item := range todos.([]any) {
+				todo := item.(map[string]any)
+				content := todo["content"]
+	          if content == nil {
+ 	            continue
+ 	          }
+				active := ""
+				if value, ok := todo["activeForm"].(string); ok && strings.TrimSpace(value) != "" {
+					active = value
 				}
-				body = util.ToMarkdown(body, width, backgroundColor)
+				switch todo["status"] {
+				case "completed":
+					body += fmt.Sprintf("- [x] %s\n", content)
+				case "cancelled":
+					body += fmt.Sprintf("- [ ] ~~%s~~\n", content)
+				case "in_progress":
+					body += fmt.Sprintf("- [ ] `%s`\n", content)
+				default:
+					body += fmt.Sprintf("- [ ] %s\n", content)
+				}
+				if active != "" {
+					body += fmt.Sprintf("  ↳ %s\n", active)
+				}
 			}
+			body = util.ToMarkdown(body, width, backgroundColor)
+		}
 		case "task":
 			summary := metadata["summary"]
 			if summary != nil {

@@ -413,7 +413,7 @@ export function TodoWriteTool(props: ToolProps) {
           <For each={todos()}>
             {(todo) => (
               <li data-slot="item" data-status={todo.status}>
-                <span></span>
+                <span data-slot="checkbox"></span>
                 <span data-slot="content">{todo.content}</span>
                 <Show when={todo.status === "in_progress" && todo.activeForm}>
                   <span data-slot="active">{todo.activeForm}</span>
