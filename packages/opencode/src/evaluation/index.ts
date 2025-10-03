@@ -10,6 +10,7 @@
  * - Test runner for executing and validating test cases
  * - Baseline tracking for regression detection
  * - Time-series analysis for trend monitoring
+ * - Integration layer for automatic evaluation and alerting
  */
 
 export { Trace } from "../trace"
@@ -21,4 +22,5 @@ export { Dataset } from "./dataset"
 export { TestRunner } from "./runner"
 export { Baseline } from "./baseline"
 export { TimeSeries } from "./timeseries"
+export { EvaluationIntegration } from "./integration"
 export { initEvaluation } from "./init"
