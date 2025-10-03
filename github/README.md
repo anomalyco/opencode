@@ -67,7 +67,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
              fetch-depth: 1
 
          - name: Run opencode
-           uses: sst/opencode/github@latest
+           uses: evalops/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -78,7 +78,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/sst/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/evalops/opencode/issues.
 
 ## Development
 

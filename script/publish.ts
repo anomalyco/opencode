@@ -28,7 +28,7 @@ process.env["OPENCODE_VERSION"] = version
 console.log("version:", version)
 
 if (!snapshot) {
-  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+  const previous = await fetch("https://api.github.com/repos/evalops/opencode/releases/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()

@@ -29,7 +29,7 @@ export function Header(props: { zen?: boolean }) {
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href="https://github.com/sst/opencode" target="_blank">
+            <a href="https://github.com/evalops/opencode" target="_blank">
               GitHub <span>[{starCount()}]</span>
             </a>
           </li>
@@ -100,7 +100,7 @@ export function Header(props: { zen?: boolean }) {
                   <A href="/">Home</A>
                 </li>
                 <li>
-                  <a href="https://github.com/sst/opencode" target="_blank">
+                  <a href="https://github.com/evalops/opencode" target="_blank">
                     GitHub <span>[{starCount()}]</span>
                   </a>
                 </li>

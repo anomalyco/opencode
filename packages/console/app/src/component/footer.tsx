@@ -16,7 +16,7 @@ export function Footer() {
   return (
     <footer data-component="footer">
       <div data-slot="cell">
-        <a href="https://github.com/sst/opencode" target="_blank">
+        <a href="https://github.com/evalops/opencode" target="_blank">
           GitHub <span>[{starCount()}]</span>
         </a>
       </div>

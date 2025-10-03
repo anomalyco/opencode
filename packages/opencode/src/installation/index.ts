@@ -139,7 +139,7 @@ export namespace Installation {
   export const USER_AGENT = `opencode/${VERSION}`
 
   export async function latest() {
-    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+    return fetch("https://api.github.com/repos/evalops/opencode/releases/latest")
       .then((res) => res.json())
       .then((data) => {
         if (typeof data.tag_name !== "string") {

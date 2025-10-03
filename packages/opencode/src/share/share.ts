@@ -9,6 +9,7 @@ export namespace Share {
 
   let queue: Promise<void> = Promise.resolve()
   const pending = new Map<string, any>()
+  const attempts = new Map<string, number>()
 
   export async function sync(key: string, content: any) {
     const [root, ...splits] = key.split("/")
@@ -21,28 +22,7 @@ export namespace Share {
     pending.set(key, content)
     queue = queue
       .then(async () => {
-        const payload = pending.get(key)
-        if (payload === undefined) return
-        const response = await fetch(`${URL}/share_sync`, {
-          method: "POST",
-          body: JSON.stringify({
-            sessionID: sessionID,
-            secret,
-            key: key,
-            content: payload,
-          }),
-        })
-        if (!response.ok) return response
-        pending.delete(key)
-        return response
-      })
-      .then((x) => {
-        if (x) {
-          log.info("synced", {
-            key: key,
-            status: x.status,
-          })
-        }
+        await flush(key, sessionID, secret)
       })
       .catch((error) => {
         log.error("sync_failed", {
@@ -50,6 +30,48 @@ export namespace Share {
           error,
         })
       })
+  }
+
+  async function flush(key: string, sessionID: string, secret: string) {
+    while (true) {
+      const payload = pending.get(key)
+      if (payload === undefined) {
+        attempts.delete(key)
+        return
+      }
+
+      const attempt = (attempts.get(key) ?? 0) + 1
+      attempts.set(key, attempt)
+
+      const response = await fetch(`${URL}/share_sync`, {
+        method: "POST",
+        body: JSON.stringify({
+          sessionID: sessionID,
+          secret,
+          key: key,
+          content: payload,
+        }),
+      }).catch((error) => error as Error)
+
+      if (response instanceof Error || !response.ok) {
+        log.error("sync_retry", {
+          key: key,
+          attempt,
+          error: response instanceof Error ? response : response.status,
+        })
+        const delay = Math.min(30000, 1000 * 2 ** Math.min(attempt - 1, 5))
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        continue
+      }
+
+      pending.delete(key)
+      attempts.delete(key)
+      log.info("synced", {
+        key: key,
+        status: response.status,
+      })
+      return
+    }
   }
 
   export function init() {

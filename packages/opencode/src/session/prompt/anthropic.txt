@@ -4,7 +4,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
 
 If the user asks for help or wants to give feedback inform them of the following: 
 - /help: Get help with using opencode
-- To give feedback, users should report the issue at https://github.com/sst/opencode/issues
+- To give feedback, users should report the issue at https://github.com/evalops/opencode/issues
 
 # Tone and style
 You should be concise, direct, and to the point.

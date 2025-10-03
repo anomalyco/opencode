@@ -78,12 +78,12 @@ export const GithubInstallCommand = cmd({
             .text()
             .then((text) => text.trim())
           // match https or git pattern
-          // ie. https://github.com/sst/opencode.git
-          // ie. https://github.com/sst/opencode
-          // ie. git@github.com:sst/opencode.git
-          // ie. git@github.com:sst/opencode
-          // ie. ssh://git@github.com/sst/opencode.git
-          // ie. ssh://git@github.com/sst/opencode
+          // ie. https://github.com/evalops/opencode.git
+          // ie. https://github.com/evalops/opencode
+          // ie. git@github.com:evalops/opencode.git
+          // ie. git@github.com:evalops/opencode
+          // ie. ssh://git@github.com/evalops/opencode.git
+          // ie. ssh://git@github.com/evalops/opencode
           const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
           if (!parsed) {
             prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
@@ -231,7 +231,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run opencode
-        uses: sst/opencode/github@latest${envStr}
+        uses: evalops/opencode/github@latest${envStr}
         with:
           model: ${provider}/${model}
 `.trim(),

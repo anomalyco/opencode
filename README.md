@@ -1,10 +1,10 @@
 # Grimoire
 
-> A fork of [OpenCode](https://github.com/sst/opencode) by [EvalOps](https://evalops.dev)
+> A fork of [OpenCode](https://github.com/evalops/opencode) by [EvalOps](https://evalops.dev)
 
 This is a public fork maintained by EvalOps for internal use. We use OpenCode extensively and maintain this fork to experiment with enhancements aligned with our LLM evaluation workflows. OpenCode is open source and permissively licensed (MIT).
 
-This fork tracks the `dev` branch of [sst/opencode](https://github.com/sst/opencode). For official releases and documentation, see the upstream repository.
+This fork tracks the `dev` branch of [evalops/opencode](https://github.com/evalops/opencode). For official releases and documentation, see the upstream repository.
 
 ---
 

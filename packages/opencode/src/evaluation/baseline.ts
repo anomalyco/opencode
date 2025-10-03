@@ -545,30 +545,35 @@ export namespace Baseline {
   async function computeStatistics(baselineID: string, metricIDs: string[]): Promise<Statistics[]> {
     const stats: Statistics[] = []
     const baseline = await get(baselineID)
+    const metricSet = new Set(metricIDs)
+    const scoresByMetric = new Map<string, number[]>()
+
+    for (const traceID of baseline.traceIDs) {
+      const results = await EvaluationEngine.getResults(traceID)
+      for (const result of results) {
+        if (!metricSet.has(result.metricID)) continue
+        const existing = scoresByMetric.get(result.metricID) ?? []
+        existing.push(result.score)
+        scoresByMetric.set(result.metricID, existing)
+      }
+    }
 
     for (const metricID of metricIDs) {
-      const results = await EvaluationEngine.getResultsForMetric(metricID)
-      
-      // Filter to only results from baseline traces
-      const baselineResults = results.filter((r) => baseline.traceIDs.includes(r.traceID))
-      
-      if (baselineResults.length === 0) {
-        continue
-      }
-      
-      const scores = baselineResults.map((r) => r.score).sort((a, b) => a - b)
-      const count = scores.length
-      
-      const mean = scores.reduce((sum, s) => sum + s, 0) / count
-      const median = scores[Math.floor(count / 2)]
-      const variance = scores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / count
+      const scores = scoresByMetric.get(metricID)
+      if (!scores || scores.length === 0) continue
+      const sorted = [...scores].sort((a, b) => a - b)
+      const count = sorted.length
+
+      const mean = sorted.reduce((sum, s) => sum + s, 0) / count
+      const median = sorted[Math.floor(count / 2)]
+      const variance = sorted.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / count
       const stdDev = Math.sqrt(variance)
-      const min = scores[0]
-      const max = scores[count - 1]
-      const p50 = scores[Math.floor(count * 0.5)]
-      const p95 = scores[Math.floor(count * 0.95)]
-      const p99 = scores[Math.floor(count * 0.99)]
-      
+      const min = sorted[0]
+      const max = sorted[count - 1]
+      const p50 = sorted[Math.floor((count - 1) * 0.5)]
+      const p95 = sorted[Math.floor((count - 1) * 0.95)]
+      const p99 = sorted[Math.floor((count - 1) * 0.99)]
+
       stats.push({
         metricID,
         count,
