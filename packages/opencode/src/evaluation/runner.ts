@@ -235,10 +235,7 @@ export namespace TestRunner {
   }
 
   function checkOutputMatches(trace: Trace.Complete, assertion: Dataset.Assertion & { type: "output-matches" }): AssertionResult {
-    // For now, we'll use the trace summary as a proxy for output
-    // In a full implementation, we'd need to store the actual output
-    // TODO: Add output field to Trace.Complete
-    const output = JSON.stringify(trace.summary)
+    const output = trace.output
 
     const regex = new RegExp(assertion.pattern, assertion.flags)
     const passed = regex.test(output)
@@ -255,9 +252,7 @@ export namespace TestRunner {
   }
 
   function checkOutputContains(trace: Trace.Complete, assertion: Dataset.Assertion & { type: "output-contains" }): AssertionResult {
-    // For now, we'll use the trace summary as a proxy for output
-    // TODO: Add output field to Trace.Complete
-    const output = JSON.stringify(trace.summary)
+    const output = trace.output
 
     const passed = output.includes(assertion.substring)
 

@@ -52,6 +52,9 @@ export namespace Trace {
     systemPrompt: z.string().optional(),
     systemPromptVersion: z.string().optional(),
     
+    // Output
+    output: z.string(), // Final assistant response
+    
     // Tool events
     toolCalls: z.array(z.any()), // TelemetryEvent array
     
@@ -122,6 +125,13 @@ export namespace Trace {
     // Get agent name from session or default
     const agentName = "default" // TODO: extract from session metadata
     
+    // Extract output from last assistant message
+    const lastAssistant = messages.filter((m) => m.info.role === "assistant").at(-1)
+    const output = lastAssistant?.parts
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.text)
+      .join("\n") || ""
+    
     const trace: Complete = {
       id: session.id,
       projectID: session.projectID,
@@ -131,6 +141,7 @@ export namespace Trace {
       modelConfig,
       systemPrompt: undefined, // TODO: load from session init
       systemPromptVersion: undefined,
+      output,
       toolCalls,
       summary,
       evaluationIDs: [],
