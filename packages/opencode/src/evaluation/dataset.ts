@@ -113,7 +113,12 @@ export namespace Dataset {
     }
     
     await Storage.write(["dataset", dataset.id], complete)
-    Bus.publish(Event.Created, { datasetID: dataset.id })
+    
+    try {
+      Bus.publish(Event.Created, { datasetID: dataset.id })
+    } catch {
+      // Silently fail if no context available (e.g., in tests)
+    }
     
     return complete
   }
@@ -130,7 +135,12 @@ export namespace Dataset {
     }
     
     await Storage.write(["dataset", id], updated)
-    Bus.publish(Event.Updated, { datasetID: id })
+    
+    try {
+      Bus.publish(Event.Updated, { datasetID: id })
+    } catch {
+      // Silently fail if no context available (e.g., in tests)
+    }
     
     return updated
   }

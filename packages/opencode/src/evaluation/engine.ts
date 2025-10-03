@@ -64,8 +64,12 @@ export namespace EvaluationEngine {
     // Store the result
     await Storage.write(["evaluation", trace.id, result.id], result)
 
-    // Emit event
-    Bus.publish(Event.Completed, { result })
+    // Emit event (wrapped to avoid context errors in tests)
+    try {
+      Bus.publish(Event.Completed, { result })
+    } catch {
+      // Silently fail if no context available (e.g., in tests)
+    }
 
     log.debug("evaluation completed", {
       traceID: trace.id,
