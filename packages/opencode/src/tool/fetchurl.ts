@@ -6,6 +6,7 @@ import { parseHTML } from "linkedom"
 import DESCRIPTION from "./fetchurl.txt"
 import { Config } from "../config/config"
 import { Permission } from "../permission"
+import { measure } from "./telemetry"
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024 // 10MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -58,10 +59,17 @@ export const FetchUrlTool = Tool.define("fetchurl", {
   description: DESCRIPTION,
   parameters: schema,
   async execute(params, ctx) {
-    // Validate URL and check for private IPs
-    if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
-      throw new Error("URL must start with http:// or https://")
-    }
+    const telemetryExtra: Record<string, unknown> = {}
+    return measure({
+      id: "fetchurl",
+      ctx,
+      params,
+      extra: telemetryExtra,
+      async run() {
+        // Validate URL and check for private IPs
+        if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
+          throw new Error("URL must start with http:// or https://")
+        }
 
     // Extract hostname and check against private IP patterns
     const hostname = new URL(params.url).hostname
@@ -71,43 +79,46 @@ export const FetchUrlTool = Tool.define("fetchurl", {
       }
     }
 
-    const cfg = await Config.get()
-    if (cfg.permission?.fetchurl === "ask")
-      await Permission.ask({
-        type: "fetchurl",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: "Fetch content from: " + params.url,
-        metadata: {
-          url: params.url,
-          integration: params.integration,
-        },
-      })
+        const cfg = await Config.get()
+        if (cfg.permission?.fetchurl === "ask")
+          await Permission.ask({
+            type: "fetchurl",
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+            title: "Fetch content from: " + params.url,
+            metadata: {
+              url: params.url,
+              integration: params.integration,
+            },
+          })
 
-    const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
+        const timeout = Math.min((params.timeout ?? DEFAULT_TIMEOUT / 1000) * 1000, MAX_TIMEOUT)
 
-    // Auto-detect integration type if not specified
-    const integration = params.integration || detectIntegration(params.url)
+        const integration = params.integration || detectIntegration(params.url)
+        telemetryExtra["integration"] = integration
 
-    // Use API integration if available
-    if (integration === "github" && canUseGitHubAPI(params.url, params.auth_token)) {
-      const content = await fetchGitHubContent(params.url, params.auth_token, params.format)
-      return {
-        title: `${params.url} (github-api)`,
-        output: content,
-        metadata: {
-          integration: "github",
-          api_used: true,
-          content_type: "api/json",
-          size: content.length,
-        },
-      }
-    }
+        if (integration === "github" && canUseGitHubAPI(params.url, params.auth_token)) {
+          const content = await fetchGitHubContent(params.url, params.auth_token, params.format)
+          telemetryExtra["api_used"] = true
+          telemetryExtra["final_url"] = params.url
+          const metadata = {
+            integration: "github",
+            api_used: true,
+            content_type: "api/json",
+            size: content.length,
+          }
+          return {
+            title: `${params.url} (github-api)`,
+            output: content,
+            metadata,
+          }
+        }
 
-    // Fallback to HTTP fetch for other integrations
-    const result = await fetchHTTP(params, ctx, integration, timeout)
-    return result
+        const result = await fetchHTTP(params, ctx, integration, timeout, telemetryExtra)
+        return result
+      },
+    })
   },
 })
 
@@ -184,6 +195,7 @@ async function fetchHTTP(
   ctx: Tool.Context,
   integration: string,
   timeout: number,
+  telemetryExtra: Record<string, unknown>,
 ): Promise<{ title: string; output: string; metadata: FetchMeta }> {
   const state = { url: params.url, redirects: 0 }
   const follow = params.follow_redirects !== false
@@ -252,6 +264,9 @@ async function fetchHTTP(
     const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
     const output = await processContent(content, contentType, integration, state.url, params.format)
+    telemetryExtra["final_url"] = state.url
+    telemetryExtra["redirects"] = state.redirects
+    telemetryExtra["content_type"] = contentType
 
     return {
       title: `${state.url} (${integration})`,

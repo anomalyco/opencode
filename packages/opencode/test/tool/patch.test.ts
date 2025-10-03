@@ -5,6 +5,7 @@ import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import * as fs from "fs/promises"
+import { FileTime } from "../../src/file/time"
 
 const ctx = {
   sessionID: "test",
@@ -260,4 +261,21 @@ describe("tool.patch", () => {
       },
     })
   })
+  test("should reject move targets outside workspace", async () => {
+    await using fixture = await tmpdir()
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const filePath = path.join(fixture.path, "sample.txt")
+        await fs.writeFile(filePath, "content")
+        FileTime.read(ctx.sessionID, filePath)
+        const patchText = `*** Begin Patch
+*** Update File: sample.txt
+*** Move to: ../escape.txt
+*** End Patch`
+        await expect(patchTool.execute({ patchText }, ctx)).rejects.toThrow("not in the current working directory")
+      },
+    })
+  })
+
 })

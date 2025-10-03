@@ -1,4 +1,5 @@
 import { cmd } from "./cmd"
+import { ToolHistory } from "../../tool/history"
 
 interface SessionStats {
   totalSessions: number
@@ -32,7 +33,37 @@ interface SessionStats {
 
 export const StatsCommand = cmd({
   command: "stats",
-  handler: async () => {},
+  handler: async () => {
+    const history = await ToolHistory.read()
+    const toolUsage = Object.fromEntries(
+      Object.entries(history.tools).map(([tool, data]) => [tool, data.runs]),
+    )
+    const timestamps = history.events.map((event) => event.timestamp)
+    const earliest = timestamps.length > 0 ? Math.min(...timestamps) : Date.now()
+    const latest = timestamps.length > 0 ? Math.max(...timestamps) : earliest
+    const days = Math.max(1, Math.ceil((latest - earliest) / (1000 * 60 * 60 * 24)))
+
+    const stats: SessionStats = {
+      totalSessions: 0,
+      totalMessages: 0,
+      totalCost: 0,
+      totalTokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+      toolUsage,
+      toolTelemetry: history.tools,
+      dateRange: { earliest, latest },
+      days,
+      costPerDay: 0,
+    }
+    displayStats(stats)
+  },
 })
 
 export function displayStats(stats: SessionStats) {
