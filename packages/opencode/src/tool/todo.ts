@@ -8,7 +8,7 @@ const TodoInfo = z.object({
   status: z.enum(["pending", "in_progress", "completed", "cancelled"]).describe("Current status of the task"),
   priority: z.enum(["high", "medium", "low"]).optional().describe("Priority level of the task"),
   id: z.string().describe("Unique identifier for the todo item"),
-  activeForm: z.string().max(500).describe("Present continuous form shown during execution (e.g., 'Running tests')"),
+  activeForm: z.string().max(500).optional().describe("Present continuous form shown during execution (e.g., 'Running tests')"),
   tags: z.array(z.string()).optional().describe("Optional tags for categorization"),
   dependencies: z.array(z.string()).optional().describe("IDs of todos that must be completed first"),
   estimate_minutes: z.number().min(1).optional().describe("Estimated time in minutes"),
@@ -44,6 +44,12 @@ export const TodoWriteTool = Tool.define("todowrite", {
             throw new Error(`Todo '${todo.id}' has invalid dependency '${depId}' (not found in todo list)`)
           }
         }
+      }
+      if (todo.activeForm && todo.activeForm.trim().length === 0) {
+        throw new Error(`Todo '${todo.id}' must not provide an empty activeForm`)
+      }
+      if (todo.status === "in_progress" && !todo.activeForm) {
+        throw new Error(`Todo '${todo.id}' requires an activeForm while in progress`)
       }
     }
 

@@ -1,6 +1,29 @@
 Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
 It also helps the user understand the progress of the task and overall progress of their requests.
 
+## Request Format
+
+Send a JSON object with a single `todos` array. Every entry must look like:
+
+```
+{
+  "id": "write-tests",
+  "content": "Write unit coverage for auth module",
+  "status": "in_progress",
+  "activeForm": "Writing auth tests",
+  "priority": "high",
+  "tags": ["auth", "tests"],
+  "dependencies": ["scaffold-auth"],
+  "estimate_minutes": 30
+}
+```
+
+Guidelines:
+- Provide a stable `id` (no duplicates in the array).
+- Use `status` values: `pending`, `in_progress`, `completed`, or `cancelled`.
+- Include `activeForm` while a todo is `in_progress`; omit it for other states or when not needed.
+- Optional fields: `priority`, `tags`, `dependencies`, and `estimate_minutes`.
+
 ## When to Use This Tool
 Use this tool proactively in these scenarios:
 
@@ -164,4 +187,3 @@ The assistant did not use the todo list because this is a single command executi
    - Use clear, descriptive task names
 
 When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.
-

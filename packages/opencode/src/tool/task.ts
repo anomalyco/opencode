@@ -61,10 +61,10 @@ export const TaskTool = Tool.define("task", async () => {
         },
         agent: agent.name,
         tools: {
+          ...agent.tools,
           todowrite: false,
           todoread: false,
           task: false,
-          ...agent.tools,
         },
         parts: [
           {

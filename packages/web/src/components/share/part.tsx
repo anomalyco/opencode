@@ -305,8 +305,9 @@ type ToolProps = {
 interface Todo {
   id: string
   content: string
-  status: "pending" | "in_progress" | "completed"
-  priority: "low" | "medium" | "high"
+  status: "pending" | "in_progress" | "completed" | "cancelled"
+  priority?: "low" | "medium" | "high"
+  activeForm?: string
 }
 
 function stripWorkingDirectory(filePath?: string, workingDir?: string) {
@@ -389,6 +390,7 @@ export function TodoWriteTool(props: ToolProps) {
     in_progress: 0,
     pending: 1,
     completed: 2,
+    cancelled: 3,
   }
   const todos = createMemo(() =>
     ((props.state.input?.todos ?? []) as Todo[]).slice().sort((a, b) => priority[a.status] - priority[b.status]),
@@ -412,7 +414,10 @@ export function TodoWriteTool(props: ToolProps) {
             {(todo) => (
               <li data-slot="item" data-status={todo.status}>
                 <span></span>
-                {todo.content}
+                <span data-slot="content">{todo.content}</span>
+                <Show when={todo.status === "in_progress" && todo.activeForm}>
+                  <span data-slot="active">{todo.activeForm}</span>
+                </Show>
               </li>
             )}
           </For>
