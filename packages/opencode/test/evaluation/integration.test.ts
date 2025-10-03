@@ -118,7 +118,7 @@ describe("EvaluationIntegration", () => {
   })
 
   describe("alert callbacks", () => {
-    test("onRegression receives regression alerts", async () => {
+    test("onRegression receives regression alerts", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: "regression-metric",
         name: "Regression Metric",
@@ -188,7 +188,7 @@ describe("EvaluationIntegration", () => {
       expect(alerts[0].metricID).toBe(metric.id)
 
       unsubscribe()
-    })
+    }))
 
     test("onAnomaly receives anomaly alerts", async () => {
       const metric: Metric.Definition = {
@@ -449,7 +449,7 @@ describe("EvaluationIntegration", () => {
   })
 
   describe("edge cases - baseline comparison", () => {
-    test("skips baseline comparison when baseline has insufficient samples", async () => {
+    test("skips baseline comparison when baseline has insufficient samples", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: "insufficient-baseline-metric",
         name: "Insufficient Baseline Metric",
@@ -504,9 +504,9 @@ describe("EvaluationIntegration", () => {
       expect(alerts.length).toBe(0)
 
       unsubscribe()
-    })
+    }))
 
-    test("handles baseline with no matching metrics", async () => {
+    test("handles baseline with no matching metrics", () => withInstance(async () => {
       const metric1: Metric.Definition = {
         id: "baseline-metric-1",
         name: "Baseline Metric 1",
@@ -557,7 +557,7 @@ describe("EvaluationIntegration", () => {
 
       // Should complete without errors
       expect(true).toBe(true)
-    })
+    }))
 
     test("detects improvement alerts", () => withInstance(async () => {
       const metric: Metric.Definition = {

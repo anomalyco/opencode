@@ -188,7 +188,7 @@ describe("Baseline", () => {
   })
 
   describe("compare", () => {
-    test("compares trace against baseline and detects regressions", async () => {
+    test("compares trace against baseline and detects regressions", () => withInstance(async () => {
       // Create metric (lower is better)
       const metric: Metric.Definition = {
         id: "error-rate-metric",
@@ -247,9 +247,9 @@ describe("Baseline", () => {
       expect(metricComparison).toBeDefined()
       expect(metricComparison!.isRegression).toBe(true)
       expect(comparison.regressions).toContain(metric.id)
-    })
+    }))
 
-    test("detects improvements", async () => {
+    test("detects improvements", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: "success-rate-metric",
         name: "Success Rate",
@@ -294,7 +294,7 @@ describe("Baseline", () => {
 
       const comparison = await Baseline.compare(baseline.id, goodTrace)
       expect(comparison.improvements.length).toBeGreaterThan(0)
-    })
+    }))
   })
 
   describe("compareAB", () => {

@@ -3,8 +3,19 @@ import { EvaluationIntegration } from "../../src/evaluation/integration"
 import { Metric } from "../../src/evaluation/metric"
 import { Baseline } from "../../src/evaluation/baseline"
 import { TimeSeries } from "../../src/evaluation/timeseries"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 import { RealisticTraces } from "./fixtures/realistic-traces"
 import { TimeSeriesSimulator } from "./helpers/time-series-simulation"
+
+// Helper to wrap tests with Instance context for storage isolation
+async function withInstance(fn: () => Promise<void>) {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn,
+  })
+}
 
 /**
  * Realistic scenario tests using production-like trace patterns.
@@ -87,7 +98,7 @@ describe("Realistic Evaluation Scenarios", () => {
   })
 
   describe("Real-World Trace Patterns", () => {
-    test("detects regression when switching from Haiku to Sonnet", async () => {
+    test("detects regression when switching from Haiku to Sonnet", () => withInstance(async () => {
       const durationMetric: Metric.Definition = {
         id: `model-switch-${Date.now()}`,
         name: "Response Duration",
@@ -142,9 +153,9 @@ describe("Realistic Evaluation Scenarios", () => {
       )
 
       unsubscribe()
-    })
+    }))
 
-    test("detects improvement from code optimization", async () => {
+    test("detects improvement from code optimization", () => withInstance(async () => {
       const costMetric: Metric.Definition = {
         id: `optimization-${Date.now()}`,
         name: "Total Cost",
@@ -198,7 +209,7 @@ describe("Realistic Evaluation Scenarios", () => {
       )
 
       unsubscribe()
-    })
+    }))
 
     test("handles retry patterns correctly", async () => {
       const errorMetric: Metric.Definition = {
@@ -373,7 +384,7 @@ describe("Realistic Evaluation Scenarios", () => {
       expect(avgHigh).toBeGreaterThan(avgLow * 1.5)
     })
 
-    test("handles A/B test comparison", async () => {
+    test("handles A/B test comparison", () => withInstance(async () => {
       const metric: Metric.Definition = {
         id: `ab-test-${Date.now()}`,
         name: "A/B Test",
@@ -426,7 +437,7 @@ describe("Realistic Evaluation Scenarios", () => {
       expect(comparison.metrics[0].meanB).toBeGreaterThan(
         comparison.metrics[0].meanA
       )
-    })
+    }))
 
     test("detects step function change after deployment", async () => {
       const metric: Metric.Definition = {
