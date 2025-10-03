@@ -133,7 +133,7 @@ export namespace TimeSeries {
       metricID,
       traceID: trace.id,
       value: result.score,
-      timestamp: Date.now(),
+      timestamp: trace.createdAt || Date.now(),
       tags,
     }
     
