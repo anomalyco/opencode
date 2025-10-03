@@ -2,6 +2,7 @@ import z from "zod/v4"
 import type { ZodType } from "zod/v4"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
+import { Context } from "../util/context"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
@@ -14,6 +15,17 @@ export namespace Bus {
       subscriptions,
     }
   })
+
+  function getState() {
+    try {
+      return state()
+    } catch (error) {
+      if (error instanceof Context.NotFound && error.name === "instance") {
+        return null
+      }
+      throw error
+    }
+  }
 
   export type EventDefinition = ReturnType<typeof event>
 
@@ -51,6 +63,14 @@ export namespace Bus {
     def: Definition,
     properties: z.output<Definition["properties"]>,
   ) {
+    const currentState = getState()
+    if (!currentState) {
+      log.debug("skipping publish (no instance context)", {
+        type: def.type,
+      })
+      return
+    }
+
     const payload = {
       type: def.type,
       properties,
@@ -60,7 +80,7 @@ export namespace Bus {
     })
     const pending = []
     for (const key of [def.type, "*"]) {
-      const match = state().subscriptions.get(key)
+      const match = currentState.subscriptions.get(key)
       for (const sub of match ?? []) {
         pending.push(sub(payload))
       }
@@ -92,8 +112,14 @@ export namespace Bus {
   }
 
   function raw(type: string, callback: (event: any) => void) {
+    const currentState = getState()
+    if (!currentState) {
+      log.debug("skipping subscription (no instance context)", { type })
+      return () => {}
+    }
+
     log.info("subscribing", { type })
-    const subscriptions = state().subscriptions
+    const subscriptions = currentState.subscriptions
     let match = subscriptions.get(type) ?? []
     match.push(callback)
     subscriptions.set(type, match)

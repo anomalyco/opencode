@@ -64,12 +64,8 @@ export namespace EvaluationEngine {
     // Store the result
     await Storage.write(["evaluation", trace.id, result.id], result)
 
-    // Emit event (wrapped to avoid context errors in tests)
-    try {
-      Bus.publish(Event.Completed, { result })
-    } catch {
-      // Silently fail if no context available (e.g., in tests)
-    }
+    // Emit event
+    Bus.publish(Event.Completed, { result })
 
     log.debug("evaluation completed", {
       traceID: trace.id,
@@ -147,6 +143,8 @@ export namespace EvaluationEngine {
       // Create a safe evaluation context
       const func = new Function("trace", `return ${expression}`)
       const result = func(trace)
+      // Convert boolean to number (true -> 1, false -> 0)
+      if (typeof result === "boolean") return result ? 1 : 0
       return typeof result === "number" ? result : 0
     } catch (error) {
       log.error("rule evaluation failed", {
@@ -161,7 +159,9 @@ export namespace EvaluationEngine {
    * Evaluate using a built-in heuristic function
    */
   function evaluateHeuristic(trace: Trace.Complete, evaluator: Metric.HeuristicEvaluator): number {
-    const heuristic = Heuristics[evaluator.function]
+    const functionName = evaluator.function as keyof typeof Heuristics
+    const heuristic = Heuristics[functionName]
+    
     if (!heuristic) {
       log.error("heuristic not found", {
         function: evaluator.function,

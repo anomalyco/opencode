@@ -5,11 +5,11 @@ export type HeuristicFunction = (trace: Trace.Complete, params?: Record<string, 
 /**
  * Built-in heuristic functions for trace evaluation
  */
-export const Heuristics: Record<string, HeuristicFunction> = {
+export const Heuristics = {
   /**
    * Calculate the ratio of failed tool calls
    */
-  toolErrorRate(trace: Trace.Complete): number {
+  toolErrorRate(trace: Trace.Complete, _params?: Record<string, any>): number {
     if (trace.toolCalls.length === 0) return 0
     const errors = trace.toolCalls.filter((t) => t.status === "error").length
     return errors / trace.toolCalls.length
@@ -18,14 +18,14 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate the total duration in milliseconds
    */
-  responseDuration(trace: Trace.Complete): number {
+  responseDuration(trace: Trace.Complete, _params?: Record<string, any>): number {
     return trace.summary.duration
   },
 
   /**
    * Detect redundant/duplicate tool calls
    */
-  redundantCalls(trace: Trace.Complete): number {
+  redundantCalls(trace: Trace.Complete, _params?: Record<string, any>): number {
     const seen = new Map<string, number>()
     
     for (const call of trace.toolCalls) {
@@ -41,7 +41,7 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate cost efficiency (cost per successful operation)
    */
-  costEfficiency(trace: Trace.Complete): number {
+  costEfficiency(trace: Trace.Complete, _params?: Record<string, any>): number {
     const successfulCalls = trace.toolCalls.filter((t) => t.status === "success").length
     if (successfulCalls === 0) return Infinity
     return trace.summary.cost / successfulCalls
@@ -50,7 +50,7 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate token efficiency (output tokens / total tokens)
    */
-  tokenEfficiency(trace: Trace.Complete): number {
+  tokenEfficiency(trace: Trace.Complete, _params?: Record<string, any>): number {
     const total =
       trace.summary.tokens.input +
       trace.summary.tokens.output +
@@ -62,7 +62,7 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate average tool call duration
    */
-  averageToolDuration(trace: Trace.Complete): number {
+  averageToolDuration(trace: Trace.Complete, _params?: Record<string, any>): number {
     if (trace.toolCalls.length === 0) return 0
     const totalDuration = trace.toolCalls.reduce((sum, call) => sum + call.duration, 0)
     return totalDuration / trace.toolCalls.length
@@ -79,7 +79,7 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate the ratio of tool calls that were successful
    */
-  toolSuccessRate(trace: Trace.Complete): number {
+  toolSuccessRate(trace: Trace.Complete, _params?: Record<string, any>): number {
     if (trace.toolCalls.length === 0) return 1 // No tools = perfect success
     const successes = trace.toolCalls.filter((t) => t.status === "success").length
     return successes / trace.toolCalls.length
@@ -88,14 +88,14 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Count total number of tool calls
    */
-  toolCallCount(trace: Trace.Complete): number {
+  toolCallCount(trace: Trace.Complete, _params?: Record<string, any>): number {
     return trace.toolCalls.length
   },
 
   /**
    * Calculate cache hit rate
    */
-  cacheHitRate(trace: Trace.Complete): number {
+  cacheHitRate(trace: Trace.Complete, _params?: Record<string, any>): number {
     const cacheRead = trace.summary.tokens.cache.read
     const totalInput = trace.summary.tokens.input + cacheRead
     if (totalInput === 0) return 0
@@ -105,14 +105,14 @@ export const Heuristics: Record<string, HeuristicFunction> = {
   /**
    * Calculate total cost
    */
-  totalCost(trace: Trace.Complete): number {
+  totalCost(trace: Trace.Complete, _params?: Record<string, any>): number {
     return trace.summary.cost
   },
 
   /**
    * Check if trace has any errors
    */
-  hasErrors(trace: Trace.Complete): number {
+  hasErrors(trace: Trace.Complete, _params?: Record<string, any>): number {
     return trace.summary.errorCount > 0 ? 1 : 0
   },
 
@@ -123,4 +123,6 @@ export const Heuristics: Record<string, HeuristicFunction> = {
     if (!params?.toolId) return 0
     return trace.toolCalls.filter((t) => t.id === params.toolId).length
   },
-}
+} as const
+
+export type HeuristicName = keyof typeof Heuristics

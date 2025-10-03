@@ -35,7 +35,7 @@ const createMockTrace = (overrides?: Partial<Trace.Complete>): Trace.Complete =>
     provider: "anthropic",
     model: "claude-3-5-sonnet-20241022",
   },
-  output: "Successfully implemented feature with proper error handling",
+  output: "Successfully implemented feature with proper validation",
   toolCalls: [
     { id: "Read", status: "success", duration: 100 } as any,
     { id: "Edit", status: "success", duration: 200 } as any,
@@ -332,6 +332,9 @@ describe("EvalOps Integration - Test Dataset Workflows", () => {
     testIds.push(initialDataset.id)
     const created = await Dataset.create(initialDataset)
 
+    // Wait 1ms to ensure timestamps are different
+    await new Promise(resolve => setTimeout(resolve, 1))
+
     // Update the dataset
     const updated = await Dataset.update(created.id, {
       version: "2.0.0",
@@ -542,6 +545,7 @@ describe("EvalOps Integration - Production Monitoring", () => {
       toolCalls: [
         { id: "Read", status: "success", duration: 100 } as any,
         { id: "Read", status: "success", duration: 120 } as any,
+        { id: "Read", status: "success", duration: 130 } as any,
         { id: "Edit", status: "success", duration: 200 } as any,
         { id: "Execute", status: "success", duration: 300 } as any,
       ],
@@ -560,6 +564,6 @@ describe("EvalOps Integration - Production Monitoring", () => {
     const results = await TestRunner.runAssertions(trace, assertions)
 
     expect(results).toHaveLength(3)
-    expect(results.filter((r) => r.passed).length).toBe(2) // First two pass, third fails
+    expect(results.filter((r) => r.passed).length).toBe(2) // First two pass, third fails (3 Read calls > 2)
   })
 })

@@ -1,4 +1,3 @@
-// @ts-nocheck - Using index signatures for dynamic heuristic access
 import { describe, expect, test } from "bun:test"
 import { Heuristics } from "../../src/evaluation/heuristics"
 import type { Trace } from "../../src/trace"
