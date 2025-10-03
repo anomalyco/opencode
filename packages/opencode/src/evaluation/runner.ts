@@ -6,6 +6,31 @@ import type { Trace } from "../trace"
 import { Dataset } from "./dataset"
 import { EvaluationEngine } from "./engine"
 
+/**
+ * TestRunner executes test suites and validates trace behavior.
+ * 
+ * The runner evaluates assertions against traces to determine if they
+ * meet expected criteria. It supports:
+ * - Running entire datasets of test cases
+ * - Evaluating individual assertions against traces
+ * - Tracking test history and results
+ * - Emitting events for test lifecycle monitoring
+ * 
+ * Assertion results include pass/fail status, actual vs expected values,
+ * and descriptive messages for debugging failures.
+ * 
+ * @example
+ * ```typescript
+ * // Run assertions against a trace
+ * const assertions = [
+ *   { type: "tool-called", toolID: "Read", minCount: 1 },
+ *   { type: "duration-under", milliseconds: 5000 },
+ *   { type: "no-errors" }
+ * ]
+ * const results = await TestRunner.runAssertions(trace, assertions)
+ * const passed = results.every(r => r.passed)
+ * ```
+ */
 export namespace TestRunner {
   const log = Log.create({ service: "test-runner" })
 
@@ -176,7 +201,27 @@ export namespace TestRunner {
   }
 
   /**
-   * Run assertions against a trace
+   * Run assertions against a trace.
+   * 
+   * Evaluates all provided assertions and returns results with
+   * pass/fail status, actual vs expected values, and messages.
+   * 
+   * @param trace - The completed trace to validate
+   * @param assertions - Array of assertions to evaluate
+   * @returns Array of assertion results with pass/fail status
+   * 
+   * @example
+   * ```typescript
+   * const assertions = [
+   *   { type: "tool-called", toolID: "Edit", minCount: 1, maxCount: 3 },
+   *   { type: "output-contains", substring: "success" },
+   *   { type: "cost-under", dollars: 0.05 }
+   * ]
+   * const results = await TestRunner.runAssertions(trace, assertions)
+   * results.forEach(r => {
+   *   console.log(`${r.passed ? '✓' : '✗'} ${r.message}`)
+   * })
+   * ```
    */
   export async function runAssertions(trace: Trace.Complete, assertions: Dataset.Assertion[]): Promise<AssertionResult[]> {
     return Promise.all(assertions.map((assertion) => checkAssertion(trace, assertion)))

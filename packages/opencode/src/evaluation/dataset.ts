@@ -2,9 +2,54 @@ import z from "zod/v4"
 import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
 
+/**
+ * Dataset management for test-driven evaluation.
+ * 
+ * Datasets contain test cases with input scenarios and expected behaviors
+ * defined through assertions. Test cases can be:
+ * - Executed against traces to verify behavior
+ * - Tagged and filtered for organization
+ * - Enabled/disabled for selective testing
+ * - Versioned for tracking changes over time
+ * 
+ * Supported assertion types:
+ * - tool-called: Verify specific tools were invoked
+ * - output-matches: Check output against regex patterns
+ * - output-contains: Verify substring presence
+ * - no-errors: Ensure error-free execution
+ * - duration-under: Performance threshold checks
+ * - cost-under: Budget constraints
+ * - metric-passes: Evaluate against registered metrics
+ * - custom: JavaScript expressions for flexible logic
+ * 
+ * @example
+ * ```typescript
+ * await Dataset.create({
+ *   id: "smoke-tests",
+ *   name: "Smoke Test Suite",
+ *   description: "Critical path validation",
+ *   version: "1.0.0",
+ *   testCases: [{
+ *     id: "test-1",
+ *     name: "Basic Task",
+ *     input: { prompt: "List files", context: {} },
+ *     assertions: [
+ *       { type: "tool-called", toolID: "LS", minCount: 1 },
+ *       { type: "no-errors" }
+ *     ],
+ *     tags: ["critical"],
+ *     enabled: true
+ *   }],
+ *   tags: ["production"]
+ * })
+ * ```
+ */
 export namespace Dataset {
   /**
-   * Assertion types for test cases
+   * Assertion types for test cases.
+   * 
+   * Assertions define expected trace behaviors and are evaluated
+   * against completed traces to determine test pass/fail status.
    */
   export const Assertion = z.discriminatedUnion("type", [
     z.object({

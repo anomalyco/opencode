@@ -6,6 +6,21 @@ import type { Metric } from "./metric"
 import { Heuristics } from "./heuristics"
 import { Log } from "../util/log"
 
+/**
+ * EvaluationEngine executes metric evaluations against traces.
+ * 
+ * Supports three types of evaluators:
+ * - Rule: JavaScript expressions evaluated against trace data
+ * - Heuristic: Built-in functions for common metrics
+ * - LLM: AI-based evaluation using language models (planned)
+ * 
+ * @example
+ * ```typescript
+ * const metric = await Metric.get("error-rate")
+ * const result = await EvaluationEngine.evaluate(trace, metric)
+ * console.log(`Score: ${result.score}, Passed: ${result.passed}`)
+ * ```
+ */
 export namespace EvaluationEngine {
   const log = Log.create({ service: "evaluation-engine" })
 
@@ -35,7 +50,23 @@ export namespace EvaluationEngine {
   }
 
   /**
-   * Evaluate a trace against a specific metric
+   * Evaluate a trace against a specific metric.
+   * 
+   * Computes a score based on the metric's evaluator type and determines
+   * whether the trace passes the defined threshold.
+   * 
+   * @param trace - The completed trace to evaluate
+   * @param metric - The metric definition containing evaluation logic and thresholds
+   * @returns Evaluation result with score, pass/fail status, and metadata
+   * 
+   * @example
+   * ```typescript
+   * const metric = await Metric.get("response-time")
+   * const result = await EvaluationEngine.evaluate(trace, metric)
+   * if (result.passed) {
+   *   console.log(`Passed with score: ${result.score}`)
+   * }
+   * ```
    */
   export async function evaluate(trace: Trace.Complete, metric: Metric.Definition): Promise<Result> {
     log.debug("evaluating trace", {
@@ -78,7 +109,21 @@ export namespace EvaluationEngine {
   }
 
   /**
-   * Evaluate a trace against multiple metrics
+   * Evaluate a trace against multiple metrics in parallel.
+   * 
+   * Efficiently evaluates multiple metrics simultaneously and returns
+   * all results. Useful for quality gates and comprehensive assessments.
+   * 
+   * @param trace - The completed trace to evaluate
+   * @param metrics - Array of metric definitions to evaluate
+   * @returns Array of evaluation results, one per metric
+   * 
+   * @example
+   * ```typescript
+   * const metrics = await Metric.findByTag("production")
+   * const results = await EvaluationEngine.evaluateMany(trace, metrics)
+   * const allPassed = results.every(r => r.passed)
+   * ```
    */
   export async function evaluateMany(
     trace: Trace.Complete,
@@ -200,7 +245,20 @@ export namespace EvaluationEngine {
   }
 
   /**
-   * Get summary statistics for evaluation results
+   * Get summary statistics for evaluation results.
+   * 
+   * Aggregates all evaluation results for a trace and computes summary
+   * statistics including pass/fail counts and average score.
+   * 
+   * @param traceID - The ID of the trace to summarize
+   * @returns Summary object with statistics and full results
+   * 
+   * @example
+   * ```typescript
+   * const summary = await EvaluationEngine.summarize("trace-123")
+   * console.log(`${summary.passed}/${summary.total} metrics passed`)
+   * console.log(`Average score: ${summary.averageScore.toFixed(2)}`)
+   * ```
    */
   export async function summarize(traceID: string): Promise<{
     total: number

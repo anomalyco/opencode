@@ -1,6 +1,34 @@
 import z from "zod/v4"
 import { Storage } from "../storage/storage"
 
+/**
+ * Metric management for trace evaluation.
+ * 
+ * Metrics define how traces should be evaluated, including:
+ * - What to measure (via evaluator)
+ * - Success thresholds (pass/warn values)
+ * - Whether higher or lower scores are better
+ * 
+ * Supports three evaluator types:
+ * - Rule: JavaScript expressions for custom logic
+ * - Heuristic: Built-in functions for common metrics
+ * - LLM: AI-powered evaluation (planned)
+ * 
+ * @example
+ * ```typescript
+ * await Metric.register({
+ *   id: "error-rate",
+ *   name: "Error Rate",
+ *   description: "Tool call error rate threshold",
+ *   version: "1.0.0",
+ *   category: "reliability",
+ *   evaluator: { type: "heuristic", function: "toolErrorRate" },
+ *   threshold: { pass: 0.05, warn: 0.02 },
+ *   higherIsBetter: false,
+ *   tags: ["production", "quality-gate"]
+ * })
+ * ```
+ */
 export namespace Metric {
   export const Category = z.enum(["performance", "correctness", "safety", "cost", "quality", "reliability"])
   export type Category = z.infer<typeof Category>
@@ -53,7 +81,27 @@ export namespace Metric {
   export type Definition = z.infer<typeof Definition>
 
   /**
-   * Register a metric
+   * Register a new metric definition.
+   * 
+   * Stores the metric in the registry for use in evaluations.
+   * Metrics can be retrieved by ID, category, or tags.
+   * 
+   * @param metric - The complete metric definition
+   * 
+   * @example
+   * ```typescript
+   * await Metric.register({
+   *   id: "cost-limit",
+   *   name: "Cost Limit",
+   *   description: "Maximum cost per trace",
+   *   version: "1.0.0",
+   *   category: "cost",
+   *   evaluator: { type: "heuristic", function: "totalCost" },
+   *   threshold: { pass: 0.10 },
+   *   higherIsBetter: false,
+   *   tags: ["budget"]
+   * })
+   * ```
    */
   export async function register(metric: Definition): Promise<void> {
     await Storage.write(["metric", metric.id], metric)
@@ -102,7 +150,19 @@ export namespace Metric {
   }
 
   /**
-   * Find metrics by category
+   * Find metrics by category.
+   * 
+   * Retrieves all metrics that belong to a specific category.
+   * Categories help organize metrics by their evaluation focus.
+   * 
+   * @param category - The category to filter by (performance, correctness, safety, cost, quality, reliability)
+   * @returns Array of metric definitions in the specified category
+   * 
+   * @example
+   * ```typescript
+   * const costMetrics = await Metric.findByCategory("cost")
+   * console.log(`Found ${costMetrics.length} cost metrics`)
+   * ```
    */
   export async function findByCategory(category: Category): Promise<Definition[]> {
     const all = await list()
@@ -110,7 +170,19 @@ export namespace Metric {
   }
 
   /**
-   * Find metrics by tag
+   * Find metrics by tag.
+   * 
+   * Retrieves all metrics that have a specific tag.
+   * Tags allow flexible grouping and filtering of metrics.
+   * 
+   * @param tag - The tag to filter by
+   * @returns Array of metric definitions with the specified tag
+   * 
+   * @example
+   * ```typescript
+   * const prodMetrics = await Metric.findByTag("production")
+   * const gateMetrics = await Metric.findByTag("quality-gate")
+   * ```
    */
   export async function findByTag(tag: string): Promise<Definition[]> {
     const all = await list()
