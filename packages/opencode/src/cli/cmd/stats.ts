@@ -14,6 +14,14 @@ interface SessionStats {
     }
   }
   toolUsage: Record<string, number>
+  toolTelemetry: Record<
+    string,
+    {
+      runs: number
+      errors: number
+      totalDuration: number
+    }
+  >
   dateRange: {
     earliest: number
     latest: number
@@ -87,6 +95,22 @@ export function displayStats(stats: SessionStats) {
     console.log("└────────────────────────────────────────────────────────┘")
   }
   console.log()
+
+  if (Object.keys(stats.toolTelemetry ?? {}).length > 0) {
+    console.log("┌─────────────────────── TOOL TELEMETRY ─────────────────────┐")
+    console.log("│ Tool        Runs   Avg     Errors                         │")
+    console.log("├───────────────────────────────────────────────────────────┤")
+    for (const [tool, data] of Object.entries(stats.toolTelemetry)) {
+      const avg = data.runs > 0 ? data.totalDuration / data.runs : 0
+      const avgLabel = avg < 1000 ? `${avg.toFixed(0)}ms` : `${(avg / 1000).toFixed(2)}s`
+      const line = `│ ${tool.padEnd(10)} ${String(data.runs).padStart(4)} ${avgLabel.padEnd(7)} ${
+        String(data.errors).padStart(5)
+      } errors                   │`
+      console.log(line)
+    }
+    console.log("└───────────────────────────────────────────────────────────┘")
+    console.log()
+  }
 }
 function formatNumber(num: number): string {
   if (num >= 1000000) {

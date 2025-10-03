@@ -4,6 +4,7 @@ import { EditTool } from "./edit"
 import DESCRIPTION from "./multiedit.txt"
 import path from "path"
 import { Instance } from "../project/instance"
+import { guard } from "./workspace"
 
 export const MultiEditTool = Tool.define("multiedit", {
   description: DESCRIPTION,
@@ -23,8 +24,9 @@ export const MultiEditTool = Tool.define("multiedit", {
   async execute(params, ctx) {
     const tool = await EditTool.init()
     const results = []
+    const defaultPath = guard(params.filePath)
     for (const [, edit] of params.edits.entries()) {
-      const dest = edit.filePath || params.filePath
+      const dest = guard(edit.filePath || defaultPath)
       const result = await tool.execute(
         {
           filePath: dest,
@@ -37,7 +39,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       results.push(result)
     }
     const last = params.edits.at(-1)
-    const head = last?.filePath || params.filePath
+    const head = guard(last?.filePath || defaultPath)
     return {
       title: path.relative(Instance.worktree, head),
       metadata: {
