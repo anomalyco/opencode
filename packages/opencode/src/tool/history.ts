@@ -42,4 +42,9 @@ export namespace ToolHistory {
   export async function read(): Promise<TelemetrySummary> {
     return ensure()
   }
+
+  export async function clear() {
+    const fresh: TelemetrySummary = { version: 1, tools: {}, events: [] }
+    await write(fresh)
+  }
 }

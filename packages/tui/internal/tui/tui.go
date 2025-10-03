@@ -966,9 +966,11 @@ func (a Model) Cleanup() {
 	a.status.Cleanup()
 }
 
-func renderTelemetry(entries []app.TelemetryEntry, width int) string {
+func renderTelemetry(entries []app.TelemetryEntry, usage app.UsageSummary, width int) string {
 	if len(entries) == 0 {
-		return ""
+		if usage.Sessions == 0 {
+			return ""
+		}
 	}
 
 	const limit = 5
@@ -980,7 +982,15 @@ func renderTelemetry(entries []app.TelemetryEntry, width int) string {
 	t := theme.CurrentTheme()
 	headStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background())
 	rowStyle := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background())
-	lines := []string{headStyle.Render("telemetry")}
+	summary := fmt.Sprintf(
+		"sessions %d • messages %d • cost $%.2f • tokens %.0f/%.0f",
+		usage.Sessions,
+		usage.Messages,
+		usage.Cost,
+		usage.Tokens.Input,
+		usage.Tokens.Output,
+	)
+	lines := []string{headStyle.Render(summary)}
 	for _, entry := range entries[start:] {
 		status := entry.Status
 		if status == "success" {
@@ -1160,7 +1170,7 @@ func (a Model) chat() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
-	telemetryView := renderTelemetry(a.app.Telemetry, effectiveWidth)
+	telemetryView := renderTelemetry(a.app.Telemetry, a.app.Usage, effectiveWidth)
 	mainLayout := messagesView + "\n" + editorView
 	if telemetryView != "" {
 		mainLayout = telemetryView + "\n" + mainLayout

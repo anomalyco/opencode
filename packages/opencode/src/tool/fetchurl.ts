@@ -53,6 +53,7 @@ type FetchMeta = {
   size: number
   redirects?: number
   final_url?: string
+  status?: number
 }
 
 export const FetchUrlTool = Tool.define("fetchurl", {
@@ -197,7 +198,8 @@ async function fetchHTTP(
   timeout: number,
   telemetryExtra: Record<string, unknown>,
 ): Promise<{ title: string; output: string; metadata: FetchMeta }> {
-  const state = { url: params.url, redirects: 0 }
+    const state = { url: params.url, redirects: 0 }
+    const chain = [params.url]
   const follow = params.follow_redirects !== false
 
   const headers: Record<string, string> = {
@@ -241,6 +243,7 @@ async function fetchHTTP(
       if (state.redirects > MAX_REDIRECTS) throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`)
 
       state.url = new URL(location, state.url).toString()
+      chain.push(state.url)
       const newHostname = new URL(state.url).hostname
       for (const pattern of PRIVATE_IP_RANGES) {
         if (pattern.test(newHostname)) throw new Error("Redirect to localhost/private IP is not allowed")
@@ -266,7 +269,9 @@ async function fetchHTTP(
     const output = await processContent(content, contentType, integration, state.url, params.format)
     telemetryExtra["final_url"] = state.url
     telemetryExtra["redirects"] = state.redirects
+    telemetryExtra["redirect_chain"] = chain
     telemetryExtra["content_type"] = contentType
+    telemetryExtra["status"] = response.status
 
     return {
       title: `${state.url} (${integration})`,
@@ -278,6 +283,7 @@ async function fetchHTTP(
         size: arrayBuffer.byteLength,
         redirects: state.redirects,
         final_url: state.url,
+        status: response.status,
       },
     }
   }

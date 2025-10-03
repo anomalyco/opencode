@@ -39,6 +39,7 @@ type StatsArgs = {
   json?: boolean
   telemetry?: string
   limit?: number
+  clear?: boolean
 }
 
 export const StatsCommand = cmd<StatsArgs, StatsArgs>({
@@ -59,9 +60,18 @@ export const StatsCommand = cmd<StatsArgs, StatsArgs>({
         describe: "Number of telemetry events to display",
         type: "number",
         default: 20,
+      })
+      .option("clear", {
+        describe: "Clear stored telemetry history before printing stats",
+        type: "boolean",
+        default: false,
       }),
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      if (args.clear) {
+        await ToolHistory.clear()
+        console.log("Cleared telemetry history.")
+      }
       const history = await ToolHistory.read()
       const toolUsage = Object.fromEntries(
         Object.entries(history.tools).map(([tool, data]) => [tool, data.runs]),

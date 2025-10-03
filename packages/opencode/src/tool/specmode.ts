@@ -4,6 +4,7 @@ import DESCRIPTION from "./specmode.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import fs from "fs/promises"
+import { measure } from "./telemetry"
 
 const state = Instance.state(() => {
   const specSessions: {
@@ -70,9 +71,14 @@ export const SpecModeTool = Tool.define("specmode", {
     template: z.enum(["feature", "api", "bugfix", "refactor", "none"]).optional().describe("Template to use when entering spec mode"),
   }),
   async execute(params, ctx) {
-    const sessions = state()
+    return measure({
+      id: "specmode",
+      ctx,
+      params,
+      async run() {
+        const sessions = state()
 
-    switch (params.action) {
+        switch (params.action) {
       case "list_templates":
         let templateList = "# Available Spec Templates\n\n"
         for (const [key, template] of Object.entries(TEMPLATES)) {
@@ -87,16 +93,16 @@ export const SpecModeTool = Tool.define("specmode", {
           })
           templateList += "\n"
         }
-        return {
-          title: "Spec Templates",
-          output: templateList,
-          metadata: {
-            active: false,
-            requirements_count: 0,
-            notes_count: 0,
-            duration: 0,
-          },
-        }
+          return {
+            title: "Spec Templates",
+            output: templateList,
+            metadata: {
+              active: false,
+              requirements_count: 0,
+              notes_count: 0,
+              duration: 0,
+            },
+          }
 
       case "enter":
         const template = params.template && params.template !== "none" ? TEMPLATES[params.template] : null
@@ -302,7 +308,9 @@ export const SpecModeTool = Tool.define("specmode", {
 
       default:
         throw new Error(`Unknown action: ${params.action}`)
-    }
+        }
+      },
+    })
   },
 })
 

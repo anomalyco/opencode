@@ -35,6 +35,21 @@ type TelemetryEntry struct {
 	Error     string
 }
 
+type UsageTokens struct {
+	Input      float64
+	Output     float64
+	Reasoning  float64
+	CacheRead  float64
+	CacheWrite float64
+}
+
+type UsageSummary struct {
+	Sessions int
+	Messages int
+	Cost     float64
+	Tokens   UsageTokens
+}
+
 type App struct {
 	Project           opencode.Project
 	Agents            []opencode.Agent
@@ -61,6 +76,7 @@ type App struct {
 	IsBashMode        bool
 	ScrollSpeed       int
 	Telemetry         []TelemetryEntry
+	Usage             UsageSummary
 }
 
 func (a *App) Agent() *opencode.Agent {
@@ -222,6 +238,12 @@ func New(
 		ScrollSpeed:    int(configInfo.Tui.ScrollSpeed),
 	}
 
+	if usage, err := loadUsageSummary(ctx, httpClient, project); err == nil {
+		app.Usage = usage
+	} else {
+		slog.Warn("failed to load usage summary", "error", err)
+	}
+
 	return app, nil
 }
 
@@ -231,6 +253,43 @@ func (a *App) RecordTelemetry(entry TelemetryEntry) {
 	if len(a.Telemetry) > maxEntries {
 		a.Telemetry = a.Telemetry[len(a.Telemetry)-maxEntries:]
 	}
+}
+
+func loadUsageSummary(ctx context.Context, client *opencode.Client, project *opencode.Project) (UsageSummary, error) {
+	result := UsageSummary{}
+	sessionsRes, err := client.Session.List(ctx, opencode.SessionListParams{
+		Directory: opencode.F(project.Worktree),
+	})
+	if err != nil || sessionsRes == nil {
+		return result, err
+	}
+
+	sessions := *sessionsRes
+	result.Sessions = len(sessions)
+
+	for _, session := range sessions {
+		messagesRes, err := client.Session.Messages(ctx, session.ID, opencode.SessionMessagesParams{
+			Directory: opencode.F(session.Directory),
+		})
+		if err != nil || messagesRes == nil {
+			continue
+		}
+		messages := *messagesRes
+		result.Messages += len(messages)
+		for _, message := range messages {
+			switch info := message.Info.AsUnion().(type) {
+			case opencode.AssistantMessage:
+				result.Cost += info.Cost
+				result.Tokens.Input += info.Tokens.Input
+				result.Tokens.Output += info.Tokens.Output
+				result.Tokens.Reasoning += info.Tokens.Reasoning
+				result.Tokens.CacheRead += info.Tokens.Cache.Read
+				result.Tokens.CacheWrite += info.Tokens.Cache.Write
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (a *App) Keybind(commandName commands.CommandName) string {

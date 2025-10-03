@@ -57,12 +57,14 @@ For more info on how to configure OpenCode [**head over to our docs**](https://o
 You can inspect local usage history and tool telemetry with the built-in stats command:
 
 ```bash
-opencode stats            # pretty summary
-opencode stats --json     # machine-readable output
-opencode stats --telemetry all --limit 10
+opencode stats                   # pretty summary
+opencode stats --json            # machine-readable output
+opencode stats --telemetry all   # include recent tool runs
+opencode stats --limit 50        # show more history
+opencode stats --clear           # reset stored telemetry data
 ```
 
-The telemetry section lists recent tool executions (duration, status, error message) gathered from `tool.telemetry` events.
+The telemetry section lists recent tool executions (duration, status, error message) gathered from persisted `tool.telemetry` events.
 
 ### Contributing
 
