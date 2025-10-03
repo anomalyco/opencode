@@ -1,5 +1,4 @@
 import z from "zod/v4"
-import { exec } from "child_process"
 
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
@@ -43,17 +42,25 @@ const parser = lazy(async () => {
   }
 })
 
-export const BashTool = Tool.define("bash", {
+const parameters = z.object({
+  command: z.string().describe("The command to execute"),
+  timeout: z.number().describe("Optional timeout in milliseconds").optional(),
+  description: z
+    .string()
+    .describe(
+      "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
+    ),
+})
+
+type BashMetadata = {
+  output: string
+  exit?: number
+  description: string
+}
+
+export const BashTool = Tool.define<typeof parameters, BashMetadata>("bash", {
   description: DESCRIPTION,
-  parameters: z.object({
-    command: z.string().describe("The command to execute"),
-    timeout: z.number().describe("Optional timeout in milliseconds").optional(),
-    description: z
-      .string()
-      .describe(
-        "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-      ),
-  }),
+  parameters,
   async execute(params, ctx) {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const tree = await parser().then((p) => p.parse(params.command))
@@ -146,15 +153,39 @@ export const BashTool = Tool.define("bash", {
       })
     }
 
-    const process = exec(params.command, {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeout)
+    const signal = AbortSignal.any([ctx.abort, controller.signal])
+    const shell = process.env["SHELL"] || "/bin/sh"
+    const proc = Bun.spawn([shell, "-lc", params.command], {
       cwd: Instance.directory,
-      signal: ctx.abort,
-      timeout,
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
     })
 
-    let output = ""
+    const state = { output: "" }
+    const decoder = () => new TextDecoder()
+    const pump = async (stream: ReadableStream<Uint8Array> | undefined) => {
+      if (!stream) return
+      const textDecoder = decoder()
+      await stream.pipeTo(
+        new WritableStream<Uint8Array>({
+          write(chunk) {
+            const text = textDecoder.decode(chunk, { stream: true })
+            if (!text) return
+            state.output += text
+            ctx.metadata({
+              metadata: {
+                output: state.output,
+                description: params.description,
+              },
+            })
+          },
+        }),
+      )
+    }
 
-    // Initialize metadata with empty output
     ctx.metadata({
       metadata: {
         output: "",
@@ -162,53 +193,32 @@ export const BashTool = Tool.define("bash", {
       },
     })
 
-    process.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      ctx.metadata({
-        metadata: {
-          output: output,
-          description: params.description,
-        },
-      })
-    })
-
-    process.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      ctx.metadata({
-        metadata: {
-          output: output,
-          description: params.description,
-        },
-      })
-    })
-
-    await new Promise<void>((resolve) => {
-      process.on("close", () => {
-        resolve()
-      })
-    })
+    await Promise.all([pump(proc.stdout), pump(proc.stderr)])
+    const exit = await proc.exited
+    clearTimeout(timer)
 
     ctx.metadata({
       metadata: {
-        output: output,
-        exit: process.exitCode,
+        output: state.output,
+        exit,
         description: params.description,
       },
     })
 
-    if (output.length > MAX_OUTPUT_LENGTH) {
-      output = output.slice(0, MAX_OUTPUT_LENGTH)
-      output += "\n\n(Output was truncated due to length limit)"
+    let finalOutput = state.output
+    if (finalOutput.length > MAX_OUTPUT_LENGTH) {
+      finalOutput = finalOutput.slice(0, MAX_OUTPUT_LENGTH)
+      finalOutput += "\n\n(Output was truncated due to length limit)"
     }
 
     return {
       title: params.command,
       metadata: {
-        output,
-        exit: process.exitCode,
+        output: finalOutput,
+        exit,
         description: params.description,
       },
-      output,
+      output: finalOutput,
     }
   },
 })

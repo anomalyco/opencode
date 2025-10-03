@@ -21,7 +21,7 @@ import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
-import { type ToolDefinition } from "@opencode-ai/plugin"
+import { type ToolDefinition, type ToolContext as PluginToolContext } from "@opencode-ai/plugin"
 import z from "zod/v4"
 import { Plugin } from "../plugin"
 
@@ -51,13 +51,20 @@ export namespace ToolRegistry {
   })
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+    const parameters = z.object(def.args)
     return {
       id,
       init: async () => ({
-        parameters: z.object(def.args),
+        parameters,
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
+          const pluginCtx: PluginToolContext = {
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            agent: ctx.agent,
+            abort: ctx.abort,
+          }
+          const result = await def.execute(args as z.infer<typeof parameters>, pluginCtx)
           return {
             title: "",
             output: result,

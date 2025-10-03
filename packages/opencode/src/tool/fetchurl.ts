@@ -23,28 +23,40 @@ const PRIVATE_IP_RANGES = [
   /^fe80::/i, // IPv6 link-local
 ]
 
+const schema = z.object({
+  url: z.string().describe("The URL to fetch content from"),
+  format: z
+    .enum(["markdown", "text", "html", "json", "auto"])
+    .optional()
+    .describe("Output format (auto-detected if not specified)"),
+  integration: z
+    .enum(["google_docs", "notion", "linear", "github", "gitlab", "jira", "pagerduty", "slack", "sentry", "generic"])
+    .optional()
+    .describe("Integration type (auto-detected if not specified)"),
+  auth_type: z
+    .enum(["bearer", "api_key", "header", "query", "none"])
+    .optional()
+    .describe("Authentication type"),
+  auth_token: z.string().optional().describe("Authentication token/API key"),
+  auth_header_name: z.string().optional().describe("Custom header name for auth (if auth_type=header)"),
+  auth_query_param: z.string().optional().describe("Query parameter name for auth (if auth_type=query)"),
+  timeout: z.number().optional().describe("Optional timeout in seconds (max 120)"),
+  follow_redirects: z.boolean().optional().describe("Follow HTTP redirects (default true, max 5)"),
+})
+
+type FetchArgs = z.infer<typeof schema>
+type FetchMeta = {
+  integration: string
+  api_used: boolean
+  content_type: string
+  size: number
+  redirects?: number
+  final_url?: string
+}
+
 export const FetchUrlTool = Tool.define("fetchurl", {
   description: DESCRIPTION,
-  parameters: z.object({
-    url: z.string().describe("The URL to fetch content from"),
-    format: z
-      .enum(["markdown", "text", "html", "json", "auto"])
-      .optional()
-      .describe("Output format (auto-detected if not specified)"),
-    integration: z
-      .enum(["google_docs", "notion", "linear", "github", "gitlab", "jira", "pagerduty", "slack", "sentry", "generic"])
-      .optional()
-      .describe("Integration type (auto-detected if not specified)"),
-    auth_type: z
-      .enum(["bearer", "api_key", "header", "query", "none"])
-      .optional()
-      .describe("Authentication type"),
-    auth_token: z.string().optional().describe("Authentication token/API key"),
-    auth_header_name: z.string().optional().describe("Custom header name for auth (if auth_type=header)"),
-    auth_query_param: z.string().optional().describe("Query parameter name for auth (if auth_type=query)"),
-    timeout: z.number().optional().describe("Optional timeout in seconds (max 120)"),
-    follow_redirects: z.boolean().optional().describe("Follow HTTP redirects (default true, max 5)"),
-  }),
+  parameters: schema,
   async execute(params, ctx) {
     // Validate URL and check for private IPs
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
@@ -168,16 +180,14 @@ async function fetchGitHubContent(url: string, authToken?: string, format?: stri
 }
 
 async function fetchHTTP(
-  params: any,
-  ctx: any,
+  params: FetchArgs,
+  ctx: Tool.Context,
   integration: string,
   timeout: number,
-): Promise<{ title: string; output: string; metadata: any }> {
-  let url = params.url
-  let redirectCount = 0
-  const followRedirects = params.follow_redirects !== false
+): Promise<{ title: string; output: string; metadata: FetchMeta }> {
+  const state = { url: params.url, redirects: 0 }
+  const follow = params.follow_redirects !== false
 
-  // Build headers
   const headers: Record<string, string> = {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -185,67 +195,50 @@ async function fetchHTTP(
     "Accept-Language": "en-US,en;q=0.9",
   }
 
-  // Handle authentication
   if (params.auth_token) {
     const authType = params.auth_type || "bearer"
-
-    if (authType === "bearer") {
-      headers["Authorization"] = `Bearer ${params.auth_token}`
-    } else if (authType === "api_key") {
-      headers["X-API-Key"] = params.auth_token
-    } else if (authType === "header" && params.auth_header_name) {
-      headers[params.auth_header_name] = params.auth_token
-    } else if (authType === "query" && params.auth_query_param) {
-      const urlObj = new URL(url)
+    if (authType === "bearer") headers["Authorization"] = `Bearer ${params.auth_token}`
+    if (authType === "api_key") headers["X-API-Key"] = params.auth_token
+    if (authType === "header" && params.auth_header_name) headers[params.auth_header_name] = params.auth_token
+    if (authType === "query" && params.auth_query_param) {
+      const urlObj = new URL(state.url)
       urlObj.searchParams.set(params.auth_query_param, params.auth_token)
-      url = urlObj.toString()
+      state.url = urlObj.toString()
     }
   }
 
-  // Manual redirect handling
   while (true) {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    const timer = setTimeout(() => controller.abort(), timeout)
 
-    const response = await fetch(url, {
+    const response = await fetch(state.url, {
       signal: AbortSignal.any([controller.signal, ctx.abort]),
       headers,
       redirect: "manual",
     })
 
-    clearTimeout(timeoutId)
+    clearTimeout(timer)
 
-    // Handle redirects
-    if (followRedirects && (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308)) {
+    const isRedirect =
+      response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308
+    if (follow && isRedirect) {
       const location = response.headers.get("location")
-      if (!location) {
-        throw new Error(`Redirect without location header`)
-      }
+      if (!location) throw new Error(`Redirect without location header`)
 
-      redirectCount++
-      if (redirectCount > MAX_REDIRECTS) {
-        throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`)
-      }
+      state.redirects += 1
+      if (state.redirects > MAX_REDIRECTS) throw new Error(`Too many redirects (max ${MAX_REDIRECTS})`)
 
-      // Resolve relative URLs
-      url = new URL(location, url).toString()
-
-      // Check for redirect to private IP
-      const newHostname = new URL(url).hostname
+      state.url = new URL(location, state.url).toString()
+      const newHostname = new URL(state.url).hostname
       for (const pattern of PRIVATE_IP_RANGES) {
-        if (pattern.test(newHostname)) {
-          throw new Error("Redirect to localhost/private IP is not allowed")
-        }
+        if (pattern.test(newHostname)) throw new Error("Redirect to localhost/private IP is not allowed")
       }
 
       continue
     }
 
-    if (!response.ok) {
-      throw new Error(`Request failed with status code: ${response.status}`)
-    }
+    if (!response.ok) throw new Error(`Request failed with status code: ${response.status}`)
 
-    // Check content length
     const contentLength = response.headers.get("content-length")
     if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
       throw new Error(`Response too large (exceeds ${MAX_RESPONSE_SIZE / 1024 / 1024}MB limit)`)
@@ -258,20 +251,18 @@ async function fetchHTTP(
 
     const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
-
-    // Process content based on format preference
-    const output = await processContent(content, contentType, integration, url, params.format)
+    const output = await processContent(content, contentType, integration, state.url, params.format)
 
     return {
-      title: `${url} (${integration})`,
+      title: `${state.url} (${integration})`,
       output,
       metadata: {
         integration,
         api_used: false,
         content_type: contentType,
         size: arrayBuffer.byteLength,
-        redirects: redirectCount,
-        final_url: url,
+        redirects: state.redirects,
+        final_url: state.url,
       },
     }
   }
@@ -282,7 +273,7 @@ async function processContent(
   contentType: string,
   integration: string,
   url: string,
-  formatPreference?: string,
+  formatPreference?: FetchArgs["format"],
 ): Promise<string> {
   // Handle JSON responses
   if (contentType.includes("application/json")) {
@@ -313,33 +304,55 @@ async function processContent(
   return content
 }
 
-function formatJSONAsMarkdown(data: any, integration: string): string {
-  let markdown = `# ${integration.toUpperCase()} Content\n\n`
+function formatJSONAsMarkdown(data: unknown, integration: string): string {
+  const heading = `# ${integration.toUpperCase()} Content`
+  const parts = [heading, ""]
+  const record = toRecord(data)
 
-  switch (integration) {
-    case "github":
-      if (data.name) markdown += `## ${data.name}\n\n`
-      if (data.description) markdown += `${data.description}\n\n`
-      if (data.content) markdown += `\`\`\`\n${Buffer.from(data.content, "base64").toString()}\n\`\`\`\n\n`
-      break
-
-    case "linear":
-      if (data.title) markdown += `## ${data.title}\n\n`
-      if (data.description) markdown += `${data.description}\n\n`
-      if (data.state) markdown += `**State:** ${data.state}\n\n`
-      break
-
-    case "jira":
-      if (data.fields?.summary) markdown += `## ${data.fields.summary}\n\n`
-      if (data.fields?.description) markdown += `${data.fields.description}\n\n`
-      if (data.fields?.status) markdown += `**Status:** ${data.fields.status.name}\n\n`
-      break
-
-    default:
-      markdown += "```json\n" + JSON.stringify(data, null, 2) + "\n```\n"
+  if (integration === "github" && record) {
+    const name = record["name"]
+    if (typeof name === "string" && name) parts.push(`## ${name}`, "")
+    const description = record["description"]
+    if (typeof description === "string" && description) parts.push(description, "")
+    const content = record["content"]
+    if (typeof content === "string" && content) {
+      const decoded = Buffer.from(content, "base64").toString()
+      parts.push("```", decoded, "```", "")
+    }
+    return parts.join("\n").trimEnd()
   }
 
-  return markdown
+  if (integration === "linear" && record) {
+    const title = record["title"]
+    if (typeof title === "string" && title) parts.push(`## ${title}`, "")
+    const description = record["description"]
+    if (typeof description === "string" && description) parts.push(description, "")
+    const state = record["state"]
+    if (typeof state === "string" && state) parts.push(`**State:** ${state}`, "")
+    return parts.join("\n").trimEnd()
+  }
+
+  if (integration === "jira" && record) {
+    const fields = toRecord(record["fields"])
+    if (fields) {
+      const summary = fields["summary"]
+      if (typeof summary === "string" && summary) parts.push(`## ${summary}`, "")
+      const description = fields["description"]
+      if (typeof description === "string" && description) parts.push(description, "")
+      const status = toRecord(fields["status"])
+      const name = status ? status["name"] : undefined
+      if (typeof name === "string" && name) parts.push(`**Status:** ${name}`, "")
+    }
+    return parts.join("\n").trimEnd()
+  }
+
+  parts.push("```json", JSON.stringify(data, null, 2), "```", "")
+  return parts.join("\n").trimEnd()
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object") return value as Record<string, unknown>
+  return null
 }
 
 function convertHTMLToMarkdown(html: string, integration: string, url: string): string {

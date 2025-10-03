@@ -24,9 +24,10 @@ export const MultiEditTool = Tool.define("multiedit", {
     const tool = await EditTool.init()
     const results = []
     for (const [, edit] of params.edits.entries()) {
+      const dest = edit.filePath || params.filePath
       const result = await tool.execute(
         {
-          filePath: params.filePath,
+          filePath: dest,
           oldString: edit.oldString,
           newString: edit.newString,
           replaceAll: edit.replaceAll,
@@ -35,8 +36,10 @@ export const MultiEditTool = Tool.define("multiedit", {
       )
       results.push(result)
     }
+    const last = params.edits.at(-1)
+    const head = last?.filePath || params.filePath
     return {
-      title: path.relative(Instance.worktree, params.filePath),
+      title: path.relative(Instance.worktree, head),
       metadata: {
         results: results.map((r) => r.metadata),
       },

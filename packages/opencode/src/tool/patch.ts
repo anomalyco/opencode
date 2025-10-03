@@ -16,7 +16,11 @@ const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
 })
 
-export const PatchTool = Tool.define("patch", {
+type PatchMetadata = {
+  diff: string
+}
+
+export const PatchTool = Tool.define<typeof PatchParams, PatchMetadata>("patch", {
   description: "Apply a patch to modify multiple files. Supports adding, updating, and deleting files with context-aware changes.",
   parameters: PatchParams,
   async execute(params, ctx) {
