@@ -5,15 +5,14 @@ import { createSubjects } from "@openauthjs/openauth/subject"
 import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
-import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode/console-core/account.js"
-import { Workspace } from "@opencode/console-core/workspace.js"
-import { Actor } from "@opencode/console-core/actor.js"
+import { CloudflareStorage, type CloudflareStorageOptions } from "@openauthjs/openauth/storage/cloudflare"
+import { Account } from "@opencode/console-core/account"
+import { Workspace } from "@opencode/console-core/workspace"
+import { Actor } from "@opencode/console-core/actor"
 import { Resource } from "@opencode/console-resource"
-import { Database } from "@opencode/console-core/drizzle/index.js"
 
 type Env = {
-  AuthStorage: KVNamespace
+  AuthStorage: CloudflareStorageOptions["namespace"]
 }
 
 export const subjects = createSubjects({

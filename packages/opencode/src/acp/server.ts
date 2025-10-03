@@ -8,7 +8,6 @@ import { Provider } from "../provider/provider"
 import { z } from "zod"
 import { MessageV2 } from "../session/message-v2"
 
-
 export namespace ACPServer {
   const log = Log.create({ service: "acp" })
 
@@ -89,13 +88,16 @@ export namespace ACPServer {
     if (method === "fs/glob") {
       const input = z.object({ pattern: z.string(), path: z.string().optional() }).parse(params ?? {})
       const glob = await (await import("../tool/glob")).GlobTool.init()
-      const res = await glob.execute({ pattern: input.pattern, path: input.path }, {
-        sessionID: await ensureSession(),
-        messageID: Identifier.ascending("message"),
-        agent: "build",
-        abort: AbortSignal.any([]),
-        metadata: () => {},
-      })
+      const res = await glob.execute(
+        { pattern: input.pattern, path: input.path },
+        {
+          sessionID: await ensureSession(),
+          messageID: Identifier.ascending("message"),
+          agent: "build",
+          abort: AbortSignal.any([]),
+          metadata: () => {},
+        },
+      )
       const list = res.output.split("\n").filter((x) => x && !x.startsWith("(Results"))
       return { paths: list }
     }
@@ -133,7 +135,9 @@ export namespace ACPServer {
       const tools = await ToolRegistry.tools(def.providerID, def.modelID)
       const t = tools.find((x) => x.id === input.name)
       if (!t) return { output: "unknown tool" }
-      const res = await t.execute(input.args ?? {}, {
+      // Tool parameter validation happens at runtime via each tool's Zod schema
+      // TypeScript cannot narrow the union of all possible tool parameters at compile time
+      const res = await (t as { execute: (args: unknown, ctx: any) => Promise<any> }).execute(input.args ?? {}, {
         sessionID: input.sessionId ?? (await ensureSession()),
         messageID: Identifier.ascending("message"),
         agent: "build",

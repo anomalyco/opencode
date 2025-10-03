@@ -32,6 +32,10 @@
     }
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "4.20250904.0",
+    "@tsconfig/bun": "1.0.8",
+    "@tsconfig/node22": "22.0.2",
+    "@types/node": "24.3.1",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "sst": "3.17.13",

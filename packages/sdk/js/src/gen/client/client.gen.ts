@@ -64,7 +64,7 @@ export const createClient = (config: Config = {}): Client => {
   }
 
   const request: Client["request"] = async (options) => {
-    // @ts-expect-error
+    // @ts-expect-error - Type incompatibility with generic TData parameter
     const { opts, url } = await beforeRequest(options)
     const requestInit: ReqInit = {
       redirect: "follow",

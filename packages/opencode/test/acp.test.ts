@@ -15,10 +15,10 @@ describe("acp server", () => {
     })
 
     const w = new TextEncoder()
-    const writer = proc.stdin!.getWriter()
-    await writer.write(w.encode(line({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })))
-    await writer.write(w.encode(line({ jsonrpc: "2.0", id: 2, method: "text/complete", params: { text: "Hello" } })))
-    await writer.write(w.encode(line({ jsonrpc: "2.0", id: 3, method: "shutdown" })))
+    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })))
+    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 2, method: "text/complete", params: { text: "Hello" } })))
+    proc.stdin!.write(w.encode(line({ jsonrpc: "2.0", id: 3, method: "shutdown" })))
+    proc.stdin!.end()
 
     const r = proc.stdout!.getReader()
     const d = new TextDecoder()
