@@ -218,19 +218,20 @@ describe("Telemetry", () => {
   describe("Telemetry Query", () => {
     test("queries telemetry by time range", () =>
       withInstance(async () => {
+        const now = Date.now()
         const trace1 = RealisticTraces.quickFix()
-        trace1.createdAt = Date.now() - 10000
+        trace1.createdAt = now - 10000
         tracesToClean.push(trace1.id)
 
         const trace2 = RealisticTraces.successfulCodeEdit()
-        trace2.createdAt = Date.now() - 5000
+        trace2.createdAt = now - 5000
         tracesToClean.push(trace2.id)
 
         await Telemetry.enrichTrace(trace1)
         await Telemetry.enrichTrace(trace2)
 
         const results = await Telemetry.query({
-          since: Date.now() - 8000,
+          since: now - 8000,
           limit: 10,
         })
 
