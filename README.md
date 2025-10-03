@@ -1,20 +1,19 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The AI coding agent built for the terminal.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# Grimoire
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+> A fork of [OpenCode](https://github.com/sst/opencode) - The AI coding agent built for the terminal.
+
+## About This Fork
+
+**Grimoire** is a public fork of OpenCode, rebranded for personal use. This fork maintains the core functionality of OpenCode while providing a customized experience. OpenCode is open source and permissively licensed (MIT), and we're grateful to the SST team for building such an amazing tool.
+
+### Key Changes
+
+- **UI Rebranding**: Terminal interface displays "Grimoire" instead of "OpenCode"
+- All core features and functionality remain intact
+
+### Upstream
+
+This fork tracks the `dev` branch of [sst/opencode](https://github.com/sst/opencode). For the latest official releases, documentation, and community support, please refer to the upstream repository.
 
 ---
 
