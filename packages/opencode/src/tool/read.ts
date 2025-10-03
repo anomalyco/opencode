@@ -20,10 +20,21 @@ export const ReadTool = Tool.define("read", {
     limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
+    const resolvedPath = path.resolve(Instance.directory, params.filePath)
+    const relativePath = path.relative(Instance.worktree, resolvedPath)
     return measure({
       id: "read",
       ctx,
       params,
+      captureInput: () => ({
+        filePath: relativePath,
+        offset: params.offset ?? 0,
+        limit: params.limit ?? DEFAULT_READ_LIMIT,
+      }),
+      captureOutput: (result) => ({
+        title: result.title,
+        preview: result.metadata ? (result.metadata as Record<string, unknown>)["preview"] : undefined,
+      }),
       async run() {
         const filepath = guard(params.filePath, {
           bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
