@@ -2,7 +2,6 @@ import { Log } from "../util/log"
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
-import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
 import { $ } from "bun"
 
@@ -109,40 +108,72 @@ export namespace Storage {
     },
   ]
 
-  const state = lazy(async () => {
-    const dir = path.join(Global.Path.data, "storage")
-    const migration = await Bun.file(path.join(dir, "migration"))
-      .json()
-      .then((x) => parseInt(x))
-      .catch(() => 0)
-    for (let index = migration; index < MIGRATIONS.length; index++) {
-      log.info("running migration", { index })
-      const migration = MIGRATIONS[index]
-      await migration(dir).catch((e) => {
-        log.error("failed to run migration", { error: e, index })
-      })
-      await Bun.write(path.join(dir, "migration"), (index + 1).toString())
+  /**
+   * Get storage directory, respecting Instance context if available.
+   * Tests run in Instance.provide() will get isolated storage.
+   */
+  function getStorageDir(): string {
+    try {
+      const { Instance } = require("../project/instance")
+      // If we're in an Instance context, use Instance-specific storage
+      const instanceDir = Instance.directory
+      if (instanceDir) {
+        return path.join(instanceDir, ".opencode-storage")
+      }
+    } catch {
+      // Not in Instance context, use global storage
     }
-    return {
-      dir,
+    return path.join(Global.Path.data, "storage")
+  }
+
+  // Cache migrations per directory to avoid re-running
+  const migrationCache = new Map<string, Promise<void>>()
+
+  async function ensureMigrations(dir: string): Promise<void> {
+    if (migrationCache.has(dir)) {
+      return migrationCache.get(dir)!
     }
-  })
+
+    const promise = (async () => {
+      const migration = await Bun.file(path.join(dir, "migration"))
+        .json()
+        .then((x) => parseInt(x))
+        .catch(() => 0)
+      for (let index = migration; index < MIGRATIONS.length; index++) {
+        log.info("running migration", { index, dir })
+        const migration = MIGRATIONS[index]
+        await migration(dir).catch((e) => {
+          log.error("failed to run migration", { error: e, index, dir })
+        })
+        await Bun.write(path.join(dir, "migration"), (index + 1).toString())
+      }
+    })()
+
+    migrationCache.set(dir, promise)
+    return promise
+  }
+
+  async function getDir(): Promise<string> {
+    const dir = getStorageDir()
+    await ensureMigrations(dir)
+    return dir
+  }
 
   export async function remove(key: string[]) {
-    const dir = await state().then((x) => x.dir)
+    const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
     await fs.unlink(target).catch(() => {})
   }
 
   export async function read<T>(key: string[]) {
-    const dir = await state().then((x) => x.dir)
+    const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
     using _ = await Lock.read(target)
     return Bun.file(target).json() as Promise<T>
   }
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
-    const dir = await state().then((x) => x.dir)
+    const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
     using _ = await Lock.write("storage")
     const content = await Bun.file(target).json()
@@ -152,7 +183,7 @@ export namespace Storage {
   }
 
   export async function write<T>(key: string[], content: T) {
-    const dir = await state().then((x) => x.dir)
+    const dir = await getDir()
     const target = path.join(dir, ...key) + ".json"
     using _ = await Lock.write("storage")
     await fs.mkdir(path.dirname(target), { recursive: true }).catch(() => {})
@@ -161,7 +192,7 @@ export namespace Storage {
 
   const glob = new Bun.Glob("**/*")
   export async function list(prefix: string[]) {
-    const dir = await state().then((x) => x.dir)
+    const dir = await getDir()
     try {
       const result = await Array.fromAsync(
         glob.scan({
