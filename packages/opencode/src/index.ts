@@ -65,6 +65,10 @@ const cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    // Initialize evaluation framework
+    const { initEvaluation } = await import("./evaluation/init")
+    await initEvaluation()
   })
   .usage("\n" + UI.logo())
   .command(McpCommand)
