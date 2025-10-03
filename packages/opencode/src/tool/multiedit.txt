@@ -1,4 +1,4 @@
-This is a tool for making multiple edits to a single file in one operation. It is built on top of the Edit tool and allows you to perform multiple find-and-replace operations efficiently. Prefer this tool over the Edit tool when you need to make multiple edits to the same file.
+This is a tool for making multiple edits in one operation. It is built on top of the Edit tool and allows you to perform multiple find-and-replace operations efficiently. Prefer this tool over the Edit tool when you need to make several edits to the same file.
 
 Before using this tool:
 
@@ -6,8 +6,9 @@ Before using this tool:
 2. Verify the directory path is correct
 
 To make multiple file edits, provide the following:
-1. file_path: The absolute path to the file to modify (must be absolute, not relative)
+1. file_path: The default absolute path to modify (must be absolute, not relative)
 2. edits: An array of edit operations to perform, where each edit contains:
+   - filePath (optional): Override target path for this edit. Use it to touch additional files in the same call.
    - oldString: The text to replace (must match the file contents exactly, including all whitespace and indentation)
    - newString: The edited text to replace the oldString
    - replaceAll: Replace all occurrences of oldString. This parameter is optional and defaults to false.
@@ -16,7 +17,7 @@ IMPORTANT:
 - All edits are applied in sequence, in the order they are provided
 - Each edit operates on the result of the previous edit
 - All edits must be valid for the operation to succeed - if any edit fails, none will be applied
-- This tool is ideal when you need to make several changes to different parts of the same file
+- This tool is ideal when you need to make several changes to different parts of the same file, and it now supports touching a small set of related files when you supply per-edit file paths
 
 CRITICAL REQUIREMENTS:
 1. All edits follow the same requirements as the single Edit tool

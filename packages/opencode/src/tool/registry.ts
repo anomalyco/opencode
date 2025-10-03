@@ -65,14 +65,50 @@ export namespace ToolRegistry {
             abort: ctx.abort,
           }
           const result = await def.execute(args as z.infer<typeof parameters>, pluginCtx)
+          const normalized = pluginResult(result)
           return {
-            title: "",
-            output: result,
-            metadata: {},
+            title: normalized.title ?? "",
+            output: normalized.output,
+            metadata: normalized.metadata ?? {},
           }
         },
       }),
     }
+  }
+
+  function pluginResult(value: unknown): {
+    output: string
+    title?: string
+    metadata?: Record<string, unknown>
+  } {
+    if (typeof value === "string") {
+      return { output: value }
+    }
+    if (!value || typeof value !== "object") {
+      return { output: String(value ?? "") }
+    }
+    const record = value as {
+      output?: unknown
+      title?: unknown
+      metadata?: unknown
+    }
+    if (typeof record.output === "string") {
+      const metadata = isRecord(record.metadata) ? record.metadata : undefined
+      const title = typeof record.title === "string" ? record.title : undefined
+      return {
+        output: record.output,
+        title,
+        metadata,
+      }
+    }
+    return { output: JSON.stringify(value) }
+  }
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    if (!value) return false
+    if (typeof value !== "object") return false
+    if (Array.isArray(value)) return false
+    return true
   }
 
   export async function register(tool: Tool.Info) {
