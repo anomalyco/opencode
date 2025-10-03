@@ -331,11 +331,13 @@ export namespace TimeSeries {
     const denomY = Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - meanY, 2), 0))
     const correlation = numerator / (denomX * denomY)
     
-    // Determine trend direction based on slope and metric direction
+    // Determine trend direction based on correlation strength
     let trend: "improving" | "degrading" | "stable"
     const trendStrength = Math.abs(correlation)
     
-    if (trendStrength < 0.3) {
+    // Use correlation threshold to determine if trend is significant
+    // Correlation > 0.5 indicates moderate to strong linear trend
+    if (trendStrength < 0.5) {
       trend = "stable"
     } else {
       const isIncreasing = slope > 0
@@ -426,8 +428,21 @@ export namespace TimeSeries {
     const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length
     const stdDev = Math.sqrt(variance)
     
-    const zScore = stdDev === 0 ? 0 : (currentValue - mean) / stdDev
-    const isAnomaly = Math.abs(zScore) > 3 // 3-sigma rule
+    // Handle edge case where all values are identical (stdDev = 0)
+    // If current value differs significantly from mean, it's an anomaly
+    let zScore = 0
+    let isAnomaly = false
+    
+    if (stdDev === 0) {
+      // All historical values are identical
+      const deviation = Math.abs(currentValue - mean)
+      // If deviation is more than 10% of mean (or > 0.01 for small values), it's anomalous
+      isAnomaly = deviation > Math.max(mean * 0.1, 0.01)
+      zScore = isAnomaly ? 10 : 0 // Arbitrary large z-score
+    } else {
+      zScore = (currentValue - mean) / stdDev
+      isAnomaly = Math.abs(zScore) > 3 // 3-sigma rule
+    }
     
     return {
       isAnomaly,

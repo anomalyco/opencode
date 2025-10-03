@@ -314,12 +314,25 @@ export namespace Baseline {
       
       // Determine if this is a regression based on metric direction
       const isWorse = metric.higherIsBetter ? delta < 0 : delta > 0
-      const isRegression = isWorse && Math.abs(percentChange) > baseline.regressionThreshold * 100
+      
+      // For regression detection:
+      // - Use percent change if baseline is non-zero
+      // - Use absolute delta if baseline is zero (any change from 0 is significant)
+      const isRegression = baselineValue === 0
+        ? isWorse && Math.abs(delta) > baseline.regressionThreshold
+        : isWorse && Math.abs(percentChange) > baseline.regressionThreshold * 100
       
       if (isRegression) {
         regressions.push(result.metricID)
-      } else if (!isWorse && Math.abs(percentChange) > baseline.regressionThreshold * 100) {
-        improvements.push(result.metricID)
+      } else {
+        // Check for improvements using same logic
+        const isImprovement = baselineValue === 0
+          ? !isWorse && Math.abs(delta) > baseline.regressionThreshold
+          : !isWorse && Math.abs(percentChange) > baseline.regressionThreshold * 100
+        
+        if (isImprovement) {
+          improvements.push(result.metricID)
+        }
       }
       
       metricComparisons.push({
