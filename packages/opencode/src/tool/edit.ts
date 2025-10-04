@@ -185,6 +185,9 @@ export const SimpleReplacer: Replacer = function* (_content, find) {
   yield find
 }
 
+const same = (line: string) => line
+const strip = (line: string) => line.replace(/^\s*\d+\|\s?/, "")
+
 export const LineTrimmedReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")
@@ -193,34 +196,42 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
     searchLines.pop()
   }
 
-  for (let i = 0; i <= originalLines.length - searchLines.length; i++) {
-    let matches = true
+  const seen = new Set<string>()
+  for (const fn of [same, strip]) {
+    for (let i = 0; i <= originalLines.length - searchLines.length; i++) {
+      let matches = true
 
-    for (let j = 0; j < searchLines.length; j++) {
-      const originalTrimmed = originalLines[i + j].trim()
-      const searchTrimmed = searchLines[j].trim()
+      for (let j = 0; j < searchLines.length; j++) {
+        const originalTrimmed = fn(originalLines[i + j]).trim()
+        const searchTrimmed = fn(searchLines[j]).trim()
 
-      if (originalTrimmed !== searchTrimmed) {
-        matches = false
-        break
-      }
-    }
-
-    if (matches) {
-      let matchStartIndex = 0
-      for (let k = 0; k < i; k++) {
-        matchStartIndex += originalLines[k].length + 1
-      }
-
-      let matchEndIndex = matchStartIndex
-      for (let k = 0; k < searchLines.length; k++) {
-        matchEndIndex += originalLines[i + k].length
-        if (k < searchLines.length - 1) {
-          matchEndIndex += 1 // Add newline character except for the last line
+        if (originalTrimmed !== searchTrimmed) {
+          matches = false
+          break
         }
       }
 
-      yield content.substring(matchStartIndex, matchEndIndex)
+      if (matches) {
+        let matchStartIndex = 0
+        for (let k = 0; k < i; k++) {
+          matchStartIndex += originalLines[k].length + 1
+        }
+
+        let matchEndIndex = matchStartIndex
+        for (let k = 0; k < searchLines.length; k++) {
+          matchEndIndex += originalLines[i + k].length
+          if (k < searchLines.length - 1) {
+            matchEndIndex += 1
+          }
+        }
+
+        const key = `${matchStartIndex}:${matchEndIndex}`
+        if (seen.has(key)) {
+          continue
+        }
+        seen.add(key)
+        yield content.substring(matchStartIndex, matchEndIndex)
+      }
     }
   }
 }
@@ -621,7 +632,6 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   let notFound = true
-
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
