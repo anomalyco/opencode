@@ -23,11 +23,14 @@ export const TaskTool = Tool.define("task", async () => {
       description: z.string().describe("A short (3-5 words) description of the task"),
       prompt: z.string().describe("The task for the agent to perform"),
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+      session_id: z.string().describe("Existing Task session to continue").optional(),
     }),
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-      const session = await Session.create({
+      const session = params.session_id
+        ? await Session.get(params.session_id)
+        : await Session.create({
         parentID: ctx.sessionID,
         title: params.description + ` (@${agent.name} subagent)`,
       })
@@ -92,13 +95,17 @@ export const TaskTool = Tool.define("task", async () => {
       all = await Session.messages(session.id)
       all = all.filter((x) => x.info.role === "assistant")
       all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+      const text = (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? ""
+      const output = text ? `${text}
+
+[task-session:${session.id}]` : `[task-session:${session.id}]`
       return {
         title: params.description,
         metadata: {
           summary: all,
           sessionId: session.id,
         },
-        output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
+        output,
       }
     },
   }
