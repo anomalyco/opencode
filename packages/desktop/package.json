@@ -1,6 +1,6 @@
 {
-  "name": "@opencode/app",
-  "version": "0.14.0",
+  "name": "@opencode/desktop",
+  "version": "0.14.1",
   "description": "",
   "type": "module",
   "scripts": {

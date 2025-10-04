@@ -2,17 +2,7 @@ import "./workspace.css"
 import { useAuthSession } from "~/context/auth.session"
 import { IconLogo } from "../component/icon"
 import { withActor } from "~/context/auth.withActor"
-import {
-  query,
-  action,
-  redirect,
-  createAsync,
-  RouteSectionProps,
-  Navigate,
-  useNavigate,
-  useParams,
-  A,
-} from "@solidjs/router"
+import { query, action, redirect, createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
 import { User } from "@opencode/console-core/user.js"
 import { Actor } from "@opencode/console-core/actor.js"
 import { getRequestEvent } from "solid-js/web"
@@ -21,7 +11,8 @@ const getUserInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const actor = Actor.assert("user")
-    return await User.fromID(actor.properties.userID)
+    const email = await User.getAccountEmail(actor.properties.userID)
+    return { email }
   }, workspaceID)
 }, "userInfo")
 

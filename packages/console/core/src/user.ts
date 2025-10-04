@@ -1,15 +1,16 @@
 import { z } from "zod"
-import { and, eq, getTableColumns, isNull, sql } from "drizzle-orm"
+import { and, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm"
 import { fn } from "./util/fn"
 import { Database } from "./drizzle"
 import { UserRole, UserTable } from "./schema/user.sql"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { render } from "@jsx-email/render"
-import { InviteEmail } from "@opencode/console-mail/InviteEmail.jsx"
 import { AWS } from "./aws"
 import { Account } from "./account"
 import { AccountTable } from "./schema/account.sql"
+import { Key } from "./key"
+import { KeyTable } from "./schema/key.sql"
 
 export namespace User {
   const assertAdmin = async () => {
@@ -50,6 +51,19 @@ export namespace User {
     ),
   )
 
+  export const getAccountEmail = fn(z.string(), (id) =>
+    Database.use((tx) =>
+      tx
+        .select({
+          email: AccountTable.email,
+        })
+        .from(UserTable)
+        .leftJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+        .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.id, id)))
+        .then((rows) => rows[0]?.email),
+    ),
+  )
+
   export const invite = fn(
     z.object({
       email: z.string(),
@@ -57,75 +71,45 @@ export namespace User {
     }),
     async ({ email, role }) => {
       await assertAdmin()
-
       const workspaceID = Actor.workspace()
-      await Database.transaction(async (tx) => {
-        const account = await Account.fromEmail(email)
-        const members = await tx.select().from(UserTable).where(eq(UserTable.workspaceID, Actor.workspace()))
 
-        await (async () => {
-          if (account) {
-            // case: account previously invited and removed
-            if (members.some((m) => m.oldAccountID === account.id)) {
-              await tx
-                .update(UserTable)
-                .set({
-                  timeDeleted: null,
-                  oldAccountID: null,
+      // create user
+      const account = await Account.fromEmail(email)
+      await Database.use((tx) =>
+        tx
+          .insert(UserTable)
+          .values({
+            id: Identifier.create("user"),
+            name: "",
+            ...(account
+              ? {
                   accountID: account.id,
-                })
-                .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.accountID, account.id)))
-              return
-            }
-            // case: account previously not invited
-            await tx
-              .insert(UserTable)
-              .values({
-                id: Identifier.create("user"),
-                name: "",
-                accountID: account.id,
-                workspaceID,
-                role,
-              })
-              .catch((e: any) => {
-                if (e.message.match(/Duplicate entry '.*' for key 'user.user_account_id'/))
-                  throw new Error("A user with this email has already been invited.")
-                throw e
-              })
-            return
-          }
-          // case: email previously invited and removed
-          if (members.some((m) => m.oldEmail === email)) {
-            await tx
-              .update(UserTable)
-              .set({
-                timeDeleted: null,
-                oldEmail: null,
-                email,
-              })
-              .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.email, email)))
-            return
-          }
-          // case: email previously not invited
-          await tx
-            .insert(UserTable)
-            .values({
-              id: Identifier.create("user"),
-              name: "",
-              email,
-              workspaceID,
+                }
+              : {
+                  email,
+                }),
+            workspaceID,
+            role,
+          })
+          .onDuplicateKeyUpdate({
+            set: {
               role,
-            })
-            .catch((e: any) => {
-              if (e.message.match(/Duplicate entry '.*' for key 'user.user_email'/))
-                throw new Error("A user with this email has already been invited.")
-              throw e
-            })
-        })()
-      })
+              timeDeleted: null,
+            },
+          }),
+      )
+
+      // create api key
+      //if (account) {
+      //  const existing = await Database.use(tx => {
+      //    const key = tx.select().from(KeyTable).where(and(eq(KeyTable.workspaceID, workspaceID), eq(KeyTable, account.id))).then((rows) => rows[0])
+      //    return key
+      //  })
+      //}
 
       // send email, ignore errors
       try {
+        const { InviteEmail } = await import("@opencode/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
           subject: `You've been invited to join the ${workspaceID} workspace on OpenCode Zen`,
@@ -142,6 +126,42 @@ export namespace User {
       }
     },
   )
+
+  export const joinInvitedWorkspaces = fn(z.void(), async () => {
+    const account = Actor.assert("account")
+    const invitations = await Database.use(async (tx) => {
+      const invitations = await tx
+        .select({
+          id: UserTable.id,
+          workspaceID: UserTable.workspaceID,
+        })
+        .from(UserTable)
+        .where(eq(UserTable.email, account.properties.email))
+
+      await tx
+        .update(UserTable)
+        .set({
+          accountID: account.properties.accountID,
+          email: null,
+        })
+        .where(eq(UserTable.email, account.properties.email))
+      return invitations
+    })
+
+    await Promise.all(
+      invitations.map((invite) =>
+        Actor.provide(
+          "system",
+          {
+            workspaceID: invite.workspaceID,
+          },
+          () => Key.create({ name: "Default API Key" }),
+        ),
+      ),
+    )
+
+    return invitations.length
+  })
 
   export const updateRole = fn(
     z.object({
@@ -164,25 +184,13 @@ export namespace User {
     await assertAdmin()
     assertNotSelf(id)
 
-    return await Database.transaction(async (tx) => {
-      const user = await fromID(id)
-      if (!user) throw new Error("User not found")
-
-      await tx
+    return await Database.use((tx) =>
+      tx
         .update(UserTable)
         .set({
-          ...(user.email
-            ? {
-                oldEmail: user.email,
-                email: null,
-              }
-            : {
-                oldAccountID: user.accountID,
-                accountID: null,
-              }),
           timeDeleted: sql`now()`,
         })
-        .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, Actor.workspace())))
-    })
+        .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, Actor.workspace()))),
+    )
   })
 }

@@ -1,15 +1,15 @@
 ---
 title: Config
-description: Using the opencode JSON config.
+description: Using the OpenCode JSON config.
 ---
 
-You can configure opencode using a JSON config file.
+You can configure OpenCode using a JSON config file.
 
 ---
 
 ## Format
 
-opencode supports both **JSON** and **JSONC** (JSON with Comments) formats.
+OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -32,7 +32,7 @@ different order of precedence.
 
 ### Global
 
-Place your global opencode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+Place your global OpenCode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
 
 ---
 
@@ -44,7 +44,7 @@ You can also add a `opencode.json` in your project. It takes precedence over the
 Place project specific config in the root of your project.
 :::
 
-When opencode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
+When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
@@ -71,7 +71,7 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 ### Models
 
-You can configure the providers and models you want to use in your opencode config through the `provider`, `model` and `small_model` options.
+You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
 
 ```json title="opencode.json"
 {
@@ -82,7 +82,7 @@ You can configure the providers and models you want to use in your opencode conf
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, opencode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -90,7 +90,7 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ### Themes
 
-You can configure the theme you want to use in your opencode config through the `theme` option.
+You can configure the theme you want to use in your OpenCode config through the `theme` option.
 
 ```json title="opencode.json"
 {
@@ -193,7 +193,7 @@ You can customize your keybinds through the `keybinds` option.
 
 ### Autoupdate
 
-opencode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
 
 ```json title="opencode.json"
 {

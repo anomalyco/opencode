@@ -6,8 +6,8 @@ export const domain = (() => {
 
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
 
-// new cloudflare.RegionalHostname("RegionalHostname", {
-//   hostname: domain,
-//   regionKey: "us",
-//   zoneId: zoneID,
-// })
+new cloudflare.RegionalHostname("RegionalHostname", {
+  hostname: domain,
+  regionKey: "us",
+  zoneId: zoneID,
+})

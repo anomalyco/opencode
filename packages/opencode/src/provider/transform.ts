@@ -92,7 +92,7 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      if (!modelID.includes("codex")) result["reasoningEffort"] = "medium"
+      result["reasoningEffort"] = "medium"
       if (providerID !== "azure") {
         result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
       }

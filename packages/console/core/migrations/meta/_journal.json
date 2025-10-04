@@ -162,6 +162,20 @@
       "when": 1759427432588,
       "tag": "0022_nice_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1759444220653,
+      "tag": "0023_optimal_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1759522925614,
+      "tag": "0024_early_black_crow",
+      "breakpoints": true
     }
   ]
 }

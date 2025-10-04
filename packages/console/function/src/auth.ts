@@ -10,7 +10,7 @@ import { Account } from "@opencode/console-core/account.js"
 import { Workspace } from "@opencode/console-core/workspace.js"
 import { Actor } from "@opencode/console-core/actor.js"
 import { Resource } from "@opencode/console-resource"
-import { Database } from "@opencode/console-core/drizzle/index.js"
+import { User } from "@opencode/console-core/user.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -123,8 +123,8 @@ export default {
           })
         }
         await Actor.provide("account", { accountID, email }, async () => {
-          const workspaces = await Account.workspaces()
-          if (workspaces.length === 0) {
+          const workspaceCount = await User.joinInvitedWorkspaces()
+          if (workspaceCount === 0) {
             await Workspace.create()
           }
         })

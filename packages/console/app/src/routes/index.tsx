@@ -4,10 +4,7 @@ import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { A, createAsync, query } from "@solidjs/router"
-import { getActor } from "~/context/auth"
-import { withActor } from "~/context/auth.withActor"
-import { Account } from "@opencode/console-core/account.js"
+import { A, createAsync } from "@solidjs/router"
 import { EmailSignup } from "~/component/email-signup"
 import { Tabs } from "@kobalte/core/tabs"
 import { Faq } from "~/component/faq"
@@ -26,18 +23,8 @@ function CopyStatus() {
   )
 }
 
-const defaultWorkspace = query(async () => {
-  "use server"
-  const actor = await getActor()
-  if (actor.type === "account") {
-    const workspaces = await withActor(() => Account.workspaces())
-    return workspaces[0].id
-  }
-}, "defaultWorkspace")
-
 export default function Home() {
   const githubData = createAsync(() => github())
-  const workspace = createAsync(() => defaultWorkspace())
   const release = createMemo(() => githubData()?.release)
 
   const handleCopyClick = (event: Event) => {

@@ -11,13 +11,17 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { Actor } from "@opencode/console-core/actor.js"
 import { withActor } from "~/context/auth.withActor"
 import { User } from "@opencode/console-core/user.js"
+import { Resource } from "@opencode/console-resource"
 
 const getUser = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const actor = Actor.assert("user")
     const user = await User.fromID(actor.properties.userID)
-    return { isAdmin: user?.role === "admin" }
+    return {
+      isAdmin: user?.role === "admin",
+      isBeta: Resource.App.stage === "production" ? workspaceID === "wrk_01K46JDFR0E75SG2Q8K172KF3Y" : true,
+    }
   }, workspaceID)
 }, "user.get")
 
@@ -41,7 +45,7 @@ export default function () {
         <NewUserSection />
         <KeySection />
         <Show when={data()?.isAdmin}>
-          <Show when={isBeta(params.id)}>
+          <Show when={data()?.isBeta}>
             <MemberSection />
           </Show>
           <BillingSection />
@@ -54,12 +58,4 @@ export default function () {
       </div>
     </div>
   )
-}
-
-export function isBeta(workspaceID: string) {
-  return [
-    "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // production
-    "wrk_01K4NFRR5P7FSYWH88307B4DDS", // dev
-    "wrk_01K6G7HBZ7C046A4XK01CVD0NS", // frank
-  ].includes(workspaceID)
 }

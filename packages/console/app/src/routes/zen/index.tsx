@@ -10,28 +10,13 @@ import avatarJay from "../../asset/lander/avatar-jay.png"
 import avatarFrank from "../../asset/lander/avatar-frank.png"
 import avatarAdam from "../../asset/lander/avatar-adam.png"
 import avatarDavid from "../../asset/lander/avatar-david.png"
-import { A, createAsync, query } from "@solidjs/router"
-import { getActor } from "~/context/auth"
-import { withActor } from "~/context/auth.withActor"
-import { Account } from "@opencode/console-core/account.js"
 import { EmailSignup } from "~/component/email-signup"
 import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 
-const defaultWorkspace = query(async () => {
-  "use server"
-  const actor = await getActor()
-  if (actor.type === "account") {
-    const workspaces = await withActor(() => Account.workspaces())
-    return workspaces[0].id
-  }
-}, "defaultWorkspace")
-
 export default function Home() {
-  const workspace = createAsync(() => defaultWorkspace())
-
   return (
     <main data-page="zen">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
@@ -146,7 +131,8 @@ export default function Home() {
             <div data-slot="section-title">
               <h3>What problem is Zen solving?</h3>
               <p>
-                There are so many models available, but only a few work well with coding agents.  Most providers configure them differently with varying results.
+                There are so many models available, but only a few work well with coding agents. Most providers
+                configure them differently with varying results.
               </p>
             </div>
             <p>We're fixing this for everyone, not just OpenCode users.</p>
@@ -216,8 +202,8 @@ export default function Home() {
                   <strong>Dax Raad</strong>
                   <span>ex-CEO, Terminal Products</span>
                 </div>
-                <div data-slot="quote"><span>@OpenCode</span> Zen has been life
-                  changing, it's truly a no-brainer.
+                <div data-slot="quote">
+                  <span>@OpenCode</span> Zen has been life changing, it's truly a no-brainer.
                 </div>
               </div>
             </a>

@@ -5,10 +5,6 @@ import logoLight from "../asset/logo-ornate-light.svg"
 import logoDark from "../asset/logo-ornate-dark.svg"
 import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { createAsync, query } from "@solidjs/router"
-import { getActor } from "~/context/auth"
-import { withActor } from "~/context/auth.withActor"
-import { Account } from "@opencode/console-core/account.js"
 
 function CopyStatus() {
   return (
@@ -19,17 +15,7 @@ function CopyStatus() {
   )
 }
 
-const defaultWorkspace = query(async () => {
-  "use server"
-  const actor = await getActor()
-  if (actor.type === "account") {
-    const workspaces = await withActor(() => Account.workspaces())
-    return workspaces[0].id
-  }
-}, "defaultWorkspace")
-
 export default function Home() {
-  const workspace = createAsync(() => defaultWorkspace())
   onMount(() => {
     const commands = document.querySelectorAll("[data-copy]")
     for (const button of commands) {

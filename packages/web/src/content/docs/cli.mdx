@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: opencode CLI options and commands.
+description: OpenCode CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-The opencode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
+The OpenCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
 opencode
 ```
 
-But it also accepts commands as documented on this page. This allows you to interact with opencode programmatically.
+But it also accepts commands as documented on this page. This allows you to interact with OpenCode programmatically.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,13 +21,13 @@ opencode run "Explain how closures work in JavaScript"
 
 ## Commands
 
-The opencode CLI also has the following commands.
+The OpenCode CLI also has the following commands.
 
 ---
 
 ### agent
 
-Manage agents for opencode.
+Manage agents for OpenCode.
 
 ```bash
 opencode agent [command]
@@ -59,13 +59,13 @@ opencode auth [command]
 
 #### login
 
-opencode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-When opencode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
