@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-if [ -n "$OPENCODE_BIN_PATH" ]; then
-    resolved="$OPENCODE_BIN_PATH"
+if [ -n "$LAP_BIN_PATH" ]; then
+    resolved="$LAP_BIN_PATH"
 else
     # Get the real path of this script, resolving any symlinks
     script_path="$0"
@@ -32,9 +32,9 @@ else
         *) arch="$(uname -m)" ;;
     esac
     
-    name="opencode-${platform}-${arch}"
-    binary="opencode"
-    [ "$platform" = "win32" ] && binary="opencode.exe"
+    name="lap-${platform}-${arch}"
+    binary="lap"
+    [ "$platform" = "win32" ] && binary="lap.exe"
     
     # Search for the binary starting from real script location
     resolved=""
@@ -49,7 +49,7 @@ else
     done
     
     if [ -z "$resolved" ]; then
-        printf "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
+        printf "It seems that your package manager failed to install the right version of the lap CLI for your platform. You can try manually installing the \"%s\" package\n" "$name" >&2
         exit 1
     fi
 fi

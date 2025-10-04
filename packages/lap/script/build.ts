@@ -24,25 +24,25 @@ const targets = [
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-const version = process.env["OPENCODE_VERSION"] ?? "dev"
+const version = process.env["LAP_VERSION"] ?? "dev"
 for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
   const name = `${pkg.name}-${os}-${arch}`
   await $`mkdir -p dist/${name}/bin`
-  await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`
+  await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../lap/dist/${name}/bin/tui ../tui/cmd/lap/main.go`
     .cwd("../tui")
     .quiet()
   await Bun.build({
     compile: {
       target: `bun-${os}-${arch}` as any,
-      outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${version}`, `--env-file=""`, `--`],
+      outfile: `dist/${name}/bin/lap`,
+      execArgv: [`--user-agent=lap/${version}`, `--env-file=""`, `--`],
       windows: {},
     },
     entrypoints: ["./src/index.ts"],
     define: {
-      OPENCODE_VERSION: `'${version}'`,
-      OPENCODE_TUI_PATH: `'../../../dist/${name}/bin/tui'`,
+      LAP_VERSION: `'${version}'`,
+      LAP_TUI_PATH: `'../../../dist/${name}/bin/tui'`,
     },
   })
   await $`rm -rf ./dist/${name}/bin/tui`

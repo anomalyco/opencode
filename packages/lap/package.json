@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "0.11.3",
-  "name": "opencode",
+  "name": "lap",
   "type": "module",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "dev": "bun run --conditions=development ./src/index.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "lap": "./bin/lap"
   },
   "exports": {
     "./*": "./src/*.ts"
