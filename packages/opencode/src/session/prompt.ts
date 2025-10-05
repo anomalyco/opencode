@@ -269,7 +269,7 @@ export namespace SessionPrompt {
         maxOutputTokens: ProviderTransform.maxOutputTokens(
           model.providerID,
           params.options,
-          model.info.limit.output || OUTPUT_TOKEN_MAX,
+          model.info.limit.output,
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort.signal,
