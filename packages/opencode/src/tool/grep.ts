@@ -25,6 +25,7 @@ export const GrepTool = Tool.define("grep", {
       args.push("--glob", params.include)
     }
     args.push(searchPath)
+    args.push("--field-match-separator=|")
 
     const proc = Bun.spawn([rgPath, ...args], {
       stdout: "pipe",
@@ -53,11 +54,11 @@ export const GrepTool = Tool.define("grep", {
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
+      const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
       const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join(":")
+      const lineText = lineTextParts.join("|")
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => null)
