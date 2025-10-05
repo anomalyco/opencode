@@ -159,7 +159,7 @@ export namespace SessionPrompt {
       agent,
       model: input.model,
     }).then((x) => Provider.getModel(x.providerID, x.modelID))
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
     using abort = lock(input.sessionID)
 
     const system = await resolveSystemPrompt({
@@ -266,7 +266,12 @@ export namespace SessionPrompt {
             : undefined,
         maxRetries: 10,
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(
+          model.providerID,
+          params.options,
+          model.info.limit.output || OUTPUT_TOKEN_MAX,
+          OUTPUT_TOKEN_MAX,
+        ),
         abortSignal: abort.signal,
         providerOptions: {
           [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
