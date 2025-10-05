@@ -113,7 +113,7 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext
+    const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
