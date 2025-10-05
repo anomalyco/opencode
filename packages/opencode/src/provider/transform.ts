@@ -112,7 +112,7 @@ export namespace ProviderTransform {
     globalLimit: number,
   ): number {
     const modelCap = modelLimit || globalLimit
-    const textDefault = Math.min(modelCap, globalLimit)
+    const standardLimit = Math.min(modelCap, globalLimit)
 
     if (providerID === "anthropic") {
       const thinking = options?.["thinking"]
@@ -120,12 +120,14 @@ export namespace ProviderTransform {
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
-        if (budgetTokens + textDefault <= modelCap) return textDefault
+        if (budgetTokens + standardLimit <= modelCap) {
+          return standardLimit
+        }
         return modelCap - budgetTokens
       }
     }
 
-    return textDefault
+    return standardLimit
   }
 
   export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
