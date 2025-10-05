@@ -47,7 +47,7 @@ import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
+import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 
 export namespace SessionPrompt {
@@ -589,7 +589,7 @@ export namespace SessionPrompt {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = decodeURIComponent(url.pathname)
+              const filepath = fileURLToPath(part.url)
               const stat = await Bun.file(filepath).stat()
 
               if (stat.isDirectory()) {
@@ -604,14 +604,14 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
+                  const filePathURI = part.url.split("?")[0]
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
+                    const symbols = await LSP.documentSymbol(filePathURI)
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
