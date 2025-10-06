@@ -122,7 +122,7 @@ export namespace User {
 
       // send email, ignore errors
       try {
-        const { InviteEmail } = await import("@opencode/console-mail/InviteEmail.jsx")
+        const { InviteEmail } = await import("@opencode-ai/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
           subject: `You've been invited to join the ${workspaceID} workspace on OpenCode Zen`,

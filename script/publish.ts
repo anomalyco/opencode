@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencodeClient, createOpencodeServer } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 if (process.versions.bun !== "1.2.21") {
   throw new Error("This script requires bun@1.2.21")
 }
 
-let notes = []
+const notes = [] as string[]
 
 console.log("=== publishing ===\n")
 
@@ -14,11 +14,13 @@ const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 const version = await (async () => {
   if (snapshot) return `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
-  const [major, minor, patch] = (await $`gh release list --limit 1 --json tagName --jq '.[0].tagName'`.text())
-    .trim()
-    .replace(/^v/, "")
-    .split(".")
-    .map((x) => Number(x) || 0)
+  const npmVersion = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+    .then((res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    })
+    .then((data: any) => data.version)
+  const [major, minor, patch] = npmVersion.split(".").map((x: string) => Number(x) || 0)
   const t = process.env["OPENCODE_BUMP"]?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
@@ -28,18 +30,17 @@ process.env["OPENCODE_VERSION"] = version
 console.log("version:", version)
 
 if (!snapshot) {
-  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
-    .then((data) => data.tag_name)
+    .then((data: any) => data.version)
 
-  const server = await createOpencodeServer()
-  const client = createOpencodeClient({ baseUrl: server.url })
-  const session = await client.session.create()
+  const opencode = await createOpencode()
+  const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
-  const raw = await client.session
+  const raw = await opencode.client.session
     .prompt({
       path: {
         id: session.data!.id,
@@ -85,7 +86,7 @@ if (!snapshot) {
     }
   }
   console.log(notes)
-  server.close()
+  opencode.server.close()
 }
 
 const pkgjsons = await Array.fromAsync(

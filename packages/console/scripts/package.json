@@ -1,6 +1,6 @@
 {
-  "name": "@opencode/console-scripts",
-  "version": "0.14.1",
+  "name": "@opencode-ai/console-scripts",
+  "version": "0.14.3",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "shell-prod": "sst shell --stage production -- bun tsx"
   },
   "dependencies": {
-    "@opencode/console-core": "workspace:*",
+    "@opencode-ai/console-core": "workspace:*",
     "tsx": "4.20.5"
   },
   "devDependencies": {

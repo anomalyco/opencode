@@ -1,12 +1,12 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { IconCopy, IconCheck } from "~/component/icon"
-import { Key } from "@opencode/console-core/key.js"
+import { Key } from "@opencode-ai/console-core/key.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import { formatDateUTC, formatDateForTable } from "./common"
 import styles from "./key-section.module.css"
-import { Actor } from "@opencode/console-core/actor.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
 
 const removeKey = action(async (form: FormData) => {
   "use server"

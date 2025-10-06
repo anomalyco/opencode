@@ -3,9 +3,9 @@ import { createEffect, createSignal, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import styles from "./member-section.module.css"
-import { UserRole } from "@opencode/console-core/schema/user.sql.js"
-import { Actor } from "@opencode/console-core/actor.js"
-import { User } from "@opencode/console-core/user.js"
+import { UserRole } from "@opencode-ai/console-core/schema/user.sql.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { User } from "@opencode-ai/console-core/user.js"
 
 const listMembers = query(async (workspaceID: string) => {
   "use server"

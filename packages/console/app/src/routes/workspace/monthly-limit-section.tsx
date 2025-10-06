@@ -2,7 +2,7 @@ import { json, query, action, useParams, createAsync, useSubmission } from "@sol
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
-import { Billing } from "@opencode/console-core/billing.js"
+import { Billing } from "@opencode-ai/console-core/billing.js"
 import styles from "./monthly-limit-section.module.css"
 
 const getBillingInfo = query(async (workspaceID: string) => {

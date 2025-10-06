@@ -61,6 +61,8 @@ if (!snapshot) {
   const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
+  // arch
+  /*
   const binaryPkgbuild = [
     "# Maintainer: dax",
     "# Maintainer: adam",
@@ -146,6 +148,7 @@ if (!snapshot) {
     await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
     await $`cd ./dist/aur-${pkg} && git push`
   }
+  */
 
   // Homebrew formula
   const homebrewFormula = [

@@ -1,11 +1,11 @@
 import { json, query, action, useParams, useAction, createAsync, useSubmission } from "@solidjs/router"
 import { createMemo, Show } from "solid-js"
-import { Billing } from "@opencode/console-core/billing.js"
+import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCreditCard } from "~/component/icon"
 import styles from "./billing-section.module.css"
-import { Database, eq } from "@opencode/console-core/drizzle/index.js"
-import { BillingTable } from "@opencode/console-core/schema/billing.sql.js"
+import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
+import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 
 const createCheckoutUrl = action(async (workspaceID: string, successUrl: string, cancelUrl: string) => {
   "use server"

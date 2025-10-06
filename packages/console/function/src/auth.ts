@@ -6,11 +6,11 @@ import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode/console-core/account.js"
-import { Workspace } from "@opencode/console-core/workspace.js"
-import { Actor } from "@opencode/console-core/actor.js"
-import { Resource } from "@opencode/console-resource"
-import { User } from "@opencode/console-core/user.js"
+import { Account } from "@opencode-ai/console-core/account.js"
+import { Workspace } from "@opencode-ai/console-core/workspace.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Resource } from "@opencode-ai/console-resource"
+import { User } from "@opencode-ai/console-core/user.js"
 
 type Env = {
   AuthStorage: KVNamespace

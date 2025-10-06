@@ -8,10 +8,10 @@ import { KeySection } from "./key-section"
 import { MemberSection } from "./member-section"
 import { Show } from "solid-js"
 import { createAsync, query, useParams } from "@solidjs/router"
-import { Actor } from "@opencode/console-core/actor.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
 import { withActor } from "~/context/auth.withActor"
-import { User } from "@opencode/console-core/user.js"
-import { Resource } from "@opencode/console-resource"
+import { User } from "@opencode-ai/console-core/user.js"
+import { Resource } from "@opencode-ai/console-resource"
 
 const getUser = query(async (workspaceID: string) => {
   "use server"
