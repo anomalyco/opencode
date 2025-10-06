@@ -494,6 +494,42 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### Nebius AI Studio
+
+1. Head over to the [Nebius AI Studio console](https://studio.nebius.com/), create an account, and click **Add Key**.
+
+2. Run `opencode auth login` and select **Nebius AI Studio**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Nebius AI Studio
+   │  ...
+   └
+   ```
+
+3. Enter your Nebius AI Studio API key.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Nebius AI Studio
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Kimi K2 Instruct_.
+
+---
+
 ### Ollama
 
 You can configure opencode to use local models through Ollama.
