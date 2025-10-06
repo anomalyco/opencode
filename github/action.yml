@@ -17,12 +17,18 @@ inputs:
     description: "Optional GitHub access token for performing operations such as creating comments, committing changes, and opening pull requests. Defaults to the installation access token from the opencode GitHub App."
     required: false
 
+  version:
+    description: "Optional version of opencode to install. Defaults to latest version if not specified."
+    required: false
+
 runs:
   using: "composite"
   steps:
     - name: Install opencode
       shell: bash
       run: curl -fsSL https://opencode.ai/install | bash
+      env:
+        VERSION: ${{ inputs.version }}
 
     - name: Install bun
       shell: bash
