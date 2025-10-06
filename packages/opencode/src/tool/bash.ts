@@ -188,6 +188,10 @@ export const BashTool = Tool.define("bash", {
       })
     })
 
+    if (process.signalCode === "SIGTERM" && params.timeout) {
+      output += `\n\n(Command timed out after ${timeout} ms)\n`
+    }
+
     ctx.metadata({
       metadata: {
         output: output,
