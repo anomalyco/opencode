@@ -188,10 +188,6 @@ export const BashTool = Tool.define("bash", {
       })
     })
 
-    if (process.signalCode === "SIGTERM" && params.timeout) {
-      output += `\n\n(Command timed out after ${timeout} ms)\n`
-    }
-
     ctx.metadata({
       metadata: {
         output: output,
@@ -203,6 +199,10 @@ export const BashTool = Tool.define("bash", {
     if (output.length > MAX_OUTPUT_LENGTH) {
       output = output.slice(0, MAX_OUTPUT_LENGTH)
       output += "\n\n(Output was truncated due to length limit)"
+    }
+
+    if (process.signalCode === "SIGTERM" && params.timeout) {
+      output += `\n\n(Command timed out after ${timeout} ms)`
     }
 
     return {
