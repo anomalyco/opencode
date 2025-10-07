@@ -105,8 +105,17 @@ export namespace Snapshot {
           .cwd(Instance.worktree)
           .nothrow()
         if (result.exitCode !== 0) {
-          log.info("file not found in history, deleting", { file })
-          await fs.unlink(file).catch(() => {})
+          const relativePath = path.relative(Instance.worktree, file)
+          const checkTree = await $`git --git-dir=${git} ls-tree ${item.hash} -- ${relativePath}`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
+          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
+            log.info("file existed in snapshot but checkout failed, keeping", { file })
+          } else {
+            log.info("file did not exist in snapshot, deleting", { file })
+            await fs.unlink(file).catch(() => {})
+          }
         }
         files.add(file)
       }

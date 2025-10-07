@@ -18,6 +18,7 @@
     "catalog": {
       "@types/bun": "1.2.21",
       "@hono/zod-validator": "0.4.2",
+      "@kobalte/core": "0.13.11",
       "@types/node": "22.13.9",
       "@tsconfig/node22": "22.0.2",
       "ai": "5.0.8",

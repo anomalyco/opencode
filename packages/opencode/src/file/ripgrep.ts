@@ -6,7 +6,7 @@ import z from "zod/v4"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
-import { Fzf } from "./fzf"
+
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 
 export namespace Ripgrep {
@@ -203,24 +203,48 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function files(input: { cwd: string; query?: string; glob?: string[]; limit?: number }) {
-    const commands = [`${$.escape(await filepath())} --files --follow --hidden --glob='!.git/*'`]
-
+  export async function* files(input: { cwd: string; glob?: string[] }) {
+    const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
     if (input.glob) {
       for (const g of input.glob) {
-        commands[0] += ` --glob='${g}'`
+        args.push(`--glob=${g}`)
       }
     }
 
-    if (input.query) commands.push(`${await Fzf.filepath()} --filter=${input.query}`)
-    if (input.limit) commands.push(`head -n ${input.limit}`)
-    const joined = commands.join(" | ")
-    const result = await $`${{ raw: joined }}`.cwd(input.cwd).nothrow().text()
-    return result.split("\n").filter(Boolean)
+    const proc = Bun.spawn(args, {
+      cwd: input.cwd,
+      stdout: "pipe",
+      stderr: "ignore",
+      maxBuffer: 1024 * 1024 * 20,
+    })
+
+    const reader = proc.stdout.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line) yield line
+        }
+      }
+
+      if (buffer) yield buffer
+    } finally {
+      reader.releaseLock()
+      await proc.exited
+    }
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
-    const files = await Ripgrep.files({ cwd: input.cwd })
+    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
     interface Node {
       path: string[]
       children: Node[]

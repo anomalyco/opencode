@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Using any LLM provider in opencode.
+description: Using any LLM provider in OpenCode.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using `opencode auth login`.
-2. Configure the provider in your opencode config.
+2. Configure the provider in your OpenCode config.
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-You can customize the providers through the `provider` section in your opencode
+You can customize the providers through the `provider` section in your OpenCode
 config.
 
 ---
@@ -48,13 +48,13 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## opencode zen
+## OpenCode Zen
 
-opencode zen is a list of models provided by the opencode team that have been
-tested and verified to work well with opencode. [Learn more](/docs/zen).
+OpenCode Zen is a list of models provided by the OpenCode team that have been
+tested and verified to work well with OpenCode. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with opencode zen.
+If you are new, we recommend starting with OpenCode Zen.
 :::
 
 1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
@@ -78,7 +78,7 @@ If you are new, we recommend starting with opencode zen.
 
 4. Run `/models` in the TUI to see the list of models we recommend.
 
-It works like any other provider in opencode. And is completely optional to use
+It works like any other provider in OpenCode. And is completely optional to use
 it.
 
 ---
@@ -96,7 +96,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with opencode:
+To use Amazon Bedrock with OpenCode:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -564,13 +564,13 @@ In this example:
 
 ---
 
-### opencode zen
+### OpenCode Zen
 
-opencode zen is a list of tested and verified models provided by the opencode team. [Learn more](/docs/zen).
+OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>opencode zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
 
-2. Run `opencode auth login` and select **opencode zen**.
+2. Run `opencode auth login` and select **OpenCode Zen**.
 
    ```bash
    $ opencode auth login
@@ -578,12 +578,12 @@ opencode zen is a list of tested and verified models provided by the opencode te
    ┌  Add credential
    │
    ◆  Select provider
-   │  ● opencode zen
+   │  ● OpenCode Zen
    │  ...
    └
    ```
 
-3. Enter your opencode API key.
+3. Enter your OpenCode API key.
 
    ```bash
    $ opencode auth login
@@ -591,7 +591,7 @@ opencode zen is a list of tested and verified models provided by the opencode te
    ┌  Add credential
    │
    ◇  Select provider
-   │  opencode zen
+   │  OpenCode Zen
    │
    ◇  Enter your API key
    │  _

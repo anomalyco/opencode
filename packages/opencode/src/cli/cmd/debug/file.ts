@@ -2,6 +2,22 @@ import { File } from "../../../file"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
+const FileSearchCommand = cmd({
+  command: "search <query>",
+  builder: (yargs) =>
+    yargs.positional("query", {
+      type: "string",
+      demandOption: true,
+      description: "Search query",
+    }),
+  async handler(args) {
+    await bootstrap(process.cwd(), async () => {
+      const results = await File.search({ query: args.query })
+      console.log(results.join("\n"))
+    })
+  },
+})
+
 const FileReadCommand = cmd({
   command: "read <path>",
   builder: (yargs) =>
@@ -48,6 +64,11 @@ const FileListCommand = cmd({
 export const FileCommand = cmd({
   command: "file",
   builder: (yargs) =>
-    yargs.command(FileReadCommand).command(FileStatusCommand).command(FileListCommand).demandCommand(),
+    yargs
+      .command(FileReadCommand)
+      .command(FileStatusCommand)
+      .command(FileListCommand)
+      .command(FileSearchCommand)
+      .demandCommand(),
   async handler() {},
 })
