@@ -119,7 +119,7 @@ export const AuthLoginCommand = cmd({
             prompts.log.info(
               `For GitHub Enterprise, please run 'opencode auth login', select 'github-copilot', and then 'GitHub Enterprise'.`,
             )
-            prompts.log.error(`Error: ${e.message}`)
+            prompts.log.error(`Error: ${e instanceof Error ? e.message : String(e)}`)
           }
           prompts.outro("Done")
           return
