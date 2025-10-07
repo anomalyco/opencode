@@ -141,6 +141,24 @@ export namespace SessionPrompt {
     const session = await Session.get(input.sessionID)
     await SessionRevert.cleanup(session)
 
+    const agent = await Agent.get(input.agent ?? "build")
+    let model = await resolveModel({
+      agent,
+      model: input.model,
+    }).then((x) => Provider.getModel(x.providerID, x.modelID))
+
+    if (session.time.created === session.time.updated) {
+      await Plugin.trigger(
+        "chat.session",
+        {},
+        {
+          sessionID: session.id,
+          model: model.info,
+          provider: await Provider.getProvider(model.providerID),
+        },
+      )
+    }
+
     const userMsg = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
@@ -154,13 +172,34 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
-    const agent = await Agent.get(input.agent ?? "build")
-    const model = await resolveModel({
-      agent,
-      model: input.model,
-    }).then((x) => Provider.getModel(x.providerID, x.modelID))
 
     using abort = lock(input.sessionID)
+
+    const params = await Plugin.trigger(
+      "chat.params",
+      {
+        model: model.info,
+        provider: await Provider.getProvider(model.providerID),
+        message: userMsg,
+      },
+      {
+        modelID: model.modelID,
+        providerID: model.providerID,
+        temperature: model.info.temperature
+          ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
+          : undefined,
+        topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
+        options: {
+          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
+          ...model.info.options,
+          ...agent.options,
+        },
+      },
+    )
+
+    if (params.modelID !== model.modelID || params.providerID !== model.providerID) {
+      model = await Provider.getModel(params.providerID, params.modelID)
+    }
 
     const system = await resolveSystemPrompt({
       providerID: model.providerID,
@@ -186,26 +225,6 @@ export namespace SessionPrompt {
       tools: input.tools,
       processor,
     })
-
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        model: model.info,
-        provider: await Provider.getProvider(model.providerID),
-        message: userMsg,
-      },
-      {
-        temperature: model.info.temperature
-          ? (agent.temperature ?? ProviderTransform.temperature(model.providerID, model.modelID))
-          : undefined,
-        topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
-        options: {
-          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
-          ...model.info.options,
-          ...agent.options,
-        },
-      },
-    )
 
     let step = 0
     while (true) {
