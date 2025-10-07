@@ -12,6 +12,8 @@ import { Auth } from "../auth"
 import { Instance } from "../project/instance"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
+import { AuthGithubCopilot } from "../auth/github-copilot"
+import { normalizeDomain, buildCopilotApiUrl } from "../util/url"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -188,10 +190,6 @@ export namespace Provider {
       }
     },
     "github-copilot-enterprise": async (provider) => {
-      const { AuthGithubCopilot } = await import("../auth/github-copilot")
-      const { Auth } = await import("../auth")
-      const { normalizeDomain, buildCopilotApiUrl } = await import("../util/url")
-
       const authInfo = await Auth.get("github-copilot-enterprise")
       const enterpriseUrl = authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined
 

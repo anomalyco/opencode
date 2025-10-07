@@ -426,6 +426,10 @@ export type Config = {
         apiKey?: string
         baseURL?: string
         /**
+         * GitHub Enterprise URL for copilot authentication
+         */
+        enterpriseUrl?: string
+        /**
          * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
          */
         timeout?: number | false
@@ -999,6 +1003,7 @@ export type OAuth = {
   refresh: string
   access: string
   expires: number
+  enterpriseUrl?: string
 }
 
 export type ApiAuth = {
