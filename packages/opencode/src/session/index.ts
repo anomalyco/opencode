@@ -188,14 +188,14 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    try {
-      const read = await Storage.read<Info>(["session", Instance.project.id, id])
-      return read as Info
-    } catch {
-      // Fallback to global if not found in current project
-      const read = await Storage.read<Info>(["session", "global", id])
-      return read as Info
+    const projects = [Instance.project.id, "global"]
+    for (const projectID of projects) {
+      try {
+        const read = await Storage.read<Info>(["session", projectID, id])
+        return read as Info
+      } catch {}
     }
+    throw new Error(`Session ${id} not found`)
   })
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {
