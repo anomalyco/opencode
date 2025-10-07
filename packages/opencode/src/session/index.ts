@@ -188,8 +188,14 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read as Info
+    try {
+      const read = await Storage.read<Info>(["session", Instance.project.id, id])
+      return read as Info
+    } catch {
+      // Fallback to global if not found in current project
+      const read = await Storage.read<Info>(["session", "global", id])
+      return read as Info
+    }
   })
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {
