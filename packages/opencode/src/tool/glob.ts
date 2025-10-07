@@ -23,7 +23,7 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for (const file of await Ripgrep.files({
+    for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
     })) {

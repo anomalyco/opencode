@@ -44,7 +44,11 @@ export const ListTool = Tool.define("list", {
     const searchPath = path.resolve(Instance.directory, params.path || ".")
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
-    const files = await Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, limit: LIMIT })
+    const files = []
+    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs })) {
+      files.push(file)
+      if (files.length >= LIMIT) break
+    }
 
     // Build directory structure
     const dirs = new Set<string>()

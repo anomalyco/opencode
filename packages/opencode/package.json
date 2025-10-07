@@ -1,12 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.9.6",
+  "version": "0.14.5",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bun run --conditions=development ./src/index.ts"
+    "test": "bun test",
+    "build": "./script/build.ts",
+    "dev": "bun run ./src/index.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -16,6 +18,7 @@
   },
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
+    "@ai-sdk/google-vertex": "3.0.16",
     "@octokit/webhooks-types": "7.6.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
@@ -40,6 +43,7 @@
     "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
+    "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
     "hono-openapi": "1.0.7",

@@ -16,10 +16,7 @@ import { Flag } from "../flag/flag"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (
-    provider: ModelsDev.Provider,
-    api?: string,
-  ) => Promise<{
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
     getModel?: (sdk: any, modelID: string) => Promise<any>
     options?: Record<string, any>
@@ -40,6 +37,19 @@ export namespace Provider {
       }
     },
     async opencode(input) {
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
       return {
         autoload: Object.keys(input.models).length > 0,
         options: {},
@@ -140,6 +150,40 @@ export namespace Provider {
             "http-referer": "https://opencode.ai/",
             "x-title": "opencode",
           },
+        },
+      }
+    },
+    "google-vertex": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }
+    },
+    "google-vertex-anthropic": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
         },
       }
     },
@@ -244,7 +288,7 @@ export namespace Provider {
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[modelID]
         const parsedModel: ModelsDev.Model = {
-          id: modelID,
+          id: model.id ?? modelID,
           name: model.name ?? existing?.name ?? modelID,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
@@ -370,10 +414,22 @@ export namespace Provider {
       const s = await state()
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
       const options = { ...s.providers[provider.id]?.options }
+      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
+        options["includeUsage"] = true
+      }
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
-      const mod = await import(await BunProc.install(pkg, "latest"))
+      const installedPath = await BunProc.install(pkg, "latest")
+      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
+      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
+      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
+      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
+      // In addition, Bun's dynamic import logic does not support subpath imports,
+      // so we patch the import path to load directly from `dist`.
+      const modPath =
+        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
+      const mod = await import(modPath)
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: any) => {

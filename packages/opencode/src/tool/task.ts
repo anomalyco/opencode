@@ -26,8 +26,11 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-      const session = await Session.create(ctx.sessionID, params.description + ` (@${agent.name} subagent)`)
-      const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
+      const session = await Session.create({
+        parentID: ctx.sessionID,
+        title: params.description + ` (@${agent.name} subagent)`,
+      })
+      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
@@ -75,10 +78,14 @@ export const TaskTool = Tool.define("task", async () => {
         ],
       })
       unsub()
+      let all
+      all = await Session.messages(session.id)
+      all = all.filter((x) => x.info.role === "assistant")
+      all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
       return {
         title: params.description,
         metadata: {
-          summary: result.parts.filter((x: any) => x.type === "tool"),
+          summary: all,
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }

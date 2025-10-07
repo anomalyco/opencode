@@ -33,16 +33,16 @@ export namespace Bus {
       "type",
       registry
         .entries()
-        .map(([type, def]) =>
-          z
+        .map(([type, def]) => {
+          return z
             .object({
               type: z.literal(type),
               properties: def.properties,
             })
             .meta({
               ref: "Event" + "." + def.type,
-            }),
-        )
+            })
+        })
         .toArray() as any,
     )
   }

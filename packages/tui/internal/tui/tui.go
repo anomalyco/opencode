@@ -954,16 +954,18 @@ func (a Model) home() (string, int, int) {
 	baseStyle := styles.NewStyle().Foreground(t.Text()).Background(t.Background())
 	base := baseStyle.Render
 	muted := styles.NewStyle().Foreground(t.TextMuted()).Background(t.Background()).Render
-	highlight := styles.NewStyle().Foreground(t.Accent()).Background(t.Background()).Render
 
 	open := `
-█▀▀█ █▀▀█ █▀▀ █▀▀▄ 
-█░░█ █░░█ █▀▀ █░░█ 
-▀▀▀▀ █▀▀▀ ▀▀▀ ▀  ▀ `
+                    
+█▀▀█ █▀▀█ █▀▀█ █▀▀▄ 
+█░░█ █░░█ █▀▀▀ █░░█ 
+▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ `
+
 	code := `
-█▀▀ █▀▀█ █▀▀▄ █▀▀
-█░░ █░░█ █░░█ █▀▀
-▀▀▀ ▀▀▀▀ ▀▀▀  ▀▀▀`
+             ▄
+█▀▀▀ █▀▀█ █▀▀█ █▀▀█
+█░░░ █░░█ █░░█ █▀▀▀
+▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`
 
 	logo := lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -989,9 +991,9 @@ func (a Model) home() (string, int, int) {
 	)
 
 	// Use limit of 4 for vscode, 6 for others
-	limit := 4
+	limit := 5
 	if util.IsVSCode() {
-		limit = 2
+		limit = 3
 	}
 
 	showVscode := util.IsVSCode()
@@ -1008,22 +1010,12 @@ func (a Model) home() (string, int, int) {
 		styles.WhitespaceStyle(t.Background()),
 	)
 
-	grok := highlight("Grok Code is free for a limited time")
-	grok = lipgloss.PlaceHorizontal(
-		effectiveWidth,
-		lipgloss.Center,
-		grok,
-		styles.WhitespaceStyle(t.Background()),
-	)
-
 	lines := []string{}
 	lines = append(lines, "")
 	lines = append(lines, logoAndVersion)
 	lines = append(lines, "")
 	lines = append(lines, cmds)
 	lines = append(lines, "")
-	lines = append(lines, "")
-	lines = append(lines, grok)
 	lines = append(lines, "")
 
 	mainHeight := lipgloss.Height(strings.Join(lines, "\n"))
@@ -1050,9 +1042,11 @@ func (a Model) home() (string, int, int) {
 	)
 
 	editorX := max(0, (effectiveWidth-editorWidth)/2)
-	editorY := (a.height / 2) + (mainHeight / 2) - 2
+	editorY := (a.height / 2) + (mainHeight / 2) - 3
+	editorYDelta := 3
 
 	if editorLines > 1 {
+		editorYDelta = 2
 		content := a.editor.Content()
 		editorHeight := lipgloss.Height(content)
 
@@ -1081,7 +1075,7 @@ func (a Model) home() (string, int, int) {
 		)
 	}
 
-	return mainLayout, editorX + 5, editorY + 2
+	return mainLayout, editorX + 5, editorY + editorYDelta
 }
 
 func (a Model) chat() (string, int, int) {
@@ -1219,7 +1213,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		response, err := a.app.Client.Session.Share(context.Background(), a.app.Session.ID, opencode.SessionShareParams{})
+		response, err := a.app.Client.Session.Share(
+			context.Background(),
+			a.app.Session.ID,
+			opencode.SessionShareParams{},
+		)
 		if err != nil {
 			slog.Error("Failed to share session", "error", err)
 			return a, toast.NewErrorToast("Failed to share session")
@@ -1231,7 +1229,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		if a.app.Session.ID == "" {
 			return a, nil
 		}
-		_, err := a.app.Client.Session.Unshare(context.Background(), a.app.Session.ID, opencode.SessionUnshareParams{})
+		_, err := a.app.Client.Session.Unshare(
+			context.Background(),
+			a.app.Session.ID,
+			opencode.SessionUnshareParams{},
+		)
 		if err != nil {
 			slog.Error("Failed to unshare session", "error", err)
 			return a, toast.NewErrorToast("Failed to unshare session")
@@ -1259,7 +1261,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			var parentSession *opencode.Session
 			if a.app.Session.ParentID != "" {
 				parentSessionID = a.app.Session.ParentID
-				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID, opencode.SessionGetParams{})
+				session, err := a.app.Client.Session.Get(
+					context.Background(),
+					parentSessionID,
+					opencode.SessionGetParams{},
+				)
 				if err != nil {
 					slog.Error("Failed to get parent session", "error", err)
 					return toast.NewErrorToast("Failed to get parent session")
@@ -1269,7 +1275,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 				parentSession = a.app.Session
 			}
 
-			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID, opencode.SessionChildrenParams{})
+			children, err := a.app.Client.Session.Children(
+				context.Background(),
+				parentSessionID,
+				opencode.SessionChildrenParams{},
+			)
 			if err != nil {
 				slog.Error("Failed to get session children", "error", err)
 				return toast.NewErrorToast("Failed to get session children")
@@ -1317,7 +1327,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			var parentSession *opencode.Session
 			if a.app.Session.ParentID != "" {
 				parentSessionID = a.app.Session.ParentID
-				session, err := a.app.Client.Session.Get(context.Background(), parentSessionID, opencode.SessionGetParams{})
+				session, err := a.app.Client.Session.Get(
+					context.Background(),
+					parentSessionID,
+					opencode.SessionGetParams{},
+				)
 				if err != nil {
 					slog.Error("Failed to get parent session", "error", err)
 					return toast.NewErrorToast("Failed to get parent session")
@@ -1327,7 +1341,11 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 				parentSession = a.app.Session
 			}
 
-			children, err := a.app.Client.Session.Children(context.Background(), parentSessionID, opencode.SessionChildrenParams{})
+			children, err := a.app.Client.Session.Children(
+				context.Background(),
+				parentSessionID,
+				opencode.SessionChildrenParams{},
+			)
 			if err != nil {
 				slog.Error("Failed to get session children", "error", err)
 				return toast.NewErrorToast("Failed to get session children")

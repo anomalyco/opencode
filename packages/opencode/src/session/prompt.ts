@@ -47,7 +47,8 @@ import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
+import { $, fileURLToPath } from "bun"
+import { ConfigMarkdown } from "../config/markdown"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -158,7 +159,7 @@ export namespace SessionPrompt {
       agent,
       model: input.model,
     }).then((x) => Provider.getModel(x.providerID, x.modelID))
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
     using abort = lock(input.sessionID)
 
     const system = await resolveSystemPrompt({
@@ -265,7 +266,12 @@ export namespace SessionPrompt {
             : undefined,
         maxRetries: 10,
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(
+          model.providerID,
+          params.options,
+          model.info.limit.output,
+          OUTPUT_TOKEN_MAX,
+        ),
         abortSignal: abort.signal,
         providerOptions: {
           [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
@@ -281,9 +287,19 @@ export namespace SessionPrompt {
             }),
           ),
           ...MessageV2.toModelMessage(
-            msgs.filter(
-              (m) => !(m.info.role === "assistant" && m.info.error && !MessageV2.AbortedError.isInstance(m.info.error)),
-            ),
+            msgs.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
           ),
         ],
         tools: model.info.tool_call === false ? undefined : tools,
@@ -336,12 +352,37 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
@@ -487,6 +528,8 @@ export namespace SessionPrompt {
         )
 
         return {
+          title: "",
+          metadata: {},
           output,
         }
       }
@@ -545,9 +588,15 @@ export namespace SessionPrompt {
               }
               break
             case "file:":
+              log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filePath = decodeURIComponent(url.pathname)
+              const filepath = fileURLToPath(part.url)
+              const stat = await Bun.file(filepath).stat()
+
+              if (stat.isDirectory()) {
+                part.mime = "application/x-directory"
+              }
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -557,14 +606,14 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
+                  const filePathURI = part.url.split("?")[0]
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
+                    const symbols = await LSP.documentSymbol(filePathURI)
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
@@ -584,7 +633,7 @@ export namespace SessionPrompt {
                     limit = end - offset
                   }
                 }
-                const args = { filePath, offset, limit }
+                const args = { filePath: filepath, offset, limit }
                 const result = await ReadTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -622,7 +671,7 @@ export namespace SessionPrompt {
               }
 
               if (part.mime === "application/x-directory") {
-                const args = { path: filePath }
+                const args = { path: filepath }
                 const result = await ListTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -659,15 +708,15 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filePath)
-              FileTime.read(input.sessionID, filePath)
+              const file = Bun.file(filepath)
+              FileTime.read(input.sessionID, filepath)
               return [
                 {
                   id: Identifier.ascending("part"),
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filepath}\"}`,
                   synthetic: true,
                 },
                 {
@@ -857,6 +906,7 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
@@ -878,6 +928,7 @@ export namespace SessionPrompt {
                     ...part.time,
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
@@ -917,6 +968,7 @@ export namespace SessionPrompt {
                         start: Date.now(),
                       },
                     },
+                    metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
@@ -981,7 +1033,11 @@ export namespace SessionPrompt {
                 break
 
               case "finish-step":
-                const usage = Session.getUsage(input.model, value.usage, value.providerMetadata)
+                const usage = Session.getUsage({
+                  model: input.model,
+                  usage: value.usage,
+                  metadata: value.providerMetadata,
+                })
                 assistantMsg.cost += usage.cost
                 assistantMsg.tokens = usage.tokens
                 await Session.updatePart({
@@ -1019,12 +1075,14 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
                 }
                 break
@@ -1036,6 +1094,7 @@ export namespace SessionPrompt {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   await Session.updatePart(currentText)
                 }
                 currentText = undefined
@@ -1323,7 +1382,6 @@ export namespace SessionPrompt {
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
-  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
@@ -1332,10 +1390,10 @@ export namespace SessionPrompt {
 
     let template = command.template.replace("$ARGUMENTS", input.arguments)
 
-    const bash = Array.from(template.matchAll(bashRegex))
-    if (bash.length > 0) {
+    const shell = ConfigMarkdown.shell(template)
+    if (shell.length > 0) {
       const results = await Promise.all(
-        bash.map(async ([, cmd]) => {
+        shell.map(async ([, cmd]) => {
           try {
             return await $`${{ raw: cmd }}`.nothrow().text()
           } catch (error) {
@@ -1354,9 +1412,9 @@ export namespace SessionPrompt {
       },
     ] as PromptInput["parts"]
 
-    const matches = Array.from(template.matchAll(fileRegex))
+    const files = ConfigMarkdown.files(template)
     await Promise.all(
-      matches.map(async (match) => {
+      files.map(async (match) => {
         const name = match[1]
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
@@ -1410,7 +1468,7 @@ export namespace SessionPrompt {
     })()
 
     const agent = await Agent.get(agentName)
-    if (agent.mode === "subagent" || command.subtask) {
+    if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
       using abort = lock(input.sessionID)
 
       const userMsg: MessageV2.User = {
@@ -1548,7 +1606,7 @@ export namespace SessionPrompt {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
     }
-    if (small.providerID === "openai") {
+    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
       options["reasoningEffort"] = "minimal"
     }
     if (small.providerID === "google") {

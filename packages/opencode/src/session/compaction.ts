@@ -36,6 +36,9 @@ export namespace SessionCompaction {
     return count > usable
   }
 
+  export const PRUNE_MINIMUM = 20_000
+  export const PRUNE_PROTECT = 40_000
+
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
@@ -46,10 +49,13 @@ export namespace SessionCompaction {
     let total = 0
     let pruned = 0
     const toPrune = []
+    let turns = 0
 
-    loop: for (let msgIndex = msgs.length - 2; msgIndex >= 0; msgIndex--) {
+    loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
       const msg = msgs[msgIndex]
-      if (msg.info.role === "assistant" && msg.info.summary) return
+      if (msg.info.role === "user") turns++
+      if (turns < 2) continue
+      if (msg.info.role === "assistant" && msg.info.summary) break loop
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
         const part = msg.parts[partIndex]
         if (part.type === "tool")
@@ -57,7 +63,7 @@ export namespace SessionCompaction {
             if (part.state.time.compacted) break loop
             const estimate = Token.estimate(part.state.output)
             total += estimate
-            if (total > 40_000) {
+            if (total > PRUNE_PROTECT) {
               pruned += estimate
               toPrune.push(part)
             }
@@ -65,7 +71,7 @@ export namespace SessionCompaction {
       }
     }
     log.info("found", { pruned, total })
-    if (pruned > 20_000) {
+    if (pruned > PRUNE_MINIMUM) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
@@ -138,7 +144,7 @@ export namespace SessionCompaction {
         },
       ],
     })
-    const usage = Session.getUsage(model.info, generated.usage, generated.providerMetadata)
+    const usage = Session.getUsage({ model: model.info, usage: generated.usage, metadata: generated.providerMetadata })
     msg.cost += usage.cost
     msg.tokens = usage.tokens
     msg.summary = true

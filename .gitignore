@@ -9,3 +9,4 @@ openapi.json
 playground
 tmp
 dist
+.turbo
