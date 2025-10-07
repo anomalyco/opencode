@@ -8,7 +8,7 @@ export class ACPSessionManager {
 
   async create(cwd: string, mcpServers: McpServer[]): Promise<ACPSessionState> {
     const sessionId = `acp_${Identifier.ascending("session")}`
-    const openCodeSession = await Session.create(undefined, `ACP Session ${sessionId}`)
+    const openCodeSession = await Session.create({ title: `ACP Session ${sessionId}` })
 
     const state: ACPSessionState = {
       id: sessionId,
@@ -44,7 +44,7 @@ export class ACPSessionManager {
       return existing
     }
 
-    const openCodeSession = await Session.create(undefined, `ACP Session ${sessionId} (loaded)`)
+    const openCodeSession = await Session.create({ title: `ACP Session ${sessionId} (loaded)` })
 
     const state: ACPSessionState = {
       id: sessionId,
