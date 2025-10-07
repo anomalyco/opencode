@@ -11,6 +11,7 @@ import { Billing } from "../../../../core/src/billing"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenModel } from "@opencode-ai/console-core/model.js"
+import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 
 export async function handler(
   input: APIEvent,
@@ -33,6 +34,7 @@ export async function handler(
   class AuthError extends Error {}
   class CreditsError extends Error {}
   class MonthlyLimitError extends Error {}
+  class UserLimitError extends Error {}
   class ModelError extends Error {}
 
   type Model = z.infer<typeof ZenModel.ModelSchema>
@@ -181,6 +183,7 @@ export async function handler(
       error instanceof AuthError ||
       error instanceof CreditsError ||
       error instanceof MonthlyLimitError ||
+      error instanceof UserLimitError ||
       error instanceof ModelError
     )
       return new Response(
@@ -243,10 +246,15 @@ export async function handler(
           monthlyLimit: BillingTable.monthlyLimit,
           monthlyUsage: BillingTable.monthlyUsage,
           timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+          userID: UserTable.id,
+          userMonthlyLimit: UserTable.monthlyLimit,
+          userMonthlyUsage: UserTable.monthlyUsage,
+          timeUserMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
         })
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
+        .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -269,6 +277,12 @@ export async function handler(
         monthlyUsage: data.monthlyUsage,
         timeMonthlyUsageUpdated: data.timeMonthlyUsageUpdated,
       },
+      user: {
+        id: data.userID,
+        monthlyLimit: data.userMonthlyLimit,
+        monthlyUsage: data.userMonthlyUsage,
+        timeMonthlyUsageUpdated: data.timeUserMonthlyUsageUpdated,
+      },
       isFree,
     }
   }
@@ -280,19 +294,34 @@ export async function handler(
     const billing = authInfo.billing
     if (!billing.paymentMethodID) throw new CreditsError("No payment method")
     if (billing.balance <= 0) throw new CreditsError("Insufficient balance")
+
+    const now = new Date()
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
     if (
       billing.monthlyLimit &&
       billing.monthlyUsage &&
       billing.timeMonthlyUsageUpdated &&
       billing.monthlyUsage >= centsToMicroCents(billing.monthlyLimit * 100)
     ) {
-      const now = new Date()
-      const currentYear = now.getUTCFullYear()
-      const currentMonth = now.getUTCMonth()
       const dateYear = billing.timeMonthlyUsageUpdated.getUTCFullYear()
       const dateMonth = billing.timeMonthlyUsageUpdated.getUTCMonth()
       if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new MonthlyLimitError(`You have reached your monthly spending limit of $${billing.monthlyLimit}.`)
+        throw new MonthlyLimitError(
+          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}.`,
+        )
+    }
+
+    if (
+      authInfo.user.monthlyLimit &&
+      authInfo.user.monthlyUsage &&
+      authInfo.user.timeMonthlyUsageUpdated &&
+      authInfo.user.monthlyUsage >= centsToMicroCents(authInfo.user.monthlyLimit * 100)
+    ) {
+      const dateYear = authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear()
+      const dateMonth = authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
+      if (currentYear === dateYear && currentMonth === dateMonth)
+        throw new UserLimitError(`You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}.`)
     }
   }
 
@@ -386,6 +415,18 @@ export async function handler(
           timeMonthlyUsageUpdated: sql`now()`,
         })
         .where(eq(BillingTable.workspaceID, authInfo.workspaceID))
+      await tx
+        .update(UserTable)
+        .set({
+          monthlyUsage: sql`
+              CASE
+                WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+          timeMonthlyUsageUpdated: sql`now()`,
+        })
+        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
     })
 
     await Database.use((tx) =>
