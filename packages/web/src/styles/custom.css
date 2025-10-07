@@ -91,10 +91,6 @@ body > .page > header button[data-open-modal] > kbd kbd {
   display: flex;
 }
 
-body > .page > header button[data-open-modal] > kbd kbd:first-child {
-  font-size: 20px !important;
-}
-
 .starlight-aside__title {
   flex: 0 0 auto;
   margin-top: 3px;
