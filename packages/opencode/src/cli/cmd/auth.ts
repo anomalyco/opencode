@@ -81,25 +81,46 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
-            stdout: "pipe",
-          })
-          const exit = await proc.exited
-          if (exit !== 0) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
+          let hostname = args.url
+          try {
+            const url = new URL(args.url.includes("://") ? args.url : `https://${args.url}`)
+            hostname = url.hostname
+          } catch {}
+
+          if (hostname.endsWith(".ghe.com")) {
+            return handleGithubCopilotAuth("github-copilot", args.url)
           }
-          const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
-            type: "wellknown",
-            key: wellknown.auth.env,
-            token: token.trim(),
-          })
-          prompts.log.success("Logged into " + args.url)
+
+          try {
+            const url = args.url.includes("://") ? args.url : `https://${args.url}`
+            const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json())
+            prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+            const proc = Bun.spawn({
+              cmd: wellknown.auth.command,
+              stdout: "pipe",
+            })
+            const exit = await proc.exited
+            if (exit !== 0) {
+              prompts.log.error("Failed")
+              prompts.outro("Done")
+              return
+            }
+            const token = await new Response(proc.stdout).text()
+            await Auth.set(url, {
+              type: "wellknown",
+              key: wellknown.auth.env,
+              token: token.trim(),
+            })
+            prompts.log.success("Logged into " + url)
+          } catch (e) {
+            prompts.log.error(
+              `Failed to login via ${args.url}. This command is for servers with a specific opencode configuration.`,
+            )
+            prompts.log.info(
+              `For GitHub Enterprise, please run 'opencode auth login', select 'github-copilot', and then 'GitHub Enterprise'.`,
+            )
+            prompts.log.error(`Error: ${e.message}`)
+          }
           prompts.outro("Done")
           return
         }
@@ -309,53 +330,57 @@ export const AuthLogoutCommand = cmd({
   },
 })
 
-async function handleGithubCopilotAuth(providerID: string) {
+async function handleGithubCopilotAuth(providerID: string, enterpriseUrlInput?: string) {
   try {
-    const deploymentType = await prompts.select({
-      message: "Select GitHub deployment type",
-      options: [
-        {
-          label: "GitHub.com",
-          value: "github.com",
-          hint: "Public",
-        },
-        {
-          label: "GitHub Enterprise",
-          value: "enterprise",
-          hint: "Data residency or self-hosted",
-        },
-      ],
-    })
-
-    if (prompts.isCancel(deploymentType)) throw new UI.CancelledError()
-
     let enterpriseUrl: string | undefined
     let actualProviderID = providerID
 
-    if (deploymentType === "enterprise") {
-      const enterpriseHost = await prompts.text({
-        message: "Enter your GitHub Enterprise URL or domain",
-        placeholder: "company.ghe.com or https://company.ghe.com",
-        validate: (value) => {
-          if (!value) return "URL or domain is required"
-          try {
-            // Test if it's a valid URL
-            const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
-            if (!url.hostname) return "Please enter a valid URL or domain"
-            return undefined
-          } catch {
-            return "Please enter a valid URL (e.g., company.ghe.com or https://company.ghe.com)"
-          }
-        },
+    if (enterpriseUrlInput) {
+      enterpriseUrl = enterpriseUrlInput.includes("://") ? enterpriseUrlInput : `https://${enterpriseUrlInput}`
+      actualProviderID = "github-copilot-enterprise"
+    } else {
+      const deploymentType = await prompts.select({
+        message: "Select GitHub deployment type",
+        options: [
+          {
+            label: "GitHub.com",
+            value: "github.com",
+            hint: "Public",
+          },
+          {
+            label: "GitHub Enterprise",
+            value: "enterprise",
+            hint: "Data residency or self-hosted",
+          },
+        ],
       })
 
-      if (prompts.isCancel(enterpriseHost)) throw new UI.CancelledError()
+      if (prompts.isCancel(deploymentType)) throw new UI.CancelledError()
 
-      enterpriseUrl = enterpriseHost.includes("://") ? enterpriseHost : `https://${enterpriseHost}`
+      if (deploymentType === "enterprise") {
+        const enterpriseHost = await prompts.text({
+          message: "Enter your GitHub Enterprise URL or domain",
+          placeholder: "company.ghe.com or https://company.ghe.com",
+          validate: (value) => {
+            if (!value) return "URL or domain is required"
+            try {
+              // Test if it's a valid URL
+              const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
+              if (!url.hostname) return "Please enter a valid URL or domain"
+              return undefined
+            } catch {
+              return "Please enter a valid URL (e.g., company.ghe.com or https://company.ghe.com)"
+            }
+          },
+        })
 
-      actualProviderID = "github-copilot-enterprise"
+        if (prompts.isCancel(enterpriseHost)) throw new UI.CancelledError()
+
+        enterpriseUrl = enterpriseHost.includes("://") ? enterpriseHost : `https://${enterpriseHost}`
+
+        actualProviderID = "github-copilot-enterprise"
+      }
     }
-
     const authorize = await AuthGithubCopilot.authorize(actualProviderID, enterpriseUrl)
 
     prompts.log.info(`Go to: ${authorize.verification}`)

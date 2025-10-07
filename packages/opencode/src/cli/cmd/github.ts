@@ -90,26 +90,18 @@ export const GithubInstallCommand = cmd({
           // ie. ssh://git@github.com/sst/opencode
           // ie. ssh://git@company.ghe.com/sst/opencode.git
           // ie. ssh://git@company.ghe.com/sst/opencode
-          const githubComMatch = info.match(
-            /^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/,
-          )
-          const gheMatch = info.match(
-            /^(?:(?:https?|ssh):\/\/)?(?:git@)?([^:/]+\.ghe\.com)[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/,
+          const remoteMatch = info.match(
+            /^(?:(?:https?|ssh):\/\/)?(?:git@)?([^:/]+)[:\/]([^\/]+)\/([^\/.]+?)(?:\.git)?$/,
           )
 
-          let owner: string, repo: string, githubHost: string
-
-          if (githubComMatch) {
-            ;[, owner, repo] = githubComMatch
-            githubHost = "github.com"
-          } else if (gheMatch) {
-            ;[, githubHost, owner, repo] = gheMatch
-          } else {
+          if (!remoteMatch) {
             prompts.log.error(
               `Could not find GitHub repository. Please run this command from a GitHub or GitHub Enterprise repository.`,
             )
             throw new UI.CancelledError()
           }
+
+          const [, githubHost, owner, repo] = remoteMatch
 
           return { owner, repo, root: Instance.worktree, githubHost }
         }

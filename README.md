@@ -33,6 +33,9 @@ paru -S opencode-bin               # Arch Linux
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+> [!NOTE]
+> **Want the latest features?** See our [Local Installation Guide](LOCAL_INSTALL.md) to install from source.
+
 #### Installation Directory
 
 The install script respects the following priority order for the installation path:
