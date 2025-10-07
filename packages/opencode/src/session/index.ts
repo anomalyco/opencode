@@ -5,6 +5,7 @@ import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
 
 import { Bus } from "../bus"
+import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
@@ -101,6 +102,14 @@ export namespace Session {
       })
       .optional(),
     async (input) => {
+      try {
+        const stat = await Bun.file(Instance.directory).stat()
+        if (!stat.isDirectory) throw new Error("Path is not a directory")
+      } catch {
+        throw new Error("Directory does not exist")
+      }
+      if (Instance.project.id !== "global" && !Filesystem.contains(Instance.worktree, Instance.directory))
+        throw new Error("Directory outside project")
       return createNext({
         parentID: input?.parentID,
         directory: Instance.directory,
