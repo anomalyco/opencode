@@ -19,7 +19,6 @@ import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
-import type { MessageV2 } from "../session/message-v2"
 
 export class OpenCodeAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
@@ -111,7 +110,7 @@ export class OpenCodeAgent implements Agent {
       }
     })
 
-    const response = await SessionPrompt.prompt({
+    await SessionPrompt.prompt({
       sessionID: acpSession.openCodeSessionId,
       messageID: Identifier.ascending("message"),
       model: {
@@ -119,27 +118,16 @@ export class OpenCodeAgent implements Agent {
         modelID: model.modelID,
       },
       parts,
+      acpConnection: {
+        connection: this.connection,
+        sessionId: params.sessionId,
+      },
     })
 
-    const textParts = response.parts
-      .filter((p): p is MessageV2.TextPart => p.type === "text")
-      .map((p) => p.text)
-      .join("\n")
+    this.log.debug("prompt response completed")
 
-    this.log.debug("prompt response", { text: textParts.slice(0, 100) })
-
-    if (textParts) {
-      await this.connection.sessionUpdate({
-        sessionId: params.sessionId,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: {
-            type: "text",
-            text: textParts,
-          },
-        },
-      })
-    }
+    // Streaming notifications are now handled during prompt execution
+    // No need to send final text chunk here
 
     return {
       stopReason: "end_turn",

@@ -183,6 +183,7 @@ export namespace SessionPrompt {
       agent: agent.name,
       system,
       abort: abort.signal,
+      acpConnection: input.acpConnection,
     })
 
     const tools = await resolveTools({
@@ -887,6 +888,10 @@ export namespace SessionPrompt {
     system: string[]
     agent: string
     abort: AbortSignal
+    acpConnection?: {
+      connection: any
+      sessionId: string
+    }
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
