@@ -830,7 +830,6 @@ export namespace SessionPrompt {
    * - edit: Tools that modify state (edit, write, bash)
    * - other: All other tools (MCP tools, task, todowrite, etc.)
    */
-  // @ts-expect-error - Used in Phase 3+ for ACP notifications
   function determineToolKind(toolName: string): "read" | "edit" | "other" {
     const readTools = [
       "read",
@@ -857,7 +856,6 @@ export namespace SessionPrompt {
    * - glob({pattern: "*.ts", path: "/src"}) -> [{path: "/src"}]
    * - bash({command: "ls"}) -> [] (no file references)
    */
-  // @ts-expect-error - Used in Phase 4+ for ACP tool notifications
   function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
     try {
       switch (toolName.toLowerCase()) {
@@ -1019,6 +1017,26 @@ export namespace SessionPrompt {
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
+
+                // Notify ACP client of pending tool call
+                if (input.acpConnection) {
+                  await input.acpConnection.connection
+                    .sessionUpdate({
+                      sessionId: input.acpConnection.sessionId,
+                      update: {
+                        sessionUpdate: "tool_call",
+                        toolCallId: value.id,
+                        title: value.toolName,
+                        kind: determineToolKind(value.toolName),
+                        status: "pending",
+                        locations: [], // Will be populated when we have input
+                        rawInput: {},
+                      },
+                    })
+                    .catch((err: Error) => {
+                      log.error("failed to send tool pending to ACP", { error: err })
+                    })
+                }
                 break
 
               case "tool-input-delta":
@@ -1043,6 +1061,24 @@ export namespace SessionPrompt {
                     metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+
+                  // Notify ACP client that tool is running
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "in_progress",
+                          locations: extractLocations(value.toolName, value.input),
+                          rawInput: value.input,
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool in_progress to ACP", { error: err })
+                      })
+                  }
                 }
                 break
               }
@@ -1064,6 +1100,33 @@ export namespace SessionPrompt {
                       attachments: value.output.attachments,
                     },
                   })
+
+                  // Notify ACP client that tool completed
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "completed",
+                          content: [
+                            {
+                              type: "content",
+                              content: {
+                                type: "text",
+                                text: value.output.output,
+                              },
+                            },
+                          ],
+                          rawOutput: value.output,
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool completed to ACP", { error: err })
+                      })
+                  }
+
                   delete toolcalls[value.toolCallId]
                 }
                 break
@@ -1085,6 +1148,35 @@ export namespace SessionPrompt {
                       },
                     },
                   })
+
+                  // Notify ACP client of tool error
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "failed",
+                          content: [
+                            {
+                              type: "content",
+                              content: {
+                                type: "text",
+                                text: `Error: ${(value.error as any).toString()}`,
+                              },
+                            },
+                          ],
+                          rawOutput: {
+                            error: (value.error as any).toString(),
+                          },
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool error to ACP", { error: err })
+                      })
+                  }
+
                   if (value.error instanceof Permission.RejectedError) {
                     blocked = true
                   }
