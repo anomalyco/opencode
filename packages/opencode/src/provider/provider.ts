@@ -190,7 +190,7 @@ export namespace Provider {
     "github-copilot-enterprise": async (provider) => {
       const { AuthGithubCopilot } = await import("../auth/github-copilot")
       const { Auth } = await import("../auth")
-      const { normalizeDomain, buildCopilotApiUrl } = await import("../util/url")
+      const { normalizeDomain } = await import("../util/url")
 
       const authInfo = await Auth.get("github-copilot-enterprise")
       const enterpriseUrl = authInfo && "enterpriseUrl" in authInfo ? authInfo.enterpriseUrl : undefined
@@ -198,7 +198,7 @@ export namespace Provider {
       let baseURL = provider?.api
       if (enterpriseUrl) {
         const domain = normalizeDomain(enterpriseUrl)
-        baseURL = buildCopilotApiUrl(domain)
+        baseURL = `https://copilot-api.${domain}`
       }
 
       const token = await AuthGithubCopilot.access("github-copilot-enterprise")
