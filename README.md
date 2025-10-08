@@ -48,6 +48,21 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+### Agents
+
+OpenCode includes three built-in agents you can switch between:
+
+- **build** (default) - Full access agent for development work
+- **plan** - Read-only agent for safe code exploration and analysis
+  - Denies file edits by default
+  - Asks permission before running bash commands
+  - Ideal for exploring unfamiliar codebases or planning changes
+- **general** - Subagent for complex searches and multi-step tasks
+
+Switch agents using `Tab` or `@mention` them in messages. Configure in `opencode.json`.
+
+Learn more about [customizing agents](https://opencode.ai/docs/agents).
+
 ### Documentation
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
