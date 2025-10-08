@@ -1,4 +1,4 @@
-import { mysqlTable, uniqueIndex, varchar, int, mysqlEnum, index } from "drizzle-orm/mysql-core"
+import { mysqlTable, uniqueIndex, varchar, int, mysqlEnum, index, bigint } from "drizzle-orm/mysql-core"
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
@@ -15,6 +15,9 @@ export const UserTable = mysqlTable(
     timeSeen: utc("time_seen"),
     color: int("color"),
     role: mysqlEnum("role", UserRole).notNull(),
+    monthlyLimit: int("monthly_limit"),
+    monthlyUsage: bigint("monthly_usage", { mode: "number" }),
+    timeMonthlyUsageUpdated: utc("time_monthly_usage_updated"),
   },
   (table) => [
     ...workspaceIndexes(table),

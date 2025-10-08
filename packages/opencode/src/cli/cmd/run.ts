@@ -106,7 +106,7 @@ export const RunCommand = cmd({
 
         if (args.session) return Session.get(args.session)
 
-        return Session.create()
+        return Session.create({})
       })()
 
       if (!session) {

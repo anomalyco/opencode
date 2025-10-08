@@ -111,5 +111,23 @@ For example.
     }
   }
   ```
-
   This configuration allows all commands by default (`"*": "allow"`) but requires approval for `git push` commands.
+
+### Agents
+
+Configure agent specific permissions 
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "plan": {
+      "permission": {
+        "bash": {
+          "echo *": "allow"
+        }
+      }
+    }
+  }
+}
+```

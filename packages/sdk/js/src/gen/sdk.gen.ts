@@ -32,8 +32,12 @@ import type {
   SessionUpdateResponses,
   SessionChildrenData,
   SessionChildrenResponses,
+  SessionTodoData,
+  SessionTodoResponses,
   SessionInitData,
   SessionInitResponses,
+  SessionForkData,
+  SessionForkResponses,
   SessionAbortData,
   SessionAbortResponses,
   SessionUnshareData,
@@ -78,6 +82,8 @@ import type {
   AppLogResponses,
   AppAgentsData,
   AppAgentsResponses,
+  McpStatusData,
+  McpStatusResponses,
   TuiAppendPromptData,
   TuiAppendPromptResponses,
   TuiOpenHelpData,
@@ -293,11 +299,35 @@ class Session extends _HeyApiClient {
   }
 
   /**
+   * Get the todo list for a session
+   */
+  public todo<ThrowOnError extends boolean = false>(options: Options<SessionTodoData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionTodoResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/todo",
+      ...options,
+    })
+  }
+
+  /**
    * Analyze the app and create an AGENTS.md file
    */
   public init<ThrowOnError extends boolean = false>(options: Options<SessionInitData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionInitResponses, unknown, ThrowOnError>({
       url: "/session/{id}/init",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+
+  /**
+   * Fork an existing session at a specific message
+   */
+  public fork<ThrowOnError extends boolean = false>(options: Options<SessionForkData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionForkResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/fork",
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -539,6 +569,18 @@ class App extends _HeyApiClient {
   }
 }
 
+class Mcp extends _HeyApiClient {
+  /**
+   * Get MCP server status
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<McpStatusData, ThrowOnError>) {
+    return (options?.client ?? this._client).get<McpStatusResponses, unknown, ThrowOnError>({
+      url: "/mcp",
+      ...options,
+    })
+  }
+}
+
 class Tui extends _HeyApiClient {
   /**
    * Append prompt to the TUI
@@ -696,6 +738,7 @@ export class OpencodeClient extends _HeyApiClient {
   find = new Find({ client: this._client })
   file = new File({ client: this._client })
   app = new App({ client: this._client })
+  mcp = new Mcp({ client: this._client })
   tui = new Tui({ client: this._client })
   auth = new Auth({ client: this._client })
   event = new Event({ client: this._client })

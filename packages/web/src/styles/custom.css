@@ -24,6 +24,10 @@
   --color-border-weak: hsl(0, 1%, 85%);
 
   --color-icon: hsl(0, 1%, 55%);
+
+  /* For the share component */
+  --sl-color-bg-surface: var(--sl-color-bg-nav);
+  --sl-color-divider: var(--sl-color-gray-5);
 }
 
 
@@ -294,14 +298,16 @@ body > .page > header, :root[data-has-sidebar] body > .page > header {
 }
 
 
-.sl-container ul li a {
+nav.sidebar .sl-container ul li a,
+div.right-sidebar .sl-container ul li a {
   padding: 4px 24px !important;
   width: 100% !important;
   color: var(--color-text-weaker);
   opacity: 50%;
 }
 
-.sl-container ul li a:hover {
+nav.sidebar .sl-container ul li a:hover,
+div.right-sidebar .sl-container ul li a:hover {
   background: var(--color-background-weak);
 
   @media (prefers-color-scheme: dark) {
@@ -309,12 +315,14 @@ body > .page > header, :root[data-has-sidebar] body > .page > header {
   }
 }
 
-.sl-container ul li ul li {
+nav.sidebar .sl-container ul li ul li,
+div.right-sidebar .sl-container ul li ul li {
   padding: 4px 12px 0 12px !important;
 }
 
 
-.sl-container ul li a[aria-current="true"] {
+nav.sidebar .sl-container ul li a[aria-current="true"],
+div.right-sidebar .sl-container ul li a[aria-current="true"] {
   color: var(--color-text-strong) !important;
   opacity: 100%;
 }

@@ -1,5 +1,5 @@
 import { Stripe } from "stripe"
-import { and, Database, eq, sql } from "./drizzle"
+import { Database, eq, sql } from "./drizzle"
 import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"

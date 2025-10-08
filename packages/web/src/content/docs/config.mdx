@@ -69,6 +69,23 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 ---
 
+### TUI
+
+You can configure TUI-specific settings through the `tui` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3
+  }
+}
+```
+
+[Learn more about using the TUI here](/docs/tui).
+
+---
+
 ### Models
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
@@ -201,23 +218,6 @@ OpenCode will automatically download any new updates when it starts up. You can 
   "autoupdate": false
 }
 ```
-
----
-
-### TUI
-
-You can configure TUI-specific settings through the `tui` option.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3
-  }
-}
-```
-
-[Learn more about using the TUI here](/docs/tui).
 
 ---
 

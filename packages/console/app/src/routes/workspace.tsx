@@ -1,11 +1,14 @@
+import { Show } from "solid-js"
+import { getRequestEvent } from "solid-js/web"
+import { query, action, redirect, createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
 import "./workspace.css"
 import { useAuthSession } from "~/context/auth.session"
 import { IconLogo } from "../component/icon"
+import { WorkspacePicker } from "./workspace-picker"
 import { withActor } from "~/context/auth.withActor"
-import { query, action, redirect, createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
 import { User } from "@opencode-ai/console-core/user.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
-import { getRequestEvent } from "solid-js/web"
+import { beta } from "~/lib/beta"
 
 const getUserInfo = query(async (workspaceID: string) => {
   "use server"
@@ -35,6 +38,7 @@ const logout = action(async () => {
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
   const userInfo = createAsync(() => getUserInfo(params.id))
+  const isBeta = createAsync(() => beta(params.id))
   return (
     <main data-page="workspace">
       <header data-component="workspace-header">
@@ -44,6 +48,9 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
           </A>
         </div>
         <div data-slot="header-actions">
+          <Show when={isBeta()}>
+            <WorkspacePicker />
+          </Show>
           <span data-slot="user">{userInfo()?.email}</span>
           <form action={logout} method="post">
             <button type="submit" formaction={logout}>

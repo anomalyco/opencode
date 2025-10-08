@@ -17,6 +17,7 @@
         "@kobalte/core": "catalog:",
         "@openauthjs/openauth": "0.0.0-20250322224806",
         "@opencode-ai/console-core": "workspace:*",
+        "@opencode-ai/console-resource": "workspace:*",
         "@solidjs/meta": "^0.29.4",
         "@solidjs/router": "^0.15.0",
         "@solidjs/start": "^1.1.0",
@@ -27,7 +28,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -47,7 +48,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -67,7 +68,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -83,19 +84,14 @@
     },
     "packages/console/scripts": {
       "name": "@opencode-ai/console-scripts",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@opencode-ai/console-core": "workspace:*",
-        "tsx": "4.20.5",
-      },
-      "devDependencies": {
-        "@types/node": "catalog:",
-        "typescript": "catalog:",
       },
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -129,7 +125,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "22.0.0",
@@ -144,7 +140,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -197,7 +193,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "zod": "catalog:",
@@ -209,7 +205,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@hey-api/openapi-ts": "0.81.0",
       },
@@ -221,7 +217,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "0.14.3",
+      "version": "0.14.6",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -243,7 +239,7 @@
         "sharp": "0.32.5",
         "shiki": "3.4.2",
         "solid-js": "catalog:",
-        "toolbeam-docs-theme": "0.4.6",
+        "toolbeam-docs-theme": "0.4.7",
       },
       "devDependencies": {
         "@types/node": "catalog:",
@@ -2801,7 +2797,7 @@
 
     "toidentifier": ["toidentifier@1.0.1", "", {}, "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="],
 
-    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.6", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-s4yKn3PYnmPCl6MHPkQ2MedSgVh7FMAP64DiXnAfCls/H/RR6iTe0/SFgPTprz+HXXaKvv2iPo3XuvmDRY6cxQ=="],
+    "toolbeam-docs-theme": ["toolbeam-docs-theme@0.4.7", "", { "peerDependencies": { "@astrojs/starlight": "^0.34.3", "astro": "^5.7.13" } }, "sha512-oVA/V4M4s4vtLljfnZrOSuCNomek5h9jIYkr92l4QgAQvB3ht+D7xAJIy27IGVJzYA5scUE1OK84ZZqeajoeWw=="],
 
     "tr46": ["tr46@0.0.3", "", {}, "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="],
 

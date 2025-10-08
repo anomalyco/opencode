@@ -73,6 +73,10 @@ You can also access our models through the following API endpoints.
 | Grok Code Fast 1 | grok-code        | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2          | kimi-k2          | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
+The [model id](/docs/config/#models) in your OpenCode config
+uses the format `opencode/<model-id>`. For example, for GPT 5 Codex, you would
+use `opencode/gpt-5-codex` in your config.
+
 ---
 
 ## Pricing
@@ -93,6 +97,8 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Claude Opus 4.1                   | $15.00 | $75.00 | $1.50       | $18.75       |
 | GPT 5                             | $1.25  | $10.00 | $0.125      | -            |
 | GPT 5 Codex                       | $1.25  | $10.00 | $0.125      | -            |
+
+You might notice _Claude Haiku 3.5_ in your usage history. This is a [low cost model](/docs/config/#models) that's used to generate the titles of your sessions.
 
 :::note
 Credit card fees are passed along at cost; we don't charge anything beyond that.

@@ -1,4 +1,4 @@
-import { primaryKey, mysqlTable, uniqueIndex, varchar, boolean } from "drizzle-orm/mysql-core"
+import { primaryKey, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { timestamps, ulid } from "../drizzle/types"
 
 export const WorkspaceTable = mysqlTable(
@@ -6,7 +6,7 @@ export const WorkspaceTable = mysqlTable(
   {
     id: ulid("id").notNull().primaryKey(),
     slug: varchar("slug", { length: 255 }),
-    name: varchar("name", { length: 255 }),
+    name: varchar("name", { length: 255 }).notNull(),
     ...timestamps,
   },
   (table) => [uniqueIndex("slug").on(table.slug)],

@@ -197,6 +197,27 @@
       "when": 1759553466608,
       "tag": "0027_hot_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1759805025276,
+      "tag": "0028_careful_cerise",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1759811835558,
+      "tag": "0029_panoramic_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1759878278492,
+      "tag": "0030_ordinary_ultragirl",
+      "breakpoints": true
     }
   ]
 }

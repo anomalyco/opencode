@@ -20,6 +20,7 @@ export namespace Actor {
     properties: {
       userID: string
       workspaceID: string
+      accountID: string
     }
   }
 
@@ -70,5 +71,13 @@ export namespace Actor {
       return actor.properties.workspaceID
     }
     throw new Error(`actor of type "${actor.type}" is not associated with a workspace`)
+  }
+
+  export function account() {
+    const actor = use()
+    if ("accountID" in actor.properties) {
+      return actor.properties.accountID
+    }
+    throw new Error(`actor of type "${actor.type}" is not associated with an account`)
   }
 }

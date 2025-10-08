@@ -11,6 +11,9 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { User } from "@opencode-ai/console-core/user.js"
+import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
+import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -123,9 +126,22 @@ export default {
           })
         }
         await Actor.provide("account", { accountID, email }, async () => {
-          const workspaceCount = await User.joinInvitedWorkspaces()
-          if (workspaceCount === 0) {
-            await Workspace.create()
+          await User.joinInvitedWorkspaces()
+          const workspaces = await Database.transaction(async (tx) =>
+            tx
+              .select({ id: WorkspaceTable.id })
+              .from(WorkspaceTable)
+              .innerJoin(UserTable, eq(UserTable.workspaceID, WorkspaceTable.id))
+              .where(
+                and(
+                  eq(UserTable.accountID, accountID),
+                  isNull(UserTable.timeDeleted),
+                  isNull(WorkspaceTable.timeDeleted),
+                ),
+              ),
+          )
+          if (workspaces.length === 0) {
+            await Workspace.create({ name: "Default" })
           }
         })
         return ctx.subject("account", accountID, { accountID, email })

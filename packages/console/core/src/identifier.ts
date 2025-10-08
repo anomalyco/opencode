@@ -6,6 +6,7 @@ export namespace Identifier {
     account: "acc",
     billing: "bil",
     key: "key",
+    model: "mod",
     payment: "pay",
     usage: "usg",
     user: "usr",

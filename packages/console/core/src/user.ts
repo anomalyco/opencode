@@ -172,22 +172,21 @@ export namespace User {
         ),
       ),
     )
-
-    return invitations.length
   })
 
-  export const updateRole = fn(
+  export const update = fn(
     z.object({
       id: z.string(),
       role: z.enum(UserRole),
+      monthlyLimit: z.number().nullable(),
     }),
-    async ({ id, role }) => {
+    async ({ id, role, monthlyLimit }) => {
       await assertAdmin()
       if (role === "member") assertNotSelf(id)
       return await Database.use((tx) =>
         tx
           .update(UserTable)
-          .set({ role })
+          .set({ role, monthlyLimit })
           .where(and(eq(UserTable.id, id), eq(UserTable.workspaceID, Actor.workspace()))),
       )
     },
