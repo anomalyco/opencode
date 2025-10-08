@@ -95,6 +95,16 @@ export namespace SessionPrompt {
     agent: z.string().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    /**
+     * ACP (Agent Client Protocol) connection details for streaming responses.
+     * When provided, enables real-time streaming and tool execution visibility.
+     */
+    acpConnection: z
+      .object({
+        connection: z.any(), // AgentSideConnection - using any to avoid circular deps
+        sessionId: z.string(), // ACP session ID (different from opencode sessionID)
+      })
+      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -811,6 +821,62 @@ export namespace SessionPrompt {
       })
     }
     return input.messages
+  }
+
+  /**
+   * Maps tool names to ACP tool kinds for consistent categorization.
+   * - read: Tools that read data (read, glob, grep, list, webfetch, docs)
+   * - edit: Tools that modify state (edit, write, bash)
+   * - other: All other tools (MCP tools, task, todowrite, etc.)
+   */
+  // @ts-expect-error - Used in Phase 3+ for ACP notifications
+  function determineToolKind(toolName: string): "read" | "edit" | "other" {
+    const readTools = [
+      "read",
+      "glob",
+      "grep",
+      "list",
+      "webfetch",
+      "context7_resolve_library_id",
+      "context7_get_library_docs",
+    ]
+    const editTools = ["edit", "write", "bash"]
+
+    if (readTools.includes(toolName.toLowerCase())) return "read"
+    if (editTools.includes(toolName.toLowerCase())) return "edit"
+    return "other"
+  }
+
+  /**
+   * Extracts file/directory locations from tool inputs for ACP notifications.
+   * Returns array of {path} objects that ACP clients can use for navigation.
+   *
+   * Examples:
+   * - read({filePath: "/foo/bar.ts"}) -> [{path: "/foo/bar.ts"}]
+   * - glob({pattern: "*.ts", path: "/src"}) -> [{path: "/src"}]
+   * - bash({command: "ls"}) -> [] (no file references)
+   */
+  // @ts-expect-error - Used in Phase 4+ for ACP tool notifications
+  function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
+    try {
+      switch (toolName.toLowerCase()) {
+        case "read":
+        case "edit":
+        case "write":
+          return input["filePath"] ? [{ path: input["filePath"] }] : []
+        case "glob":
+        case "grep":
+          return input["path"] ? [{ path: input["path"] }] : []
+        case "bash":
+          return []
+        case "list":
+          return input["path"] ? [{ path: input["path"] }] : []
+        default:
+          return []
+      }
+    } catch {
+      return []
+    }
   }
 
   export type Processor = Awaited<ReturnType<typeof createProcessor>>
