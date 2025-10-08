@@ -1,5 +1,6 @@
 import type {
   Agent,
+  AgentSideConnection,
   AuthenticateRequest,
   AuthenticateResponse,
   CancelNotification,
@@ -23,9 +24,11 @@ import type { MessageV2 } from "../session/message-v2"
 export class OpenCodeAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
   private sessionManager = new ACPSessionManager()
+  private connection: AgentSideConnection
   private config: ACPConfig
 
-  constructor(config: ACPConfig = {}) {
+  constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
+    this.connection = connection
     this.config = config
   }
 
@@ -124,6 +127,19 @@ export class OpenCodeAgent implements Agent {
       .join("\n")
 
     this.log.debug("prompt response", { text: textParts.slice(0, 100) })
+
+    if (textParts) {
+      await this.connection.sessionUpdate({
+        sessionId: params.sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: textParts,
+          },
+        },
+      })
+    }
 
     return {
       stopReason: "end_turn",

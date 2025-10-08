@@ -31,8 +31,8 @@ export namespace ACPServer {
 
         const stream = ndJsonStream(stdout, stdin)
 
-        new AgentSideConnection(() => {
-          return new OpenCodeAgent()
+        new AgentSideConnection((conn) => {
+          return new OpenCodeAgent(conn)
         }, stream)
 
         await new Promise<void>((resolve) => {
