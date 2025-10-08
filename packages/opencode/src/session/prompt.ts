@@ -1157,6 +1157,25 @@ export namespace SessionPrompt {
                   currentText.text += value.text
                   if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
+
+                  // Send streaming chunk to ACP client
+                  if (input.acpConnection && value.text) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "agent_message_chunk",
+                          content: {
+                            type: "text",
+                            text: value.text,
+                          },
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send text delta to ACP", { error: err })
+                        // Don't fail the whole request if ACP notification fails
+                      })
+                  }
                 }
                 break
 
