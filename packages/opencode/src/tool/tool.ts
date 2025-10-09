@@ -2,15 +2,8 @@ import z from "zod/v4"
 import type { MessageV2 } from "../session/message-v2"
 
 export namespace Tool {
-  export interface Metadata {
+  interface Metadata {
     [key: string]: any
-  }
-
-  export type ExecuteResult<M extends Metadata = Metadata> = {
-    title: string
-    metadata: M
-    output: string
-    attachment?: MessageV2.FilePart
   }
 
   export type Context<M extends Metadata = Metadata> = {
@@ -27,7 +20,15 @@ export namespace Tool {
     init: () => Promise<{
       description: string
       parameters: Parameters
-      execute(args: z.infer<Parameters>, ctx: Context): Promise<ExecuteResult<M>>
+      execute(
+        args: z.infer<Parameters>,
+        ctx: Context,
+      ): Promise<{
+        title: string
+        metadata: M
+        output: string
+        attachment?: MessageV2.FilePart
+      }>
     }>
   }
 
