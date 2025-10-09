@@ -41,7 +41,7 @@ function CollapsiblePart(props: { title: ParentProps["children"] } & ParentProps
   return (
     <div class="ml-4">
       <Collapsible {...props}>
-        <div class="border border-border-subtle rounded-md overflow-hidden bg-background-element/30 mb-2">
+        <div class="border border-border-subtle rounded-xl overflow-hidden bg-background-element/30 mb-2">
           <Collapsible.Trigger class="peer/collapsible w-full">
             <div class="flex items-center gap-x-3 px-4 py-3 hover:bg-background-element/50 transition-colors">
               <Collapsible.Arrow size={18} class="text-text-muted" />

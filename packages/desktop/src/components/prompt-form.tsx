@@ -5,6 +5,7 @@ import { useLocal } from "@/context"
 import type { FileContext, LocalFile } from "@/context/local"
 import { getFilename } from "@/utils"
 import { createSpeechRecognition } from "@/utils/speech"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 
 interface PromptFormProps {
   class?: string
@@ -19,6 +20,9 @@ export default function PromptForm(props: PromptFormProps) {
 
   const [prompt, setPrompt] = createSignal("")
   const [isDragOver, setIsDragOver] = createSignal(false)
+  const [uploadedFiles, setUploadedFiles] = createSignal<File[]>([])
+
+  let dragCounter = 0
 
   const placeholderText = "Start typing or speaking..."
 
@@ -145,9 +149,49 @@ export default function PromptForm(props: PromptFormProps) {
     containerRef.style.cursor = ""
   }
 
-  onMount(() => {
+  onMount(async () => {
     document.addEventListener("mousemove", handleDragMove)
     document.addEventListener("mouseup", handleDragEnd)
+
+    const unlisten = await getCurrentWindow().onDragDropEvent((e) => {
+      switch (e.payload.type) {
+        case "enter":
+          dragCounter++
+          setIsDragOver(true)
+          break
+        case "over":
+          break
+        case "drop":
+          dragCounter = 0
+          setIsDragOver(false)
+          if (e.payload.paths && e.payload.paths.length > 0) {
+            const current = uploadedFiles()
+            const available = 5 - current.length
+            if (available <= 0) return
+            Promise.all(
+              e.payload.paths.slice(0, available).map(async (path) => {
+                const response = await fetch(`asset://localhost${path}`)
+                const blob = await response.blob()
+                const fileName = path.split("/").pop() || "file"
+                return new File([blob], fileName, { type: blob.type })
+              }),
+            ).then((files) => {
+              setUploadedFiles([...current, ...files])
+            })
+          }
+          break
+        case "leave":
+          dragCounter--
+          if (dragCounter === 0) {
+            setIsDragOver(false)
+          }
+          break
+      }
+    })
+
+    onCleanup(() => {
+      unlisten()
+    })
   })
 
   onCleanup(() => {
@@ -163,7 +207,7 @@ export default function PromptForm(props: PromptFormProps) {
         ref={containerRef}
         onMouseDown={handleDragStart}
         style={{ "touch-action": "none" }}
-        class="w-full max-w-xl min-w-0 p-2 mx-auto rounded-lg isolate backdrop-blur-xs
+        class="w-full max-w-xl min-w-0 p-2 mx-auto rounded-xl isolate backdrop-blur-xs
                flex flex-col gap-1
                bg-gradient-to-b from-background-panel/90 to-background/90
                ring-1 ring-border-active/50 border border-transparent
@@ -171,24 +215,26 @@ export default function PromptForm(props: PromptFormProps) {
                will-change-transform"
         classList={{
           "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !!local.file.active(),
-          "ring-2 ring-primary/60 bg-primary/5": isDragOver(),
+          "!ring-4 !ring-primary !bg-primary/20 !border-primary": isDragOver(),
           "cursor-grab": !!local.file.active(),
         }}
         onDragEnter={(event) => {
           const evt = event as unknown as globalThis.DragEvent
-          if (evt.dataTransfer?.types.includes("text/plain")) {
+          dragCounter++
+          if (evt.dataTransfer?.types.includes("text/plain") || evt.dataTransfer?.types.includes("Files")) {
             evt.preventDefault()
             setIsDragOver(true)
           }
         }}
-        onDragLeave={(event) => {
-          if (event.currentTarget === event.target) {
+        onDragLeave={() => {
+          dragCounter--
+          if (dragCounter === 0) {
             setIsDragOver(false)
           }
         }}
         onDragOver={(event) => {
           const evt = event as unknown as globalThis.DragEvent
-          if (evt.dataTransfer?.types.includes("text/plain")) {
+          if (evt.dataTransfer?.types.includes("text/plain") || evt.dataTransfer?.types.includes("Files")) {
             evt.preventDefault()
             evt.dataTransfer.dropEffect = "copy"
           }
@@ -196,6 +242,7 @@ export default function PromptForm(props: PromptFormProps) {
         onDrop={(event) => {
           const evt = event as unknown as globalThis.DragEvent
           evt.preventDefault()
+          dragCounter = 0
           setIsDragOver(false)
 
           const data = evt.dataTransfer?.getData("text/plain")
@@ -208,16 +255,34 @@ export default function PromptForm(props: PromptFormProps) {
                 path: filePath,
               })
             }
+            return
+          }
+
+          const files = evt.dataTransfer?.files
+          if (files && files.length > 0) {
+            const current = uploadedFiles()
+            const available = 5 - current.length
+            if (available <= 0) return
+            const newFiles = Array.from(files).slice(0, available)
+            setUploadedFiles([...current, ...newFiles])
           }
         }}
       >
-        <Show when={local.context.all().length > 0 || local.context.active()}>
+        <Show when={local.context.all().length > 0 || local.context.active() || uploadedFiles().length > 0}>
           <div class="flex flex-wrap gap-1">
             <Show when={local.context.active()}>
               <ActiveTabContextTag file={local.context.active()!} onClose={() => local.context.removeActive()} />
             </Show>
             <For each={local.context.all()}>
               {(file) => <FileTag file={file} onClose={() => local.context.remove(file.key)} />}
+            </For>
+            <For each={uploadedFiles()}>
+              {(file, idx) => (
+                <UploadedFileTag
+                  file={file}
+                  onClose={() => setUploadedFiles((prev) => prev.filter((_, i) => i !== idx()))}
+                />
+              )}
             </For>
           </div>
         </Show>
@@ -236,7 +301,7 @@ export default function PromptForm(props: PromptFormProps) {
             autocomplete="off"
             autocorrect="off"
             spellcheck={false}
-            class="relative w-full h-20 rounded-md px-0.5 resize-none overflow-y-auto
+            class="relative w-full h-20 rounded-lg px-0.5 resize-none overflow-y-auto
                    bg-transparent text-transparent caret-text font-light text-base
                    leading-relaxed focus:outline-none selection:bg-primary/20"
           ></textarea>
@@ -289,9 +354,37 @@ export default function PromptForm(props: PromptFormProps) {
                 </IconButton>
               </Tooltip>
             </Show>
-            <IconButton class="text-text-muted" size="xs" variant="ghost">
-              <Icon name="photo" size={24} />
-            </IconButton>
+            <Tooltip value="Attach files" placement="top">
+              <IconButton
+                class="text-text-muted relative"
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  const input = document.createElement("input")
+                  input.type = "file"
+                  input.multiple = true
+                  input.accept = "image/*,application/pdf,.txt,.md,.json,.xml,.csv"
+                  input.onchange = (e) => {
+                    const files = (e.target as HTMLInputElement).files
+                    if (files && files.length > 0) {
+                      const current = uploadedFiles()
+                      const available = 5 - current.length
+                      if (available <= 0) return
+                      const newFiles = Array.from(files).slice(0, available)
+                      setUploadedFiles([...current, ...newFiles])
+                    }
+                  }
+                  input.click()
+                }}
+              >
+                <Icon name="photo" size={24} />
+                <Show when={uploadedFiles().length > 0}>
+                  <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-background-panel text-[10px] flex items-center justify-center font-medium">
+                    {uploadedFiles().length}
+                  </span>
+                </Show>
+              </IconButton>
+            </Tooltip>
             <IconButton
               class="text-background-panel! bg-primary rounded-full! hover:bg-primary/90 ml-1.5"
               size="xs"
@@ -311,7 +404,7 @@ const ActiveTabContextTag = (props: { file: LocalFile; onClose: () => void }) =>
   <div
     class="flex items-center bg-background group/tag
            border border-border-subtle/60 border-dashed
-           rounded-md text-xs text-text-muted"
+           rounded-lg text-xs text-text-muted"
   >
     <IconButton class="text-text-muted" size="xs" variant="ghost" onClick={props.onClose}>
       <Icon name="file" class="group-hover/tag:hidden" size={12} />
@@ -327,7 +420,7 @@ const FileTag = (props: { file: FileContext; onClose: () => void }) => (
   <div
     class="flex items-center bg-background group/tag
            border border-border-subtle/60
-           rounded-md text-xs text-text-muted"
+           rounded-lg text-xs text-text-muted"
   >
     <IconButton class="text-text-muted" size="xs" variant="ghost" onClick={props.onClose}>
       <FileIcon node={props.file} class="group-hover/tag:hidden size-3!" />
@@ -340,6 +433,23 @@ const FileTag = (props: { file: FileContext; onClose: () => void }) => (
           ({props.file.selection!.startLine}-{props.file.selection!.endLine})
         </span>
       </Show>
+    </div>
+  </div>
+)
+
+const UploadedFileTag = (props: { file: File; onClose: () => void }) => (
+  <div
+    class="flex items-center bg-background group/tag
+           border border-border-subtle/60
+           rounded-lg text-xs text-text-muted"
+  >
+    <IconButton class="text-text-muted" size="xs" variant="ghost" onClick={props.onClose}>
+      <Icon name="file" class="group-hover/tag:hidden" size={12} />
+      <Icon name="close" class="hidden group-hover/tag:block" size={12} />
+    </IconButton>
+    <div class="pr-1 flex gap-1 items-center">
+      <span>{props.file.name}</span>
+      <span class="text-text-muted/50">({(props.file.size / 1024).toFixed(1)}KB)</span>
     </div>
   </div>
 )

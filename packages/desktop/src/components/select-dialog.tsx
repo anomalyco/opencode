@@ -113,7 +113,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         <Dialog.Content
           class="fixed top-[20%] left-1/2 -translate-x-1/2 w-[90vw] max-w-2xl 
                  shadow-[0_0_33px_rgba(0,0,0,0.8)]
-                 bg-background border border-border-subtle/30 rounded-lg  z-[101]
+                 bg-background border border-border-subtle/30 rounded-xl  z-[101]
                  max-h-[60vh] flex flex-col"
         >
           <div class="border-b border-border-subtle/30">
@@ -125,7 +125,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                 onInput={(e) => handleInput(e.currentTarget.value)}
                 onKeyDown={handleKey}
                 placeholder={props.placeholder}
-                class="w-full pl-10 pr-4 py-2 rounded-t-md
+                class="w-full pl-10 pr-4 py-2 rounded-t-xl
                        text-sm text-text placeholder-text-muted/70
                        focus:outline-none"
                 autofocus
@@ -181,7 +181,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                             }}
                             classList={{
                               "w-full px-3 py-2 flex items-center gap-3": true,
-                              "rounded-md text-left transition-colors group": true,
+                              "rounded-lg text-left transition-colors group": true,
                               "bg-background-element": props.key(item) === list.active(),
                             }}
                           >
