@@ -49,6 +49,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $ } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
+import type { Tool } from "../tool/tool"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -452,6 +453,10 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            extra: {
+              modelID: input.modelID,
+              providerID: input.providerID,
+            },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -964,6 +969,31 @@ export namespace SessionPrompt {
               case "tool-result": {
                 const match = toolcalls[value.toolCallId]
                 if (match && match.state.status === "running") {
+                  const result = value.output
+
+                  // Check for attachments in metadata and create synthetic user message
+                  if (result.metadata?.attachments?.length) {
+                    const syntheticParts: PromptInput["parts"] = [
+                      {
+                        type: "text" as const,
+                        text: `Tool ${match.tool} returned attachments:`,
+                        synthetic: true,
+                      },
+                      ...result.metadata.attachments.map((att: Tool.Attachment) => ({
+                        type: "file" as const,
+                        url: att.url,
+                        mime: att.mime,
+                        filename: att.filename,
+                        synthetic: true,
+                      })),
+                    ]
+
+                    await createUserMessage({
+                      sessionID: input.sessionID,
+                      parts: syntheticParts,
+                    })
+                  }
+
                   await Session.updatePart({
                     ...match,
                     state: {

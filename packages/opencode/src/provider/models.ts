@@ -28,6 +28,12 @@ export namespace ModelsDev {
         context: z.number(),
         output: z.number(),
       }),
+      modalities: z
+        .object({
+          input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+          output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+        })
+        .optional(),
       experimental: z.boolean().optional(),
       options: z.record(z.string(), z.any()),
       provider: z.object({ npm: z.string() }).optional(),
