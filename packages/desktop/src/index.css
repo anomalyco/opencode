@@ -236,6 +236,10 @@
   .prose blockquote {
     margin-bottom: calc(var(--spacing) * 2);
   }
+  .prose {
+    max-width: none;
+    margin: 0;
+  }
 }
 
 @utility no-scrollbar {

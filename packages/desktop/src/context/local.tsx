@@ -453,8 +453,14 @@ function init() {
     const [store, setStore] = createStore<{
       active?: string
       chatDocked: boolean
+      chatDockedPreference: boolean
     }>({
       chatDocked: false,
+      chatDockedPreference: localStorage.getItem("chatDockedPreference") === "true",
+    })
+
+    createEffect(() => {
+      localStorage.setItem("chatDockedPreference", store.chatDockedPreference.toString())
     })
 
     const active = createMemo(() => {
@@ -466,18 +472,26 @@ function init() {
       active,
       setActive(sessionId: string | undefined) {
         setStore("active", sessionId)
+        if (sessionId && store.chatDockedPreference) {
+          console.log("[session.setActive] Auto-docking chat based on preference")
+          setStore("chatDocked", true)
+        }
       },
       clearActive() {
+        console.log("[session.clearActive] Clearing active session and undocking chat")
         setStore("active", undefined)
+        setStore("chatDocked", false)
       },
       chatDocked: () => store.chatDocked,
       dockChat() {
-        console.log("[session.dockChat] Setting chatDocked to true")
+        console.log("[session.dockChat] Docking chat and saving preference")
         setStore("chatDocked", true)
+        setStore("chatDockedPreference", true)
       },
       undockChat() {
-        console.log("[session.undockChat] Setting chatDocked to false")
+        console.log("[session.undockChat] Undocking chat and clearing preference")
         setStore("chatDocked", false)
+        setStore("chatDockedPreference", false)
       },
     }
   })()

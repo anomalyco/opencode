@@ -267,12 +267,25 @@ export default function SessionTimeline(props: SessionTimelineProps) {
   const [scrollElement, setScrollElement] = createSignal<HTMLElement | undefined>(undefined)
   const [root, setRoot] = createSignal<HTMLDivElement | undefined>(undefined)
   const [tail, setTail] = createSignal(true)
+  const [loading, setLoading] = createSignal(false)
+  const [totalMessages, setTotalMessages] = createSignal(0)
   const size = createElementSize(root)
   const scroll = createScrollPosition(scrollElement)
 
-  onMount(() => sync.session.sync(props.session))
+  onMount(async () => {
+    const result = await sync.session.sync(props.session, 20)
+    setTotalMessages(result?.total || 0)
+    console.log("[SessionTimeline] Loaded initial messages. Current:", messages().length, "Total:", result?.total)
+  })
   const session = createMemo(() => sync.session.get(props.session))
   const messages = createMemo(() => sync.data.message[props.session] ?? [])
+  const hasMore = createMemo(() => {
+    const total = totalMessages()
+    const current = messages().length
+    const more = total > 0 && current < total
+    console.log("[SessionTimeline] hasMore check - current:", current, "total:", total, "hasMore:", more)
+    return more
+  })
   const working = createMemo(() => {
     const last = messages()[messages().length - 1]
     if (!last) return false
@@ -314,12 +327,56 @@ export default function SessionTimeline(props: SessionTimelineProps) {
   })
 
   let lastScrollY = 0
+  let loadMoreTimeout: number | undefined
   createEffect(() => {
-    if (scroll.y < lastScrollY) {
+    const scrollY = scroll.y
+    if (scrollY < lastScrollY) {
       setTail(false)
     }
-    lastScrollY = scroll.y
+
+    if (scrollY < 200 && !loading() && hasMore()) {
+      if (loadMoreTimeout) clearTimeout(loadMoreTimeout)
+      loadMoreTimeout = window.setTimeout(() => {
+        console.log(
+          "[SessionTimeline] Triggering load more - scrollY:",
+          scrollY,
+          "loading:",
+          loading(),
+          "hasMore:",
+          hasMore(),
+        )
+        loadMoreMessages()
+      }, 300)
+    }
+
+    lastScrollY = scrollY
   })
+
+  const loadMoreMessages = async () => {
+    console.log("[SessionTimeline] Loading more messages...")
+    setLoading(true)
+    const element = scrollElement()
+    const previousScrollHeight = element?.scrollHeight || 0
+    const previousScrollTop = element?.scrollTop || 0
+
+    try {
+      const result = await sync.session.loadMore(props.session, 20)
+      setTotalMessages(result.total)
+      console.log("[SessionTimeline] Loaded more messages. Now have:", result.loaded, "of", result.total)
+
+      requestAnimationFrame(() => {
+        if (element) {
+          const newScrollHeight = element.scrollHeight
+          const heightDifference = newScrollHeight - previousScrollHeight
+          element.scrollTop = previousScrollTop + heightDifference
+        }
+      })
+    } catch (error) {
+      console.error("[SessionTimeline] Error loading more messages:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const valid = (part: Part) => {
     if (!part) return false
@@ -370,6 +427,16 @@ export default function SessionTimeline(props: SessionTimelineProps) {
         "backface-visibility": "hidden",
       }}
     >
+      <Show when={loading()}>
+        <div class="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-primary/30 text-center py-2 text-xs text-primary font-medium animate-pulse">
+          Loading more messages...
+        </div>
+      </Show>
+      <Show when={hasMore() && !loading()}>
+        <div class="text-center py-2 text-xs text-text-muted/60">
+          Scroll up to load more messages ({messages().length} of {totalMessages()})
+        </div>
+      </Show>
       <ul role="list" class="flex flex-col gap-1" style={{ transform: "translateZ(0)" }}>
         <For each={messages()}>
           {(message) => {

@@ -9,7 +9,7 @@ export default function StatusBar() {
   const version = "0.14.6"
 
   return (
-    <div class="h-6 bg-background-panel border-t border-border-subtle/30 flex items-center justify-between px-3 text-xs text-text-muted font-scalable select-none">
+    <div class="h-6 bg-background-panel border-t border-border-subtle/30 flex items-center justify-between px-3 text-[10px] text-text-muted font-scalable select-none">
       <div class="flex items-center gap-4">
         <Tooltip value={sync.data.path.directory} placement="top">
           <div class="flex items-center gap-1.5 hover:text-text transition-colors cursor-default">

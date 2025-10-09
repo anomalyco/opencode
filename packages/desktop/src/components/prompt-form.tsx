@@ -392,45 +392,55 @@ export default function PromptForm(props: PromptFormProps) {
     document.addEventListener("mousemove", handleDragMove)
     document.addEventListener("mouseup", handleDragEnd)
 
-    const unlisten = await getCurrentWindow().onDragDropEvent((e) => {
-      switch (e.payload.type) {
-        case "enter":
-          dragCounter++
-          setIsDragOver(true)
-          break
-        case "over":
-          break
-        case "drop":
-          dragCounter = 0
-          setIsDragOver(false)
-          if (e.payload.paths && e.payload.paths.length > 0) {
-            const current = uploadedFiles()
-            const available = 5 - current.length
-            if (available <= 0) return
-            Promise.all(
-              e.payload.paths.slice(0, available).map(async (path) => {
-                const response = await fetch(`asset://localhost${path}`)
-                const blob = await response.blob()
-                const fileName = path.split("/").pop() || "file"
-                return new File([blob], fileName, { type: blob.type })
-              }),
-            ).then((files) => {
-              setUploadedFiles([...current, ...files])
-            })
-          }
-          break
-        case "leave":
-          dragCounter--
-          if (dragCounter === 0) {
-            setIsDragOver(false)
-          }
-          break
-      }
-    })
+    // Only set up Tauri drag/drop in desktop environment
+    if (typeof window !== "undefined" && "__TAURI__" in window) {
+      try {
+        const tauriWindow = getCurrentWindow()
+        if (tauriWindow) {
+          const unlisten = await tauriWindow.onDragDropEvent((e) => {
+            switch (e.payload.type) {
+              case "enter":
+                dragCounter++
+                setIsDragOver(true)
+                break
+              case "over":
+                break
+              case "drop":
+                dragCounter = 0
+                setIsDragOver(false)
+                if (e.payload.paths && e.payload.paths.length > 0) {
+                  const current = uploadedFiles()
+                  const available = 5 - current.length
+                  if (available <= 0) return
+                  Promise.all(
+                    e.payload.paths.slice(0, available).map(async (path) => {
+                      const response = await fetch(`asset://localhost${path}`)
+                      const blob = await response.blob()
+                      const fileName = path.split("/").pop() || "file"
+                      return new File([blob], fileName, { type: blob.type })
+                    }),
+                  ).then((files) => {
+                    setUploadedFiles([...current, ...files])
+                  })
+                }
+                break
+              case "leave":
+                dragCounter--
+                if (dragCounter === 0) {
+                  setIsDragOver(false)
+                }
+                break
+            }
+          })
 
-    onCleanup(() => {
-      unlisten()
-    })
+          onCleanup(() => {
+            unlisten()
+          })
+        }
+      } catch (error) {
+        console.warn("[PromptForm] Tauri drag/drop not available:", error)
+      }
+    }
   })
 
   onCleanup(() => {

@@ -309,7 +309,6 @@ export default function Page() {
                       variant="ghost"
                       onClick={() => {
                         local.session.clearActive()
-                        local.session.undockChat()
                       }}
                       class="text-text-muted hover:text-text"
                     >

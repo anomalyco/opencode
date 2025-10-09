@@ -157,24 +157,71 @@ function init() {
         if (match.found) return store.session[match.index]
         return undefined
       },
-      async sync(sessionID: string) {
+      async sync(sessionID: string, limit?: number) {
         const [session, messages] = await Promise.all([
           sdk.session.get({ path: { id: sessionID } }),
           sdk.session.messages({ path: { id: sessionID } }),
         ])
+        const allMessages = messages.data!
+        const limitedMessages = limit ? allMessages.slice(-limit) : allMessages
         setStore(
           produce((draft) => {
             const match = Binary.search(draft.session, sessionID, (s) => s.id)
             draft.session[match.index] = session.data!
-            draft.message[sessionID] = messages
-              .data!.map((x) => x.info)
+            draft.message[sessionID] = limitedMessages
+              .map((x) => x.info)
               .slice()
               .sort((a, b) => a.id.localeCompare(b.id))
-            for (const message of messages.data!) {
+            for (const message of limitedMessages) {
               draft.part[message.info.id] = message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
             }
           }),
         )
+        return { loaded: limitedMessages.length, total: allMessages.length }
+      },
+      loadMoreCache: {} as { [sessionID: string]: any[] },
+      async loadMore(sessionID: string, count: number = 10) {
+        console.log("[Sync] loadMore called for session:", sessionID, "count:", count)
+
+        if (!this.loadMoreCache[sessionID]) {
+          console.log("[Sync] Fetching all messages for cache...")
+          const messages = await sdk.session.messages({ path: { id: sessionID } })
+          this.loadMoreCache[sessionID] = messages.data!
+        }
+
+        const allMessages = this.loadMoreCache[sessionID]
+        const currentMessages = store.message[sessionID] || []
+        const currentCount = currentMessages.length
+        const newLimit = Math.min(currentCount + count, allMessages.length)
+        const messagesToLoad = allMessages.slice(-newLimit)
+
+        console.log(
+          "[Sync] Loading",
+          messagesToLoad.length,
+          "messages (",
+          currentCount,
+          "->",
+          newLimit,
+          "of",
+          allMessages.length,
+          ")",
+        )
+
+        setStore(
+          produce((draft) => {
+            draft.message[sessionID] = messagesToLoad
+              .map((x: any) => x.info)
+              .slice()
+              .sort((a: any, b: any) => a.id.localeCompare(b.id))
+            for (const message of messagesToLoad) {
+              if (!draft.part[message.info.id]) {
+                draft.part[message.info.id] = message.parts.slice().sort((a: any, b: any) => a.id.localeCompare(b.id))
+              }
+            }
+          }),
+        )
+
+        return { loaded: messagesToLoad.length, total: allMessages.length }
       },
     },
     load,

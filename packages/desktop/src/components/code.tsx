@@ -351,7 +351,7 @@ export function Code(props: Props) {
           [&_.line]:inline-block [&_.line]:w-full
           [&_.line]:hover:bg-background-element
           [&_.line::before]:sticky [&_.line::before]:left-0
-          [&_.line::before]:w-12 [&_.line::before]:pr-4
+          [&_.line::before]:w-10 [&_.line::before]:pr-4
           [&_.line::before]:z-10
           [&_.line::before]:bg-background-panel
           [&_.line::before]:text-text-muted/60
@@ -359,6 +359,7 @@ export function Code(props: Props) {
           [&_.line::before]:select-none
           [&_.line::before]:[counter-increment:line]
           [&_.line::before]:content-[counter(line)]
+          [&_.line::before]:min-w-[2ch]
           [&_.line-number-highlight]:bg-accent/20
           [&_.line-number-highlight::before]:bg-accent/40!
           [&_.line-number-highlight::before]:text-background-panel!
