@@ -118,7 +118,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         >
           <div class="border-b border-border-subtle/30">
             <div class="relative">
-              <Icon name="command" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/80" />
+              <Icon name="command" size={24} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/80" />
               <input
                 type="text"
                 value={store.filter}
@@ -137,7 +137,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
               <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 {/* <Show when={fileResults.loading && mode() === "files"}>
                   <div class="text-text-muted">
-                    <Icon name="refresh" size={14} class="animate-spin" />
+                    <Icon name="refresh" size={21} class="animate-spin" />
                   </div>
                 </Show> */}
                 <Show when={store.filter}>
@@ -150,7 +150,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
                       resetSelection()
                     }}
                   >
-                    <Icon name="close" size={14} />
+                    <Icon name="close" size={21} />
                   </IconButton>
                 </Show>
               </div>

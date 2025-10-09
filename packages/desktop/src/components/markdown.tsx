@@ -18,6 +18,11 @@ export function Markdown(props: { text: string; class?: string }) {
     <div
       class={`min-w-0 max-w-full text-xs overflow-auto no-scrollbar prose ${props.class ?? ""}`}
       innerHTML={html()}
+      style={{
+        transform: "translateZ(0)",
+        "will-change": "contents",
+        contain: "layout style paint",
+      }}
     />
   )
 }

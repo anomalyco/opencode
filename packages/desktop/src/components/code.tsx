@@ -330,9 +330,13 @@ export function Code(props: Props) {
         container = el
       }}
       innerHTML={html()}
+      style={{
+        transform: "translateZ(0)",
+        "will-change": "contents",
+      }}
       class="
           font-mono text-xs tracking-wide overflow-y-auto h-full
-          [&]:[counter-reset:line]
+          [&_code]:[counter-reset:line]
           [&_pre]:focus-visible:outline-none
           [&_pre]:overflow-x-auto [&_pre]:no-scrollbar
           [&_code]:min-w-full [&_code]:inline-block 
@@ -358,9 +362,7 @@ export function Code(props: Props) {
           [&_.line-number-highlight]:bg-accent/20
           [&_.line-number-highlight::before]:bg-accent/40!
           [&_.line-number-highlight::before]:text-background-panel!
-          [&_code.code-diff_.line::before]:content-['']
-          [&_code.code-diff_.line::before]:w-0
-          [&_code.code-diff_.line::before]:pr-0
+          [&_code.code-diff_.line::before]:hidden
           [&_.diff-split_code.code-diff::before]:w-10
           [&_.diff-split_.diff-newln]:left-0
           [&_.diff-oldln]:sticky [&_.diff-oldln]:left-0

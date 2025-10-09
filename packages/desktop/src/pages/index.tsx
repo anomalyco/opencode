@@ -4,7 +4,8 @@ import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { SelectDialog } from "@/components/select-dialog"
-import { useLocal } from "@/context"
+import { useLocal, useTheme } from "@/context"
+import { themes, type FontSize } from "@/context/theme"
 import { ResizeableLayout, ResizeablePane } from "@/components/resizeable-pane"
 import type { LocalFile } from "@/context/local"
 import SessionList from "@/components/session-list"
@@ -14,12 +15,17 @@ import { getDirectory, getFilename } from "@/utils"
 
 export default function Page() {
   const local = useLocal()
+  const theme = useTheme()
+
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     modelSelectOpen: false,
     fileSelectOpen: false,
-    settingsOpen: false,
+    commandPaletteOpen: false,
+    commandPaletteView: "main" as "main" | "theme" | "fontSize",
   })
+
+  let previewTimer: number | undefined
 
   const layoutKey = "workspace"
   const timelinePane = "timeline"
@@ -39,12 +45,14 @@ export default function Page() {
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.getModifierState(MOD) && event.key === ",") {
       event.preventDefault()
-      setStore("settingsOpen", true)
+      setStore("commandPaletteOpen", true)
+      setStore("commandPaletteView", "main")
       return
     }
     if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
       event.preventDefault()
-      // TODO: command palette
+      setStore("commandPaletteOpen", true)
+      setStore("commandPaletteView", "main")
       return
     }
     if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
@@ -125,7 +133,7 @@ export default function Page() {
           id="explorer"
           minSize="150px"
           maxSize="300px"
-          class="border-r border-border-subtle/30 bg-background z-10 overflow-hidden"
+          class="border-r border-border-subtle/30 bg-background z-10 overflow-hidden font-scalable"
         >
           <Tabs class="relative flex flex-col h-full" defaultValue="files">
             <div class="sticky top-0 shrink-0 flex">
@@ -139,8 +147,15 @@ export default function Page() {
               </Tabs.List>
               <div class="shrink-0 h-full flex items-center px-1 border-b border-border-subtle/40">
                 <Tooltip value="Settings (Cmd/Ctrl+,)" placement="bottom">
-                  <IconButton onClick={() => setStore("settingsOpen", true)} size="xs" variant="ghost">
-                    <Icon name="settings" size={16} />
+                  <IconButton
+                    onClick={() => {
+                      setStore("commandPaletteOpen", true)
+                      setStore("commandPaletteView", "main")
+                    }}
+                    size="xs"
+                    variant="ghost"
+                  >
+                    <Icon name="settings" size={24} />
                   </IconButton>
                 </Tooltip>
               </div>
@@ -175,7 +190,7 @@ export default function Page() {
             </Tabs.Content>
           </Tabs>
         </ResizeablePane>
-        <ResizeablePane id="editor" minSize={30} maxSize={80} class="bg-background">
+        <ResizeablePane id="editor" minSize={30} maxSize={80} class="bg-background font-scalable">
           <EditorPane
             layoutKey={layoutKey}
             timelinePane={timelinePane}
@@ -204,7 +219,7 @@ export default function Page() {
                         onClick={() => local.session.clearActive()}
                         class="text-text-muted hover:text-text"
                       >
-                        <Icon name="arrow-left" size={14} />
+                        <Icon name="arrow-left" size={21} />
                       </IconButton>
                       <h2 class="text-sm font-medium text-text truncate">
                         {activeSession().title || "Untitled Session"}
@@ -286,39 +301,124 @@ export default function Page() {
           onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
         />
       </Show>
-      <Show when={store.settingsOpen}>
-        <SelectDialog<{ id: string; name: string; value: string; category: string }>
+
+      <Show when={store.commandPaletteOpen && store.commandPaletteView === "main"}>
+        <SelectDialog<{ id: string; name: string; description: string; action: string }>
           items={[
-            { id: "theme", name: "Theme", value: "Dark", category: "Appearance" },
-            {
-              id: "server-host",
-              name: "Server Host",
-              value: import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1",
-              category: "Connection",
-            },
-            {
-              id: "server-port",
-              name: "Server Port",
-              value: import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096",
-              category: "Connection",
-            },
+            { id: "theme", name: "Preferences: Color Theme", description: "Change color theme", action: "theme" },
+            { id: "fontSize", name: "Preferences: Font Size", description: "Change font size", action: "fontSize" },
           ]}
           key={(x) => x.id}
+          placeholder="Type a command..."
           render={(i) => (
-            <div class="w-full flex items-center justify-between">
-              <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
-                <Icon name="settings" size={16} class="shrink-0 opacity-40" />
-                <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
-                <span class="text-xs text-text-muted/80 whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                  {i.value}
-                </span>
-              </div>
+            <div class="w-full flex flex-col gap-y-1">
+              <div class="text-xs text-text">{i.name}</div>
+              <div class="text-xs text-text-muted/60">{i.description}</div>
             </div>
           )}
-          filter={["name", "category", "value"]}
-          groupBy={(x) => x.category}
-          onClose={() => setStore("settingsOpen", false)}
-          onSelect={() => {}}
+          filter={["name", "description"]}
+          onClose={() => {
+            setStore("commandPaletteOpen", false)
+          }}
+          onSelect={(item) => {
+            if (item?.action === "theme") {
+              setStore("commandPaletteView", "theme")
+            } else if (item?.action === "fontSize") {
+              setStore("commandPaletteView", "fontSize")
+            }
+          }}
+        />
+      </Show>
+
+      <Show when={store.commandPaletteOpen && store.commandPaletteView === "theme"}>
+        <SelectDialog<{ id: string; name: string; value: string; themeName: string; isDark: boolean }>
+          items={themes.flatMap((t) => [
+            {
+              id: `theme-${t}-light`,
+              name: t.charAt(0).toUpperCase() + t.slice(1).replace(/-/g, " "),
+              value: "Light",
+              themeName: t,
+              isDark: false,
+            },
+            {
+              id: `theme-${t}-dark`,
+              name: t.charAt(0).toUpperCase() + t.slice(1).replace(/-/g, " "),
+              value: "Dark",
+              themeName: t,
+              isDark: true,
+            },
+          ])}
+          key={(x) => x.id}
+          placeholder="Select theme..."
+          render={(i) => {
+            const isActive = i.themeName === theme.theme && i.isDark === theme.isDark
+            return (
+              <div
+                class="w-full flex items-center justify-between"
+                onMouseEnter={() => {
+                  if (previewTimer) clearTimeout(previewTimer)
+                  theme.previewTheme(i.themeName, i.isDark)
+                }}
+                onMouseLeave={() => {
+                  if (previewTimer) clearTimeout(previewTimer)
+                  previewTimer = window.setTimeout(() => theme.clearPreview(), 100)
+                }}
+              >
+                <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
+                  <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
+                  <span class="text-xs text-text-muted/80">{i.value}</span>
+                  {isActive && <Icon name="checkmark" size={24} class="text-primary shrink-0" />}
+                </div>
+              </div>
+            )
+          }}
+          filter={["name", "value"]}
+          onClose={() => {
+            theme.clearPreview()
+            setStore("commandPaletteView", "main")
+          }}
+          onSelect={(item) => {
+            if (item) {
+              theme.setTheme(item.themeName)
+              theme.setDarkMode(item.isDark)
+            }
+            setStore("commandPaletteOpen", false)
+          }}
+        />
+      </Show>
+
+      <Show when={store.commandPaletteOpen && store.commandPaletteView === "fontSize"}>
+        <SelectDialog<{ id: string; name: string; fontSize: FontSize }>
+          items={[
+            { id: "font-smallest", name: "Smallest", fontSize: "smallest" },
+            { id: "font-small", name: "Small", fontSize: "small" },
+            { id: "font-default", name: "Default", fontSize: "default" },
+            { id: "font-large", name: "Large", fontSize: "large" },
+            { id: "font-largest", name: "Largest", fontSize: "largest" },
+          ]}
+          key={(x) => x.id}
+          placeholder="Select font size..."
+          render={(i) => {
+            const isActive = i.fontSize === theme.fontSize
+            return (
+              <div class="w-full flex items-center justify-between">
+                <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
+                  <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
+                  {isActive && <Icon name="checkmark" size={24} class="text-primary shrink-0" />}
+                </div>
+              </div>
+            )
+          }}
+          filter={["name"]}
+          onClose={() => {
+            setStore("commandPaletteView", "main")
+          }}
+          onSelect={(item) => {
+            if (item) {
+              theme.setFontSize(item.fontSize)
+            }
+            setStore("commandPaletteOpen", false)
+          }}
         />
       </Show>
     </div>

@@ -1,6 +1,6 @@
 import { useLocal } from "@/context"
 import type { LocalFile } from "@/context/local"
-import { Collapsible, FileIcon, Tooltip } from "@/ui"
+import { Collapsible, FileIcon } from "@/ui"
 import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
@@ -71,38 +71,36 @@ export default function FileTree(props: {
     <div class={`flex flex-col ${props.class}`}>
       <For each={local.file.children(props.path)}>
         {(node) => (
-          <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right">
-            <Switch>
-              <Match when={node.type === "directory"}>
-                <Collapsible
-                  class="w-full"
-                  forceMount={false}
-                  open={local.file.node(node.path)?.expanded}
-                  onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}
-                >
-                  <Collapsible.Trigger>
-                    <Node node={node}>
-                      <Collapsible.Arrow size={16} class="text-text-muted/60 ml-1" />
-                      <FileIcon
-                        node={node}
-                        expanded={local.file.node(node.path).expanded}
-                        class="text-text-muted/60 -ml-1"
-                      />
-                    </Node>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content>
-                    <FileTree path={node.path} level={level + 1} onFileClick={props.onFileClick} />
-                  </Collapsible.Content>
-                </Collapsible>
-              </Match>
-              <Match when={node.type === "file"}>
-                <Node node={node} as="button" onClick={() => props.onFileClick?.(node)}>
-                  <div class="w-4 shrink-0" />
-                  <FileIcon node={node} class="text-primary" />
-                </Node>
-              </Match>
-            </Switch>
-          </Tooltip>
+          <Switch>
+            <Match when={node.type === "directory"}>
+              <Collapsible
+                class="w-full"
+                forceMount={false}
+                open={local.file.node(node.path)?.expanded}
+                onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}
+              >
+                <Collapsible.Trigger>
+                  <Node node={node} title={node.path}>
+                    <Collapsible.Arrow size={24} class="text-text-muted/60 ml-1" />
+                    <FileIcon
+                      node={node}
+                      expanded={local.file.node(node.path).expanded}
+                      class="text-text-muted/60 -ml-1"
+                    />
+                  </Node>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <FileTree path={node.path} level={level + 1} onFileClick={props.onFileClick} />
+                </Collapsible.Content>
+              </Collapsible>
+            </Match>
+            <Match when={node.type === "file"}>
+              <Node node={node} as="button" onClick={() => props.onFileClick?.(node)} title={node.path}>
+                <div class="w-4 shrink-0" />
+                <FileIcon node={node} class="text-primary" />
+              </Node>
+            </Match>
+          </Switch>
         )}
       </For>
     </div>

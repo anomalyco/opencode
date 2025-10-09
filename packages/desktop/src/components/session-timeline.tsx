@@ -1,4 +1,4 @@
-import { useLocal, useSync } from "@/context"
+import { useSync } from "@/context"
 import { Collapsible, Icon } from "@/ui"
 import type { Part, ToolPart } from "@opencode-ai/sdk"
 import { DateTime } from "luxon"
@@ -39,22 +39,28 @@ function Part(props: ParentProps & ComponentProps<"div">) {
 
 function CollapsiblePart(props: { title: ParentProps["children"] } & ParentProps & ComponentProps<typeof Collapsible>) {
   return (
-    <Collapsible {...props}>
-      <Collapsible.Trigger class="peer/collapsible">
-        <Part>{props.title}</Part>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <p class="flex-auto py-1 text-xs min-w-0 text-pretty">
-          <span class="text-text-muted/60 break-words">{props.children}</span>
-        </p>
-      </Collapsible.Content>
-    </Collapsible>
+    <div class="ml-4">
+      <Collapsible {...props}>
+        <div class="border border-border-subtle rounded-md overflow-hidden bg-background-element/30 mb-2">
+          <Collapsible.Trigger class="peer/collapsible w-full">
+            <div class="flex items-center gap-x-3 px-4 py-3 hover:bg-background-element/50 transition-colors">
+              <Collapsible.Arrow size={18} class="text-text-muted" />
+              <Part class="flex-1">{props.title}</Part>
+            </div>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div class="border-t border-border-subtle">
+              <div class="p-4">{props.children}</div>
+            </div>
+          </Collapsible.Content>
+        </div>
+      </Collapsible>
+    </div>
   )
 }
 
 function ReadToolPart(props: { part: ToolPart }) {
   const sync = useSync()
-  const local = useLocal()
   return (
     <Switch>
       <Match when={props.part.state.status === "pending"}>
@@ -64,9 +70,16 @@ function ReadToolPart(props: { part: ToolPart }) {
         {(state) => {
           const path = state().input["filePath"] as string
           return (
-            <Part class="cursor-pointer" onClick={() => local.file.open(path)}>
-              <span class="text-text-muted">Read</span> {getFilename(path)}
-            </Part>
+            <CollapsiblePart
+              defaultOpen={false}
+              title={
+                <>
+                  <span class="text-text-muted">Read</span> {getFilename(path)}
+                </>
+              }
+            >
+              <Code path={path} code={state().output as string} />
+            </CollapsiblePart>
           )
         }}
       </Match>
@@ -94,7 +107,7 @@ function EditToolPart(props: { part: ToolPart }) {
       <Match when={props.part.state.status === "completed" && props.part.state}>
         {(state) => (
           <CollapsiblePart
-            defaultOpen
+            defaultOpen={false}
             title={
               <>
                 <span class="text-text-muted">Edit</span> {getFilename(state().input["filePath"] as string)}
@@ -132,13 +145,14 @@ function WriteToolPart(props: { part: ToolPart }) {
       <Match when={props.part.state.status === "completed" && props.part.state}>
         {(state) => (
           <CollapsiblePart
+            defaultOpen={false}
             title={
               <>
                 <span class="text-text-muted">Write</span> {getFilename(state().input["filePath"] as string)}
               </>
             }
           >
-            <div class="p-2 bg-background-panel rounded-md border border-border-subtle"></div>
+            <Code path={state().input["filePath"] as string} code={state().input["content"] as string} />
           </CollapsiblePart>
         )}
       </Match>
@@ -166,14 +180,21 @@ function BashToolPart(props: { part: ToolPart }) {
       <Match when={props.part.state.status === "completed" && props.part.state}>
         {(state) => (
           <CollapsiblePart
-            defaultOpen
+            defaultOpen={false}
             title={
               <>
-                <span class="text-text-muted">Run command:</span> {state().input["command"]}
+                <span class="text-text-muted">Bash</span>
               </>
             }
           >
-            <Markdown text={`\`\`\`command\n${state().input["command"]}\n${state().output}\`\`\``} />
+            <div class="space-y-2">
+              <div class="text-xs text-text-muted">Command:</div>
+              <Code path="bash" code={state().input["command"] as string} />
+              <div class="text-xs text-text-muted mt-3">Output:</div>
+              <pre class="text-xs text-text whitespace-pre-wrap bg-background-panel p-3 rounded border border-border-subtle overflow-x-auto">
+                {state().output}
+              </pre>
+            </div>
           </CollapsiblePart>
         )}
       </Match>
@@ -336,55 +357,65 @@ export default function SessionTimeline(props: { session: string; class?: string
         "p-4 select-text flex flex-col gap-y-1": true,
         [props.class ?? ""]: !!props.class,
       }}
+      style={{
+        "will-change": "contents",
+        transform: "translateZ(0)",
+        "backface-visibility": "hidden",
+      }}
     >
-      <ul role="list" class="flex flex-col gap-1">
+      <ul role="list" class="flex flex-col gap-1" style={{ transform: "translateZ(0)" }}>
         <For each={messages()}>
-          {(message) => (
-            <For each={sync.data.part[message.id]?.filter(valid)}>
-              {(part) => (
-                <li class="group/li">
-                  <Switch fallback={<div class="flex-auto min-w-0 text-xs mt-1 text-left">{part.type}</div>}>
-                    <Match when={part.type === "text" && part}>
-                      {(part) => (
-                        <Switch>
-                          <Match when={message.role === "user"}>
-                            <div class="w-full flex flex-col items-end justify-stretch gap-y-1.5 min-w-0 mt-5 group-first/li:mt-0">
-                              <p class="w-full rounded-md p-3 ring-1 ring-text/15 ring-inset text-xs bg-background-panel">
-                                <span class="font-medium text-text whitespace-pre-wrap break-words">{part().text}</span>
-                              </p>
-                              <p class="text-xs text-text-muted">
-                                {DateTime.fromMillis(message.time.created).toRelative()} ·{" "}
-                                {sync.data.config.username ?? "user"}
-                              </p>
-                            </div>
-                          </Match>
-                          <Match when={message.role === "assistant"}>
-                            <Markdown text={sync.sanitize(part().text)} class="text-text mt-1" />
-                          </Match>
-                        </Switch>
-                      )}
-                    </Match>
-                    <Match when={part.type === "reasoning" && part}>
-                      {(part) => (
-                        <CollapsiblePart
-                          title={
-                            <Switch fallback={<span class="text-text-muted">Thinking</span>}>
-                              <Match when={part().time.end}>
-                                <span class="text-text-muted">Thought</span> for {duration(part())}s
-                              </Match>
-                            </Switch>
-                          }
-                        >
-                          <Markdown text={part().text} />
-                        </CollapsiblePart>
-                      )}
-                    </Match>
-                    <Match when={part.type === "tool" && part}>{(part) => <ToolPart part={part()} />}</Match>
-                  </Switch>
-                </li>
-              )}
-            </For>
-          )}
+          {(message) => {
+            const messageParts = createMemo(() => sync.data.part[message.id]?.filter(valid) ?? [])
+            return (
+              <For each={messageParts()}>
+                {(part) => (
+                  <li class="group/li" style={{ transform: "translateZ(0)", "will-change": "transform" }}>
+                    <Switch fallback={<div class="flex-auto min-w-0 text-xs mt-1 text-left">{part.type}</div>}>
+                      <Match when={part.type === "text" && part}>
+                        {(part) => (
+                          <Switch>
+                            <Match when={message.role === "user"}>
+                              <div class="w-full flex flex-col items-end justify-stretch gap-y-1.5 min-w-0 mt-5 group-first/li:mt-0">
+                                <p class="w-full rounded-md p-3 ring-1 ring-text/15 ring-inset text-xs bg-background-panel">
+                                  <span class="font-medium text-text whitespace-pre-wrap break-words">
+                                    {part().text}
+                                  </span>
+                                </p>
+                                <p class="text-xs text-text-muted">
+                                  {DateTime.fromMillis(message.time.created).toRelative()} ·{" "}
+                                  {sync.data.config.username ?? "user"}
+                                </p>
+                              </div>
+                            </Match>
+                            <Match when={message.role === "assistant"}>
+                              <Markdown text={sync.sanitize(part().text)} class="text-text mt-1" />
+                            </Match>
+                          </Switch>
+                        )}
+                      </Match>
+                      <Match when={part.type === "reasoning" && part}>
+                        {(part) => (
+                          <CollapsiblePart
+                            title={
+                              <Switch fallback={<span class="text-text-muted">Thinking</span>}>
+                                <Match when={part().time.end}>
+                                  <span class="text-text-muted">Thought</span> for {duration(part())}s
+                                </Match>
+                              </Switch>
+                            }
+                          >
+                            <Markdown text={part().text} />
+                          </CollapsiblePart>
+                        )}
+                      </Match>
+                      <Match when={part.type === "tool" && part}>{(part) => <ToolPart part={part()} />}</Match>
+                    </Switch>
+                  </li>
+                )}
+              </For>
+            )
+          }}
         </For>
       </ul>
       <Show when={false}>

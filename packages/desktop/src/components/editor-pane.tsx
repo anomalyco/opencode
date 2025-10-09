@@ -181,12 +181,12 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                         <div class="mr-1 flex items-center gap-1">
                           <Tooltip value="Previous change" placement="bottom">
                             <IconButton size="xs" variant="ghost" onClick={() => navigateChange(-1)}>
-                              <Icon name="arrow-up" size={14} />
+                              <Icon name="arrow-up" size={21} />
                             </IconButton>
                           </Tooltip>
                           <Tooltip value="Next change" placement="bottom">
                             <IconButton size="xs" variant="ghost" onClick={() => navigateChange(1)}>
-                              <Icon name="arrow-down" size={14} />
+                              <Icon name="arrow-down" size={21} />
                             </IconButton>
                           </Tooltip>
                         </div>
@@ -202,7 +202,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           }}
                           onClick={() => local.file.setView(activeFile.path, "raw")}
                         >
-                          <Icon name="file-text" size={14} />
+                          <Icon name="file-text" size={21} />
                         </IconButton>
                       </Tooltip>
                       <Tooltip value="Unified diff" placement="bottom">
@@ -216,7 +216,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           }}
                           onClick={() => local.file.setView(activeFile.path, "diff-unified")}
                         >
-                          <Icon name="checklist" size={14} />
+                          <Icon name="checklist" size={21} />
                         </IconButton>
                       </Tooltip>
                       <Tooltip value="Split diff" placement="bottom">
@@ -230,7 +230,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           }}
                           onClick={() => local.file.setView(activeFile.path, "diff-split")}
                         >
-                          <Icon name="columns" size={14} />
+                          <Icon name="columns" size={21} />
                         </IconButton>
                       </Tooltip>
                     </div>
@@ -250,7 +250,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                     name={
                       local.layout.visible(localProps.layoutKey, localProps.timelinePane) ? "close-pane" : "open-pane"
                     }
-                    size={14}
+                    size={21}
                   />
                 </IconButton>
               </Tooltip>
@@ -372,7 +372,7 @@ function SortableTab(props: {
             variant="ghost"
             onClick={() => props.onTabClose(props.file)}
           >
-            <Icon name="close" size={16} />
+            <Icon name="close" size={24} />
           </IconButton>
         </div>
       </Tooltip>

@@ -265,7 +265,7 @@ export default function PromptForm(props: PromptFormProps) {
             </Button>
             <span class="text-text-muted/70 whitespace-nowrap">{local.model.current()?.provider.name}</span>
           </div>
-          <div class="flex gap-1 items-center">
+          <div class="flex gap-0.5 items-center">
             <Show when={isSupported()}>
               <Tooltip value={isRecording() ? "Stop voice input" : "Start voice input"} placement="top">
                 <IconButton
@@ -285,20 +285,20 @@ export default function PromptForm(props: PromptFormProps) {
                   size="xs"
                   variant="ghost"
                 >
-                  <Icon name="mic" size={16} />
+                  <Icon name="mic" size={24} />
                 </IconButton>
               </Tooltip>
             </Show>
             <IconButton class="text-text-muted" size="xs" variant="ghost">
-              <Icon name="photo" size={16} />
+              <Icon name="photo" size={24} />
             </IconButton>
             <IconButton
-              class="text-background-panel! bg-primary rounded-full! hover:bg-primary/90 ml-0.5"
+              class="text-background-panel! bg-primary rounded-full! hover:bg-primary/90 ml-1.5"
               size="xs"
               variant="ghost"
               type="submit"
             >
-              <Icon name="arrow-up" size={14} />
+              <Icon name="arrow-up" size={21} />
             </IconButton>
           </div>
         </div>

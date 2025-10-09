@@ -57,7 +57,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </KobalteSelect.ItemLabel>
           <KobalteSelect.ItemIndicator class="ml-auto">
-            <Icon name="checkmark" size={16} />
+            <Icon name="checkmark" size={24} />
           </KobalteSelect.ItemIndicator>
         </KobalteSelect.Item>
       )}

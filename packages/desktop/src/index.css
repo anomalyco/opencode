@@ -4,6 +4,31 @@
   interpolate-size: allow-keywords;
 }
 
+[data-font-size="smallest"] .font-scalable {
+  font-size: 0.7rem !important;
+  line-height: 1.2 !important;
+}
+
+[data-font-size="small"] .font-scalable {
+  font-size: 0.8rem !important;
+  line-height: 1.3 !important;
+}
+
+[data-font-size="default"] .font-scalable {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+[data-font-size="large"] .font-scalable {
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
+}
+
+[data-font-size="largest"] .font-scalable {
+  font-size: 1.25rem !important;
+  line-height: 1.6 !important;
+}
+
 @layer components {
   [data-popper-positioner] {
     pointer-events: none;
@@ -11,6 +36,17 @@
 
   body {
     line-height: 1;
+  }
+
+  /* GPU acceleration for timeline */
+  [role="list"] {
+    contain: layout style paint;
+    content-visibility: auto;
+  }
+
+  [role="list"] > li {
+    contain: layout style paint;
+    content-visibility: auto;
   }
 
   ::selection {
