@@ -541,7 +541,6 @@ export namespace MessageV2 {
                       {
                         type: "text",
                         text: `Tool ${part.tool} returned an attachment:`,
-                        // synthetic: true,
                       },
                       {
                         type: "file",
@@ -561,16 +560,6 @@ export namespace MessageV2 {
                     output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                     callProviderMetadata: part.metadata,
                   },
-                  // ...(part.state.attachment
-                  //   ? [
-                  //       {
-                  //         type: "file" as const,
-                  //         url: part.state.attachment.url,
-                  //         mediaType: part.state.attachment.mime,
-                  //         filename: part.state.attachment.filename,
-                  //       },
-                  //     ]
-                  //   : []),
                 ]
               }
               if (part.state.status === "error")
