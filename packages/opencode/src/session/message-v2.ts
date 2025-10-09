@@ -189,7 +189,7 @@ export namespace MessageV2 {
         end: z.number(),
         compacted: z.number().optional(),
       }),
-      attachment: FilePart.optional(),
+      attachments: FilePart.array().optional(),
     })
     .meta({
       ref: "ToolStateCompleted",
@@ -533,7 +533,7 @@ export namespace MessageV2 {
               ]
             if (part.type === "tool") {
               if (part.state.status === "completed") {
-                if (part.state.attachment) {
+                if (part.state.attachments?.length) {
                   result.push({
                     id: Identifier.ascending("message"),
                     role: "user",
@@ -542,12 +542,12 @@ export namespace MessageV2 {
                         type: "text",
                         text: `Tool ${part.tool} returned an attachment:`,
                       },
-                      {
-                        type: "file",
-                        url: part.state.attachment.url,
-                        mediaType: part.state.attachment.mime,
-                        filename: part.state.attachment.filename,
-                      },
+                      ...part.state.attachments.map((attachment) => ({
+                        type: "file" as const,
+                        url: attachment.url,
+                        mediaType: attachment.mime,
+                        filename: attachment.filename,
+                      })),
                     ],
                   })
                 }

@@ -993,7 +993,7 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
-                      attachment: value.output.attachment,
+                      attachments: value.output.attachments,
                     },
                   })
                   delete toolcalls[value.toolCallId]

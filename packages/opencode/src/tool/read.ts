@@ -73,14 +73,16 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
         },
-        attachment: {
-          id: Identifier.ascending("part"),
-          sessionID: ctx.sessionID,
-          messageID: ctx.messageID,
-          type: "file",
-          mime,
-          url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
-        },
+        attachments: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: ctx.sessionID,
+            messageID: ctx.messageID,
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+          },
+        ],
       }
     }
 

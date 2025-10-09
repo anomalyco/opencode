@@ -27,7 +27,7 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
-        attachment?: MessageV2.FilePart
+        attachments?: MessageV2.FilePart[]
       }>
     }>
   }
