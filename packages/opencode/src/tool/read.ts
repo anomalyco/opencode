@@ -8,6 +8,7 @@ import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
+import { Identifier } from "../id/id"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -71,14 +72,14 @@ export const ReadTool = Tool.define("read", {
         output: msg,
         metadata: {
           preview: msg,
-          attachments: [
-            {
-              type: "file",
-              url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
-              mime,
-              filename: path.basename(filepath),
-            },
-          ],
+        },
+        attachment: {
+          id: Identifier.ascending("part"),
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          type: "file",
+          mime,
+          url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
         },
       }
     }
@@ -114,7 +115,6 @@ export const ReadTool = Tool.define("read", {
       output,
       metadata: {
         preview,
-        attachments: [],
       },
     }
   },

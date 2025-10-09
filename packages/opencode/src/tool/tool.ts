@@ -1,22 +1,16 @@
 import z from "zod/v4"
+import type { MessageV2 } from "../session/message-v2"
 
 export namespace Tool {
-  export interface Attachment {
-    type: "file"
-    url: string
-    mime: string
-    filename?: string
-  }
-
   export interface Metadata {
     [key: string]: any
-    attachments?: Attachment[]
   }
 
   export type ExecuteResult<M extends Metadata = Metadata> = {
     title: string
     metadata: M
     output: string
+    attachment?: MessageV2.FilePart
   }
 
   export type Context<M extends Metadata = Metadata> = {

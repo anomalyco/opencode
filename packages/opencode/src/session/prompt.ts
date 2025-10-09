@@ -969,31 +969,6 @@ export namespace SessionPrompt {
               case "tool-result": {
                 const match = toolcalls[value.toolCallId]
                 if (match && match.state.status === "running") {
-                  const result = value.output
-
-                  // Check for attachments in metadata and create synthetic user message
-                  if (result.metadata?.attachments?.length) {
-                    const syntheticParts: PromptInput["parts"] = [
-                      {
-                        type: "text" as const,
-                        text: `Tool ${match.tool} returned attachments:`,
-                        synthetic: true,
-                      },
-                      ...result.metadata.attachments.map((att: Tool.Attachment) => ({
-                        type: "file" as const,
-                        url: att.url,
-                        mime: att.mime,
-                        filename: att.filename,
-                        synthetic: true,
-                      })),
-                    ]
-
-                    await createUserMessage({
-                      sessionID: input.sessionID,
-                      parts: syntheticParts,
-                    })
-                  }
-
                   await Session.updatePart({
                     ...match,
                     state: {
@@ -1006,6 +981,7 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
+                      attachment: value.output.attachment,
                     },
                   })
                   delete toolcalls[value.toolCallId]
