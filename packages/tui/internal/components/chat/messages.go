@@ -678,6 +678,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 						false,
 						[]opencode.FilePart{},
 						[]opencode.AgentPart{},
+						orphanedToolCalls...,
 					)
 					partCount++
 					lineCount += lipgloss.Height(content) + 1
