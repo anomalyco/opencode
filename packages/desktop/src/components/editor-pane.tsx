@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createSignal, splitProps } from "solid-js"
+import { For, Match, Show, Switch, createSignal, splitProps, createMemo } from "solid-js"
 import { Tabs } from "@/ui/tabs"
 import { FileIcon, Icon, IconButton, Logo, Tooltip } from "@/ui"
 import {
@@ -14,6 +14,7 @@ import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { LocalFile } from "@/context/local"
 import { Code } from "@/components/code"
 import PromptForm from "@/components/prompt-form"
+import SuggestionChips from "@/components/suggestion-chips"
 import { useLocal, useSDK, useSync } from "@/context"
 import { getFilename } from "@/utils"
 import type { JSX } from "solid-js"
@@ -150,9 +151,133 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
     setActiveItem(undefined)
   }
 
+  const handleOpenFolder = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.webkitdirectory = true
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files
+      if (files && files.length > 0) {
+        const path = files[0].webkitRelativePath.split("/")[0]
+        window.location.href = `/?path=${encodeURIComponent(path)}`
+      }
+    }
+    input.click()
+  }
+
+  const suggestions = createMemo(() => {
+    if (local.file.opened().length > 0) return []
+
+    const hasFiles = Object.keys(sync.data.node).length > 0
+    if (!hasFiles) {
+      return ["Open a folder to get started"]
+    }
+
+    const activeSession = local.session.active()
+    const hasConversation = activeSession && sync.data.message[activeSession.id]?.length > 0
+
+    if (hasConversation) {
+      const messages = sync.data.message[activeSession.id] || []
+
+      const conversationText = messages
+        .map((m) =>
+          sync.data.part[m.id]
+            ?.filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join(" "),
+        )
+        .join(" ")
+        .toLowerCase()
+
+      const result = []
+
+      if (conversationText.includes("agent") || conversationText.includes("guideline")) {
+        result.push("Review the AGENTS.md file")
+        result.push("What build commands are configured?")
+      }
+
+      if (conversationText.includes("component") || conversationText.includes("ui")) {
+        result.push("Show me all components")
+        result.push("Create a new component")
+      }
+
+      if (conversationText.includes("test") || conversationText.includes("spec")) {
+        result.push("Write tests for this feature")
+        result.push("Run the test suite")
+      }
+
+      if (
+        conversationText.includes("style") ||
+        conversationText.includes("css") ||
+        conversationText.includes("theme")
+      ) {
+        result.push("Update the theme system")
+        result.push("Review styling patterns")
+      }
+
+      if (conversationText.includes("error") || conversationText.includes("bug") || conversationText.includes("fix")) {
+        result.push("Debug this issue")
+        result.push("Check error logs")
+      }
+
+      if (result.length === 0) {
+        result.push("Continue working on this feature")
+        result.push("What should we do next?")
+        result.push("Review recent changes")
+      }
+
+      return result.slice(0, 6)
+    }
+
+    const files = Object.keys(sync.data.node)
+    const agentsMdFile = files.find((f) => f.endsWith("AGENTS.md") || f.endsWith("agents.md"))
+    const hasAgentsMd = !!agentsMdFile
+    const hasPackageJson = files.some((f) => f.endsWith("package.json"))
+    const hasReadme = files.some((f) => f.toLowerCase().includes("readme"))
+    const hasSrc = files.some((f) => f.startsWith("src/"))
+    const hasTests = files.some((f) => f.includes("test") || f.includes("spec"))
+    const hasTsConfig = files.some((f) => f.includes("tsconfig"))
+    const hasComponents = files.some((f) => f.includes("component"))
+
+    const result = []
+
+    if (!hasAgentsMd) {
+      result.push("Create an AGENTS.md file for this project")
+    } else {
+      result.push("Review the AGENTS.md file")
+    }
+    if (hasReadme) result.push("Explain what this project does")
+    if (hasPackageJson) result.push("Show me the dependencies")
+    if (hasSrc) result.push("Give me an overview of the codebase")
+    if (hasComponents) result.push("Review component architecture")
+    if (hasTsConfig) result.push("Check TypeScript configuration")
+    if (hasTests) result.push("Review test coverage")
+
+    if (result.length === 0) {
+      result.push("Explain the project structure")
+    }
+
+    return result.slice(0, 6)
+  })
+
+  const handleSuggestion = async (suggestion: string) => {
+    if (suggestion === "Open a folder to get started") {
+      handleOpenFolder()
+    } else {
+      await handlePromptSubmit(suggestion)
+    }
+  }
+
   return (
     <div class="relative flex h-full flex-col">
-      <Logo size={64} variant="ornate" class="absolute top-2/5 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+      <Show when={!local.file.active()}>
+        <div class="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 w-full max-w-xl px-4 z-10 pointer-events-none">
+          <Logo size={64} variant="ornate" />
+          <div class="pointer-events-auto">
+            <SuggestionChips suggestions={suggestions()} onSelect={handleSuggestion} />
+          </div>
+        </div>
+      </Show>
       <DragDropProvider
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -324,7 +449,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
           class="peer/editor absolute inset-x-4 z-50 flex items-center justify-center"
           classList={{
             "bottom-8": !!local.file.active(),
-            "bottom-3/8": local.file.active() === undefined,
+            "bottom-1/3": local.file.active() === undefined,
           }}
           onSubmit={handlePromptSubmit}
           onOpenModelSelect={localProps.onOpenModelSelect}
