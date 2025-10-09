@@ -1,17 +1,17 @@
 import type { ModelMessage } from "ai"
 import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
+import { randomBytes } from "crypto"
 
 export namespace ProviderTransform {
-  function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
+  function normalizeToolCallIds(msgs: ModelMessage[], transform: (id: string) => string): ModelMessage[] {
+    const idMap = new Map<string, string>()
     return msgs.map((msg) => {
       if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
         msg.content = msg.content.map((part) => {
           if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-            return {
-              ...part,
-              toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
-            }
+            if (!idMap.has(part.toolCallId)) idMap.set(part.toolCallId, transform(part.toolCallId))
+            return { ...part, toolCallId: idMap.get(part.toolCallId)! }
           }
           return part
         })
@@ -64,7 +64,14 @@ export namespace ProviderTransform {
 
   export function message(msgs: ModelMessage[], providerID: string, modelID: string) {
     if (modelID.includes("claude")) {
-      msgs = normalizeToolCallIds(msgs)
+      msgs = normalizeToolCallIds(msgs, (id) => id.replace(/[^a-zA-Z0-9_-]/g, "_"))
+    }
+    if (providerID === "mistral" || modelID.includes("mistral")) {
+      const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+      msgs = normalizeToolCallIds(msgs, () => {
+        const bytes = randomBytes(9)
+        return Array.from(bytes, (b) => chars[b % chars.length]).join("")
+      })
     }
     if (providerID === "anthropic" || modelID.includes("anthropic") || modelID.includes("claude")) {
       msgs = applyCaching(msgs, providerID)
