@@ -10,6 +10,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    conditions: ["solid"],
+  },
+  esbuild: {
+    jsxImportSource: "solid-js",
   },
   plugins: [
     generateThemeCSS(),

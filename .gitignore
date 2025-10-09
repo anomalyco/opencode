@@ -10,3 +10,5 @@ playground
 tmp
 dist
 .turbo
+/packages/app/release
+/packages/app

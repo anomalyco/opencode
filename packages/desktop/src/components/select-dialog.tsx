@@ -29,7 +29,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     () => store.filter,
     async (filter) => {
       const needle = filter.toLowerCase()
-      const all = (typeof props.items === "function" ? await props.items(needle) : props.items) || []
+      const all = (typeof props.items === "function" ? await props.items(needle).catch(() => []) : props.items) || []
       const result = pipe(
         all,
         (x) => {

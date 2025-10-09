@@ -98,22 +98,51 @@ function init() {
   const sdk = useSDK()
 
   const load = {
-    provider: () => sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
-    path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
-    agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+    provider: () =>
+      sdk.config
+        .providers()
+        .then((x) => setStore("provider", x.data!.providers))
+        .catch(() => {}),
+    path: () =>
+      sdk.path
+        .get()
+        .then((x) => setStore("path", x.data!))
+        .catch(() => {}),
+    agent: () =>
+      sdk.app
+        .agents()
+        .then((x) => setStore("agent", x.data ?? []))
+        .catch(() => {}),
     session: () =>
-      sdk.session.list().then((x) =>
-        setStore(
-          "session",
-          (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
-        ),
-      ),
-    config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
-    changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
-    node: () => sdk.file.list({ query: { path: "/" } }).then((x) => setStore("node", x.data!)),
+      sdk.session
+        .list()
+        .then((x) =>
+          setStore(
+            "session",
+            (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
+          ),
+        )
+        .catch(() => {}),
+    config: () =>
+      sdk.config
+        .get()
+        .then((x) => setStore("config", x.data!))
+        .catch(() => {}),
+    changes: () =>
+      sdk.file
+        .status()
+        .then((x) => setStore("changes", x.data!))
+        .catch(() => {}),
+    node: () =>
+      sdk.file
+        .list({ query: { path: "/" } })
+        .then((x) => setStore("node", x.data!))
+        .catch(() => {}),
   }
 
-  Promise.all(Object.values(load).map((p) => p())).then(() => setStore("ready", true))
+  Promise.all(Object.values(load).map((p) => p()))
+    .then(() => setStore("ready", true))
+    .catch(() => {})
 
   const sanitizer = createMemo(() => new RegExp(`${store.path.directory}/`, "g"))
   const sanitize = (text: string) => text.replace(sanitizer(), "")
