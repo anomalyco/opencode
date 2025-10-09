@@ -550,6 +550,25 @@ export type Session = {
   }
 }
 
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+  /**
+   * Unique identifier for the todo item
+   */
+  id: string
+}
+
 export type UserMessage = {
   id: string
   sessionID: string
@@ -1085,6 +1104,22 @@ export type EventFileEdited = {
   }
 }
 
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
 export type EventSessionIdle = {
   type: "session.idle"
   properties: {
@@ -1114,14 +1149,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -1147,11 +1174,12 @@ export type Event =
   | EventPermissionUpdated
   | EventPermissionReplied
   | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventTodoUpdated
   | EventSessionIdle
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
-  | EventFileWatcherUpdated
   | EventServerConnected
   | EventIdeInstalled
 
@@ -1440,11 +1468,34 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
+export type SessionTodoData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/todo"
+}
+
+export type SessionTodoResponses = {
+  /**
+   * Todo list
+   */
+  200: Array<Todo>
+}
+
+export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
 export type SessionInitData = {
   body?: {
-    messageID: string
-    providerID: string
     modelID: string
+    providerID: string
+    messageID: string
   }
   path: {
     /**
@@ -1466,6 +1517,28 @@ export type SessionInitResponses = {
 }
 
 export type SessionInitResponse = SessionInitResponses[keyof SessionInitResponses]
+
+export type SessionForkData = {
+  body?: {
+    messageID?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/fork"
+}
+
+export type SessionForkResponses = {
+  /**
+   * 200
+   */
+  200: Session
+}
+
+export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
 
 export type SessionAbortData = {
   body?: never
@@ -1996,6 +2069,22 @@ export type AppAgentsResponses = {
 }
 
 export type AppAgentsResponse = AppAgentsResponses[keyof AppAgentsResponses]
+
+export type McpStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp"
+}
+
+export type McpStatusResponses = {
+  /**
+   * MCP server status
+   */
+  200: unknown
+}
 
 export type TuiAppendPromptData = {
   body?: {

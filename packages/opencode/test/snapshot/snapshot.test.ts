@@ -532,3 +532,55 @@ test("restore function", async () => {
     },
   })
 })
+
+test("revert should not delete files that existed but were deleted in snapshot", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const snapshot1 = await Snapshot.track()
+      expect(snapshot1).toBeTruthy()
+
+      await $`rm ${tmp.path}/a.txt`.quiet()
+
+      const snapshot2 = await Snapshot.track()
+      expect(snapshot2).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/a.txt`, "recreated content")
+
+      const patch = await Snapshot.patch(snapshot2!)
+      expect(patch.files).toContain(`${tmp.path}/a.txt`)
+
+      await Snapshot.revert([patch])
+
+      expect(await Bun.file(`${tmp.path}/a.txt`).exists()).toBe(false)
+    },
+  })
+})
+
+test("revert preserves file that existed in snapshot when deleted then recreated", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(`${tmp.path}/existing.txt`, "original content")
+
+      const snapshot = await Snapshot.track()
+      expect(snapshot).toBeTruthy()
+
+      await $`rm ${tmp.path}/existing.txt`.quiet()
+      await Bun.write(`${tmp.path}/existing.txt`, "recreated")
+      await Bun.write(`${tmp.path}/newfile.txt`, "new")
+
+      const patch = await Snapshot.patch(snapshot!)
+      expect(patch.files).toContain(`${tmp.path}/existing.txt`)
+      expect(patch.files).toContain(`${tmp.path}/newfile.txt`)
+
+      await Snapshot.revert([patch])
+
+      expect(await Bun.file(`${tmp.path}/newfile.txt`).exists()).toBe(false)
+      expect(await Bun.file(`${tmp.path}/existing.txt`).exists()).toBe(true)
+      expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe("original content")
+    },
+  })
+})

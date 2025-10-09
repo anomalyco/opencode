@@ -6,11 +6,14 @@ import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode/console-core/account.js"
-import { Workspace } from "@opencode/console-core/workspace.js"
-import { Actor } from "@opencode/console-core/actor.js"
-import { Resource } from "@opencode/console-resource"
-import { Database } from "@opencode/console-core/drizzle/index.js"
+import { Account } from "@opencode-ai/console-core/account.js"
+import { Workspace } from "@opencode-ai/console-core/workspace.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Resource } from "@opencode-ai/console-resource"
+import { User } from "@opencode-ai/console-core/user.js"
+import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
+import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -111,11 +114,7 @@ export default {
         } else if (response.provider === "google") {
           if (!response.id.email_verified) throw new Error("Google email not verified")
           email = response.id.email as string
-        }
-        //if (response.provider === "email") {
-        //  email = response.claims.email
-        //}
-        else throw new Error("Unsupported provider")
+        } else throw new Error("Unsupported provider")
 
         if (!email) throw new Error("No email found")
 
@@ -127,9 +126,22 @@ export default {
           })
         }
         await Actor.provide("account", { accountID, email }, async () => {
-          const workspaces = await Account.workspaces()
+          await User.joinInvitedWorkspaces()
+          const workspaces = await Database.transaction(async (tx) =>
+            tx
+              .select({ id: WorkspaceTable.id })
+              .from(WorkspaceTable)
+              .innerJoin(UserTable, eq(UserTable.workspaceID, WorkspaceTable.id))
+              .where(
+                and(
+                  eq(UserTable.accountID, accountID),
+                  isNull(UserTable.timeDeleted),
+                  isNull(WorkspaceTable.timeDeleted),
+                ),
+              ),
+          )
           if (workspaces.length === 0) {
-            await Workspace.create()
+            await Workspace.create({ name: "Default" })
           }
         })
         return ctx.subject("account", accountID, { accountID, email })

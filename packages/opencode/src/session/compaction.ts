@@ -144,7 +144,7 @@ export namespace SessionCompaction {
         },
       ],
     })
-    const usage = Session.getUsage(model.info, generated.usage, generated.providerMetadata)
+    const usage = Session.getUsage({ model: model.info, usage: generated.usage, metadata: generated.providerMetadata })
     msg.cost += usage.cost
     msg.tokens = usage.tokens
     msg.summary = true

@@ -24,14 +24,14 @@ Or to pin the version:
 <!-- x-release-please-start-version -->
 
 ```sh
-go get -u 'github.com/sst/opencode-sdk-go@v0.15.0'
+go get -u 'github.com/sst/opencode-sdk-go@v0.16.2'
 ```
 
 <!-- x-release-please-end -->
 
 ## Requirements
 
-This library requires Go 1.18+.
+This library requires Go 1.22+.
 
 ## Usage
 

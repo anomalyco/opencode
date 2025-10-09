@@ -110,6 +110,9 @@ const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
 // CONSOLE
 ////////////////
 
+const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
+const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
+
 let logProcessor
 if ($app.stage === "production" || $app.stage === "frank") {
   const HONEYCOMB_API_KEY = new sst.Secret("HONEYCOMB_API_KEY")
@@ -122,7 +125,16 @@ if ($app.stage === "production" || $app.stage === "frank") {
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
-  link: [database, AUTH_API_URL, STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY, ZEN_MODELS, EMAILOCTOPUS_API_KEY],
+  link: [
+    database,
+    AUTH_API_URL,
+    STRIPE_WEBHOOK_SECRET,
+    STRIPE_SECRET_KEY,
+    ZEN_MODELS,
+    EMAILOCTOPUS_API_KEY,
+    AWS_SES_ACCESS_KEY_ID,
+    AWS_SES_SECRET_ACCESS_KEY,
+  ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),

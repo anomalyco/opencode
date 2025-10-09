@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/console-resource",
+  "name": "@opencode-ai/console-resource",
   "dependencies": {
     "@cloudflare/workers-types": "^4.20250830.0"
   },

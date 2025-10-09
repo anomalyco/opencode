@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewFileService(opts ...option.RequestOption) (r *FileService) {
 
 // List files and directories
 func (r *FileService) List(ctx context.Context, query FileListParams, opts ...option.RequestOption) (res *[]FileNode, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -43,7 +44,7 @@ func (r *FileService) List(ctx context.Context, query FileListParams, opts ...op
 
 // Read a file
 func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...option.RequestOption) (res *FileReadResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file/content"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -51,7 +52,7 @@ func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...op
 
 // Get file status
 func (r *FileService) Status(ctx context.Context, query FileStatusParams, opts ...option.RequestOption) (res *[]File, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file/status"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return

@@ -63,6 +63,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Install OpenCode
+        run: curl -fsSL https://opencode.ai/install | bash
+
       - name: Publish
         run: |
           ./script/publish.ts
@@ -71,3 +74,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

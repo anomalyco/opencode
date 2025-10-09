@@ -9,6 +9,14 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "AWS_SES_ACCESS_KEY_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "AWS_SES_SECRET_ACCESS_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Api": {
       "type": "sst.cloudflare.Worker"
       "url": string

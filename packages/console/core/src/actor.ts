@@ -21,6 +21,7 @@ export namespace Actor {
     properties: {
       userID: string
       workspaceID: string
+      accountID: string
       role: (typeof UserRole)[number]
     }
   }
@@ -72,5 +73,21 @@ export namespace Actor {
       return actor.properties.workspaceID
     }
     throw new Error(`actor of type "${actor.type}" is not associated with a workspace`)
+  }
+
+  export function account() {
+    const actor = use()
+    if ("accountID" in actor.properties) {
+      return actor.properties.accountID
+    }
+    throw new Error(`actor of type "${actor.type}" is not associated with an account`)
+  }
+
+  export function userID() {
+    return Actor.assert("user").properties.userID
+  }
+
+  export function userRole() {
+    return Actor.assert("user").properties.role
   }
 }

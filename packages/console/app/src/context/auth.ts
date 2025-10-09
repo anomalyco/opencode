@@ -1,10 +1,8 @@
 import { getRequestEvent } from "solid-js/web"
-import { and, Database, eq, inArray } from "@opencode/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@opencode/console-core/schema/workspace.sql.js"
-import { UserTable } from "@opencode/console-core/schema/user.sql.js"
+import { and, Database, eq, inArray, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { redirect } from "@solidjs/router"
-import { AccountTable } from "@opencode/console-core/schema/account.sql.js"
-import { Actor } from "@opencode/console-core/actor.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
 
 import { createClient } from "@openauthjs/openauth/client"
 import { useAuthSession } from "./auth.session"
@@ -54,26 +52,29 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
     }
     const accounts = Object.keys(auth.data.account ?? {})
     if (accounts.length) {
-      const result = await Database.transaction(async (tx) => {
-        return await tx
-          .select({
-            user: UserTable,
-          })
-          .from(AccountTable)
-          .innerJoin(UserTable, and(eq(UserTable.email, AccountTable.email)))
-          .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
-          .where(and(inArray(AccountTable.id, accounts), eq(WorkspaceTable.id, workspace)))
+      const user = await Database.use((tx) =>
+        tx
+          .select()
+          .from(UserTable)
+          .where(and(eq(UserTable.workspaceID, workspace), inArray(UserTable.accountID, accounts)))
           .limit(1)
           .execute()
-          .then((x) => x[0])
-      })
-      if (result) {
+          .then((x) => x[0]),
+      )
+      if (user) {
+        await Database.use((tx) =>
+          tx
+            .update(UserTable)
+            .set({ timeSeen: sql`now()` })
+            .where(and(eq(UserTable.workspaceID, workspace), eq(UserTable.id, user.id))),
+        )
         return {
           type: "user",
           properties: {
-            userID: result.user.id,
-            workspaceID: result.user.workspaceID,
-            role: result.user.role,
+            userID: user.id,
+            workspaceID: user.workspaceID,
+            accountID: user.accountID,
+            role: user.role,
           },
         }
       }

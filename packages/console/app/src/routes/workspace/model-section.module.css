@@ -1,0 +1,122 @@
+.root {}
+
+[data-slot="section-title"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+[data-slot="section-title"] h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+[data-slot="section-title"] p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+[data-slot="models-list"] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-slot="models-table"] {
+  overflow-x: auto;
+}
+
+[data-slot="models-table-element"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+
+  thead {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  th {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-weight: normal;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
+
+  td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-muted);
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+
+    &[data-slot="model-name"] {
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    &[data-slot="training-data"] {
+      text-align: center;
+      color: var(--color-text);
+    }
+
+    &[data-slot="model-status"] {
+      text-align: left;
+      color: var(--color-text);
+    }
+
+    &[data-slot="model-toggle"] {
+      text-align: left;
+      font-family: var(--font-sans);
+    }
+  }
+
+  tbody tr {
+    &[data-enabled="false"] {
+      opacity: 0.6;
+    }
+
+    &:last-child td {
+      border-bottom: none;
+    }
+  }
+
+  @media (max-width: 40rem) {
+
+    th,
+    td {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--font-size-xs);
+    }
+
+    th {
+      &:nth-child(2)
+
+      /* Training Data */
+        {
+        display: none;
+      }
+    }
+
+    td {
+      &:nth-child(2)
+
+      /* Training Data */
+        {
+        display: none;
+      }
+    }
+  }
+}
+
+
+[data-component="empty-state"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}

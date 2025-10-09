@@ -1,11 +1,12 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { IconCopy, IconCheck } from "~/component/icon"
-import { Key } from "@opencode/console-core/key.js"
+import { Key } from "@opencode-ai/console-core/key.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import { formatDateUTC, formatDateForTable } from "./common"
 import styles from "./key-section.module.css"
+import { Actor } from "@opencode-ai/console-core/actor.js"
 
 const removeKey = action(async (form: FormData) => {
   "use server"
@@ -25,7 +26,10 @@ const createKey = action(async (form: FormData) => {
   return json(
     await withActor(
       () =>
-        Key.create({ name })
+        Key.create({
+          userID: Actor.assert("user").properties.userID,
+          name,
+        })
           .then((data) => ({ error: undefined, data }))
           .catch((e) => ({ error: e.message as string })),
       workspaceID,
@@ -104,11 +108,6 @@ export function KeySection() {
   const params = useParams()
   const keys = createAsync(() => listKeys(params.id))
 
-  function formatKey(key: string) {
-    if (key.length <= 11) return key
-    return `${key.slice(0, 7)}...${key.slice(-4)}`
-  }
-
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
@@ -130,7 +129,8 @@ export function KeySection() {
               <tr>
                 <th>Name</th>
                 <th>Key</th>
-                <th>Created</th>
+                <th>Created By</th>
+                <th>Last Used</th>
                 <th></th>
               </tr>
             </thead>
@@ -143,24 +143,27 @@ export function KeySection() {
                     <tr>
                       <td data-slot="key-name">{key.name}</td>
                       <td data-slot="key-value">
-                        <button
-                          data-color="ghost"
-                          disabled={copied()}
-                          onClick={async () => {
-                            await navigator.clipboard.writeText(key.key)
-                            setCopied(true)
-                            setTimeout(() => setCopied(false), 1000)
-                          }}
-                          title="Copy API key"
-                        >
-                          <span>{formatKey(key.key)}</span>
-                          <Show when={copied()} fallback={<IconCopy style={{ width: "14px", height: "14px" }} />}>
-                            <IconCheck style={{ width: "14px", height: "14px" }} />
-                          </Show>
-                        </button>
+                        <Show when={key.key} fallback={<span>{key.keyDisplay}</span>}>
+                          <button
+                            data-color="ghost"
+                            disabled={copied()}
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(key.key!)
+                              setCopied(true)
+                              setTimeout(() => setCopied(false), 1000)
+                            }}
+                            title="Copy API key"
+                          >
+                            <span>{key.keyDisplay}</span>
+                            <Show when={copied()} fallback={<IconCopy style={{ width: "14px", height: "14px" }} />}>
+                              <IconCheck style={{ width: "14px", height: "14px" }} />
+                            </Show>
+                          </button>
+                        </Show>
                       </td>
-                      <td data-slot="key-date" title={formatDateUTC(key.timeCreated)}>
-                        {formatDateForTable(key.timeCreated)}
+                      <td data-slot="key-user-email">{key.email}</td>
+                      <td data-slot="key-last-used" title={key.timeUsed ? formatDateUTC(key.timeUsed) : undefined}>
+                        {key.timeUsed ? formatDateForTable(key.timeUsed) : "-"}
                       </td>
                       <td data-slot="key-actions">
                         <form action={removeKey} method="post">

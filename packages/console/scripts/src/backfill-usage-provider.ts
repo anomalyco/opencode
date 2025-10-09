@@ -1,5 +1,5 @@
-import { Database, eq } from "@opencode/console-core/drizzle/index.js"
-import { UsageTable } from "@opencode/console-core/schema/billing.sql.js"
+import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
+import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 
 await Database.use(async (tx) => {
   await tx

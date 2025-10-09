@@ -9,6 +9,7 @@ import z from "zod/v4"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { Instance } from "../project/instance"
+import { withTimeout } from "@/util/timeout"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -20,11 +21,13 @@ export namespace MCP {
     }),
   )
 
+  type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
       const clients: {
-        [name: string]: Awaited<ReturnType<typeof experimental_createMCPClient>>
+        [name: string]: MCPClient
       } = {}
       for (const [key, mcp] of Object.entries(cfg.mcp ?? {})) {
         if (mcp.enabled === false) {
@@ -128,8 +131,17 @@ export namespace MCP {
         }
       }
 
+      for (const [key, client] of Object.entries(clients)) {
+        const result = await withTimeout(client.tools(), 5000).catch(() => {})
+        if (!result) {
+          log.warn("mcp client verification failed, removing client", { key })
+          delete clients[key]
+        }
+      }
+
       return {
         clients,
+        config: cfg.mcp ?? {},
       }
     },
     async (state) => {
@@ -138,6 +150,23 @@ export namespace MCP {
       }
     },
   )
+
+  export async function status() {
+    return state().then((state) => {
+      const result: Record<string, "connected" | "failed" | "disabled"> = {}
+      for (const [key, client] of Object.entries(state.config)) {
+        if (client.enabled === false) {
+          result[key] = "disabled"
+          continue
+        }
+        if (state.clients[key]) {
+          result[key] = "connected"
+        }
+        result[key] = "failed"
+      }
+      return result
+    })
+  }
 
   export async function clients() {
     return state().then((state) => state.clients)

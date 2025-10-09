@@ -247,6 +247,14 @@ export const AuthLoginCommand = cmd({
           return
         }
 
+        if (provider === "google-vertex") {
+          prompts.log.info(
+            "Google Cloud Vertex AI uses Application Default Credentials. Set GOOGLE_APPLICATION_CREDENTIALS or run 'gcloud auth application-default login'. Optionally set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION (or VERTEX_LOCATION)",
+          )
+          prompts.outro("Done")
+          return
+        }
+
         if (provider === "opencode") {
           prompts.log.info("Create an api key at https://opencode.ai/auth")
         }

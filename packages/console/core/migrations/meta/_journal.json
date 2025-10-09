@@ -148,6 +148,90 @@
       "when": 1759169697658,
       "tag": "0020_supreme_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1759186023755,
+      "tag": "0021_flawless_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1759427432588,
+      "tag": "0022_nice_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1759444220653,
+      "tag": "0023_optimal_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1759522925614,
+      "tag": "0024_early_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1759525451885,
+      "tag": "0025_legal_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1759546980316,
+      "tag": "0026_numerous_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1759553466608,
+      "tag": "0027_hot_wong",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1759805025276,
+      "tag": "0028_careful_cerise",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1759811835558,
+      "tag": "0029_panoramic_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1759878278492,
+      "tag": "0030_ordinary_ultragirl",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1759940238478,
+      "tag": "0031_outgoing_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1759976329502,
+      "tag": "0032_white_doctor_doom",
+      "breakpoints": true
     }
   ]
 }
