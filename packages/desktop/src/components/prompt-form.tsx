@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button, FileIcon, Icon, IconButton, Tooltip } from "@/ui"
 import { Select } from "@/components/select"
 import { useLocal } from "@/context"
@@ -34,7 +34,12 @@ export default function PromptForm(props: PromptFormProps) {
 
   let inputRef: HTMLTextAreaElement | undefined = undefined
   let overlayContainerRef: HTMLDivElement | undefined = undefined
+  let containerRef!: HTMLDivElement
   let shouldAutoScroll = true
+  let isDraggingForm = false
+  let dragStartPos = { x: 0, y: 0 }
+  let currentTranslate = { x: 0, y: 0 }
+  let animationFrameId: number | undefined
 
   const promptContent = createMemo(() => {
     const base = prompt() || ""
@@ -107,22 +112,67 @@ export default function PromptForm(props: PromptFormProps) {
     await props.onSubmit(currentPrompt)
   }
 
+  const handleDragStart = (event: MouseEvent) => {
+    if (!local.file.active()) return
+    const target = event.target as HTMLElement
+    if (target.closest("textarea") || target.closest("button") || target.closest("input")) return
+
+    isDraggingForm = true
+    dragStartPos = { x: event.clientX - currentTranslate.x, y: event.clientY - currentTranslate.y }
+    containerRef.style.cursor = "grabbing"
+    event.preventDefault()
+  }
+
+  const handleDragMove = (event: MouseEvent) => {
+    if (!isDraggingForm) return
+    event.preventDefault()
+
+    if (animationFrameId) return
+
+    animationFrameId = requestAnimationFrame(() => {
+      currentTranslate = {
+        x: event.clientX - dragStartPos.x,
+        y: event.clientY - dragStartPos.y,
+      }
+      containerRef.style.transform = `translate3d(${currentTranslate.x}px, ${currentTranslate.y}px, 0)`
+      animationFrameId = undefined
+    })
+  }
+
+  const handleDragEnd = () => {
+    if (!isDraggingForm) return
+    isDraggingForm = false
+    containerRef.style.cursor = ""
+  }
+
+  onMount(() => {
+    document.addEventListener("mousemove", handleDragMove)
+    document.addEventListener("mouseup", handleDragEnd)
+  })
+
   onCleanup(() => {
+    document.removeEventListener("mousemove", handleDragMove)
+    document.removeEventListener("mouseup", handleDragEnd)
+    if (animationFrameId) cancelAnimationFrame(animationFrameId)
     props.onInputRefChange?.(undefined)
   })
 
   return (
     <form onSubmit={handleSubmit} class={props.class} classList={props.classList}>
       <div
+        ref={containerRef}
+        onMouseDown={handleDragStart}
+        style={{ "touch-action": "none" }}
         class="w-full max-w-xl min-w-0 p-2 mx-auto rounded-lg isolate backdrop-blur-xs
                flex flex-col gap-1
                bg-gradient-to-b from-background-panel/90 to-background/90
                ring-1 ring-border-active/50 border border-transparent
                focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary
-               transition-all duration-200"
+               will-change-transform"
         classList={{
           "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !!local.file.active(),
           "ring-2 ring-primary/60 bg-primary/5": isDragOver(),
+          "cursor-grab": !!local.file.active(),
         }}
         onDragEnter={(event) => {
           const evt = event as unknown as globalThis.DragEvent

@@ -8,11 +8,16 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "license": "MIT",
   "devDependencies": {
     "@tailwindcss/vite": "4.1.11",
+    "@tauri-apps/api": "2.8.0",
+    "@tauri-apps/cli": "2.8.4",
     "@types/luxon": "3.7.1",
     "@types/node": "catalog:",
     "typescript": "catalog:",

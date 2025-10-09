@@ -260,6 +260,36 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
             {(file) => (
               <Tabs.Content value={file.path} class="grow h-full pt-1 select-text">
                 {(() => {
+                  const ext = file.path.split(".").pop()?.toLowerCase()
+                  const imageExts = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]
+                  const isImage = ext && imageExts.includes(ext)
+
+                  if (isImage) {
+                    const absolutePath = sync.absolute(file.path)
+
+                    return (
+                      <div class="flex items-center justify-center h-full bg-background-element/20 p-4">
+                        <div class="text-center">
+                          <img
+                            src={`asset://localhost${absolutePath}`}
+                            alt={file.name}
+                            class="max-w-full max-h-full object-contain rounded shadow-lg mb-2"
+                            onError={(e) => {
+                              const target = e.currentTarget
+                              target.style.display = "none"
+                              const sibling = target.nextElementSibling as HTMLElement
+                              if (sibling) sibling.style.display = "block"
+                            }}
+                          />
+                          <div style="display: none;" class="text-text-muted text-sm">
+                            <div class="mb-2">Unable to display image</div>
+                            <div class="text-xs opacity-70">{absolutePath}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   const view = local.file.view(file.path)
                   const showRaw = view === "raw" || !file.content?.diff
                   const code = showRaw ? (file.content?.content ?? "") : (file.content?.diff ?? "")

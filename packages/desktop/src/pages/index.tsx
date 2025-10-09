@@ -18,6 +18,7 @@ export default function Page() {
     clickTimer: undefined as number | undefined,
     modelSelectOpen: false,
     fileSelectOpen: false,
+    settingsOpen: false,
   })
 
   const layoutKey = "workspace"
@@ -36,6 +37,11 @@ export default function Page() {
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.getModifierState(MOD) && event.key === ",") {
+      event.preventDefault()
+      setStore("settingsOpen", true)
+      return
+    }
     if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
       event.preventDefault()
       // TODO: command palette
@@ -131,6 +137,13 @@ export default function Page() {
                   Changes
                 </Tabs.Trigger>
               </Tabs.List>
+              <div class="shrink-0 h-full flex items-center px-1 border-b border-border-subtle/40">
+                <Tooltip value="Settings (Cmd/Ctrl+,)" placement="bottom">
+                  <IconButton onClick={() => setStore("settingsOpen", true)} size="xs" variant="ghost">
+                    <Icon name="settings" size={16} />
+                  </IconButton>
+                </Tooltip>
+              </div>
             </div>
             <Tabs.Content value="files" class="grow min-h-0 py-2 bg-background">
               <FileTree path="" onFileClick={handleFileClick} />
@@ -271,6 +284,41 @@ export default function Page() {
           )}
           onClose={() => setStore("fileSelectOpen", false)}
           onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
+        />
+      </Show>
+      <Show when={store.settingsOpen}>
+        <SelectDialog<{ id: string; name: string; value: string; category: string }>
+          items={[
+            { id: "theme", name: "Theme", value: "Dark", category: "Appearance" },
+            {
+              id: "server-host",
+              name: "Server Host",
+              value: import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1",
+              category: "Connection",
+            },
+            {
+              id: "server-port",
+              name: "Server Port",
+              value: import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096",
+              category: "Connection",
+            },
+          ]}
+          key={(x) => x.id}
+          render={(i) => (
+            <div class="w-full flex items-center justify-between">
+              <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
+                <Icon name="settings" size={16} class="shrink-0 opacity-40" />
+                <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
+                <span class="text-xs text-text-muted/80 whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                  {i.value}
+                </span>
+              </div>
+            </div>
+          )}
+          filter={["name", "category", "value"]}
+          groupBy={(x) => x.category}
+          onClose={() => setStore("settingsOpen", false)}
+          onSelect={() => {}}
         />
       </Show>
     </div>
