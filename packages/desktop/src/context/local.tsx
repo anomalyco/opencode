@@ -452,7 +452,10 @@ function init() {
   const session = (() => {
     const [store, setStore] = createStore<{
       active?: string
-    }>({})
+      chatDocked: boolean
+    }>({
+      chatDocked: false,
+    })
 
     const active = createMemo(() => {
       if (!store.active) return undefined
@@ -466,6 +469,15 @@ function init() {
       },
       clearActive() {
         setStore("active", undefined)
+      },
+      chatDocked: () => store.chatDocked,
+      dockChat() {
+        console.log("[session.dockChat] Setting chatDocked to true")
+        setStore("chatDocked", true)
+      },
+      undockChat() {
+        console.log("[session.undockChat] Setting chatDocked to false")
+        setStore("chatDocked", false)
       },
     }
   })()

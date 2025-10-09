@@ -23,3 +23,6 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.8.5", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
+
+[package.metadata.bundle]
+osx_info_plist_path = "Info.plist"

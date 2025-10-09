@@ -4,18 +4,21 @@ import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { SelectDialog } from "@/components/select-dialog"
-import { useLocal, useTheme } from "@/context"
+import { useLocal, useTheme, useSDK, useSync } from "@/context"
 import { themes, type FontSize } from "@/context/theme"
 import { ResizeableLayout, ResizeablePane } from "@/components/resizeable-pane"
 import type { LocalFile } from "@/context/local"
 import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
+import PromptForm from "@/components/prompt-form"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
 
 export default function Page() {
   const local = useLocal()
   const theme = useTheme()
+  const sdk = useSDK()
+  const sync = useSync()
 
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
@@ -23,6 +26,7 @@ export default function Page() {
     fileSelectOpen: false,
     commandPaletteOpen: false,
     commandPaletteView: "main" as "main" | "theme" | "fontSize",
+    dragProximity: { isDragging: false, nearDockZone: false, x: 0, y: 0 },
   })
 
   let previewTimer: number | undefined
@@ -118,6 +122,87 @@ export default function Page() {
     }
   }
 
+  const handleDragProximity = (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => {
+    setStore("dragProximity", proximity)
+  }
+
+  const handleDrop = () => {
+    console.log("[handleDrop] Called! Timeline visible:", local.layout.visible(layoutKey, timelinePane))
+    if (local.layout.visible(layoutKey, timelinePane)) {
+      console.log("[handleDrop] Docking chat now!")
+      local.session.dockChat()
+    }
+  }
+
+  const handleDockChat = () => {
+    local.session.dockChat()
+  }
+
+  const handlePromptSubmit = async (prompt: string) => {
+    const existingSession = local.layout.visible(layoutKey, timelinePane) ? local.session.active() : undefined
+    let session = existingSession
+    if (!session) {
+      const created = await sdk.session.create()
+      session = created.data ?? undefined
+    }
+    if (!session) return
+    local.session.setActive(session.id)
+    local.layout.show(layoutKey, timelinePane)
+
+    await sdk.session.prompt({
+      path: { id: session.id },
+      body: {
+        agent: local.agent.current()!.name,
+        model: {
+          modelID: local.model.current()!.id,
+          providerID: local.model.current()!.provider.id,
+        },
+        parts: [
+          {
+            type: "text",
+            text: prompt,
+          },
+          ...(local.context.active()
+            ? [
+                {
+                  type: "file" as const,
+                  mime: "text/plain",
+                  url: `file://${local.context.active()!.absolute}`,
+                  filename: local.context.active()!.name,
+                  source: {
+                    type: "file" as const,
+                    text: {
+                      value: "@" + local.context.active()!.name,
+                      start: 0,
+                      end: 0,
+                    },
+                    path: local.context.active()!.absolute,
+                  },
+                },
+              ]
+            : []),
+          ...local.context.all().flatMap((file) => [
+            {
+              type: "file" as const,
+              mime: "text/plain",
+              url: `file://${sync.absolute(file.path)}${file.selection ? `?start=${file.selection.startLine}&end=${file.selection.endLine}` : ""}`,
+              filename: getFilename(file.path),
+              source: {
+                type: "file" as const,
+                text: {
+                  value: "@" + getFilename(file.path),
+                  start: 0,
+                  end: 0,
+                },
+                path: sync.absolute(file.path),
+              },
+            },
+          ]),
+        ],
+      },
+    })
+  }
+
   return (
     <div class="relative">
       <ResizeableLayout
@@ -199,6 +284,9 @@ export default function Page() {
             onInputRefChange={(element: HTMLTextAreaElement | null) => {
               inputRef = element ?? undefined
             }}
+            onDragProximity={handleDragProximity}
+            onDrop={handleDrop}
+            hideFloatingChat={local.session.chatDocked()}
           />
         </ResizeablePane>
         <ResizeablePane
@@ -207,30 +295,102 @@ export default function Page() {
           maxSize={40}
           class="border-l border-border-subtle/30 bg-background z-10 overflow-hidden"
         >
-          <div class="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-            <Show when={local.session.active()} fallback={<SessionList />}>
-              {(activeSession) => (
-                <div class="relative">
-                  <div class="sticky top-0 bg-background z-50 px-2 h-8 border-b border-border-subtle/30">
-                    <div class="h-full flex items-center gap-2">
+          <Show when={local.session.active()} fallback={<SessionList />}>
+            {(activeSession) => (
+              <div class="relative h-full flex flex-col">
+                <div class="sticky top-0 bg-background z-50 px-2 h-8 border-b border-border-subtle/30 shrink-0">
+                  <div class="h-full flex items-center gap-2">
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        local.session.clearActive()
+                        local.session.undockChat()
+                      }}
+                      class="text-text-muted hover:text-text"
+                    >
+                      <Icon name="arrow-left" size={21} />
+                    </IconButton>
+                    <h2 class="text-sm font-medium text-text truncate">
+                      {activeSession().title || "Untitled Session"}
+                    </h2>
+                    <Show when={local.session.chatDocked()}>
                       <IconButton
                         size="xs"
                         variant="ghost"
-                        onClick={() => local.session.clearActive()}
-                        class="text-text-muted hover:text-text"
+                        onClick={() => local.session.undockChat()}
+                        class="text-text-muted hover:text-text ml-auto"
+                        title="Undock chat"
                       >
-                        <Icon name="arrow-left" size={21} />
+                        <Icon name="close-pane" size={21} />
                       </IconButton>
-                      <h2 class="text-sm font-medium text-text truncate">
-                        {activeSession().title || "Untitled Session"}
-                      </h2>
+                    </Show>
+                  </div>
+                </div>
+                <div class="flex-1 overflow-y-auto overflow-x-hidden relative min-h-0">
+                  <SessionTimeline
+                    session={activeSession().id}
+                    showDockZone={store.dragProximity.isDragging && store.dragProximity.nearDockZone}
+                    onDockChat={handleDockChat}
+                  />
+                </div>
+                <Show when={local.session.chatDocked()}>
+                  <div class="shrink-0 bg-background">
+                    <div
+                      class="pt-2 pb-1 px-3 cursor-grab active:cursor-grabbing hover:bg-primary/10 transition-colors"
+                      onMouseDown={(e) => {
+                        console.log("[Drag handle] Mouse down")
+                        e.preventDefault()
+                        const startY = e.clientY
+                        let hasMoved = false
+
+                        const handleMove = (moveEvent: MouseEvent) => {
+                          const deltaY = startY - moveEvent.clientY
+                          console.log("[Drag handle] Delta Y:", deltaY)
+                          if (Math.abs(deltaY) > 10) {
+                            hasMoved = true
+                          }
+                          if (hasMoved && deltaY > 30) {
+                            console.log("[Drag handle] Undocking chat - dragged up")
+                            local.session.undockChat()
+                            document.removeEventListener("mousemove", handleMove)
+                            document.removeEventListener("mouseup", handleUp)
+                          }
+                        }
+
+                        const handleUp = () => {
+                          console.log("[Drag handle] Mouse up")
+                          document.removeEventListener("mousemove", handleMove)
+                          document.removeEventListener("mouseup", handleUp)
+                        }
+
+                        document.addEventListener("mousemove", handleMove)
+                        document.addEventListener("mouseup", handleUp)
+                      }}
+                    >
+                      <div class="w-16 h-1 bg-text-muted/30 rounded-full mx-auto" />
+                    </div>
+                    <div class="px-3 pb-3">
+                      <PromptForm
+                        onSubmit={handlePromptSubmit}
+                        onOpenModelSelect={() => setStore("modelSelectOpen", true)}
+                        docked={true}
+                      />
                     </div>
                   </div>
-                  <SessionTimeline session={activeSession().id} />
-                </div>
-              )}
-            </Show>
-          </div>
+                </Show>
+                <Show when={store.dragProximity.isDragging && store.dragProximity.nearDockZone}>
+                  <div class="absolute bottom-0 left-0 right-0 h-40 bg-primary/10 border-t-4 border-primary border-dashed flex items-center justify-center backdrop-blur-sm z-40 pointer-events-none">
+                    <div class="text-primary text-base font-semibold flex items-center gap-3 animate-pulse">
+                      <Icon name="arrow-down" size={28} />
+                      Drop to dock chat here
+                      <Icon name="arrow-down" size={28} />
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            )}
+          </Show>
         </ResizeablePane>
       </ResizeableLayout>
       <Show when={store.modelSelectOpen}>

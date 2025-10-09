@@ -250,8 +250,17 @@ export function createSpeechRecognition(opts?: {
     }
   }
 
-  const start = () => {
+  const start = async () => {
     if (!recognition) return
+
+    // Request microphone permission explicitly
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (err) {
+      console.error("Microphone permission denied:", err)
+      return
+    }
+
     shouldContinue = true
     sessionCommitted = ""
     pendingHypothesis = ""

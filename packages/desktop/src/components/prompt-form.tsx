@@ -13,6 +13,9 @@ interface PromptFormProps {
   onSubmit: (prompt: string) => Promise<void> | void
   onOpenModelSelect: () => void
   onInputRefChange?: (element: HTMLTextAreaElement | undefined) => void
+  onDragProximity?: (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => void
+  onDrop?: () => void
+  docked?: boolean
 }
 
 export default function PromptForm(props: PromptFormProps) {
@@ -44,6 +47,7 @@ export default function PromptForm(props: PromptFormProps) {
   let dragStartPos = { x: 0, y: 0 }
   let currentTranslate = { x: 0, y: 0 }
   let animationFrameId: number | undefined
+  let wasNearDockZone = false
 
   const promptContent = createMemo(() => {
     const base = prompt() || ""
@@ -117,7 +121,7 @@ export default function PromptForm(props: PromptFormProps) {
   }
 
   const handleDragStart = (event: MouseEvent) => {
-    if (!local.file.active()) return
+    if (!local.file.active() || props.docked) return
     const target = event.target as HTMLElement
     if (target.closest("textarea") || target.closest("button") || target.closest("input")) return
 
@@ -139,14 +143,63 @@ export default function PromptForm(props: PromptFormProps) {
         y: event.clientY - dragStartPos.y,
       }
       containerRef.style.transform = `translate3d(${currentTranslate.x}px, ${currentTranslate.y}px, 0)`
+
+      const windowWidth = window.innerWidth
+      const windowHeight = window.innerHeight
+      const isNearRight = event.clientX > windowWidth * 0.75
+      const isNearBottom = event.clientY > windowHeight * 0.6
+      const nearDockZone = isNearRight && isNearBottom
+
+      wasNearDockZone = nearDockZone
+
+      props.onDragProximity?.({
+        isDragging: true,
+        nearDockZone,
+        x: event.clientX,
+        y: event.clientY,
+      })
+
+      props.onDragProximity?.({
+        isDragging: true,
+        nearDockZone,
+        x: event.clientX,
+        y: event.clientY,
+      })
+
       animationFrameId = undefined
     })
   }
 
-  const handleDragEnd = () => {
+  const handleDragEnd = (event: MouseEvent) => {
     if (!isDraggingForm) return
+
+    console.log("[PromptForm handleDragEnd]", {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      wasNearDockZone,
+    })
+
     isDraggingForm = false
     containerRef.style.cursor = ""
+
+    if (wasNearDockZone) {
+      console.log("[PromptForm] Was near dock zone, calling onDrop")
+      props.onDrop?.()
+    }
+
+    currentTranslate = { x: 0, y: 0 }
+    containerRef.style.transform = `translate3d(0px, 0px, 0)`
+
+    wasNearDockZone = false
+
+    props.onDragProximity?.({
+      isDragging: false,
+      nearDockZone: false,
+      x: 0,
+      y: 0,
+    })
   }
 
   onMount(async () => {
@@ -214,9 +267,10 @@ export default function PromptForm(props: PromptFormProps) {
                focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary
                will-change-transform"
         classList={{
-          "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !!local.file.active(),
+          "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !!local.file.active() && !props.docked,
           "!ring-4 !ring-primary !bg-primary/20 !border-primary": isDragOver(),
-          "cursor-grab": !!local.file.active(),
+          "cursor-grab": !!local.file.active() && !props.docked,
+          "!max-w-none !mx-0": props.docked,
         }}
         onDragEnter={(event) => {
           const evt = event as unknown as globalThis.DragEvent

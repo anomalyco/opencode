@@ -255,7 +255,14 @@ function ToolPart(props: { part: ToolPart }) {
   )
 }
 
-export default function SessionTimeline(props: { session: string; class?: string }) {
+interface SessionTimelineProps {
+  session: string
+  class?: string
+  showDockZone?: boolean
+  onDockChat?: () => void
+}
+
+export default function SessionTimeline(props: SessionTimelineProps) {
   const sync = useSync()
   const [scrollElement, setScrollElement] = createSignal<HTMLElement | undefined>(undefined)
   const [root, setRoot] = createSignal<HTMLDivElement | undefined>(undefined)

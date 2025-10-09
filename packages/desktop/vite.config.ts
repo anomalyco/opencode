@@ -13,6 +13,7 @@ export default defineConfig({
     conditions: ["solid"],
   },
   esbuild: {
+    jsx: "automatic",
     jsxImportSource: "solid-js",
   },
   plugins: [
@@ -27,7 +28,7 @@ export default defineConfig({
     }),
   ],
   server: {
-    host: "0.0.0.0",
+    host: "localhost",
     port: 3000,
   },
   build: {

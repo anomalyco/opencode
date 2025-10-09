@@ -25,7 +25,8 @@
         "enable": true,
         "scope": ["**"]
       }
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,

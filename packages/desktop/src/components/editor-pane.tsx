@@ -24,6 +24,9 @@ interface EditorPaneProps {
   onFileClick: (file: LocalFile) => void
   onOpenModelSelect: () => void
   onInputRefChange: (element: HTMLTextAreaElement | null) => void
+  onDragProximity?: (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => void
+  onDrop?: () => void
+  hideFloatingChat?: boolean
 }
 
 export default function EditorPane(props: EditorPaneProps): JSX.Element {
@@ -33,6 +36,9 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
     "onFileClick",
     "onOpenModelSelect",
     "onInputRefChange",
+    "onDragProximity",
+    "onDrop",
+    "hideFloatingChat",
   ])
   const local = useLocal()
   const sdk = useSDK()
@@ -313,16 +319,20 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
           })()}
         </DragOverlay>
       </DragDropProvider>
-      <PromptForm
-        class="peer/editor absolute inset-x-4 z-50 flex items-center justify-center"
-        classList={{
-          "bottom-8": !!local.file.active(),
-          "bottom-3/8": local.file.active() === undefined,
-        }}
-        onSubmit={handlePromptSubmit}
-        onOpenModelSelect={localProps.onOpenModelSelect}
-        onInputRefChange={(element) => localProps.onInputRefChange(element ?? null)}
-      />
+      <Show when={!localProps.hideFloatingChat}>
+        <PromptForm
+          class="peer/editor absolute inset-x-4 z-50 flex items-center justify-center"
+          classList={{
+            "bottom-8": !!local.file.active(),
+            "bottom-3/8": local.file.active() === undefined,
+          }}
+          onSubmit={handlePromptSubmit}
+          onOpenModelSelect={localProps.onOpenModelSelect}
+          onInputRefChange={(element) => localProps.onInputRefChange(element ?? null)}
+          onDragProximity={localProps.onDragProximity}
+          onDrop={localProps.onDrop}
+        />
+      </Show>
     </div>
   )
 }
