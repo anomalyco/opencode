@@ -136,17 +136,71 @@
 
   body {
     line-height: 1;
+    transform: translateZ(0);
   }
 
   /* GPU acceleration for timeline */
   [role="list"] {
     contain: layout style paint;
     content-visibility: auto;
+    transform: translateZ(0);
+    will-change: contents;
   }
 
   [role="list"] > li {
     contain: layout style paint;
     content-visibility: auto;
+    transform: translateZ(0);
+  }
+
+  /* GPU acceleration for all scrollable areas */
+  [class*="overflow-y-auto"],
+  [class*="overflow-x-auto"],
+  [class*="overflow-auto"] {
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* GPU acceleration for animated/interactive elements */
+  button,
+  [role="button"],
+  a {
+    transform: translateZ(0);
+  }
+
+  /* Optimize panel renders */
+  [class*="bg-background"],
+  [class*="bg-background-panel"],
+  [class*="bg-background-element"] {
+    transform: translateZ(0);
+  }
+
+  /* CSS containment for independent rendering contexts */
+  [class*="border-r"],
+  [class*="border-l"] {
+    contain: layout style;
+  }
+
+  /* Optimize file tree and list rendering */
+  [role="tree"],
+  [role="listbox"] {
+    contain: layout style paint;
+    transform: translateZ(0);
+  }
+
+  /* Optimize dialog/modal rendering */
+  [role="dialog"],
+  [data-overlay] {
+    contain: layout style paint;
+    transform: translateZ(0);
+    will-change: opacity, transform;
+  }
+
+  /* Optimize transitions and animations */
+  [class*="transition"],
+  [class*="animate"] {
+    will-change: transform, opacity;
   }
 
   ::selection {
@@ -166,6 +220,16 @@
 
   * {
     scrollbar-color: var(--theme-border-subtle) var(--theme-background-panel);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    * {
+      scroll-snap-stop: normal;
+    }
   }
 
   .prose h1 {
@@ -251,6 +315,18 @@
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
   }
+}
+
+@utility gpu-accelerate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+@utility gpu-smooth {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 @theme {

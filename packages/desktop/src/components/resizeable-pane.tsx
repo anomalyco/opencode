@@ -195,6 +195,8 @@ export function ResizeablePane(props: ResizeablePaneProps) {
         style={{
           width: `${width()}%`,
           flex: `0 0 ${width()}%`,
+          transform: "translateZ(0)",
+          "will-change": "width",
         }}
       >
         {props.children}
