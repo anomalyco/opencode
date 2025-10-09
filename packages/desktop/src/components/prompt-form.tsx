@@ -121,7 +121,7 @@ export default function PromptForm(props: PromptFormProps) {
   }
 
   const handleDragStart = (event: MouseEvent) => {
-    if (!local.file.active() || props.docked) return
+    if (props.docked) return
     const target = event.target as HTMLElement
     if (target.closest("textarea") || target.closest("button") || target.closest("input")) return
 
@@ -267,9 +267,9 @@ export default function PromptForm(props: PromptFormProps) {
                focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary
                will-change-transform"
         classList={{
-          "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !!local.file.active() && !props.docked,
+          "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !props.docked,
           "!ring-4 !ring-primary !bg-primary/20 !border-primary": isDragOver(),
-          "cursor-grab": !!local.file.active() && !props.docked,
+          "cursor-grab": !props.docked,
           "!max-w-none !mx-0": props.docked,
         }}
         onDragEnter={(event) => {

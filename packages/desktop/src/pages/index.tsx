@@ -11,6 +11,7 @@ import type { LocalFile } from "@/context/local"
 import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
 import PromptForm from "@/components/prompt-form"
+import StatusBar from "@/components/status-bar"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
 
@@ -204,7 +205,7 @@ export default function Page() {
   }
 
   return (
-    <div class="relative">
+    <div class="relative flex flex-col h-screen">
       <ResizeableLayout
         id={layoutKey}
         defaults={{
@@ -212,7 +213,7 @@ export default function Page() {
           editor: { size: 56, visible: true },
           timeline: { size: 20, visible: false },
         }}
-        class="h-screen"
+        class="flex-1 min-h-0"
       >
         <ResizeablePane
           id="explorer"
@@ -581,6 +582,7 @@ export default function Page() {
           }}
         />
       </Show>
+      <StatusBar />
     </div>
   )
 }
