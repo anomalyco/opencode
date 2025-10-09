@@ -49,7 +49,6 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $ } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
-import type { Tool } from "../tool/tool"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
