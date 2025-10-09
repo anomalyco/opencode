@@ -19,6 +19,7 @@ export default function FileTree(props: {
       component={p.as ?? "div"}
       classList={{
         "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element cursor-pointer": true,
+        "!py-0": p.node.type === "directory",
         "bg-background-element": local.file.active()?.path === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}

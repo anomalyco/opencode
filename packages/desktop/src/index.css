@@ -29,6 +29,106 @@
   line-height: 1.6 !important;
 }
 
+[data-font-explorer="smallest"] .font-explorer {
+  font-size: 0.7rem !important;
+  line-height: 1.2 !important;
+}
+
+[data-font-explorer="small"] .font-explorer {
+  font-size: 0.8rem !important;
+  line-height: 1.3 !important;
+}
+
+[data-font-explorer="default"] .font-explorer {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+[data-font-explorer="large"] .font-explorer {
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
+}
+
+[data-font-explorer="largest"] .font-explorer {
+  font-size: 1.25rem !important;
+  line-height: 1.6 !important;
+}
+
+[data-font-editor="smallest"] .font-editor {
+  font-size: 0.7rem !important;
+  line-height: 1.2 !important;
+}
+
+[data-font-editor="small"] .font-editor {
+  font-size: 0.8rem !important;
+  line-height: 1.3 !important;
+}
+
+[data-font-editor="default"] .font-editor {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+[data-font-editor="large"] .font-editor {
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
+}
+
+[data-font-editor="largest"] .font-editor {
+  font-size: 1.25rem !important;
+  line-height: 1.6 !important;
+}
+
+[data-font-timeline="smallest"] .font-timeline {
+  font-size: 0.7rem !important;
+  line-height: 1.2 !important;
+}
+
+[data-font-timeline="small"] .font-timeline {
+  font-size: 0.8rem !important;
+  line-height: 1.3 !important;
+}
+
+[data-font-timeline="default"] .font-timeline {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+[data-font-timeline="large"] .font-timeline {
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
+}
+
+[data-font-timeline="largest"] .font-timeline {
+  font-size: 1.25rem !important;
+  line-height: 1.6 !important;
+}
+
+[data-font-conversation="smallest"] .font-conversation {
+  font-size: 0.7rem !important;
+  line-height: 1.2 !important;
+}
+
+[data-font-conversation="small"] .font-conversation {
+  font-size: 0.8rem !important;
+  line-height: 1.3 !important;
+}
+
+[data-font-conversation="default"] .font-conversation {
+  font-size: 0.875rem !important;
+  line-height: 1.4 !important;
+}
+
+[data-font-conversation="large"] .font-conversation {
+  font-size: 1rem !important;
+  line-height: 1.5 !important;
+}
+
+[data-font-conversation="largest"] .font-conversation {
+  font-size: 1.25rem !important;
+  line-height: 1.6 !important;
+}
+
 @layer components {
   [data-popper-positioner] {
     pointer-events: none;

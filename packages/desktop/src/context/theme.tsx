@@ -10,13 +10,22 @@ import {
 
 export type FontSize = "smallest" | "small" | "default" | "large" | "largest"
 
+export interface FontSizes {
+  explorer: FontSize
+  editor: FontSize
+  timeline: FontSize
+  conversation: FontSize
+}
+
 export interface ThemeContextValue {
   theme: string | undefined
   isDark: boolean
   fontSize: FontSize
+  fontSizes: FontSizes
   setTheme: (themeName: string) => void
   setDarkMode: (isDark: boolean) => void
   setFontSize: (size: FontSize) => void
+  setAreaFontSize: (area: keyof FontSizes, size: FontSize) => void
   previewTheme: (themeName: string, isDark: boolean) => void
   clearPreview: () => void
 }
@@ -65,6 +74,12 @@ export const ThemeProvider: ParentComponent<ThemeProviderProps> = (props) => {
   const [theme, setThemeSignal] = createSignal<string | undefined>()
   const [isDark, setIsDark] = createSignal(props.defaultDarkMode ?? false)
   const [fontSize, setFontSizeSignal] = createSignal<FontSize>("default")
+  const [fontSizes, setFontSizes] = createSignal<FontSizes>({
+    explorer: "default",
+    editor: "default",
+    timeline: "default",
+    conversation: "default",
+  })
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "t" && event.ctrlKey) {
@@ -89,8 +104,19 @@ export const ThemeProvider: ParentComponent<ThemeProviderProps> = (props) => {
     const savedTheme = localStorage.getItem("theme") ?? "opencode"
     const savedDarkMode = localStorage.getItem("darkMode") ?? "true"
     const savedFontSize = (localStorage.getItem("fontSize") as FontSize) ?? "default"
+    const savedFontSizes = localStorage.getItem("fontSizes")
+
     setIsDark(savedDarkMode === "true")
     setFontSizeSignal(savedFontSize)
+
+    if (savedFontSizes) {
+      try {
+        setFontSizes(JSON.parse(savedFontSizes))
+      } catch (e) {
+        // ignore
+      }
+    }
+
     setTheme(savedTheme)
   })
 
@@ -98,10 +124,15 @@ export const ThemeProvider: ParentComponent<ThemeProviderProps> = (props) => {
     const currentTheme = theme()
     const darkMode = isDark()
     const size = fontSize()
+    const sizes = fontSizes()
     if (currentTheme) {
       document.documentElement.setAttribute("data-theme", currentTheme)
       document.documentElement.setAttribute("data-dark", darkMode.toString())
       document.documentElement.setAttribute("data-font-size", size)
+      document.documentElement.setAttribute("data-font-explorer", sizes.explorer)
+      document.documentElement.setAttribute("data-font-editor", sizes.editor)
+      document.documentElement.setAttribute("data-font-timeline", sizes.timeline)
+      document.documentElement.setAttribute("data-font-conversation", sizes.conversation)
     }
   })
 
@@ -120,6 +151,14 @@ export const ThemeProvider: ParentComponent<ThemeProviderProps> = (props) => {
     localStorage.setItem("fontSize", size)
   }
 
+  const setAreaFontSize = (area: keyof FontSizes, size: FontSize) => {
+    setFontSizes((prev) => {
+      const updated = { ...prev, [area]: size }
+      localStorage.setItem("fontSizes", JSON.stringify(updated))
+      return updated
+    })
+  }
+
   const previewTheme = (themeName: string, isDark: boolean) => {
     document.documentElement.setAttribute("data-theme", themeName)
     document.documentElement.setAttribute("data-dark", isDark.toString())
@@ -134,16 +173,30 @@ export const ThemeProvider: ParentComponent<ThemeProviderProps> = (props) => {
     }
   }
 
-  const contextValue: ThemeContextValue = {
-    theme: theme(),
-    isDark: isDark(),
-    fontSize: fontSize(),
-    setTheme,
-    setDarkMode,
-    setFontSize,
-    previewTheme,
-    clearPreview,
-  }
-
-  return <ThemeContext.Provider value={contextValue}>{props.children}</ThemeContext.Provider>
+  return (
+    <ThemeContext.Provider
+      value={{
+        get theme() {
+          return theme()
+        },
+        get isDark() {
+          return isDark()
+        },
+        get fontSize() {
+          return fontSize()
+        },
+        get fontSizes() {
+          return fontSizes()
+        },
+        setTheme,
+        setDarkMode,
+        setFontSize,
+        setAreaFontSize,
+        previewTheme,
+        clearPreview,
+      }}
+    >
+      {props.children}
+    </ThemeContext.Provider>
+  )
 }

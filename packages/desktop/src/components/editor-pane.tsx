@@ -24,6 +24,7 @@ interface EditorPaneProps {
   timelinePane: string
   onFileClick: (file: LocalFile) => void
   onOpenModelSelect: () => void
+  onOpenAgentSelect: () => void
   onInputRefChange: (element: HTMLTextAreaElement | null) => void
   onDragProximity?: (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => void
   onDrop?: () => void
@@ -36,6 +37,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
     "timelinePane",
     "onFileClick",
     "onOpenModelSelect",
+    "onOpenAgentSelect",
     "onInputRefChange",
     "onDragProximity",
     "onDrop",
@@ -453,6 +455,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
           }}
           onSubmit={handlePromptSubmit}
           onOpenModelSelect={localProps.onOpenModelSelect}
+          onOpenAgentSelect={localProps.onOpenAgentSelect}
           onInputRefChange={(element) => localProps.onInputRefChange(element ?? null)}
           onDragProximity={localProps.onDragProximity}
           onDrop={localProps.onDrop}

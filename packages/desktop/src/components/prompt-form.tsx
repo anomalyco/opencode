@@ -1,17 +1,19 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, createResource } from "solid-js"
 import { Button, FileIcon, Icon, IconButton, Tooltip } from "@/ui"
 import { Select } from "@/components/select"
 import { useLocal } from "@/context"
 import type { FileContext, LocalFile } from "@/context/local"
-import { getFilename } from "@/utils"
+import { getFilename, getDirectory } from "@/utils"
 import { createSpeechRecognition } from "@/utils/speech"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { AutocompleteDropdown, type AutocompleteItem } from "@/components/autocomplete-dropdown"
 
 interface PromptFormProps {
   class?: string
   classList?: Record<string, boolean>
   onSubmit: (prompt: string) => Promise<void> | void
   onOpenModelSelect: () => void
+  onOpenAgentSelect: () => void
   onInputRefChange?: (element: HTMLTextAreaElement | undefined) => void
   onDragProximity?: (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => void
   onDrop?: () => void
@@ -24,6 +26,48 @@ export default function PromptForm(props: PromptFormProps) {
   const [prompt, setPrompt] = createSignal("")
   const [isDragOver, setIsDragOver] = createSignal(false)
   const [uploadedFiles, setUploadedFiles] = createSignal<File[]>([])
+  const [autocomplete, setAutocomplete] = createSignal<{
+    type: "file" | "command"
+    query: string
+    position: { top: number; left: number }
+    startPos: number
+  } | null>(null)
+
+  const [autocompleteItems] = createResource(autocomplete, async (ac) => {
+    if (!ac) return []
+
+    if (ac.type === "file") {
+      const files = await local.file.search(ac.query)
+
+      const sorted = files.sort((a: string, b: string) => {
+        const aFilename = getFilename(a)
+        const bFilename = getFilename(b)
+        const aIsHidden = aFilename.startsWith(".")
+        const bIsHidden = bFilename.startsWith(".")
+
+        if (aIsHidden && !bIsHidden) return 1
+        if (!aIsHidden && bIsHidden) return -1
+        return 0
+      })
+
+      return sorted.slice(0, 10).map((path: string) => ({
+        type: "file" as const,
+        label: getFilename(path),
+        value: path,
+        description: getDirectory(path),
+      }))
+    }
+
+    if (ac.type === "command") {
+      const commands = [
+        { label: "model", value: "model", description: "Change model" },
+        { label: "agent", value: "agent", description: "Change agent" },
+      ]
+      return commands.filter((c) => c.label.startsWith(ac.query)).map((c) => ({ type: "command" as const, ...c }))
+    }
+
+    return []
+  })
 
   let dragCounter = 0
 
@@ -48,6 +92,44 @@ export default function PromptForm(props: PromptFormProps) {
   let currentTranslate = { x: 0, y: 0 }
   let animationFrameId: number | undefined
   let wasNearDockZone = false
+
+  const modeColors = createMemo(() => {
+    const agentName = local.agent.current().name.toLowerCase()
+
+    if (agentName === "build") {
+      return {
+        ring: "ring-primary/50",
+        focusRing: "focus-within:ring-primary/40",
+        focusBorder: "focus-within:border-primary",
+        button: "bg-primary",
+        buttonHover: "hover:bg-primary/90",
+      }
+    } else if (agentName === "plan") {
+      return {
+        ring: "ring-secondary/50",
+        focusRing: "focus-within:ring-secondary/40",
+        focusBorder: "focus-within:border-secondary",
+        button: "bg-secondary",
+        buttonHover: "hover:bg-secondary/90",
+      }
+    } else if (agentName === "docs") {
+      return {
+        ring: "ring-accent/50",
+        focusRing: "focus-within:ring-accent/40",
+        focusBorder: "focus-within:border-accent",
+        button: "bg-accent",
+        buttonHover: "hover:bg-accent/90",
+      }
+    }
+
+    return {
+      ring: "ring-border-active/50",
+      focusRing: "focus-within:ring-primary/40",
+      focusBorder: "focus-within:border-primary",
+      button: "bg-primary",
+      buttonHover: "hover:bg-primary/90",
+    }
+  })
 
   const promptContent = createMemo(() => {
     const base = prompt() || ""
@@ -85,6 +167,11 @@ export default function PromptForm(props: PromptFormProps) {
 
   const handlePromptKeyDown = (event: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
     if (event.isComposing) return
+
+    if (autocomplete()) {
+      return
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       inputRef?.form?.requestSubmit()
@@ -106,6 +193,98 @@ export default function PromptForm(props: PromptFormProps) {
     shouldAutoScroll = true
   }
 
+  const getCaretCoordinates = (element: HTMLTextAreaElement): { top: number; left: number } => {
+    const rect = element.getBoundingClientRect()
+    const style = window.getComputedStyle(element)
+    const lineHeight = parseInt(style.lineHeight || "20")
+
+    return {
+      top: rect.top + lineHeight + 5,
+      left: rect.left + 10,
+    }
+  }
+
+  const detectAutocomplete = (value: string, cursorPos: number) => {
+    const beforeCursor = value.slice(0, cursorPos)
+
+    const atMatch = beforeCursor.match(/@(\S*)$/)
+    if (atMatch) {
+      const query = atMatch[1]
+      const startPos = cursorPos - atMatch[0].length
+      const position = getCaretCoordinates(inputRef!)
+
+      setAutocomplete({
+        type: "file",
+        query,
+        position,
+        startPos,
+      })
+      return
+    }
+
+    const slashMatch = value.match(/^\/(\w*)$/)
+    if (slashMatch && cursorPos <= slashMatch[0].length) {
+      const query = slashMatch[1]
+      const position = getCaretCoordinates(inputRef!)
+
+      setAutocomplete({
+        type: "command",
+        query,
+        position,
+        startPos: 0,
+      })
+      return
+    }
+
+    setAutocomplete(null)
+  }
+
+  const handleAutocompleteSelect = (item: AutocompleteItem) => {
+    if (!autocomplete() || !inputRef) return
+
+    const ac = autocomplete()!
+    const currentPrompt = prompt()
+    const before = currentPrompt.slice(0, ac.startPos)
+    const after = currentPrompt.slice(inputRef.selectionStart)
+
+    if (ac.type === "file") {
+      const newPrompt = before + "@" + item.label + " " + after
+      setPrompt(newPrompt)
+
+      local.context.add({
+        type: "file",
+        path: item.value,
+      })
+
+      const newCursorPos = before.length + item.label.length + 2
+      queueMicrotask(() => {
+        if (inputRef) {
+          inputRef.selectionStart = newCursorPos
+          inputRef.selectionEnd = newCursorPos
+        }
+      })
+    } else if (ac.type === "command") {
+      const newPrompt = before + after
+      setPrompt(newPrompt)
+
+      if (item.value === "model") {
+        props.onOpenModelSelect()
+      } else if (item.value === "agent") {
+        props.onOpenAgentSelect()
+      }
+
+      queueMicrotask(() => {
+        if (inputRef) {
+          inputRef.selectionStart = before.length
+          inputRef.selectionEnd = before.length
+        }
+      })
+    }
+
+    setAutocomplete(null)
+    inputRef?.focus()
+  }
+
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault()
     const currentPrompt = prompt()
@@ -123,7 +302,14 @@ export default function PromptForm(props: PromptFormProps) {
   const handleDragStart = (event: MouseEvent) => {
     if (props.docked) return
     const target = event.target as HTMLElement
-    if (target.closest("textarea") || target.closest("button") || target.closest("input")) return
+    if (
+      target.closest("textarea") ||
+      target.closest("button") ||
+      target.closest("input") ||
+      target.closest("[role='combobox']") ||
+      target.closest("[role='listbox']")
+    )
+      return
 
     isDraggingForm = true
     dragStartPos = { x: event.clientX - currentTranslate.x, y: event.clientY - currentTranslate.y }
@@ -260,17 +446,19 @@ export default function PromptForm(props: PromptFormProps) {
         ref={containerRef}
         onMouseDown={handleDragStart}
         style={{ "touch-action": "none" }}
-        class="w-full max-w-xl min-w-0 p-2 mx-auto rounded-xl isolate backdrop-blur-xs
+        class="w-full max-w-xl min-w-0 p-2 mx-auto rounded-2xl isolate backdrop-blur-xs
                flex flex-col gap-1
                bg-gradient-to-b from-background-panel/90 to-background/90
-               ring-1 ring-border-active/50 border border-transparent
-               focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary
+               ring-1 border border-transparent focus-within:ring-2
                will-change-transform"
         classList={{
           "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !props.docked,
           "!ring-4 !ring-primary !bg-primary/20 !border-primary": isDragOver(),
           "cursor-grab": !props.docked,
           "!max-w-none !mx-0": props.docked,
+          [modeColors().ring]: true,
+          [modeColors().focusRing]: true,
+          [modeColors().focusBorder]: true,
         }}
         onDragEnter={(event) => {
           const evt = event as unknown as globalThis.DragEvent
@@ -347,8 +535,17 @@ export default function PromptForm(props: PromptFormProps) {
               props.onInputRefChange?.(inputRef)
             }}
             value={prompt()}
-            onInput={(event) => setPrompt(event.currentTarget.value)}
+            onInput={(event) => {
+              const value = event.currentTarget.value
+              const cursorPos = event.currentTarget.selectionStart
+              setPrompt(value)
+              detectAutocomplete(value, cursorPos)
+            }}
             onKeyDown={handlePromptKeyDown}
+            onKeyUp={(event) => {
+              const cursorPos = event.currentTarget.selectionStart
+              detectAutocomplete(prompt(), cursorPos)
+            }}
             onScroll={handlePromptScroll}
             placeholder={placeholderText}
             autocapitalize="off"
@@ -377,8 +574,20 @@ export default function PromptForm(props: PromptFormProps) {
               current={local.agent.current().name}
               onSelect={local.agent.set}
               class="uppercase"
+              classList={{
+                "text-primary": local.agent.current().name.toLowerCase() === "build",
+                "text-secondary": local.agent.current().name.toLowerCase() === "plan",
+                "text-accent": local.agent.current().name.toLowerCase() === "docs",
+              }}
             />
-            <Button onClick={() => props.onOpenModelSelect()}>
+            <Button
+              onClick={() => props.onOpenModelSelect()}
+              classList={{
+                "text-primary": local.agent.current().name.toLowerCase() === "build",
+                "text-secondary": local.agent.current().name.toLowerCase() === "plan",
+                "text-accent": local.agent.current().name.toLowerCase() === "docs",
+              }}
+            >
               {local.model.current()?.name ?? "Select model"}
               <Icon name="chevron-down" size={24} class="text-text-muted" />
             </Button>
@@ -440,7 +649,11 @@ export default function PromptForm(props: PromptFormProps) {
               </IconButton>
             </Tooltip>
             <IconButton
-              class="text-background-panel! bg-primary rounded-full! hover:bg-primary/90 ml-1.5"
+              class="text-background-panel! rounded-full! ml-1.5"
+              classList={{
+                [modeColors().button]: true,
+                [modeColors().buttonHover]: true,
+              }}
               size="xs"
               variant="ghost"
               type="submit"
@@ -450,6 +663,14 @@ export default function PromptForm(props: PromptFormProps) {
           </div>
         </div>
       </div>
+      <Show when={autocomplete() && autocompleteItems()}>
+        <AutocompleteDropdown
+          items={autocompleteItems() || []}
+          position={autocomplete()!.position}
+          onSelect={handleAutocompleteSelect}
+          onClose={() => setAutocomplete(null)}
+        />
+      </Show>
     </form>
   )
 }

@@ -361,7 +361,7 @@ export default function SessionTimeline(props: SessionTimelineProps) {
     <div
       ref={setRoot}
       classList={{
-        "p-4 select-text flex flex-col gap-y-1": true,
+        "p-4 select-text flex flex-col gap-y-1 font-timeline": true,
         [props.class ?? ""]: !!props.class,
       }}
       style={{
@@ -383,7 +383,7 @@ export default function SessionTimeline(props: SessionTimelineProps) {
                         {(part) => (
                           <Switch>
                             <Match when={message.role === "user"}>
-                              <div class="w-full flex flex-col items-end justify-stretch gap-y-1.5 min-w-0 mt-5 group-first/li:mt-0">
+                              <div class="w-full flex flex-col items-end justify-stretch gap-y-1.5 min-w-0 mt-5 group-first/li:mt-0 font-conversation">
                                 <p class="w-full rounded-md p-3 ring-1 ring-text/15 ring-inset text-xs bg-background-panel">
                                   <span class="font-medium text-text whitespace-pre-wrap break-words">
                                     {part().text}
@@ -396,7 +396,7 @@ export default function SessionTimeline(props: SessionTimelineProps) {
                               </div>
                             </Match>
                             <Match when={message.role === "assistant"}>
-                              <Markdown text={sync.sanitize(part().text)} class="text-text mt-1" />
+                              <Markdown text={sync.sanitize(part().text)} class="text-text mt-1 font-conversation" />
                             </Match>
                           </Switch>
                         )}

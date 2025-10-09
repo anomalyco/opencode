@@ -1,4 +1,4 @@
-import { createEffect, Show, For, createMemo, type JSX, createResource } from "solid-js"
+import { createEffect, Show, For, createMemo, type JSX, createResource, onMount } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
 import { Icon, IconButton } from "@/ui"
 import { createStore } from "solid-js/store"
@@ -16,6 +16,9 @@ interface SelectDialogProps<T> {
   groupBy?: (x: T) => string
   onSelect?: (value: T | undefined) => void
   onClose?: () => void
+  onBack?: () => void
+  reduceBlur?: boolean
+  keepOpen?: boolean
 }
 
 export function SelectDialog<T>(props: SelectDialogProps<T>) {
@@ -64,6 +67,10 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
     list.setActive(props.key(all[0]))
   }
 
+  onMount(() => {
+    resetSelection()
+  })
+
   createEffect(() => {
     store.filter
     scrollRef?.scrollTo(0, 0)
@@ -88,7 +95,9 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
 
   const handleSelect = (item: T) => {
     props.onSelect?.(item)
-    props.onClose?.()
+    if (!props.keepOpen) {
+      props.onClose?.()
+    }
   }
 
   const handleKey = (e: KeyboardEvent) => {
@@ -100,7 +109,11 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
       if (selected) handleSelect(selected)
     } else if (e.key === "Escape") {
       e.preventDefault()
-      props.onClose?.()
+      if (props.onBack) {
+        props.onBack()
+      } else {
+        props.onClose?.()
+      }
     } else {
       list.onKeyDown(e)
     }
@@ -109,7 +122,13 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
   return (
     <Dialog defaultOpen modal onOpenChange={(open) => open || props.onClose?.()}>
       <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]" />
+        <Dialog.Overlay
+          classList={{
+            "fixed inset-0 bg-black/50 z-[100]": true,
+            "backdrop-blur-sm": !props.reduceBlur,
+            "backdrop-blur-[2px]": props.reduceBlur,
+          }}
+        />
         <Dialog.Content
           class="fixed top-[20%] left-1/2 -translate-x-1/2 w-[90vw] max-w-2xl 
                  shadow-[0_0_33px_rgba(0,0,0,0.8)]
@@ -118,16 +137,32 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         >
           <div class="border-b border-border-subtle/30">
             <div class="relative">
-              <Icon name="command" size={24} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/80" />
+              <Show
+                when={props.onBack}
+                fallback={
+                  <Icon name="command" size={24} class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/80" />
+                }
+              >
+                <IconButton
+                  size="xs"
+                  variant="ghost"
+                  onClick={props.onBack}
+                  class="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                >
+                  <Icon name="arrow-left" size={21} />
+                </IconButton>
+              </Show>
               <input
                 type="text"
                 value={store.filter}
                 onInput={(e) => handleInput(e.currentTarget.value)}
                 onKeyDown={handleKey}
                 placeholder={props.placeholder}
-                class="w-full pl-10 pr-4 py-2 rounded-t-xl
-                       text-sm text-text placeholder-text-muted/70
-                       focus:outline-none"
+                classList={{
+                  "w-full pr-4 py-2 rounded-t-xl text-sm text-text placeholder-text-muted/70 focus:outline-none": true,
+                  "pl-10": !props.onBack,
+                  "pl-9": !!props.onBack,
+                }}
                 autofocus
                 spellcheck={false}
                 autocorrect="off"
