@@ -12,6 +12,7 @@ import {
   ThemeProvider,
   ShikiProvider,
   MarkedProvider,
+  MobileProvider,
 } from "@/context"
 
 const root = document.getElementById("root")
@@ -26,21 +27,23 @@ render(
   () => (
     <div class="h-full bg-background text-text-muted">
       <ThemeProvider defaultTheme="opencode" defaultDarkMode={true}>
-        <ShikiProvider>
-          <MarkedProvider>
-            <SDKProvider>
-              <EventProvider>
-                <SyncProvider>
-                  <LocalProvider>
-                    <Router root={Layout}>
-                      <Route path="/" component={Home} />
-                    </Router>
-                  </LocalProvider>
-                </SyncProvider>
-              </EventProvider>
-            </SDKProvider>
-          </MarkedProvider>
-        </ShikiProvider>
+        <MobileProvider>
+          <ShikiProvider>
+            <MarkedProvider>
+              <SDKProvider>
+                <EventProvider>
+                  <SyncProvider>
+                    <LocalProvider>
+                      <Router root={Layout}>
+                        <Route path="/" component={Home} />
+                      </Router>
+                    </LocalProvider>
+                  </SyncProvider>
+                </EventProvider>
+              </SDKProvider>
+            </MarkedProvider>
+          </ShikiProvider>
+        </MobileProvider>
       </ThemeProvider>
     </div>
   ),

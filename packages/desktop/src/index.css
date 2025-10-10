@@ -2,6 +2,11 @@
 
 :root {
   interpolate-size: allow-keywords;
+
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
 }
 
 [data-font-size="smallest"] .font-scalable {
@@ -137,6 +142,21 @@
   body {
     line-height: 1;
     transform: translateZ(0);
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color-scheme: dark;
+    touch-action: pan-x pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea {
+    -webkit-user-select: auto;
+    user-select: auto;
   }
 
   /* GPU acceleration for timeline */

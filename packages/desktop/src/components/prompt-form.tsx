@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, createResource } from "solid-js"
 import { Button, FileIcon, Icon, IconButton, Tooltip } from "@/ui"
 import { Select } from "@/components/select"
-import { useLocal } from "@/context"
+import { useLocal, useMobile } from "@/context"
 import type { FileContext, LocalFile } from "@/context/local"
 import { getFilename, getDirectory } from "@/utils"
 import { createSpeechRecognition } from "@/utils/speech"
@@ -22,6 +22,7 @@ interface PromptFormProps {
 
 export default function PromptForm(props: PromptFormProps) {
   const local = useLocal()
+  const mobile = useMobile()
 
   const [prompt, setPrompt] = createSignal("")
   const [isDragOver, setIsDragOver] = createSignal(false)
@@ -620,10 +621,10 @@ export default function PromptForm(props: PromptFormProps) {
                     "text-text-muted": !isRecording(),
                     "text-error! animate-pulse": isRecording(),
                   }}
-                  size="xs"
+                  size={mobile.isMobile ? "md" : "xs"}
                   variant="ghost"
                 >
-                  <Icon name="mic" size={24} />
+                  <Icon name="mic" size={mobile.isMobile ? 32 : 24} />
                 </IconButton>
               </Tooltip>
             </Show>
@@ -664,11 +665,11 @@ export default function PromptForm(props: PromptFormProps) {
                 [modeColors().button]: true,
                 [modeColors().buttonHover]: true,
               }}
-              size="xs"
+              size={mobile.isMobile ? "md" : "xs"}
               variant="ghost"
               type="submit"
             >
-              <Icon name="arrow-up" size={21} />
+              <Icon name="arrow-up" size={mobile.isMobile ? 28 : 21} />
             </IconButton>
           </div>
         </div>

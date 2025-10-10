@@ -28,7 +28,7 @@ export default defineConfig({
     }),
   ],
   server: {
-    host: "localhost",
+    host: process.env["TAURI_DEV_HOST"] || "0.0.0.0",
     port: 3000,
   },
   build: {

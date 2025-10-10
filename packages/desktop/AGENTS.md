@@ -2,10 +2,24 @@
 
 ## Build/Test Commands
 
-- **Development**: `bun run dev` (starts Vite dev server on port 3000)
-- **Build**: `bun run build` (production build)
-- **Preview**: `bun run serve` (preview production build)
+### Development
+
+- **Web Dev**: `bun run dev` (starts Vite dev server on port 3000, responsive mobile UI at < 768px)
+- **macOS Desktop**: `bun run tauri:dev` or `cargo tauri dev`
+- **iOS Simulator**: `bun run ios:dev` or `cargo tauri ios dev "iPhone 16 Pro"`
 - **Validation**: Use `bun run typecheck` only - do not build or run project for validation
+
+### Production Builds
+
+- **Build All**: `./scripts/build-all.sh` (builds web, macOS desktop, and iOS)
+- **Web Only**: `bun run build` (production web build)
+- **macOS Desktop**: `bun run build:macos` (creates .app and .dmg)
+- **iOS for Mac**: `bun run build:ios` (creates IPA that runs on iPhone, iPad, and Apple Silicon Macs)
+- **iOS Simulator**: `bun run build:ios-sim` (for testing in simulator)
+
+### Testing
+
+- **Preview**: `bun run serve` (preview production build)
 - **Testing**: Do not create or run automated tests
 
 ## Code Style

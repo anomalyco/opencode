@@ -11,11 +11,15 @@
     "build": "vite build",
     "build:all": "npm run build && npm run build:tauri",
     "build:tauri": "tauri build",
+    "build:macos": "tauri build --bundles app,dmg",
+    "build:ios": "tauri ios build --target aarch64",
+    "build:ios-sim": "tauri ios build --target aarch64-sim",
     "serve": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "ios:dev": "tauri ios dev"
   },
   "license": "MIT",
   "devDependencies": {
