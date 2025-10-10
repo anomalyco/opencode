@@ -239,6 +239,19 @@ OpenCode will automatically download any new updates when it starts up. You can 
 
 ---
 
+### Autocompact
+
+OpenCode will automatically compact sessions when they exceed the model's context window limits. This helps maintain conversation history while staying within token limits. You can disable this with the `autocompact` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autocompact": false
+}
+```
+
+---
+
 ### Formatters
 
 You can configure code formatters through the `formatter` option.

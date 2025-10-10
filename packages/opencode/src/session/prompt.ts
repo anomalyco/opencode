@@ -347,10 +347,10 @@ export namespace SessionPrompt {
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
-      SessionCompaction.isOverflow({
+      (await SessionCompaction.isOverflow({
         tokens: lastAssistant.info.tokens,
         model: input.model,
-      })
+      }))
     ) {
       const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,

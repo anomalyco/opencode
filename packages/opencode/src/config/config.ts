@@ -428,6 +428,7 @@ export namespace Config {
         .describe(
           "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
         ),
+      autocompact: z.boolean().optional().default(true).describe("Automatically compact sessions"),
       autoshare: z
         .boolean()
         .optional()
@@ -616,7 +617,7 @@ export namespace Config {
         if (err.code === "ENOENT") return
         throw new JsonError({ path: filepath }, { cause: err })
       })
-    if (!text) return {}
+    if (!text) return {} as Info
     return load(text, filepath)
   }
 

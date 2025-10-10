@@ -3,6 +3,7 @@ import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
+import { Config } from "../config/config"
 import { defer } from "../util/defer"
 import { MessageV2 } from "./message-v2"
 import { SystemPrompt } from "./system"
@@ -26,8 +27,9 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
+  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: ModelsDev.Model }) {
+    const config = await Config.get()
+    if (config.autocompact === false || Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
