@@ -92,6 +92,7 @@ body > .page > header button[data-open-modal] > kbd {
   gap: 4px;
 }
 body > .page > header button[data-open-modal] > kbd > kbd {
+  color: var(--color-icon) !important;
   padding: 4px 6px;
   border: 1px solid var(--color-border);
   border-radius: 3px;
