@@ -37,16 +37,16 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.21
+          bun-version: 1.3.0
 
       - name: Cache ~/.bun
         id: cache-bun
         uses: actions/cache@v3
         with:
           path: ~/.bun
-          key: ${{ runner.os }}-bun-1-2-21-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-bun-1-3-0-${{ hashFiles('bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-bun-1-2-21-
+            ${{ runner.os }}-bun-1-3-0-
 
       - name: Install makepkg
         run: |

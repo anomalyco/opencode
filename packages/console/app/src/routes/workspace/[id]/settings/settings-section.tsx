@@ -79,10 +79,7 @@ export function SettingsSection() {
       </div>
       <div data-slot="section-content">
         <div data-slot="setting">
-          <div data-slot="setting-info">
-            <h3>Workspace Name</h3>
-            <p data-slot="current-value">{workspaceInfo()?.name}</p>
-          </div>
+          <p>Workspace name</p>
           <Show
             when={!store.show}
             fallback={
@@ -97,25 +94,26 @@ export function SettingsSection() {
                     placeholder="Workspace name"
                     value={workspaceInfo()?.name ?? "Default"}
                   />
-                  <Show when={submission.result && submission.result.error}>
-                    {(err) => <div data-slot="form-error">{err()}</div>}
-                  </Show>
-                </div>
-                <input type="hidden" name="workspaceID" value={params.id} />
-                <div data-slot="form-actions">
+                  <input type="hidden" name="workspaceID" value={params.id} />
+                  <button type="submit" data-color="primary" disabled={submission.pending}>
+                    {submission.pending ? "Updating..." : "Save"}
+                  </button>
                   <button type="reset" data-color="ghost" onClick={() => hide()}>
                     Cancel
                   </button>
-                  <button type="submit" data-color="primary" disabled={submission.pending}>
-                    {submission.pending ? "Updating..." : "Update"}
-                  </button>
                 </div>
+                <Show when={submission.result && submission.result.error}>
+                  {(err) => <div data-slot="form-error">{err()}</div>}
+                </Show>
               </form>
             }
           >
-            <button data-color="primary" onClick={() => show()}>
-              Edit Name
-            </button>
+            <div data-slot="value-with-action">
+              <p data-slot="current-value">{workspaceInfo()?.name}</p>
+              <button data-color="primary" onClick={() => show()}>
+                Edit
+              </button>
+            </div>
           </Show>
         </div>
       </div>

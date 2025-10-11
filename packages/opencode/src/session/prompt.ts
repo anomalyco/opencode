@@ -457,6 +457,10 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            extra: {
+              modelID: input.modelID,
+              providerID: input.providerID,
+            },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -989,6 +993,7 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
+                      attachments: value.output.attachments,
                     },
                   })
                   delete toolcalls[value.toolCallId]

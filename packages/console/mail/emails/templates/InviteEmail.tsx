@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from "react"
 import { Img, Row, Html, Link, Body, Head, Button, Column, Preview, Section, Container } from "@jsx-email/all"
-import { Hr, Text, Fonts, SplitString, Title, A, Span } from "../components"
+import { Hr, Text, Fonts, SplitString, Title, A, Span, B } from "../components"
 import {
   unit,
   body,
@@ -23,17 +23,24 @@ const CONSOLE_URL = "https://opencode.ai/"
 const DOC_URL = "https://opencode.ai/docs/zen"
 
 interface InviteEmailProps {
-  workspace: string
+  inviter: string
+  workspaceID: string
+  workspaceName: string
   assetsUrl: string
 }
-export const InviteEmail = ({ workspace, assetsUrl = LOCAL_ASSETS_URL }: InviteEmailProps) => {
-  const subject = `Join the ${workspace} workspace`
-  const messagePlain = `You've been invited to join the ${workspace} workspace in the OpenCode Zen Console.`
-  const url = `${CONSOLE_URL}workspace/${workspace}`
+export const InviteEmail = ({
+  inviter = "test@anoma.ly",
+  workspaceID = "wrk_01K6XFY7V53T8XN0A7X8G9BTN3",
+  workspaceName = "anomaly",
+  assetsUrl = LOCAL_ASSETS_URL,
+}: InviteEmailProps) => {
+  const subject = `You've been invited to join the ${workspaceName} workspace on OpenCode Console`
+  const messagePlain = `${inviter} invited you to join the ${workspaceName} workspace (${workspaceID}).`
+  const url = `${CONSOLE_URL}workspace/${workspaceID}`
   return (
     <Html lang="en">
       <Head>
-        <Title>{`OpenCode Zen — ${messagePlain}`}</Title>
+        <Title>{`OpenCode — ${messagePlain}`}</Title>
       </Head>
       <Fonts assetsUrl={assetsUrl} />
       <Preview>{messagePlain}</Preview>
@@ -42,14 +49,9 @@ export const InviteEmail = ({ workspace, assetsUrl = LOCAL_ASSETS_URL }: InviteE
           <Section style={frame}>
             <Row>
               <Column>
-                <A href={CONSOLE_URL}>
-                  <Img height="32" alt="OpenCode Zen Logo" src={`${assetsUrl}/zen-logo.png`} />
+                <A href={`${CONSOLE_URL}zen`}>
+                  <Img height="32" alt="OpenCode Logo" src={`${assetsUrl}/logo.png`} />
                 </A>
-              </Column>
-              <Column align="right">
-                <Button style={buttonPrimary} href={url}>
-                  <Span style={code}>Join Workspace</Span>
-                </Button>
               </Column>
             </Row>
 
@@ -59,30 +61,24 @@ export const InviteEmail = ({ workspace, assetsUrl = LOCAL_ASSETS_URL }: InviteE
               </Column>
             </Row>
 
-            <Section>
-              <Text style={{ ...compactText, ...breadcrumb }}>
-                <Span>OpenCode Zen</Span>
-                <Span style={{ ...code, ...breadcrumbColonSeparator }}>:</Span>
-                <Span>{workspace}</Span>
-              </Text>
-              <Text style={{ ...heading, ...compactText }}>
-                <Link href={url}>
-                  <SplitString text={subject} split={40} />
-                </Link>
-              </Text>
-            </Section>
             <Section style={{ padding: `${unit}px 0 0 0` }}>
               <Text style={{ ...compactText }}>
-                You've been invited to join the{" "}
+                <B>{inviter}</B> invited you to join the{" "}
                 <Link style={medium} href={url}>
-                  {workspace}
+                  <B>{workspaceName}</B>
                 </Link>{" "}
-                workspace in the{" "}
-                <Link style={medium} href={CONSOLE_URL}>
-                  OpenCode Zen Console
+                workspace ({workspaceID}) in the{" "}
+                <Link style={medium} href={`${CONSOLE_URL}zen`}>
+                  OpenCode Console
                 </Link>
                 .
               </Text>
+            </Section>
+
+            <Section style={{ padding: `${unit}px 0 0 0` }}>
+              <Button style={buttonPrimary} href={url}>
+                <Span style={code}>Join Workspace</Span>
+              </Button>
             </Section>
 
             <Row style={headingHr}>
@@ -93,7 +89,7 @@ export const InviteEmail = ({ workspace, assetsUrl = LOCAL_ASSETS_URL }: InviteE
 
             <Row>
               <Column>
-                <Link href={CONSOLE_URL} style={footerLink}>
+                <Link href={`${CONSOLE_URL}zen`} style={footerLink}>
                   Console
                 </Link>
               </Column>

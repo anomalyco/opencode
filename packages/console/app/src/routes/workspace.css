@@ -11,7 +11,6 @@
     font-size: var(--font-size-sm);
     font-family: var(--font-sans);
     font-weight: 500;
-    text-transform: uppercase;
     cursor: pointer;
     transition: all 0.15s ease;
 
@@ -55,9 +54,6 @@
 
   a {
     color: var(--color-text);
-    text-decoration: underline;
-    text-underline-offset: var(--space-0-75);
-    text-decoration-thickness: 1px;
   }
 
   /* Workspace Header */
@@ -80,16 +76,14 @@
   [data-slot="header-brand"] {
     flex: 0 0 auto;
     padding-top: 4px;
-
-    svg {
-      width: 138px;
-    }
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
 
     [data-component="site-title"] {
       font-size: var(--font-size-lg);
       font-weight: 600;
       color: var(--color-text);
-      text-decoration: none;
       letter-spacing: -0.02em;
     }
   }
@@ -108,20 +102,6 @@
       [data-slot="user"] {
         display: none;
       }
-    }
-
-    a,
-    button {
-      appearance: none;
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 0;
-      color: var(--color-text);
-      text-decoration: underline;
-      text-underline-offset: var(--space-0-75);
-      text-decoration-thickness: 1px;
-      text-transform: uppercase;
     }
   }
 }

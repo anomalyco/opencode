@@ -74,6 +74,7 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
             userID: user.id,
             workspaceID: user.workspaceID,
             accountID: user.accountID,
+            role: user.role,
           },
         }
       }

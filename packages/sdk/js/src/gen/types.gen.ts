@@ -413,6 +413,10 @@ export type Config = {
             context: number
             output: number
           }
+          modalities?: {
+            input: Array<"text" | "audio" | "image" | "video" | "pdf">
+            output: Array<"text" | "audio" | "image" | "video" | "pdf">
+          }
           experimental?: boolean
           options?: {
             [key: string]: unknown
@@ -746,6 +750,7 @@ export type ToolStateCompleted = {
     end: number
     compacted?: number
   }
+  attachments?: Array<FilePart>
 }
 
 export type ToolStateError = {
@@ -903,6 +908,10 @@ export type Model = {
   limit: {
     context: number
     output: number
+  }
+  modalities?: {
+    input: Array<"text" | "audio" | "image" | "video" | "pdf">
+    output: Array<"text" | "audio" | "image" | "video" | "pdf">
   }
   experimental?: boolean
   options: {

@@ -279,6 +279,11 @@ export namespace Provider {
               context: 0,
               output: 0,
             },
+          modalities: model.modalities ??
+            existing?.modalities ?? {
+              input: ["text"],
+              output: ["text"],
+            },
           provider: model.provider ?? existing?.provider,
         }
         parsed.models[modelID] = parsedModel

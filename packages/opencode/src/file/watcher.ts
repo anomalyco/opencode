@@ -1,11 +1,13 @@
 import z from "zod/v4"
 import { Bus } from "../bus"
-import chokidar from "chokidar"
 import { Flag } from "../flag/flag"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
+// @ts-ignore
+import { createWrapper } from "@parcel/watcher/wrapper"
+import { lazy } from "@/util/lazy"
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
@@ -20,37 +22,48 @@ export namespace FileWatcher {
     ),
   }
 
+  const watcher = lazy(() => {
+    const binding = require(
+      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? "-glibc" : ""}`,
+    )
+    return createWrapper(binding) as typeof import("@parcel/watcher")
+  })
+
   const state = Instance.state(
     async () => {
       if (Instance.project.vcs !== "git") return {}
       log.info("init")
       const cfg = await Config.get()
-      const ignore = (cfg.watcher?.ignore ?? []).map((v) => new Bun.Glob(v))
-      const watcher = chokidar.watch(Instance.directory, {
-        ignoreInitial: true,
-        ignored: (filepath) => {
-          return FileIgnore.match(filepath, {
-            whitelist: [new Bun.Glob("**/.git/{index,logs/HEAD}")],
-            extra: ignore,
-          })
+      const backend = (() => {
+        if (process.platform === "win32") return "windows"
+        if (process.platform === "darwin") return "fs-events"
+        if (process.platform === "linux") return "inotify"
+      })()
+      if (!backend) {
+        log.error("watcher backend not supported", { platform: process.platform })
+        return {}
+      }
+      log.info("watcher backend", { platform: process.platform, backend })
+      const sub = await watcher().subscribe(
+        Instance.directory,
+        (err, evts) => {
+          if (err) return
+          for (const evt of evts) {
+            log.info("event", evt)
+            if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+            if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+            if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+          }
         },
-      })
-      watcher.on("change", (file) => {
-        Bus.publish(Event.Updated, { file, event: "change" })
-      })
-      watcher.on("add", (file) => {
-        Bus.publish(Event.Updated, { file, event: "add" })
-      })
-      watcher.on("unlink", (file) => {
-        Bus.publish(Event.Updated, { file, event: "unlink" })
-      })
-      watcher.on("ready", () => {
-        log.info("ready")
-      })
-      return { watcher }
+        {
+          ignore: [...FileIgnore.PATTERNS, ...(cfg.watcher?.ignore ?? [])],
+          backend,
+        },
+      )
+      return { sub }
     },
     async (state) => {
-      state.watcher?.close()
+      state.sub?.unsubscribe()
     },
   )
 

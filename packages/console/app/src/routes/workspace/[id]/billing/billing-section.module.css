@@ -1,10 +1,4 @@
 .root {
-  [data-slot="section-content"] {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
   [data-slot="reload-error"] {
     display: flex;
     align-items: center;
@@ -29,6 +23,7 @@
       flex-shrink: 0;
     }
   }
+
   [data-slot="payment"] {
     display: flex;
     flex-direction: column;
@@ -86,7 +81,7 @@
       @media (max-width: 30rem) {
         flex-direction: column;
 
-        > button {
+        >button {
           width: 100%;
         }
       }
@@ -96,16 +91,18 @@
       }
 
       /* Make Enable Billing button full width when it's the only button */
-      > button {
+      >button {
         flex: 1;
       }
     }
   }
+
   [data-slot="usage"] {
     p {
       font-size: var(--font-size-sm);
       line-height: 1.5;
       color: var(--color-text-secondary);
+
       b {
         font-weight: 600;
       }

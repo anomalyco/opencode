@@ -1,7 +1,7 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { query, useParams, createAsync } from "@solidjs/router"
 import { createMemo, For, Show } from "solid-js"
-import { formatDateUTC, formatDateForTable } from "./common"
+import { formatDateUTC, formatDateForTable } from "../common"
 import { withActor } from "~/context/auth.withActor"
 import styles from "./usage-section.module.css"
 

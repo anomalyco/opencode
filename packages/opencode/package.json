@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.14.5",
+  "version": "0.14.7",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -20,6 +20,7 @@
     "@ai-sdk/amazon-bedrock": "2.2.10",
     "@ai-sdk/google-vertex": "3.0.16",
     "@octokit/webhooks-types": "7.6.1",
+    "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
     "@types/bun": "catalog:",
@@ -37,6 +38,7 @@
     "@openauthjs/openauth": "0.4.3",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@parcel/watcher": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",

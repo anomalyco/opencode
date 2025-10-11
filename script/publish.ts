@@ -2,8 +2,8 @@
 
 import { $ } from "bun"
 import { createOpencode } from "@opencode-ai/sdk"
-if (process.versions.bun !== "1.2.21") {
-  throw new Error("This script requires bun@1.2.21")
+if (process.versions.bun !== "1.3.0") {
+  throw new Error("This script requires bun@1.3.0")
 }
 
 const notes = [] as string[]

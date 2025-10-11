@@ -86,6 +86,24 @@ You can configure TUI-specific settings through the `tui` option.
 
 ---
 
+### Tools
+
+You can manage the tools an LLM can use through the `tools` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Learn more about tools here](/docs/tools).
+
+---
+
 ### Models
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
@@ -249,7 +267,9 @@ You can configure code formatters through the `formatter` option.
 
 ### Permissions
 
-You can configure permissions to control what AI agents can do in your codebase through the `permission` option.
+By default, opencode **allows all operations** without requiring explicit approval. You can change this using the `permission` option.
+
+For example, to ensure that the `edit` and `bash` tools require user approval:
 
 ```json title="opencode.json"
 {
@@ -260,11 +280,6 @@ You can configure permissions to control what AI agents can do in your codebase 
   }
 }
 ```
-
-This allows you to configure explicit approval requirements for sensitive operations:
-
-- `edit` - Controls whether file editing operations require user approval (`"ask"` or `"allow"`)
-- `bash` - Controls whether bash commands require user approval (can be `"ask"`/`"allow"` or a pattern map)
 
 [Learn more about permissions here](/docs/permissions).
 

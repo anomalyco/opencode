@@ -376,7 +376,7 @@ nav.sidebar ul.top-level > li > details > summary .group-label > span {
 }
 
 .expressive-code {
-  margin: 12px 0 56px 0 !important;
+  margin: 0.75rem 0 3rem 0 !important;
   border-radius: 6px;
 
 }

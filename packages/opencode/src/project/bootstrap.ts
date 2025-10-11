@@ -5,8 +5,10 @@ import { LSP } from "../lsp"
 import { Snapshot } from "../snapshot"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
+import { Flag } from "../flag/flag"
 
 export async function InstanceBootstrap() {
+  if (Flag.OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP) return
   await Plugin.init()
   Share.init()
   Format.init()

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import path from "path"
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 import { $ } from "bun"
@@ -32,6 +33,12 @@ for (const [os, arch] of targets) {
   await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`
     .cwd("../tui")
     .quiet()
+
+  const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
+  await $`mkdir -p ../../node_modules/${watcher}`
+  await $`npm pack npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
+  await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
+
   await Bun.build({
     compile: {
       target: `bun-${os}-${arch}` as any,

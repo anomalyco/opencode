@@ -25,11 +25,11 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: patterns,
         start: path.dirname(file),
-        stop: Instance.worktree,
+        stop: Instance.directory,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return Instance.worktree
+      if (!first.value) return Instance.directory
       return path.dirname(first.value)
     }
   }
@@ -44,7 +44,7 @@ export namespace LSPServer {
 
   export const Typescript: Info = {
     id: "typescript",
-    root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
@@ -70,20 +70,7 @@ export namespace LSPServer {
   export const Vue: Info = {
     id: "vue",
     extensions: [".vue"],
-    root: NearestRoot([
-      "tsconfig.json",
-      "jsconfig.json",
-      "package.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
-      "bun.lockb",
-      "bun.lock",
-      "vite.config.ts",
-      "vite.config.js",
-      "nuxt.config.ts",
-      "nuxt.config.js",
-      "vue.config.js",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
       let binary = Bun.which("vue-language-server")
       const args: string[] = []
@@ -131,20 +118,7 @@ export namespace LSPServer {
 
   export const ESLint: Info = {
     id: "eslint",
-    root: NearestRoot([
-      "eslint.config.js",
-      "eslint.config.mjs",
-      "eslint.config.cjs",
-      "eslint.config.ts",
-      "eslint.config.mts",
-      "eslint.config.cts",
-      ".eslintrc.js",
-      ".eslintrc.cjs",
-      ".eslintrc.yaml",
-      ".eslintrc.yml",
-      ".eslintrc.json",
-      "package.json",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const eslint = await Bun.resolve("eslint", Instance.directory).catch(() => {})
@@ -659,19 +633,7 @@ export namespace LSPServer {
   export const Svelte: Info = {
     id: "svelte",
     extensions: [".svelte"],
-    root: NearestRoot([
-      "tsconfig.json",
-      "jsconfig.json",
-      "package.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
-      "bun.lockb",
-      "bun.lock",
-      "vite.config.ts",
-      "vite.config.js",
-      "svelte.config.ts",
-      "svelte.config.js",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
       let binary = Bun.which("svelteserver")
       const args: string[] = []

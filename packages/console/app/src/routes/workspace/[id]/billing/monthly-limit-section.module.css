@@ -1,10 +1,4 @@
 .root {
-  [data-slot="section-content"] {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
   [data-slot="balance"] {
     display: flex;
     flex-direction: column;

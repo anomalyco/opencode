@@ -12,6 +12,8 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenModel } from "@opencode-ai/console-core/model.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
+import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
+import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 
 export async function handler(
   input: APIEvent,
@@ -41,6 +43,7 @@ export async function handler(
 
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
+    "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
   ]
 
   const logger = {
@@ -65,8 +68,10 @@ export async function handler(
     })
     const modelInfo = validateModel(body.model)
     const providerInfo = selectProvider(modelInfo)
-    const authInfo = await authenticate(modelInfo)
+    const authInfo = await authenticate(modelInfo, providerInfo)
     validateBilling(modelInfo, authInfo)
+    validateModelSettings(authInfo)
+    updateProviderKey(authInfo, providerInfo)
     logger.metric({ provider: providerInfo.id })
 
     // Request to model provider
@@ -222,14 +227,17 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(model: Model) {
+  function selectProvider(model: Awaited<ReturnType<typeof validateModel>>) {
     const providers = model.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
     return providers[Math.floor(Math.random() * providers.length)]
   }
 
-  async function authenticate(model: Model) {
+  async function authenticate(
+    model: Awaited<ReturnType<typeof validateModel>>,
+    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
+  ) {
     const apiKey = opts.parseApiKey(input.request.headers)
     if (!apiKey) {
       if (model.allowAnonymous) return
@@ -241,20 +249,33 @@ export async function handler(
         .select({
           apiKey: KeyTable.id,
           workspaceID: KeyTable.workspaceID,
-          balance: BillingTable.balance,
-          paymentMethodID: BillingTable.paymentMethodID,
-          monthlyLimit: BillingTable.monthlyLimit,
-          monthlyUsage: BillingTable.monthlyUsage,
-          timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
-          userID: UserTable.id,
-          userMonthlyLimit: UserTable.monthlyLimit,
-          userMonthlyUsage: UserTable.monthlyUsage,
-          timeUserMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
+          billing: {
+            balance: BillingTable.balance,
+            paymentMethodID: BillingTable.paymentMethodID,
+            monthlyLimit: BillingTable.monthlyLimit,
+            monthlyUsage: BillingTable.monthlyUsage,
+            timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
+          },
+          user: {
+            id: UserTable.id,
+            monthlyLimit: UserTable.monthlyLimit,
+            monthlyUsage: UserTable.monthlyUsage,
+            timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
+          },
+          provider: {
+            credentials: ProviderTable.credentials,
+          },
+          timeDisabled: ModelTable.timeCreated,
         })
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
         .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
+        .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)))
+        .leftJoin(
+          ProviderTable,
+          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, providerInfo.id)),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -265,25 +286,14 @@ export async function handler(
       workspace: data.workspaceID,
     })
 
-    const isFree = FREE_WORKSPACES.includes(data.workspaceID)
-
     return {
       apiKeyId: data.apiKey,
       workspaceID: data.workspaceID,
-      billing: {
-        paymentMethodID: data.paymentMethodID,
-        balance: data.balance,
-        monthlyLimit: data.monthlyLimit,
-        monthlyUsage: data.monthlyUsage,
-        timeMonthlyUsageUpdated: data.timeMonthlyUsageUpdated,
-      },
-      user: {
-        id: data.userID,
-        monthlyLimit: data.userMonthlyLimit,
-        monthlyUsage: data.userMonthlyUsage,
-        timeMonthlyUsageUpdated: data.timeUserMonthlyUsageUpdated,
-      },
-      isFree,
+      billing: data.billing,
+      user: data.user,
+      provider: data.provider,
+      isFree: FREE_WORKSPACES.includes(data.workspaceID),
+      isDisabled: !!data.timeDisabled,
     }
   }
 
@@ -323,6 +333,20 @@ export async function handler(
       if (currentYear === dateYear && currentMonth === dateMonth)
         throw new UserLimitError(`You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}.`)
     }
+  }
+
+  function validateModelSettings(authInfo: Awaited<ReturnType<typeof authenticate>>) {
+    if (!authInfo) return
+    if (authInfo.isDisabled) throw new ModelError("Model is disabled")
+  }
+
+  function updateProviderKey(
+    authInfo: Awaited<ReturnType<typeof authenticate>>,
+    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
+  ) {
+    if (!authInfo) return
+    if (!authInfo.provider?.credentials) return
+    providerInfo.apiKey = authInfo.provider.credentials
   }
 
   async function trackUsage(
@@ -387,7 +411,7 @@ export async function handler(
 
     if (!authInfo) return
 
-    const cost = authInfo.isFree ? 0 : centsToMicroCents(totalCostInCent)
+    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.transaction(async (tx) => {
       await tx.insert(UsageTable).values({
         workspaceID: authInfo.workspaceID,
@@ -401,6 +425,7 @@ export async function handler(
         cacheWrite5mTokens,
         cacheWrite1hTokens,
         cost,
+        keyID: authInfo.apiKeyId,
       })
       await tx
         .update(BillingTable)
@@ -439,6 +464,8 @@ export async function handler(
 
   async function reload(authInfo: Awaited<ReturnType<typeof authenticate>>) {
     if (!authInfo) return
+    if (authInfo.isFree) return
+    if (authInfo.provider?.credentials) return
 
     const lock = await Database.use((tx) =>
       tx

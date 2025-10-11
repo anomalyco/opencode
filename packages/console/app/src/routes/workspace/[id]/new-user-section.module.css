@@ -53,26 +53,6 @@
     flex-direction: column;
     gap: var(--space-6);
 
-    [data-slot="section-title"] {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-
-      h2 {
-        font-size: var(--font-size-md);
-        font-weight: 600;
-        line-height: 1.2;
-        letter-spacing: -0.03125rem;
-        margin: 0;
-        color: var(--color-text-secondary);
-        text-transform: uppercase;
-
-        @media (max-width: 30rem) {
-          font-size: var(--font-size-md);
-        }
-      }
-    }
-
     [data-slot="key-display"] {
       display: flex;
       flex-direction: column;

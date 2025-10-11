@@ -66,7 +66,8 @@ export const ExportCommand = cmd({
           })),
         }
 
-        console.log(JSON.stringify(exportData, null, 2))
+        process.stdout.write(JSON.stringify(exportData, null, 2))
+        process.stdout.write("\n")
       } catch (error) {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)
