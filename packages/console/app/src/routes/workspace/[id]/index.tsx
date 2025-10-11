@@ -30,31 +30,33 @@ export default function () {
             </a>
             .
           </span>
-          <span data-slot="billing-info">
-            <Show
-              when={billingInfo()?.reload}
-              fallback={
-                <button
-                  data-color="primary"
-                  data-size="sm"
-                  disabled={createCheckoutUrlSubmission.pending}
-                  onClick={async () => {
-                    const baseUrl = window.location.href
-                    const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
-                    if (checkoutUrl) {
-                      window.location.href = checkoutUrl
-                    }
-                  }}
-                >
-                  {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable billing"}
-                </button>
-              }
-            >
-              <span data-slot="balance">
-                Current balance: <b>${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
-              </span>
-            </Show>
-          </span>
+          <Show when={userInfo()?.isAdmin}>
+            <span data-slot="billing-info">
+              <Show
+                when={billingInfo()?.reload}
+                fallback={
+                  <button
+                    data-color="primary"
+                    data-size="sm"
+                    disabled={createCheckoutUrlSubmission.pending}
+                    onClick={async () => {
+                      const baseUrl = window.location.href
+                      const checkoutUrl = await createCheckoutUrlAction(params.id, baseUrl, baseUrl)
+                      if (checkoutUrl) {
+                        window.location.href = checkoutUrl
+                      }
+                    }}
+                  >
+                    {createCheckoutUrlSubmission.pending ? "Loading..." : "Enable billing"}
+                  </button>
+                }
+              >
+                <span data-slot="balance">
+                  Current balance: <b>${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
+                </span>
+              </Show>
+            </span>
+          </Show>
         </p>
       </section>
 

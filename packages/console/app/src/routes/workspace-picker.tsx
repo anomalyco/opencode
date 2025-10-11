@@ -1,5 +1,5 @@
 import { query, useParams, action, createAsync, redirect, useSubmission } from "@solidjs/router"
-import { For, Show, createEffect, onCleanup } from "solid-js"
+import { For, Show, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -7,7 +7,7 @@ import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/ind
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { Workspace } from "@opencode-ai/console-core/workspace.js"
-import { IconChevron } from "~/component/icon"
+import { Dropdown, DropdownItem } from "~/component/dropdown"
 import { Modal } from "~/component/modal"
 import "./workspace-picker.css"
 
@@ -45,9 +45,7 @@ export function WorkspacePicker() {
   const submission = useSubmission(createWorkspace)
   const [store, setStore] = createStore({
     showForm: false,
-    showDropdown: false,
   })
-  let dropdownRef: HTMLDivElement | undefined
   let inputRef: HTMLInputElement | undefined
 
   const currentWorkspace = () => {
@@ -56,7 +54,7 @@ export function WorkspacePicker() {
   }
 
   const handleWorkspaceNew = () => {
-    setStore({ showForm: true, showDropdown: false })
+    setStore("showForm", true)
   }
 
   createEffect(() => {
@@ -66,11 +64,7 @@ export function WorkspacePicker() {
   })
 
   const handleSelectWorkspace = (workspaceID: string) => {
-    if (workspaceID === params.id) {
-      setStore("showDropdown", false)
-      return
-    }
-
+    if (workspaceID === params.id) return
     window.location.href = `/workspace/${workspaceID}`
   }
 
@@ -78,48 +72,22 @@ export function WorkspacePicker() {
   createEffect(() => {
     params.id
     setStore("showForm", false)
-    setStore("showDropdown", false)
-  })
-
-  createEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef && !dropdownRef.contains(event.target as Node)) {
-        setStore("showDropdown", false)
-      }
-    }
-
-    document.addEventListener("click", handleClickOutside)
-    onCleanup(() => document.removeEventListener("click", handleClickOutside))
   })
 
   return (
     <div data-component="workspace-picker">
-      <div ref={dropdownRef}>
-        <button data-slot="trigger" type="button" onClick={() => setStore("showDropdown", !store.showDropdown)}>
-          <span>{currentWorkspace()}</span>
-          <IconChevron data-slot="chevron" />
+      <Dropdown trigger={currentWorkspace()} align="left">
+        <For each={workspaces()}>
+          {(workspace) => (
+            <DropdownItem selected={workspace.id === params.id} onClick={() => handleSelectWorkspace(workspace.id)}>
+              {workspace.name || workspace.slug}
+            </DropdownItem>
+          )}
+        </For>
+        <button data-slot="create-item" type="button" onClick={() => handleWorkspaceNew()}>
+          + Create New Workspace
         </button>
-
-        <Show when={store.showDropdown}>
-          <div data-slot="dropdown">
-            <For each={workspaces()}>
-              {(workspace) => (
-                <button
-                  data-slot="item"
-                  data-selected={workspace.id === params.id}
-                  type="button"
-                  onClick={() => handleSelectWorkspace(workspace.id)}
-                >
-                  {workspace.name || workspace.slug}
-                </button>
-              )}
-            </For>
-            <button data-slot="create-item" type="button" onClick={() => handleWorkspaceNew()}>
-              + Create New Workspace
-            </button>
-          </div>
-        </Show>
-      </div>
+      </Dropdown>
 
       <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title="Create New Workspace">
         <form data-slot="create-form" action={createWorkspace} method="post">

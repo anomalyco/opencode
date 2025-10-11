@@ -134,7 +134,7 @@ export namespace User {
         const { InviteEmail } = await import("@opencode-ai/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
-          subject: `You've been invited to join the ${workspaceID} workspace on OpenCode Zen`,
+          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on OpenCode Console`,
           body: render(
             // @ts-ignore
             InviteEmail({

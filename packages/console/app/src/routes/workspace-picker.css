@@ -1,66 +1,23 @@
 [data-component="workspace-picker"] {
-  position: relative;
-
-  [data-slot="trigger"] {
-    /* Override blue accent colors with neutral colors for dropdown trigger */
-    --color-accent: var(--color-border);
-    --color-accent-hover: var(--color-border);
-    --color-accent-active: var(--color-border);
-    --color-primary: var(--color-border);
-    --color-primary-hover: var(--color-border);
-    --color-primary-active: var(--color-border);
-    --color-primary-alpha-20: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    background-color: transparent;
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all 0.15s ease;
-
-    &:hover {
-      background-color: var(--color-surface-hover);
+  [data-component="dropdown"] {
+    [data-slot="trigger"] {
+      /* Override blue accent colors with neutral colors for dropdown trigger */
+      --color-accent: var(--color-border);
+      --color-accent-hover: var(--color-border);
+      --color-accent-active: var(--color-border);
+      --color-primary: var(--color-border);
+      --color-primary-hover: var(--color-border);
+      --color-primary-active: var(--color-border);
+      --color-primary-alpha-20: transparent;
     }
 
-    span {
-      flex: 1;
-      text-align: left;
-      font-weight: 500;
-      color: var(--color-text);
+    [data-slot="dropdown"] {
+      max-height: 240px;
+      overflow-y: auto;
+      min-width: 200px;
     }
   }
 
-  [data-slot="chevron"] {
-    flex-shrink: 0;
-    color: var(--color-text-secondary);
-  }
-
-  [data-slot="dropdown"] {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 1000;
-    margin-top: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-sm);
-    background-color: var(--color-bg);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    max-height: 240px;
-    overflow-y: auto;
-    min-width: 200px;
-
-    @media (prefers-color-scheme: dark) {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-  }
-
-  [data-slot="item"],
   [data-slot="create-item"] {
     width: 100%;
     padding: var(--space-2-5) var(--space-3);
@@ -70,6 +27,12 @@
     font-size: var(--font-size-sm);
     font-family: var(--font-sans);
     text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+      background-color: var(--color-bg-surface);
+    }
   }
 
   [data-slot="create-form"] {
