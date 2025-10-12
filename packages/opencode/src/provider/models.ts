@@ -76,6 +76,7 @@ export namespace ModelsDev {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
+      signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,
