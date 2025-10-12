@@ -146,7 +146,6 @@ export const BashTool = Tool.define("bash", {
     }
 
     const process = spawn(params.command, {
-      shell: 'bash',
       cwd: Instance.directory,
       signal: ctx.abort,
       stdio: ["ignore", "pipe", "pipe"],
