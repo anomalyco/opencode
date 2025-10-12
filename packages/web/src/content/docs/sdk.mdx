@@ -262,7 +262,7 @@ const result = await client.session.prompt({
 | `find.text({ query })`    | Search for text in files     | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Find files by name           | `string[]` (file paths)                                                                     |
 | `find.symbols({ query })` | Find workspace symbols       | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
-| `file.read({ query })`    | Read a file                  | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.read({ query })`    | Read a file                  | <a href={typesUrl}><code>FileContent</code></a>                                               |
 | `file.status({ query? })` | Get status for tracked files | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
 ---
@@ -282,6 +282,16 @@ const files = await client.find.files({
 const content = await client.file.read({
   query: { path: "src/index.ts" },
 })
+
+// Handle text vs binary content
+if (content.type === "binary") {
+  const dataUrl = `data:${content.mimeType};base64,${content.content}`
+  // For images, you can render <img src={dataUrl} /> in a browser context
+} else {
+  // Text content with optional diff/patch metadata
+  console.log(content.content)
+  if (content.diff) console.log("Has diff available")
+}
 ```
 
 ---
