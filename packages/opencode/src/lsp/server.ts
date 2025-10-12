@@ -134,7 +134,12 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
         await Bun.file(zipPath).write(response)
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        if (Bun.which("unzip")) {
+          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        } else {
+          await $`tar -xf ${zipPath}`.cwd(Global.Path.bin).nothrow()
+        }
+        
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -334,7 +339,11 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          if (Bun.which("unzip")) {
+            await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          } else {
+            await $`tar -xf ${zipPath}`.cwd(Global.Path.bin).nothrow()
+          }
 
           await fs.rm(zipPath, {
             force: true,
@@ -436,7 +445,7 @@ export namespace LSPServer {
         const tempPath = path.join(Global.Path.bin, assetName)
         await Bun.file(tempPath).write(downloadResponse)
 
-        if (ext === "zip") {
+        if (ext === "zip" && Bun.which("unzip")) {
           await $`unzip -o -q ${tempPath}`.quiet().cwd(Global.Path.bin).nothrow()
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
@@ -604,7 +613,12 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "clangd.zip")
         await Bun.file(zipPath).write(downloadResponse)
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        if (Bun.which("unzip")) {
+          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        } else {
+          await $`tar -xf ${zipPath}`.cwd(Global.Path.bin).nothrow()
+        }
+
         await fs.rm(zipPath, { force: true })
 
         const extractedDir = path.join(Global.Path.bin, assetName.replace(".zip", ""))
