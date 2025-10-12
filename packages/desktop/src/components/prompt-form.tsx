@@ -461,7 +461,7 @@ export default function PromptForm(props: PromptFormProps) {
                flex flex-col gap-1
                bg-gradient-to-b from-background-panel/90 to-background/90
                ring-1 border border-transparent focus-within:ring-2
-               will-change-transform"
+               will-change-transform z-50"
         classList={{
           "shadow-[0_0_33px_rgba(0,0,0,0.8)]": !props.docked,
           "!ring-4 !ring-primary !bg-primary/20 !border-primary": isDragOver(),

@@ -182,16 +182,22 @@ function init() {
 
     const load = async (path: string) => {
       const relativePath = relative(path)
-      sdk.file.read({ query: { path: relativePath } }).then((x) => {
-        setStore(
-          "node",
-          relativePath,
-          produce((draft) => {
-            draft.loaded = true
-            draft.content = x.data
-          }),
-        )
-      })
+      sdk.file
+        .read({ query: { path: relativePath } })
+        .then((x) => {
+          setStore(
+            "node",
+            relativePath,
+            produce((draft) => {
+              draft.loaded = true
+              draft.content = x.data
+            }),
+          )
+        })
+        .catch((err) => {
+          console.error("Failed to load file:", relativePath, err)
+          setStore("node", relativePath, "loaded", true)
+        })
     }
 
     const fetch = async (path: string) => {
@@ -223,17 +229,22 @@ function init() {
     }
 
     const list = async (path: string) => {
-      return sdk.file.list({ query: { path: path + "/" } }).then((x) => {
-        setStore(
-          "node",
-          produce((draft) => {
-            x.data!.forEach((node) => {
-              if (node.path in draft) return
-              draft[node.path] = node
-            })
-          }),
-        )
-      })
+      return sdk.file
+        .list({ query: { path: path + "/" } })
+        .then((x) => {
+          setStore(
+            "node",
+            produce((draft) => {
+              x.data?.forEach((node) => {
+                if (node.path in draft) return
+                draft[node.path] = node
+              })
+            }),
+          )
+        })
+        .catch((err) => {
+          console.error("Failed to list files:", err)
+        })
     }
 
     const search = (query: string) => sdk.find.files({ query: { query } }).then((x) => x.data!)

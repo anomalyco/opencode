@@ -9,5 +9,6 @@
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["src-tauri/target", "node_modules"]
 }

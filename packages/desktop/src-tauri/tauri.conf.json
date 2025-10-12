@@ -5,9 +5,8 @@
   "identifier": "ai.opencode.desktop",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:3000",
     "beforeDevCommand": "bun dev",
-    "beforeBuildCommand": "bun build"
+    "beforeBuildCommand": "bun run build"
   },
   "app": {
     "windows": [
@@ -16,7 +15,8 @@
         "width": 800,
         "height": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "devtools": true
       }
     ],
     "security": {

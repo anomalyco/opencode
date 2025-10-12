@@ -29,7 +29,8 @@ export default defineConfig({
   ],
   server: {
     host: process.env["TAURI_DEV_HOST"] || "0.0.0.0",
-    port: 3000,
+    port: parseInt(process.env["PORT"] || String(Math.floor(Math.random() * (65535 - 49152) + 49152))),
+    strictPort: false,
   },
   build: {
     target: "esnext",
