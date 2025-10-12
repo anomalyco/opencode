@@ -38,6 +38,9 @@
     "sst": "3.17.19",
     "turbo": "2.5.6"
   },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sst/opencode"

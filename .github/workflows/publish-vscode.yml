@@ -19,16 +19,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.0
+      - uses: ./.github/actions/setup-bun
 
       - run: git fetch --force --tags
       - run: bun install -g @vscode/vsce
 
       - name: Publish
         run: |
-          bun install
           ./script/publish
         working-directory: ./sdks/vscode
         env:

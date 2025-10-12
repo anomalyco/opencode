@@ -35,18 +35,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.0
-
-      - name: Cache ~/.bun
-        id: cache-bun
-        uses: actions/cache@v3
-        with:
-          path: ~/.bun
-          key: ${{ runner.os }}-bun-1-3-0-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-1-3-0-
+      - uses: ./.github/actions/setup-bun
 
       - name: Install makepkg
         run: |
@@ -60,8 +49,6 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
-      - name: Install dependencies
-        run: bun install
 
       - name: Install OpenCode
         run: curl -fsSL https://opencode.ai/install | bash

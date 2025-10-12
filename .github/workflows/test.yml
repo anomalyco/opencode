@@ -18,15 +18,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: 1.3.0
+        uses: ./.github/actions/setup-bun
 
       - name: run
         run: |
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
-          bun install
           bun turbo test
         env:
           CI: true

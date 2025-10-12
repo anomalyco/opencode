@@ -62,7 +62,6 @@ if (!snapshot) {
   const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
 
   // arch
-  /*
   const binaryPkgbuild = [
     "# Maintainer: dax",
     "# Maintainer: adam",
@@ -132,23 +131,22 @@ if (!snapshot) {
     ["opencode-bin", binaryPkgbuild],
     ["opencode", sourcePkgbuild],
   ]) {
-    await $`rm -rf ./dist/aur-${pkg}`
-    while (true) {
+    for (let i = 0; i < 30; i++) {
       try {
+        await $`rm -rf ./dist/aur-${pkg}`
         await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+        await $`cd ./dist/aur-${pkg} && git checkout master`
+        await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
+        await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
+        await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
+        await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
+        await $`cd ./dist/aur-${pkg} && git push`
         break
       } catch (e) {
         continue
       }
     }
-    await $`cd ./dist/aur-${pkg} && git checkout master`
-    await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
-    await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
-    await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
-    await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
-    await $`cd ./dist/aur-${pkg} && git push`
   }
-  */
 
   // Homebrew formula
   const homebrewFormula = [
