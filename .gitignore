@@ -10,3 +10,4 @@ playground
 tmp
 dist
 .turbo
+/packages/desktop/src-tauri/gen/apple/build
