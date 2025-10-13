@@ -160,7 +160,7 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await Storage.write(["session", result.id], result)
+    await Storage.write(["session", "global", result.id], result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -180,28 +180,21 @@ export namespace Session {
 
   export const get = fn(Identifier.schema("session"), async (id) => {
     try {
-      // Attempt to read from the new global path first
-      return await Storage.read<Info>(["session", id]);
+      // 1. Try new global path
+      return await Storage.read<Info>(["session", "global", id]);
     } catch (e) {
-      // If it fails, search through all old project-specific directories
-      const projectDirs = await Storage.list(["session"]);
-      for (const dirPath of projectDirs) {
-        // A project dir path will have 2 segments: ["session", "prj_..."]
-        if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
-        try {
-          const session = await Storage.read<Info>([...dirPath, id]);
-          // Found it in an old location!
-          // Lazily migrate it to the new global location for future access.
-          await Storage.write(["session", id], session);
-          await Storage.remove([...dirPath, id]);
-          log.info("Lazily migrated session to global store", { sessionID: id });
-          return session;
-        } catch (e2) {
-          // Not in this directory, continue searching
-        }
+      try {
+        // 2. Try old project-specific path
+        const session = await Storage.read<Info>(["session", Instance.project.id, id]);
+        // 3. Migrate if found
+        await Storage.write(["session", "global", id], session);
+        await Storage.remove(["session", Instance.project.id, id]);
+        log.info("Lazily migrated session to global store", { sessionID: id });
+        return session;
+      } catch (e2) {
+        // 4. Not found anywhere, re-throw original error
+        throw e;
       }
-      // If not found anywhere, re-throw the original error
-      throw e;
     }
   });
 
@@ -245,32 +238,9 @@ export namespace Session {
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
-    let sessionPath: string[] = ["session", id];
-    try {
-      // Try the new global path first. If it throws, it doesn't exist there.
-      await Storage.read<Info>(sessionPath);
-    } catch (e) {
-      // If it failed, search old project paths to find the correct one.
-      let found = false;
-      const projectDirs = await Storage.list(["session"]);
-      for (const dirPath of projectDirs) {
-        if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
-        try {
-          const session = await Storage.read<Info>([...dirPath, id]);
-          // Found it. Migrate it before updating.
-          await Storage.write(["session", id], session);
-          await Storage.remove([...dirPath, id]);
-          found = true;
-          break;
-        } catch (e2) {}
-      }
-      if (!found) {
-        // If still not found, we have to create it at the new path.
-        // This case can happen if update is called on a non-existent session.
-      }
-    }
-
-    const result = await Storage.update<Info>(sessionPath, (draft) => {
+    // Ensure session is migrated by calling get first, which handles the move.
+    await get(id);
+    const result = await Storage.update<Info>(["session", "global", id], (draft) => {
       editor(draft);
       draft.time.updated = Date.now();
     });
@@ -317,10 +287,32 @@ export namespace Session {
   })
 
   export async function* list() {
-    for (const item of await Storage.list(["session"])) {
-      const session = await Storage.read<Info>(item)
-      if (session.directory !== Instance.directory) continue
-      yield session
+    const project = Instance.project
+    const seen = new Set<string>()
+
+    // 1. List from the new global path
+    try {
+      for (const item of await Storage.list(["session", "global"])) {
+        const session = await Storage.read<Info>(item)
+        if (session.directory === Instance.directory) {
+          seen.add(session.id)
+          yield session
+        }
+      }
+    } catch (e) {
+      /* global dir might not exist yet */
+    }
+
+    // 2. List from the old project-specific path (for backwards compatibility)
+    try {
+      for (const item of await Storage.list(["session", project.id])) {
+        const session = await Storage.read<Info>(item)
+        if (!seen.has(session.id) && session.directory === Instance.directory) {
+          yield session
+        }
+      }
+    } catch (e) {
+      /* project dir might not exist */
     }
   }
 
@@ -349,17 +341,15 @@ export namespace Session {
         }
         await Storage.remove(msg)
       }
-      // Try removing from the new path, then try finding and removing from old paths.
+      // Try removing from both new and old paths to be safe.
       try {
-        await Storage.remove(["session", sessionID])
+        await Storage.remove(["session", "global", sessionID]);
       } catch (e) {
-        const projectDirs = await Storage.list(["session"]);
-        for (const dirPath of projectDirs) {
-          if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
-          try {
-            await Storage.remove([...dirPath, sessionID]);
-            break; // Found and removed
-          } catch (e2) {}
+        // Might not exist in global, try old path
+        try {
+          await Storage.remove(["session", project.id, sessionID]);
+        } catch (e2) {
+          log.warn("Could not remove session from any known location", { sessionID });
         }
       }
       Bus.publish(Event.Deleted, {
