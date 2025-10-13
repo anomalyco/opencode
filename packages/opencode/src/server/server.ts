@@ -71,7 +71,8 @@ export namespace Server {
             status: 400,
           })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
           status: 400,
         })
       })
