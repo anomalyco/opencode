@@ -224,7 +224,32 @@ Or if you already have an API key, you can select **Manually enter API Key** and
    export AZURE_RESOURCE_NAME=XXX
    ```
 
-6. Run the `/models` command to select your deployed model.
+6. Optional: set different Azure Url styles:
+
+  ```json title="opencode.json" {6}
+  {
+    "$schema": "https://opencode.ai/config.json",
+    "provider": {
+      "azure": {
+        "options": {
+          "useDeploymentBasedUrls": "true",
+          "useCompletionUrls": "true"
+        }
+      }
+    }
+  }
+  ```
+  
+  - How this options will change the generated Azure url to be used in opencode
+
+  | useDeploymentBasedUrls | useCompletionUrls | Generated URL |
+  |------------------------|-------------------|-------------------------------------------------------------------------------|
+  | false                  | false             | %baseURL%/v1/responses?api-version=%apiVersion%                              |
+  | true                   | false             | %baseURL%/deployments/%Model%/responses?api-version=%apiVersion%             |
+  | false                  | true              | %baseURL%/v1/responses?api-version=%apiVersion%                              |
+  | true                   | true              | %baseURL%/deployments/%Model%/chat/completions?api-version=%apiVersion%        |
+
+7. Run the `/models` command to select your deployed model.
 
 ---
 
