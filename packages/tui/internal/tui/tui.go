@@ -1152,9 +1152,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			// status.Warn("Agent is working, please wait...")
 			return a, nil
 		}
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			return a, toast.NewErrorToast("No EDITOR set, can't open editor")
+		editor, err := util.GetEditor()
+		if err != nil || editor == "" {
+			return a, toast.NewErrorToast("No editor found. Set EDITOR environment variable (e.g., export EDITOR=vim)")
 		}
 
 		value := a.editor.Value()
@@ -1398,10 +1398,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		// Format to Markdown
 		markdownContent := formatConversationToMarkdown(messages)
 
-		// Check if EDITOR is set
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			return a, toast.NewErrorToast("No EDITOR set, can't open editor")
+		editor, err := util.GetEditor()
+		if err != nil || editor == "" {
+			return a, toast.NewErrorToast("No editor found. Set EDITOR environment variable (e.g., export EDITOR=vim)")
 		}
 
 		// Create and write to temp file
