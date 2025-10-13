@@ -179,9 +179,31 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", id])
-    return read as Info
-  })
+    try {
+      // Attempt to read from the new global path first
+      return await Storage.read<Info>(["session", id]);
+    } catch (e) {
+      // If it fails, search through all old project-specific directories
+      const projectDirs = await Storage.list(["session"]);
+      for (const dirPath of projectDirs) {
+        // A project dir path will have 2 segments: ["session", "prj_..."]
+        if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
+        try {
+          const session = await Storage.read<Info>([...dirPath, id]);
+          // Found it in an old location!
+          // Lazily migrate it to the new global location for future access.
+          await Storage.write(["session", id], session);
+          await Storage.remove([...dirPath, id]);
+          log.info("Lazily migrated session to global store", { sessionID: id });
+          return session;
+        } catch (e2) {
+          // Not in this directory, continue searching
+        }
+      }
+      // If not found anywhere, re-throw the original error
+      throw e;
+    }
+  });
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {
     return Storage.read<ShareInfo>(["share", id])
@@ -223,14 +245,39 @@ export namespace Session {
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const result = await Storage.update<Info>(["session", id], (draft) => {
-      editor(draft)
-      draft.time.updated = Date.now()
-    })
+    let sessionPath: string[] = ["session", id];
+    try {
+      // Try the new global path first. If it throws, it doesn't exist there.
+      await Storage.read<Info>(sessionPath);
+    } catch (e) {
+      // If it failed, search old project paths to find the correct one.
+      let found = false;
+      const projectDirs = await Storage.list(["session"]);
+      for (const dirPath of projectDirs) {
+        if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
+        try {
+          const session = await Storage.read<Info>([...dirPath, id]);
+          // Found it. Migrate it before updating.
+          await Storage.write(["session", id], session);
+          await Storage.remove([...dirPath, id]);
+          found = true;
+          break;
+        } catch (e2) {}
+      }
+      if (!found) {
+        // If still not found, we have to create it at the new path.
+        // This case can happen if update is called on a non-existent session.
+      }
+    }
+
+    const result = await Storage.update<Info>(sessionPath, (draft) => {
+      editor(draft);
+      draft.time.updated = Date.now();
+    });
     Bus.publish(Event.Updated, {
       info: result,
-    })
-    return result
+    });
+    return result;
   }
 
   export const messages = fn(Identifier.schema("session"), async (sessionID) => {
@@ -302,7 +349,19 @@ export namespace Session {
         }
         await Storage.remove(msg)
       }
-      await Storage.remove(["session", sessionID])
+      // Try removing from the new path, then try finding and removing from old paths.
+      try {
+        await Storage.remove(["session", sessionID])
+      } catch (e) {
+        const projectDirs = await Storage.list(["session"]);
+        for (const dirPath of projectDirs) {
+          if (dirPath.length !== 2 || !dirPath[1].startsWith("prj_")) continue;
+          try {
+            await Storage.remove([...dirPath, sessionID]);
+            break; // Found and removed
+          } catch (e2) {}
+        }
+      }
       Bus.publish(Event.Deleted, {
         info: session,
       })
