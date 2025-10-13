@@ -957,6 +957,32 @@ func (a *App) ListMessages(ctx context.Context, sessionId string) ([]Message, er
 	return messages, nil
 }
 
+func (a *App) LoadLastSession() tea.Cmd {
+	return func() tea.Msg {
+		sessions, err := a.ListSessions(context.Background())
+		if err != nil {
+			slog.Error("Failed to list sessions for initial session", "error", err)
+			return toast.NewErrorToast("Failed to load initial session")()
+		}
+
+		if len(sessions) > 0 {
+			var lastSession opencode.Session
+			for _, session := range sessions {
+				if session.ParentID == "" {
+					if lastSession.ID == "" || session.Time.Updated > lastSession.Time.Updated {
+						lastSession = session
+					}
+				}
+			}
+			if lastSession.ID != "" {
+				return SessionSelectedMsg(&lastSession)
+			}
+		}
+
+		return nil
+	}
+}
+
 func (a *App) ListProviders(ctx context.Context) ([]opencode.Provider, error) {
 	response, err := a.Client.App.Providers(ctx, opencode.AppProvidersParams{})
 	if err != nil {
