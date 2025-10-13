@@ -58,7 +58,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (options?.["useDeploymentBasedUrl"]) {
+          if (options?.["useCompletionUrls"]) {
             return sdk.completion(modelID)
           } else {
             return sdk.responses(modelID)
