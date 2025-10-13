@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
+import os from "os"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
@@ -24,11 +25,11 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: patterns,
         start: path.dirname(file),
-        stop: Instance.worktree,
+        stop: Instance.directory,
       })
       const first = await files.next()
       await files.return()
-      if (!first.value) return Instance.worktree
+      if (!first.value) return Instance.directory
       return path.dirname(first.value)
     }
   }
@@ -43,7 +44,7 @@ export namespace LSPServer {
 
   export const Typescript: Info = {
     id: "typescript",
-    root: NearestRoot(["tsconfig.json", "package.json", "jsconfig.json"]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
@@ -69,20 +70,7 @@ export namespace LSPServer {
   export const Vue: Info = {
     id: "vue",
     extensions: [".vue"],
-    root: NearestRoot([
-      "tsconfig.json",
-      "jsconfig.json",
-      "package.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
-      "bun.lockb",
-      "bun.lock",
-      "vite.config.ts",
-      "vite.config.js",
-      "nuxt.config.ts",
-      "nuxt.config.js",
-      "vue.config.js",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
       let binary = Bun.which("vue-language-server")
       const args: string[] = []
@@ -130,20 +118,7 @@ export namespace LSPServer {
 
   export const ESLint: Info = {
     id: "eslint",
-    root: NearestRoot([
-      "eslint.config.js",
-      "eslint.config.mjs",
-      "eslint.config.cjs",
-      "eslint.config.ts",
-      "eslint.config.mts",
-      "eslint.config.cts",
-      ".eslintrc.js",
-      ".eslintrc.cjs",
-      ".eslintrc.yaml",
-      ".eslintrc.yml",
-      ".eslintrc.json",
-      "package.json",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const eslint = await Bun.resolve("eslint", Instance.directory).catch(() => {})
@@ -658,19 +633,7 @@ export namespace LSPServer {
   export const Svelte: Info = {
     id: "svelte",
     extensions: [".svelte"],
-    root: NearestRoot([
-      "tsconfig.json",
-      "jsconfig.json",
-      "package.json",
-      "pnpm-lock.yaml",
-      "yarn.lock",
-      "bun.lockb",
-      "bun.lock",
-      "vite.config.ts",
-      "vite.config.js",
-      "svelte.config.ts",
-      "svelte.config.js",
-    ]),
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
       let binary = Bun.which("svelteserver")
       const args: string[] = []
@@ -703,6 +666,93 @@ export namespace LSPServer {
       return {
         process: proc,
         initialization: {},
+      }
+    },
+  }
+
+  export const JDTLS: Info = {
+    id: "jdtls",
+    root: NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"]),
+    extensions: [".java"],
+    async spawn(root) {
+      const java = Bun.which("java")
+      if (!java) {
+        log.error("Java 21 or newer is required to run the JDTLS. Please install it first.")
+        return
+      }
+      const javaMajorVersion = await $`java -version`
+        .quiet()
+        .nothrow()
+        .then(({ stderr }) => {
+          const m = /"(\d+)\.\d+\.\d+"/.exec(stderr.toString())
+          return !m ? undefined : parseInt(m[1])
+        })
+      if (javaMajorVersion == null || javaMajorVersion < 21) {
+        log.error("JDTLS requires at least Java 21.")
+        return
+      }
+      const distPath = path.join(Global.Path.bin, "jdtls")
+      const launcherDir = path.join(distPath, "plugins")
+      const installed = await fs.exists(launcherDir)
+      if (!installed) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("Downloading JDTLS LSP server.")
+        await fs.mkdir(distPath, { recursive: true })
+        const releaseURL =
+          "https://www.eclipse.org/downloads/download.php?file=/jdtls/snapshots/jdt-language-server-latest.tar.gz"
+        const archivePath = path.join(distPath, "release.tar.gz")
+        await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
+        await $`tar -xzf ${archivePath}`.cwd(distPath).quiet().nothrow()
+        await fs.rm(archivePath, { force: true })
+      }
+      const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
+        .cwd(launcherDir)
+        .quiet()
+        .nothrow()
+        .then(({ stdout }) => stdout.toString().trim())
+      const launcherJar = path.join(launcherDir, jarFileName)
+      if (!(await fs.exists(launcherJar))) {
+        log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
+        return
+      }
+      const configFile = path.join(
+        distPath,
+        (() => {
+          switch (process.platform) {
+            case "darwin":
+              return "config_mac"
+            case "linux":
+              return "config_linux"
+            case "win32":
+              return "config_windows"
+            default:
+              return "config_linux"
+          }
+        })(),
+      )
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
+      return {
+        process: spawn(
+          java,
+          [
+            "-jar",
+            launcherJar,
+            "-configuration",
+            configFile,
+            "-data",
+            dataDir,
+            "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+            "-Dosgi.bundles.defaultStartLevel=4",
+            "-Declipse.product=org.eclipse.jdt.ls.core.product",
+            "-Dlog.level=ALL",
+            "--add-modules=ALL-SYSTEM",
+            "--add-opens java.base/java.util=ALL-UNNAMED",
+            "--add-opens java.base/java.lang=ALL-UNNAMED",
+          ],
+          {
+            cwd: root,
+          },
+        ),
       }
     },
   }

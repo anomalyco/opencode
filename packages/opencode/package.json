@@ -1,12 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.7.0",
+  "version": "0.15.0",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bun run --conditions=development ./src/index.ts"
+    "test": "bun test",
+    "build": "./script/build.ts",
+    "dev": "bun run ./src/index.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -16,7 +18,9 @@
   },
   "devDependencies": {
     "@ai-sdk/amazon-bedrock": "2.2.10",
+    "@ai-sdk/google-vertex": "3.0.16",
     "@octokit/webhooks-types": "7.6.1",
+    "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "1.0.7",
     "@types/bun": "catalog:",
@@ -28,19 +32,23 @@
   },
   "dependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
+    "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "0.4.3",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@parcel/watcher": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
+    "chokidar": "4.0.3",
     "decimal.js": "10.5.0",
     "diff": "8.0.2",
+    "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
-    "hono-openapi": "0.4.8",
+    "hono-openapi": "1.0.7",
     "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
@@ -54,7 +62,6 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:",
-    "zod-openapi": "4.1.0"
+    "zod": "catalog:"
   }
 }

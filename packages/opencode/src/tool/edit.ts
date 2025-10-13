@@ -3,7 +3,7 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import { z } from "zod"
+import z from "zod/v4"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
@@ -82,7 +82,6 @@ export const EditTool = Tool.define("edit", {
           sessionID: ctx.sessionID,
           messageID: ctx.messageID,
           callID: ctx.callID,
-          pattern: filePath,
           title: "Edit this file: " + filePath,
           metadata: {
             filePath,
@@ -107,14 +106,12 @@ export const EditTool = Tool.define("edit", {
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
       if (file === filePath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
+        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues
+          .filter((item) => item.severity === 1)
+          .map(LSP.Diagnostic.pretty)
+          .join("\n")}\n</file_diagnostics>\n`
         continue
       }
-      output += `\n<project_diagnostics>\n${file}\n${issues
-        // TODO: may want to make more leniant for eslint
-        .filter((item) => item.severity === 1)
-        .map(LSP.Diagnostic.pretty)
-        .join("\n")}\n</project_diagnostics>\n`
     }
 
     return {
@@ -603,9 +600,9 @@ export function replace(content: string, oldString: string, newString: string, r
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
-    // TrimmedBoundaryReplacer,
-    // ContextAwareReplacer,
-    // MultiOccurrenceReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)

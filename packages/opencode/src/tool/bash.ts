@@ -1,6 +1,5 @@
-import { z } from "zod"
-import { exec } from "child_process"
-
+import z from "zod/v4"
+import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { Permission } from "../permission"
@@ -59,7 +58,7 @@ export const BashTool = Tool.define("bash", {
     const tree = await parser().then((p) => p.parse(params.command))
     const permissions = await Agent.get(ctx.agent).then((x) => x.permission.bash)
 
-    let needsAsk = false
+    const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {
       const command = []
       for (let i = 0; i < node.childCount; i++) {
@@ -96,34 +95,61 @@ export const BashTool = Tool.define("bash", {
       }
 
       // always allow cd if it passes above check
-      if (!needsAsk && command[0] !== "cd") {
+      if (command[0] !== "cd") {
         const action = Wildcard.all(node.text, permissions)
         if (action === "deny") {
           throw new Error(
             `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
           )
         }
-        if (action === "ask") needsAsk = true
+        if (action === "ask") {
+          const pattern = (() => {
+            let head = ""
+            let sub: string | undefined
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i)
+              if (!child) continue
+              if (child.type === "command_name") {
+                if (!head) {
+                  head = child.text
+                }
+                continue
+              }
+              if (!sub && child.type === "word") {
+                if (!child.text.startsWith("-")) sub = child.text
+              }
+            }
+            if (!head) return
+            return sub ? `${head} ${sub} *` : `${head} *`
+          })()
+          if (pattern) {
+            askPatterns.add(pattern)
+          }
+        }
       }
     }
 
-    if (needsAsk) {
+    if (askPatterns.size > 0) {
+      const patterns = Array.from(askPatterns)
       await Permission.ask({
         type: "bash",
-        pattern: params.command,
+        pattern: patterns,
         sessionID: ctx.sessionID,
         messageID: ctx.messageID,
         callID: ctx.callID,
         title: params.command,
         metadata: {
           command: params.command,
+          patterns,
         },
       })
     }
 
-    const process = exec(params.command, {
+    const process = spawn(params.command, {
+      shell: true,
       cwd: Instance.directory,
       signal: ctx.abort,
+      stdio: ["ignore", "pipe", "pipe"],
       timeout,
     })
 
@@ -174,6 +200,10 @@ export const BashTool = Tool.define("bash", {
     if (output.length > MAX_OUTPUT_LENGTH) {
       output = output.slice(0, MAX_OUTPUT_LENGTH)
       output += "\n\n(Output was truncated due to length limit)"
+    }
+
+    if (process.signalCode === "SIGTERM" && params.timeout) {
+      output += `\n\n(Command timed out after ${timeout} ms)`
     }
 
     return {

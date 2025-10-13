@@ -74,6 +74,7 @@ export default defineConfig({
         {
           label: "Configure",
           items: [
+            "tools",
             "rules",
             "agents",
             "models",
@@ -84,6 +85,7 @@ export default defineConfig({
             "permissions",
             "lsp",
             "mcp-servers",
+            "custom-tools",
           ],
         },
 

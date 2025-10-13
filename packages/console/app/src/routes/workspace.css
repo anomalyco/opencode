@@ -1,0 +1,107 @@
+[data-page="workspace"] {
+  line-height: 1;
+
+  /* Common elements */
+  button {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover:not(:disabled) {
+      background-color: var(--color-surface-hover);
+      border-color: var(--color-accent);
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      transform: none;
+    }
+
+    &[data-color="primary"] {
+      background-color: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-primary-text);
+
+      &:hover:not(:disabled) {
+        background-color: var(--color-primary-hover);
+        border-color: var(--color-primary-hover);
+      }
+    }
+
+    &[data-color="ghost"] {
+      background-color: transparent;
+      border-color: transparent;
+      color: var(--color-text-muted);
+
+      &:hover:not(:disabled) {
+        background-color: var(--color-surface-hover);
+        border-color: var(--color-border);
+        color: var(--color-text);
+      }
+    }
+  }
+
+  a {
+    color: var(--color-text);
+  }
+
+  /* Workspace Header */
+  [data-component="workspace-header"] {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+
+    @media (max-width: 30rem) {
+      padding: var(--space-4) var(--space-4);
+    }
+  }
+
+  [data-slot="header-brand"] {
+    flex: 0 0 auto;
+    padding-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+
+    [data-component="site-title"] {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      color: var(--color-text);
+      letter-spacing: -0.02em;
+    }
+  }
+
+  [data-slot="header-actions"] {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    font-size: var(--font-size-sm);
+
+    [data-slot="user"] {
+      color: var(--color-text-muted);
+    }
+
+    @media (max-width: 30rem) {
+      [data-slot="user"] {
+        display: none;
+      }
+    }
+  }
+}

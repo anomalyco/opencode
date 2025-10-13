@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Using any LLM provider in opencode.
+description: Using any LLM provider in OpenCode.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using `opencode auth login`.
-2. Configure the provider in your opencode config.
+2. Configure the provider in your OpenCode config.
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-You can customize the providers through the `provider` section in your opencode
+You can customize the providers through the `provider` section in your OpenCode
 config.
 
 ---
@@ -48,20 +48,37 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## opencode zen
+## OpenCode Zen
 
-opencode zen is a list of models provided by the opencode team that have been
-tested and verified to work well with opencode. [Learn more](/docs/zen).
+OpenCode Zen is a list of models provided by the OpenCode team that have been
+tested and verified to work well with OpenCode. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with opencode zen.
+If you are new, we recommend starting with OpenCode Zen.
 :::
 
-1. You sign in to **<a href={console}>opencode zen</a>** and get your API key.
-2. You run `opencode auth login` and select opencode zen and add your API key.
-3. Run `/models` in the TUI to see the list of models we recommend.
+1. Run `opencode auth login`, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+2. Sign in, add your billing details, and copy your API key.
+3. Paste your API key.
 
-It works like any other provider in opencode. And is completely optional to use
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  opencode
+   │
+   ●  Create an api key at https://opencode.ai/auth
+   │
+   ◆  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run `/models` in the TUI to see the list of models we recommend.
+
+It works like any other provider in OpenCode. And is completely optional to use
 it.
 
 ---
@@ -79,7 +96,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with opencode:
+To use Amazon Bedrock with OpenCode:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -89,7 +106,6 @@ To use Amazon Bedrock with opencode:
    :::
 
 1. You'll need either to set one of the following environment variables:
-
    - `AWS_ACCESS_KEY_ID`: You can get this by creating an IAM user and generating
      an access key for it.
    - `AWS_PROFILE`: First login through AWS IAM Identity Center (or AWS SSO) using
@@ -123,7 +139,7 @@ To use Amazon Bedrock with opencode:
 
 We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max), it's the most cost-effective way to use opencode.
 
-Once you've singed up, run `opencode auth login` and select Anthropic.
+Once you've signed up, run `opencode auth login` and select Anthropic.
 
 ```bash
 $ opencode auth login
@@ -131,9 +147,7 @@ $ opencode auth login
 ┌  Add credential
 │
 ◆  Select provider
-│  ● Anthropic (recommended)
-│  ○ OpenAI
-│  ○ Google
+│  ● Anthropic
 │  ...
 └
 ```
@@ -168,7 +182,6 @@ Or if you already have an API key, you can select **Manually enter API Key** and
 ### Azure OpenAI
 
 1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
-
    - **Resource name**: This becomes part of your API endpoint (`https://RESOURCE_NAME.openai.azure.com/`)
    - **API key**: Either `KEY 1` or `KEY 2` from your resource
 
@@ -343,6 +356,8 @@ To use your GitHub Copilot subscription with opencode:
 :::note
 Some models might need a [Pro+
 subscription](https://github.com/features/copilot/plans) to use.
+
+Some models need to be manually enabled in your [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Run `opencode auth login` and select GitHub Copilot.
@@ -511,6 +526,10 @@ In this example:
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
 
+:::tip
+If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 16k - 32k.
+:::
+
 ---
 
 ### OpenAI
@@ -549,13 +568,13 @@ In this example:
 
 ---
 
-### opencode zen
+### OpenCode Zen
 
-opencode zen is a list of tested and verified models provided by the opencode team. [Learn more](/docs/zen).
+OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>opencode zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
 
-2. Run `opencode auth login` and select **opencode zen**.
+2. Run `opencode auth login` and select **OpenCode Zen**.
 
    ```bash
    $ opencode auth login
@@ -563,12 +582,12 @@ opencode zen is a list of tested and verified models provided by the opencode te
    ┌  Add credential
    │
    ◆  Select provider
-   │  ● opencode zen
+   │  ● OpenCode Zen
    │  ...
    └
    ```
 
-3. Enter your opencode API key.
+3. Enter your OpenCode API key.
 
    ```bash
    $ opencode auth login
@@ -576,7 +595,7 @@ opencode zen is a list of tested and verified models provided by the opencode te
    ┌  Add credential
    │
    ◇  Select provider
-   │  opencode zen
+   │  OpenCode Zen
    │
    ◇  Enter your API key
    │  _
@@ -732,6 +751,19 @@ monitor and improve Grok Code.
    └
    ```
 
+   If you are subscribed to the **GLM Coding Plan**, select **Z.AI Coding Plan**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Z.AI Coding Plan
+   │  ...
+   └
+   ```
+
 3. Enter your Z.AI API key.
 
    ```bash
@@ -825,7 +857,6 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
    ```
 
    Here are the configuration options:
-
    - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers
    - **name**: Display name in UI.
    - **models**: Available models.
@@ -881,7 +912,6 @@ If you are having trouble with configuring a provider, check the following:
    This doesn't apply to providers like Amazon Bedrock, that rely on environment variables for their auth.
 
 2. For custom providers, check the opencode config and:
-
    - Make sure the provider ID used in `opencode auth login` matches the ID in your opencode config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.
