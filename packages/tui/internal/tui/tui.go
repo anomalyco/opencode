@@ -87,6 +87,7 @@ func (a Model) Init() tea.Cmd {
 		cmds = append(cmds, tea.RequestBackgroundColor)
 	}
 	cmds = append(cmds, a.app.InitializeProvider())
+	cmds = append(cmds, a.app.LoadLastSession())
 	cmds = append(cmds, a.editor.Init())
 	cmds = append(cmds, a.messages.Init())
 	cmds = append(cmds, a.status.Init())

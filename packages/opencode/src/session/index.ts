@@ -160,7 +160,7 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
+    await Storage.write(["session", result.id], result)
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
@@ -179,7 +179,7 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
+    const read = await Storage.read<Info>(["session", id])
     return read as Info
   })
 
@@ -223,8 +223,7 @@ export namespace Session {
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
-    const project = Instance.project
-    const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
+    const result = await Storage.update<Info>(["session", id], (draft) => {
       editor(draft)
       draft.time.updated = Date.now()
     })
@@ -271,9 +270,10 @@ export namespace Session {
   })
 
   export async function* list() {
-    const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+    for (const item of await Storage.list(["session"])) {
+      const session = await Storage.read<Info>(item)
+      if (session.directory !== Instance.directory) continue
+      yield session
     }
   }
 
@@ -302,7 +302,7 @@ export namespace Session {
         }
         await Storage.remove(msg)
       }
-      await Storage.remove(["session", project.id, sessionID])
+      await Storage.remove(["session", sessionID])
       Bus.publish(Event.Deleted, {
         info: session,
       })
