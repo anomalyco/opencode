@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewPathService(opts ...option.RequestOption) (r *PathService) {
 
 // Get the current path
 func (r *PathService) Get(ctx context.Context, query PathGetParams, opts ...option.RequestOption) (res *Path, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "path"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return

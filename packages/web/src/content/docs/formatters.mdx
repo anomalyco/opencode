@@ -1,15 +1,15 @@
 ---
 title: Formatters
-description: opencode uses language specific formatters.
+description: OpenCode uses language specific formatters.
 ---
 
-opencode automatically formats files after they are written or edited using language-specific formatters. This ensures that the code that is generated follows the code styles of your project.
+OpenCode automatically formats files after they are written or edited using language-specific formatters. This ensures that the code that is generated follows the code styles of your project.
 
 ---
 
 ## Built-in
 
-opencode comes with several built-in formatters for popular languages and frameworks. Below is a list of the formatters, supported file extensions, and commands or config options it needs.
+OpenCode comes with several built-in formatters for popular languages and frameworks. Below is a list of the formatters, supported file extensions, and commands or config options it needs.
 
 | Formatter      | Extensions                                                                                               | Requirements                            |
 | -------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------- |
@@ -25,13 +25,13 @@ opencode comes with several built-in formatters for popular languages and framew
 | standardrb     | .rb, .rake, .gemspec, .ru                                                                                | `standardrb` command available          |
 | htmlbeautifier | .erb, .html.erb                                                                                          | `htmlbeautifier` command available      |
 
-So if your project has `prettier` in your `package.json`, opencode will automatically use it.
+So if your project has `prettier` in your `package.json`, OpenCode will automatically use it.
 
 ---
 
 ## How it works
 
-When opencode writes or edits a file, it:
+When OpenCode writes or edits a file, it:
 
 1. Checks the file extension against all enabled formatters.
 2. Runs the appropriate formatter command on the file.
@@ -43,7 +43,7 @@ This process happens in the background, ensuring your code styles are maintained
 
 ## Configure
 
-You can customize formatters through the `formatter` section in your opencode config.
+You can customize formatters through the `formatter` section in your OpenCode config.
 
 ```json title="opencode.json"
 {

@@ -1,15 +1,15 @@
 ---
 title: LSP Servers
-description: opencode integrates with your LSP servers.
+description: OpenCode integrates with your LSP servers.
 ---
 
-opencode integrates with your Language Server Protocol (LSP) to help the LLM interacts with your codebase. It uses diagnostics to provide feedback to the LLM. And _go-to-definition_ and _find-references_ to help navigate your codebase.
+OpenCode integrates with your Language Server Protocol (LSP) to help the LLM interact with your codebase. It uses diagnostics to provide feedback to the LLM.
 
 ---
 
 ## Built-in
 
-opencode comes with several built-in LSP servers for popular languages:
+OpenCode comes with several built-in LSP servers for popular languages:
 
 | LSP Server | Extensions                                           | Requirements                        |
 | ---------- | ---------------------------------------------------- | ----------------------------------- |
@@ -25,6 +25,7 @@ opencode comes with several built-in LSP servers for popular languages:
 | rust       | .rs                                                  | `rust-analyzer` command available   |
 | clangd     | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects    |
 | svelte     | .svelte                                              | Auto-installs for Svelte projects   |
+| jdtls      | .java                                                | `Java SDK (version 21+)` installed  |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 

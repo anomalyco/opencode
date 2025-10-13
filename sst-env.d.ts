@@ -5,91 +5,95 @@
 
 declare module "sst" {
   export interface Resource {
-    ANTHROPIC_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "AUTH_API_URL": {
+      "type": "sst.sst.Linkable"
+      "value": string
     }
-    AUTH_API_URL: {
-      type: "sst.sst.Linkable"
-      value: string
+    "AWS_SES_ACCESS_KEY_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    Api: {
-      type: "sst.cloudflare.Worker"
-      url: string
+    "AWS_SES_SECRET_ACCESS_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    AuthApi: {
-      type: "sst.cloudflare.Worker"
-      url: string
+    "Api": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
-    AuthStorage: {
-      type: "sst.cloudflare.Kv"
+    "AuthApi": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
-    BASETEN_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "AuthStorage": {
+      "type": "sst.cloudflare.Kv"
     }
-    Bucket: {
-      name: string
-      type: "sst.cloudflare.Bucket"
+    "Bucket": {
+      "name": string
+      "type": "sst.cloudflare.Bucket"
     }
-    Console: {
-      type: "sst.cloudflare.SolidStart"
-      url: string
+    "Console": {
+      "type": "sst.cloudflare.SolidStart"
+      "url": string
     }
-    Database: {
-      database: string
-      host: string
-      password: string
-      port: number
-      type: "sst.sst.Linkable"
-      username: string
+    "Database": {
+      "database": string
+      "host": string
+      "password": string
+      "port": number
+      "type": "sst.sst.Linkable"
+      "username": string
     }
-    GITHUB_APP_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "Desktop": {
+      "type": "sst.cloudflare.StaticSite"
+      "url": string
     }
-    GITHUB_APP_PRIVATE_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "EMAILOCTOPUS_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GITHUB_CLIENT_ID_CONSOLE: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_APP_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GITHUB_CLIENT_SECRET_CONSOLE: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_APP_PRIVATE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    GOOGLE_CLIENT_ID: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_CLIENT_ID_CONSOLE": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    HONEYCOMB_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "GITHUB_CLIENT_SECRET_CONSOLE": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    LogProcessor: {
-      type: "sst.cloudflare.Worker"
+    "GOOGLE_CLIENT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    OPENAI_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "HONEYCOMB_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    STRIPE_SECRET_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "LogProcessor": {
+      "type": "sst.cloudflare.Worker"
     }
-    STRIPE_WEBHOOK_SECRET: {
-      type: "sst.sst.Linkable"
-      value: string
+    "STRIPE_SECRET_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
-    Web: {
-      type: "sst.cloudflare.Astro"
-      url: string
+    "STRIPE_WEBHOOK_SECRET": {
+      "type": "sst.sst.Linkable"
+      "value": string
     }
-    XAI_API_KEY: {
-      type: "sst.sst.Secret"
-      value: string
+    "Web": {
+      "type": "sst.cloudflare.Astro"
+      "url": string
+    }
+    "ZEN_MODELS": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
   }
 }

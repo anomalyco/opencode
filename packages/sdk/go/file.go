@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -35,7 +36,7 @@ func NewFileService(opts ...option.RequestOption) (r *FileService) {
 
 // List files and directories
 func (r *FileService) List(ctx context.Context, query FileListParams, opts ...option.RequestOption) (res *[]FileNode, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -43,7 +44,7 @@ func (r *FileService) List(ctx context.Context, query FileListParams, opts ...op
 
 // Read a file
 func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...option.RequestOption) (res *FileReadResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file/content"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -51,7 +52,7 @@ func (r *FileService) Read(ctx context.Context, query FileReadParams, opts ...op
 
 // Get file status
 func (r *FileService) Status(ctx context.Context, query FileStatusParams, opts ...option.RequestOption) (res *[]File, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "file/status"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -100,15 +101,17 @@ func (r FileStatus) IsKnown() bool {
 }
 
 type FileNode struct {
-	Ignored bool         `json:"ignored,required"`
-	Name    string       `json:"name,required"`
-	Path    string       `json:"path,required"`
-	Type    FileNodeType `json:"type,required"`
-	JSON    fileNodeJSON `json:"-"`
+	Absolute string       `json:"absolute,required"`
+	Ignored  bool         `json:"ignored,required"`
+	Name     string       `json:"name,required"`
+	Path     string       `json:"path,required"`
+	Type     FileNodeType `json:"type,required"`
+	JSON     fileNodeJSON `json:"-"`
 }
 
 // fileNodeJSON contains the JSON metadata for the struct [FileNode]
 type fileNodeJSON struct {
+	Absolute    apijson.Field
 	Ignored     apijson.Field
 	Name        apijson.Field
 	Path        apijson.Field
@@ -141,16 +144,18 @@ func (r FileNodeType) IsKnown() bool {
 }
 
 type FileReadResponse struct {
-	Content string               `json:"content,required"`
-	Type    FileReadResponseType `json:"type,required"`
-	JSON    fileReadResponseJSON `json:"-"`
+	Content string                `json:"content,required"`
+	Diff    string                `json:"diff"`
+	Patch   FileReadResponsePatch `json:"patch"`
+	JSON    fileReadResponseJSON  `json:"-"`
 }
 
 // fileReadResponseJSON contains the JSON metadata for the struct
 // [FileReadResponse]
 type fileReadResponseJSON struct {
 	Content     apijson.Field
-	Type        apijson.Field
+	Diff        apijson.Field
+	Patch       apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -163,19 +168,64 @@ func (r fileReadResponseJSON) RawJSON() string {
 	return r.raw
 }
 
-type FileReadResponseType string
+type FileReadResponsePatch struct {
+	Hunks       []FileReadResponsePatchHunk `json:"hunks,required"`
+	NewFileName string                      `json:"newFileName,required"`
+	OldFileName string                      `json:"oldFileName,required"`
+	Index       string                      `json:"index"`
+	NewHeader   string                      `json:"newHeader"`
+	OldHeader   string                      `json:"oldHeader"`
+	JSON        fileReadResponsePatchJSON   `json:"-"`
+}
 
-const (
-	FileReadResponseTypeRaw   FileReadResponseType = "raw"
-	FileReadResponseTypePatch FileReadResponseType = "patch"
-)
+// fileReadResponsePatchJSON contains the JSON metadata for the struct
+// [FileReadResponsePatch]
+type fileReadResponsePatchJSON struct {
+	Hunks       apijson.Field
+	NewFileName apijson.Field
+	OldFileName apijson.Field
+	Index       apijson.Field
+	NewHeader   apijson.Field
+	OldHeader   apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
 
-func (r FileReadResponseType) IsKnown() bool {
-	switch r {
-	case FileReadResponseTypeRaw, FileReadResponseTypePatch:
-		return true
-	}
-	return false
+func (r *FileReadResponsePatch) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r fileReadResponsePatchJSON) RawJSON() string {
+	return r.raw
+}
+
+type FileReadResponsePatchHunk struct {
+	Lines    []string                      `json:"lines,required"`
+	NewLines float64                       `json:"newLines,required"`
+	NewStart float64                       `json:"newStart,required"`
+	OldLines float64                       `json:"oldLines,required"`
+	OldStart float64                       `json:"oldStart,required"`
+	JSON     fileReadResponsePatchHunkJSON `json:"-"`
+}
+
+// fileReadResponsePatchHunkJSON contains the JSON metadata for the struct
+// [FileReadResponsePatchHunk]
+type fileReadResponsePatchHunkJSON struct {
+	Lines       apijson.Field
+	NewLines    apijson.Field
+	NewStart    apijson.Field
+	OldLines    apijson.Field
+	OldStart    apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *FileReadResponsePatchHunk) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r fileReadResponsePatchHunkJSON) RawJSON() string {
+	return r.raw
 }
 
 type FileListParams struct {

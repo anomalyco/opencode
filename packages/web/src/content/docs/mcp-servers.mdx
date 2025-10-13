@@ -3,10 +3,10 @@ title: MCP servers
 description: Add local and remote MCP tools.
 ---
 
-You can add external tools to opencode using the _Model Context Protocol_, or MCP. opencode supports both:
+You can add external tools to OpenCode using the _Model Context Protocol_, or MCP. OpenCode supports both:
 
 - Local servers
-- And remote servers
+- Remote servers
 
 Once added, MCP tools are automatically available to the LLM alongside built-in tools.
 
@@ -14,15 +14,22 @@ Once added, MCP tools are automatically available to the LLM alongside built-in 
 
 ## Configure
 
-You can define MCP servers in your opencode config under `mcp`.
+You can define MCP servers in your OpenCode config under `mcp`.
 
 ---
 
 ### Local
 
-Add local MCP servers using `"type": "local"` within the MCP object. Multiple MCP servers can be added. The key string for each server can be any arbitrary name.
+Add local MCP servers using `"type": "local"` within the MCP object. Multiple MCP servers can be added.
 
-```json title="opencode.json"
+:::tip
+MCP servers add to your context, so you want to be careful with which
+ones you enable.
+:::
+
+The key string for each server can be any arbitrary name.
+
+```json title="opencode.json" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -95,16 +102,70 @@ Local and remote servers can be used together within the same `mcp` config objec
 
 ---
 
-## Per agent
+## Manage
+
+Your MCPs are available as tools in OpenCode, alongside built-in tools. So you
+can manage them through the OpenCode config like any other tool.
+
+---
+
+### Global
+
+This means that you can enable or disable them globally.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+We can also use a glob pattern to disable all matching MCPs.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+Here we are using the glob pattern `my-mcp*` to disable all MCPs.
+
+---
+
+### Per agent
 
 If you have a large number of MCP servers you may want to only enable them per
 agent and disable them globally. To do this:
 
-1. Configure the MCP server.
-2. Disable it as a tool globally.
-3. In your [agent config](/docs/agents#tools) enable the MCP server as a tool.
+1. Disable it as a tool globally.
+2. In your [agent config](/docs/agents#tools) enable the MCP server as a tool.
 
-```json title="opencode.json" {11, 14-17}
+```json title="opencode.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -126,3 +187,13 @@ agent and disable them globally. To do this:
   }
 }
 ```
+
+---
+
+#### Glob patterns
+
+The glob pattern uses simple regex globbing patterns.
+
+- `*` matches zero or more of any character
+- `?` matches exactly one character
+- All other characters match literally

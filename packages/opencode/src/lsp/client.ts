@@ -4,7 +4,7 @@ import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import { Bus } from "../bus"
-import z from "zod"
+import z from "zod/v4"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
 import { withTimeout } from "../util/timeout"
@@ -39,8 +39,8 @@ export namespace LSPClient {
     l.info("starting client")
 
     const connection = createMessageConnection(
-      new StreamMessageReader(input.server.process.stdout),
-      new StreamMessageWriter(input.server.process.stdin),
+      new StreamMessageReader(input.server.process.stdout as any),
+      new StreamMessageWriter(input.server.process.stdin as any),
     )
 
     const diagnostics = new Map<string, Diagnostic[]>()

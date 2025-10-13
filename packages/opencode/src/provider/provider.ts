@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -16,10 +16,7 @@ import { Flag } from "../flag/flag"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (
-    provider: ModelsDev.Provider,
-    api?: string,
-  ) => Promise<{
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
     getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
     options?: Record<string, any>
@@ -40,6 +37,19 @@ export namespace Provider {
       }
     },
     async opencode(input) {
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
       return {
         autoload: Object.keys(input.models).length > 0,
         options: {},
@@ -147,6 +157,40 @@ export namespace Provider {
         },
       }
     },
+    "google-vertex": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }
+    },
+    "google-vertex-anthropic": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -163,9 +207,9 @@ export namespace Provider {
     } = {}
     const models = new Map<
       string,
-      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
+      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
     >()
-    const sdk = new Map<string, SDK>()
+    const sdk = new Map<number, SDK>()
 
     log.info("init")
 
@@ -209,7 +253,7 @@ export namespace Provider {
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[modelID]
         const parsedModel: ModelsDev.Model = {
-          id: modelID,
+          id: model.id ?? modelID,
           name: model.name ?? existing?.name ?? modelID,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
@@ -238,6 +282,11 @@ export namespace Provider {
             existing?.limit ?? {
               context: 0,
               output: 0,
+            },
+          modalities: model.modalities ??
+            existing?.modalities ?? {
+              input: ["text"],
+              output: ["text"],
             },
           provider: model.provider ?? existing?.provider,
         }
@@ -330,23 +379,36 @@ export namespace Provider {
         providerID: provider.id,
       })
       const s = await state()
-      const existing = s.sdk.get(provider.id)
-      if (existing) return existing
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
-      const mod = await import(await BunProc.install(pkg, "latest"))
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      let options = { ...s.providers[provider.id]?.options }
+      const options = { ...s.providers[provider.id]?.options }
+      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
+        options["includeUsage"] = true
+      }
+      const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
+      const existing = s.sdk.get(key)
+      if (existing) return existing
+      const installedPath = await BunProc.install(pkg, "latest")
+      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
+      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
+      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
+      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
+      // In addition, Bun's dynamic import logic does not support subpath imports,
+      // so we patch the import path to load directly from `dist`.
+      const modPath =
+        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
+      const mod = await import(modPath)
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: any) => {
           return await fetch(input, { ...init, timeout: options["timeout"] })
         }
       }
+      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
       const loaded = fn({
         name: provider.id,
         ...options,
       })
-      s.sdk.set(provider.id, loaded)
+      s.sdk.set(key, loaded)
       return loaded as SDK
     })().catch((e) => {
       throw new InitError({ providerID: provider.id }, { cause: e })
@@ -383,12 +445,14 @@ export namespace Provider {
         modelID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       })
       return {
         modelID,
         providerID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       }
     } catch (e) {
       if (e instanceof NoSuchModelError)

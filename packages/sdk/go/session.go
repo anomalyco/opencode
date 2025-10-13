@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -42,7 +43,7 @@ func NewSessionService(opts ...option.RequestOption) (r *SessionService) {
 
 // Create a new session
 func (r *SessionService) New(ctx context.Context, params SessionNewParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "session"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return
@@ -50,7 +51,7 @@ func (r *SessionService) New(ctx context.Context, params SessionNewParams, opts 
 
 // Update session properties
 func (r *SessionService) Update(ctx context.Context, id string, params SessionUpdateParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -62,7 +63,7 @@ func (r *SessionService) Update(ctx context.Context, id string, params SessionUp
 
 // List all sessions
 func (r *SessionService) List(ctx context.Context, query SessionListParams, opts ...option.RequestOption) (res *[]Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "session"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -70,7 +71,7 @@ func (r *SessionService) List(ctx context.Context, query SessionListParams, opts
 
 // Delete a session and all its data
 func (r *SessionService) Delete(ctx context.Context, id string, body SessionDeleteParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -82,7 +83,7 @@ func (r *SessionService) Delete(ctx context.Context, id string, body SessionDele
 
 // Abort a session
 func (r *SessionService) Abort(ctx context.Context, id string, body SessionAbortParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -94,7 +95,7 @@ func (r *SessionService) Abort(ctx context.Context, id string, body SessionAbort
 
 // Get a session's children
 func (r *SessionService) Children(ctx context.Context, id string, query SessionChildrenParams, opts ...option.RequestOption) (res *[]Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -106,7 +107,7 @@ func (r *SessionService) Children(ctx context.Context, id string, query SessionC
 
 // Send a new command to a session
 func (r *SessionService) Command(ctx context.Context, id string, params SessionCommandParams, opts ...option.RequestOption) (res *SessionCommandResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -118,7 +119,7 @@ func (r *SessionService) Command(ctx context.Context, id string, params SessionC
 
 // Get session
 func (r *SessionService) Get(ctx context.Context, id string, query SessionGetParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -130,7 +131,7 @@ func (r *SessionService) Get(ctx context.Context, id string, query SessionGetPar
 
 // Analyze the app and create an AGENTS.md file
 func (r *SessionService) Init(ctx context.Context, id string, params SessionInitParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -142,7 +143,7 @@ func (r *SessionService) Init(ctx context.Context, id string, params SessionInit
 
 // Get a message from a session
 func (r *SessionService) Message(ctx context.Context, id string, messageID string, query SessionMessageParams, opts ...option.RequestOption) (res *SessionMessageResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -158,7 +159,7 @@ func (r *SessionService) Message(ctx context.Context, id string, messageID strin
 
 // List messages for a session
 func (r *SessionService) Messages(ctx context.Context, id string, query SessionMessagesParams, opts ...option.RequestOption) (res *[]SessionMessagesResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -170,7 +171,7 @@ func (r *SessionService) Messages(ctx context.Context, id string, query SessionM
 
 // Create and send a new message to a session
 func (r *SessionService) Prompt(ctx context.Context, id string, params SessionPromptParams, opts ...option.RequestOption) (res *SessionPromptResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -182,7 +183,7 @@ func (r *SessionService) Prompt(ctx context.Context, id string, params SessionPr
 
 // Revert a message
 func (r *SessionService) Revert(ctx context.Context, id string, params SessionRevertParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -194,7 +195,7 @@ func (r *SessionService) Revert(ctx context.Context, id string, params SessionRe
 
 // Share a session
 func (r *SessionService) Share(ctx context.Context, id string, body SessionShareParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -206,7 +207,7 @@ func (r *SessionService) Share(ctx context.Context, id string, body SessionShare
 
 // Run a shell command
 func (r *SessionService) Shell(ctx context.Context, id string, params SessionShellParams, opts ...option.RequestOption) (res *AssistantMessage, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -218,7 +219,7 @@ func (r *SessionService) Shell(ctx context.Context, id string, params SessionShe
 
 // Summarize the session
 func (r *SessionService) Summarize(ctx context.Context, id string, params SessionSummarizeParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -230,7 +231,7 @@ func (r *SessionService) Summarize(ctx context.Context, id string, params Sessio
 
 // Restore all reverted messages
 func (r *SessionService) Unrevert(ctx context.Context, id string, body SessionUnrevertParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -242,7 +243,7 @@ func (r *SessionService) Unrevert(ctx context.Context, id string, body SessionUn
 
 // Unshare the session
 func (r *SessionService) Unshare(ctx context.Context, id string, body SessionUnshareParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -518,7 +519,7 @@ func (r assistantMessageTokensCacheJSON) RawJSON() string {
 
 type AssistantMessageError struct {
 	// This field can have the runtime type of [shared.ProviderAuthErrorData],
-	// [shared.UnknownErrorData], [interface{}].
+	// [shared.UnknownErrorData], [interface{}], [shared.MessageAbortedErrorData].
 	Data  interface{}               `json:"data,required"`
 	Name  AssistantMessageErrorName `json:"name,required"`
 	JSON  assistantMessageErrorJSON `json:"-"`
@@ -566,26 +567,22 @@ type AssistantMessageErrorUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*AssistantMessageErrorUnion)(nil)).Elem(),
-		"name",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.ProviderAuthError{}),
-			DiscriminatorValue: "ProviderAuthError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.ProviderAuthError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.UnknownError{}),
-			DiscriminatorValue: "UnknownError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.UnknownError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AssistantMessageErrorMessageOutputLengthError{}),
-			DiscriminatorValue: "MessageOutputLengthError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AssistantMessageErrorMessageOutputLengthError{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(shared.MessageAbortedError{}),
-			DiscriminatorValue: "MessageAbortedError",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(shared.MessageAbortedError{}),
 		},
 	)
 }
@@ -778,16 +775,14 @@ type FilePartSourceUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*FilePartSourceUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(FileSource{}),
-			DiscriminatorValue: "file",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(FileSource{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(SymbolSource{}),
-			DiscriminatorValue: "symbol",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(SymbolSource{}),
 		},
 	)
 }
@@ -986,16 +981,14 @@ type MessageUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*MessageUnion)(nil)).Elem(),
-		"role",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(UserMessage{}),
-			DiscriminatorValue: "user",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(UserMessage{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AssistantMessage{}),
-			DiscriminatorValue: "assistant",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AssistantMessage{}),
 		},
 	)
 }
@@ -1107,51 +1100,42 @@ type PartUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*PartUnion)(nil)).Elem(),
-		"type",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(TextPart{}),
-			DiscriminatorValue: "text",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(TextPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ReasoningPart{}),
-			DiscriminatorValue: "reasoning",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ReasoningPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(FilePart{}),
-			DiscriminatorValue: "file",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(FilePart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolPart{}),
-			DiscriminatorValue: "tool",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepStartPart{}),
-			DiscriminatorValue: "step-start",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepStartPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(StepFinishPart{}),
-			DiscriminatorValue: "step-finish",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(StepFinishPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(SnapshotPart{}),
-			DiscriminatorValue: "snapshot",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(SnapshotPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(PartPatchPart{}),
-			DiscriminatorValue: "patch",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(PartPatchPart{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(AgentPart{}),
-			DiscriminatorValue: "agent",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(AgentPart{}),
 		},
 	)
 }
@@ -1332,15 +1316,17 @@ func (r sessionJSON) RawJSON() string {
 }
 
 type SessionTime struct {
-	Created float64         `json:"created,required"`
-	Updated float64         `json:"updated,required"`
-	JSON    sessionTimeJSON `json:"-"`
+	Created    float64         `json:"created,required"`
+	Updated    float64         `json:"updated,required"`
+	Compacting float64         `json:"compacting"`
+	JSON       sessionTimeJSON `json:"-"`
 }
 
 // sessionTimeJSON contains the JSON metadata for the struct [SessionTime]
 type sessionTimeJSON struct {
 	Created     apijson.Field
 	Updated     apijson.Field
+	Compacting  apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -1739,14 +1725,15 @@ func (r SymbolSourceRangeStartParam) MarshalJSON() (data []byte, err error) {
 }
 
 type TextPart struct {
-	ID        string       `json:"id,required"`
-	MessageID string       `json:"messageID,required"`
-	SessionID string       `json:"sessionID,required"`
-	Text      string       `json:"text,required"`
-	Type      TextPartType `json:"type,required"`
-	Synthetic bool         `json:"synthetic"`
-	Time      TextPartTime `json:"time"`
-	JSON      textPartJSON `json:"-"`
+	ID        string                 `json:"id,required"`
+	MessageID string                 `json:"messageID,required"`
+	SessionID string                 `json:"sessionID,required"`
+	Text      string                 `json:"text,required"`
+	Type      TextPartType           `json:"type,required"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	Synthetic bool                   `json:"synthetic"`
+	Time      TextPartTime           `json:"time"`
+	JSON      textPartJSON           `json:"-"`
 }
 
 // textPartJSON contains the JSON metadata for the struct [TextPart]
@@ -1756,6 +1743,7 @@ type textPartJSON struct {
 	SessionID   apijson.Field
 	Text        apijson.Field
 	Type        apijson.Field
+	Metadata    apijson.Field
 	Synthetic   apijson.Field
 	Time        apijson.Field
 	raw         string
@@ -1812,6 +1800,7 @@ type TextPartInputParam struct {
 	Text      param.Field[string]                 `json:"text,required"`
 	Type      param.Field[TextPartInputType]      `json:"type,required"`
 	ID        param.Field[string]                 `json:"id"`
+	Metadata  param.Field[map[string]interface{}] `json:"metadata"`
 	Synthetic param.Field[bool]                   `json:"synthetic"`
 	Time      param.Field[TextPartInputTimeParam] `json:"time"`
 }
@@ -1846,14 +1835,15 @@ func (r TextPartInputTimeParam) MarshalJSON() (data []byte, err error) {
 }
 
 type ToolPart struct {
-	ID        string        `json:"id,required"`
-	CallID    string        `json:"callID,required"`
-	MessageID string        `json:"messageID,required"`
-	SessionID string        `json:"sessionID,required"`
-	State     ToolPartState `json:"state,required"`
-	Tool      string        `json:"tool,required"`
-	Type      ToolPartType  `json:"type,required"`
-	JSON      toolPartJSON  `json:"-"`
+	ID        string                 `json:"id,required"`
+	CallID    string                 `json:"callID,required"`
+	MessageID string                 `json:"messageID,required"`
+	SessionID string                 `json:"sessionID,required"`
+	State     ToolPartState          `json:"state,required"`
+	Tool      string                 `json:"tool,required"`
+	Type      ToolPartType           `json:"type,required"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	JSON      toolPartJSON           `json:"-"`
 }
 
 // toolPartJSON contains the JSON metadata for the struct [ToolPart]
@@ -1865,6 +1855,7 @@ type toolPartJSON struct {
 	State       apijson.Field
 	Tool        apijson.Field
 	Type        apijson.Field
+	Metadata    apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -1939,26 +1930,22 @@ type ToolPartStateUnion interface {
 func init() {
 	apijson.RegisterUnion(
 		reflect.TypeOf((*ToolPartStateUnion)(nil)).Elem(),
-		"status",
+		"",
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStatePending{}),
-			DiscriminatorValue: "pending",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStatePending{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateRunning{}),
-			DiscriminatorValue: "running",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateRunning{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateCompleted{}),
-			DiscriminatorValue: "completed",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateCompleted{}),
 		},
 		apijson.UnionVariant{
-			TypeFilter:         gjson.JSON,
-			Type:               reflect.TypeOf(ToolStateError{}),
-			DiscriminatorValue: "error",
+			TypeFilter: gjson.JSON,
+			Type:       reflect.TypeOf(ToolStateError{}),
 		},
 	)
 }
@@ -2042,9 +2029,10 @@ func (r ToolStateCompletedStatus) IsKnown() bool {
 }
 
 type ToolStateCompletedTime struct {
-	End   float64                    `json:"end,required"`
-	Start float64                    `json:"start,required"`
-	JSON  toolStateCompletedTimeJSON `json:"-"`
+	End       float64                    `json:"end,required"`
+	Start     float64                    `json:"start,required"`
+	Compacted float64                    `json:"compacted"`
+	JSON      toolStateCompletedTimeJSON `json:"-"`
 }
 
 // toolStateCompletedTimeJSON contains the JSON metadata for the struct
@@ -2052,6 +2040,7 @@ type ToolStateCompletedTime struct {
 type toolStateCompletedTimeJSON struct {
 	End         apijson.Field
 	Start       apijson.Field
+	Compacted   apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -2169,9 +2158,9 @@ func (r ToolStatePendingStatus) IsKnown() bool {
 }
 
 type ToolStateRunning struct {
+	Input    interface{}            `json:"input,required"`
 	Status   ToolStateRunningStatus `json:"status,required"`
 	Time     ToolStateRunningTime   `json:"time,required"`
-	Input    interface{}            `json:"input"`
 	Metadata map[string]interface{} `json:"metadata"`
 	Title    string                 `json:"title"`
 	JSON     toolStateRunningJSON   `json:"-"`
@@ -2180,9 +2169,9 @@ type ToolStateRunning struct {
 // toolStateRunningJSON contains the JSON metadata for the struct
 // [ToolStateRunning]
 type toolStateRunningJSON struct {
+	Input       apijson.Field
 	Status      apijson.Field
 	Time        apijson.Field
-	Input       apijson.Field
 	Metadata    apijson.Field
 	Title       apijson.Field
 	raw         string
@@ -2573,6 +2562,7 @@ type SessionPromptParamsPart struct {
 	Type      param.Field[SessionPromptParamsPartsType] `json:"type,required"`
 	ID        param.Field[string]                       `json:"id"`
 	Filename  param.Field[string]                       `json:"filename"`
+	Metadata  param.Field[interface{}]                  `json:"metadata"`
 	Mime      param.Field[string]                       `json:"mime"`
 	Name      param.Field[string]                       `json:"name"`
 	Source    param.Field[interface{}]                  `json:"source"`

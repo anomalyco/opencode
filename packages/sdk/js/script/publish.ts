@@ -5,15 +5,26 @@ process.chdir(dir)
 
 import { $ } from "bun"
 
-await import("./generate")
-await $`rm -rf dist`
-await $`bun tsc`
+await import("./build")
+
+const pkg = await import("../package.json").then((m) => m.default)
+const original = JSON.parse(JSON.stringify(pkg))
+for (const [key, value] of Object.entries(pkg.exports)) {
+  const file = value.replace("./src/", "./dist/").replace(".ts", "")
+  /// @ts-expect-error
+  pkg.exports[key] = {
+    import: file + ".js",
+    types: file + ".d.ts",
+  }
+}
+await Bun.write("package.json", JSON.stringify(pkg, null, 2))
 
 const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
 
 if (snapshot) {
-  await $`bun publish --tag snapshot`
+  await $`bun publish --tag snapshot --access public`
 }
 if (!snapshot) {
-  await $`bun publish`
+  await $`bun publish --access public`
 }
+await Bun.write("package.json", JSON.stringify(original, null, 2))

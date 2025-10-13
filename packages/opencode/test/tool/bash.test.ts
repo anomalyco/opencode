@@ -19,30 +19,36 @@ Log.init({ print: false })
 
 describe("tool.bash", () => {
   test("basic", async () => {
-    await Instance.provide(projectRoot, async () => {
-      const result = await bash.execute(
-        {
-          command: "echo 'test'",
-          description: "Echo test message",
-        },
-        ctx,
-      )
-      expect(result.metadata.exit).toBe(0)
-      expect(result.metadata.output).toContain("test")
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const result = await bash.execute(
+          {
+            command: "echo 'test'",
+            description: "Echo test message",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("test")
+      },
     })
   })
 
   test("cd ../ should fail outside of project root", async () => {
-    await Instance.provide(projectRoot, async () => {
-      expect(
-        bash.execute(
-          {
-            command: "cd ../",
-            description: "Try to cd to parent directory",
-          },
-          ctx,
-        ),
-      ).rejects.toThrow("This command references paths outside of")
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        expect(
+          bash.execute(
+            {
+              command: "cd ../",
+              description: "Try to cd to parent directory",
+            },
+            ctx,
+          ),
+        ).rejects.toThrow("This command references paths outside of")
+      },
     })
   })
 })

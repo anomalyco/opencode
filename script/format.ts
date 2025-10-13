@@ -2,7 +2,7 @@
 
 import { $ } from "bun"
 
-await $`bun run prettier --ignore-unknown --write $(git ls-files)`
+await $`bun run prettier --ignore-unknown --write`
 
 if (process.env["CI"] && (await $`git status --porcelain`.text())) {
   await $`git config --local user.email "action@github.com"`
