@@ -88,6 +88,16 @@ $ bun dev
 
 #### Development Notes
 
+To look behind the scene and report in an issue what OpenCode is sending:
+
+- Set up `mitmproxy` with `uv tool install mitmproxy`.
+- Start it by running `mitmweb`.
+- Trust the certificate](https://docs.mitmproxy.org/stable/concepts/certificates/)
+- Run opencode like so:
+  ```bash
+  HTTP_PROXY=http://127.0.0.1:8080 HTTPS_PROXY=http://127.0.0.1:8080 NODE_EXTRA_CA_CERTS="$HOME/.mitmproxy/mitmproxy-ca-cert.pem" opencode
+  ```
+
 **API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the OpenCode team to generate a new stainless sdk for the clients.
 
 ### FAQ
