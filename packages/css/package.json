@@ -1,0 +1,12 @@
+{
+  "name": "@opencode-ai/css",
+  "version": "0.15.3",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.css",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "dev": "bun run dev.ts"
+  }
+}

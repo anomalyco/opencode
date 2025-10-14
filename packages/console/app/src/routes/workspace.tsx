@@ -1,4 +1,3 @@
-import { Show } from "solid-js"
 import { query, createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
 import "./workspace.css"
 import { IconWorkspaceLogo } from "../component/icon"
@@ -7,7 +6,6 @@ import { UserMenu } from "./user-menu"
 import { withActor } from "~/context/auth.withActor"
 import { User } from "@opencode-ai/console-core/user.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
-import { querySessionInfo } from "./workspace/common"
 
 const getUserEmail = query(async (workspaceID: string) => {
   "use server"
@@ -21,7 +19,6 @@ const getUserEmail = query(async (workspaceID: string) => {
 export default function WorkspaceLayout(props: RouteSectionProps) {
   const params = useParams()
   const userEmail = createAsync(() => getUserEmail(params.id))
-  const sessionInfo = createAsync(() => querySessionInfo(params.id))
   return (
     <main data-page="workspace">
       <header data-component="workspace-header">
@@ -29,9 +26,7 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
           <A href="/" data-component="site-title">
             <IconWorkspaceLogo />
           </A>
-          <Show when={sessionInfo()?.isBeta}>
-            <WorkspacePicker />
-          </Show>
+          <WorkspacePicker />
         </div>
         <div data-slot="header-actions">
           <UserMenu email={userEmail()} />

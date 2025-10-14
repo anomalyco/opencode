@@ -1,3 +1,4 @@
+import type { KVNamespace } from "@cloudflare/workers-types"
 import { z } from "zod"
 import { issuer } from "@openauthjs/openauth"
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -94,6 +95,7 @@ export default {
         //        }),
       },
       storage: CloudflareStorage({
+        // @ts-ignore
         namespace: env.AuthStorage,
       }),
       subjects,

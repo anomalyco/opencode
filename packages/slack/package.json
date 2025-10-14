@@ -1,0 +1,17 @@
+{
+  "name": "@opencode-ai/slack",
+  "version": "0.15.3",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "@slack/bolt": "^3.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

@@ -30,7 +30,5 @@ jobs:
         run: |
           ./packages/opencode/script/publish.ts
         env:
-          OPENCODE_SNAPSHOT: true
-          OPENCODE_TAG: ${{ github.ref_name }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

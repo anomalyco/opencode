@@ -13,30 +13,16 @@ import {
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
 import type { LocalFile } from "@/context/local"
 import { Code } from "@/components/code"
-import PromptForm from "@/components/prompt-form"
-import { useLocal, useSDK, useSync } from "@/context"
-import { getFilename } from "@/utils"
+import { useLocal } from "@/context"
 import type { JSX } from "solid-js"
 
 interface EditorPaneProps {
-  layoutKey: string
-  timelinePane: string
   onFileClick: (file: LocalFile) => void
-  onOpenModelSelect: () => void
-  onInputRefChange: (element: HTMLTextAreaElement | null) => void
 }
 
 export default function EditorPane(props: EditorPaneProps): JSX.Element {
-  const [localProps] = splitProps(props, [
-    "layoutKey",
-    "timelinePane",
-    "onFileClick",
-    "onOpenModelSelect",
-    "onInputRefChange",
-  ])
+  const [localProps] = splitProps(props, ["onFileClick"])
   const local = useLocal()
-  const sdk = useSDK()
-  const sync = useSync()
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
   const navigateChange = (dir: 1 | -1) => {
@@ -53,73 +39,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
 
   const handleTabClose = (file: LocalFile) => {
     local.file.close(file.path)
-  }
-
-  const handlePromptSubmit = async (prompt: string) => {
-    const existingSession = local.layout.visible(localProps.layoutKey, localProps.timelinePane)
-      ? local.session.active()
-      : undefined
-    let session = existingSession
-    if (!session) {
-      const created = await sdk.session.create()
-      session = created.data ?? undefined
-    }
-    if (!session) return
-    local.session.setActive(session.id)
-    local.layout.show(localProps.layoutKey, localProps.timelinePane)
-
-    await sdk.session.prompt({
-      path: { id: session.id },
-      body: {
-        agent: local.agent.current()!.name,
-        model: {
-          modelID: local.model.current()!.id,
-          providerID: local.model.current()!.provider.id,
-        },
-        parts: [
-          {
-            type: "text",
-            text: prompt,
-          },
-          ...(local.context.active()
-            ? [
-                {
-                  type: "file" as const,
-                  mime: "text/plain",
-                  url: `file://${local.context.active()!.absolute}`,
-                  filename: local.context.active()!.name,
-                  source: {
-                    type: "file" as const,
-                    text: {
-                      value: "@" + local.context.active()!.name,
-                      start: 0,
-                      end: 0,
-                    },
-                    path: local.context.active()!.absolute,
-                  },
-                },
-              ]
-            : []),
-          ...local.context.all().flatMap((file) => [
-            {
-              type: "file" as const,
-              mime: "text/plain",
-              url: `file://${sync.absolute(file.path)}${file.selection ? `?start=${file.selection.startLine}&end=${file.selection.endLine}` : ""}`,
-              filename: getFilename(file.path),
-              source: {
-                type: "file" as const,
-                text: {
-                  value: "@" + getFilename(file.path),
-                  start: 0,
-                  end: 0,
-                },
-                path: sync.absolute(file.path),
-              },
-            },
-          ]),
-        ],
-      },
-    })
   }
 
   const handleDragStart = (event: unknown) => {
@@ -146,7 +65,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
 
   return (
     <div class="relative flex h-full flex-col">
-      <Logo size={64} variant="ornate" class="absolute top-2/5 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
       <DragDropProvider
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -237,23 +155,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                   )
                 })()}
               </Show>
-              <Tooltip
-                value={local.layout.visible(localProps.layoutKey, localProps.timelinePane) ? "Close pane" : "Open pane"}
-                placement="bottom"
-              >
-                <IconButton
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => local.layout.toggle(localProps.layoutKey, localProps.timelinePane)}
-                >
-                  <Icon
-                    name={
-                      local.layout.visible(localProps.layoutKey, localProps.timelinePane) ? "close-pane" : "open-pane"
-                    }
-                    size={14}
-                  />
-                </IconButton>
-              </Tooltip>
             </div>
           </div>
           <For each={local.file.opened()}>
@@ -283,16 +184,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
           })()}
         </DragOverlay>
       </DragDropProvider>
-      <PromptForm
-        class="peer/editor absolute inset-x-4 z-50 flex items-center justify-center"
-        classList={{
-          "bottom-8": !!local.file.active(),
-          "bottom-3/8": local.file.active() === undefined,
-        }}
-        onSubmit={handlePromptSubmit}
-        onOpenModelSelect={localProps.onOpenModelSelect}
-        onInputRefChange={(element) => localProps.onInputRefChange(element ?? null)}
-      />
     </div>
   )
 }

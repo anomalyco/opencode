@@ -18,7 +18,7 @@ export namespace Provider {
 
   type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
-    getModel?: (sdk: any, modelID: string) => Promise<any>
+    getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
     options?: Record<string, any>
   }>
 
@@ -58,7 +58,7 @@ export namespace Provider {
     openai: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
         options: {},
@@ -67,8 +67,12 @@ export namespace Provider {
     azure: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.completion(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
         },
         options: {},
       }
@@ -86,7 +90,7 @@ export namespace Provider {
           region,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -197,7 +201,7 @@ export namespace Provider {
       [providerID: string]: {
         source: Source
         info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string) => Promise<any>
+        getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
         options: Record<string, any>
       }
     } = {}
@@ -206,6 +210,8 @@ export namespace Provider {
       { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
     >()
     const sdk = new Map<number, SDK>()
+    // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
+    const realIdByKey = new Map<string, string>()
 
     log.info("init")
 
@@ -213,7 +219,7 @@ export namespace Provider {
       id: string,
       options: Record<string, any>,
       source: Source,
-      getModel?: (sdk: any, modelID: string) => Promise<any>,
+      getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>,
     ) {
       const provider = providers[id]
       if (!provider) {
@@ -249,7 +255,7 @@ export namespace Provider {
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[modelID]
         const parsedModel: ModelsDev.Model = {
-          id: model.id ?? modelID,
+          id: modelID,
           name: model.name ?? existing?.name ?? modelID,
           release_date: model.release_date ?? existing?.release_date,
           attachment: model.attachment ?? existing?.attachment ?? false,
@@ -285,6 +291,9 @@ export namespace Provider {
               output: ["text"],
             },
           provider: model.provider ?? existing?.provider,
+        }
+        if (model.id && model.id !== modelID) {
+          realIdByKey.set(`${providerID}/${modelID}`, model.id)
         }
         parsed.models[modelID] = parsedModel
       }
@@ -362,6 +371,7 @@ export namespace Provider {
       models,
       providers,
       sdk,
+      realIdByKey,
     }
   })
 
@@ -432,7 +442,11 @@ export namespace Provider {
     const sdk = await getSDK(provider.info, info)
 
     try {
-      const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
+      const keyReal = `${providerID}/${modelID}`
+      const realID = s.realIdByKey.get(keyReal) ?? info.id
+      const language = provider.getModel
+        ? await provider.getModel(sdk, realID, provider.options)
+        : sdk.languageModel(realID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         providerID,
@@ -512,11 +526,11 @@ export namespace Provider {
             model_id: string
           }[]
         }
-        const models = state?.recently_used_models ?? []
-        if (models.length > 0) {
+        const [model] = state?.recently_used_models ?? []
+        if (model) {
           return {
-            providerID: models[0].provider_id,
-            modelID: models[0].model_id,
+            providerID: model.provider_id,
+            modelID: model.model_id,
           }
         }
       })

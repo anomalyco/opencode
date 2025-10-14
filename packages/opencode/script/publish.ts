@@ -1,20 +1,10 @@
 #!/usr/bin/env bun
+import { $ } from "bun"
+import pkg from "../package.json"
+import { Script } from "@opencode-ai/script"
+
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
-import { $ } from "bun"
-
-import pkg from "../package.json"
-
-const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
-let version = process.env["OPENCODE_VERSION"]
-const tag = process.env["OPENCODE_TAG"] ?? (snapshot ? "snapshot" : "latest")
-if (!version && snapshot) {
-  version = `0.0.0-${tag}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  process.env["OPENCODE_VERSION"] = version
-}
-if (!version) throw new Error("OPENCODE_VERSION is required")
-
-console.log(`publishing ${version}`)
 
 const { binaries } = await import("./build.ts")
 {
@@ -38,7 +28,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         preinstall: "node ./preinstall.mjs",
         postinstall: "node ./postinstall.mjs",
       },
-      version,
+      version: Script.version,
       optionalDependencies: binaries,
     },
     null,
@@ -46,11 +36,11 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 for (const [name] of Object.entries(binaries)) {
-  await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${tag}`
+  await $`cd dist/${name} && chmod 777 -R . && bun publish --access public --tag ${Script.channel}`
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${tag}`
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
-if (!snapshot) {
+if (!Script.preview) {
   for (const key of Object.keys(binaries)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
@@ -67,7 +57,7 @@ if (!snapshot) {
     "# Maintainer: adam",
     "",
     "pkgname='opencode-bin'",
-    `pkgver=${version.split("-")[0]}`,
+    `pkgver=${Script.version.split("-")[0]}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
     "pkgdesc='The AI coding agent built for the terminal.'",
@@ -78,10 +68,10 @@ if (!snapshot) {
     "conflicts=('opencode')",
     "depends=('fzf' 'ripgrep')",
     "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-arm64.zip")`,
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.zip")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
     "",
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-x64.zip")`,
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.zip")`,
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
@@ -96,7 +86,7 @@ if (!snapshot) {
     "# Maintainer: adam",
     "",
     "pkgname='opencode'",
-    `pkgver=${version.split("-")[0]}`,
+    `pkgver=${Script.version.split("-")[0]}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
     "pkgdesc='The AI coding agent built for the terminal.'",
@@ -108,7 +98,7 @@ if (!snapshot) {
     "depends=('fzf' 'ripgrep')",
     "makedepends=('git' 'bun-bin' 'go')",
     "",
-    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v${version}.tar.gz")`,
+    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v${Script.version}.tar.gz")`,
     `sha256sums=('SKIP')`,
     "",
     "build() {",
@@ -139,7 +129,7 @@ if (!snapshot) {
         await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
         await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
         await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
-        await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${version}"`
+        await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${Script.version}"`
         await $`cd ./dist/aur-${pkg} && git push`
         break
       } catch (e) {
@@ -157,11 +147,11 @@ if (!snapshot) {
     "class Opencode < Formula",
     `  desc "The AI coding agent built for the terminal."`,
     `  homepage "https://github.com/sst/opencode"`,
-    `  version "${version.split("-")[0]}"`,
+    `  version "${Script.version.split("-")[0]}"`,
     "",
     "  on_macos do",
     "    if Hardware::CPU.intel?",
-    `      url "https://github.com/sst/opencode/releases/download/v${version}/opencode-darwin-x64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
     `      sha256 "${macX64Sha}"`,
     "",
     "      def install",
@@ -169,7 +159,7 @@ if (!snapshot) {
     "      end",
     "    end",
     "    if Hardware::CPU.arm?",
-    `      url "https://github.com/sst/opencode/releases/download/v${version}/opencode-darwin-arm64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-darwin-arm64.zip"`,
     `      sha256 "${macArm64Sha}"`,
     "",
     "      def install",
@@ -180,14 +170,14 @@ if (!snapshot) {
     "",
     "  on_linux do",
     "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-x64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.zip"`,
     `      sha256 "${x64Sha}"`,
     "      def install",
     '        bin.install "opencode"',
     "      end",
     "    end",
     "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
-    `      url "https://github.com/sst/opencode/releases/download/v${version}/opencode-linux-arm64.zip"`,
+    `      url "https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.zip"`,
     `      sha256 "${arm64Sha}"`,
     "      def install",
     '        bin.install "opencode"',
@@ -203,6 +193,6 @@ if (!snapshot) {
   await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/sst/homebrew-tap.git ./dist/homebrew-tap`
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
-  await $`cd ./dist/homebrew-tap && git commit -m "Update to v${version}"`
+  await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
   await $`cd ./dist/homebrew-tap && git push`
 }
