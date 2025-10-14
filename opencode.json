@@ -1,4 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth"]
+  "plugin": ["opencode-openai-codex-auth"],
+  "mcp": {
+    "weather": {
+      "type": "local",
+      "command": ["bun", "x", "@h1deya/mcp-server-weather"]
+    }
+  }
 }

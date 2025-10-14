@@ -74,6 +74,7 @@ export default defineConfig({
         {
           label: "Configure",
           items: [
+            "tools",
             "rules",
             "agents",
             "models",

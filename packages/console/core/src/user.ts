@@ -11,13 +11,9 @@ import { Account } from "./account"
 import { AccountTable } from "./schema/account.sql"
 import { Key } from "./key"
 import { KeyTable } from "./schema/key.sql"
+import { WorkspaceTable } from "./schema/workspace.sql"
 
 export namespace User {
-  const assertAdmin = () => {
-    if (Actor.userRole() === "admin") return
-    throw new Error(`Expected admin user, got ${Actor.userRole()}`)
-  }
-
   const assertNotSelf = (id: string) => {
     if (Actor.userID() !== id) return
     throw new Error(`Expected not self actor, got self actor`)
@@ -63,9 +59,10 @@ export namespace User {
     z.object({
       email: z.string(),
       role: z.enum(UserRole),
+      monthlyLimit: z.number().nullable().optional(),
     }),
-    async ({ email, role }) => {
-      assertAdmin()
+    async ({ email, role, monthlyLimit }) => {
+      Actor.assertAdmin()
       const workspaceID = Actor.workspace()
 
       // create user
@@ -85,10 +82,12 @@ export namespace User {
                 }),
             workspaceID,
             role,
+            monthlyLimit,
           })
           .onDuplicateKeyUpdate({
             set: {
               role,
+              monthlyLimit,
               timeDeleted: null,
             },
           }),
@@ -117,6 +116,21 @@ export namespace User {
 
       // send email, ignore errors
       try {
+        const emailInfo = await Database.use((tx) =>
+          tx
+            .select({
+              email: AccountTable.email,
+              workspaceName: WorkspaceTable.name,
+            })
+            .from(UserTable)
+            .innerJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+            .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, workspaceID))
+            .where(
+              and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, Actor.assert("user").properties.userID)),
+            )
+            .then((rows) => rows[0]),
+        )
+
         const { InviteEmail } = await import("@opencode-ai/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
@@ -124,8 +138,10 @@ export namespace User {
           body: render(
             // @ts-ignore
             InviteEmail({
+              inviter: emailInfo.email,
               assetsUrl: `https://opencode.ai/email`,
-              workspace: workspaceID,
+              workspaceID: workspaceID,
+              workspaceName: emailInfo.workspaceName,
             }),
           ),
         })
@@ -176,7 +192,7 @@ export namespace User {
       monthlyLimit: z.number().nullable(),
     }),
     async ({ id, role, monthlyLimit }) => {
-      assertAdmin()
+      Actor.assertAdmin()
       if (role === "member") assertNotSelf(id)
       return await Database.use((tx) =>
         tx
@@ -188,7 +204,7 @@ export namespace User {
   )
 
   export const remove = fn(z.string(), async (id) => {
-    assertAdmin()
+    Actor.assertAdmin()
     assertNotSelf(id)
 
     return await Database.use((tx) =>

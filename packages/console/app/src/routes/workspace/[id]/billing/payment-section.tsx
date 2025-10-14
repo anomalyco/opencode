@@ -1,8 +1,8 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { query, action, useParams, createAsync, useAction } from "@solidjs/router"
-import { For } from "solid-js"
+import { For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
-import { formatDateUTC, formatDateForTable } from "./common"
+import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./payment-section.module.css"
 
 const getPaymentsInfo = query(async (workspaceID: string) => {
@@ -19,7 +19,6 @@ const downloadReceipt = action(async (workspaceID: string, paymentID: string) =>
 
 export function PaymentSection() {
   const params = useParams()
-  // ORIGINAL CODE - COMMENTED OUT FOR TESTING
   const payments = createAsync(() => getPaymentsInfo(params.id))
   const downloadReceiptAction = useAction(downloadReceipt)
 
@@ -58,8 +57,7 @@ export function PaymentSection() {
   // ]
 
   return (
-    payments() &&
-    payments()!.length > 0 && (
+    <Show when={payments() && payments()!.length > 0}>
       <section class={styles.root}>
         <div data-slot="section-title">
           <h2>Payments History</h2>
@@ -109,6 +107,6 @@ export function PaymentSection() {
           </table>
         </div>
       </section>
-    )
+    </Show>
   )
 }

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "0.14.6",
+  "version": "0.14.7",
   "description": "",
   "type": "module",
   "scripts": {
@@ -26,6 +26,7 @@
     "@tailwindcss/vite": "4.1.11",
     "@tauri-apps/api": "2.8.0",
     "@tauri-apps/cli": "2.8.4",
+    "@tsconfig/bun": "1.0.9",
     "@types/luxon": "3.7.1",
     "@types/node": "catalog:",
     "concurrently": "^9.1.2",
@@ -49,8 +50,8 @@
     "marked": "16.2.0",
     "marked-shiki": "1.2.1",
     "remeda": "catalog:",
-    "shiki": "3.9.2",
     "solid-js": "catalog:",
+    "shiki": "3.9.2",
     "solid-list": "0.3.0",
     "tailwindcss": "4.1.11",
     "virtua": "0.42.3"

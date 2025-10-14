@@ -12,3 +12,4 @@ dist
 .turbo
 /packages/app/release
 /packages/app
+/packages/desktop/src-tauri/gen/apple/build

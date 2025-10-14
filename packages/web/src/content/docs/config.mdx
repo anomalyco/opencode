@@ -86,6 +86,24 @@ You can configure TUI-specific settings through the `tui` option.
 
 ---
 
+### Tools
+
+You can manage the tools an LLM can use through the `tools` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": false,
+    "bash": false
+  }
+}
+```
+
+[Learn more about tools here](/docs/tools).
+
+---
+
 ### Models
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.

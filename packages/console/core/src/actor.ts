@@ -67,6 +67,11 @@ export namespace Actor {
     return actor as Extract<Info, { type: T }>
   }
 
+  export const assertAdmin = () => {
+    if (userRole() === "admin") return
+    throw new Error(`Action not allowed. Ask your workspace admin to perform this action.`)
+  }
+
   export function workspace() {
     const actor = use()
     if ("workspaceID" in actor.properties) {

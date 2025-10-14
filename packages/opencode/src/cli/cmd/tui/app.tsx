@@ -1,4 +1,3 @@
-import { cmd } from "@/cli/cmd/cmd"
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
@@ -23,57 +22,42 @@ import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 
-export const AttachCommand = cmd({
-  command: "attach <url>",
-  describe: "attach to a running opencode server",
-  builder: (yargs) =>
-    yargs
-      .positional("url", {
-        type: "string",
-        describe: "http://localhost:4096",
-        demandOption: true,
-      })
-      .option("dir", {
-        type: "string",
-        description: "directory to run in",
-      }),
-  handler: async (args) => {
-    if (args.dir) process.chdir(args.dir)
-    await render(
-      () => {
-        return (
-          <RouteProvider>
-            <SDKProvider url={args.url}>
-              <SyncProvider>
-                <LocalProvider>
-                  <KeybindProvider>
-                    <DialogProvider>
-                      <CommandProvider>
-                        <PromptHistoryProvider>
-                          <App
-                            onExit={() => {
-                              process.exit(0)
-                            }}
-                          />
-                        </PromptHistoryProvider>
-                      </CommandProvider>
-                    </DialogProvider>
-                  </KeybindProvider>
-                </LocalProvider>
-              </SyncProvider>
-            </SDKProvider>
-          </RouteProvider>
-        )
-      },
-      {
-        targetFps: 60,
-        gatherStats: false,
-        exitOnCtrlC: false,
-        useKittyKeyboard: true,
-      },
-    )
-  },
-})
+export async function tui(input: { url: string; onExit?: () => Promise<void> }) {
+  await render(
+    () => {
+      return (
+        <RouteProvider>
+          <SDKProvider url={input.url}>
+            <SyncProvider>
+              <LocalProvider>
+                <KeybindProvider>
+                  <DialogProvider>
+                    <CommandProvider>
+                      <PromptHistoryProvider>
+                        <App
+                          onExit={async () => {
+                            await input.onExit?.()
+                            process.exit(0)
+                          }}
+                        />
+                      </PromptHistoryProvider>
+                    </CommandProvider>
+                  </DialogProvider>
+                </KeybindProvider>
+              </LocalProvider>
+            </SyncProvider>
+          </SDKProvider>
+        </RouteProvider>
+      )
+    },
+    {
+      targetFps: 60,
+      gatherStats: false,
+      exitOnCtrlC: false,
+      useKittyKeyboard: true,
+    },
+  )
+}
 
 function App(props: { onExit: () => void }) {
   const route = useRoute()
@@ -186,7 +170,11 @@ function App(props: { onExit: () => void }) {
       onMouseUp={async () => {
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
-          console.log("copying", text)
+          const base64 = Buffer.from(text).toString("base64")
+          const osc52 = `\x1b]52;c;${base64}\x07`
+          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+          /* @ts-expect-error */
+          renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
           renderer.clearSelection()
         }

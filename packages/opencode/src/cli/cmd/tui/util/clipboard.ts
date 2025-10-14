@@ -112,9 +112,6 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
-    const base64 = Buffer.from(text).toString("base64")
-    const osc52 = `\x1b]52;c;${base64}\x07`
-    process.stdout.write(osc52)
     await getCopyMethod()(text)
   }
 }

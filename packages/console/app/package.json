@@ -7,7 +7,7 @@
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
     "start": "vinxi start",
-    "version": "0.14.6"
+    "version": "0.14.7"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",

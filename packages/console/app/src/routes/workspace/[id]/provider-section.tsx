@@ -12,6 +12,10 @@ const PROVIDERS = [
 
 type Provider = (typeof PROVIDERS)[number]
 
+function maskCredentials(credentials: string) {
+  return `${credentials.slice(0, 8)}...${credentials.slice(-8)}`
+}
+
 const removeProvider = action(async (form: FormData) => {
   "use server"
   const provider = form.get("provider")?.toString()
@@ -58,7 +62,7 @@ function ProviderRow(props: { provider: Provider }) {
 
   let input: HTMLInputElement
 
-  const isEnabled = () => providers()?.some((p) => p.provider === props.provider.key)
+  const providerData = () => providers()?.find((p) => p.provider === props.provider.key)
 
   createEffect(() => {
     if (!saveSubmission.pending && saveSubmission.result && !saveSubmission.result.error) {
@@ -80,32 +84,14 @@ function ProviderRow(props: { provider: Provider }) {
   }
 
   return (
-    <tr data-slot="provider-row" data-enabled={isEnabled()}>
+    <tr data-slot="provider-row">
       <td data-slot="provider-name">{props.provider.name}</td>
-      <td data-slot="provider-status">{isEnabled() ? "Configured" : "Not Configured"}</td>
-      <td data-slot="provider-toggle">
+      <td data-slot="provider-key">
         <Show
           when={store.editing}
-          fallback={
-            <Show
-              when={isEnabled()}
-              fallback={
-                <button data-color="ghost" onClick={() => show()}>
-                  Configure
-                </button>
-              }
-            >
-              <form action={removeProvider} method="post">
-                <input type="hidden" name="provider" value={props.provider.key} />
-                <input type="hidden" name="workspaceID" value={params.id} />
-                <button data-color="ghost" type="submit" disabled={removeSubmission.pending}>
-                  Disable
-                </button>
-              </form>
-            </Show>
-          }
+          fallback={<span>{providerData() ? maskCredentials(providerData()!.credentials) : "-"}</span>}
         >
-          <form action={saveProvider} method="post" data-slot="edit-form">
+          <form id={`provider-form-${props.provider.key}`} action={saveProvider} method="post" data-slot="edit-form">
             <div data-slot="input-wrapper">
               <input
                 ref={(r) => (input = r)}
@@ -122,15 +108,51 @@ function ProviderRow(props: { provider: Provider }) {
             </div>
             <input type="hidden" name="provider" value={props.provider.key} />
             <input type="hidden" name="workspaceID" value={params.id} />
-            <div data-slot="form-actions">
+          </form>
+        </Show>
+      </td>
+      <td data-slot="provider-action">
+        <Show
+          when={store.editing}
+          fallback={
+            <Show
+              when={!!providerData()}
+              fallback={
+                <button data-color="ghost" onClick={() => show()}>
+                  Configure
+                </button>
+              }
+            >
+              <div data-slot="configured-actions">
+                <button data-color="ghost" onClick={() => show()}>
+                  Edit
+                </button>
+                <form action={removeProvider} method="post" data-slot="delete-form">
+                  <input type="hidden" name="provider" value={props.provider.key} />
+                  <input type="hidden" name="workspaceID" value={params.id} />
+                  <button data-color="ghost" type="submit" disabled={removeSubmission.pending}>
+                    Delete
+                  </button>
+                </form>
+              </div>
+            </Show>
+          }
+        >
+          <div data-slot="form-actions">
+            <button
+              type="submit"
+              data-color="ghost"
+              disabled={saveSubmission.pending}
+              form={`provider-form-${props.provider.key}`}
+            >
+              {saveSubmission.pending ? "Saving..." : "Save"}
+            </button>
+            <Show when={!saveSubmission.pending}>
               <button type="reset" data-color="ghost" onClick={() => hide()}>
                 Cancel
               </button>
-              <button type="submit" data-color="ghost" disabled={saveSubmission.pending}>
-                {saveSubmission.pending ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </form>
+            </Show>
+          </div>
         </Show>
       </td>
     </tr>
@@ -149,8 +171,8 @@ export function ProviderSection() {
           <thead>
             <tr>
               <th>Provider</th>
-              <th>Status</th>
-              <th>Action</th>
+              <th>API Key</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>

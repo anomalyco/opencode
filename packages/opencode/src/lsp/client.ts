@@ -39,8 +39,8 @@ export namespace LSPClient {
     l.info("starting client")
 
     const connection = createMessageConnection(
-      new StreamMessageReader(input.server.process.stdout),
-      new StreamMessageWriter(input.server.process.stdin),
+      new StreamMessageReader(input.server.process.stdout as any),
+      new StreamMessageWriter(input.server.process.stdin as any),
     )
 
     const diagnostics = new Map<string, Diagnostic[]>()

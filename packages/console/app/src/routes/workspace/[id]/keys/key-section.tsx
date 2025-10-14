@@ -4,7 +4,7 @@ import { IconCopy, IconCheck } from "~/component/icon"
 import { Key } from "@opencode-ai/console-core/key.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
-import { formatDateUTC, formatDateForTable } from "./common"
+import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 
@@ -43,8 +43,9 @@ const listKeys = query(async (workspaceID: string) => {
   return withActor(() => Key.list(), workspaceID)
 }, "key.list")
 
-export function KeyCreateForm() {
+export function KeySection() {
   const params = useParams()
+  const keys = createAsync(() => listKeys(params.id))
   const submission = useSubmission(createKey)
   const [store, setStore] = createStore({ show: false })
 
@@ -52,22 +53,17 @@ export function KeyCreateForm() {
 
   createEffect(() => {
     if (!submission.pending && submission.result && !submission.result.error) {
-      hide()
+      setStore("show", false)
     }
   })
 
   function show() {
-    // submission.clear() does not clear the result in some cases, ie.
-    //  1. Create key with empty name => error shows
-    //  2. Put in a key name and creates the key => form hides
-    //  3. Click add key button again => form shows with the same error if
-    //     submission.clear() is called only once
     while (true) {
       submission.clear()
       if (!submission.result) break
     }
     setStore("show", true)
-    input.focus()
+    setTimeout(() => input?.focus(), 0)
   }
 
   function hide() {
@@ -75,46 +71,41 @@ export function KeyCreateForm() {
   }
 
   return (
-    <Show
-      when={store.show}
-      fallback={
-        <button data-color="primary" onClick={() => show()}>
-          Create API Key
-        </button>
-      }
-    >
-      <form action={createKey} method="post" data-slot="create-form">
-        <div data-slot="input-container">
-          <input ref={(r) => (input = r)} data-component="input" name="name" type="text" placeholder="Enter key name" />
-          <Show when={submission.result && submission.result.error}>
-            {(err) => <div data-slot="form-error">{err()}</div>}
-          </Show>
-        </div>
-        <input type="hidden" name="workspaceID" value={params.id} />
-        <div data-slot="form-actions">
-          <button type="reset" data-color="ghost" onClick={() => hide()}>
-            Cancel
-          </button>
-          <button type="submit" data-color="primary" disabled={submission.pending}>
-            {submission.pending ? "Creating..." : "Create"}
-          </button>
-        </div>
-      </form>
-    </Show>
-  )
-}
-
-export function KeySection() {
-  const params = useParams()
-  const keys = createAsync(() => listKeys(params.id))
-
-  return (
     <section class={styles.root}>
       <div data-slot="section-title">
         <h2>API Keys</h2>
-        <p>Manage your API keys for accessing opencode services.</p>
+        <div data-slot="title-row">
+          <p>Manage your API keys for accessing opencode services.</p>
+          <button data-color="primary" onClick={() => show()}>
+            Create API Key
+          </button>
+        </div>
       </div>
-      <KeyCreateForm />
+      <Show when={store.show}>
+        <form action={createKey} method="post" data-slot="create-form">
+          <div data-slot="input-container">
+            <input
+              ref={(r) => (input = r)}
+              data-component="input"
+              name="name"
+              type="text"
+              placeholder="Enter key name"
+            />
+            <Show when={submission.result && submission.result.error}>
+              {(err) => <div data-slot="form-error">{err()}</div>}
+            </Show>
+          </div>
+          <input type="hidden" name="workspaceID" value={params.id} />
+          <div data-slot="form-actions">
+            <button type="reset" data-color="ghost" onClick={() => hide()}>
+              Cancel
+            </button>
+            <button type="submit" data-color="primary" disabled={submission.pending}>
+              {submission.pending ? "Creating..." : "Create"}
+            </button>
+          </div>
+        </form>
+      </Show>
       <div data-slot="api-keys-table">
         <Show
           when={keys()?.length}

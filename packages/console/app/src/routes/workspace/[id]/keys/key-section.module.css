@@ -1,4 +1,11 @@
 .root {
+  [data-slot="title-row"] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
   [data-component="empty-state"] {
     padding: var(--space-20) var(--space-6);
     text-align: center;
@@ -66,11 +73,11 @@
     }
   }
 
-  [data-slot="members-table"] {
+  [data-slot="api-keys-table"] {
     overflow-x: auto;
   }
 
-  [data-slot="members-table-element"] {
+  [data-slot="api-keys-table-element"] {
     width: 100%;
     border-collapse: collapse;
     font-size: var(--font-size-sm);
@@ -93,13 +100,13 @@
       color: var(--color-text-muted);
       font-family: var(--font-mono);
 
-      &[data-slot="member-email"] {
+      &[data-slot="key-name"] {
         color: var(--color-text);
         font-family: var(--font-sans);
         font-weight: 500;
       }
 
-      &[data-slot="member-role"] {
+      &[data-slot="key-value"] {
         font-family: var(--font-mono);
 
         button {
@@ -107,6 +114,7 @@
           align-items: center;
           gap: var(--space-2);
           padding: var(--space-2) var(--space-3);
+          margin-left: calc(-1 * var(--space-3));
           font-size: var(--font-size-sm);
           font-weight: 400;
           border: none;
@@ -134,16 +142,29 @@
         }
       }
 
-      &[data-slot="member-date"] {
+      &[data-slot="key-date"] {
         color: var(--color-text);
       }
 
-      &[data-slot="member-actions"] {
+      &[data-slot="key-actions"] {
         font-family: var(--font-sans);
+
+        button {
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.15s ease;
+        }
       }
     }
 
     tbody tr {
+      &:hover {
+        [data-slot="key-actions"] button {
+          opacity: 1;
+          pointer-events: auto;
+        }
+      }
+
       &:last-child td {
         border-bottom: none;
       }

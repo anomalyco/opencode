@@ -30,5 +30,6 @@ export namespace State {
       if (!entry.dispose) continue
       await entry.dispose(await entry.state)
     }
+    entries.delete(key)
   }
 }

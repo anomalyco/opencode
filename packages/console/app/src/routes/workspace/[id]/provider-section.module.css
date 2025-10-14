@@ -18,6 +18,14 @@
       font-weight: normal;
       color: var(--color-text-muted);
       text-transform: uppercase;
+
+      &:nth-child(1) {
+        width: 180px;
+      }
+
+      &:nth-child(3) {
+        width: 200px;
+      }
     }
 
     td {
@@ -32,24 +40,21 @@
         font-weight: 500;
       }
 
-      &[data-slot="provider-status"] {
+      &[data-slot="provider-key"] {
         text-align: left;
-        color: var(--color-text);
-      }
-
-      &[data-slot="provider-toggle"] {
-        text-align: left;
-        font-family: var(--font-sans);
+        color: var(--color-text-secondary);
 
         [data-slot="edit-form"] {
           display: flex;
           flex-direction: column;
           gap: var(--space-3);
+          max-width: 100%;
 
           [data-slot="input-wrapper"] {
             display: flex;
             flex-direction: column;
             gap: var(--space-1);
+            max-width: 100%;
 
             input {
               padding: var(--space-2) var(--space-3);
@@ -59,6 +64,8 @@
               color: var(--color-text);
               font-size: var(--font-size-sm);
               font-family: var(--font-mono);
+              width: 100%;
+              box-sizing: border-box;
 
               &:focus {
                 outline: none;
@@ -76,18 +83,43 @@
               line-height: 1.4;
             }
           }
+        }
+      }
 
-          [data-slot="form-actions"] {
-            display: flex;
-            gap: var(--space-2);
+      &[data-slot="provider-action"] {
+        text-align: left;
+        font-family: var(--font-sans);
+        white-space: nowrap;
+
+        [data-slot="configured-actions"] {
+          display: flex;
+          gap: var(--space-2);
+
+          [data-slot="delete-form"] {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
           }
+
+          &:hover [data-slot="delete-form"] {
+            opacity: 1;
+            pointer-events: auto;
+          }
+        }
+
+        [data-slot="form-actions"] {
+          display: flex;
+          gap: var(--space-2);
         }
       }
     }
 
     tbody tr {
-      &[data-enabled="false"] {
-        opacity: 0.6;
+      &:hover {
+        [data-slot="provider-action"] [data-slot="delete-form"] {
+          opacity: 1;
+          pointer-events: auto;
+        }
       }
 
       &:last-child td {

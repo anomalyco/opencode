@@ -4,6 +4,7 @@ import { createMemo, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { ZenModel } from "@opencode-ai/console-core/model.js"
 import styles from "./model-section.module.css"
+import { querySessionInfo } from "../common"
 
 const getModelsInfo = query(async (workspaceID: string) => {
   "use server"
@@ -39,28 +40,24 @@ const updateModel = action(async (form: FormData) => {
 export function ModelSection() {
   const params = useParams()
   const modelsInfo = createAsync(() => getModelsInfo(params.id))
+  const userInfo = createAsync(() => querySessionInfo(params.id))
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Models</h2>
-        <p>Manage models for your workspace.</p>
+        <p>
+          Manage which models workspace members can access. Requests will fail if a member tries to use a disabled
+          model.{userInfo()?.isAdmin ? "" : " To use a disabled model, contact your workspace’s admin."}
+        </p>
       </div>
       <div data-slot="models-list">
-        <Show
-          when={modelsInfo()}
-          fallback={
-            <div data-component="empty-state">
-              <p>Loading models...</p>
-            </div>
-          }
-        >
+        <Show when={modelsInfo()}>
           <div data-slot="models-table">
             <table data-slot="models-table-element">
               <thead>
                 <tr>
                   <th>Model</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  <th>Enabled</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,15 +65,25 @@ export function ModelSection() {
                   {(modelId) => {
                     const isEnabled = createMemo(() => !modelsInfo()!.disabled.includes(modelId))
                     return (
-                      <tr data-slot="model-row" data-enabled={isEnabled()}>
+                      <tr data-slot="model-row" data-disabled={!isEnabled()}>
                         <td data-slot="model-name">{modelId}</td>
-                        <td data-slot="model-status">{isEnabled() ? "Enabled" : "Disabled"}</td>
                         <td data-slot="model-toggle">
                           <form action={updateModel} method="post">
                             <input type="hidden" name="model" value={modelId} />
                             <input type="hidden" name="workspaceID" value={params.id} />
                             <input type="hidden" name="enabled" value={isEnabled().toString()} />
-                            <button data-color="ghost">{isEnabled() ? "Disable" : "Enable"}</button>
+                            <label data-slot="model-toggle-label">
+                              <input
+                                type="checkbox"
+                                checked={isEnabled()}
+                                disabled={!userInfo()?.isAdmin}
+                                onChange={(e) => {
+                                  const form = e.currentTarget.closest("form")
+                                  if (form) form.requestSubmit()
+                                }}
+                              />
+                              <span></span>
+                            </label>
                           </form>
                         </td>
                       </tr>

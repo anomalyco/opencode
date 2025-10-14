@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-scripts",
-  "version": "0.14.6",
+  "version": "0.14.7",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",

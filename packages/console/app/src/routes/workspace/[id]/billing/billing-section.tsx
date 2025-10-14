@@ -6,11 +6,7 @@ import { IconCreditCard } from "~/component/icon"
 import styles from "./billing-section.module.css"
 import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-
-const createCheckoutUrl = action(async (workspaceID: string, successUrl: string, cancelUrl: string) => {
-  "use server"
-  return withActor(() => Billing.generateCheckoutUrl({ successUrl, cancelUrl }), workspaceID)
-}, "checkoutUrl")
+import { createCheckoutUrl } from "../../common"
 
 const reload = action(async (form: FormData) => {
   "use server"

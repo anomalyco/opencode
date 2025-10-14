@@ -1,9 +1,11 @@
 import z from "zod/v4"
+import type { MessageV2 } from "../session/message-v2"
 
 export namespace Tool {
   interface Metadata {
     [key: string]: any
   }
+
   export type Context<M extends Metadata = Metadata> = {
     sessionID: string
     messageID: string
@@ -25,6 +27,7 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
+        attachments?: MessageV2.FilePart[]
       }>
     }>
   }

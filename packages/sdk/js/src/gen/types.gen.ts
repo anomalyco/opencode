@@ -47,6 +47,10 @@ export type KeybindsConfig = {
    */
   thinking_blocks?: string
   /**
+   * Toggle sidebar
+   */
+  sidebar_toggle?: string
+  /**
    * View status
    */
   status_view?: string
@@ -421,6 +425,10 @@ export type Config = {
             context: number
             output: number
           }
+          modalities?: {
+            input: Array<"text" | "audio" | "image" | "video" | "pdf">
+            output: Array<"text" | "audio" | "image" | "video" | "pdf">
+          }
           experimental?: boolean
           options?: {
             [key: string]: unknown
@@ -625,6 +633,7 @@ export type AssistantMessage = {
   }
   error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
   system: Array<string>
+  finish?: string
   modelID: string
   providerID: string
   mode: string
@@ -632,7 +641,6 @@ export type AssistantMessage = {
     cwd: string
     root: string
   }
-  finish?: string
   summary?: boolean
   cost: number
   tokens: {
@@ -726,10 +734,10 @@ export type FilePart = {
 
 export type ToolStatePending = {
   status: "pending"
-  raw: string
   input: {
     [key: string]: unknown
   }
+  raw: string
 }
 
 export type ToolStateRunning = {
@@ -761,6 +769,7 @@ export type ToolStateCompleted = {
     end: number
     compacted?: number
   }
+  attachments?: Array<FilePart>
 }
 
 export type ToolStateError = {
@@ -918,6 +927,10 @@ export type Model = {
   limit: {
     context: number
     output: number
+  }
+  modalities?: {
+    input: Array<"text" | "audio" | "image" | "video" | "pdf">
+    output: Array<"text" | "audio" | "image" | "video" | "pdf">
   }
   experimental?: boolean
   options: {

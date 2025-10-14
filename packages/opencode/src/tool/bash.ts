@@ -153,6 +153,7 @@ export const BashTool = Tool.define("bash", {
       signal: ctx.abort,
       timeout,
     })
+    process.stdin?.end()
 
     let output = ""
 

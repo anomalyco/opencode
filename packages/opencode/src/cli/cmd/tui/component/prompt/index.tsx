@@ -12,6 +12,8 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { iife } from "@/util/iife"
+import { useCommandDialog } from "../dialog-command"
+import { useRenderer } from "@opentui/solid"
 
 export type PromptProps = {
   sessionID?: string
@@ -41,6 +43,35 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const status = createMemo(() => (props.sessionID ? sync.session.status(props.sessionID) : "idle"))
   const history = usePromptHistory()
+  const command = useCommandDialog()
+  const renderer = useRenderer()
+
+  command.register(() => {
+    return [
+      {
+        title: "Open editor",
+        category: "Session",
+        keybind: "editor_open",
+        value: "prompt.editor",
+        onSelect: async () => {
+          renderer.suspend()
+          // asni code to clear
+          /* @ts-ignore */
+          // renderer.writeOut("\x1b[2J\x1b[H")
+          renderer.currentRenderBuffer.clear()
+          const proc = Bun.spawn({
+            cmd: ["nvim"],
+            stdin: "inherit",
+            stdout: "inherit",
+            stderr: "inherit",
+          })
+          await proc.exited
+          renderer.resume()
+          renderer.requestRender()
+        },
+      },
+    ]
+  })
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = Theme.backgroundElement

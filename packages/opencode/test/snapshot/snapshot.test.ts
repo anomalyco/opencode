@@ -123,7 +123,7 @@ test("binary file handling", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      await Bun.write(`${tmp.path}/image.png`, Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      await Bun.write(`${tmp.path}/image.png`, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files).toContain(`image.png`)
@@ -502,9 +502,9 @@ test("diff function with various changes", async () => {
       await Bun.write(`${tmp.path}/b.txt`, "modified content")
 
       const diff = await Snapshot.diff(before!)
-      expect(diff).toContain("deleted")
-      expect(diff).toContain("modified")
-      // Note: git diff only shows changes to tracked files, not untracked files like new.txt
+      expect(diff).toContain("a.txt")
+      expect(diff).toContain("b.txt")
+      expect(diff).toContain("new.txt")
     },
   })
 })
