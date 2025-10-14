@@ -20,6 +20,7 @@ export namespace Agent {
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
+        mcp: z.record(z.string(), Config.Permission).optional(),
       }),
       model: z
         .object({
@@ -45,6 +46,9 @@ export namespace Agent {
         "*": "allow",
       },
       webfetch: "allow",
+      mcp: {
+        "*": "allow",
+      },
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
@@ -53,6 +57,7 @@ export namespace Agent {
         edit: "deny",
         bash: "ask",
         webfetch: "allow",
+        mcp: "ask",
       },
       cfg.permission ?? {},
     )
@@ -195,10 +200,28 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     }
   }
 
+  let mergedMcp
+  if (merged.mcp) {
+    if (typeof merged.mcp === "string") {
+      mergedMcp = {
+        "*": merged.mcp,
+      }
+    }
+    if (typeof merged.mcp === "object") {
+      mergedMcp = mergeDeep(
+        {
+          "*": "ask",
+        },
+        merged.mcp,
+      )
+    }
+  }
+
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    mcp: mergedMcp ?? { "*": "allow" },
   }
 
   return result

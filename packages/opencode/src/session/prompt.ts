@@ -509,6 +509,30 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        const permissions = input.agent.permission?.mcp
+        const action = Wildcard.all(key, permissions ?? {})
+
+        if (action === "deny") {
+          throw new Error(
+            `The user has specifically restricted access to this MCP tool, you are not allowed to execute it. Tool: ${key}`,
+          )
+        }
+
+        if (action === "ask") {
+          await Permission.ask({
+            type: "mcp",
+            pattern: key,
+            sessionID: input.sessionID,
+            messageID: input.processor.message.id,
+            callID: opts.toolCallId,
+            title: `MCP tool: ${key}`,
+            metadata: {
+              tool: key,
+              args,
+            },
+          })
+        }
+
         await Plugin.trigger(
           "tool.execute.before",
           {
