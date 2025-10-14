@@ -139,8 +139,17 @@ export namespace Config {
 
   async function installDependencies(dir: string) {
     if (Installation.isDev()) return
-    await Bun.write(path.join(dir, "package.json"), "{}")
-    await Bun.write(path.join(dir, ".gitignore"), ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
+    const pkg = path.join(dir, "package.json")
+
+    if (!(await Bun.file(pkg).exists())) {
+      await Bun.write(pkg, "{}")
+    }
+
+    const gitignore = path.join(dir, ".gitignore")
+    const hasGitIgnore = await Bun.file(gitignore).exists()
+    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
     await BunProc.run(
       ["add", "@opencode-ai/plugin@" + (Installation.isDev() ? "latest" : Installation.VERSION), "--exact"],
       {
