@@ -20,8 +20,9 @@ export namespace Provider {
       provider: z.string().min(1).max(64),
       credentials: z.string(),
     }),
-    ({ provider, credentials }) =>
-      Database.use((tx) =>
+    async ({ provider, credentials }) => {
+      Actor.assertAdmin()
+      return Database.use((tx) =>
         tx
           .insert(ProviderTable)
           .values({
@@ -36,14 +37,21 @@ export namespace Provider {
               timeDeleted: null,
             },
           }),
-      ),
+      )
+    },
   )
 
-  export const remove = fn(z.object({ provider: z.string() }), ({ provider }) =>
-    Database.transaction((tx) =>
-      tx
-        .delete(ProviderTable)
-        .where(and(eq(ProviderTable.provider, provider), eq(ProviderTable.workspaceID, Actor.workspace()))),
-    ),
+  export const remove = fn(
+    z.object({
+      provider: z.string(),
+    }),
+    async ({ provider }) => {
+      Actor.assertAdmin()
+      return Database.transaction((tx) =>
+        tx
+          .delete(ProviderTable)
+          .where(and(eq(ProviderTable.provider, provider), eq(ProviderTable.workspaceID, Actor.workspace()))),
+      )
+    },
   )
 }

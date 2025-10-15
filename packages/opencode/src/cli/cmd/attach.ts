@@ -10,10 +10,16 @@ export const AttachCommand = cmd({
   command: "attach <server>",
   describe: "attach to a running opencode server",
   builder: (yargs) =>
-    yargs.positional("server", {
-      type: "string",
-      describe: "http://localhost:4096",
-    }),
+    yargs
+      .positional("server", {
+        type: "string",
+        describe: "http://localhost:4096",
+      })
+      .option("session", {
+        alias: ["s"],
+        describe: "session id to continue",
+        type: "string",
+      }),
   handler: async (args) => {
     let cmd = [] as string[]
     const tui = Bun.embeddedFiles.find((item) => (item as File).name.includes("tui")) as File
@@ -35,6 +41,9 @@ export const AttachCommand = cmd({
       let binaryName = `./dist/tui${process.platform === "win32" ? ".exe" : ""}`
       await $`go build -o ${binaryName} ./main.go`.cwd(dir)
       cmd = [path.join(dir, binaryName)]
+    }
+    if (args.session) {
+      cmd.push("--session", args.session)
     }
     Log.Default.info("tui", {
       cmd,

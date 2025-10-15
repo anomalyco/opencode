@@ -125,6 +125,9 @@ export namespace SessionCompaction {
     const generated = await generateText({
       maxRetries: 10,
       model: model.language,
+      providerOptions: {
+        [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: model.info.options,
+      },
       messages: [
         ...system.map(
           (x): ModelMessage => ({

@@ -225,6 +225,13 @@
       "when": 1759940238478,
       "tag": "0031_outgoing_outlaw_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1759976329502,
+      "tag": "0032_white_doctor_doom",
+      "breakpoints": true
     }
   ]
 }

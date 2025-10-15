@@ -1,6 +1,5 @@
 import z from "zod/v4"
-import { exec } from "child_process"
-
+import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { Permission } from "../permission"
@@ -146,9 +145,11 @@ export const BashTool = Tool.define("bash", {
       })
     }
 
-    const process = exec(params.command, {
+    const process = spawn(params.command, {
+      shell: true,
       cwd: Instance.directory,
       signal: ctx.abort,
+      stdio: ["ignore", "pipe", "pipe"],
       timeout,
     })
 

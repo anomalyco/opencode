@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { and, eq, getTableColumns, inArray, isNull, or, sql } from "drizzle-orm"
+import { and, eq, getTableColumns, isNull, sql } from "drizzle-orm"
 import { fn } from "./util/fn"
 import { Database } from "./drizzle"
 import { UserRole, UserTable } from "./schema/user.sql"
@@ -11,21 +11,12 @@ import { Account } from "./account"
 import { AccountTable } from "./schema/account.sql"
 import { Key } from "./key"
 import { KeyTable } from "./schema/key.sql"
+import { WorkspaceTable } from "./schema/workspace.sql"
 
 export namespace User {
-  const assertAdmin = async () => {
-    const actor = Actor.assert("user")
-    const user = await User.fromID(actor.properties.userID)
-    if (user?.role !== "admin") {
-      throw new Error(`Expected admin user, got ${user?.role}`)
-    }
-  }
-
   const assertNotSelf = (id: string) => {
-    const actor = Actor.assert("user")
-    if (actor.properties.userID === id) {
-      throw new Error(`Expected not self actor, got self actor`)
-    }
+    if (Actor.userID() !== id) return
+    throw new Error(`Expected not self actor, got self actor`)
   }
 
   export const list = fn(z.void(), () =>
@@ -68,9 +59,10 @@ export namespace User {
     z.object({
       email: z.string(),
       role: z.enum(UserRole),
+      monthlyLimit: z.number().nullable().optional(),
     }),
-    async ({ email, role }) => {
-      await assertAdmin()
+    async ({ email, role, monthlyLimit }) => {
+      Actor.assertAdmin()
       const workspaceID = Actor.workspace()
 
       // create user
@@ -90,10 +82,12 @@ export namespace User {
                 }),
             workspaceID,
             role,
+            monthlyLimit,
           })
           .onDuplicateKeyUpdate({
             set: {
               role,
+              monthlyLimit,
               timeDeleted: null,
             },
           }),
@@ -122,15 +116,32 @@ export namespace User {
 
       // send email, ignore errors
       try {
+        const emailInfo = await Database.use((tx) =>
+          tx
+            .select({
+              email: AccountTable.email,
+              workspaceName: WorkspaceTable.name,
+            })
+            .from(UserTable)
+            .innerJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+            .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, workspaceID))
+            .where(
+              and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, Actor.assert("user").properties.userID)),
+            )
+            .then((rows) => rows[0]),
+        )
+
         const { InviteEmail } = await import("@opencode-ai/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
-          subject: `You've been invited to join the ${workspaceID} workspace on OpenCode Zen`,
+          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on OpenCode`,
           body: render(
             // @ts-ignore
             InviteEmail({
+              inviter: emailInfo.email,
               assetsUrl: `https://opencode.ai/email`,
-              workspace: workspaceID,
+              workspaceID: workspaceID,
+              workspaceName: emailInfo.workspaceName,
             }),
           ),
         })
@@ -181,7 +192,7 @@ export namespace User {
       monthlyLimit: z.number().nullable(),
     }),
     async ({ id, role, monthlyLimit }) => {
-      await assertAdmin()
+      Actor.assertAdmin()
       if (role === "member") assertNotSelf(id)
       return await Database.use((tx) =>
         tx
@@ -193,7 +204,7 @@ export namespace User {
   )
 
   export const remove = fn(z.string(), async (id) => {
-    await assertAdmin()
+    Actor.assertAdmin()
     assertNotSelf(id)
 
     return await Database.use((tx) =>

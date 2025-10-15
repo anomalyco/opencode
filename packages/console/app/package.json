@@ -2,12 +2,12 @@
   "name": "@opencode-ai/console-app",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "dev": "vinxi dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
     "start": "vinxi start",
-    "version": "0.14.6"
+    "version": "0.15.3"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
@@ -21,6 +21,10 @@
     "solid-js": "catalog:",
     "vinxi": "^0.5.7",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   },
   "engines": {
     "node": ">=22"

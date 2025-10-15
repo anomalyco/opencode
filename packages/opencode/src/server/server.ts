@@ -25,6 +25,7 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
@@ -71,7 +72,8 @@ export namespace Server {
             status: 400,
           })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
           status: 400,
         })
       })
@@ -548,7 +550,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionPrompt.abort(c.req.valid("param").id))
+          return c.json(SessionLock.abort(c.req.valid("param").id))
         },
       )
       .post(
@@ -1031,9 +1033,12 @@ export namespace Server {
           }),
         ),
         async (c) => {
+          /*
           const query = c.req.valid("query").query
           const result = await LSP.workspaceSymbol(query)
           return c.json(result)
+          */
+          return c.json([])
         },
       )
       .get(

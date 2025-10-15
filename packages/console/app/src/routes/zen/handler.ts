@@ -425,6 +425,7 @@ export async function handler(
         cacheWrite5mTokens,
         cacheWrite1hTokens,
         cost,
+        keyID: authInfo.apiKeyId,
       })
       await tx
         .update(BillingTable)

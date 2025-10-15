@@ -10,8 +10,6 @@ import { User } from "./user"
 
 export namespace Key {
   export const list = fn(z.void(), async () => {
-    const userID = Actor.assert("user").properties.userID
-    const user = await User.fromID(userID)
     const keys = await Database.use((tx) =>
       tx
         .select({
@@ -30,7 +28,7 @@ export namespace Key {
             ...[
               eq(KeyTable.workspaceID, Actor.workspace()),
               isNull(KeyTable.timeDeleted),
-              ...(user.role === "admin" ? [] : [eq(KeyTable.userID, userID)]),
+              ...(Actor.userRole() === "admin" ? [] : [eq(KeyTable.userID, Actor.userID())]),
             ],
           ),
         )
@@ -39,7 +37,7 @@ export namespace Key {
     // only return value for user's keys
     return keys.map((key) => ({
       ...key,
-      key: key.userID === userID ? key.key : undefined,
+      key: key.userID === Actor.userID() ? key.key : undefined,
       keyDisplay: `${key.key.slice(0, 7)}...${key.key.slice(-4)}`,
     }))
   })
@@ -78,14 +76,22 @@ export namespace Key {
   )
 
   export const remove = fn(z.object({ id: z.string() }), async (input) => {
-    const workspace = Actor.workspace()
-    await Database.transaction((tx) =>
+    // only admin can remove other user's keys
+    await Database.use((tx) =>
       tx
         .update(KeyTable)
         .set({
           timeDeleted: sql`now()`,
         })
-        .where(and(eq(KeyTable.id, input.id), eq(KeyTable.workspaceID, workspace))),
+        .where(
+          and(
+            ...[
+              eq(KeyTable.id, input.id),
+              eq(KeyTable.workspaceID, Actor.workspace()),
+              ...(Actor.userRole() === "admin" ? [] : [eq(KeyTable.userID, Actor.userID())]),
+            ],
+          ),
+        ),
     )
   })
 }

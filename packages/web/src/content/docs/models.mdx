@@ -33,11 +33,14 @@ There are a lot of models out there, with new models coming out every week.
 Consider using one of the models we recommend.
 :::
 
-However, there are a only a few of them that are good at both generating code and tool calling.
+However, there are only a few of them that are good at both generating code and tool calling.
 
-Here are the ones we recommend with OpenCode:
+Here are several models, in no particular order, that work well with OpenCode (to name a few):
 
+- GPT 5
+- GPT 5 Codex
 - Claude Sonnet 4.5
+- Claude Sonnet 4
 - Claude Opus 4.1
 - Kimi K2
 - Qwen3 Coder
@@ -100,7 +103,7 @@ You can globally configure a model's options through the config.
 }
 ```
 
-Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.  
+Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
 The built-in provider and model names can be found on [Models.dev](https://models.dev).
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
@@ -118,20 +121,20 @@ You can also define custom models that extend built-in ones and can optionally u
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
-            "reasoningSummary": "auto"
-          }
+            "reasoningSummary": "auto",
+          },
         },
         "gpt-5-low": {
           "id": "gpt-5",
           "options": {
             "reasoningEffort": "low",
             "textVerbosity": "low",
-            "reasoningSummary": "auto"
-          }
-        }
-      }
-    }
-  }
+            "reasoningSummary": "auto",
+          },
+        },
+      },
+    },
+  },
 }
 ```
 

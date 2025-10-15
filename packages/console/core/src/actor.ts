@@ -1,4 +1,5 @@
 import { Context } from "./context"
+import { UserRole } from "./schema/user.sql"
 import { Log } from "./util/log"
 
 export namespace Actor {
@@ -21,6 +22,7 @@ export namespace Actor {
       userID: string
       workspaceID: string
       accountID: string
+      role: (typeof UserRole)[number]
     }
   }
 
@@ -65,6 +67,11 @@ export namespace Actor {
     return actor as Extract<Info, { type: T }>
   }
 
+  export const assertAdmin = () => {
+    if (userRole() === "admin") return
+    throw new Error(`Action not allowed. Ask your workspace admin to perform this action.`)
+  }
+
   export function workspace() {
     const actor = use()
     if ("workspaceID" in actor.properties) {
@@ -79,5 +86,13 @@ export namespace Actor {
       return actor.properties.accountID
     }
     throw new Error(`actor of type "${actor.type}" is not associated with an account`)
+  }
+
+  export function userID() {
+    return Actor.assert("user").properties.userID
+  }
+
+  export function userRole() {
+    return Actor.assert("user").properties.role
   }
 }

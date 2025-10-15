@@ -14,7 +14,7 @@ export namespace Context {
         return result
       },
       provide<R>(value: T, fn: () => R) {
-        return storage.run<R>(value, fn)
+        return storage.run(value, fn)
       },
     }
   }

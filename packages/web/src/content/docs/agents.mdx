@@ -303,27 +303,33 @@ Use the `model` config to override the default model for this agent. Useful for 
 
 Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
 
-```json title="opencode.json"
+```json title="opencode.json" {3-6,9-12}
 {
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
   "agent": {
-    "readonly": {
+    "plan": {
       "tools": {
         "write": false,
-        "edit": false,
-        "bash": false,
-        "read": true,
-        "grep": true,
-        "glob": true
+        "bash": false
       }
     }
   }
 }
 ```
 
+:::note
+The agent-specific config overrides the global config.
+:::
+
 You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
 
 ```json title="opencode.json"
 {
+  "$schema": "https://opencode.ai/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -336,27 +342,7 @@ You can also use wildcards to control multiple tools at once. For example, to di
 }
 ```
 
-If no tools are specified, all tools are enabled by default.
-
----
-
-#### Available tools
-
-Here are all the tools can be controlled through the agent config.
-
-| Tool        | Description             |
-| ----------- | ----------------------- |
-| `bash`      | Execute shell commands  |
-| `edit`      | Modify existing files   |
-| `write`     | Create new files        |
-| `read`      | Read file contents      |
-| `grep`      | Search file contents    |
-| `glob`      | Find files by pattern   |
-| `list`      | List directory contents |
-| `patch`     | Apply patches to files  |
-| `todowrite` | Manage todo lists       |
-| `todoread`  | Read todo lists         |
-| `webfetch`  | Fetch web content       |
+[Learn more about tools](/docs/tools).
 
 ---
 
