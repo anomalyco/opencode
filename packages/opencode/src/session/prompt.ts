@@ -1290,20 +1290,42 @@ export namespace SessionPrompt {
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
-    const scripts: Record<string, string> = {
-      nu: input.command,
-      fish: `eval "${input.command}"`,
+    const invocations: Record<string, { args: string[] }> = {
+      nu: {
+        args: ["-c", input.command],
+      },
+      fish: {
+        args: ["-c", input.command],
+      },
+      zsh: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+            [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      bash: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      // Fallback: any shell that doesn't match those above
+      "": {
+        args: ["-c", "-l", `${input.command}`],
+      },
     }
 
-    const script =
-      scripts[shellName] ??
-      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-       eval "${input.command}"`
-
-    const isFishOrNu = shellName === "fish" || shellName === "nu"
-    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
+    const matchingInvocation = invocations[shellName] ?? invocations[""]
+    const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,

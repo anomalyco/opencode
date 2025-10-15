@@ -51,10 +51,10 @@ const cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
-      dev: Installation.isDev(),
+      dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isDev()) return "DEBUG"
+        if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
     })

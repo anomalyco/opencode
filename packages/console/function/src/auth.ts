@@ -1,3 +1,4 @@
+import type { KVNamespace } from "@cloudflare/workers-types"
 import { z } from "zod"
 import { issuer } from "@openauthjs/openauth"
 import type { Theme } from "@openauthjs/openauth/ui/theme"
@@ -94,6 +95,7 @@ export default {
         //        }),
       },
       storage: CloudflareStorage({
+        // @ts-ignore
         namespace: env.AuthStorage,
       }),
       subjects,
@@ -117,6 +119,10 @@ export default {
         } else throw new Error("Unsupported provider")
 
         if (!email) throw new Error("No email found")
+
+        if (Resource.App.stage !== "production" && !email.endsWith("@anoma.ly")) {
+          throw new Error("Invalid email")
+        }
 
         let accountID = await Account.fromEmail(email).then((x) => x?.id)
         if (!accountID) {

@@ -137,6 +137,9 @@ export namespace SessionCompaction {
     const stream = streamText({
       maxRetries: 10,
       model: model.language,
+      providerOptions: {
+        [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: model.info.options,
+      },
       messages: [
         ...system.map(
           (x): ModelMessage => ({

@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/web",
   "type": "module",
-  "version": "0.14.7",
+  "version": "0.15.3",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
@@ -20,7 +20,7 @@
     "@types/luxon": "3.6.2",
     "ai": "catalog:",
     "astro": "5.7.13",
-    "diff": "8.0.2",
+    "diff": "catalog:",
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
     "luxon": "catalog:",

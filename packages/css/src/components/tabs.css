@@ -1,0 +1,98 @@
+[data-component="tabs"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  & [data-slot="list"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background-color: var(--surface-default-surface);
+    overflow-x: auto;
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Divider between tabs */
+    & > [data-slot="trigger"]:not(:first-child) {
+      border-left: 1px solid var(--border-default-border-weak);
+    }
+
+    /* After element to fill remaining space */
+    &::after {
+      content: "";
+      display: block;
+      flex-grow: 1;
+      height: calc(var(--spacing) * 8);
+      border-left: 1px solid var(--border-default-border-weak);
+      border-bottom: 1px solid var(--border-default-border-weak);
+    }
+
+    &:empty::after {
+      border-left: none;
+    }
+  }
+
+  & [data-slot="trigger"] {
+    position: relative;
+    padding: 0 calc(var(--spacing) * 3);
+    height: calc(var(--spacing) * 8);
+    display: flex;
+    align-items: center;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-default-text-weak);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-default-border-weak);
+    background-color: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+
+    &:disabled {
+      pointer-events: none;
+      opacity: 0.5;
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--border-default-border-focus);
+    }
+
+    &[data-selected] {
+      color: var(--text-default-text);
+      background-color: var(--surface-panel-surface);
+      border-bottom-color: transparent;
+    }
+
+    &:hover:not(:disabled):not([data-selected]) {
+      color: var(--text-default-text);
+    }
+  }
+
+  & [data-slot="content"] {
+    background-color: var(--surface-panel-surface);
+    overflow-y: auto;
+    flex: 1;
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--border-default-border-focus);
+    }
+  }
+}

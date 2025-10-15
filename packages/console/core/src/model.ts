@@ -17,6 +17,7 @@ export namespace ZenModel {
   })
 
   export const ModelSchema = z.object({
+    name: z.string(),
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
@@ -40,13 +41,14 @@ export namespace ZenModel {
 
 export namespace Model {
   export const enable = fn(z.object({ model: z.string() }), ({ model }) => {
-    const workspaceID = Actor.workspace()
+    Actor.assertAdmin()
     return Database.use((db) =>
-      db.delete(ModelTable).where(and(eq(ModelTable.workspaceID, workspaceID), eq(ModelTable.model, model))),
+      db.delete(ModelTable).where(and(eq(ModelTable.workspaceID, Actor.workspace()), eq(ModelTable.model, model))),
     )
   })
 
   export const disable = fn(z.object({ model: z.string() }), ({ model }) => {
+    Actor.assertAdmin()
     return Database.use((db) =>
       db
         .insert(ModelTable)

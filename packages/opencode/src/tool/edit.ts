@@ -550,7 +550,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
-function trimDiff(diff: string): string {
+export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>

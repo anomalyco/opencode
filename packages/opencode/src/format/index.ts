@@ -15,7 +15,10 @@ export namespace Format {
     const enabled: Record<string, boolean> = {}
     const cfg = await Config.get()
 
-    const formatters = { ...Formatter } as Record<string, Formatter.Info>
+    const formatters: Record<string, Formatter.Info> = {}
+    for (const item of Object.values(Formatter)) {
+      formatters[item.name] = item
+    }
     for (const [name, item] of Object.entries(cfg.formatter ?? {})) {
       if (item.disabled) {
         delete formatters[name]

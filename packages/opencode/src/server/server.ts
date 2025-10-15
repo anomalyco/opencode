@@ -71,7 +71,8 @@ export namespace Server {
             status: 400,
           })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
           status: 400,
         })
       })
@@ -1031,9 +1032,12 @@ export namespace Server {
           }),
         ),
         async (c) => {
+          /*
           const query = c.req.valid("query").query
           const result = await LSP.workspaceSymbol(query)
           return c.json(result)
+          */
+          return c.json([])
         },
       )
       .get(
