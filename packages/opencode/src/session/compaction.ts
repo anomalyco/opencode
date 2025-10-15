@@ -161,27 +161,31 @@ export namespace SessionCompaction {
     })
 
     for await (const value of stream.fullStream) {
-      if (value.type === "text-delta") {
-        summaryText += value.text
-        await Session.updatePart({
-          ...part,
-          text: summaryText,
-        } as MessageV2.TextPart)
-      } else if (value.type === "text-end") {
-        part.text = summaryText
-        await Session.updatePart({
-          ...part,
-        } as MessageV2.TextPart)
-      } else if (value.type === "finish") {
-        const usage = Session.getUsage({ model: model.info, usage: value.totalUsage, metadata: undefined })
-        msg.cost += usage.cost
-        msg.tokens = usage.tokens
-        msg.summary = true
-        msg.time.completed = Date.now()
-        await Session.updateMessage(msg)
-        part.time!.end = Date.now()
-        await Session.updatePart(part as MessageV2.TextPart)
-        break
+      switch (value.type) {
+        case "text-delta":
+          summaryText += value.text
+          await Session.updatePart({
+            ...part,
+            text: summaryText,
+          })
+          break
+        case "text-end":
+          part.text = summaryText
+          await Session.updatePart({
+            ...part,
+          })
+          break
+        case "finish": {
+          const usage = Session.getUsage({ model: model.info, usage: value.totalUsage, metadata: undefined })
+          msg.cost += usage.cost
+          msg.tokens = usage.tokens
+          msg.summary = true
+          msg.time.completed = Date.now()
+          await Session.updateMessage(msg)
+          part.time!.end = Date.now()
+          await Session.updatePart(part)
+          break
+        }
       }
     }
 
