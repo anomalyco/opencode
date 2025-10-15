@@ -27,7 +27,9 @@ import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
+import { DynamicPrompt } from "./dynamic-prompt"
 import { Plugin } from "../plugin"
+import { Config } from "../config/config"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -401,13 +403,35 @@ export namespace SessionPrompt {
     modelID: string
   }) {
     let system = SystemPrompt.header(input.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.modelID)
-      })(),
-    )
+
+    // Determine which prompt to use and potentially resolve dynamically
+    let promptToResolve: string | undefined
+    if (input.system) {
+      promptToResolve = input.system
+    } else if (input.agent.prompt) {
+      promptToResolve = input.agent.prompt
+    }
+
+    if (promptToResolve) {
+      const config = await Config.get()
+      const context = DynamicPrompt.createContext({
+        providerID: input.providerID,
+        modelID: input.modelID,
+        username: config.username,
+      })
+
+      try {
+        const resolvedPrompt = await DynamicPrompt.resolve(promptToResolve, context)
+        system.push(resolvedPrompt)
+      } catch (error) {
+        log.error("failed to resolve dynamic prompt", { error: error instanceof Error ? error.message : String(error) })
+        // Keep the original prompt if dynamic resolution fails
+        system.push(promptToResolve)
+      }
+    } else {
+      system.push(...SystemPrompt.provider(input.modelID))
+    }
+
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
