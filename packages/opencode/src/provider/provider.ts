@@ -69,7 +69,7 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (options?.["useCompletionUrls"]) {
-            return sdk.completion(modelID)
+            return sdk.chat(modelID)
           } else {
             return sdk.responses(modelID)
           }
