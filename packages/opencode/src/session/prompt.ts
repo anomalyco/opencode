@@ -406,22 +406,8 @@ export namespace SessionPrompt {
       ...(await (async () => {
         if (input.system) return [input.system]
         if (input.agent.prompt) {
-          let prompt = input.agent.prompt
-
-          // Handle file:// URLs
-          if (prompt.startsWith("file://")) {
-            const filePath = fileURLToPath(prompt)
-            try {
-              prompt = await Bun.file(filePath).text()
-            } catch (error) {
-              throw new Error(
-                `Failed to load agent prompt from file: ${filePath}. ${error instanceof Error ? error.message : String(error)}`,
-              )
-            }
-          }
-
           // Process templates (bash commands and file references)
-          return [await Template.process(prompt)]
+          return [await Template.process(input.agent.prompt)]
         }
         return SystemPrompt.provider(input.modelID)
       })()),
