@@ -413,8 +413,20 @@ export namespace Provider {
       const mod = await import(modPath)
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
-        options["fetch"] = async (input: any, init?: any) => {
-          return await fetch(input, { ...init, timeout: options["timeout"] })
+        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          const { signal, ...rest } = init ?? {}
+
+          const signals: AbortSignal[] = [AbortSignal.timeout(options["timeout"])]
+          if (signal) signals.push(signal)
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          return fetch(input, {
+            ...rest,
+            signal: combined,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
         }
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
