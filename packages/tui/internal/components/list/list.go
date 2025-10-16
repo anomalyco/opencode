@@ -27,6 +27,7 @@ type SelectableFunc[T any] func(item T) bool
 type Options[T any] struct {
 	items               []T
 	maxVisibleHeight    int
+	maxVisibleItems     int
 	fallbackMsg         string
 	useAlphaNumericKeys bool
 	renderItem          RenderFunc[T]
@@ -41,6 +42,21 @@ type Option[T any] func(*Options[T])
 func WithItems[T any](items []T) Option[T] {
 	return func(o *Options[T]) {
 		o.items = items
+	}
+}
+
+// WithHeightFunc sets the maxVisibleHeight based on a user defined function
+func WithHeightFunc[T any](fn func(item T, isFirstInViewport bool) int) Option[T] {
+	return func(o *Options[T]) {
+		var i T
+		o.maxVisibleHeight = fn(i, true)
+	}
+}
+
+// WithMaxVisibleItems sets the maximum number of visible items in the list.
+func WithMaxVisibleItems[T any](n int) Option[T] {
+	return func(o *Options[T]) {
+		o.maxVisibleItems = n
 	}
 }
 
