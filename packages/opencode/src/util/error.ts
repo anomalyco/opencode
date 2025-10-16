@@ -1,7 +1,4 @@
 import z from "zod/v4"
-// import { Log } from "./log"
-
-// const log = Log.create()
 
 export abstract class NamedError extends Error {
   abstract schema(): z.core.$ZodType
@@ -19,7 +16,7 @@ export abstract class NamedError extends Error {
     const result = class extends NamedError {
       public static readonly Schema = schema
 
-      public readonly name = name as Name
+      public override readonly name = name as Name
 
       constructor(
         public readonly data: z.input<Data>,

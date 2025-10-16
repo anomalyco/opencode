@@ -1,10 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/plugin",
-  "version": "0.14.7",
+  "version": "0.15.4",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "build": "tsc"
   },
   "exports": {
@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",
-    "@types/node": "24.7.1",
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   }
 }

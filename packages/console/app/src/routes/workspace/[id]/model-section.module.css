@@ -34,6 +34,12 @@
       color: var(--color-text);
       font-family: var(--font-mono);
       font-weight: 500;
+
+      div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
     }
 
     &[data-slot="training-data"] {
@@ -88,8 +94,8 @@
       }
 
       /* Checked state - track */
-      input:checked+span {
-        background-color: #21AD0E;
+      input:checked + span {
+        background-color: #21ad0e;
         border-color: #148605;
 
         /* Checked state - handle */
@@ -103,7 +109,7 @@
         box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
       }
 
-      input:checked:hover+span {
+      input:checked:hover + span {
         box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
       }
 
@@ -112,16 +118,16 @@
         cursor: not-allowed;
       }
 
-      input:disabled+span {
+      input:disabled + span {
         opacity: 0.5;
         cursor: not-allowed;
       }
 
-      input:disabled:checked+span {
+      input:disabled:checked + span {
         opacity: 0.5;
       }
 
-      input:disabled~span:hover {
+      input:disabled ~ span:hover {
         box-shadow: none;
       }
     }
@@ -142,7 +148,6 @@
 
 @media (max-width: 40rem) {
   [data-slot="models-table-element"] {
-
     th,
     td {
       padding: var(--space-2) var(--space-3);
@@ -152,8 +157,7 @@
     th {
       &:nth-child(2)
 
-      /* Training Data */
-        {
+      /* Training Data */ {
         display: none;
       }
     }
@@ -161,8 +165,7 @@
     td {
       &:nth-child(2)
 
-      /* Training Data */
-        {
+      /* Training Data */ {
         display: none;
       }
     }

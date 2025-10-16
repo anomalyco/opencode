@@ -1,0 +1,93 @@
+[data-component="button"] {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+  font-weight: var(--font-weight-normal);
+  text-decoration: none;
+  user-select: none;
+  gap: calc(var(--spacing) * 2);
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &[data-variant="primary"] {
+    border-color: var(--border-default-border);
+    background-color: var(--surface-brand-surface-brand);
+    color: var(--text-on-brand-text-strong-on-brand);
+
+    &:hover:not(:disabled) {
+      border-color: var(--border-default-border-hover);
+      background-color: var(--surface-brand-surface-brand-hover);
+    }
+    &:active:not(:disabled) {
+      border-color: var(--border-default-border-active);
+      background-color: var(--surface-brand-surface-brand-active);
+    }
+    &:focus:not(:disabled) {
+      border-color: var(--border-default-border-focus);
+      background-color: var(--surface-brand-surface-brand-focus);
+    }
+  }
+
+  &[data-variant="secondary"] {
+    border-color: var(--border-default-border);
+    background-color: var(--surface-default-surface);
+    color: var(--text-default-text);
+
+    &:hover:not(:disabled) {
+      border-color: var(--border-default-border-hover);
+      background-color: var(--surface-default-surface-hover);
+    }
+    &:active:not(:disabled) {
+      border-color: var(--border-default-border-active);
+      background-color: var(--surface-default-surface-active);
+    }
+    &:focus:not(:disabled) {
+      border-color: var(--border-default-border-focus);
+      background-color: var(--surface-default-surface-focus);
+    }
+  }
+
+  &[data-variant="ghost"] {
+    border-color: transparent;
+    background-color: transparent;
+    color: var(--text-default-text);
+
+    &:hover:not(:disabled) {
+      background-color: var(--surface-default-surface-hover);
+    }
+    &:active:not(:disabled) {
+      border-color: var(--border-default-border-active);
+      background-color: var(--surface-default-surface-active);
+    }
+    &:focus:not(:disabled) {
+      border-color: var(--border-default-border-focus);
+      background-color: var(--surface-default-surface-focus);
+    }
+  }
+
+  &[data-size="normal"] {
+    padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 3);
+    font-size: var(--text-xs);
+    line-height: var(--text-sm--line-height);
+  }
+
+  &[data-size="large"] {
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+}

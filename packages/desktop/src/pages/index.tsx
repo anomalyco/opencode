@@ -1,27 +1,29 @@
 import { FileIcon, Icon, IconButton, Tooltip } from "@/ui"
-import { Tabs } from "@/ui/tabs"
+import * as KobalteTabs from "@kobalte/core/tabs"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { SelectDialog } from "@/components/select-dialog"
-import { useLocal } from "@/context"
-import { ResizeableLayout, ResizeablePane } from "@/components/resizeable-pane"
-import type { LocalFile } from "@/context/local"
+import { useSync, useSDK, useLocal } from "@/context"
+import type { LocalFile, TextSelection } from "@/context/local"
 import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
+import PromptForm, { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
+import { Select } from "@/components/select"
+import { Tabs } from "@/ui/tabs"
+import { Code } from "@/components/code"
 
 export default function Page() {
   const local = useLocal()
+  const sync = useSync()
+  const sdk = useSDK()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     modelSelectOpen: false,
     fileSelectOpen: false,
   })
-
-  const layoutKey = "workspace"
-  const timelinePane = "timeline"
 
   let inputRef: HTMLTextAreaElement | undefined = undefined
 
@@ -104,107 +106,178 @@ export default function Page() {
     }
   }
 
+  const handlePromptSubmit = async (prompt: PromptSubmitValue) => {
+    const existingSession = local.session.active()
+    let session = existingSession
+    if (!session) {
+      const created = await sdk.session.create()
+      session = created.data ?? undefined
+    }
+    if (!session) return
+    local.session.setActive(session.id)
+
+    interface SubmissionAttachment {
+      path: string
+      selection?: TextSelection
+      label: string
+    }
+
+    const createAttachmentKey = (path: string, selection?: TextSelection) => {
+      if (!selection) return path
+      return `${path}:${selection.startLine}:${selection.startChar}:${selection.endLine}:${selection.endChar}`
+    }
+
+    const formatAttachmentLabel = (path: string, selection?: TextSelection) => {
+      if (!selection) return getFilename(path)
+      return `${getFilename(path)} (${selection.startLine}-${selection.endLine})`
+    }
+
+    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+
+    const attachments = new Map<string, SubmissionAttachment>()
+
+    const registerAttachment = (path: string, selection: TextSelection | undefined, label?: string) => {
+      if (!path) return
+      const key = createAttachmentKey(path, selection)
+      if (attachments.has(key)) return
+      attachments.set(key, {
+        path,
+        selection,
+        label: label ?? formatAttachmentLabel(path, selection),
+      })
+    }
+
+    const promptAttachments = prompt.parts.filter(
+      (part): part is Extract<PromptContentPart, { kind: "attachment" }> => part.kind === "attachment",
+    )
+
+    for (const part of promptAttachments) {
+      registerAttachment(part.path, part.selection, part.display)
+    }
+
+    const activeFile = local.context.active()
+    if (activeFile) {
+      registerAttachment(
+        activeFile.path,
+        activeFile.selection,
+        activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
+      )
+    }
+
+    for (const contextFile of local.context.all()) {
+      registerAttachment(
+        contextFile.path,
+        contextFile.selection,
+        formatAttachmentLabel(contextFile.path, contextFile.selection),
+      )
+    }
+
+    const attachmentParts = Array.from(attachments.values()).map((attachment) => {
+      const absolute = toAbsolutePath(attachment.path)
+      const query = attachment.selection
+        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
+        : ""
+      return {
+        type: "file" as const,
+        mime: "text/plain",
+        url: `file://${absolute}${query}`,
+        filename: getFilename(attachment.path),
+        source: {
+          type: "file" as const,
+          text: {
+            value: `@${attachment.label}`,
+            start: 0,
+            end: 0,
+          },
+          path: absolute,
+        },
+      }
+    })
+
+    await sdk.session.prompt({
+      path: { id: session.id },
+      body: {
+        agent: local.agent.current()!.name,
+        model: {
+          modelID: local.model.current()!.id,
+          providerID: local.model.current()!.provider.id,
+        },
+        parts: [
+          {
+            type: "text",
+            text: prompt.text,
+          },
+          ...attachmentParts,
+        ],
+      },
+    })
+  }
+
+  const plus = (
+    <IconButton
+      class="text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
+      size="xs"
+      variant="secondary"
+      onClick={() => setStore("fileSelectOpen", true)}
+    >
+      <Icon name="plus" size={12} />
+    </IconButton>
+  )
+
   return (
-    <div class="relative">
-      <ResizeableLayout
-        id={layoutKey}
-        defaults={{
-          explorer: { size: 24, visible: true },
-          editor: { size: 56, visible: true },
-          timeline: { size: 20, visible: false },
-        }}
-        class="h-screen"
-      >
-        <ResizeablePane
-          id="explorer"
-          minSize="150px"
-          maxSize="300px"
-          class="border-r border-border-subtle/30 bg-background z-10 overflow-hidden"
-        >
-          <Tabs class="relative flex flex-col h-full" defaultValue="files">
-            <div class="sticky top-0 shrink-0 flex">
-              <Tabs.List class="grow w-full after:hidden">
-                <Tabs.Trigger value="files" class="flex-1 justify-center text-xs">
-                  Files
-                </Tabs.Trigger>
-                <Tabs.Trigger value="changes" class="flex-1 justify-center text-xs">
-                  Changes
-                </Tabs.Trigger>
-              </Tabs.List>
-            </div>
-            <Tabs.Content value="files" class="grow min-h-0 py-2 bg-background">
-              <FileTree path="" onFileClick={handleFileClick} />
-            </Tabs.Content>
-            <Tabs.Content value="changes" class="grow min-h-0 py-2 bg-background">
-              <Show
-                when={local.file.changes().length}
-                fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
-              >
-                <ul class="">
-                  <For each={local.file.changes()}>
-                    {(path) => (
-                      <li>
-                        <button
-                          onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
-                          class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 cursor-pointer hover:bg-background-element"
-                        >
-                          <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
-                          <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
-                          <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
-                            {getDirectory(path)}
-                          </span>
-                        </button>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </Show>
-            </Tabs.Content>
-          </Tabs>
-        </ResizeablePane>
-        <ResizeablePane id="editor" minSize={30} maxSize={80} class="bg-background">
-          <EditorPane
-            layoutKey={layoutKey}
-            timelinePane={timelinePane}
-            onFileClick={handleFileClick}
+    <div class="relative h-screen flex flex-col">
+      <header class="h-12 shrink-0"></header>
+      <main class="h-[calc(100vh-3rem)] flex">
+        <div class="hidden shrink-0 w-64">
+          <SessionList />
+        </div>
+        <div class="grow w-full min-w-0 overflow-y-auto flex justify-center">
+          <Show when={local.session.active()}>
+            {(activeSession) => <SessionTimeline session={activeSession().id} class="max-w-xl" />}
+          </Show>
+        </div>
+        <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
+          <FileTree path="" onFileClick={handleFileClick} />
+        </div>
+        <div class="hidden shrink-0 w-56 p-2">
+          <Show
+            when={local.file.changes().length}
+            fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
+          >
+            <ul class="">
+              <For each={local.file.changes()}>
+                {(path) => (
+                  <li>
+                    <button
+                      onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
+                      class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 cursor-pointer hover:bg-background-element"
+                    >
+                      <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
+                      <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
+                      <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
+                        {getDirectory(path)}
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
+        </div>
+        <div class="hidden grow min-w-0">
+          <EditorPane onFileClick={handleFileClick} />
+        </div>
+        <div class="absolute bottom-4 inset-x-0 p-2 flex flex-col justify-center items-center gap-2 z-50">
+          <PromptForm
+            class="w-xl"
+            onSubmit={handlePromptSubmit}
             onOpenModelSelect={() => setStore("modelSelectOpen", true)}
-            onInputRefChange={(element: HTMLTextAreaElement | null) => {
+            onInputRefChange={(element: HTMLTextAreaElement | undefined) => {
               inputRef = element ?? undefined
             }}
           />
-        </ResizeablePane>
-        <ResizeablePane
-          id="timeline"
-          minSize={20}
-          maxSize={40}
-          class="border-l border-border-subtle/30 bg-background z-10 overflow-hidden"
-        >
-          <div class="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-            <Show when={local.session.active()} fallback={<SessionList />}>
-              {(activeSession) => (
-                <div class="relative">
-                  <div class="sticky top-0 bg-background z-50 px-2 h-8 border-b border-border-subtle/30">
-                    <div class="h-full flex items-center gap-2">
-                      <IconButton
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => local.session.clearActive()}
-                        class="text-text-muted hover:text-text"
-                      >
-                        <Icon name="arrow-left" size={14} />
-                      </IconButton>
-                      <h2 class="text-sm font-medium text-text truncate">
-                        {activeSession().title || "Untitled Session"}
-                      </h2>
-                    </div>
-                  </div>
-                  <SessionTimeline session={activeSession().id} />
-                </div>
-              )}
-            </Show>
-          </div>
-        </ResizeablePane>
-      </ResizeableLayout>
+        </div>
+      </main>
       <Show when={store.modelSelectOpen}>
         <SelectDialog
           key={(x) => `${x.provider.id}:${x.id}`}
@@ -270,7 +343,8 @@ export default function Page() {
             </div>
           )}
           onClose={() => setStore("fileSelectOpen", false)}
-          onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
+          onSelect={(x) => (x ? local.context.openFile(x) : undefined)}
+          // onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
         />
       </Show>
     </div>

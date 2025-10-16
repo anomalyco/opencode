@@ -17,6 +17,7 @@ export namespace ZenModel {
   })
 
   export const ModelSchema = z.object({
+    name: z.string(),
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),

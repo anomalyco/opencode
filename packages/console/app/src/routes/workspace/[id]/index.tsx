@@ -52,7 +52,7 @@ export default function () {
                 }
               >
                 <span data-slot="balance">
-                  Current balance: <b>${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
+                  Current balance <b>${balanceAmount() === "-0.00" ? "0.00" : balanceAmount()}</b>
                 </span>
               </Show>
             </span>

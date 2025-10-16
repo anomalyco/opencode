@@ -342,6 +342,23 @@ export namespace Session {
     return part
   })
 
+  export const removePart = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+      partID: Identifier.schema("part"),
+    }),
+    async (input) => {
+      await Storage.remove(["part", input.messageID, input.partID])
+      Bus.publish(MessageV2.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      return input.partID
+    },
+  )
+
   export const getUsage = fn(
     z.object({
       model: z.custom<ModelsDev.Model>(),

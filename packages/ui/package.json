@@ -1,0 +1,23 @@
+{
+  "name": "@opencode-ai/ui",
+  "version": "0.15.4",
+  "type": "module",
+  "exports": {
+    ".": "./src/components/index.ts",
+    "./*": "./src/components/*"
+  },
+  "scripts": {
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
+  },
+  "dependencies": {
+    "remeda": "catalog:",
+    "solid-js": "catalog:",
+    "@kobalte/core": "catalog:",
+    "@opencode-ai/css": "workspace:*"
+  }
+}

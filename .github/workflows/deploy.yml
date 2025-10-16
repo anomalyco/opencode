@@ -15,11 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: 1.3.0
-
-      - run: bun install
+      - uses: ./.github/actions/setup-bun
 
       - run: bun sst deploy --stage=${{ github.ref_name }}
         env:
