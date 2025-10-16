@@ -86,6 +86,18 @@ Here are some common issues and how to resolve them.
 2. Verify the model name in your config is correct
 3. Some models may require specific access or subscriptions
 
+If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
+referencing a model somewhere.
+Models should be referenced like so: `<providerId>/<modelId>`
+
+
+Examples:
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
+
+To figure out what models you have access to, run `opencode models`
+
 ---
 
 ### ProviderInitError

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 
 	"github.com/sst/opencode-sdk-go/internal/apijson"
 	"github.com/sst/opencode-sdk-go/internal/apiquery"
@@ -42,7 +43,7 @@ func NewSessionService(opts ...option.RequestOption) (r *SessionService) {
 
 // Create a new session
 func (r *SessionService) New(ctx context.Context, params SessionNewParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "session"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodPost, path, params, &res, opts...)
 	return
@@ -50,7 +51,7 @@ func (r *SessionService) New(ctx context.Context, params SessionNewParams, opts 
 
 // Update session properties
 func (r *SessionService) Update(ctx context.Context, id string, params SessionUpdateParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -62,7 +63,7 @@ func (r *SessionService) Update(ctx context.Context, id string, params SessionUp
 
 // List all sessions
 func (r *SessionService) List(ctx context.Context, query SessionListParams, opts ...option.RequestOption) (res *[]Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	path := "session"
 	err = requestconfig.ExecuteNewRequest(ctx, http.MethodGet, path, query, &res, opts...)
 	return
@@ -70,7 +71,7 @@ func (r *SessionService) List(ctx context.Context, query SessionListParams, opts
 
 // Delete a session and all its data
 func (r *SessionService) Delete(ctx context.Context, id string, body SessionDeleteParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -82,7 +83,7 @@ func (r *SessionService) Delete(ctx context.Context, id string, body SessionDele
 
 // Abort a session
 func (r *SessionService) Abort(ctx context.Context, id string, body SessionAbortParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -94,7 +95,7 @@ func (r *SessionService) Abort(ctx context.Context, id string, body SessionAbort
 
 // Get a session's children
 func (r *SessionService) Children(ctx context.Context, id string, query SessionChildrenParams, opts ...option.RequestOption) (res *[]Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -106,7 +107,7 @@ func (r *SessionService) Children(ctx context.Context, id string, query SessionC
 
 // Send a new command to a session
 func (r *SessionService) Command(ctx context.Context, id string, params SessionCommandParams, opts ...option.RequestOption) (res *SessionCommandResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -118,7 +119,7 @@ func (r *SessionService) Command(ctx context.Context, id string, params SessionC
 
 // Get session
 func (r *SessionService) Get(ctx context.Context, id string, query SessionGetParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -130,7 +131,7 @@ func (r *SessionService) Get(ctx context.Context, id string, query SessionGetPar
 
 // Analyze the app and create an AGENTS.md file
 func (r *SessionService) Init(ctx context.Context, id string, params SessionInitParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -142,7 +143,7 @@ func (r *SessionService) Init(ctx context.Context, id string, params SessionInit
 
 // Get a message from a session
 func (r *SessionService) Message(ctx context.Context, id string, messageID string, query SessionMessageParams, opts ...option.RequestOption) (res *SessionMessageResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -158,7 +159,7 @@ func (r *SessionService) Message(ctx context.Context, id string, messageID strin
 
 // List messages for a session
 func (r *SessionService) Messages(ctx context.Context, id string, query SessionMessagesParams, opts ...option.RequestOption) (res *[]SessionMessagesResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -170,7 +171,7 @@ func (r *SessionService) Messages(ctx context.Context, id string, query SessionM
 
 // Create and send a new message to a session
 func (r *SessionService) Prompt(ctx context.Context, id string, params SessionPromptParams, opts ...option.RequestOption) (res *SessionPromptResponse, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -182,7 +183,7 @@ func (r *SessionService) Prompt(ctx context.Context, id string, params SessionPr
 
 // Revert a message
 func (r *SessionService) Revert(ctx context.Context, id string, params SessionRevertParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -194,7 +195,7 @@ func (r *SessionService) Revert(ctx context.Context, id string, params SessionRe
 
 // Share a session
 func (r *SessionService) Share(ctx context.Context, id string, body SessionShareParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -206,7 +207,7 @@ func (r *SessionService) Share(ctx context.Context, id string, body SessionShare
 
 // Run a shell command
 func (r *SessionService) Shell(ctx context.Context, id string, params SessionShellParams, opts ...option.RequestOption) (res *AssistantMessage, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -218,7 +219,7 @@ func (r *SessionService) Shell(ctx context.Context, id string, params SessionShe
 
 // Summarize the session
 func (r *SessionService) Summarize(ctx context.Context, id string, params SessionSummarizeParams, opts ...option.RequestOption) (res *bool, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -230,7 +231,7 @@ func (r *SessionService) Summarize(ctx context.Context, id string, params Sessio
 
 // Restore all reverted messages
 func (r *SessionService) Unrevert(ctx context.Context, id string, body SessionUnrevertParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -242,7 +243,7 @@ func (r *SessionService) Unrevert(ctx context.Context, id string, body SessionUn
 
 // Unshare the session
 func (r *SessionService) Unshare(ctx context.Context, id string, body SessionUnshareParams, opts ...option.RequestOption) (res *Session, err error) {
-	opts = append(r.Options[:], opts...)
+	opts = slices.Concat(r.Options, opts)
 	if id == "" {
 		err = errors.New("missing required id parameter")
 		return
@@ -1724,14 +1725,15 @@ func (r SymbolSourceRangeStartParam) MarshalJSON() (data []byte, err error) {
 }
 
 type TextPart struct {
-	ID        string       `json:"id,required"`
-	MessageID string       `json:"messageID,required"`
-	SessionID string       `json:"sessionID,required"`
-	Text      string       `json:"text,required"`
-	Type      TextPartType `json:"type,required"`
-	Synthetic bool         `json:"synthetic"`
-	Time      TextPartTime `json:"time"`
-	JSON      textPartJSON `json:"-"`
+	ID        string                 `json:"id,required"`
+	MessageID string                 `json:"messageID,required"`
+	SessionID string                 `json:"sessionID,required"`
+	Text      string                 `json:"text,required"`
+	Type      TextPartType           `json:"type,required"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	Synthetic bool                   `json:"synthetic"`
+	Time      TextPartTime           `json:"time"`
+	JSON      textPartJSON           `json:"-"`
 }
 
 // textPartJSON contains the JSON metadata for the struct [TextPart]
@@ -1741,6 +1743,7 @@ type textPartJSON struct {
 	SessionID   apijson.Field
 	Text        apijson.Field
 	Type        apijson.Field
+	Metadata    apijson.Field
 	Synthetic   apijson.Field
 	Time        apijson.Field
 	raw         string
@@ -1797,6 +1800,7 @@ type TextPartInputParam struct {
 	Text      param.Field[string]                 `json:"text,required"`
 	Type      param.Field[TextPartInputType]      `json:"type,required"`
 	ID        param.Field[string]                 `json:"id"`
+	Metadata  param.Field[map[string]interface{}] `json:"metadata"`
 	Synthetic param.Field[bool]                   `json:"synthetic"`
 	Time      param.Field[TextPartInputTimeParam] `json:"time"`
 }
@@ -1831,14 +1835,15 @@ func (r TextPartInputTimeParam) MarshalJSON() (data []byte, err error) {
 }
 
 type ToolPart struct {
-	ID        string        `json:"id,required"`
-	CallID    string        `json:"callID,required"`
-	MessageID string        `json:"messageID,required"`
-	SessionID string        `json:"sessionID,required"`
-	State     ToolPartState `json:"state,required"`
-	Tool      string        `json:"tool,required"`
-	Type      ToolPartType  `json:"type,required"`
-	JSON      toolPartJSON  `json:"-"`
+	ID        string                 `json:"id,required"`
+	CallID    string                 `json:"callID,required"`
+	MessageID string                 `json:"messageID,required"`
+	SessionID string                 `json:"sessionID,required"`
+	State     ToolPartState          `json:"state,required"`
+	Tool      string                 `json:"tool,required"`
+	Type      ToolPartType           `json:"type,required"`
+	Metadata  map[string]interface{} `json:"metadata"`
+	JSON      toolPartJSON           `json:"-"`
 }
 
 // toolPartJSON contains the JSON metadata for the struct [ToolPart]
@@ -1850,6 +1855,7 @@ type toolPartJSON struct {
 	State       apijson.Field
 	Tool        apijson.Field
 	Type        apijson.Field
+	Metadata    apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -2556,6 +2562,7 @@ type SessionPromptParamsPart struct {
 	Type      param.Field[SessionPromptParamsPartsType] `json:"type,required"`
 	ID        param.Field[string]                       `json:"id"`
 	Filename  param.Field[string]                       `json:"filename"`
+	Metadata  param.Field[interface{}]                  `json:"metadata"`
 	Mime      param.Field[string]                       `json:"mime"`
 	Name      param.Field[string]                       `json:"name"`
 	Source    param.Field[interface{}]                  `json:"source"`

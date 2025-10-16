@@ -15,6 +15,8 @@ import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
+import { BunProc } from "@/bun"
+import { Installation } from "@/installation"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -60,7 +62,8 @@ export namespace Config {
     ]
 
     for (const dir of directories) {
-      await assertValid(dir).catch(() => {})
+      await assertValid(dir)
+      installDependencies(dir)
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
@@ -117,24 +120,42 @@ export namespace Config {
     }
   })
 
+  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
   async function assertValid(dir: string) {
-    const ALLOWED_DIRS = new Set(["agent", "command", "mode", "plugin", "tool", "themes"])
-    const UNEXPECTED_DIR_GLOB = new Bun.Glob("*/")
-    for await (const item of UNEXPECTED_DIR_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
-      cwd: dir,
-      onlyFiles: false,
-    })) {
-      const dirname = path.basename(item)
-      if (!ALLOWED_DIRS.has(dirname)) {
-        throw new InvalidError({
-          path: dir,
-          message: `Unexpected directory "${dirname}" found in "${dir}". Only ${ALLOWED_DIRS.values().toArray().join(", ")} directories are allowed.`,
-        })
-      }
+    const invalid = await Array.fromAsync(
+      INVALID_DIRS.scan({
+        onlyFiles: false,
+        cwd: dir,
+      }),
+    )
+    for (const item of invalid) {
+      throw new DirectoryError({
+        path: dir,
+        dir: item,
+        suggestion: item.substring(0, item.length - 1),
+      })
     }
+  }
+
+  async function installDependencies(dir: string) {
+    if (Installation.isLocal()) return
+
+    const pkg = path.join(dir, "package.json")
+
+    if (!(await Bun.file(pkg).exists())) {
+      await Bun.write(pkg, "{}")
+    }
+
+    const gitignore = path.join(dir, ".gitignore")
+    const hasGitIgnore = await Bun.file(gitignore).exists()
+    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
+    await BunProc.run(
+      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
+      {
+        cwd: dir,
+      },
+    )
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
@@ -680,10 +701,10 @@ export namespace Config {
       }
       const data = parsed.data
       if (data.plugin) {
-        for (let i = 0; i < data.plugin?.length; i++) {
+        for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve(plugin, configFilepath)
+            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
           } catch (err) {}
         }
       }
@@ -697,6 +718,15 @@ export namespace Config {
     z.object({
       path: z.string(),
       message: z.string().optional(),
+    }),
+  )
+
+  export const DirectoryError = NamedError.create(
+    "ConfigDirectoryError",
+    z.object({
+      path: z.string(),
+      dir: z.string(),
+      suggestion: z.string(),
     }),
   )
 

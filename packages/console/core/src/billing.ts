@@ -1,10 +1,10 @@
 import { Stripe } from "stripe"
-import { and, Database, eq, sql } from "./drizzle"
+import { Database, eq, sql } from "./drizzle"
 import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { Resource } from "@opencode/console-resource"
+import { Resource } from "@opencode-ai/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
@@ -18,6 +18,7 @@ export namespace Billing {
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
+      httpClient: Stripe.createFetchHttpClient(),
     })
 
   export const get = async () => {

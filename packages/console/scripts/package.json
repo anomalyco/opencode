@@ -1,20 +1,15 @@
 {
-  "name": "@opencode/console-scripts",
-  "version": "0.14.1",
+  "name": "@opencode-ai/console-scripts",
+  "version": "0.15.3",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
   "scripts": {
-    "shell": "sst shell -- bun tsx",
-    "shell-dev": "sst shell --stage dev -- bun tsx",
-    "shell-prod": "sst shell --stage production -- bun tsx"
+    "shell": "sst shell -- bun",
+    "shell-dev": "sst shell --stage dev -- bun",
+    "shell-prod": "sst shell --stage production -- bun"
   },
   "dependencies": {
-    "@opencode/console-core": "workspace:*",
-    "tsx": "4.20.5"
-  },
-  "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "@opencode-ai/console-core": "workspace:*"
   }
 }

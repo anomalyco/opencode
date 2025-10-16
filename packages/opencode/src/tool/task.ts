@@ -6,6 +6,7 @@ import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
+import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 
 export const TaskTool = Tool.define("task", async () => {
@@ -26,8 +27,11 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-      const session = await Session.create(ctx.sessionID, params.description + ` (@${agent.name} subagent)`)
-      const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
+      const session = await Session.create({
+        parentID: ctx.sessionID,
+        title: params.description + ` (@${agent.name} subagent)`,
+      })
+      const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
@@ -50,7 +54,7 @@ export const TaskTool = Tool.define("task", async () => {
       }
 
       ctx.abort.addEventListener("abort", () => {
-        SessionPrompt.abort(session.id)
+        SessionLock.abort(session.id)
       })
       const result = await SessionPrompt.prompt({
         messageID,

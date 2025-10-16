@@ -1,45 +1,25 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencodeClient, createOpencodeServer } from "@opencode-ai/sdk"
-if (process.versions.bun !== "1.2.21") {
-  throw new Error("This script requires bun@1.2.21")
-}
+import { createOpencode } from "@opencode-ai/sdk"
+import { Script } from "@opencode-ai/script"
 
-let notes = []
+const notes = [] as string[]
 
 console.log("=== publishing ===\n")
 
-const snapshot = process.env["OPENCODE_SNAPSHOT"] === "true"
-const version = await (async () => {
-  if (snapshot) return `0.0.0-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  if (process.env["OPENCODE_VERSION"]) return process.env["OPENCODE_VERSION"]
-  const [major, minor, patch] = (await $`gh release list --limit 1 --json tagName --jq '.[0].tagName'`.text())
-    .trim()
-    .replace(/^v/, "")
-    .split(".")
-    .map((x) => Number(x) || 0)
-  const t = process.env["OPENCODE_BUMP"]?.toLowerCase()
-  if (t === "major") return `${major + 1}.0.0`
-  if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
-})()
-process.env["OPENCODE_VERSION"] = version
-console.log("version:", version)
-
-if (!snapshot) {
-  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+if (!Script.preview) {
+  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
-    .then((data) => data.tag_name)
+    .then((data: any) => data.version)
 
-  const server = await createOpencodeServer()
-  const client = createOpencodeClient({ baseUrl: server.url })
-  const session = await client.session.create()
+  const opencode = await createOpencode()
+  const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
-  const raw = await client.session
+  const raw = await opencode.client.session
     .prompt({
       path: {
         id: session.data!.id,
@@ -85,7 +65,7 @@ if (!snapshot) {
     }
   }
   console.log(notes)
-  server.close()
+  opencode.server.close()
 }
 
 const pkgjsons = await Array.fromAsync(
@@ -94,10 +74,9 @@ const pkgjsons = await Array.fromAsync(
   }),
 ).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
 
-const tree = await $`git add . && git write-tree`.text().then((x) => x.trim())
 for (const file of pkgjsons) {
   let pkg = await Bun.file(file).text()
-  pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${version}"`)
+  pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
   console.log("updated:", file)
   await Bun.file(file).write(pkg)
 }
@@ -115,23 +94,12 @@ await import(`../packages/plugin/script/publish.ts`)
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
-if (!snapshot) {
-  await $`git commit -am "release: v${version}"`
-  await $`git tag v${version}`
+if (!Script.preview) {
+  await $`git commit -am "release: v${Script.version}"`
+  await $`git tag v${Script.version}`
   await $`git fetch origin`
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force`
 
-  await $`gh release create v${version} --title "v${version}" --notes ${notes.join("\n") ?? "No notable changes"} ./packages/opencode/dist/*.zip`
-}
-if (snapshot) {
-  await $`git checkout -b snapshot-${version}`
-  await $`git commit --allow-empty -m "Snapshot release v${version}"`
-  await $`git tag v${version}`
-  await $`git push origin v${version} --no-verify`
-  await $`git checkout dev`
-  await $`git branch -D snapshot-${version}`
-  for (const file of pkgjsons) {
-    await $`git checkout ${tree} ${file}`
-  }
+  await $`gh release create v${Script.version} --title "v${Script.version}" --notes ${notes.join("\n") ?? "No notable changes"} ./packages/opencode/dist/*.zip`
 }

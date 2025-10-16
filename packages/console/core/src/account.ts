@@ -1,12 +1,9 @@
 import { z } from "zod"
-import { and, eq, getTableColumns, isNull } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { fn } from "./util/fn"
 import { Database } from "./drizzle"
 import { Identifier } from "./identifier"
 import { AccountTable } from "./schema/account.sql"
-import { Actor } from "./actor"
-import { WorkspaceTable } from "./schema/workspace.sql"
-import { UserTable } from "./schema/user.sql"
 
 export namespace Account {
   export const create = fn(
@@ -46,16 +43,4 @@ export namespace Account {
         .then((rows) => rows[0])
     }),
   )
-
-  export const workspaces = async () => {
-    const actor = Actor.assert("account")
-    return Database.transaction(async (tx) =>
-      tx
-        .select(getTableColumns(WorkspaceTable))
-        .from(WorkspaceTable)
-        .innerJoin(UserTable, eq(UserTable.workspaceID, WorkspaceTable.id))
-        .where(and(eq(UserTable.accountID, actor.properties.accountID), isNull(WorkspaceTable.timeDeleted)))
-        .execute(),
-    )
-  }
 }

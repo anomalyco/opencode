@@ -1069,7 +1069,7 @@ func (a Model) home() (string, int, int) {
 
 		mainLayout = layout.PlaceOverlay(
 			editorX,
-			editorY-overlayHeight+1,
+			editorY-overlayHeight+2,
 			overlay,
 			mainLayout,
 		)
