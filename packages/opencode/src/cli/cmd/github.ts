@@ -189,7 +189,7 @@ export const GithubInstallCommand = cmd({
             }
 
             // Get repo info
-            const info = await $`git remote get-url origin`.quiet().nothrow().text()
+            const info = (await $`git remote get-url origin`.quiet().nothrow().text()).trim()
             // match https or git pattern
             // ie. https://github.com/sst/opencode.git
             // ie. https://github.com/sst/opencode
@@ -319,33 +319,33 @@ export const GithubInstallCommand = cmd({
 
             await Bun.write(
               path.join(app.root, WORKFLOW_FILE),
-              `
-    name: opencode
+              `name: opencode
 
-    on:
-      issue_comment:
-        types: [created]
+on:
+  issue_comment:
+    types: [created]
 
-    jobs:
-      opencode:
-        if: |
-          contains(github.event.comment.body, ' /oc') ||
-          startsWith(github.event.comment.body, '/oc') ||
-          contains(github.event.comment.body, ' /opencode') ||
-          startsWith(github.event.comment.body, '/opencode')
-        runs-on: ubuntu-latest
-        permissions:
-          contents: read
-          id-token: write
-        steps:
-          - name: Checkout repository
-            uses: actions/checkout@v4
+jobs:
+  opencode:
+    if: |
+      contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, ' /opencode') ||
+      startsWith(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-          - name: Run opencode
-            uses: sst/opencode/github@latest${envStr}
-            with:
-              model: ${provider}/${model}
-    `.trim(),
+      - name: Run opencode
+        uses: sst/opencode/github@latest${envStr}
+        with:
+          model: ${provider}/${model}`,
             )
 
             prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
