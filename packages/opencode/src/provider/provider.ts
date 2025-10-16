@@ -416,8 +416,9 @@ export namespace Provider {
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
-          const signals: AbortSignal[] = [AbortSignal.timeout(options["timeout"])]
+          const signals: AbortSignal[] = []
           if (signal) signals.push(signal)
+          signals.push(AbortSignal.timeout(options["timeout"]))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
