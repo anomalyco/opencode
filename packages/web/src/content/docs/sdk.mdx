@@ -285,7 +285,8 @@ const content = await client.file.read({
 
 // Handle text vs binary content
 if (content.type === "binary") {
-  const dataUrl = `data:${content.mimeType};base64,${content.content}`
+  // Binary payloads are base64 encoded for JSON transport
+  const dataUrl = `data:${content.mimeType};${content.encoding},${content.content}`
   // For images, you can render <img src={dataUrl} /> in a browser context
 } else {
   // Text content with optional diff/patch metadata

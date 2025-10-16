@@ -68,35 +68,13 @@ export namespace File {
         type: z.literal("binary"),
         content: z.string(),
         mimeType: z.string(),
+        encoding: z.literal("base64"),
       }),
     ])
     .meta({
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
-
-  function getMimeType(filepath: string): string {
-    const ext = path.extname(filepath).toLowerCase()
-    const mimeTypes: Record<string, string> = {
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".png": "image/png",
-      ".gif": "image/gif",
-      ".bmp": "image/bmp",
-      ".webp": "image/webp",
-      ".ico": "image/x-icon",
-      ".svg": "image/svg+xml",
-      ".zip": "application/zip",
-      ".tar": "application/x-tar",
-      ".gz": "application/gzip",
-      ".pdf": "application/pdf",
-      ".wasm": "application/wasm",
-      ".exe": "application/x-msdownload",
-      ".dll": "application/x-msdownload",
-      ".so": "application/x-sharedlib",
-    }
-    return mimeTypes[ext] || "application/octet-stream"
-  }
 
   async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
     const ext = path.extname(filepath).toLowerCase()
@@ -254,8 +232,10 @@ export namespace File {
 
     if (isBinary) {
       const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+      // Base64 keeps binary payloads safe inside the JSON API response
       const content = Buffer.from(buffer).toString("base64")
-      return { type: "binary", content, mimeType: getMimeType(full) }
+      const mimeType = bunFile.type || "application/octet-stream"
+      return { type: "binary", content, mimeType, encoding: "base64" }
     }
 
     const content = await bunFile
