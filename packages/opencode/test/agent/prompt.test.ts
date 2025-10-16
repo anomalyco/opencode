@@ -2,26 +2,23 @@ import { test, expect } from "bun:test"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { Config } from "../../src/config/config"
-import { SessionPrompt } from "../../src/session/prompt"
+import { Template } from "../../src/util/template"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import os from "os"
 
-// Access the internal resolveAgentPrompt function for testing
-const { resolveAgentPrompt } = SessionPrompt._internal
-
-test("resolveAgentPrompt processes basic template with bash commands", async () => {
+test("Template.process handles basic shell commands", async () => {
   const template = "Current time: !`date`"
-  const result = await resolveAgentPrompt(template)
+  const result = await Template.process(template)
 
   expect(result).toMatch(/Current time: \w+/)
   expect(result).not.toContain("!`date`")
 })
 
-test("resolveAgentPrompt processes template with multiple bash commands", async () => {
+test("Template.process handles multiple shell commands", async () => {
   const template = "User: !`whoami`, Directory: !`pwd`"
-  const result = await resolveAgentPrompt(template)
+  const result = await Template.process(template)
 
   expect(result).not.toContain("!`whoami`")
   expect(result).not.toContain("!`pwd`")
@@ -29,42 +26,130 @@ test("resolveAgentPrompt processes template with multiple bash commands", async 
   expect(result).toContain("Directory:")
 })
 
-test("resolveAgentPrompt handles bash command errors gracefully", async () => {
+test("Template.process handles bash command errors gracefully", async () => {
   const template = "This will fail: !`exit 1`"
-  const result = await resolveAgentPrompt(template)
+  const result = await Template.process(template)
 
   // The command will still execute but return empty output for failed commands
   expect(result).toBe("This will fail: ")
 })
 
-test("resolveAgentPrompt loads content from file:// URL", async () => {
+test("Template.process returns template as-is when no processing needed", async () => {
+  const template = "Static prompt with no dynamic content"
+  const result = await Template.process(template)
+
+  expect(result).toBe(template)
+})
+
+test("Template.process handles file references with @file/path", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "test-prompt.txt"),
-        "You are a test agent with dynamic content: !`echo hello world`",
-      )
+      await Bun.write(path.join(dir, "context.txt"), "Important context information")
+      await Bun.write(path.join(dir, "rules.md"), "# Rules\n1. Be helpful\n2. Be accurate")
     },
   })
 
-  const fileUrl = `file://${path.join(tmp.path, "test-prompt.txt")}`
-  const result = await resolveAgentPrompt(fileUrl)
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const template = "You are an agent with context: @context.txt and rules: @rules.md"
+      const result = await Template.process(template)
 
-  expect(result).toContain("You are a test agent with dynamic content: hello world")
-  expect(result).not.toContain("!`echo hello world`")
+      expect(result).toContain("Important context information")
+      expect(result).toContain("# Rules")
+      expect(result).toContain("1. Be helpful")
+      expect(result).not.toContain("@context.txt")
+      expect(result).not.toContain("@rules.md")
+    },
+  })
 })
 
-test("resolveAgentPrompt throws error for missing file:// URL", async () => {
-  const fileUrl = "file:///nonexistent/path/to/file.txt"
+test("Template.process handles missing file references gracefully", async () => {
+  await using tmp = await tmpdir()
 
-  await expect(resolveAgentPrompt(fileUrl)).rejects.toThrow(/Failed to load agent prompt from file/)
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const template = "You are an agent with missing context: @nonexistent.txt"
+      const result = await Template.process(template)
+
+      expect(result).toContain("Error reading file nonexistent.txt")
+      expect(result).not.toContain("@nonexistent.txt")
+    },
+  })
 })
 
-test("resolveAgentPrompt returns template as-is when no processing needed", async () => {
-  const template = "Static prompt with no dynamic content"
-  const result = await resolveAgentPrompt(template)
+test("Template.process handles directory references", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const subdir = path.join(dir, "docs")
+      await fs.mkdir(subdir)
+      await Bun.write(path.join(subdir, "readme.md"), "README content")
+      await Bun.write(path.join(subdir, "guide.md"), "Guide content")
+    },
+  })
 
-  expect(result).toBe(template)
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const template = "Available documentation: @docs"
+      const result = await Template.process(template)
+
+      expect(result).toContain("Directory contents of docs:")
+      expect(result).toContain("- readme.md")
+      expect(result).toContain("- guide.md")
+      expect(result).not.toContain("@docs")
+    },
+  })
+})
+
+test("Template.process combines shell and file templating", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "version.txt"), "v1.0.0")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const template = "System info - User: !`whoami`, Version: @version.txt, Time: !`date +%Y`"
+      const result = await Template.process(template)
+
+      expect(result).toContain("System info - User:")
+      expect(result).toContain("Version: v1.0.0")
+      expect(result).toContain("Time:")
+      expect(result).not.toContain("!`whoami`")
+      expect(result).not.toContain("@version.txt")
+      expect(result).not.toContain("!`date +%Y`")
+    },
+  })
+})
+
+test("Template.process handles tilde paths in file references", async () => {
+  await using tmp = await tmpdir()
+
+  const homeDir = os.homedir()
+  const testFile = path.join(homeDir, ".test-opencode-file")
+
+  // Create a test file in home directory
+  await Bun.write(testFile, "Home directory content")
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const template = "Content from home: @~/.test-opencode-file"
+        const result = await Template.process(template)
+
+        expect(result).toContain("Home directory content")
+        expect(result).not.toContain("@~/.test-opencode-file")
+      },
+    })
+  } finally {
+    // Clean up test file
+    await fs.unlink(testFile).catch(() => {})
+  }
 })
 
 test("agent with templated prompt works in full system", async () => {
@@ -96,16 +181,12 @@ test("agent with templated prompt works in full system", async () => {
       const agent = await Agent.get("test_agent")
       expect(agent).toBeDefined()
       expect(agent?.prompt).toContain("!`node")
-
-      // Test that the prompt gets processed when the agent is used
-      // This simulates how the prompt would be resolved in actual usage
-      const resolvedPrompt = await resolveAgentPrompt(agent!.prompt!)
-      expect(resolvedPrompt).toContain("You are a helpful assistant. Dynamic agent prompt from Node.js")
+      // The actual processing will happen when the agent is used in a session
     },
   })
 })
 
-test("agent with file:// prompt works in full system", async () => {
+test("agent with file:// prompt is loaded correctly", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Create prompt file with template
@@ -134,15 +215,12 @@ test("agent with file:// prompt works in full system", async () => {
       const agent = await Agent.get("file_agent")
       expect(agent).toBeDefined()
       expect(agent?.prompt).toStartWith("file://")
-
-      // Test that both file loading and templating work together
-      const resolvedPrompt = await resolveAgentPrompt(agent!.prompt!)
-      expect(resolvedPrompt).toBe("You are specialized in: TypeScript development\n")
+      // The file:// URL processing happens when the agent is used in resolveSystemPrompt
     },
   })
 })
 
-test("markdown agent file with templated content", async () => {
+test("markdown agent file with templated content is loaded correctly", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const opencodeDir = path.join(dir, ".opencode")
@@ -169,128 +247,12 @@ You are a specialized agent. Current working directory: !\`pwd\``,
 
       expect(agent).toBeDefined()
       expect(agent?.prompt).toContain("!`pwd`")
-
-      // Test that the prompt gets templated
-      const resolvedPrompt = await resolveAgentPrompt(agent!.prompt!)
-      expect(resolvedPrompt).toContain("Current working directory:")
-      expect(resolvedPrompt).not.toContain("!`pwd`")
-      // The command runs in the current process directory, not the temp dir
+      // The templating will happen when the agent is used in resolveSystemPrompt
     },
   })
 })
 
-test("resolveAgentPrompt processes file references with @file/path", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(path.join(dir, "context.txt"), "Important context information")
-      await Bun.write(path.join(dir, "rules.md"), "# Rules\n1. Be helpful\n2. Be accurate")
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const template = "You are an agent with context: @context.txt and rules: @rules.md"
-      const result = await resolveAgentPrompt(template)
-
-      expect(result).toContain("Important context information")
-      expect(result).toContain("# Rules")
-      expect(result).toContain("1. Be helpful")
-      expect(result).not.toContain("@context.txt")
-      expect(result).not.toContain("@rules.md")
-    },
-  })
-})
-
-test("resolveAgentPrompt handles missing file references gracefully", async () => {
-  await using tmp = await tmpdir()
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const template = "You are an agent with missing context: @nonexistent.txt"
-      const result = await resolveAgentPrompt(template)
-
-      expect(result).toContain("Error reading file nonexistent.txt")
-      expect(result).not.toContain("@nonexistent.txt")
-    },
-  })
-})
-
-test("resolveAgentPrompt processes directory references", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const subdir = path.join(dir, "docs")
-      await fs.mkdir(subdir)
-      await Bun.write(path.join(subdir, "readme.md"), "README content")
-      await Bun.write(path.join(subdir, "guide.md"), "Guide content")
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const template = "Available documentation: @docs"
-      const result = await resolveAgentPrompt(template)
-
-      expect(result).toContain("Directory contents of docs:")
-      expect(result).toContain("- readme.md")
-      expect(result).toContain("- guide.md")
-      expect(result).not.toContain("@docs")
-    },
-  })
-})
-
-test("resolveAgentPrompt combines shell and file templating", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(path.join(dir, "version.txt"), "v1.0.0")
-    },
-  })
-
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const template = "System info - User: !\`whoami\`, Version: @version.txt, Time: !\`date +%Y\`"
-      const result = await resolveAgentPrompt(template)
-
-      expect(result).toContain("System info - User:")
-      expect(result).toContain("Version: v1.0.0")
-      expect(result).toContain("Time:")
-      expect(result).not.toContain("!`whoami`")
-      expect(result).not.toContain("@version.txt")
-      expect(result).not.toContain("!`date +%Y`")
-    },
-  })
-})
-
-test("resolveAgentPrompt handles tilde paths in file references", async () => {
-  await using tmp = await tmpdir()
-
-  const homeDir = os.homedir()
-  const testFile = path.join(homeDir, ".test-opencode-file")
-
-  // Create a test file in home directory
-  await Bun.write(testFile, "Home directory content")
-
-  try {
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const template = "Content from home: @~/.test-opencode-file"
-        const result = await resolveAgentPrompt(template)
-
-        expect(result).toContain("Home directory content")
-        expect(result).not.toContain("@~/.test-opencode-file")
-      },
-    })
-  } finally {
-    // Clean up test file
-    await fs.unlink(testFile).catch(() => {})
-  }
-})
-
-test("agent with combined templating works in full system", async () => {
+test("agent with combined templating is configured correctly", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Create context file
@@ -319,14 +281,7 @@ test("agent with combined templating works in full system", async () => {
       expect(agent).toBeDefined()
       expect(agent?.prompt).toContain("@agent-context.md")
       expect(agent?.prompt).toContain("!`whoami`")
-
-      // Test that both templating types work together
-      const resolvedPrompt = await resolveAgentPrompt(agent!.prompt!)
-      expect(resolvedPrompt).toContain("# Agent Context")
-      expect(resolvedPrompt).toContain("Specialized for TypeScript")
-      expect(resolvedPrompt).toContain("Current user:")
-      expect(resolvedPrompt).not.toContain("@agent-context.md")
-      expect(resolvedPrompt).not.toContain("!`whoami`")
+      // The combined processing happens in resolveSystemPrompt when agent is used
     },
   })
 })

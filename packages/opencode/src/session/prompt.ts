@@ -395,26 +395,6 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  /**
-   * Resolve an agent prompt with support for file:// URLs and templating
-   */
-  async function resolveAgentPrompt(prompt: string): Promise<string> {
-    // Handle file:// URLs
-    if (prompt.startsWith("file://")) {
-      const filePath = fileURLToPath(prompt)
-      try {
-        prompt = await Bun.file(filePath).text()
-      } catch (error) {
-        throw new Error(
-          `Failed to load agent prompt from file: ${filePath}. ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-    }
-
-    // Process templates (bash commands in !`...` syntax)
-    return await Template.process(prompt)
-  }
-
   async function resolveSystemPrompt(input: {
     system?: string
     agent: Agent.Info
@@ -425,7 +405,24 @@ export namespace SessionPrompt {
     system.push(
       ...(await (async () => {
         if (input.system) return [input.system]
-        if (input.agent.prompt) return [await resolveAgentPrompt(input.agent.prompt)]
+        if (input.agent.prompt) {
+          let prompt = input.agent.prompt
+
+          // Handle file:// URLs
+          if (prompt.startsWith("file://")) {
+            const filePath = fileURLToPath(prompt)
+            try {
+              prompt = await Bun.file(filePath).text()
+            } catch (error) {
+              throw new Error(
+                `Failed to load agent prompt from file: ${filePath}. ${error instanceof Error ? error.message : String(error)}`,
+              )
+            }
+          }
+
+          // Process templates (bash commands and file references)
+          return [await Template.process(prompt)]
+        }
         return SystemPrompt.provider(input.modelID)
       })()),
     )
@@ -1688,10 +1685,5 @@ export namespace SessionPrompt {
       .catch((error) => {
         log.error("failed to generate title", { error, model: small.info.id })
       })
-  }
-
-  // Export for testing
-  export const _internal = {
-    resolveAgentPrompt,
   }
 }
