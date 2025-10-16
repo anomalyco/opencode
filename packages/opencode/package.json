@@ -33,10 +33,14 @@
     "@opencode-ai/script": "workspace:*"
   },
   "dependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
+    "@octokit/graphql": "9.0.2",
+    "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
