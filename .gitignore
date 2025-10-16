@@ -10,3 +10,4 @@ playground
 tmp
 dist
 .turbo
+hugo/
