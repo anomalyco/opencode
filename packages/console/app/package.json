@@ -2,7 +2,7 @@
   "name": "@opencode-ai/console-app",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "dev": "vinxi dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",
@@ -23,7 +23,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   },
   "engines": {
     "node": ">=22"

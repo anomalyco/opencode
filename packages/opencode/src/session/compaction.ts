@@ -1,4 +1,4 @@
-import { generateText, type ModelMessage } from "ai"
+import { streamText, type ModelMessage } from "ai"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -122,7 +122,19 @@ export namespace SessionCompaction {
         created: Date.now(),
       },
     })) as MessageV2.Assistant
-    const generated = await generateText({
+    const part = (await Session.updatePart({
+      type: "text",
+      sessionID: input.sessionID,
+      messageID: msg.id,
+      id: Identifier.ascending("part"),
+      text: "",
+      time: {
+        start: Date.now(),
+      },
+    })) as MessageV2.TextPart
+
+    let summaryText = ""
+    const stream = streamText({
       maxRetries: 10,
       model: model.language,
       providerOptions: {
@@ -147,23 +159,35 @@ export namespace SessionCompaction {
         },
       ],
     })
-    const usage = Session.getUsage({ model: model.info, usage: generated.usage, metadata: generated.providerMetadata })
-    msg.cost += usage.cost
-    msg.tokens = usage.tokens
-    msg.summary = true
-    msg.time.completed = Date.now()
-    await Session.updateMessage(msg)
-    const part = await Session.updatePart({
-      type: "text",
-      sessionID: input.sessionID,
-      messageID: msg.id,
-      id: Identifier.ascending("part"),
-      text: generated.text,
-      time: {
-        start: Date.now(),
-        end: Date.now(),
-      },
-    })
+
+    for await (const value of stream.fullStream) {
+      switch (value.type) {
+        case "text-delta":
+          summaryText += value.text
+          await Session.updatePart({
+            ...part,
+            text: summaryText,
+          })
+          break
+        case "text-end":
+          part.text = summaryText
+          await Session.updatePart({
+            ...part,
+          })
+          break
+        case "finish": {
+          const usage = Session.getUsage({ model: model.info, usage: value.totalUsage, metadata: undefined })
+          msg.cost += usage.cost
+          msg.tokens = usage.tokens
+          msg.summary = true
+          msg.time.completed = Date.now()
+          await Session.updateMessage(msg)
+          part.time!.end = Date.now()
+          await Session.updatePart(part)
+          break
+        }
+      }
+    }
 
     Bus.publish(Event.Compacted, {
       sessionID: input.sessionID,

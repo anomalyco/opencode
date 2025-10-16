@@ -120,6 +120,10 @@ export default {
 
         if (!email) throw new Error("No email found")
 
+        if (Resource.App.stage !== "production" && !email.endsWith("@anoma.ly")) {
+          throw new Error("Invalid email")
+        }
+
         let accountID = await Account.fromEmail(email).then((x) => x?.id)
         if (!accountID) {
           console.log("creating account for", email)

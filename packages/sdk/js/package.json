@@ -4,7 +4,7 @@
   "version": "0.15.3",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "build": "./script/build.ts"
   },
   "exports": {
@@ -19,7 +19,8 @@
     "@hey-api/openapi-ts": "0.81.0",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   },
   "dependencies": {},
   "publishConfig": {

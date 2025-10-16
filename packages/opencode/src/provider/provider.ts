@@ -69,7 +69,7 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (options?.["useCompletionUrls"]) {
-            return sdk.completion(modelID)
+            return sdk.chat(modelID)
           } else {
             return sdk.responses(modelID)
           }
@@ -120,12 +120,17 @@ export namespace Provider {
               break
             }
             case "ap": {
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                modelID.includes(m),
-              )
-              if (modelRequiresPrefix) {
-                regionPrefix = "apac"
-                modelID = `${regionPrefix}.${modelID}`
+              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              if (isAustraliaRegion && modelID.startsWith("anthropic.claude-sonnet-4-5")) {
+                modelID = `au.${modelID}`
+              } else {
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "apac"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               }
               break
             }
@@ -356,7 +361,10 @@ export namespace Provider {
               modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
-          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
+          .filter(
+            ([, model]) =>
+              (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
+          ),
       )
       provider.info.models = filteredModels
 

@@ -76,7 +76,7 @@ Take a look at the git history to see what kind of PRs we end up merging.
 
 To run OpenCode locally you need.
 
-- Bun
+- Bun 1.3 or higher
 - Golang 1.24.x
 
 And run.

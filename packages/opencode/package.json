@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run ./src/index.ts"
@@ -27,6 +27,7 @@
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
@@ -38,6 +39,7 @@
     "@modelcontextprotocol/sdk": "1.15.1",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@parcel/watcher": "2.5.1",
     "@standard-schema/spec": "1.0.0",

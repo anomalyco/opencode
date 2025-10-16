@@ -46,7 +46,7 @@ export namespace Installation {
   }
 
   export function isLocal() {
-    return typeof OPENCODE_CHANNEL !== "string"
+    return CHANNEL === "local"
   }
 
   export async function method() {
@@ -137,8 +137,8 @@ export namespace Installation {
       })
   }
 
-  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "dev"
-  export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "dev"
+  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
+  export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}`
 
   export async function latest() {

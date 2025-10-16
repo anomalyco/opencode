@@ -43,7 +43,7 @@ export default function Home() {
     <main data-page="opencode">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
       <Title>OpenCode | The AI coding agent built for the terminal</Title>
-      <Link rel="icon" type="image/svg+xml" href="/favicon-zen.svg" />
+      <Link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">

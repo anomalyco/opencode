@@ -25,6 +25,7 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
@@ -32,6 +33,8 @@ import { lazy } from "../util/lazy"
 import { Todo } from "../session/todo"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { MCP } from "../mcp"
+import { Storage } from "../storage/storage"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
 
 const ERRORS = {
   400: {
@@ -41,16 +44,32 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.record(z.string(), z.any()),
+              data: z.any().nullable(),
+              errors: z.array(z.record(z.string(), z.any())),
+              success: z.literal(false),
             })
             .meta({
-              ref: "Error",
+              ref: "BadRequestError",
             }),
         ),
       },
     },
   },
+  404: {
+    description: "Not found",
+    content: {
+      "application/json": {
+        schema: resolver(
+          Storage.NotFoundError.Schema
+        )
+      },
+    },
+  },
 } as const
+
+function errors(...codes: number[]) {
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
+}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -67,13 +86,18 @@ export namespace Server {
           error: err,
         })
         if (err instanceof NamedError) {
-          return c.json(err.toObject(), {
-            status: 400,
-          })
+          let status: ContentfulStatusCode
+          if (err instanceof Storage.NotFoundError)
+            status = 404
+          else if (err instanceof Provider.ModelNotFoundError)
+            status = 400
+          else
+            status = 500
+          return c.json(err.toObject(), { status })
         }
         const message = err instanceof Error && err.stack ? err.stack : err.toString()
         return c.json(new NamedError.Unknown({ message }).toObject(), {
-          status: 400,
+          status: 500,
         })
       })
       .use(async (c, next) => {
@@ -152,7 +176,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator("json", Config.Info),
@@ -176,7 +200,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         async (c) => {
@@ -209,7 +233,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(
@@ -304,6 +328,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -332,6 +357,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -360,6 +386,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -380,7 +407,7 @@ export namespace Server {
           description: "Create a new session",
           operationId: "session.create",
           responses: {
-            ...ERRORS,
+            ...errors(400),
             200: {
               description: "Successfully created session",
               content: {
@@ -412,6 +439,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -439,6 +467,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -480,6 +509,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -540,6 +570,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -549,7 +580,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionPrompt.abort(c.req.valid("param").id))
+          return c.json(SessionLock.abort(c.req.valid("param").id))
         },
       )
       .post(
@@ -566,6 +597,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -595,6 +627,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -624,6 +657,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -660,6 +694,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -692,6 +727,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -726,6 +762,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -761,6 +798,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -791,6 +829,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -821,6 +860,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -851,6 +891,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -878,6 +919,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -1131,6 +1173,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1222,6 +1265,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1354,6 +1398,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1405,7 +1450,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(

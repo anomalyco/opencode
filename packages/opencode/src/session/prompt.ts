@@ -22,6 +22,7 @@ import {
   jsonSchema,
 } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionLock } from "./lock"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -65,7 +66,6 @@ export namespace SessionPrompt {
 
   const state = Instance.state(
     () => {
-      const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
         {
@@ -75,14 +75,11 @@ export namespace SessionPrompt {
       >()
 
       return {
-        pending,
         queued,
       }
     },
-    async (state) => {
-      for (const [_, controller] of state.pending) {
-        controller.abort()
-      }
+    async (current) => {
+      current.queued.clear()
     },
   )
 
@@ -1179,30 +1176,20 @@ export namespace SessionPrompt {
   }
 
   function isBusy(sessionID: string) {
-    return state().pending.has(sessionID)
-  }
-
-  export function abort(sessionID: string) {
-    const controller = state().pending.get(sessionID)
-    if (!controller) return false
-    log.info("aborting", {
-      sessionID,
-    })
-    controller.abort()
-    state().pending.delete(sessionID)
-    return true
+    return SessionLock.isLocked(sessionID)
   }
 
   function lock(sessionID: string) {
+    const handle = SessionLock.acquire({
+      sessionID,
+    })
     log.info("locking", { sessionID })
-    if (state().pending.has(sessionID)) throw new Error("TODO")
-    const controller = new AbortController()
-    state().pending.set(sessionID, controller)
     return {
-      signal: controller.signal,
+      signal: handle.signal,
+      abort: handle.abort,
       async [Symbol.dispose]() {
+        handle[Symbol.dispose]()
         log.info("unlocking", { sessionID })
-        state().pending.delete(sessionID)
 
         const session = await Session.get(sessionID)
         if (session.parentID) return

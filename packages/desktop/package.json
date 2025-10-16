@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "license": "MIT",
   "devDependencies": {
@@ -17,6 +17,7 @@
     "@types/luxon": "3.7.1",
     "@types/node": "catalog:",
     "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
     "vite-plugin-solid": "catalog:"

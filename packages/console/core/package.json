@@ -27,7 +27,7 @@
     "update-models": "script/update-models.ts",
     "promote-models-to-dev": "script/promote-models.ts dev",
     "promote-models-to-prod": "script/promote-models.ts production",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
@@ -36,6 +36,7 @@
     "@types/node": "catalog:",
     "drizzle-kit": "0.30.5",
     "mysql2": "3.14.4",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   }
 }
