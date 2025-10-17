@@ -1,5 +1,6 @@
 import { SyntaxStyle, RGBA } from "@opentui/core"
-import { createSignal, createMemo } from "solid-js"
+import { createMemo, createSignal, createEffect } from "solid-js"
+import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
 import ayu from "../../../../../../tui/internal/theme/themes/ayu.json" with { type: "json" }
@@ -23,6 +24,7 @@ import synthwave84 from "../../../../../../tui/internal/theme/themes/synthwave84
 import tokyonight from "../../../../../../tui/internal/theme/themes/tokyonight.json" with { type: "json" }
 import vesper from "../../../../../../tui/internal/theme/themes/vesper.json" with { type: "json" }
 import zenburn from "../../../../../../tui/internal/theme/themes/zenburn.json" with { type: "json" }
+import { iife } from "@/util/iife"
 
 type Theme = {
   primary: RGBA
@@ -95,7 +97,7 @@ export const THEMES = {
   matrix: resolveTheme(matrix),
   monokai: resolveTheme(monokai),
   nord: resolveTheme(nord),
-  onedark: resolveTheme(onedark),
+  ["one-dark"]: resolveTheme(onedark),
   opencode: resolveTheme(opencode),
   palenight: resolveTheme(palenight),
   rosepine: resolveTheme(rosepine),
@@ -110,7 +112,8 @@ function resolveTheme(theme: ThemeJson) {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
     if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
-    else return resolveColor(c.dark) // TODO: opentui doesn't have the equivalent of lipgloss adaptiveColor yet
+    // TODO: support light theme when opentui has the equivalent of lipgloss.AdaptiveColor
+    return resolveColor(c.dark)
   }
   return Object.fromEntries(
     Object.entries(theme.theme).map(([key, value]) => {
@@ -302,7 +305,21 @@ const syntaxThemeDark = [
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: () => {
-    const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("tokyonight")
+    const sync = useSync()
+    const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("opencode")
+
+    createEffect(() => {
+      if (!sync.ready) return
+      setSelectedTheme(
+        iife(() => {
+          if (typeof sync.data.config.theme === "string" && sync.data.config.theme in THEMES) {
+            return sync.data.config.theme as keyof typeof THEMES
+          }
+          return "opencode"
+        }),
+      )
+    })
+
     const theme = createMemo(() => THEMES[selectedTheme()])
     const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
 
@@ -311,6 +328,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       syntaxTheme,
       selectedTheme,
       setSelectedTheme,
+      get ready() {
+        return sync.ready
+      },
     }
   },
 })
