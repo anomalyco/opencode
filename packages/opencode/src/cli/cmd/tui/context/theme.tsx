@@ -1,5 +1,6 @@
 import { SyntaxStyle, RGBA } from "@opentui/core"
 import { createSignal, createMemo } from "solid-js"
+import { createSimpleContext } from "./helper"
 import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
 import ayu from "../../../../../../tui/internal/theme/themes/ayu.json" with { type: "json" }
 import catppuccin from "../../../../../../tui/internal/theme/themes/catppuccin.json" with { type: "json" }
@@ -298,7 +299,22 @@ const syntaxThemeDark = [
   },
 ]
 
-export const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("tokyonight")
-export const Theme = createMemo(() => THEMES[selectedTheme()])
-// TODO: switch this
-export const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
+export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
+  name: "Theme",
+  init: () => {
+    const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("tokyonight")
+    const themeValue = createMemo(() => THEMES[selectedTheme()])
+    const syntaxThemeValue = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
+
+    return {
+      get theme() {
+        return themeValue()
+      },
+      get syntaxTheme() {
+        return syntaxThemeValue()
+      },
+      selectedTheme,
+      setSelectedTheme,
+    }
+  },
+})

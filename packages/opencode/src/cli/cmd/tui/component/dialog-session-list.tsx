@@ -5,12 +5,13 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
-import { Theme } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 
 export function DialogSessionList() {
   const dialog = useDialog()
   const sync = useSync()
+  const { theme } = useTheme()
   const route = useRoute()
   const sdk = useSDK()
 
@@ -29,7 +30,7 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         return {
           title: isDeleting ? "Press delete again to confirm" : x.title,
-          bg: isDeleting ? Theme().error : undefined,
+          bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),

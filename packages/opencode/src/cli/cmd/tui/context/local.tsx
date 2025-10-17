@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
-import { Theme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@/global"
@@ -20,6 +20,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }>({
         current: agents()[0].name,
       })
+      const { theme } = useTheme()
       return {
         list() {
           return agents()
@@ -44,7 +45,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         color(name: string) {
           const index = agents().findIndex((x) => x.name === name)
-          const colors = [Theme().secondary, Theme().accent, Theme().success, Theme().warning, Theme().primary, Theme().error]
+          const colors = [theme.secondary, theme.accent, theme.success, theme.warning, theme.primary, theme.error]
           return colors[index % colors.length]
         },
       }

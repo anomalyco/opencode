@@ -1,9 +1,10 @@
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
-import { THEMES, selectedTheme, setSelectedTheme } from "../context/theme"
+import { THEMES, useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { onCleanup } from "solid-js"
 
 export function DialogThemeList() {
+  const { selectedTheme, setSelectedTheme } = useTheme()
   const options = Object.keys(THEMES).map((theme) => ({
     title: theme,
     value: theme as keyof typeof THEMES,
