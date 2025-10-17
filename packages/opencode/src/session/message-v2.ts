@@ -513,80 +513,66 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
-        result.push({
-          id: msg.info.id,
-          role: "assistant",
-          parts: msg.parts.flatMap((part): UIMessage["parts"] => {
-            if (part.type === "text")
-              return [
-                {
-                  type: "text",
-                  text: part.text,
-                  providerMetadata: part.metadata,
-                },
-              ]
-            if (part.type === "step-start")
-              return [
-                {
-                  type: "step-start",
-                },
-              ]
-            if (part.type === "tool") {
-              if (part.state.status === "completed") {
-                if (part.state.attachments?.length) {
-                  result.push({
-                    id: Identifier.ascending("message"),
-                    role: "user",
-                    parts: [
-                      {
-                        type: "text",
-                        text: `Tool ${part.tool} returned an attachment:`,
-                      },
-                      ...part.state.attachments.map((attachment) => ({
-                        type: "file" as const,
-                        url: attachment.url,
-                        mediaType: attachment.mime,
-                        filename: attachment.filename,
-                      })),
-                    ],
-                  })
-                }
-                return [
-                  {
-                    type: ("tool-" + part.tool) as `tool-${string}`,
-                    state: "output-available",
-                    toolCallId: part.callID,
-                    input: part.state.input,
-                    output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
-                    callProviderMetadata: part.metadata,
-                  },
-                ]
-              }
-              if (part.state.status === "error")
-                return [
-                  {
-                    type: ("tool-" + part.tool) as `tool-${string}`,
-                    state: "output-error",
-                    toolCallId: part.callID,
-                    input: part.state.input,
-                    errorText: part.state.error,
-                    callProviderMetadata: part.metadata,
-                  },
-                ]
-            }
-            if (part.type === "reasoning") {
-              return [
-                {
-                  type: "reasoning",
-                  text: part.text,
-                  providerMetadata: part.metadata,
-                },
-              ]
-            }
+        const normal: UIMessage["parts"] = []
+        const tools: UIMessage["parts"] = []
 
-            return []
-          }),
-        })
+        for (const part of msg.parts) {
+          if (part.type === "text") {
+            normal.push({ type: "text", text: part.text, providerMetadata: part.metadata })
+            continue
+          }
+          if (part.type === "reasoning") {
+            normal.push({ type: "reasoning", text: part.text, providerMetadata: part.metadata })
+            continue
+          }
+          if (part.type === "step-start") {
+            normal.push({ type: "step-start" })
+            continue
+          }
+          if (part.type === "tool") {
+            if (part.state.status === "completed") {
+              if (part.state.attachments?.length) {
+                result.push({
+                  id: Identifier.ascending("message"),
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: `Tool ${part.tool} returned an attachment:`,
+                    },
+                    ...part.state.attachments.map((attachment) => ({
+                      type: "file" as const,
+                      url: attachment.url,
+                      mediaType: attachment.mime,
+                      filename: attachment.filename,
+                    })),
+                  ],
+                })
+              }
+              tools.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-available",
+                toolCallId: part.callID,
+                input: part.state.input,
+                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                callProviderMetadata: part.metadata,
+              })
+            }
+            if (part.state.status === "error") {
+              tools.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-error",
+                toolCallId: part.callID,
+                input: part.state.input,
+                errorText: part.state.error,
+                callProviderMetadata: part.metadata,
+              })
+            }
+            continue
+          }
+        }
+
+        result.push({ id: msg.info.id, role: "assistant", parts: [...normal, ...tools] })
       }
     }
 
