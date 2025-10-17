@@ -5,7 +5,7 @@ import { createMemo, createResource, createEffect, onMount, For, Show } from "so
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
-import { Theme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import type { PromptInfo } from "./history"
@@ -34,6 +34,7 @@ export function Autocomplete(props: {
   const sdk = useSDK()
   const sync = useSync()
   const command = useCommandDialog()
+  const { theme } = useTheme()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -300,7 +301,7 @@ export function Autocomplete(props: {
       zIndex={100}
       {...SplitBorder}
     >
-      <box backgroundColor={Theme().backgroundElement} height={height()}>
+      <box backgroundColor={theme.backgroundElement} height={height()}>
         <For
           each={options()}
           fallback={
@@ -313,12 +314,12 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? Theme().primary : undefined}
+              backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? Theme().background : Theme().text}>{option.display}</text>
+              <text fg={index() === store.selected ? theme.background : theme.text}>{option.display}</text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? Theme().background : Theme().textMuted}> {option.description}</text>
+                <text fg={index() === store.selected ? theme.background : theme.textMuted}> {option.description}</text>
               </Show>
             </box>
           )}

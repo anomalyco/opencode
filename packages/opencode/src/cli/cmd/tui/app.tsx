@@ -16,7 +16,7 @@ import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
-import { Theme } from "@tui/context/theme"
+import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
@@ -32,15 +32,17 @@ export async function tui(input: { url: string; onExit?: () => Promise<void> }) 
             <SDKProvider url={input.url}>
               <SyncProvider>
                 <LocalProvider>
-                  <KeybindProvider>
-                    <DialogProvider>
-                      <CommandProvider>
-                        <PromptHistoryProvider>
-                          <App />
-                        </PromptHistoryProvider>
-                      </CommandProvider>
-                    </DialogProvider>
-                  </KeybindProvider>
+                  <ThemeProvider>
+                    <KeybindProvider>
+                      <DialogProvider>
+                        <CommandProvider>
+                          <PromptHistoryProvider>
+                            <App />
+                          </PromptHistoryProvider>
+                        </CommandProvider>
+                      </DialogProvider>
+                    </KeybindProvider>
+                  </ThemeProvider>
                 </LocalProvider>
               </SyncProvider>
             </SDKProvider>
@@ -66,6 +68,7 @@ function App() {
   const local = useLocal()
   const command = useCommandDialog()
   const { event } = useSDK()
+  const { theme } = useTheme()
 
   useKeyboard(async (evt) => {
     if (evt.meta && evt.name === "t") {
@@ -183,7 +186,7 @@ function App() {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={Theme().background}
+      backgroundColor={theme.background}
       onMouseUp={async () => {
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
@@ -209,27 +212,27 @@ function App() {
       </box>
       <box
         height={1}
-        backgroundColor={Theme().backgroundPanel}
+        backgroundColor={theme.backgroundPanel}
         flexDirection="row"
         justifyContent="space-between"
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={Theme().backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={Theme().textMuted}>open</text>
+          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.textMuted}>open</text>
             <text attributes={TextAttributes.BOLD}>code </text>
-            <text fg={Theme().textMuted}>v{Installation.VERSION}</text>
+            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
           </box>
           <box paddingLeft={1} paddingRight={1}>
-            <text fg={Theme().textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
           </box>
         </box>
         <box flexDirection="row" flexShrink={0}>
-          <text fg={Theme().textMuted} paddingRight={1}>
+          <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
-          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={Theme().background} wrap={false}>
+          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
+          <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrap={false}>
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>
