@@ -6,10 +6,10 @@ import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage } from "@opencode-ai/sdk"
 
-  const { theme, syntaxTheme } = useTheme()
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
+  const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
 
@@ -38,23 +38,23 @@ export function Header() {
   })
 
   return (
-    <box paddingLeft={1} paddingRight={1} {...SplitBorder} borderColor={theme.backgroundElement} flexShrink={0}>
+    <box paddingLeft={1} paddingRight={1} {...SplitBorder} borderColor={theme().backgroundElement} flexShrink={0}>
       <text>
-        <span style={{ bold: true, fg: theme.accent }}>#</span> <span style={{ bold: true }}>{session().title}</span>
+        <span style={{ bold: true, fg: theme().accent }}>#</span> <span style={{ bold: true }}>{session().title}</span>
       </text>
       <box flexDirection="row" justifyContent="space-between">
         <Switch>
           <Match when={session().share?.url}>
-            <text fg={theme.textMuted}>{session().share!.url}</text>
+            <text fg={theme().textMuted}>{session().share!.url}</text>
           </Match>
           <Match when={true}>
             <text wrap={false}>
-              /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
+              /share <span style={{ fg: theme().textMuted }}>to create a shareable link</span>
             </text>
           </Match>
         </Switch>
         <Show when={context()}>
-          <text fg={theme.textMuted} wrap={false}>
+          <text fg={theme().textMuted} wrap={false}>
             {context()} ({cost()})
           </text>
         </Show>

@@ -303,16 +303,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: () => {
     const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("tokyonight")
-    const themeValue = createMemo(() => THEMES[selectedTheme()])
-    const syntaxThemeValue = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
+    const theme = createMemo(() => THEMES[selectedTheme()])
+    const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
 
     return {
-      get theme() {
-        return themeValue()
-      },
-      get syntaxTheme() {
-        return syntaxThemeValue()
-      },
+      theme,
+      syntaxTheme,
       selectedTheme,
       setSelectedTheme,
     }
