@@ -11,21 +11,22 @@ OpenCode integrates with your Language Server Protocol (LSP) to help the LLM int
 
 OpenCode comes with several built-in LSP servers for popular languages:
 
-| LSP Server | Extensions                                           | Requirements                        |
-| ---------- | ---------------------------------------------------- | ----------------------------------- |
-| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project  |
-| eslint     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project      |
-| gopls      | .go                                                  | `go` command available              |
-| ruby-lsp   | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available |
-| pyright    | .py, .pyi                                            | `pyright` dependency installed      |
-| elixir-ls  | .ex, .exs                                            | `elixir` command available          |
-| zls        | .zig, .zon                                           | `zig` command available             |
-| csharp     | .cs                                                  | `.NET SDK` installed                |
-| vue        | .vue                                                 | Auto-installs for Vue projects      |
-| rust       | .rs                                                  | `rust-analyzer` command available   |
-| clangd     | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects    |
-| svelte     | .svelte                                              | Auto-installs for Svelte projects   |
-| jdtls      | .java                                                | `Java SDK (version 21+)` installed  |
+| LSP Server | Extensions                                           | Requirements                                                 |
+| ---------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| typescript | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project                           |
+| deno       | .ts, .tsx, .js, .jsx, .mjs                           | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| eslint     | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project                               |
+| gopls      | .go                                                  | `go` command available                                       |
+| ruby-lsp   | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available                          |
+| pyright    | .py, .pyi                                            | `pyright` dependency installed                               |
+| elixir-ls  | .ex, .exs                                            | `elixir` command available                                   |
+| zls        | .zig, .zon                                           | `zig` command available                                      |
+| csharp     | .cs                                                  | `.NET SDK` installed                                         |
+| vue        | .vue                                                 | Auto-installs for Vue projects                               |
+| rust       | .rs                                                  | `rust-analyzer` command available                            |
+| clangd     | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects                             |
+| svelte     | .svelte                                              | Auto-installs for Svelte projects                            |
+| jdtls      | .java                                                | `Java SDK (version 21+)` installed                           |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 

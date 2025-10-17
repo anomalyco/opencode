@@ -1,6 +1,7 @@
 import { For, Match, Show, Switch, createSignal, splitProps } from "solid-js"
-import { Tabs } from "@/ui/tabs"
-import { FileIcon, Icon, IconButton, Logo, Tooltip } from "@/ui"
+import { Tabs, Tooltip } from "@opencode-ai/ui"
+import { Icon } from "@opencode-ai/ui"
+import { FileIcon, IconButton } from "@/ui"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -64,127 +65,119 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
   }
 
   return (
-    <div class="relative flex h-full flex-col">
-      <DragDropProvider
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        collisionDetector={closestCenter}
-      >
-        <DragDropSensors />
-        <ConstrainDragYAxis />
-        <Tabs
-          class="relative grow w-full flex flex-col h-full"
-          value={local.file.active()?.path}
-          onChange={handleTabChange}
-        >
-          <div class="sticky top-0 shrink-0 flex">
-            <Tabs.List class="grow">
-              <SortableProvider ids={local.file.opened().map((file) => file.path)}>
-                <For each={local.file.opened()}>
-                  {(file) => (
-                    <SortableTab file={file} onTabClick={localProps.onFileClick} onTabClose={handleTabClose} />
-                  )}
-                </For>
-              </SortableProvider>
-            </Tabs.List>
-            <div class="shrink-0 h-full flex items-center gap-1 px-2 border-b border-border-subtle/40">
-              <Show when={local.file.active() && local.file.active()!.content?.diff}>
-                {(() => {
-                  const activeFile = local.file.active()!
-                  const view = local.file.view(activeFile.path)
-                  return (
-                    <div class="flex items-center gap-1">
-                      <Show when={view !== "raw"}>
-                        <div class="mr-1 flex items-center gap-1">
-                          <Tooltip value="Previous change" placement="bottom">
-                            <IconButton size="xs" variant="ghost" onClick={() => navigateChange(-1)}>
-                              <Icon name="arrow-up" size={14} />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip value="Next change" placement="bottom">
-                            <IconButton size="xs" variant="ghost" onClick={() => navigateChange(1)}>
-                              <Icon name="arrow-down" size={14} />
-                            </IconButton>
-                          </Tooltip>
-                        </div>
-                      </Show>
-                      <Tooltip value="Raw" placement="bottom">
-                        <IconButton
-                          size="xs"
-                          variant="ghost"
-                          classList={{
-                            "text-text": view === "raw",
-                            "text-text-muted/70": view !== "raw",
-                            "bg-background-element": view === "raw",
-                          }}
-                          onClick={() => local.file.setView(activeFile.path, "raw")}
-                        >
-                          <Icon name="file-text" size={14} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip value="Unified diff" placement="bottom">
-                        <IconButton
-                          size="xs"
-                          variant="ghost"
-                          classList={{
-                            "text-text": view === "diff-unified",
-                            "text-text-muted/70": view !== "diff-unified",
-                            "bg-background-element": view === "diff-unified",
-                          }}
-                          onClick={() => local.file.setView(activeFile.path, "diff-unified")}
-                        >
-                          <Icon name="checklist" size={14} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip value="Split diff" placement="bottom">
-                        <IconButton
-                          size="xs"
-                          variant="ghost"
-                          classList={{
-                            "text-text": view === "diff-split",
-                            "text-text-muted/70": view !== "diff-split",
-                            "bg-background-element": view === "diff-split",
-                          }}
-                          onClick={() => local.file.setView(activeFile.path, "diff-split")}
-                        >
-                          <Icon name="columns" size={14} />
-                        </IconButton>
-                      </Tooltip>
-                    </div>
-                  )
-                })()}
-              </Show>
-            </div>
+    <DragDropProvider
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      collisionDetector={closestCenter}
+    >
+      <DragDropSensors />
+      <ConstrainDragYAxis />
+      <Tabs value={local.file.active()?.path} onChange={handleTabChange}>
+        <div class="sticky top-0 shrink-0 flex">
+          <Tabs.List>
+            <SortableProvider ids={local.file.opened().map((file) => file.path)}>
+              <For each={local.file.opened()}>
+                {(file) => <SortableTab file={file} onTabClick={localProps.onFileClick} onTabClose={handleTabClose} />}
+              </For>
+            </SortableProvider>
+          </Tabs.List>
+          <div class="hidden shrink-0 h-full _flex items-center gap-1 px-2 border-b border-border-subtle/40">
+            <Show when={local.file.active() && local.file.active()!.content?.diff}>
+              {(() => {
+                const activeFile = local.file.active()!
+                const view = local.file.view(activeFile.path)
+                return (
+                  <div class="flex items-center gap-1">
+                    <Show when={view !== "raw"}>
+                      <div class="mr-1 flex items-center gap-1">
+                        <Tooltip value="Previous change" placement="bottom">
+                          <IconButton size="xs" variant="ghost" onClick={() => navigateChange(-1)}>
+                            <Icon name="arrow-up" size={14} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip value="Next change" placement="bottom">
+                          <IconButton size="xs" variant="ghost" onClick={() => navigateChange(1)}>
+                            <Icon name="arrow-down" size={14} />
+                          </IconButton>
+                        </Tooltip>
+                      </div>
+                    </Show>
+                    <Tooltip value="Raw" placement="bottom">
+                      <IconButton
+                        size="xs"
+                        variant="ghost"
+                        classList={{
+                          "text-text": view === "raw",
+                          "text-text-muted/70": view !== "raw",
+                          "bg-background-element": view === "raw",
+                        }}
+                        onClick={() => local.file.setView(activeFile.path, "raw")}
+                      >
+                        <Icon name="file-text" size={14} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip value="Unified diff" placement="bottom">
+                      <IconButton
+                        size="xs"
+                        variant="ghost"
+                        classList={{
+                          "text-text": view === "diff-unified",
+                          "text-text-muted/70": view !== "diff-unified",
+                          "bg-background-element": view === "diff-unified",
+                        }}
+                        onClick={() => local.file.setView(activeFile.path, "diff-unified")}
+                      >
+                        <Icon name="checklist" size={14} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip value="Split diff" placement="bottom">
+                      <IconButton
+                        size="xs"
+                        variant="ghost"
+                        classList={{
+                          "text-text": view === "diff-split",
+                          "text-text-muted/70": view !== "diff-split",
+                          "bg-background-element": view === "diff-split",
+                        }}
+                        onClick={() => local.file.setView(activeFile.path, "diff-split")}
+                      >
+                        <Icon name="columns" size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
+            </Show>
           </div>
-          <For each={local.file.opened()}>
-            {(file) => (
-              <Tabs.Content value={file.path} class="grow h-full pt-1 select-text">
-                {(() => {
-                  const view = local.file.view(file.path)
-                  const showRaw = view === "raw" || !file.content?.diff
-                  const code = showRaw ? (file.content?.content ?? "") : (file.content?.diff ?? "")
-                  return <Code path={file.path} code={code} class="[&_code]:pb-60" />
-                })()}
-              </Tabs.Content>
-            )}
-          </For>
-        </Tabs>
-        <DragOverlay>
-          {(() => {
-            const id = activeItem()
-            if (!id) return null
-            const draggedFile = local.file.node(id)
-            if (!draggedFile) return null
-            return (
-              <div class="relative px-3 h-8 flex items-center text-sm font-medium text-text whitespace-nowrap shrink-0 bg-background-panel border-x border-border-subtle/40 border-b border-b-transparent">
-                <TabVisual file={draggedFile} />
-              </div>
-            )
-          })()}
-        </DragOverlay>
-      </DragDropProvider>
-    </div>
+        </div>
+        <For each={local.file.opened()}>
+          {(file) => (
+            <Tabs.Content value={file.path} class="select-text">
+              {(() => {
+                const view = local.file.view(file.path)
+                const showRaw = view === "raw" || !file.content?.diff
+                const code = showRaw ? (file.content?.content ?? "") : (file.content?.diff ?? "")
+                return <Code path={file.path} code={code} class="[&_code]:pb-60" />
+              })()}
+            </Tabs.Content>
+          )}
+        </For>
+      </Tabs>
+      <DragOverlay>
+        {(() => {
+          const id = activeItem()
+          if (!id) return null
+          const draggedFile = local.file.node(id)
+          if (!draggedFile) return null
+          return (
+            <div class="relative px-3 h-8 flex items-center text-sm font-medium text-text whitespace-nowrap shrink-0 bg-background-panel border-x border-border-subtle/40 border-b border-b-transparent">
+              <TabVisual file={draggedFile} />
+            </div>
+          )
+        })()}
+      </DragOverlay>
+    </DragDropProvider>
   )
 }
 

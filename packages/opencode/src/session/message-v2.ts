@@ -513,8 +513,6 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
-        const hasEmptyTextPart = msg.parts.some((part) => part.type === "text" && part.text.trim() === "")
-        if (hasEmptyTextPart) continue
         result.push({
           id: msg.info.id,
           role: "assistant",

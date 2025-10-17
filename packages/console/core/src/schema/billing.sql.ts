@@ -9,6 +9,7 @@ export const BillingTable = mysqlTable(
     ...timestamps,
     customerID: varchar("customer_id", { length: 255 }),
     paymentMethodID: varchar("payment_method_id", { length: 255 }),
+    paymentMethodType: varchar("payment_method_type", { length: 32 }),
     paymentMethodLast4: varchar("payment_method_last4", { length: 4 }),
     balance: bigint("balance", { mode: "number" }).notNull(),
     monthlyLimit: int("monthly_limit"),

@@ -139,7 +139,7 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
 
   return (
     <tr>
-      <td data-slot="member-email">{props.member.accountEmail ?? props.member.email}</td>
+      <td data-slot="member-email">{props.member.authEmail ?? props.member.email}</td>
       <td data-slot="member-role">
         <Show when={store.editing && !isCurrentUser()} fallback={<span>{props.member.role}</span>}>
           <RoleDropdown

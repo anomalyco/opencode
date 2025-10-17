@@ -2,7 +2,7 @@ import { Model } from "@opencode-ai/console-core/model.js"
 import { query, action, useParams, createAsync, json } from "@solidjs/router"
 import { createMemo, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
-import { ZenModel } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@opencode-ai/console-core/model.js"
 import styles from "./model-section.module.css"
 import { querySessionInfo } from "../common"
 import { IconAlibaba, IconAnthropic, IconMoonshotAI, IconOpenAI, IconStealth, IconXai, IconZai } from "~/component/icon"
@@ -21,7 +21,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     return {
-      all: Object.entries(ZenModel.list())
+      all: Object.entries(ZenData.list().models)
         .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
         .filter(([id, _model]) => !id.startsWith("an-"))
         .sort(([_idA, modelA], [_idB, modelB]) => modelA.name.localeCompare(modelB.name))

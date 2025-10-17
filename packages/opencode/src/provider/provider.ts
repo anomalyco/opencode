@@ -69,7 +69,7 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (options?.["useCompletionUrls"]) {
-            return sdk.completion(modelID)
+            return sdk.chat(modelID)
           } else {
             return sdk.responses(modelID)
           }
@@ -121,8 +121,11 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
-              if (isAustraliaRegion && modelID.startsWith("anthropic.claude-sonnet-4-5")) {
-                modelID = `au.${modelID}`
+              if (isAustraliaRegion && ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) =>
+                modelID.includes(m),
+              )) {
+                regionPrefix = "au"
+                modelID = `${regionPrefix}.${modelID}`
               } else {
                 const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
                   modelID.includes(m),
@@ -287,14 +290,14 @@ export namespace Provider {
           },
           limit: model.limit ??
             existing?.limit ?? {
-              context: 0,
-              output: 0,
-            },
+            context: 0,
+            output: 0,
+          },
           modalities: model.modalities ??
             existing?.modalities ?? {
-              input: ["text"],
-              output: ["text"],
-            },
+            input: ["text"],
+            output: ["text"],
+          },
           provider: model.provider ?? existing?.provider,
         }
         if (model.id && model.id !== modelID) {
@@ -361,7 +364,10 @@ export namespace Provider {
               modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
-          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
+          .filter(
+            ([, model]) =>
+              (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
+          ),
       )
       provider.info.models = filteredModels
 
@@ -410,8 +416,21 @@ export namespace Provider {
       const mod = await import(modPath)
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
-        options["fetch"] = async (input: any, init?: any) => {
-          return await fetch(input, { ...init, timeout: options["timeout"] })
+        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          const { signal, ...rest } = init ?? {}
+
+          const signals: AbortSignal[] = []
+          if (signal) signals.push(signal)
+          signals.push(AbortSignal.timeout(options["timeout"]))
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          return fetch(input, {
+            ...rest,
+            signal: combined,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
         }
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]

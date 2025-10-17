@@ -418,6 +418,7 @@ export type Config = {
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
           experimental?: boolean
+          status?: "alpha" | "beta"
           options?: {
             [key: string]: unknown
           }
@@ -508,10 +509,12 @@ export type Config = {
   }
 }
 
-export type _Error = {
-  data: {
+export type BadRequestError = {
+  data: unknown | null
+  errors: Array<{
     [key: string]: unknown
-  }
+  }>
+  success: false
 }
 
 export type ToolIds = Array<string>
@@ -551,6 +554,13 @@ export type Session = {
     partID?: string
     snapshot?: string
     diff?: string
+  }
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
   }
 }
 
@@ -914,6 +924,7 @@ export type Model = {
     output: Array<"text" | "audio" | "image" | "video" | "pdf">
   }
   experimental?: boolean
+  status?: "alpha" | "beta"
   options: {
     [key: string]: unknown
   }
@@ -1259,7 +1270,7 @@ export type ConfigUpdateErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ConfigUpdateError = ConfigUpdateErrors[keyof ConfigUpdateErrors]
@@ -1286,7 +1297,7 @@ export type ToolIdsErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ToolIdsError = ToolIdsErrors[keyof ToolIdsErrors]
@@ -1315,7 +1326,7 @@ export type ToolListErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type ToolListError = ToolListErrors[keyof ToolListErrors]
@@ -1381,7 +1392,7 @@ export type SessionCreateErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]
@@ -1406,6 +1417,19 @@ export type SessionDeleteData = {
   url: "/session/{id}"
 }
 
+export type SessionDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDeleteError = SessionDeleteErrors[keyof SessionDeleteErrors]
+
 export type SessionDeleteResponses = {
   /**
    * Successfully deleted session
@@ -1425,6 +1449,19 @@ export type SessionGetData = {
   }
   url: "/session/{id}"
 }
+
+export type SessionGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionGetError = SessionGetErrors[keyof SessionGetErrors]
 
 export type SessionGetResponses = {
   /**
@@ -1448,6 +1485,19 @@ export type SessionUpdateData = {
   url: "/session/{id}"
 }
 
+export type SessionUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUpdateError = SessionUpdateErrors[keyof SessionUpdateErrors]
+
 export type SessionUpdateResponses = {
   /**
    * Successfully updated session
@@ -1467,6 +1517,19 @@ export type SessionChildrenData = {
   }
   url: "/session/{id}/children"
 }
+
+export type SessionChildrenErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionChildrenError = SessionChildrenErrors[keyof SessionChildrenErrors]
 
 export type SessionChildrenResponses = {
   /**
@@ -1490,6 +1553,19 @@ export type SessionTodoData = {
   }
   url: "/session/{id}/todo"
 }
+
+export type SessionTodoErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
 
 export type SessionTodoResponses = {
   /**
@@ -1517,6 +1593,19 @@ export type SessionInitData = {
   }
   url: "/session/{id}/init"
 }
+
+export type SessionInitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionInitError = SessionInitErrors[keyof SessionInitErrors]
 
 export type SessionInitResponses = {
   /**
@@ -1560,6 +1649,19 @@ export type SessionAbortData = {
   url: "/session/{id}/abort"
 }
 
+export type SessionAbortErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionAbortError = SessionAbortErrors[keyof SessionAbortErrors]
+
 export type SessionAbortResponses = {
   /**
    * Aborted session
@@ -1580,6 +1682,19 @@ export type SessionUnshareData = {
   url: "/session/{id}/share"
 }
 
+export type SessionUnshareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUnshareError = SessionUnshareErrors[keyof SessionUnshareErrors]
+
 export type SessionUnshareResponses = {
   /**
    * Successfully unshared session
@@ -1599,6 +1714,19 @@ export type SessionShareData = {
   }
   url: "/session/{id}/share"
 }
+
+export type SessionShareErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionShareError = SessionShareErrors[keyof SessionShareErrors]
 
 export type SessionShareResponses = {
   /**
@@ -1626,6 +1754,19 @@ export type SessionSummarizeData = {
   url: "/session/{id}/summarize"
 }
 
+export type SessionSummarizeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSummarizeError = SessionSummarizeErrors[keyof SessionSummarizeErrors]
+
 export type SessionSummarizeResponses = {
   /**
    * Summarized session
@@ -1648,6 +1789,19 @@ export type SessionMessagesData = {
   }
   url: "/session/{id}/message"
 }
+
+export type SessionMessagesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessagesError = SessionMessagesErrors[keyof SessionMessagesErrors]
 
 export type SessionMessagesResponses = {
   /**
@@ -1687,6 +1841,19 @@ export type SessionPromptData = {
   url: "/session/{id}/message"
 }
 
+export type SessionPromptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptError = SessionPromptErrors[keyof SessionPromptErrors]
+
 export type SessionPromptResponses = {
   /**
    * Created message
@@ -1716,6 +1883,19 @@ export type SessionMessageData = {
   }
   url: "/session/{id}/message/{messageID}"
 }
+
+export type SessionMessageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMessageError = SessionMessageErrors[keyof SessionMessageErrors]
 
 export type SessionMessageResponses = {
   /**
@@ -1749,6 +1929,19 @@ export type SessionCommandData = {
   url: "/session/{id}/command"
 }
 
+export type SessionCommandErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCommandError = SessionCommandErrors[keyof SessionCommandErrors]
+
 export type SessionCommandResponses = {
   /**
    * Created message
@@ -1778,6 +1971,19 @@ export type SessionShellData = {
   url: "/session/{id}/shell"
 }
 
+export type SessionShellErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionShellError = SessionShellErrors[keyof SessionShellErrors]
+
 export type SessionShellResponses = {
   /**
    * Created message
@@ -1801,6 +2007,19 @@ export type SessionRevertData = {
   url: "/session/{id}/revert"
 }
 
+export type SessionRevertErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionRevertError = SessionRevertErrors[keyof SessionRevertErrors]
+
 export type SessionRevertResponses = {
   /**
    * Updated session
@@ -1820,6 +2039,19 @@ export type SessionUnrevertData = {
   }
   url: "/session/{id}/unrevert"
 }
+
+export type SessionUnrevertErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUnrevertError = SessionUnrevertErrors[keyof SessionUnrevertErrors]
 
 export type SessionUnrevertResponses = {
   /**
@@ -1843,6 +2075,20 @@ export type PostSessionIdPermissionsPermissionIdData = {
   }
   url: "/session/{id}/permissions/{permissionID}"
 }
+
+export type PostSessionIdPermissionsPermissionIdErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PostSessionIdPermissionsPermissionIdError =
+  PostSessionIdPermissionsPermissionIdErrors[keyof PostSessionIdPermissionsPermissionIdErrors]
 
 export type PostSessionIdPermissionsPermissionIdResponses = {
   /**
@@ -2052,6 +2298,15 @@ export type AppLogData = {
   url: "/log"
 }
 
+export type AppLogErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AppLogError = AppLogErrors[keyof AppLogErrors]
+
 export type AppLogResponses = {
   /**
    * Log entry written successfully
@@ -2105,6 +2360,15 @@ export type TuiAppendPromptData = {
   }
   url: "/tui/append-prompt"
 }
+
+export type TuiAppendPromptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiAppendPromptError = TuiAppendPromptErrors[keyof TuiAppendPromptErrors]
 
 export type TuiAppendPromptResponses = {
   /**
@@ -2234,6 +2498,15 @@ export type TuiExecuteCommandData = {
   url: "/tui/execute-command"
 }
 
+export type TuiExecuteCommandErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiExecuteCommandError = TuiExecuteCommandErrors[keyof TuiExecuteCommandErrors]
+
 export type TuiExecuteCommandResponses = {
   /**
    * Command executed successfully
@@ -2280,7 +2553,7 @@ export type AuthSetErrors = {
   /**
    * Bad request
    */
-  400: _Error
+  400: BadRequestError
 }
 
 export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]

@@ -35,6 +35,7 @@ export namespace ModelsDev {
         })
         .optional(),
       experimental: z.boolean().optional(),
+      status: z.enum(["alpha", "beta"]).optional(),
       options: z.record(z.string(), z.any()),
       provider: z.object({ npm: z.string() }).optional(),
     })

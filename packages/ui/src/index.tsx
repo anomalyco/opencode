@@ -1,7 +1,8 @@
 /* @refresh reload */
 import { render } from "solid-js/web"
+import { MetaProvider } from "@solidjs/meta"
 
-import App from "./app"
+import Demo from "./demo"
 
 const root = document.getElementById("root")
 
@@ -11,4 +12,11 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   )
 }
 
-render(() => <App />, root!)
+render(
+  () => (
+    <MetaProvider>
+      <Demo />
+    </MetaProvider>
+  ),
+  root!,
+)

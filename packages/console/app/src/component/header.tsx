@@ -4,11 +4,9 @@ import { A, createAsync } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
-import { queryIsLoggedIn } from "~/routes/workspace/common"
 
 export function Header(props: { zen?: boolean }) {
   const githubData = createAsync(() => github())
-  const isLoggedIn = createAsync(() => queryIsLoggedIn())
   const starCount = createMemo(() =>
     githubData()?.stars
       ? new Intl.NumberFormat("en-US", {
@@ -41,7 +39,7 @@ export function Header(props: { zen?: boolean }) {
           <li>
             <Switch>
               <Match when={props.zen}>
-                <a href="/auth">{isLoggedIn() ? "Workspace" : "Login"}</a>
+                <a href="/auth">Login</a>
               </Match>
               <Match when={!props.zen}>
                 <A href="/zen">Zen</A>
@@ -112,7 +110,7 @@ export function Header(props: { zen?: boolean }) {
                 <li>
                   <Switch>
                     <Match when={props.zen}>
-                      <a href="/auth">{isLoggedIn() ? "Workspace" : "Login"}</a>
+                      <a href="/auth">Login</a>
                     </Match>
                     <Match when={!props.zen}>
                       <A href="/zen">Zen</A>

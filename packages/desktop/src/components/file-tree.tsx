@@ -1,6 +1,7 @@
 import { useLocal } from "@/context"
 import type { LocalFile } from "@/context/local"
-import { Collapsible, FileIcon, Tooltip } from "@/ui"
+import { Tooltip } from "@opencode-ai/ui"
+import { Collapsible, FileIcon } from "@/ui"
 import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 

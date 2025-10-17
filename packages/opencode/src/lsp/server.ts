@@ -20,10 +20,20 @@ export namespace LSPServer {
 
   type RootFunction = (file: string) => Promise<string | undefined>
 
-  const NearestRoot = (patterns: string[]): RootFunction => {
+  const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
     return async (file) => {
+      if (excludePatterns) {
+        const excludedFiles = Filesystem.up({
+          targets: excludePatterns,
+          start: path.dirname(file),
+          stop: Instance.directory,
+        })
+        const excluded = await excludedFiles.next()
+        await excludedFiles.return()
+        if (excluded.value) return undefined
+      }
       const files = Filesystem.up({
-        targets: patterns,
+        targets: includePatterns,
         start: path.dirname(file),
         stop: Instance.directory,
       })
@@ -42,9 +52,30 @@ export namespace LSPServer {
     spawn(root: string): Promise<Handle | undefined>
   }
 
+  export const Deno: Info = {
+    id: "deno",
+    root: NearestRoot(["deno.json", "deno.jsonc"]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs"],
+    async spawn(root) {
+      const deno = Bun.which("deno")
+      if (!deno) {
+        log.info("deno not found, please install deno first")
+        return
+      }
+      return {
+        process: spawn(deno, ["lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Typescript: Info = {
     id: "typescript",
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot(
+      ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
+      ["deno.json", "deno.jsonc"],
+    ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
