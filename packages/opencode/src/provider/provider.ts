@@ -121,9 +121,11 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
-              if (isAustraliaRegion &&
-                (modelID.startsWith("anthropic.claude-sonnet-4-5") || modelID.startsWith("anthropic.claude-haiku-4-5"))) {
-                modelID = `au.${modelID}`
+              if (isAustraliaRegion && ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) =>
+                modelID.includes(m),
+              )) {
+                regionPrefix = "au"
+                modelID = `${regionPrefix}.${modelID}`
               } else {
                 const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
                   modelID.includes(m),
