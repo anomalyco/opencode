@@ -320,7 +320,6 @@ export function Autocomplete(props: {
               <text fg={index() === store.selected ? theme().background : theme().text}>{option.display}</text>
               <Show when={option.description}>
                 <text fg={index() === store.selected ? theme().background : theme().textMuted}>
-                  {" "}
                   {option.description}
                 </text>
               </Show>
