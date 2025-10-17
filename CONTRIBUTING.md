@@ -1,11 +1,6 @@
 # Contributing to OpenCode
 
-OpenCode is an opinionated tool, so any fundamental feature must go through a design review with the core team before implementation.
-
-> [!IMPORTANT]
-> We do not accept PRs for core features.
-
-We still merge lots of changes when they stay within scope:
+We want to make it easy for you to contribute to OpenCode. Here are the most common type of changes that get merged:
 
 - Bug fixes
 - Additional LSPs / Formatters
@@ -15,6 +10,11 @@ We still merge lots of changes when they stay within scope:
 - Missing standard behavior
 - Documentation improvements
 
+However, any UI or core product feature must go through a design review with the core team before implementation.
+
+> [!IMPORTANT]
+> We do not accept PRs for core features.
+
 Take a look at recent git history to understand what usually lands.
 
 If you are unsure if a PR would be accepted, feel free to ask a maintainer or look for issues with either of the following labels:
@@ -23,7 +23,9 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 - `bug`
 
 > [!NOTE]
-> PRs that ignore these guardrails will likely be closed. Want to take an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
+> PRs that ignore these guardrails will likely be closed.
+
+Want to take on an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
 
 ## Developing OpenCode
 
@@ -36,9 +38,9 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
   ```
 
 - Core pieces:
-  - `packages/opencode`: opencode core business logic & server.
-  - `packages/tui`: the tui code, written in Go (will be removed soon in favor of [opentui](https://github.com/sst/opentui))
-  - `packages/plugin`: source of `@opencode-ai/plugin`
+  - `packages/opencode`: OpenCode core business logic & server.
+  - `packages/tui`: The TUI code, written in Go (will be removed soon in favor of [opentui](https://github.com/sst/opentui))
+  - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 > [!NOTE]
 > After touching `packages/opencode/src/server/server.ts`, the OpenCode team must regenerate the Stainless SDK before any client updates merge.
@@ -51,7 +53,9 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 - Avoid having verbose LLM generated PR descriptions
 - Before adding new functions or functionality, ensure that such behavior doesn't already exist elsewhere in the codebase.
 
-Style Preferences (not strictly enforced, just general guidelines):
+### Style Preferences
+
+These are not strictly enforced, they are just general guidelines:
 
 - **Functions:** Keep logic within a single function unless breaking it out adds clear reuse or composition benefits.
 - **Destructuring:** Do not do unnecessary destructuring of variables.
