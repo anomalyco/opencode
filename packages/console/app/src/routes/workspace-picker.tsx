@@ -23,7 +23,13 @@ const getWorkspaces = query(async () => {
         })
         .from(UserTable)
         .innerJoin(WorkspaceTable, eq(UserTable.workspaceID, WorkspaceTable.id))
-        .where(and(eq(UserTable.accountID, Actor.account()), isNull(WorkspaceTable.timeDeleted))),
+        .where(
+          and(
+            eq(UserTable.accountID, Actor.account()),
+            isNull(WorkspaceTable.timeDeleted),
+            isNull(UserTable.timeDeleted),
+          ),
+        ),
     )
   })
 }, "workspaces")

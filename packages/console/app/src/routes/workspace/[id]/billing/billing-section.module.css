@@ -70,6 +70,12 @@
           font-weight: 500;
           color: var(--color-text);
         }
+
+        [data-slot="type"] {
+          font-size: var(--font-size-sm);
+          font-weight: 400;
+          color: var(--color-text-muted);
+        }
       }
     }
 

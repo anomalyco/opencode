@@ -1,20 +1,20 @@
+@import "./styles/index.css";
+
 :root {
   body {
     margin: 0;
-    background-color: var(--background-background);
-    color: var(--text-default-text);
+    background-color: var(--background-base);
+    color: var(--text-base);
   }
   main {
     display: flex;
     flex-direction: row;
-    height: 100vh;
     overflow-x: hidden;
   }
   main > div {
     flex: 1;
     padding: 2rem;
     min-width: 0;
-    overflow-y: auto;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
@@ -35,6 +35,6 @@
 }
 
 .dark {
-  background-color: var(--background-background);
-  color: var(--text-default-text);
+  background-color: var(--background-base);
+  color: var(--text-base);
 }

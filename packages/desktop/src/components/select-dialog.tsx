@@ -1,6 +1,7 @@
 import { createEffect, Show, For, createMemo, type JSX, createResource } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
-import { Icon, IconButton } from "@/ui"
+import { Icon } from "@opencode-ai/ui"
+import { IconButton } from "@/ui"
 import { createStore } from "solid-js/store"
 import { entries, flatMap, groupBy, map, pipe } from "remeda"
 import { createList } from "solid-list"

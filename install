@@ -96,6 +96,7 @@ download_and_install() {
     curl -# -L -o "$filename" "$url"
     unzip -q "$filename"
     mv opencode "$INSTALL_DIR"
+    chmod 755 "${INSTALL_DIR}/opencode"
     cd .. && rm -rf opencodetmp
 }
 

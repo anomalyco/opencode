@@ -16,7 +16,7 @@ export function Markdown(props: { text: string; class?: string }) {
   )
   return (
     <div
-      class={`min-w-0 max-w-full text-xs overflow-auto no-scrollbar prose ${props.class ?? ""}`}
+      class={`min-w-0 max-w-full overflow-auto no-scrollbar text-14-regular text-text-base ${props.class ?? ""}`}
       innerHTML={html()}
     />
   )

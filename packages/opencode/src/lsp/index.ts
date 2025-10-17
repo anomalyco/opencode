@@ -166,6 +166,8 @@ export namespace LSP {
       const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
+    }).catch((err) => {
+      log.error("failed to touch file", { err, file: input })
     })
   }
 

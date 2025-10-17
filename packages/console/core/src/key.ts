@@ -4,9 +4,8 @@ import { Actor } from "./actor"
 import { and, Database, eq, isNull, sql } from "./drizzle"
 import { Identifier } from "./identifier"
 import { KeyTable } from "./schema/key.sql"
-import { AccountTable } from "./schema/account.sql"
 import { UserTable } from "./schema/user.sql"
-import { User } from "./user"
+import { AuthTable } from "./schema/auth.sql"
 
 export namespace Key {
   export const list = fn(z.void(), async () => {
@@ -18,11 +17,11 @@ export namespace Key {
           key: KeyTable.key,
           timeUsed: KeyTable.timeUsed,
           userID: KeyTable.userID,
-          email: AccountTable.email,
+          email: AuthTable.subject,
         })
         .from(KeyTable)
         .innerJoin(UserTable, and(eq(KeyTable.userID, UserTable.id), eq(KeyTable.workspaceID, UserTable.workspaceID)))
-        .innerJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+        .innerJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
         .where(
           and(
             ...[

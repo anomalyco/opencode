@@ -85,14 +85,20 @@ nav.sidebar summary svg.caret {
   color: var(--color-icon) !important;
 }
 
-body > .page > header button[data-open-modal] > kbd kbd {
-  color: var(--color-icon) !important;
-  font-size: 16px !important;
+/* Search button style overrides */
+body > .page > header button[data-open-modal] > kbd {
+  position: relative;
   display: flex;
+  gap: 4px;
 }
-
-body > .page > header button[data-open-modal] > kbd kbd:first-child {
-  font-size: 20px !important;
+body > .page > header button[data-open-modal] > kbd > kbd {
+  color: var(--color-icon) !important;
+  font-size: 15px;
+}
+/* Make the Cmd (⌘) keystroke bigger */
+body > .page > header button[data-open-modal][aria-keyshortcuts="Meta+K"] > kbd > kbd:first-child {
+  font-size: 20px;
+  line-height: 0.73;
 }
 
 .starlight-aside__title {
@@ -101,7 +107,7 @@ body > .page > header button[data-open-modal] > kbd kbd:first-child {
 }
 
 body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
- border-top: none !important;
+  border-top: none !important;
 }
 
 body > .page > header a.site-title img {
@@ -186,10 +192,10 @@ site-search > button {
 }
 
 body > .page > header button[data-open-modal] {
-  gap: 24px !important;
+  gap: 12px !important;
   background: var(--color-background-weak);
   border: 1px solid var(--color-border-weak) !important;
-  padding: 6px 16px !important;
+  padding: 6px 12px !important;
   border-radius: 4px;
 
   @media (prefers-color-scheme: dark) {

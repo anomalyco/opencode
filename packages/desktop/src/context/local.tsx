@@ -131,31 +131,31 @@ function init() {
     const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
     const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
-    createEffect((prev: FileStatus[]) => {
-      const removed = prev.filter((p) => !sync.data.changes.find((c) => c.path === p.path))
-      for (const p of removed) {
-        setStore(
-          "node",
-          p.path,
-          produce((draft) => {
-            draft.status = undefined
-            draft.view = "raw"
-          }),
-        )
-        load(p.path)
-      }
-      for (const p of sync.data.changes) {
-        if (store.node[p.path] === undefined) {
-          fetch(p.path).then(() => {
-            if (store.node[p.path] === undefined) return
-            setStore("node", p.path, "status", p)
-          })
-        } else {
-          setStore("node", p.path, "status", p)
-        }
-      }
-      return sync.data.changes
-    }, sync.data.changes)
+    // createEffect((prev: FileStatus[]) => {
+    //   const removed = prev.filter((p) => !sync.data.changes.find((c) => c.path === p.path))
+    //   for (const p of removed) {
+    //     setStore(
+    //       "node",
+    //       p.path,
+    //       produce((draft) => {
+    //         draft.status = undefined
+    //         draft.view = "raw"
+    //       }),
+    //     )
+    //     load(p.path)
+    //   }
+    //   for (const p of sync.data.changes) {
+    //     if (store.node[p.path] === undefined) {
+    //       fetch(p.path).then(() => {
+    //         if (store.node[p.path] === undefined) return
+    //         setStore("node", p.path, "status", p)
+    //       })
+    //     } else {
+    //       setStore("node", p.path, "status", p)
+    //     }
+    //   }
+    //   return sync.data.changes
+    // }, sync.data.changes)
 
     const changed = (path: string) => {
       const node = store.node[path]

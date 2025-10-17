@@ -7,11 +7,10 @@ import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { render } from "@jsx-email/render"
 import { AWS } from "./aws"
-import { Account } from "./account"
-import { AccountTable } from "./schema/account.sql"
 import { Key } from "./key"
 import { KeyTable } from "./schema/key.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
+import { AuthTable } from "./schema/auth.sql"
 
 export namespace User {
   const assertNotSelf = (id: string) => {
@@ -24,10 +23,10 @@ export namespace User {
       tx
         .select({
           ...getTableColumns(UserTable),
-          accountEmail: AccountTable.email,
+          authEmail: AuthTable.subject,
         })
         .from(UserTable)
-        .leftJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+        .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
         .where(and(eq(UserTable.workspaceID, Actor.workspace()), isNull(UserTable.timeDeleted))),
     ),
   )
@@ -42,14 +41,14 @@ export namespace User {
     ),
   )
 
-  export const getAccountEmail = fn(z.string(), (id) =>
+  export const getAuthEmail = fn(z.string(), (id) =>
     Database.use((tx) =>
       tx
         .select({
-          email: AccountTable.email,
+          email: AuthTable.subject,
         })
         .from(UserTable)
-        .leftJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+        .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
         .where(and(eq(UserTable.workspaceID, Actor.workspace()), eq(UserTable.id, id)))
         .then((rows) => rows[0]?.email),
     ),
@@ -66,16 +65,24 @@ export namespace User {
       const workspaceID = Actor.workspace()
 
       // create user
-      const account = await Account.fromEmail(email)
+      const accountID = await Database.use((tx) =>
+        tx
+          .select({
+            accountID: AuthTable.accountID,
+          })
+          .from(AuthTable)
+          .where(and(eq(AuthTable.provider, "email"), eq(AuthTable.subject, email)))
+          .then((rows) => rows[0]?.accountID),
+      )
       await Database.use((tx) =>
         tx
           .insert(UserTable)
           .values({
             id: Identifier.create("user"),
             name: "",
-            ...(account
+            ...(accountID
               ? {
-                  accountID: account.id,
+                  accountID,
                 }
               : {
                   email,
@@ -94,12 +101,12 @@ export namespace User {
       )
 
       // create api key
-      if (account) {
+      if (accountID) {
         await Database.use(async (tx) => {
           const user = await tx
             .select()
             .from(UserTable)
-            .where(and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.accountID, account.id)))
+            .where(and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.accountID, accountID)))
             .then((rows) => rows[0])
 
           const key = await tx
@@ -119,11 +126,11 @@ export namespace User {
         const emailInfo = await Database.use((tx) =>
           tx
             .select({
-              email: AccountTable.email,
+              inviterEmail: AuthTable.subject,
               workspaceName: WorkspaceTable.name,
             })
             .from(UserTable)
-            .innerJoin(AccountTable, eq(UserTable.accountID, AccountTable.id))
+            .innerJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
             .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, workspaceID))
             .where(
               and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.id, Actor.assert("user").properties.userID)),
@@ -138,7 +145,7 @@ export namespace User {
           body: render(
             // @ts-ignore
             InviteEmail({
-              inviter: emailInfo.email,
+              inviter: emailInfo.inviterEmail,
               assetsUrl: `https://opencode.ai/email`,
               workspaceID: workspaceID,
               workspaceName: emailInfo.workspaceName,

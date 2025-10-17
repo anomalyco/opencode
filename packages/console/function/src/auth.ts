@@ -12,9 +12,11 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { User } from "@opencode-ai/console-core/user.js"
-import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, isNull, or } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
+import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
+import { Identifier } from "@opencode-ai/console-core/identifier.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -102,6 +104,7 @@ export default {
       async success(ctx, response) {
         console.log(response)
 
+        let subject: string | undefined
         let email: string | undefined
 
         if (response.provider === "github") {
@@ -112,25 +115,83 @@ export default {
               Accept: "application/vnd.github+json",
             },
           }).then((x) => x.json())) as any
+          const user = (await fetch("https://api.github.com/user", {
+            headers: {
+              Authorization: `Bearer ${response.tokenset.access}`,
+              "User-Agent": "opencode",
+              Accept: "application/vnd.github+json",
+            },
+          }).then((x) => x.json())) as any
+          subject = user.id.toString()
           email = emails.find((x: any) => x.primary && x.verified)?.email
         } else if (response.provider === "google") {
           if (!response.id.email_verified) throw new Error("Google email not verified")
+          subject = response.id.sub as string
           email = response.id.email as string
         } else throw new Error("Unsupported provider")
 
         if (!email) throw new Error("No email found")
+        if (!subject) throw new Error("No subject found")
 
         if (Resource.App.stage !== "production" && !email.endsWith("@anoma.ly")) {
           throw new Error("Invalid email")
         }
 
-        let accountID = await Account.fromEmail(email).then((x) => x?.id)
-        if (!accountID) {
-          console.log("creating account for", email)
-          accountID = await Account.create({
-            email: email!,
-          })
-        }
+        // Get account
+        const accountID = await (async () => {
+          const matches = await Database.use(async (tx) =>
+            tx
+              .select({
+                provider: AuthTable.provider,
+                accountID: AuthTable.accountID,
+              })
+              .from(AuthTable)
+              .where(
+                or(
+                  and(eq(AuthTable.provider, response.provider), eq(AuthTable.subject, subject)),
+                  and(eq(AuthTable.provider, "email"), eq(AuthTable.subject, email)),
+                ),
+              ),
+          )
+          const idByProvider = matches.find((x) => x.provider === response.provider)?.accountID
+          const idByEmail = matches.find((x) => x.provider === "email")?.accountID
+          if (idByProvider && idByEmail) return idByProvider
+
+          // create account if not found
+          let accountID = idByProvider ?? idByEmail
+          if (!accountID) {
+            console.log("creating account for", email)
+            accountID = await Account.create({})
+          }
+
+          await Database.use(async (tx) =>
+            tx
+              .insert(AuthTable)
+              .values([
+                {
+                  id: Identifier.create("auth"),
+                  accountID,
+                  provider: response.provider,
+                  subject,
+                },
+                {
+                  id: Identifier.create("auth"),
+                  accountID,
+                  provider: "email",
+                  subject: email,
+                },
+              ])
+              .onDuplicateKeyUpdate({
+                set: {
+                  timeDeleted: null,
+                },
+              }),
+          )
+
+          return accountID
+        })()
+
+        // Get workspace
         await Actor.provide("account", { accountID, email }, async () => {
           await User.joinInvitedWorkspaces()
           const workspaces = await Database.transaction(async (tx) =>

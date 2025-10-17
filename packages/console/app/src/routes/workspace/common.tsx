@@ -3,6 +3,10 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { action, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
+import { User } from "@opencode-ai/console-core/user.js"
+import { and, Database, desc, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
+import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 
 export function formatDateForTable(date: Date) {
   const options: Intl.DateTimeFormatOptions = {
@@ -30,17 +34,28 @@ export function formatDateUTC(date: Date) {
   return date.toLocaleDateString("en-US", options)
 }
 
-export const queryIsLoggedIn = query(async () => {
+export async function getLastSeenWorkspaceID() {
   "use server"
-  return withActor(() => {
-    try {
-      Actor.assert("account")
-      return true
-    } catch {
-      return false
-    }
+  return withActor(async () => {
+    const actor = Actor.assert("account")
+    return Database.use(async (tx) =>
+      tx
+        .select({ id: WorkspaceTable.id })
+        .from(UserTable)
+        .innerJoin(WorkspaceTable, eq(UserTable.workspaceID, WorkspaceTable.id))
+        .where(
+          and(
+            eq(UserTable.accountID, actor.properties.accountID),
+            isNull(UserTable.timeDeleted),
+            isNull(WorkspaceTable.timeDeleted),
+          ),
+        )
+        .orderBy(desc(UserTable.timeSeen))
+        .limit(1)
+        .then((x) => x[0]?.id),
+    )
   })
-}, "isLoggedIn.get")
+}
 
 export const querySessionInfo = query(async (workspaceID: string) => {
   "use server"
