@@ -54,41 +54,7 @@ For more info on how to configure OpenCode [**head over to our docs**](https://o
 
 ### Contributing
 
-OpenCode is an opinionated tool so any fundamental feature needs to go through a
-design process with the core team.
-
-> [!IMPORTANT]
-> We do not accept PRs for core features.
-
-However we still merge a ton of PRs - you can contribute:
-
-- Bug fixes
-- Improvements to LLM performance
-- Support for new providers
-- Fixes for env specific quirks
-- Missing standard behavior
-- Documentation
-
-Take a look at the git history to see what kind of PRs we end up merging.
-
-> [!NOTE]
-> If you do not follow the above guidelines we might close your PR.
-
-To run OpenCode locally you need.
-
-- Bun 1.3 or higher
-- Golang 1.24.x
-
-And run.
-
-```bash
-$ bun install
-$ bun dev
-```
-
-#### Development Notes
-
-**API Client**: After making changes to the TypeScript API endpoints in `packages/opencode/src/server/server.ts`, you will need the OpenCode team to generate a new stainless sdk for the clients.
+If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
 
 ### FAQ
 
