@@ -29,7 +29,7 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         return {
           title: isDeleting ? "Press delete again to confirm" : x.title,
-          bg: isDeleting ? Theme.error : undefined,
+          bg: isDeleting ? Theme().error : undefined,
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),

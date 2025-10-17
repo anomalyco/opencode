@@ -19,11 +19,11 @@ export function Home() {
         <text>
           <Switch>
             <Match when={mcpError()}>
-              <span style={{ fg: Theme.error }}>•</span> mcp errors{" "}
-              <span style={{ fg: Theme.textMuted }}>ctrl+x s</span>
+              <span style={{ fg: Theme().error }}>•</span> mcp errors{" "}
+              <span style={{ fg: Theme().textMuted }}>ctrl+x s</span>
             </Match>
             <Match when={true}>
-              <span style={{ fg: Theme.success }}>•</span>{" "}
+              <span style={{ fg: Theme().success }}>•</span>{" "}
               {Locale.pluralize(Object.values(sync.data.mcp).length, "{} mcp server", "{} mcp servers")}
             </Match>
           </Switch>
@@ -53,7 +53,7 @@ function HelpRow(props: ParentProps<{ keybind: keyof KeybindsConfig }>) {
   return (
     <box flexDirection="row" justifyContent="space-between" width="100%">
       <text>{props.children}</text>
-      <text fg={Theme.primary}>{keybind.print(props.keybind)}</text>
+      <text fg={Theme().primary}>{keybind.print(props.keybind)}</text>
     </box>
   )
 }

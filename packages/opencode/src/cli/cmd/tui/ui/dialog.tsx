@@ -46,8 +46,8 @@ export function Dialog(
         customBorderChars={Border}
         width={props.size === "large" ? 80 : 60}
         maxWidth={dimensions().width - 2}
-        backgroundColor={Theme.backgroundPanel}
-        borderColor={Theme.border}
+        backgroundColor={Theme().backgroundPanel}
+        borderColor={Theme().border}
         paddingTop={1}
       >
         {props.children}

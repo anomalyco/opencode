@@ -3,7 +3,7 @@
   "defs": {
     "vesperBg": "#101010",
     "vesperFg": "#FFF",
-    "vesperComment": "#8b8b8b94",
+    "vesperComment": "#8b8b8b",
     "vesperKeyword": "#A0A0A0",
     "vesperFunction": "#FFC799",
     "vesperString": "#99FFE4",

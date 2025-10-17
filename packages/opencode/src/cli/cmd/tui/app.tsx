@@ -14,6 +14,7 @@ import { DialogStatus } from "@tui/component/dialog-status"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { Theme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -151,6 +152,14 @@ function App() {
       },
       category: "System",
     },
+    {
+      title: "Switch theme",
+      value: "theme.switch",
+      onSelect: () => {
+        dialog.replace(() => <DialogThemeList />)
+      },
+      category: "System",
+    },
   ])
 
   createEffect(() => {
@@ -174,7 +183,7 @@ function App() {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={Theme.background}
+      backgroundColor={Theme().background}
       onMouseUp={async () => {
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
@@ -200,27 +209,27 @@ function App() {
       </box>
       <box
         height={1}
-        backgroundColor={Theme.backgroundPanel}
+        backgroundColor={Theme().backgroundPanel}
         flexDirection="row"
         justifyContent="space-between"
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={Theme.backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={Theme.textMuted}>open</text>
+          <box flexDirection="row" backgroundColor={Theme().backgroundElement} paddingLeft={1} paddingRight={1}>
+            <text fg={Theme().textMuted}>open</text>
             <text attributes={TextAttributes.BOLD}>code </text>
-            <text fg={Theme.textMuted}>v{Installation.VERSION}</text>
+            <text fg={Theme().textMuted}>v{Installation.VERSION}</text>
           </box>
           <box paddingLeft={1} paddingRight={1}>
-            <text fg={Theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+            <text fg={Theme().textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
           </box>
         </box>
         <box flexDirection="row" flexShrink={0}>
-          <text fg={Theme.textMuted} paddingRight={1}>
+          <text fg={Theme().textMuted} paddingRight={1}>
             tab
           </text>
           <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={Theme.background} wrap={false}>
+          <text bg={local.agent.color(local.agent.current().name)} fg={Theme().background} wrap={false}>
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>

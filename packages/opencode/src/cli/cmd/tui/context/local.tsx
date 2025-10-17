@@ -44,7 +44,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         color(name: string) {
           const index = agents().findIndex((x) => x.name === name)
-          const colors = [Theme.secondary, Theme.accent, Theme.success, Theme.warning, Theme.primary, Theme.error]
+          const colors = [Theme().secondary, Theme().accent, Theme().success, Theme().warning, Theme().primary, Theme().error]
           return colors[index % colors.length]
         },
       }

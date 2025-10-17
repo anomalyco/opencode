@@ -300,7 +300,7 @@ export function Autocomplete(props: {
       zIndex={100}
       {...SplitBorder}
     >
-      <box backgroundColor={Theme.backgroundElement} height={height()}>
+      <box backgroundColor={Theme().backgroundElement} height={height()}>
         <For
           each={options()}
           fallback={
@@ -313,12 +313,12 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? Theme.primary : undefined}
+              backgroundColor={index() === store.selected ? Theme().primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? Theme.background : Theme.text}>{option.display}</text>
+              <text fg={index() === store.selected ? Theme().background : Theme().text}>{option.display}</text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? Theme.background : Theme.textMuted}> {option.description}</text>
+                <text fg={index() === store.selected ? Theme().background : Theme().textMuted}> {option.description}</text>
               </Show>
             </box>
           )}

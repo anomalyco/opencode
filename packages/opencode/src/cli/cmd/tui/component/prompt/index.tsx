@@ -110,8 +110,8 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
-    if (props.disabled) input.cursorColor = Theme.backgroundElement
-    if (!props.disabled) input.cursorColor = Theme.primary
+    if (props.disabled) input.cursorColor = Theme().backgroundElement
+    if (!props.disabled) input.cursorColor = Theme().primary
   })
 
   const [store, setStore] = createStore<{
@@ -251,14 +251,14 @@ export function Prompt(props: PromptProps) {
         <box
           flexDirection="row"
           {...SplitBorder}
-          borderColor={keybind.leader ? Theme.accent : store.mode === "shell" ? Theme.secondary : undefined}
+          borderColor={keybind.leader ? Theme().accent : store.mode === "shell" ? Theme().secondary : undefined}
         >
-          <box backgroundColor={Theme.backgroundElement} width={3} justifyContent="center" alignItems="center">
-            <text attributes={TextAttributes.BOLD} fg={Theme.primary}>
+          <box backgroundColor={Theme().backgroundElement} width={3} justifyContent="center" alignItems="center">
+            <text attributes={TextAttributes.BOLD} fg={Theme().primary}>
               {store.mode === "normal" ? ">" : "!"}
             </text>
           </box>
-          <box paddingTop={1} paddingBottom={2} backgroundColor={Theme.backgroundElement} flexGrow={1}>
+          <box paddingTop={1} paddingBottom={2} backgroundColor={Theme().backgroundElement} flexGrow={1}>
             <input
               onPaste={async function (text) {
                 this.insertText(text)
@@ -363,33 +363,33 @@ export function Prompt(props: PromptProps) {
               onSubmit={submit}
               ref={(r) => (input = r)}
               onMouseDown={(r) => r.target?.focus()}
-              focusedBackgroundColor={Theme.backgroundElement}
-              cursorColor={Theme.primary}
-              backgroundColor={Theme.backgroundElement}
+              focusedBackgroundColor={Theme().backgroundElement}
+              cursorColor={Theme().primary}
+              backgroundColor={Theme().backgroundElement}
             />
           </box>
-          <box backgroundColor={Theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
+          <box backgroundColor={Theme().backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
           <text flexShrink={0} wrap={false}>
-            <span style={{ fg: Theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
+            <span style={{ fg: Theme().textMuted }}>{local.model.parsed().provider}</span>{" "}
             <span style={{ bold: true }}>{local.model.parsed().model}</span>
           </text>
           <Switch>
             <Match when={status() === "compacting"}>
-              <text fg={Theme.textMuted}>compacting...</text>
+              <text fg={Theme().textMuted}>compacting...</text>
             </Match>
             <Match when={status() === "working"}>
               <box flexDirection="row" gap={1}>
                 <text>
-                  esc <span style={{ fg: Theme.textMuted }}>interrupt</span>
+                  esc <span style={{ fg: Theme().textMuted }}>interrupt</span>
                 </text>
               </box>
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
               <text>
-                ctrl+p <span style={{ fg: Theme.textMuted }}>commands</span>
+                ctrl+p <span style={{ fg: Theme().textMuted }}>commands</span>
               </text>
             </Match>
           </Switch>

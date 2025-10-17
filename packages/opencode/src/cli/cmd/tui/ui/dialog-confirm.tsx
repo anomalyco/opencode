@@ -34,10 +34,10 @@ export function DialogConfirm(props: DialogConfirmProps) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD}>{props.title}</text>
-        <text fg={Theme.textMuted}>esc</text>
+        <text fg={Theme().textMuted}>esc</text>
       </box>
       <box paddingBottom={1}>
-        <text fg={Theme.textMuted}>{props.message}</text>
+        <text fg={Theme().textMuted}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <For each={["cancel", "confirm"]}>
@@ -45,14 +45,14 @@ export function DialogConfirm(props: DialogConfirmProps) {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={key === store.active ? Theme.primary : undefined}
+              backgroundColor={key === store.active ? Theme().primary : undefined}
               onMouseDown={() => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
                 dialog.clear()
               }}
             >
-              <text fg={key === store.active ? Theme.background : Theme.textMuted}>{Locale.titlecase(key)}</text>
+              <text fg={key === store.active ? Theme().background : Theme().textMuted}>{Locale.titlecase(key)}</text>
             </box>
           )}
         </For>

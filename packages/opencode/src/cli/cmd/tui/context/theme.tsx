@@ -1,256 +1,122 @@
-import { SyntaxStyle } from "@opentui/core"
-
-const OPENCODE_THEME = {
-  primary: {
-    dark: "#fab283",
-    light: "#3b7dd8",
-  },
-  secondary: {
-    dark: "#5c9cf5",
-    light: "#7b5bb6",
-  },
-  accent: {
-    dark: "#9d7cd8",
-    light: "#d68c27",
-  },
-  error: {
-    dark: "#e06c75",
-    light: "#d1383d",
-  },
-  warning: {
-    dark: "#f5a742",
-    light: "#d68c27",
-  },
-  success: {
-    dark: "#7fd88f",
-    light: "#3d9a57",
-  },
-  info: {
-    dark: "#56b6c2",
-    light: "#318795",
-  },
-  text: {
-    dark: "#eeeeee",
-    light: "#1a1a1a",
-  },
-  textMuted: {
-    dark: "#808080",
-    light: "#8a8a8a",
-  },
-  background: {
-    dark: "#0a0a0a",
-    light: "#ffffff",
-  },
-  backgroundPanel: {
-    dark: "#141414",
-    light: "#fafafa",
-  },
-  backgroundElement: {
-    dark: "#1e1e1e",
-    light: "#f5f5f5",
-  },
-  border: {
-    dark: "#484848",
-    light: "#b8b8b8",
-  },
-  borderActive: {
-    dark: "#606060",
-    light: "#a0a0a0",
-  },
-  borderSubtle: {
-    dark: "#3c3c3c",
-    light: "#d4d4d4",
-  },
-  diffAdded: {
-    dark: "#4fd6be",
-    light: "#1e725c",
-  },
-  diffRemoved: {
-    dark: "#c53b53",
-    light: "#c53b53",
-  },
-  diffContext: {
-    dark: "#828bb8",
-    light: "#7086b5",
-  },
-  diffHunkHeader: {
-    dark: "#828bb8",
-    light: "#7086b5",
-  },
-  diffHighlightAdded: {
-    dark: "#b8db87",
-    light: "#4db380",
-  },
-  diffHighlightRemoved: {
-    dark: "#e26a75",
-    light: "#f52a65",
-  },
-  diffAddedBg: {
-    dark: "#20303b",
-    light: "#d5e5d5",
-  },
-  diffRemovedBg: {
-    dark: "#37222c",
-    light: "#f7d8db",
-  },
-  diffContextBg: {
-    dark: "#141414",
-    light: "#fafafa",
-  },
-  diffLineNumber: {
-    dark: "#1e1e1e",
-    light: "#f5f5f5",
-  },
-  diffAddedLineNumberBg: {
-    dark: "#1b2b34",
-    light: "#c5d5c5",
-  },
-  diffRemovedLineNumberBg: {
-    dark: "#2d1f26",
-    light: "#e7c8cb",
-  },
-  markdownText: {
-    dark: "#eeeeee",
-    light: "#1a1a1a",
-  },
-  markdownHeading: {
-    dark: "#9d7cd8",
-    light: "#d68c27",
-  },
-  markdownLink: {
-    dark: "#fab283",
-    light: "#3b7dd8",
-  },
-  markdownLinkText: {
-    dark: "#56b6c2",
-    light: "#318795",
-  },
-  markdownCode: {
-    dark: "#7fd88f",
-    light: "#3d9a57",
-  },
-  markdownBlockQuote: {
-    dark: "#e5c07b",
-    light: "#b0851f",
-  },
-  markdownEmph: {
-    dark: "#e5c07b",
-    light: "#b0851f",
-  },
-  markdownStrong: {
-    dark: "#f5a742",
-    light: "#d68c27",
-  },
-  markdownHorizontalRule: {
-    dark: "#808080",
-    light: "#8a8a8a",
-  },
-  markdownListItem: {
-    dark: "#fab283",
-    light: "#3b7dd8",
-  },
-  markdownListEnumeration: {
-    dark: "#56b6c2",
-    light: "#318795",
-  },
-  markdownImage: {
-    dark: "#fab283",
-    light: "#3b7dd8",
-  },
-  markdownImageText: {
-    dark: "#56b6c2",
-    light: "#318795",
-  },
-  markdownCodeBlock: {
-    dark: "#eeeeee",
-    light: "#1a1a1a",
-  },
-  syntaxComment: {
-    dark: "#808080",
-    light: "#8a8a8a",
-  },
-  syntaxKeyword: {
-    dark: "#9d7cd8",
-    light: "#d68c27",
-  },
-  syntaxFunction: {
-    dark: "#fab283",
-    light: "#3b7dd8",
-  },
-  syntaxVariable: {
-    dark: "#e06c75",
-    light: "#d1383d",
-  },
-  syntaxString: {
-    dark: "#7fd88f",
-    light: "#3d9a57",
-  },
-  syntaxNumber: {
-    dark: "#f5a742",
-    light: "#d68c27",
-  },
-  syntaxType: {
-    dark: "#e5c07b",
-    light: "#b0851f",
-  },
-  syntaxOperator: {
-    dark: "#56b6c2",
-    light: "#318795",
-  },
-  syntaxPunctuation: {
-    dark: "#eeeeee",
-    light: "#1a1a1a",
-  },
-} as const
+import { SyntaxStyle, RGBA } from "@opentui/core"
+import { createSignal, createMemo } from "solid-js"
+import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
+import ayu from "../../../../../../tui/internal/theme/themes/ayu.json" with { type: "json" }
+import catppuccin from "../../../../../../tui/internal/theme/themes/catppuccin.json" with { type: "json" }
+import cobalt2 from "../../../../../../tui/internal/theme/themes/cobalt2.json" with { type: "json" }
+import dracula from "../../../../../../tui/internal/theme/themes/dracula.json" with { type: "json" }
+import everforest from "../../../../../../tui/internal/theme/themes/everforest.json" with { type: "json" }
+import github from "../../../../../../tui/internal/theme/themes/github.json" with { type: "json" }
+import gruvbox from "../../../../../../tui/internal/theme/themes/gruvbox.json" with { type: "json" }
+import kanagawa from "../../../../../../tui/internal/theme/themes/kanagawa.json" with { type: "json" }
+import material from "../../../../../../tui/internal/theme/themes/material.json" with { type: "json" }
+import matrix from "../../../../../../tui/internal/theme/themes/matrix.json" with { type: "json" }
+import monokai from "../../../../../../tui/internal/theme/themes/monokai.json" with { type: "json" }
+import nord from "../../../../../../tui/internal/theme/themes/nord.json" with { type: "json" }
+import onedark from "../../../../../../tui/internal/theme/themes/one-dark.json" with { type: "json" }
+import opencode from "../../../../../../tui/internal/theme/themes/opencode.json" with { type: "json" }
+import palenight from "../../../../../../tui/internal/theme/themes/palenight.json" with { type: "json" }
+import rosepine from "../../../../../../tui/internal/theme/themes/rosepine.json" with { type: "json" }
+import solarized from "../../../../../../tui/internal/theme/themes/solarized.json" with { type: "json" }
+import synthwave84 from "../../../../../../tui/internal/theme/themes/synthwave84.json" with { type: "json" }
+import tokyonight from "../../../../../../tui/internal/theme/themes/tokyonight.json" with { type: "json" }
+import vesper from "../../../../../../tui/internal/theme/themes/vesper.json" with { type: "json" }
+import zenburn from "../../../../../../tui/internal/theme/themes/zenburn.json" with { type: "json" }
 
 type Theme = {
-  primary: string
-  secondary: string
-  accent: string
-  error: string
-  warning: string
-  success: string
-  info: string
-  text: string
-  textMuted: string
-  background: string
-  backgroundPanel: string
-  backgroundElement: string
-  border: string
-  borderActive: string
-  borderSubtle: string
-  diffAdded: string
-  diffRemoved: string
-  diffContext: string
-  diffHunkHeader: string
-  diffHighlightAdded: string
-  diffHighlightRemoved: string
-  diffAddedBg: string
-  diffRemovedBg: string
-  diffContextBg: string
-  diffLineNumber: string
-  diffAddedLineNumberBg: string
-  diffRemovedLineNumberBg: string
-  markdownText: string
-  markdownHeading: {}
-  markdownLink: string
-  markdownLinkText: string
-  markdownCode: string
-  markdownBlockQuote: string
-  markdownEmph: string
-  markdownStrong: string
-  markdownHorizontalRule: string
-  markdownListItem: string
-  markdownListEnumeration: {}
-  markdownImage: string
-  markdownImageText: string
-  markdownCodeBlock: string
+  primary: RGBA
+  secondary: RGBA
+  accent: RGBA
+  error: RGBA
+  warning: RGBA
+  success: RGBA
+  info: RGBA
+  text: RGBA
+  textMuted: RGBA
+  background: RGBA
+  backgroundPanel: RGBA
+  backgroundElement: RGBA
+  border: RGBA
+  borderActive: RGBA
+  borderSubtle: RGBA
+  diffAdded: RGBA
+  diffRemoved: RGBA
+  diffContext: RGBA
+  diffHunkHeader: RGBA
+  diffHighlightAdded: RGBA
+  diffHighlightRemoved: RGBA
+  diffAddedBg: RGBA
+  diffRemovedBg: RGBA
+  diffContextBg: RGBA
+  diffLineNumber: RGBA
+  diffAddedLineNumberBg: RGBA
+  diffRemovedLineNumberBg: RGBA
+  markdownText: RGBA
+  markdownHeading: RGBA
+  markdownLink: RGBA
+  markdownLinkText: RGBA
+  markdownCode: RGBA
+  markdownBlockQuote: RGBA
+  markdownEmph: RGBA
+  markdownStrong: RGBA
+  markdownHorizontalRule: RGBA
+  markdownListItem: RGBA
+  markdownListEnumeration: RGBA
+  markdownImage: RGBA
+  markdownImageText: RGBA
+  markdownCodeBlock: RGBA
 }
 
-export const Theme = Object.entries(OPENCODE_THEME).reduce((acc, [key, value]) => {
-  acc[key as keyof Theme] = value.dark
-  return acc
-}, {} as Theme)
+type HexColor = `#${string}`
+type RefName = string
+type ColorModeObj = {
+  dark: HexColor | RefName
+  light: HexColor | RefName
+}
+type ColorValue = HexColor | RefName | ColorModeObj
+type ThemeJson = {
+  $schema?: string
+  defs?: Record<string, HexColor | RefName>
+  theme: Record<keyof Theme, ColorValue>
+}
+
+export const THEMES = {
+  aura: resolveTheme(aura),
+  ayu: resolveTheme(ayu),
+  catppuccin: resolveTheme(catppuccin),
+  cobalt2: resolveTheme(cobalt2),
+  dracula: resolveTheme(dracula),
+  everforest: resolveTheme(everforest),
+  github: resolveTheme(github),
+  gruvbox: resolveTheme(gruvbox),
+  kanagawa: resolveTheme(kanagawa),
+  material: resolveTheme(material),
+  matrix: resolveTheme(matrix),
+  monokai: resolveTheme(monokai),
+  nord: resolveTheme(nord),
+  onedark: resolveTheme(onedark),
+  opencode: resolveTheme(opencode),
+  palenight: resolveTheme(palenight),
+  rosepine: resolveTheme(rosepine),
+  solarized: resolveTheme(solarized),
+  synthwave84: resolveTheme(synthwave84),
+  tokyonight: resolveTheme(tokyonight),
+  vesper: resolveTheme(vesper),
+  zenburn: resolveTheme(zenburn),
+}
+
+function resolveTheme(theme: ThemeJson) {
+  const defs = theme.defs ?? {}
+  function resolveColor(c: ColorValue): RGBA {
+    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
+    else return resolveColor(c.dark) // TODO: opentui doesn't have the equivalent of lipgloss adaptiveColor yet
+  }
+  return Object.fromEntries(
+    Object.entries(theme.theme).map(([key, value]) => {
+      return [key, resolveColor(value)]
+    }),
+  ) as Theme
+}
 
 const syntaxThemeDark = [
   {
@@ -432,4 +298,7 @@ const syntaxThemeDark = [
   },
 ]
 
-export const syntaxTheme = SyntaxStyle.fromTheme(syntaxThemeDark)
+export const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("tokyonight")
+export const Theme = createMemo(() => THEMES[selectedTheme()])
+// TODO: switch this
+export const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))

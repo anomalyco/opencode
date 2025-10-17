@@ -9,7 +9,7 @@ export function DialogModel() {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
-  const [ref, setRef] = createSignal<DialogSelectRef>()
+  const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
 
   const options = createMemo(() => {
     return [

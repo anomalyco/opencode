@@ -2,7 +2,7 @@ import { Theme } from "@tui/context/theme"
 
 export const SplitBorder = {
   border: ["left" as const, "right" as const],
-  borderColor: Theme.border,
+  borderColor: Theme().border,
   customBorderChars: {
     topLeft: "",
     bottomLeft: "",

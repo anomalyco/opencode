@@ -4,7 +4,7 @@ import { createMemo, createSignal } from "solid-js"
 
 export type ShimmerProps = {
   text: string
-  color: string
+  color: RGBA
 }
 
 const DURATION = 2_500
@@ -15,7 +15,7 @@ export function Shimmer(props: ShimmerProps) {
     loop: true,
   })
   const characters = props.text.split("")
-  const color = createMemo(() => RGBA.fromHex(props.color))
+  const color = props.color
 
   const shimmerSignals = characters.map((_, i) => {
     const [shimmer, setShimmer] = createSignal(0.4)
@@ -47,7 +47,7 @@ export function Shimmer(props: ShimmerProps) {
       {(() => {
         return characters.map((ch, i) => {
           const shimmer = shimmerSignals[i]
-          const fg = RGBA.fromInts(color().r * 255, color().g * 255, color().b * 255, shimmer() * 255)
+          const fg = RGBA.fromInts(color.r * 255, color.g * 255, color.b * 255, shimmer() * 255)
           return <span style={{ fg }}>{ch}</span>
         })
       })()}

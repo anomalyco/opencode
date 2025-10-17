@@ -13,15 +13,15 @@ export function Logo() {
       <For each={LOGO_LEFT}>
         {(line, index) => (
           <box flexDirection="row" gap={1}>
-            <text fg={Theme.textMuted}>{line}</text>
-            <text fg={Theme.text} attributes={TextAttributes.BOLD}>
+            <text fg={Theme().textMuted}>{line}</text>
+            <text fg={Theme().text} attributes={TextAttributes.BOLD}>
               {LOGO_RIGHT[index()]}
             </text>
           </box>
         )}
       </For>
       <box flexDirection="row" justifyContent="flex-end">
-        <text fg={Theme.textMuted}>{Installation.VERSION}</text>
+        <text fg={Theme().textMuted}>{Installation.VERSION}</text>
       </box>
     </box>
   )
