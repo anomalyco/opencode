@@ -23,10 +23,7 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 - `bug`
 
 > [!NOTE]
-> PRs that ignore these guardrails will likely be closed.
-
-> [!NOTE]
-> Want to take an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
+> PRs that ignore these guardrails will likely be closed. Want to take an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
 
 ## Developing OpenCode
 
@@ -56,16 +53,14 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 
 Style Preferences (not strictly enforced, just general guidelines):
 
-- Try to keep things in one function unless composable or reusable
-- DO NOT do unnecessary destructuring of variables
-- DO NOT use `else` statements unless necessary
-- DO NOT use `try`/`catch` if it can be avoided
-- AVOID `try`/`catch` where possible
-- AVOID `else` statements
-- AVOID using `any` type
-- AVOID `let` statements
-- PREFER single word variable names where possible
-- Use as many bun apis as possible like Bun.file()
+- **Functions:** Keep logic within a single function unless breaking it out adds clear reuse or composition benefits.
+- **Destructuring:** Do not do unnecessary destructuring of variables.
+- **Control flow:** Avoid `else` statements.
+- **Error handling:** Prefer `.catch(...)` instead of `try`/`catch` when possible.
+- **Types:** Reach for precise types and avoid `any`.
+- **Variables:** Stick to immutable patterns and avoid `let`.
+- **Naming:** Choose concise single-word identifiers when they remain descriptive.
+- **Runtime APIs:** Use Bun helpers such as `Bun.file()` when they fit the use case.
 
 ## Feature Requests
 
