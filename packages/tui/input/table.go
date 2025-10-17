@@ -20,6 +20,11 @@ func buildKeysTable(flags int, term string) map[string]Key {
 		tab = Key{Code: 'i', Mod: ModCtrl}
 	}
 
+	lf := Key{Code: KeyLineFeed, Text: "\n"} // ctrl+j or linefeed
+	if flags&FlagCtrlJ != 0 {
+		lf = Key{Code: 'j', Mod: ModCtrl}
+	}
+
 	enter := Key{Code: KeyEnter} // ctrl+m or enter
 	if flags&FlagCtrlM != 0 {
 		enter = Key{Code: 'm', Mod: ModCtrl}
@@ -65,7 +70,7 @@ func buildKeysTable(flags int, term string) map[string]Key {
 		string(byte(ansi.BEL)): {Code: 'g', Mod: ModCtrl},
 		string(byte(ansi.BS)):  {Code: 'h', Mod: ModCtrl},
 		string(byte(ansi.HT)):  tab,
-		string(byte(ansi.LF)):  {Code: 'j', Mod: ModCtrl},
+		string(byte(ansi.LF)):  lf,
 		string(byte(ansi.VT)):  {Code: 'k', Mod: ModCtrl},
 		string(byte(ansi.FF)):  {Code: 'l', Mod: ModCtrl},
 		string(byte(ansi.CR)):  enter,

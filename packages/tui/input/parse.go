@@ -38,6 +38,14 @@ const (
 	// and Ctrl+M. This flag allows the driver to treat both as the same key.
 	FlagCtrlM
 
+	// When this flag is set, the driver will treat the Line Feed (LF) and Ctrl+J
+	// as the same key sequence.
+	//
+	// Historically, the ANSI specs generate LF (0x0A) on Ctrl+J. When this flag
+	// is NOT set, LF will be treated as a distinct key that can be used to insert
+	// literal newlines in text, separate from the Enter key (CR).
+	FlagCtrlJ
+
 	// When this flag is set, the driver will treat Escape and Ctrl+[ as
 	// the same key sequence.
 	//
@@ -994,6 +1002,11 @@ func (p *Parser) parseControl(b byte) Event {
 		return KeyPressEvent{Code: KeySpace, Mod: ModCtrl}
 	case ansi.BS:
 		return KeyPressEvent{Code: 'h', Mod: ModCtrl}
+	case ansi.LF:
+		if p.flags&FlagCtrlJ != 0 {
+			return KeyPressEvent{Code: 'j', Mod: ModCtrl}
+		}
+		return KeyPressEvent{Code: KeyLineFeed, Text: "\n"}
 	case ansi.HT:
 		if p.flags&FlagCtrlI != 0 {
 			return KeyPressEvent{Code: 'i', Mod: ModCtrl}
@@ -1018,6 +1031,10 @@ func (p *Parser) parseControl(b byte) Event {
 		return KeyPressEvent{Code: KeySpace, Text: " "}
 	default:
 		if b >= ansi.SOH && b <= ansi.SUB {
+			// Special case: skip LF (0x0A) since it's handled above
+			if b == ansi.LF {
+				return KeyPressEvent{Code: KeyLineFeed, Text: "\n"}
+			}
 			// Use lower case letters for control codes
 			code := rune(b + 0x60)
 			return KeyPressEvent{Code: code, Mod: ModCtrl}

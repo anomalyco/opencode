@@ -249,6 +249,22 @@ func TestParseSequence(t *testing.T) {
 			[]Event{KeyPressEvent{Mod: ModShift, Code: KeyTab}},
 		},
 		seqTest{
+			[]byte("\x1b[10u"),
+			[]Event{KeyPressEvent{Code: KeyLineFeed, Text: "\n"}},
+		},
+		seqTest{
+			[]byte("\x1b[10;2u"),
+			[]Event{KeyPressEvent{Mod: ModShift, Code: KeyLineFeed}},
+		},
+		seqTest{
+			[]byte("\x1b[13u"),
+			[]Event{KeyPressEvent{Code: KeyEnter}},
+		},
+		seqTest{
+			[]byte("\x1b[13;2u"),
+			[]Event{KeyPressEvent{Mod: ModShift, Code: KeyEnter}},
+		},
+		seqTest{
 			[]byte("\x1b[195;u"),
 			[]Event{KeyPressEvent{Text: "Ã", Code: 'Ã'}},
 		},
@@ -559,6 +575,18 @@ func TestReadInput(t *testing.T) {
 			[]byte{'\x1b', '\r'},
 			[]Event{
 				KeyPressEvent{Code: KeyEnter, Mod: ModAlt},
+			},
+		},
+		{
+			"linefeed",
+			[]byte{'\n'},
+			[]Event{KeyPressEvent{Code: KeyLineFeed, Text: "\n"}},
+		},
+		{
+			"alt+linefeed",
+			[]byte{'\x1b', '\n'},
+			[]Event{
+				KeyPressEvent{Code: KeyLineFeed, Mod: ModAlt},
 			},
 		},
 		{

@@ -184,6 +184,7 @@ const (
 	KeyTab       = rune(ansi.HT)
 	KeyEnter     = rune(ansi.CR)
 	KeyReturn    = KeyEnter
+	KeyLineFeed  = rune(ansi.LF)
 	KeyEscape    = rune(ansi.ESC)
 	KeyEsc       = KeyEscape
 
@@ -423,6 +424,7 @@ func (k Key) Keystroke() string {
 
 var keyTypeString = map[rune]string{
 	KeyEnter:      "enter",
+	KeyLineFeed:   "linefeed",
 	KeyTab:        "tab",
 	KeyBackspace:  "backspace",
 	KeyEscape:     "esc",

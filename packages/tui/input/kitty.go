@@ -38,6 +38,7 @@ func (e KittyEnhancementsEvent) Contains(enhancements KittyEnhancementsEvent) bo
 var kittyKeyMap = map[int]Key{
 	ansi.BS:  {Code: KeyBackspace},
 	ansi.HT:  {Code: KeyTab},
+	ansi.LF:  {Code: KeyLineFeed, Text: "\n"},
 	ansi.CR:  {Code: KeyEnter},
 	ansi.ESC: {Code: KeyEscape},
 	ansi.DEL: {Code: KeyBackspace},

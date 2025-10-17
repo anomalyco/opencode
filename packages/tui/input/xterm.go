@@ -16,6 +16,12 @@ func parseXTermModifyOtherKeys(params ansi.Params) Event {
 		return KeyPressEvent{Mod: mod, Code: KeyBackspace}
 	case ansi.HT:
 		return KeyPressEvent{Mod: mod, Code: KeyTab}
+	case ansi.LF:
+		k := KeyPressEvent{Mod: mod, Code: KeyLineFeed}
+		if mod == 0 {
+			k.Text = "\n"
+		}
+		return k
 	case ansi.CR:
 		return KeyPressEvent{Mod: mod, Code: KeyEnter}
 	case ansi.ESC:
