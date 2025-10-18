@@ -26,7 +26,7 @@ This lets you configure granular controls for the `edit`, `bash`, and `webfetch`
 
 ## Tools
 
-Currently, the permissions for the `edit`, `bash`, and `webfetch` tools can be configured through the `permission` option.
+Currently, the permissions for the `edit`, `bash`, `webfetch`, and `mcp` tools can be configured through the `permission` option.
 
 ---
 
@@ -142,6 +142,32 @@ Use the `permission.webfetch` key to control whether the LLM can fetch web pages
   }
 }
 ```
+
+---
+
+### mcp
+
+Use the `permission.mcp` key to control whether MCP tools require user approval.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mcp": {
+      "*": "ask",
+      "mymcp1_tool_name1": "allow",
+      "mymcp2_*": "deny"
+    }
+  }
+}
+```
+
+You can use wildcards to manage permissions for specific MCP tools:
+
+- `"*"` matches all MCP tools
+- `"mymcp1_tool_name1"` matches tool `tool_name1` of mcp server `mymcp1`
+- `"mymcp2_*"` matches all tools starting with `mymcp2_`
+- Specific rules override wildcard rules
 
 ---
 
