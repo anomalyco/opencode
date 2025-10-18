@@ -20,12 +20,16 @@ const Border = {
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
+    onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
 
   return (
     <box
+      onMouseUp={async () => {
+        props.onClose?.()
+      }}
       width={dimensions().width}
       height={dimensions().height}
       alignItems="center"
@@ -36,6 +40,9 @@ export function Dialog(
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
+        onMouseUp={async (e) => {
+          e.stopPropagation()
+        }}
         customBorderChars={Border}
         width={props.size === "large" ? 80 : 60}
         maxWidth={dimensions().width - 2}
@@ -134,7 +141,9 @@ export function DialogProvider(props: ParentProps) {
       {props.children}
       <box position="absolute">
         <Show when={value.stack.length}>
-          <Dialog size={value.size}>{value.stack.at(-1)!.element}</Dialog>
+          <Dialog onClose={() => value.clear()} size={value.size}>
+            {value.stack.at(-1)!.element}
+          </Dialog>
         </Show>
       </box>
     </ctx.Provider>

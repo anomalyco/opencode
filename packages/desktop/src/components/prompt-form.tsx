@@ -11,7 +11,7 @@ import { AutocompleteDropdown, type AutocompleteItem } from "@/components/autoco
 interface PromptFormProps {
   class?: string
   classList?: Record<string, boolean>
-  onSubmit: (prompt: string) => Promise<void> | void
+  onSubmit: (prompt: PromptSubmitValue) => Promise<void> | void
   onOpenModelSelect: () => void
   onOpenAgentSelect: () => void
   onInputRefChange?: (element: HTMLTextAreaElement | undefined) => void
@@ -80,9 +80,7 @@ export default function PromptForm(props: PromptFormProps) {
     interim: interimTranscript,
     start: startSpeech,
     stop: stopSpeech,
-  } = createSpeechRecognition({
-    onFinal: (text) => setPrompt((prev) => (prev && !prev.endsWith(" ") ? prev + " " : prev) + text),
-  })
+  } = usePromptSpeech((updater) => setState("promptInput", updater))
 
   let inputRef: HTMLTextAreaElement | undefined = undefined
   let overlayContainerRef: HTMLDivElement | undefined = undefined
@@ -132,38 +130,79 @@ export default function PromptForm(props: PromptFormProps) {
     }
   })
 
-  const promptContent = createMemo(() => {
-    const base = prompt() || ""
-    const interim = isRecording() ? interimTranscript() : ""
-    if (!base && !interim) {
-      return <span class="text-text-muted/70">{placeholderText}</span>
+  const attachmentLookup = createMemo(() => {
+    const map = new Map<string, AttachmentCandidate>()
+    const activeFile = local.context.active()
+    if (activeFile) {
+      registerCandidate(
+        map,
+        {
+          origin: "active",
+          path: activeFile.path,
+          selection: activeFile.selection,
+          display: createAttachmentDisplay(activeFile.path, activeFile.selection),
+        },
+        [activeFile.path, getFilename(activeFile.path)],
+      )
     }
-    const needsSpace = base && interim && !base.endsWith(" ") && !interim.startsWith(" ")
-    return (
-      <>
-        <span class="text-text">{base}</span>
-        {interim && (
-          <span class="text-text-muted/60 italic">
-            {needsSpace ? " " : ""}
-            {interim}
-          </span>
-        )}
-      </>
-    )
+    for (const item of local.context.all()) {
+      registerCandidate(
+        map,
+        {
+          origin: "context",
+          path: item.path,
+          selection: item.selection,
+          display: createAttachmentDisplay(item.path, item.selection),
+        },
+        [item.path, getFilename(item.path)],
+      )
+    }
+    for (const [alias, part] of state.inlineAliases) {
+      registerCandidate(
+        map,
+        {
+          origin: part.origin,
+          path: part.path,
+          selection: part.selection,
+          display: part.display ?? createAttachmentDisplay(part.path, part.selection),
+        },
+        [alias],
+      )
+    }
+    return map
   })
 
-  createEffect(() => {
-    prompt()
-    interimTranscript()
-    queueMicrotask(() => {
-      if (!inputRef) return
-      if (!overlayContainerRef) return
-      if (!shouldAutoScroll) {
-        overlayContainerRef.scrollTop = inputRef.scrollTop
-        return
-      }
-      scrollPromptToEnd()
-    })
+  const parsedPrompt = createMemo(() => parsePrompt(state.promptInput, attachmentLookup()))
+  const baseParts = createMemo(() => parsedPrompt().parts)
+  const attachmentSegments = createMemo<PromptAttachmentSegment[]>(() =>
+    parsedPrompt().segments.filter((segment): segment is PromptAttachmentSegment => segment.kind === "attachment"),
+  )
+
+  const {
+    mentionResults,
+    mentionItems,
+    closeMention,
+    syncMentionFromCaret,
+    updateMentionPosition,
+    handlePromptInput,
+    handleMentionKeyDown,
+    insertMention,
+  } = useMentionController({
+    state,
+    setState,
+    attachmentSegments,
+    getInputRef: () => inputRef,
+    getOverlayRef: () => overlayContainerRef,
+    getMeasureRef: () => mentionMeasureRef,
+    searchFiles: (query) => local.file.search(query),
+    resolveFile: (path) => local.file.node(path) ?? undefined,
+    addContextFile: (path, selection) =>
+      local.context.add({
+        type: "file",
+        path,
+        selection,
+      }),
+    getActiveContext: () => local.context.active() ?? undefined,
   })
 
   const handlePromptKeyDown = (event: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
@@ -175,23 +214,79 @@ export default function PromptForm(props: PromptFormProps) {
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      inputRef?.form?.requestSubmit()
+      if (element.selectionStart === match.start && element.selectionEnd === match.end) {
+        const next = Math.max(0, match.start)
+        element.setSelectionRange(next, next)
+        syncMentionFromCaret(element)
+        return true
+      }
+      element.setSelectionRange(match.start, match.end)
+      syncMentionFromCaret(element)
+      return true
     }
+    if (direction === "right") {
+      let match = segments.find((segment) => caret >= segment.start && caret < segment.end)
+      if (!match && element.selectionStart !== element.selectionEnd) {
+        match = segments.find(
+          (segment) => element.selectionStart === segment.start && element.selectionEnd === segment.end,
+        )
+      }
+      if (!match) return false
+      event.preventDefault()
+      if (element.selectionStart === match.start && element.selectionEnd === match.end) {
+        const next = match.end
+        element.setSelectionRange(next, next)
+        syncMentionFromCaret(element)
+        return true
+      }
+      element.setSelectionRange(match.start, match.end)
+      syncMentionFromCaret(element)
+      return true
+    }
+    return false
   }
 
-  const handlePromptScroll = (event: Event & { currentTarget: HTMLTextAreaElement }) => {
+  function renderAttachmentChip(part: PromptAttachmentPart, _placeholder: string) {
+    const display = part.display ?? createAttachmentDisplay(part.path, part.selection)
+    return <span class="truncate max-w-[16ch] text-primary">@{display}</span>
+  }
+
+  function renderTextSegment(value: string) {
+    if (!value) return undefined
+    return <span class="text-text">{value}</span>
+  }
+
+  function handlePromptKeyDown(event: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) {
+    if (event.isComposing) return
     const target = event.currentTarget
-    shouldAutoScroll = target.scrollTop + target.clientHeight >= target.scrollHeight - 4
-    if (overlayContainerRef) overlayContainerRef.scrollTop = target.scrollTop
-  }
+    const key = event.key
 
-  const scrollPromptToEnd = () => {
-    if (!inputRef) return
-    const maxInputScroll = inputRef.scrollHeight - inputRef.clientHeight
-    const next = maxInputScroll > 0 ? maxInputScroll : 0
-    inputRef.scrollTop = next
-    if (overlayContainerRef) overlayContainerRef.scrollTop = next
-    shouldAutoScroll = true
+    const handled = handleMentionKeyDown({
+      event,
+      mentionItems,
+      insertMention,
+    })
+    if (handled) return
+
+    if (!state.mentionOpen) {
+      if (key === "ArrowLeft") {
+        if (handleAttachmentNavigation(event, "left")) return
+      }
+      if (key === "ArrowRight") {
+        if (handleAttachmentNavigation(event, "right")) return
+      }
+    }
+
+    if (key === "ArrowLeft" || key === "ArrowRight" || key === "Home" || key === "End") {
+      queueMicrotask(() => {
+        syncMentionFromCaret(target)
+      })
+    }
+
+    if (key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      target.form?.requestSubmit()
+    }
   }
 
   const getCaretCoordinates = (element: HTMLTextAreaElement): { top: number; left: number } => {
@@ -288,12 +383,21 @@ export default function PromptForm(props: PromptFormProps) {
 
   const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault()
-    const currentPrompt = prompt()
-    setPrompt("")
-    shouldAutoScroll = true
-    if (overlayContainerRef) overlayContainerRef.scrollTop = 0
+    const parts = baseParts()
+    const text = parts
+      .map((part) => {
+        if (part.kind === "text") return part.value
+        return `@${part.path}`
+      })
+      .join("")
+
+    const currentPrompt: PromptSubmitValue = {
+      text,
+      parts,
+    }
+    setState("promptInput", "")
+    resetScrollPosition()
     if (inputRef) {
-      inputRef.scrollTop = 0
       inputRef.blur()
     }
 
@@ -476,7 +580,7 @@ export default function PromptForm(props: PromptFormProps) {
           dragCounter++
           if (evt.dataTransfer?.types.includes("text/plain") || evt.dataTransfer?.types.includes("Files")) {
             evt.preventDefault()
-            setIsDragOver(true)
+            setState("isDragOver", true)
           }
         }}
         onDragLeave={() => {
@@ -573,10 +677,30 @@ export default function PromptForm(props: PromptFormProps) {
             }}
             class="pointer-events-none absolute inset-0 overflow-hidden"
           >
-            <div class="px-0.5 text-base font-light leading-relaxed whitespace-pre-wrap text-left text-text">
-              {promptContent()}
-            </div>
+            <PromptDisplayOverlay
+              hasDisplaySegments={hasDisplaySegments()}
+              displaySegments={displaySegments()}
+              placeholder={placeholderText}
+              renderAttachmentChip={renderAttachmentChip}
+              renderTextSegment={renderTextSegment}
+            />
           </div>
+          <div
+            ref={(element) => {
+              mentionMeasureRef = element ?? undefined
+            }}
+            class="pointer-events-none invisible absolute inset-0 whitespace-pre-wrap text-base font-light leading-relaxed px-0.5"
+            aria-hidden="true"
+          ></div>
+          <MentionSuggestions
+            open={state.mentionOpen}
+            anchor={state.mentionAnchorOffset}
+            loading={mentionResults.loading}
+            items={mentionItems()}
+            activeIndex={state.mentionIndex}
+            onHover={(index) => setState("mentionIndex", index)}
+            onSelect={insertMention}
+          />
         </div>
         <div class="flex justify-between items-center text-xs text-text-muted">
           <div class="flex gap-2 items-center">

@@ -1,10 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.14.6",
+  "version": "0.15.4",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "build": "./script/build.ts"
   },
   "exports": {
@@ -16,10 +16,14 @@
     "dist"
   ],
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.81.0",
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
     "typescript": "catalog:",
-    "@tsconfig/node22": "catalog:"
+    "@typescript/native-preview": "catalog:"
   },
-  "dependencies": {
-    "@hey-api/openapi-ts": "0.82.5"
+  "dependencies": {},
+  "publishConfig": {
+    "directory": "dist"
   }
 }

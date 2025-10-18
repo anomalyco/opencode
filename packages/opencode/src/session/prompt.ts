@@ -22,6 +22,7 @@ import {
   jsonSchema,
 } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionLock } from "./lock"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -65,7 +66,6 @@ export namespace SessionPrompt {
 
   const state = Instance.state(
     () => {
-      const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
         {
@@ -75,14 +75,11 @@ export namespace SessionPrompt {
       >()
 
       return {
-        pending,
         queued,
       }
     },
-    async (state) => {
-      for (const [_, controller] of state.pending) {
-        controller.abort()
-      }
+    async (current) => {
+      current.queued.clear()
     },
   )
 
@@ -457,6 +454,10 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            extra: {
+              modelID: input.modelID,
+              providerID: input.providerID,
+            },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -915,7 +916,7 @@ export namespace SessionPrompt {
                   const part = reasoningMap[value.id]
                   part.text += value.text
                   if (value.providerMetadata) part.metadata = value.providerMetadata
-                  if (part.text) await Session.updatePart(part)
+                  if (part.text.trim()) await Session.updatePart(part)
                 }
                 break
 
@@ -923,13 +924,14 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text = part.text.trimEnd()
-
-                  part.time = {
-                    ...part.time,
-                    end: Date.now(),
+                  if (part.text) {
+                    part.time = {
+                      ...part.time,
+                      end: Date.now(),
+                    }
+                    if (value.providerMetadata) part.metadata = value.providerMetadata
+                    await Session.updatePart(part)
                   }
-                  if (value.providerMetadata) part.metadata = value.providerMetadata
-                  await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
                 break
@@ -991,6 +993,7 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
+                      attachments: value.output.attachments,
                     },
                   })
                   delete toolcalls[value.toolCallId]
@@ -1071,19 +1074,21 @@ export namespace SessionPrompt {
                 if (currentText) {
                   currentText.text += value.text
                   if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                  if (currentText.text) await Session.updatePart(currentText)
+                  if (currentText.text.trim()) await Session.updatePart(currentText)
                 }
                 break
 
               case "text-end":
                 if (currentText) {
                   currentText.text = currentText.text.trimEnd()
-                  currentText.time = {
-                    start: Date.now(),
-                    end: Date.now(),
+                  if (currentText.text) {
+                    currentText.time = {
+                      start: Date.now(),
+                      end: Date.now(),
+                    }
+                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                    await Session.updatePart(currentText)
                   }
-                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                  await Session.updatePart(currentText)
                 }
                 currentText = undefined
                 break
@@ -1165,30 +1170,20 @@ export namespace SessionPrompt {
   }
 
   function isBusy(sessionID: string) {
-    return state().pending.has(sessionID)
-  }
-
-  export function abort(sessionID: string) {
-    const controller = state().pending.get(sessionID)
-    if (!controller) return false
-    log.info("aborting", {
-      sessionID,
-    })
-    controller.abort()
-    state().pending.delete(sessionID)
-    return true
+    return SessionLock.isLocked(sessionID)
   }
 
   function lock(sessionID: string) {
+    const handle = SessionLock.acquire({
+      sessionID,
+    })
     log.info("locking", { sessionID })
-    if (state().pending.has(sessionID)) throw new Error("TODO")
-    const controller = new AbortController()
-    state().pending.set(sessionID, controller)
     return {
-      signal: controller.signal,
+      signal: handle.signal,
+      abort: handle.abort,
       async [Symbol.dispose]() {
+        handle[Symbol.dispose]()
         log.info("unlocking", { sessionID })
-        state().pending.delete(sessionID)
 
         const session = await Session.get(sessionID)
         if (session.parentID) return
@@ -1276,20 +1271,42 @@ export namespace SessionPrompt {
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
-    const scripts: Record<string, string> = {
-      nu: input.command,
-      fish: `eval "${input.command}"`,
+    const invocations: Record<string, { args: string[] }> = {
+      nu: {
+        args: ["-c", input.command],
+      },
+      fish: {
+        args: ["-c", input.command],
+      },
+      zsh: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+            [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      bash: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      // Fallback: any shell that doesn't match those above
+      "": {
+        args: ["-c", "-l", `${input.command}`],
+      },
     }
 
-    const script =
-      scripts[shellName] ??
-      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-       eval "${input.command}"`
-
-    const isFishOrNu = shellName === "fish" || shellName === "nu"
-    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
+    const matchingInvocation = invocations[shellName] ?? invocations[""]
+    const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,

@@ -113,6 +113,7 @@ const DEFAULT_KEYBINDS: KeybindsConfig = {
   project_init: "<leader>i",
   tool_details: "<leader>d",
   thinking_blocks: "<leader>b",
+  sidebar_toggle: "<leader>b",
   session_export: "<leader>x",
   session_new: "<leader>n",
   session_list: "<leader>l",

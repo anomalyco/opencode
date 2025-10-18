@@ -124,6 +124,7 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
+    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
     const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow()
 
     if (result.exitCode !== 0) {

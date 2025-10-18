@@ -1,19 +1,43 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import { Log } from "@/util/log"
+import { Instance } from "@/project/instance"
+import { Rpc } from "@/util/rpc"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
-  dev: Installation.isDev(),
+  dev: Installation.isLocal(),
   level: (() => {
-    if (Installation.isDev()) return "DEBUG"
+    if (Installation.isLocal()) return "DEBUG"
     return "INFO"
   })(),
 })
 
-const server = Server.listen({
-  port: 4096,
-  hostname: "127.0.0.1",
+process.on("unhandledRejection", (e) => {
+  Log.Default.error("rejection", {
+    e: e instanceof Error ? e.message : e,
+  })
 })
 
-postMessage(JSON.stringify({ type: "ready", url: server.url }))
+process.on("uncaughtException", (e) => {
+  Log.Default.error("exception", {
+    e: e instanceof Error ? e.message : e,
+  })
+})
+
+let server: Bun.Server<undefined>
+export const rpc = {
+  async server(input: { port: number; hostname: string }) {
+    if (server) await server.stop(true)
+    server = Server.listen(input)
+    return {
+      url: server.url.toString(),
+    }
+  },
+  async shutdown() {
+    await Instance.disposeAll()
+    await server.stop(true)
+  },
+}
+
+Rpc.listen(rpc)

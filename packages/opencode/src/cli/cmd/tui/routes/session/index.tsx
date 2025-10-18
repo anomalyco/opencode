@@ -1,11 +1,22 @@
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type Component } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  Show,
+  Switch,
+  useContext,
+  type Component,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { syntaxTheme, Theme } from "@tui/context/theme"
-import { BoxRenderable, pathToFiletype, ScrollBoxRenderable } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -36,6 +47,17 @@ import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
+import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+
+const context = createContext<{
+  width: number
+}>()
+
+function use() {
+  const ctx = useContext(context)
+  if (!ctx) throw new Error("useContext must be used within a Session component")
+  return ctx
+}
 
 export function Session() {
   const route = useRouteData("session")
@@ -45,8 +67,10 @@ export function Session() {
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">("auto")
+
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   createEffect(() => sync.session.sync(route.sessionID))
 
@@ -58,10 +82,6 @@ export function Session() {
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
-    if (keybind.match("messages_page_up", evt)) scroll.scrollBy(-scroll.height / 2)
-    if (keybind.match("messages_page_down", evt)) scroll.scrollBy(scroll.height / 2)
-    if (keybind.match("messages_first", evt)) scroll.scrollTo(0)
-    if (keybind.match("messages_last", evt)) scroll.scrollTo(scroll.scrollHeight)
 
     const first = permissions()[0]
     if (first) {
@@ -72,7 +92,7 @@ export function Session() {
         return
       })
       if (response) {
-        sdk.postSessionIdPermissionsPermissionId({
+        sdk.client.postSessionIdPermissionsPermissionId({
           path: {
             permissionID: first.id,
             id: route.sessionID,
@@ -126,7 +146,7 @@ export function Session() {
       keybind: "session_compact",
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.summarize({
+        sdk.client.session.summarize({
           path: {
             id: route.sessionID,
           },
@@ -145,7 +165,7 @@ export function Session() {
       disabled: !!session()?.share?.url,
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.share({
+        sdk.client.session.share({
           path: {
             id: route.sessionID,
           },
@@ -160,7 +180,7 @@ export function Session() {
       disabled: !session()?.share?.url,
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.unshare({
+        sdk.client.session.unshare({
           path: {
             id: route.sessionID,
           },
@@ -177,7 +197,7 @@ export function Session() {
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.session.revert({
+        sdk.client.session.revert({
           path: {
             id: route.sessionID,
           },
@@ -211,7 +231,7 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.session.unrevert({
+          sdk.client.session.unrevert({
             path: {
               id: route.sessionID,
             },
@@ -219,7 +239,7 @@ export function Session() {
           prompt.set({ input: "", parts: [] })
           return
         }
-        sdk.session.revert({
+        sdk.client.session.revert({
           path: {
             id: route.sessionID,
           },
@@ -232,6 +252,7 @@ export function Session() {
     {
       title: "Toggle sidebar",
       value: "session.sidebar.toggle",
+      keybind: "sidebar_toggle",
       category: "Session",
       onSelect: (dialog) => {
         setSidebar((prev) => {
@@ -239,6 +260,72 @@ export function Session() {
           if (prev === "show") return "hide"
           return "show"
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Page up",
+      value: "session.page.up",
+      keybind: "messages_page_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Page down",
+      value: "session.page.down",
+      keybind: "messages_page_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Half page up",
+      value: "session.half.page.up",
+      keybind: "messages_half_page_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-scroll.height / 4)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Half page down",
+      value: "session.half.page.down",
+      keybind: "messages_half_page_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(scroll.height / 4)
+        dialog.clear()
+      },
+    },
+    {
+      title: "First message",
+      value: "session.first",
+      keybind: "messages_first",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollTo(0)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Last message",
+      value: "session.last",
+      keybind: "messages_last",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
       },
     },
@@ -284,123 +371,131 @@ export function Session() {
   const dialog = useDialog()
 
   return (
-    <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
-      <box flexGrow={1} gap={1}>
-        <Show when={session()}>
-          <Show when={!sidebarVisible()}>
-            <Header />
-          </Show>
-          <scrollbox
-            ref={(r) => (scroll = r)}
-            scrollbarOptions={{ visible: false }}
-            stickyScroll={true}
-            stickyStart="bottom"
-            flexGrow={1}
-          >
-            <For each={messages()}>
-              {(message, index) => (
-                <Switch>
-                  <Match when={message.id === revert()?.messageID}>
-                    {(function () {
-                      const command = useCommandDialog()
-                      const [hover, setHover] = createSignal(false)
-                      const dialog = useDialog()
+    <context.Provider
+      value={{
+        get width() {
+          return contentWidth()
+        },
+      }}
+    >
+      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
+        <box flexGrow={1} gap={1}>
+          <Show when={session()}>
+            <Show when={!sidebarVisible()}>
+              <Header />
+            </Show>
+            <scrollbox
+              ref={(r) => (scroll = r)}
+              scrollbarOptions={{ visible: false }}
+              stickyScroll={true}
+              stickyStart="bottom"
+              flexGrow={1}
+            >
+              <For each={messages()}>
+                {(message, index) => (
+                  <Switch>
+                    <Match when={message.id === revert()?.messageID}>
+                      {(function () {
+                        const command = useCommandDialog()
+                        const [hover, setHover] = createSignal(false)
+                        const dialog = useDialog()
 
-                      const handleUnrevert = async () => {
-                        const confirmed = await DialogConfirm.show(
-                          dialog,
-                          "Confirm Redo",
-                          "Are you sure you want to restore the reverted messages?",
-                        )
-                        if (confirmed) {
-                          command.trigger("session.redo")
+                        const handleUnrevert = async () => {
+                          const confirmed = await DialogConfirm.show(
+                            dialog,
+                            "Confirm Redo",
+                            "Are you sure you want to restore the reverted messages?",
+                          )
+                          if (confirmed) {
+                            command.trigger("session.redo")
+                          }
                         }
-                      }
 
-                      return (
-                        <box
-                          onMouseOver={() => setHover(true)}
-                          onMouseOut={() => setHover(false)}
-                          onMouseUp={handleUnrevert}
-                          marginTop={1}
-                          flexShrink={0}
-                          border={["left"]}
-                          customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={Theme.backgroundPanel}
-                        >
+                        return (
                           <box
-                            paddingTop={1}
-                            paddingBottom={1}
-                            paddingLeft={2}
-                            backgroundColor={hover() ? Theme.backgroundElement : Theme.backgroundPanel}
+                            onMouseOver={() => setHover(true)}
+                            onMouseOut={() => setHover(false)}
+                            onMouseUp={handleUnrevert}
+                            marginTop={1}
+                            flexShrink={0}
+                            border={["left"]}
+                            customBorderChars={SplitBorder.customBorderChars}
+                            borderColor={Theme.backgroundPanel}
                           >
-                            <text fg={Theme.textMuted}>{revert()!.reverted.length} message reverted</text>
-                            <text fg={Theme.textMuted}>
-                              <span style={{ fg: Theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                              restore
-                            </text>
-                            <Show when={revert()!.diffFiles?.length}>
-                              <box marginTop={1}>
-                                <For each={revert()!.diffFiles}>
-                                  {(file) => (
-                                    <text>
-                                      {file.filename}
-                                      <Show when={file.additions > 0}>
-                                        <span style={{ fg: Theme.diffAdded }}> +{file.additions}</span>
-                                      </Show>
-                                      <Show when={file.deletions > 0}>
-                                        <span style={{ fg: Theme.diffRemoved }}> -{file.deletions}</span>
-                                      </Show>
-                                    </text>
-                                  )}
-                                </For>
-                              </box>
-                            </Show>
+                            <box
+                              paddingTop={1}
+                              paddingBottom={1}
+                              paddingLeft={2}
+                              backgroundColor={hover() ? Theme.backgroundElement : Theme.backgroundPanel}
+                            >
+                              <text fg={Theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                              <text fg={Theme.textMuted}>
+                                <span style={{ fg: Theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
+                                restore
+                              </text>
+                              <Show when={revert()!.diffFiles?.length}>
+                                <box marginTop={1}>
+                                  <For each={revert()!.diffFiles}>
+                                    {(file) => (
+                                      <text>
+                                        {file.filename}
+                                        <Show when={file.additions > 0}>
+                                          <span style={{ fg: Theme.diffAdded }}> +{file.additions}</span>
+                                        </Show>
+                                        <Show when={file.deletions > 0}>
+                                          <span style={{ fg: Theme.diffRemoved }}> -{file.deletions}</span>
+                                        </Show>
+                                      </text>
+                                    )}
+                                  </For>
+                                </box>
+                              </Show>
+                            </box>
                           </box>
-                        </box>
-                      )
-                    })()}
-                  </Match>
-                  <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
-                    <></>
-                  </Match>
-                  <Match when={message.role === "user"}>
-                    <UserMessage
-                      index={index()}
-                      onMouseUp={() =>
-                        dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
-                      }
-                      message={message as UserMessage}
-                      parts={sync.data.part[message.id] ?? []}
-                    />
-                  </Match>
-                  <Match when={message.role === "assistant"}>
-                    <AssistantMessage
-                      last={index() === messages().length - 1}
-                      message={message as AssistantMessage}
-                      parts={sync.data.part[message.id] ?? []}
-                    />
-                  </Match>
-                </Switch>
-              )}
-            </For>
-          </scrollbox>
-          <box flexShrink={0}>
-            <Prompt
-              ref={(r) => (prompt = r)}
-              disabled={permissions().length > 0}
-              onSubmit={() => {
-                toBottom()
-              }}
-              sessionID={route.sessionID}
-            />
-          </box>
+                        )
+                      })()}
+                    </Match>
+                    <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
+                      <></>
+                    </Match>
+                    <Match when={message.role === "user"}>
+                      <UserMessage
+                        index={index()}
+                        onMouseUp={() =>
+                          dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
+                        }
+                        message={message as UserMessage}
+                        parts={sync.data.part[message.id] ?? []}
+                      />
+                    </Match>
+                    <Match when={message.role === "assistant"}>
+                      <AssistantMessage
+                        last={index() === messages().length - 1}
+                        message={message as AssistantMessage}
+                        parts={sync.data.part[message.id] ?? []}
+                      />
+                    </Match>
+                  </Switch>
+                )}
+              </For>
+            </scrollbox>
+            <box flexShrink={0}>
+              <Prompt
+                ref={(r) => (prompt = r)}
+                disabled={permissions().length > 0}
+                onSubmit={() => {
+                  toBottom()
+                }}
+                sessionID={route.sessionID}
+              />
+            </box>
+          </Show>
+        </box>
+        <Show when={sidebarVisible()}>
+          <Sidebar sessionID={route.sessionID} />
         </Show>
       </box>
-      <Show when={sidebarVisible()}>
-        <Sidebar sessionID={route.sessionID} />
-      </Show>
-    </box>
+    </context.Provider>
   )
 }
 
@@ -565,8 +660,7 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
   const sync = useSync()
   const [margin, setMargin] = createSignal(0)
   const component = createMemo(() => {
-    const ready = ToolRegistry.ready(props.part.tool)
-    if (!ready) return
+    const render = ToolRegistry.render(props.part.tool) ?? GenericTool
 
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
     const input = props.part.state.input
@@ -620,8 +714,9 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
         }}
       >
         <Dynamic
-          component={ready}
+          component={render}
           input={input}
+          tool={props.part.tool}
           metadata={metadata}
           permission={permission?.metadata ?? {}}
           output={props.part.state.status === "completed" ? props.part.state.output : undefined}
@@ -661,15 +756,23 @@ type ToolProps<T extends Tool.Info> = {
   input: Partial<Tool.InferParameters<T>>
   metadata: Partial<Tool.InferMetadata<T>>
   permission: Record<string, any>
+  tool: string
   output?: string
+}
+function GenericTool(props: ToolProps<any>) {
+  return (
+    <ToolTitle icon="⚙" fallback="Writing command..." when={true}>
+      {props.tool} {input(props.input)}
+    </ToolTitle>
+  )
 }
 
 const ToolRegistry = (() => {
-  const state: Record<string, { name: string; container: "inline" | "block"; ready?: Component<ToolProps<any>> }> = {}
+  const state: Record<string, { name: string; container: "inline" | "block"; render?: Component<ToolProps<any>> }> = {}
   function register<T extends Tool.Info>(input: {
     name: string
     container: "inline" | "block"
-    ready?: Component<ToolProps<T>>
+    render?: Component<ToolProps<T>>
   }) {
     state[input.name] = input
     return input
@@ -679,8 +782,8 @@ const ToolRegistry = (() => {
     container(name: string) {
       return state[name]?.container
     },
-    ready(name: string) {
-      return state[name]?.ready
+    render(name: string) {
+      return state[name]?.render
     },
   }
 })()
@@ -698,8 +801,8 @@ function ToolTitle(props: { fallback: string; when: any; icon: string; children:
 ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
-  ready(props) {
-    const output = createMemo(() => Bun.stripANSI(props.output?.trim() ?? ""))
+  render(props) {
+    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
     return (
       <>
         <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>
@@ -721,11 +824,11 @@ ToolRegistry.register<typeof BashTool>({
 ToolRegistry.register<typeof ReadTool>({
   name: "read",
   container: "inline",
-  ready(props) {
+  render(props) {
     return (
       <>
         <ToolTitle icon="→" fallback="Reading file..." when={props.input.filePath}>
-          Read {normalizePath(props.input.filePath!)}
+          Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
         </ToolTitle>
       </>
     )
@@ -735,7 +838,7 @@ ToolRegistry.register<typeof ReadTool>({
 ToolRegistry.register<typeof WriteTool>({
   name: "write",
   container: "block",
-  ready(props) {
+  render(props) {
     const lines = createMemo(() => {
       return props.input.content?.split("\n") ?? []
     })
@@ -762,7 +865,7 @@ ToolRegistry.register<typeof WriteTool>({
             <For each={numbers()}>{(value) => <text style={{ fg: Theme.textMuted }}>{value}</text>}</For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
-            <code filetype={pathToFiletype(props.input.filePath!)} syntaxStyle={syntaxTheme} content={code()} />
+            <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntaxTheme} content={code()} />
           </box>
         </box>
       </>
@@ -773,11 +876,12 @@ ToolRegistry.register<typeof WriteTool>({
 ToolRegistry.register<typeof GlobTool>({
   name: "glob",
   container: "inline",
-  ready(props) {
+  render(props) {
     return (
       <>
         <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}" <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
+          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+          <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
         </ToolTitle>
       </>
     )
@@ -787,10 +891,11 @@ ToolRegistry.register<typeof GlobTool>({
 ToolRegistry.register<typeof GrepTool>({
   name: "grep",
   container: "inline",
-  ready(props) {
+  render(props) {
     return (
       <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}"
+        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+        <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
       </ToolTitle>
     )
   },
@@ -799,7 +904,7 @@ ToolRegistry.register<typeof GrepTool>({
 ToolRegistry.register<typeof ListTool>({
   name: "list",
   container: "inline",
-  ready(props) {
+  render(props) {
     const dir = createMemo(() => {
       if (props.input.path) {
         return normalizePath(props.input.path)
@@ -819,7 +924,7 @@ ToolRegistry.register<typeof ListTool>({
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
   container: "block",
-  ready(props) {
+  render(props) {
     return (
       <>
         <ToolTitle icon="%" fallback="Delegating..." when={props.input.description}>
@@ -844,7 +949,7 @@ ToolRegistry.register<typeof TaskTool>({
 ToolRegistry.register<typeof WebFetchTool>({
   name: "webfetch",
   container: "inline",
-  ready(props) {
+  render(props) {
     return (
       <ToolTitle icon="%" fallback="Fetching from the web..." when={(props.input as any).url}>
         WebFetch {(props.input as any).url}
@@ -856,7 +961,11 @@ ToolRegistry.register<typeof WebFetchTool>({
 ToolRegistry.register<typeof EditTool>({
   name: "edit",
   container: "block",
-  ready(props) {
+  render(props) {
+    const ctx = use()
+
+    const style = createMemo(() => (ctx.width > 120 ? "split" : "stacked"))
+
     const diff = createMemo(() => {
       const diff = props.metadata.diff ?? props.permission["diff"]
       if (!diff) return null
@@ -920,28 +1029,34 @@ ToolRegistry.register<typeof EditTool>({
       const text = props.metadata.diff.split("\n").slice(5).join("\n")
       return text.trim()
     })
+
+    const ft = createMemo(() => filetype(props.input.filePath))
+
     return (
       <>
         <ToolTitle icon="←" fallback="Preparing edit..." when={props.input.filePath}>
-          Edit {normalizePath(props.input.filePath!)}
+          Edit {normalizePath(props.input.filePath!)}{" "}
+          {input({
+            replaceAll: props.input.replaceAll,
+          })}
         </ToolTitle>
         <Switch>
           <Match when={props.permission["diff"]}>
             <text>{props.permission["diff"]?.trim()}</text>
           </Match>
-          <Match when={diff()}>
+          <Match when={diff() && style() === "split"}>
             <box paddingLeft={1} flexDirection="row" gap={2}>
               <box flexGrow={1} flexBasis={0}>
-                <code filetype="typescript" syntaxStyle={syntaxTheme} content={diff()!.oldContent} />
+                <code filetype={ft()} syntaxStyle={syntaxTheme} content={diff()!.oldContent} />
               </box>
               <box flexGrow={1} flexBasis={0}>
-                <code filetype="typescript" syntaxStyle={syntaxTheme} content={diff()!.newContent} />
+                <code filetype={ft()} syntaxStyle={syntaxTheme} content={diff()!.newContent} />
               </box>
             </box>
           </Match>
           <Match when={code()}>
             <box paddingLeft={1}>
-              <code filetype={pathToFiletype(props.input.filePath!)} syntaxStyle={syntaxTheme} content={code()} />
+              <code filetype={ft()} syntaxStyle={syntaxTheme} content={code()} />
             </box>
           </Match>
         </Switch>
@@ -953,7 +1068,7 @@ ToolRegistry.register<typeof EditTool>({
 ToolRegistry.register<typeof PatchTool>({
   name: "patch",
   container: "block",
-  ready(props) {
+  render(props) {
     return (
       <>
         <ToolTitle icon="%" fallback="Preparing patch..." when={true}>
@@ -972,7 +1087,7 @@ ToolRegistry.register<typeof PatchTool>({
 ToolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
   container: "block",
-  ready(props) {
+  render(props) {
     return (
       <box>
         <For each={props.input.todos ?? []}>
@@ -987,9 +1102,27 @@ ToolRegistry.register<typeof TodoWriteTool>({
   },
 })
 
-function normalizePath(input: string) {
+function normalizePath(input?: string) {
+  if (!input) return ""
   if (path.isAbsolute(input)) {
     return path.relative(process.cwd(), input) || "."
   }
   return input
+}
+
+function input(input: Record<string, any>, omit?: string[]): string {
+  const primitives = Object.entries(input).filter(([key, value]) => {
+    if (omit?.includes(key)) return false
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+  })
+  if (primitives.length === 0) return ""
+  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+}
+
+function filetype(input?: string) {
+  if (!input) return "none"
+  const ext = path.extname(input)
+  const language = LANGUAGE_EXTENSIONS[ext]
+  if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
+  return language
 }

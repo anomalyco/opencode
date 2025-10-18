@@ -38,7 +38,7 @@ function init() {
     }
   })
 
-  return {
+  const result = {
     trigger(name: string) {
       for (const option of options()) {
         if (option.value === name) {
@@ -58,6 +58,7 @@ function init() {
       return options()
     },
   }
+  return result
 }
 
 export function useCommandDialog() {

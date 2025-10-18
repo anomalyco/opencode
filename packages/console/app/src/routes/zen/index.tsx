@@ -1,4 +1,5 @@
 import "./index.css"
+import { createAsync } from "@solidjs/router"
 import { Title, Meta, Link } from "@solidjs/meta"
 import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
@@ -15,8 +16,10 @@ import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
+import { queryIsLoggedIn } from "~/routes/workspace/common"
 
 export default function Home() {
+  const isLoggedIn = createAsync(() => queryIsLoggedIn())
   return (
     <main data-page="zen">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
@@ -102,7 +105,7 @@ export default function Home() {
                 </div>
               </div>
               <a href="/auth">
-                <span>Get started with Zen </span>
+                <span>{isLoggedIn() ? "Go to workspace " : "Get started with Zen "}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"

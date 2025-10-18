@@ -156,8 +156,7 @@ export const TuiCommand = cmd({
         })
 
         ;(async () => {
-          if (Installation.isDev()) return
-          if (Installation.isSnapshot()) return
+          // if (Installation.isLocal()) return
           const config = await Config.global()
           if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
           const latest = await Installation.latest().catch(() => {})
@@ -214,7 +213,7 @@ function getOpencodeCommand(): string[] {
 
   const execPath = process.execPath.toLowerCase()
 
-  if (Installation.isDev()) {
+  if (Installation.isLocal()) {
     // In development, use bun to run the TypeScript entry point
     return [execPath, "run", process.argv[1]]
   }

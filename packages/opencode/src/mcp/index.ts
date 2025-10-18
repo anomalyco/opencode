@@ -83,15 +83,17 @@ export namespace MCP {
           ]
           let lastError: Error | undefined
           for (const { name, transport } of transports) {
-            await experimental_createMCPClient({
+            const result = await experimental_createMCPClient({
               name: "opencode",
               transport,
             })
               .then((client) => {
+                log.info("connected", { key, transport: name })
                 clients[key] = client
                 status[key] = {
                   status: "connected",
                 }
+                return true
               })
               .catch((error) => {
                 lastError = error instanceof Error ? error : new Error(String(error))
@@ -105,7 +107,9 @@ export namespace MCP {
                   status: "failed",
                   error: lastError.message,
                 }
+                return false
               })
+            if (result) break
           }
         }
 
@@ -145,6 +149,7 @@ export namespace MCP {
       }
 
       for (const [key, client] of Object.entries(clients)) {
+        log.info("checking tools", { key })
         const result = await withTimeout(client.tools(), 5000).catch(() => {})
         if (!result) {
           client.close()

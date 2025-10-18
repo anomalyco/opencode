@@ -17,73 +17,6 @@ export namespace MessageV2 {
     }),
   )
 
-  export const ToolStatePending = z
-    .object({
-      status: z.literal("pending"),
-      raw: z.string(),
-      input: z.record(z.string(), z.any()),
-    })
-    .meta({
-      ref: "ToolStatePending",
-    })
-
-  export type ToolStatePending = z.infer<typeof ToolStatePending>
-
-  export const ToolStateRunning = z
-    .object({
-      status: z.literal("running"),
-      input: z.record(z.string(), z.any()),
-      title: z.string().optional(),
-      metadata: z.record(z.string(), z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-      }),
-    })
-    .meta({
-      ref: "ToolStateRunning",
-    })
-  export type ToolStateRunning = z.infer<typeof ToolStateRunning>
-
-  export const ToolStateCompleted = z
-    .object({
-      status: z.literal("completed"),
-      input: z.record(z.string(), z.any()),
-      output: z.string(),
-      title: z.string(),
-      metadata: z.record(z.string(), z.any()),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-        compacted: z.number().optional(),
-      }),
-    })
-    .meta({
-      ref: "ToolStateCompleted",
-    })
-  export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
-
-  export const ToolStateError = z
-    .object({
-      status: z.literal("error"),
-      input: z.record(z.string(), z.any()),
-      error: z.string(),
-      metadata: z.record(z.string(), z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-      }),
-    })
-    .meta({
-      ref: "ToolStateError",
-    })
-  export type ToolStateError = z.infer<typeof ToolStateError>
-
-  export const ToolState = z
-    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-    .meta({
-      ref: "ToolState",
-    })
-
   const PartBase = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -135,17 +68,6 @@ export namespace MessageV2 {
     ref: "ReasoningPart",
   })
   export type ReasoningPart = z.infer<typeof ReasoningPart>
-
-  export const ToolPart = PartBase.extend({
-    type: z.literal("tool"),
-    callID: z.string(),
-    tool: z.string(),
-    state: ToolState,
-    metadata: z.record(z.string(), z.any()).optional(),
-  }).meta({
-    ref: "ToolPart",
-  })
-  export type ToolPart = z.infer<typeof ToolPart>
 
   const FilePartSourceBase = z.object({
     text: z
@@ -230,6 +152,85 @@ export namespace MessageV2 {
   })
   export type StepFinishPart = z.infer<typeof StepFinishPart>
 
+  export const ToolStatePending = z
+    .object({
+      status: z.literal("pending"),
+      input: z.record(z.string(), z.any()),
+      raw: z.string(),
+    })
+    .meta({
+      ref: "ToolStatePending",
+    })
+
+  export type ToolStatePending = z.infer<typeof ToolStatePending>
+
+  export const ToolStateRunning = z
+    .object({
+      status: z.literal("running"),
+      input: z.record(z.string(), z.any()),
+      title: z.string().optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
+      time: z.object({
+        start: z.number(),
+      }),
+    })
+    .meta({
+      ref: "ToolStateRunning",
+    })
+  export type ToolStateRunning = z.infer<typeof ToolStateRunning>
+
+  export const ToolStateCompleted = z
+    .object({
+      status: z.literal("completed"),
+      input: z.record(z.string(), z.any()),
+      output: z.string(),
+      title: z.string(),
+      metadata: z.record(z.string(), z.any()),
+      time: z.object({
+        start: z.number(),
+        end: z.number(),
+        compacted: z.number().optional(),
+      }),
+      attachments: FilePart.array().optional(),
+    })
+    .meta({
+      ref: "ToolStateCompleted",
+    })
+  export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
+
+  export const ToolStateError = z
+    .object({
+      status: z.literal("error"),
+      input: z.record(z.string(), z.any()),
+      error: z.string(),
+      metadata: z.record(z.string(), z.any()).optional(),
+      time: z.object({
+        start: z.number(),
+        end: z.number(),
+      }),
+    })
+    .meta({
+      ref: "ToolStateError",
+    })
+  export type ToolStateError = z.infer<typeof ToolStateError>
+
+  export const ToolState = z
+    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
+    .meta({
+      ref: "ToolState",
+    })
+
+  export const ToolPart = PartBase.extend({
+    type: z.literal("tool"),
+    callID: z.string(),
+    tool: z.string(),
+    state: ToolState,
+    metadata: z.record(z.string(), z.any()).optional(),
+  }).meta({
+    ref: "ToolPart",
+  })
+  export type ToolPart = z.infer<typeof ToolPart>
+
   const Base = z.object({
     id: z.string(),
     sessionID: z.string(),
@@ -277,6 +278,7 @@ export namespace MessageV2 {
       ])
       .optional(),
     system: z.string().array(),
+    finish: z.string().optional(),
     modelID: z.string(),
     providerID: z.string(),
     mode: z.string(),
@@ -284,7 +286,6 @@ export namespace MessageV2 {
       cwd: z.string(),
       root: z.string(),
     }),
-    finish: z.string().optional(),
     summary: z.boolean().optional(),
     cost: z.number(),
     tokens: z.object({
@@ -536,7 +537,25 @@ export namespace MessageV2 {
                 },
               ]
             if (part.type === "tool") {
-              if (part.state.status === "completed")
+              if (part.state.status === "completed") {
+                if (part.state.attachments?.length) {
+                  result.push({
+                    id: Identifier.ascending("message"),
+                    role: "user",
+                    parts: [
+                      {
+                        type: "text",
+                        text: `Tool ${part.tool} returned an attachment:`,
+                      },
+                      ...part.state.attachments.map((attachment) => ({
+                        type: "file" as const,
+                        url: attachment.url,
+                        mediaType: attachment.mime,
+                        filename: attachment.filename,
+                      })),
+                    ],
+                  })
+                }
                 return [
                   {
                     type: ("tool-" + part.tool) as `tool-${string}`,
@@ -547,6 +566,7 @@ export namespace MessageV2 {
                     callProviderMetadata: part.metadata,
                   },
                 ]
+              }
               if (part.state.status === "error")
                 return [
                   {

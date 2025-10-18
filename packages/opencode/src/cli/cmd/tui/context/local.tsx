@@ -92,6 +92,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const fallback = createMemo(() => {
+        if (sync.data.config.model) {
+          const [providerID, modelID] = sync.data.config.model.split("/")
+          if (sync.data.provider.find((x) => x.id === providerID)?.models[modelID]) {
+            return {
+              providerID,
+              modelID,
+            }
+          }
+        }
         if (store.recent.length) return store.recent[0]
         const provider = sync.data.provider[0]
         const model = Object.values(provider.models)[0]

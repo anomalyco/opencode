@@ -53,7 +53,7 @@ export function Autocomplete(props: {
       if (store.visible === "/") return []
 
       // Get files from SDK
-      const result = await sdk.find.files({
+      const result = await sdk.client.find.files({
         query: {
           query: filter() ?? "",
         },
@@ -189,6 +189,11 @@ export function Autocomplete(props: {
         display: "/agents",
         description: "list agents",
         onSelect: () => command.trigger("agent.list"),
+      },
+      {
+        display: "/status",
+        description: "show status",
+        onSelect: () => command.trigger("opencode.status"),
       },
     )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length

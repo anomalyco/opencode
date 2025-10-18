@@ -12,6 +12,10 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { iife } from "@/util/iife"
+import { useCommandDialog } from "../dialog-command"
+import { useRenderer } from "@opentui/solid"
+import { Editor } from "@tui/util/editor"
+import { useExit } from "../../context/exit"
 
 export type PromptProps = {
   sessionID?: string
@@ -41,6 +45,69 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const status = createMemo(() => (props.sessionID ? sync.session.status(props.sessionID) : "idle"))
   const history = usePromptHistory()
+  const command = useCommandDialog()
+  const renderer = useRenderer()
+
+  command.register(() => {
+    return [
+      {
+        title: "Open editor",
+        category: "Session",
+        keybind: "editor_open",
+        value: "prompt.editor",
+        onSelect: async (dialog) => {
+          dialog.clear()
+          const value = input.value
+          input.value = ""
+          setStore("prompt", {
+            input: "",
+            parts: [],
+          })
+          const content = await Editor.open({ value, renderer })
+          if (content) {
+            setStore("prompt", {
+              input: content,
+              parts: [],
+            })
+            input.cursorPosition = content.length
+          }
+        },
+      },
+      {
+        title: "Clear prompt",
+        value: "prompt.clear",
+        disabled: true,
+        category: "Prompt",
+        onSelect: (dialog) => {
+          setStore("prompt", {
+            input: "",
+            parts: [],
+          })
+          dialog.clear()
+        },
+      },
+      {
+        title: "Submit prompt",
+        value: "prompt.submit",
+        disabled: true,
+        keybind: "input_submit",
+        category: "Prompt",
+        onSelect: (dialog) => {
+          submit()
+          dialog.clear()
+        },
+      },
+    ]
+  })
+
+  sdk.event.on("tui.prompt.append", (evt) => {
+    setStore(
+      "prompt",
+      produce((draft) => {
+        draft.input += evt.properties.text
+      }),
+    )
+  })
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = Theme.backgroundElement
@@ -91,17 +158,13 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-          const sessionID = await sdk.session.create({}).then((x) => x.data!.id)
-          route.navigate({
-            type: "session",
-            sessionID,
-          })
+          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
           return sessionID
         })()
     const messageID = Identifier.ascending("message")
     const input = store.prompt.input
     if (store.mode === "shell") {
-      sdk.session.shell({
+      sdk.client.session.shell({
         path: {
           id: sessionID,
         },
@@ -113,7 +176,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (input.startsWith("/")) {
       const [command, ...args] = input.split(" ")
-      sdk.session.command({
+      sdk.client.session.command({
         path: {
           id: sessionID,
         },
@@ -129,9 +192,8 @@ export function Prompt(props: PromptProps) {
         input: "",
         parts: [],
       })
-      return
     } else {
-      sdk.session.prompt({
+      sdk.client.session.prompt({
         path: {
           id: sessionID,
         },
@@ -160,7 +222,17 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     props.onSubmit?.()
+
+    // temporary hack to make sure the message is sent
+    if (!props.sessionID)
+      setTimeout(() => {
+        route.navigate({
+          type: "session",
+          sessionID,
+        })
+      }, 50)
   }
+  const exit = useExit()
 
   return (
     <>
@@ -224,6 +296,17 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                  setStore("prompt", {
+                    input: "",
+                    parts: [],
+                  })
+                  return
+                }
+                if (keybind.match("app_exit", e)) {
+                  await exit()
+                  return
+                }
                 if (e.name === "!" && input.cursorPosition === 0) {
                   setStore("mode", "shell")
                   e.preventDefault()
@@ -246,7 +329,7 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                   if (e.name === "escape" && props.sessionID) {
-                    sdk.session.abort({
+                    sdk.client.session.abort({
                       path: {
                         id: props.sessionID,
                       },

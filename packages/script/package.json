@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "name": "@opencode-ai/script",
+  "devDependencies": {
+    "@types/bun": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

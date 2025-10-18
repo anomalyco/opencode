@@ -12,13 +12,14 @@ import { Installation } from "./installation"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { TuiCommand } from "./cli/cmd/tui/tui"
-import { AttachCommand } from "./cli/cmd/tui/attach"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
+import { AttachCommand } from "./cli/cmd/tui/attach"
+import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 
 const cancel = new AbortController()
 
@@ -51,10 +52,10 @@ const cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
-      dev: Installation.isDev(),
+      dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isDev()) return "DEBUG"
+        if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
     })
@@ -68,7 +69,8 @@ const cli = yargs(hideBin(process.argv))
   })
   .usage("\n" + UI.logo())
   .command(McpCommand)
-  .command(TuiCommand)
+  .command(TuiThreadCommand)
+  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)

@@ -74,7 +74,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <KobalteSelect.Value<T>>
+        <KobalteSelect.Value<T> class="truncate">
           {(state) => {
             const selected = state.selectedOption() ?? props.current
             if (!selected) return props.placeholder || ""
@@ -84,10 +84,11 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
         </KobalteSelect.Value>
         <KobalteSelect.Icon
           classList={{
-            "size-fit shrink-0 text-text-muted transition-transform duration-100 data-[expanded]:rotate-180": true,
+            "group size-fit shrink-0 text-text-muted transition-transform duration-100": true,
           }}
         >
-          <Icon name="chevron-down" size={24} />
+          <Icon name="chevron-up" size={16} class="-my-2 group-data-[expanded]:rotate-180" />
+          <Icon name="chevron-down" size={16} class="-my-2 group-data-[expanded]:rotate-180" />
         </KobalteSelect.Icon>
       </KobalteSelect.Trigger>
       <KobalteSelect.Portal>
@@ -99,7 +100,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             "data-[expanded]:animate-in data-[expanded]:fade-in-0 data-[expanded]:zoom-in-95": true,
           }}
         >
-          <KobalteSelect.Listbox class="overflow-y-auto max-h-48" />
+          <KobalteSelect.Listbox class="overflow-y-auto max-h-48 whitespace-nowrap overflow-x-hidden" />
         </KobalteSelect.Content>
       </KobalteSelect.Portal>
     </KobalteSelect>
