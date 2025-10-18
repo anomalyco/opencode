@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
+import { fileURLToPath } from "url"
 import path from "path"
-const dir = new URL("..", import.meta.url).pathname
-process.chdir(dir)
 import { $ } from "bun"
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const dir = path.resolve(scriptDir, "..")
+process.chdir(dir)
 
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
@@ -30,7 +33,21 @@ for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
   const name = `${pkg.name}-${os}-${arch}`
   await $`mkdir -p dist/${name}/bin`
-  await $`CGO_ENABLED=0 GOOS=${os} GOARCH=${GOARCH[arch]} go build -ldflags="-s -w -X main.Version=${Script.version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`
+
+  // Set GOCACHE and LOCALAPPDATA for Windows
+  const env: Record<string, string> = {
+    CGO_ENABLED: "0",
+    GOOS: os,
+    GOARCH: GOARCH[arch],
+  }
+
+  if (process.platform === "win32") {
+    env.GOCACHE = process.env.TEMP ? `${process.env.TEMP}\\go-build` : "C:\\temp\\go-build"
+    env.LOCALAPPDATA = process.env.LOCALAPPDATA || process.env.USERPROFILE ? `${process.env.USERPROFILE}\\AppData\\Local` : "C:\\Users\\Default\\AppData\\Local"
+  }
+
+  await $`go build -ldflags="-s -w -X main.Version=${Script.version}" -o ../opencode/dist/${name}/bin/tui ../tui/cmd/opencode/main.go`
+    .env(env)
     .cwd("../tui")
     .quiet()
 
