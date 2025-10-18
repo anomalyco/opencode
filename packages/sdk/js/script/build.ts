@@ -1,20 +1,22 @@
 #!/usr/bin/env bun
 
-const dir = new URL("..", import.meta.url).pathname
-process.chdir(dir)
-
-import { $ } from "bun"
+import { fileURLToPath } from "url"
 import path from "path"
+import { $ } from "bun"
+
+const dir = path.dirname(fileURLToPath(import.meta.url))
+const rootDir = path.resolve(dir, "..")
+process.chdir(rootDir)
 
 import { createClient } from "@hey-api/openapi-ts"
 
-await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
+await $`bun dev generate > ${rootDir}/openapi.json`.cwd(path.resolve(rootDir, "../../opencode"))
 
 await createClient({
   input: "./openapi.json",
   output: {
     path: "./src/gen",
-    tsConfigPath: path.join(dir, "tsconfig.json"),
+    tsConfigPath: path.join(rootDir, "tsconfig.json"),
   },
   plugins: [
     {

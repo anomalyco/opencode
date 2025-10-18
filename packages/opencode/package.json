@@ -7,7 +7,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
-    "build": "./script/build.ts",
+    "build": "bun run ./script/build.ts",
     "dev": "bun run ./src/index.ts"
   },
   "bin": {

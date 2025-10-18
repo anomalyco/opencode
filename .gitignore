@@ -10,3 +10,35 @@ playground
 tmp
 dist
 .turbo
+
+# Build outputs
+*.log
+*.tsbuildinfo
+build/
+.output/
+*.tgz
+*-*.tgz
+package/
+
+# Generated files
+**/src/gen/
+packages/sdk/js/openapi.json
+
+# Bun
+bun.lockb
+.bun/
+
+# OS
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage/
+*.lcov
+
+# Debug
+*.log.*
+.env.local
+.env.*.local

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "./script/build.ts"
+    "build": "bun run ./script/build.ts"
   },
   "exports": {
     ".": "./src/index.ts",
