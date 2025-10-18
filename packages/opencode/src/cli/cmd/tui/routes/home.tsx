@@ -1,23 +1,20 @@
 import { Prompt } from "@tui/component/prompt"
-import { createMemo, createResource, Match, Show, Switch, type ParentProps } from "solid-js"
+import { createMemo, Match, Show, Switch, type ParentProps } from "solid-js"
 import { Theme } from "@tui/context/theme"
-import { useSDK } from "../context/sdk"
 import { useKeybind } from "../context/keybind"
 import type { KeybindsConfig } from "@opencode-ai/sdk"
 import { Logo } from "../component/logo"
+import { Locale } from "@/util/locale"
+import { useSync } from "../context/sync"
 
 export function Home() {
-  const sdk = useSDK()
-  const [mcp] = createResource(async () => {
-    const result = await sdk.mcp.status()
-    return result.data
-  })
+  const sync = useSync()
   const mcpError = createMemo(() => {
-    return Object.values(mcp() ?? {}).some((x) => x.status === "failed")
+    return Object.values(sync.data.mcp).some((x) => x.status === "failed")
   })
 
   const Hint = (
-    <Show when={Object.keys(mcp() ?? {}).length > 0}>
+    <Show when={Object.keys(sync.data.mcp).length > 0}>
       <box flexShrink={0} flexDirection="row" gap={1}>
         <text>
           <Switch>
@@ -26,7 +23,8 @@ export function Home() {
               <span style={{ fg: Theme.textMuted }}>ctrl+x s</span>
             </Match>
             <Match when={true}>
-              <span style={{ fg: Theme.success }}>•</span> {Object.values(mcp() ?? {}).length} mcp servers
+              <span style={{ fg: Theme.success }}>•</span>{" "}
+              {Locale.pluralize(Object.values(sync.data.mcp).length, "{} mcp server", "{} mcp servers")}
             </Match>
           </Switch>
         </text>

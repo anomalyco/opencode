@@ -18,6 +18,7 @@ export namespace Billing {
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
+      httpClient: Stripe.createFetchHttpClient(),
     })
 
   export const get = async () => {

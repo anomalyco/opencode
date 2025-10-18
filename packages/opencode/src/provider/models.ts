@@ -35,6 +35,7 @@ export namespace ModelsDev {
         })
         .optional(),
       experimental: z.boolean().optional(),
+      status: z.enum(["alpha", "beta"]).optional(),
       options: z.record(z.string(), z.any()),
       provider: z.object({ npm: z.string() }).optional(),
     })
@@ -76,6 +77,7 @@ export namespace ModelsDev {
       headers: {
         "User-Agent": Installation.USER_AGENT,
       },
+      signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,

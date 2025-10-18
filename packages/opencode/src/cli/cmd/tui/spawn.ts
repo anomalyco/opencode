@@ -2,6 +2,7 @@ import { cmd } from "@/cli/cmd/cmd"
 import { Instance } from "@/project/instance"
 import path from "path"
 import { Server } from "@/server/server"
+import { upgrade } from "@/cli/upgrade"
 
 export const TuiSpawnCommand = cmd({
   command: "spawn [project]",
@@ -23,6 +24,7 @@ export const TuiSpawnCommand = cmd({
         default: "127.0.0.1",
       }),
   handler: async (args) => {
+    upgrade()
     const server = Server.listen({
       port: args.port,
       hostname: "127.0.0.1",
@@ -41,18 +43,14 @@ export const TuiSpawnCommand = cmd({
       cwd = new URL("../../../../", import.meta.url).pathname
     } else cmd.push(process.execPath)
     cmd.push("attach", server.url.toString(), "--dir", args.project ? path.resolve(args.project) : process.cwd())
-    while (true) {
-      const proc = Bun.spawn({
-        cmd,
-        cwd,
-        stdout: "inherit",
-        stderr: "inherit",
-        stdin: "inherit",
-      })
-      await proc.exited
-      const code = proc.exitCode
-      if (code === 0) break
-    }
+    const proc = Bun.spawn({
+      cmd,
+      cwd,
+      stdout: "inherit",
+      stderr: "inherit",
+      stdin: "inherit",
+    })
+    await proc.exited
     await Instance.disposeAll()
     await server.stop(true)
   },

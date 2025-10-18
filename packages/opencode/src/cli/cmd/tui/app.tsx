@@ -6,7 +6,7 @@ import { Switch, Match, createEffect, untrack } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
-import { SDKProvider } from "@tui/context/sdk"
+import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
@@ -15,39 +15,36 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
-import { Instance } from "@/project/instance"
 import { Theme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
+import { ExitProvider } from "./context/exit"
 
 export async function tui(input: { url: string; onExit?: () => Promise<void> }) {
   await render(
     () => {
       return (
-        <RouteProvider>
-          <SDKProvider url={input.url}>
-            <SyncProvider>
-              <LocalProvider>
-                <KeybindProvider>
-                  <DialogProvider>
-                    <CommandProvider>
-                      <PromptHistoryProvider>
-                        <App
-                          onExit={async () => {
-                            await input.onExit?.()
-                            process.exit(0)
-                          }}
-                        />
-                      </PromptHistoryProvider>
-                    </CommandProvider>
-                  </DialogProvider>
-                </KeybindProvider>
-              </LocalProvider>
-            </SyncProvider>
-          </SDKProvider>
-        </RouteProvider>
+        <ExitProvider onExit={input.onExit}>
+          <RouteProvider>
+            <SDKProvider url={input.url}>
+              <SyncProvider>
+                <LocalProvider>
+                  <KeybindProvider>
+                    <DialogProvider>
+                      <CommandProvider>
+                        <PromptHistoryProvider>
+                          <App />
+                        </PromptHistoryProvider>
+                      </CommandProvider>
+                    </DialogProvider>
+                  </KeybindProvider>
+                </LocalProvider>
+              </SyncProvider>
+            </SDKProvider>
+          </RouteProvider>
+        </ExitProvider>
       )
     },
     {
@@ -59,7 +56,7 @@ export async function tui(input: { url: string; onExit?: () => Promise<void> }) 
   )
 }
 
-function App(props: { onExit: () => void }) {
+function App() {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -67,17 +64,9 @@ function App(props: { onExit: () => void }) {
   const dialog = useDialog()
   const local = useLocal()
   const command = useCommandDialog()
-  const keybind = useKeybind()
+  const { event } = useSDK()
 
   useKeyboard(async (evt) => {
-    if (keybind.match("agent_cycle", evt)) {
-      local.agent.move(1)
-      return
-    }
-    if (keybind.match("agent_cycle_reverse", evt)) {
-      local.agent.move(-1)
-    }
-
     if (evt.meta && evt.name === "t") {
       renderer.toggleDebugOverlay()
       return
@@ -86,11 +75,6 @@ function App(props: { onExit: () => void }) {
     if (evt.meta && evt.name === "d") {
       renderer.console.toggle()
       return
-    }
-    if (keybind.match("app_exit", evt)) {
-      await Instance.disposeAll()
-      renderer.destroy()
-      props.onExit()
     }
   })
 
@@ -139,6 +123,26 @@ function App(props: { onExit: () => void }) {
       },
     },
     {
+      title: "Agent cycle",
+      value: "agent.cycle",
+      keybind: "agent_cycle",
+      category: "Agent",
+      disabled: true,
+      onSelect: () => {
+        local.agent.move(1)
+      },
+    },
+    {
+      title: "Agent cycle reverse",
+      value: "agent.cycle.reverse",
+      keybind: "agent_cycle_reverse",
+      category: "Agent",
+      disabled: true,
+      onSelect: () => {
+        local.agent.move(-1)
+      },
+    },
+    {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
@@ -160,6 +164,10 @@ function App(props: { onExit: () => void }) {
         ).then(() => local.kv.set("openrouter_warning", true))
       })
     }
+  })
+
+  event.on("tui.command.execute", (evt) => {
+    command.trigger(evt.properties.command)
   })
 
   return (

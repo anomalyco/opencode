@@ -20,8 +20,6 @@ import { getFilename } from "@/utils"
 import type { JSX } from "solid-js"
 
 interface EditorPaneProps {
-  layoutKey: string
-  timelinePane: string
   onFileClick: (file: LocalFile) => void
   onOpenModelSelect: () => void
   onOpenAgentSelect: () => void
@@ -44,8 +42,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
     "hideFloatingChat",
   ])
   const local = useLocal()
-  const sdk = useSDK()
-  const sync = useSync()
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
   const navigateChange = (dir: 1 | -1) => {
@@ -62,73 +58,6 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
 
   const handleTabClose = (file: LocalFile) => {
     local.file.close(file.path)
-  }
-
-  const handlePromptSubmit = async (prompt: string) => {
-    const existingSession = local.layout.visible(localProps.layoutKey, localProps.timelinePane)
-      ? local.session.active()
-      : undefined
-    let session = existingSession
-    if (!session) {
-      const created = await sdk.session.create()
-      session = created.data ?? undefined
-    }
-    if (!session) return
-    local.session.setActive(session.id)
-    local.layout.show(localProps.layoutKey, localProps.timelinePane)
-
-    await sdk.session.prompt({
-      path: { id: session.id },
-      body: {
-        agent: local.agent.current()!.name,
-        model: {
-          modelID: local.model.current()!.id,
-          providerID: local.model.current()!.provider.id,
-        },
-        parts: [
-          {
-            type: "text",
-            text: prompt,
-          },
-          ...(local.context.active()
-            ? [
-                {
-                  type: "file" as const,
-                  mime: "text/plain",
-                  url: `file://${local.context.active()!.absolute}`,
-                  filename: local.context.active()!.name,
-                  source: {
-                    type: "file" as const,
-                    text: {
-                      value: "@" + local.context.active()!.name,
-                      start: 0,
-                      end: 0,
-                    },
-                    path: local.context.active()!.absolute,
-                  },
-                },
-              ]
-            : []),
-          ...local.context.all().flatMap((file) => [
-            {
-              type: "file" as const,
-              mime: "text/plain",
-              url: `file://${sync.absolute(file.path)}${file.selection ? `?start=${file.selection.startLine}&end=${file.selection.endLine}` : ""}`,
-              filename: getFilename(file.path),
-              source: {
-                type: "file" as const,
-                text: {
-                  value: "@" + getFilename(file.path),
-                  start: 0,
-                  end: 0,
-                },
-                path: sync.absolute(file.path),
-              },
-            },
-          ]),
-        ],
-      },
-    })
   }
 
   const handleDragStart = (event: unknown) => {

@@ -32,6 +32,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
     return {
       move(direction: 1 | -1) {
+        const prev = store.index
         setStore(
           produce((draft) => {
             const next = store.index + direction
@@ -40,7 +41,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
             draft.index = next
           }),
         )
-        if (store.index === 0)
+        if (prev !== 0 && store.index === 0)
           return {
             input: "",
             parts: [],

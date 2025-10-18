@@ -82,10 +82,6 @@ export function Session() {
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
-    if (keybind.match("messages_page_up", evt)) scroll.scrollBy(-scroll.height / 2)
-    if (keybind.match("messages_page_down", evt)) scroll.scrollBy(scroll.height / 2)
-    if (keybind.match("messages_first", evt)) scroll.scrollTo(0)
-    if (keybind.match("messages_last", evt)) scroll.scrollTo(scroll.scrollHeight)
 
     const first = permissions()[0]
     if (first) {
@@ -96,7 +92,7 @@ export function Session() {
         return
       })
       if (response) {
-        sdk.postSessionIdPermissionsPermissionId({
+        sdk.client.postSessionIdPermissionsPermissionId({
           path: {
             permissionID: first.id,
             id: route.sessionID,
@@ -150,7 +146,7 @@ export function Session() {
       keybind: "session_compact",
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.summarize({
+        sdk.client.session.summarize({
           path: {
             id: route.sessionID,
           },
@@ -169,7 +165,7 @@ export function Session() {
       disabled: !!session()?.share?.url,
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.share({
+        sdk.client.session.share({
           path: {
             id: route.sessionID,
           },
@@ -184,7 +180,7 @@ export function Session() {
       disabled: !session()?.share?.url,
       category: "Session",
       onSelect: (dialog) => {
-        sdk.session.unshare({
+        sdk.client.session.unshare({
           path: {
             id: route.sessionID,
           },
@@ -201,7 +197,7 @@ export function Session() {
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        sdk.session.revert({
+        sdk.client.session.revert({
           path: {
             id: route.sessionID,
           },
@@ -235,7 +231,7 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          sdk.session.unrevert({
+          sdk.client.session.unrevert({
             path: {
               id: route.sessionID,
             },
@@ -243,7 +239,7 @@ export function Session() {
           prompt.set({ input: "", parts: [] })
           return
         }
-        sdk.session.revert({
+        sdk.client.session.revert({
           path: {
             id: route.sessionID,
           },
@@ -264,6 +260,72 @@ export function Session() {
           if (prev === "show") return "hide"
           return "show"
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Page up",
+      value: "session.page.up",
+      keybind: "messages_page_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Page down",
+      value: "session.page.down",
+      keybind: "messages_page_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(scroll.height / 2)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Half page up",
+      value: "session.half.page.up",
+      keybind: "messages_half_page_up",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(-scroll.height / 4)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Half page down",
+      value: "session.half.page.down",
+      keybind: "messages_half_page_down",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollBy(scroll.height / 4)
+        dialog.clear()
+      },
+    },
+    {
+      title: "First message",
+      value: "session.first",
+      keybind: "messages_first",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollTo(0)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Last message",
+      value: "session.last",
+      keybind: "messages_last",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
       },
     },
@@ -740,7 +802,7 @@ ToolRegistry.register<typeof BashTool>({
   name: "bash",
   container: "block",
   render(props) {
-    const output = createMemo(() => Bun.stripANSI(props.output?.trim() ?? ""))
+    const output = createMemo(() => Bun.stripANSI(props.metadata.output?.trim() ?? ""))
     return (
       <>
         <ToolTitle icon="#" fallback="Writing command..." when={props.input.command}>

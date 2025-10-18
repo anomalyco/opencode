@@ -14,7 +14,7 @@ async function bootstrap() {
       await Bun.write(`${dir}/a.txt`, aContent)
       await Bun.write(`${dir}/b.txt`, bContent)
       await $`git add .`.cwd(dir).quiet()
-      await $`git commit -m init`.cwd(dir).quiet()
+      await $`git commit --no-gpg-sign -m init`.cwd(dir).quiet()
       return {
         aContent,
         bContent,

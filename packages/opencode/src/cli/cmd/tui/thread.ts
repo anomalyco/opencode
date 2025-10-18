@@ -1,5 +1,8 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { tui } from "./app"
+import { Rpc } from "@/util/rpc"
+import { type rpc } from "./worker"
+import { upgrade } from "@/cli/upgrade"
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
@@ -21,21 +24,25 @@ export const TuiThreadCommand = cmd({
         describe: "hostname to listen on",
         default: "127.0.0.1",
       }),
-  handler: async () => {
+  handler: async (args) => {
+    upgrade()
     const worker = new Worker("./src/cli/cmd/tui/worker.ts")
     worker.onerror = console.error
-    const server = await new Promise<any>((resolve) => {
-      worker.onmessage = async (evt) => {
-        resolve(JSON.parse(evt.data))
-      }
+    const client = Rpc.client<typeof rpc>(worker)
+    process.on("uncaughtException", (e) => {
+      console.error(e)
+    })
+    process.on("unhandledRejection", (e) => {
+      console.error(e)
+    })
+    const server = await client.call("server", {
+      port: args.port,
+      hostname: args.hostname,
     })
     await tui({
       url: server.url,
       onExit: async () => {
-        await new Promise((resolve) => {
-          worker.onmessage = resolve
-          worker.postMessage(JSON.stringify({ type: "shutdown" }))
-        })
+        await client.call("shutdown", undefined)
       },
     })
   },

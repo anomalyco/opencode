@@ -2,12 +2,14 @@
 
 import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
+import fs from "fs"
 import { $ } from "bun"
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
 import pkg from "../package.json"
+import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
 
@@ -28,7 +30,6 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
-const version = process.env["OPENCODE_VERSION"] ?? "dev"
 for (const [os, arch] of targets) {
   console.log(`building ${os}-${arch}`)
   const name = `${pkg.name}-${os}-${arch}`
@@ -44,6 +45,7 @@ for (const [os, arch] of targets) {
   await $`npm pack npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
   await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
 
+  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
@@ -51,17 +53,14 @@ for (const [os, arch] of targets) {
     compile: {
       target: `bun-${os}-${arch}` as any,
       outfile: `dist/${name}/bin/opencode`,
-      execArgv: [`--user-agent=opencode/${version}`, `--env-file=""`, `--`],
+      execArgv: [`--user-agent=opencode/${Script.version}`, `--env-file=""`, `--`],
       windows: {},
     },
-    entrypoints: [
-      "./src/index.ts",
-      path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
-      "./src/cli/cmd/tui/worker.ts",
-    ],
+    entrypoints: ["./src/index.ts", parserWorker, "./src/cli/cmd/tui/worker.ts"],
     define: {
-      OPENCODE_VERSION: `'${version}'`,
-      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/../../node_modules/@opentui/core/parser.worker.js",
+      OPENCODE_VERSION: `'${Script.version}'`,
+      OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(dir, parserWorker),
+      OPENCODE_CHANNEL: `'${Script.channel}'`,
     },
   })
 
@@ -70,7 +69,7 @@ for (const [os, arch] of targets) {
     JSON.stringify(
       {
         name,
-        version,
+        version: Script.version,
         os: [os === "windows" ? "win32" : os],
         cpu: [arch],
       },
@@ -78,7 +77,7 @@ for (const [os, arch] of targets) {
       2,
     ),
   )
-  binaries[name] = version
+  binaries[name] = Script.version
 }
 
 export { binaries }

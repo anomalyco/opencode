@@ -30,6 +30,18 @@ export function formatDateUTC(date: Date) {
   return date.toLocaleDateString("en-US", options)
 }
 
+export const queryIsLoggedIn = query(async () => {
+  "use server"
+  return withActor(() => {
+    try {
+      Actor.assert("account")
+      return true
+    } catch {
+      return false
+    }
+  })
+}, "isLoggedIn.get")
+
 export const querySessionInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(() => {

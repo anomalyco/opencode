@@ -1,12 +1,12 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
-import { createEffect, createSignal, For, Show, onCleanup } from "solid-js"
+import { createEffect, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import styles from "./member-section.module.css"
 import { UserRole } from "@opencode-ai/console-core/schema/user.sql.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { User } from "@opencode-ai/console-core/user.js"
-import { IconChevron } from "~/component/icon"
+import { RoleDropdown } from "./role-dropdown"
 
 const listMembers = query(async (workspaceID: string) => {
   "use server"
@@ -92,27 +92,13 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
   const [store, setStore] = createStore({
     editing: false,
     selectedRole: props.member.role as (typeof UserRole)[number],
-    showRoleDropdown: false,
     limit: "",
   })
-
-  let roleDropdownRef: HTMLDivElement | undefined
 
   createEffect(() => {
     if (!submission.pending && submission.result && !submission.result.error) {
       setStore("editing", false)
     }
-  })
-
-  createEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (roleDropdownRef && !roleDropdownRef.contains(event.target as Node)) {
-        setStore("showRoleDropdown", false)
-      }
-    }
-
-    document.addEventListener("click", handleClickOutside)
-    onCleanup(() => document.removeEventListener("click", handleClickOutside))
   })
 
   function show() {
@@ -127,7 +113,6 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
 
   function hide() {
     setStore("editing", false)
-    setStore("showRoleDropdown", false)
   }
 
   function getUsageDisplay() {
@@ -145,17 +130,11 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
         month: "long",
         timeZone: "UTC",
       })
-      const usage = current === lastUsed ? (props.member.monthlyUsage ?? 0) : 0
-      return (usage / 100000000).toFixed(2)
+      return current === lastUsed ? (props.member.monthlyUsage ?? 0) : 0
     })()
 
     const limit = props.member.monthlyLimit ? `$${props.member.monthlyLimit}` : "no limit"
-    return `$${currentUsage} / ${limit}`
-  }
-
-  const roleLabels = {
-    admin: { title: "Admin", description: "Can manage models, members, and billing" },
-    member: { title: "Member", description: "Can only generate API keys for themselves" },
+    return `$${(currentUsage / 100000000).toFixed(2)} / ${limit}`
   }
 
   return (
@@ -163,48 +142,11 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
       <td data-slot="member-email">{props.member.accountEmail ?? props.member.email}</td>
       <td data-slot="member-role">
         <Show when={store.editing && !isCurrentUser()} fallback={<span>{props.member.role}</span>}>
-          <div data-slot="role-selector" ref={roleDropdownRef}>
-            <button
-              data-slot="trigger"
-              type="button"
-              onClick={() => setStore("showRoleDropdown", !store.showRoleDropdown)}
-            >
-              <span>{roleLabels[store.selectedRole].title}</span>
-              <IconChevron data-slot="chevron" />
-            </button>
-            <Show when={store.showRoleDropdown}>
-              <div data-slot="dropdown">
-                <button
-                  data-slot="item"
-                  data-selected={store.selectedRole === "admin"}
-                  type="button"
-                  onClick={() => {
-                    setStore("selectedRole", "admin")
-                    setStore("showRoleDropdown", false)
-                  }}
-                >
-                  <div>
-                    <strong>Admin</strong>
-                    <p>{roleLabels.admin.description}</p>
-                  </div>
-                </button>
-                <button
-                  data-slot="item"
-                  data-selected={store.selectedRole === "member"}
-                  type="button"
-                  onClick={() => {
-                    setStore("selectedRole", "member")
-                    setStore("showRoleDropdown", false)
-                  }}
-                >
-                  <div>
-                    <strong>{roleLabels.member.title}</strong>
-                    <p>{roleLabels.member.description}</p>
-                  </div>
-                </button>
-              </div>
-            </Show>
-          </div>
+          <RoleDropdown
+            value={store.selectedRole}
+            options={roleOptions}
+            onChange={(value) => setStore("selectedRole", value as (typeof UserRole)[number])}
+          />
         </Show>
       </td>
       <td data-slot="member-usage">
@@ -260,6 +202,11 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
   )
 }
 
+const roleOptions = [
+  { value: "admin", description: "Can manage models, members, and billing" },
+  { value: "member", description: "Can only generate API keys for themselves" },
+]
+
 export function MemberSection() {
   const params = useParams()
   const data = createAsync(() => listMembers(params.id))
@@ -267,28 +214,15 @@ export function MemberSection() {
   const [store, setStore] = createStore({
     show: false,
     selectedRole: "member" as (typeof UserRole)[number],
-    showRoleDropdown: false,
     limit: "",
   })
 
   let input: HTMLInputElement
-  let roleDropdownRef: HTMLDivElement | undefined
 
   createEffect(() => {
     if (!submission.pending && submission.result && !submission.result.error) {
       setStore("show", false)
     }
-  })
-
-  createEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (roleDropdownRef && !roleDropdownRef.contains(event.target as Node)) {
-        setStore("showRoleDropdown", false)
-      }
-    }
-
-    document.addEventListener("click", handleClickOutside)
-    onCleanup(() => document.removeEventListener("click", handleClickOutside))
   })
 
   function show() {
@@ -304,12 +238,6 @@ export function MemberSection() {
 
   function hide() {
     setStore("show", false)
-    setStore("showRoleDropdown", false)
-  }
-
-  const roleLabels = {
-    admin: { title: "Admin", description: "Can manage models, members, and billing" },
-    member: { title: "Member", description: "Can only generate API keys for themselves" },
   }
 
   return (
@@ -340,48 +268,11 @@ export function MemberSection() {
             </div>
             <div data-slot="input-field">
               <p>Role</p>
-              <div data-slot="role-selector" ref={roleDropdownRef}>
-                <button
-                  data-slot="trigger"
-                  type="button"
-                  onClick={() => setStore("showRoleDropdown", !store.showRoleDropdown)}
-                >
-                  <span>{roleLabels[store.selectedRole].title}</span>
-                  <IconChevron data-slot="chevron" />
-                </button>
-                <Show when={store.showRoleDropdown}>
-                  <div data-slot="dropdown">
-                    <button
-                      data-slot="item"
-                      data-selected={store.selectedRole === "admin"}
-                      type="button"
-                      onClick={() => {
-                        setStore("selectedRole", "admin")
-                        setStore("showRoleDropdown", false)
-                      }}
-                    >
-                      <div>
-                        <strong>Admin</strong>
-                        <p>{roleLabels.admin.description}</p>
-                      </div>
-                    </button>
-                    <button
-                      data-slot="item"
-                      data-selected={store.selectedRole === "member"}
-                      type="button"
-                      onClick={() => {
-                        setStore("selectedRole", "member")
-                        setStore("showRoleDropdown", false)
-                      }}
-                    >
-                      <div>
-                        <strong>{roleLabels.member.title}</strong>
-                        <p>{roleLabels.member.description}</p>
-                      </div>
-                    </button>
-                  </div>
-                </Show>
-              </div>
+              <RoleDropdown
+                value={store.selectedRole}
+                options={roleOptions}
+                onChange={(value) => setStore("selectedRole", value as (typeof UserRole)[number])}
+              />
             </div>
             <div data-slot="input-field">
               <p>Monthly spending limit</p>

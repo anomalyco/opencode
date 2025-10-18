@@ -28,7 +28,14 @@ export function NewUserSection() {
     const usageList = usage()
     return keysList?.length === 1 && (!usageList || usageList.length === 0)
   })
-  const defaultKey = createMemo(() => keys()?.at(-1)?.key)
+  const defaultKey = createMemo(() => {
+    const key = keys()?.at(-1)?.key
+    if (!key) return undefined
+    return {
+      actual: key,
+      masked: key.slice(0, 8) + "*".repeat(key.length - 12) + key.slice(-4),
+    }
+  })
 
   return (
     <Show when={isNew()}>
@@ -52,12 +59,12 @@ export function NewUserSection() {
           <Show when={defaultKey()}>
             <div data-slot="key-display">
               <div data-slot="key-container">
-                <code data-slot="key-value">{defaultKey()}</code>
+                <code data-slot="key-value">{defaultKey()?.masked}</code>
                 <button
                   data-color="primary"
                   disabled={copiedKey()}
                   onClick={async () => {
-                    await navigator.clipboard.writeText(defaultKey() ?? "")
+                    await navigator.clipboard.writeText(defaultKey()?.actual ?? "")
                     setCopiedKey(true)
                     setTimeout(() => setCopiedKey(false), 2000)
                   }}

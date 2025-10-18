@@ -14,19 +14,23 @@ export function DialogModel() {
   const options = createMemo(() => {
     return [
       ...(!ref()?.filter
-        ? local.model.recent().map((item) => {
+        ? local.model.recent().flatMap((item) => {
             const provider = sync.data.provider.find((x) => x.id === item.providerID)!
+            if (!provider) return []
             const model = provider.models[item.modelID]
-            return {
-              key: item,
-              value: {
-                providerID: provider.id,
-                modelID: model.id,
+            if (!model) return []
+            return [
+              {
+                key: item,
+                value: {
+                  providerID: provider.id,
+                  modelID: model.id,
+                },
+                title: model.name ?? item.modelID,
+                description: provider.name,
+                category: "Recent",
               },
-              title: model.name ?? item.modelID,
-              description: provider.name,
-              category: "Recent",
-            }
+            ]
           })
         : []),
       ...pipe(

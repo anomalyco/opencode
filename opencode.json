@@ -5,6 +5,13 @@
     "weather": {
       "type": "local",
       "command": ["bun", "x", "@h1deya/mcp-server-weather"]
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
     }
   }
 }

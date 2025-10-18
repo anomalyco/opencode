@@ -13,12 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: 1.3.0
-
-      - name: Install dependencies
-        run: bun install
+        uses: ./.github/actions/setup-bun
 
       - name: Run typecheck
         run: bun typecheck

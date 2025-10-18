@@ -1,5 +1,5 @@
 import { FileIcon, Icon, IconButton, Tooltip } from "@/ui"
-import { Tabs } from "@/ui/tabs"
+import * as KobalteTabs from "@kobalte/core/tabs"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
