@@ -12,36 +12,31 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Check if API is running
-check_api() {
-  curl -s http://localhost:12345/health > /dev/null 2>&1
+# Check if Backend is running
+check_backend() {
+  curl -s http://localhost:12345 > /dev/null 2>&1
   return $?
 }
 
-# Start OpenCode API
-start_api() {
-  echo -e "${BLUE}[API]${NC} Starting OpenCode API..."
+# Start OpenCode Backend Server
+start_backend() {
+  echo -e "${BLUE}[BACKEND]${NC} Starting OpenCode backend server..."
   if command -v opencode &> /dev/null; then
-    opencode dev &
-    API_PID=$!
-    echo -e "${BLUE}[API]${NC} Started (PID: $API_PID)"
+    opencode serve &
+    BACKEND_PID=$!
+    echo -e "${BLUE}[BACKEND]${NC} Started (PID: $BACKEND_PID)"
   else
-    echo -e "${RED}[API]${NC} opencode CLI not found. Install with: npm install -g @opencode-ai/cli"
+    echo -e "${RED}[BACKEND]${NC} opencode CLI not found. Install with: npm install -g @opencode-ai/cli"
     exit 1
   fi
 }
 
 # Start Web Frontend
 start_web() {
-  if [ -d "../web" ]; then
-    echo -e "${GREEN}[WEB]${NC} Starting web frontend..."
-    cd ../web && npm run dev &
-    WEB_PID=$!
-    cd - > /dev/null
-    echo -e "${GREEN}[WEB]${NC} Started (PID: $WEB_PID)"
-  else
-    echo -e "${YELLOW}[WEB]${NC} Web package not found, skipping..."
-  fi
+  echo -e "${GREEN}[WEB]${NC} Starting web frontend..."
+  # Web frontend is served by the desktop app's Vite dev server
+  # This will be available at the desktop app's URL
+  echo -e "${GREEN}[WEB]${NC} Web frontend will be served by desktop app"
 }
 
 # Start Desktop
@@ -56,8 +51,7 @@ start_desktop() {
 cleanup() {
   echo ""
   echo -e "${RED}Shutting down...${NC}"
-  [ ! -z "$API_PID" ] && kill $API_PID 2>/dev/null && echo -e "${BLUE}[API]${NC} Stopped"
-  [ ! -z "$WEB_PID" ] && kill $WEB_PID 2>/dev/null && echo -e "${GREEN}[WEB]${NC} Stopped"
+  [ ! -z "$BACKEND_PID" ] && kill $BACKEND_PID 2>/dev/null && echo -e "${BLUE}[BACKEND]${NC} Stopped"
   [ ! -z "$DESKTOP_PID" ] && kill $DESKTOP_PID 2>/dev/null && echo -e "${YELLOW}[DESKTOP]${NC} Stopped"
   exit 0
 }
@@ -69,24 +63,28 @@ echo -e "${GREEN}  OpenCode Development Environment${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Check if API is already running
-if check_api; then
-  echo -e "${BLUE}[API]${NC} Already running ✓"
+# Start in correct order: Native Desktop > Web > Backend
+start_desktop
+sleep 3
+
+# Start backend server
+if check_backend; then
+  echo -e "${BLUE}[BACKEND]${NC} Already running ✓"
 else
-  start_api
+  start_backend
   sleep 2
 fi
 
-# Start other services
-start_desktop
+# Web frontend is served by desktop app
+start_web
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  All services started!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "Desktop:  ${YELLOW}http://localhost:3000${NC}"
-echo -e "API:      ${BLUE}http://localhost:12345${NC}"
+echo -e "Desktop (with Web): ${YELLOW}Native App Window${NC}"
+echo -e "Backend:            ${BLUE}opencode serve${NC}"
 echo ""
 echo -e "Press ${RED}Ctrl+C${NC} to stop all services"
 echo ""

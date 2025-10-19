@@ -1,6 +1,5 @@
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use std::net::TcpListener;
 use tauri::Manager;
 
 struct ServerState {
@@ -8,11 +7,7 @@ struct ServerState {
   port: Option<u16>,
 }
 
-fn find_available_port() -> Option<u16> {
-  (49152..=65535).find(|port| {
-    TcpListener::bind(("127.0.0.1", *port)).is_ok()
-  })
-}
+
 
 fn get_opencode_path() -> Option<String> {
   let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());

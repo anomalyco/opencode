@@ -26,7 +26,7 @@ export const TuiThreadCommand = cmd({
       }),
   handler: async (args) => {
     upgrade()
-    const worker = new Worker("./src/cli/cmd/tui/worker.ts")
+    const worker = new Worker(new URL("./worker.ts", import.meta.url))
     worker.onerror = console.error
     const client = Rpc.client<typeof rpc>(worker)
     process.on("uncaughtException", (e) => {

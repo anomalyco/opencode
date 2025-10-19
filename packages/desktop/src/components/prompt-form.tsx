@@ -205,47 +205,6 @@ export default function PromptForm(props: PromptFormProps) {
     getActiveContext: () => local.context.active() ?? undefined,
   })
 
-  const handlePromptKeyDown = (event: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
-    if (event.isComposing) return
-
-    if (autocomplete()) {
-      return
-    }
-
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault()
-      if (element.selectionStart === match.start && element.selectionEnd === match.end) {
-        const next = Math.max(0, match.start)
-        element.setSelectionRange(next, next)
-        syncMentionFromCaret(element)
-        return true
-      }
-      element.setSelectionRange(match.start, match.end)
-      syncMentionFromCaret(element)
-      return true
-    }
-    if (direction === "right") {
-      let match = segments.find((segment) => caret >= segment.start && caret < segment.end)
-      if (!match && element.selectionStart !== element.selectionEnd) {
-        match = segments.find(
-          (segment) => element.selectionStart === segment.start && element.selectionEnd === segment.end,
-        )
-      }
-      if (!match) return false
-      event.preventDefault()
-      if (element.selectionStart === match.start && element.selectionEnd === match.end) {
-        const next = match.end
-        element.setSelectionRange(next, next)
-        syncMentionFromCaret(element)
-        return true
-      }
-      element.setSelectionRange(match.start, match.end)
-      syncMentionFromCaret(element)
-      return true
-    }
-    return false
-  }
-
   function renderAttachmentChip(part: PromptAttachmentPart, _placeholder: string) {
     const display = part.display ?? createAttachmentDisplay(part.path, part.selection)
     return <span class="truncate max-w-[16ch] text-primary">@{display}</span>
