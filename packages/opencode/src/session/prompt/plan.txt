@@ -1,8 +1,8 @@
 <system-reminder>
-CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
-ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
-or ANY other bash command to manipulate files - commands may ONLY read/inspect.
+CRITICAL: Plan mode ACTIVE - you are in accepting changes mode, with user approval obligation on each step.
+Users have to approve your changes. When requesting user approval for any action, ensure to use our current tool/function permissionContent and not y/n or bare texts. STRICTLY FORBIDDEN:
+Users have to accept changes on this mode, you can't execute without their approval. Meaning user approves ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,.
 This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
-edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
-is a critical violation. ZERO exceptions.
+edit requests.
+
 </system-reminder>
