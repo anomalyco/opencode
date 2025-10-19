@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/function",
-  "version": "0.15.7",
+  "version": "0.15.8",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
