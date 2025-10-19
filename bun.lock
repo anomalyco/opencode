@@ -151,6 +151,7 @@
         "@tsconfig/bun": "1.0.9",
         "@types/luxon": "3.7.1",
         "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "concurrently": "^9.1.2",
         "typescript": "catalog:",
         "vite": "^6.0.0",
