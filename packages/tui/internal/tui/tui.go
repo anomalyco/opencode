@@ -54,7 +54,7 @@ const (
 	ExitKeyFirstPress
 )
 
-const interruptDebounceTimeout = 1 * time.Second
+const interruptDebounceTimeout = 300 * time.Millisecond
 const exitDebounceTimeout = 1 * time.Second
 
 type Model struct {
@@ -282,15 +282,20 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// 7. Handle interrupt key debounce for session interrupt
 		interruptCommand := a.app.Commands[commands.SessionInterruptCommand]
-		if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() {
+		if interruptCommand.Matches(msg, a.app.IsLeaderSequence) {
+			if !a.app.IsBusy() {
+				return a, nil
+			}
 			switch a.interruptKeyState {
 			case InterruptKeyIdle:
 				// First interrupt key press - start debounce timer
 				a.interruptKeyState = InterruptKeyFirstPress
 				a.editor.SetInterruptKeyInDebounce(true)
-				return a, tea.Tick(interruptDebounceTimeout, func(t time.Time) tea.Msg {
+				cmds = append(cmds, toast.NewInfoToast("Press again to interrupt"))
+				cmds = append(cmds, tea.Tick(interruptDebounceTimeout, func(t time.Time) tea.Msg {
 					return InterruptDebounceTimeoutMsg{}
-				})
+				}))
+				return a, tea.Batch(cmds...)
 			case InterruptKeyFirstPress:
 				// Second interrupt key press within timeout - actually interrupt
 				a.interruptKeyState = InterruptKeyIdle
@@ -479,6 +484,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case opencode.EventListResponseEventMessagePartUpdated:
 		slog.Debug("message part updated", "message", msg.Properties.Part.MessageID, "part", msg.Properties.Part.ID)
+		if a.app.AbortedSessions[msg.Properties.Part.SessionID] {
+			return a, nil
+		}
 		if msg.Properties.Part.SessionID == a.app.Session.ID {
 			messageIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
@@ -519,6 +527,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case opencode.EventListResponseEventMessagePartRemoved:
 		slog.Debug("message part removed", "session", msg.Properties.SessionID, "message", msg.Properties.MessageID, "part", msg.Properties.PartID)
+		if a.app.AbortedSessions[msg.Properties.SessionID] {
+			return a, nil
+		}
 		if msg.Properties.SessionID == a.app.Session.ID {
 			messageIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
@@ -557,6 +568,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case opencode.EventListResponseEventMessageRemoved:
 		slog.Debug("message removed", "session", msg.Properties.SessionID, "message", msg.Properties.MessageID)
+		if a.app.AbortedSessions[msg.Properties.SessionID] {
+			return a, nil
+		}
 		if msg.Properties.SessionID == a.app.Session.ID {
 			messageIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
@@ -572,6 +586,9 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case opencode.EventListResponseEventMessageUpdated:
+		if a.app.AbortedSessions[msg.Properties.Info.SessionID] {
+			return a, nil
+		}
 		if msg.Properties.Info.SessionID == a.app.Session.ID {
 			matchIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {

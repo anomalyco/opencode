@@ -49,6 +49,7 @@ type App struct {
 	InitialAgent      *string
 	InitialSession    *string
 	compactCancel     context.CancelFunc
+	AbortedSessions   map[string]bool
 	IsLeaderSequence  bool
 	IsBashMode        bool
 	ScrollSpeed       int
@@ -791,6 +792,11 @@ func (a *App) SendPrompt(ctx context.Context, prompt Prompt) (*App, tea.Cmd) {
 		cmds = append(cmds, util.CmdHandler(SessionCreatedMsg{Session: session}))
 	}
 
+	// Clear aborted flag for new operation
+	if a.AbortedSessions != nil {
+		delete(a.AbortedSessions, a.Session.ID)
+	}
+
 	messageID := id.Ascending(id.Message)
 	message := prompt.ToMessage(messageID, a.Session.ID)
 
@@ -893,6 +899,19 @@ func (a *App) Cancel(ctx context.Context, sessionID string) error {
 	if a.compactCancel != nil {
 		a.compactCancel()
 		a.compactCancel = nil
+	}
+
+	if a.AbortedSessions == nil {
+		a.AbortedSessions = make(map[string]bool)
+	}
+	a.AbortedSessions[sessionID] = true
+
+	// Mark the last assistant message as completed to update IsBusy
+	if len(a.Messages) > 0 {
+		if lastMsg, ok := a.Messages[len(a.Messages)-1].Info.(opencode.AssistantMessage); ok && lastMsg.Time.Completed == 0 {
+			lastMsg.Time.Completed = float64(time.Now().UnixMilli())
+			a.Messages[len(a.Messages)-1].Info = lastMsg
+		}
 	}
 
 	_, err := a.Client.Session.Abort(ctx, sessionID, opencode.SessionAbortParams{})
