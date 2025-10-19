@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, createResource } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button, FileIcon, Icon, IconButton, Tooltip } from "@/ui"
 import { Select } from "@/components/select"
 import { useLocal, useMobile } from "@/context"
@@ -7,6 +8,8 @@ import { getFilename, getDirectory } from "@/utils"
 import { createSpeechRecognition } from "@/utils/speech"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { AutocompleteDropdown, type AutocompleteItem } from "@/components/autocomplete-dropdown"
+import { usePromptSpeech, useMentionController, usePromptScrollSync, type PromptFormState } from "./prompt-form-hooks"
+import { parsePrompt, createAttachmentDisplay, type PromptAttachmentSegment } from "./prompt-form-helpers"
 
 interface PromptFormProps {
   class?: string
@@ -23,6 +26,17 @@ interface PromptFormProps {
 export default function PromptForm(props: PromptFormProps) {
   const local = useLocal()
   const mobile = useMobile()
+
+  const [state, setState] = createStore<PromptFormState>({
+    promptInput: "",
+    isDragOver: false,
+    mentionOpen: false,
+    mentionQuery: "",
+    mentionRange: undefined,
+    mentionIndex: 0,
+    mentionAnchorOffset: { x: 0, y: 0 },
+    inlineAliases: new Map(),
+  })
 
   const [prompt, setPrompt] = createSignal("")
   const [isDragOver, setIsDragOver] = createSignal(false)
@@ -205,9 +219,77 @@ export default function PromptForm(props: PromptFormProps) {
     getActiveContext: () => local.context.active() ?? undefined,
   })
 
+  const { handlePromptScroll, resetScrollPosition, setAutoScroll } = usePromptScrollSync({
+    state,
+    getInputRef: () => inputRef,
+    getOverlayRef: () => overlayContainerRef,
+    interim: interimTranscript,
+    updateMentionPosition,
+  })
+
+  let mentionMeasureRef: HTMLDivElement | undefined = undefined
+
   function renderAttachmentChip(part: PromptAttachmentPart, _placeholder: string) {
     const display = part.display ?? createAttachmentDisplay(part.path, part.selection)
     return <span class="truncate max-w-[16ch] text-primary">@{display}</span>
+  }
+
+  function renderTextSegment(text: string) {
+    return <span>{text}</span>
+  }
+
+  const displaySegments = createMemo(() => parsedPrompt().segments)
+  const hasDisplaySegments = createMemo(() => displaySegments().length > 0)
+
+  function PromptDisplayOverlay(props: any) {
+    return (
+      <div class="whitespace-pre-wrap text-base font-light leading-relaxed px-0.5">
+        <Show when={props.hasDisplaySegments} fallback={<span class="text-text-muted">{props.placeholder}</span>}>
+          <For each={props.displaySegments}>
+            {(segment: any) => (
+              <Show
+                when={segment.kind === "attachment"}
+                fallback={props.renderTextSegment ? props.renderTextSegment(segment.text) : <span>{segment.text}</span>}
+              >
+                {props.renderAttachmentChip ? props.renderAttachmentChip(segment, props.placeholder) : <span>@{segment.token}</span>}
+              </Show>
+            )}
+          </For>
+        </Show>
+      </div>
+    )
+  }
+
+  function MentionSuggestions(props: any) {
+    return (
+      <Show when={props.open}>
+        <div
+          class="absolute bg-background-panel border border-border rounded shadow-lg z-50 max-h-60 overflow-auto"
+          style={{ top: `${props.anchor.y + 24}px`, left: `${props.anchor.x}px` }}
+        >
+          <Show when={props.loading} fallback={
+            <For each={props.items}>
+              {(item: string, index) => (
+                <button
+                  class="w-full px-3 py-1.5 text-left text-sm hover:bg-background-element"
+                  classList={{ "bg-background-element": index() === props.activeIndex }}
+                  onClick={() => props.onSelect(item)}
+                  onMouseEnter={() => props.onHover(index())}
+                >
+                  <div class="flex items-center gap-2">
+                    <FileIcon node={{ path: item, type: "file" }} class="size-4" />
+                    <span class="text-text">{getFilename(item)}</span>
+                    <span class="text-text-muted text-xs">{getDirectory(item)}</span>
+                  </div>
+                </button>
+              )}
+            </For>
+          }>
+            <div class="px-3 py-2 text-sm text-text-muted">Loading...</div>
+          </Show>
+        </div>
+      </Show>
+    )
   }
 
   function renderTextSegment(value: string) {

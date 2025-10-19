@@ -20,10 +20,13 @@ import { getFilename } from "@/utils"
 import type { JSX } from "solid-js"
 
 interface EditorPaneProps {
+  layoutKey: string
+  timelinePane: string
   onFileClick: (file: LocalFile) => void
   onOpenModelSelect: () => void
   onOpenAgentSelect: () => void
   onInputRefChange: (element: HTMLTextAreaElement | null) => void
+  onPromptSubmit: (prompt: string) => void
   onDragProximity?: (proximity: { isDragging: boolean; nearDockZone: boolean; x: number; y: number }) => void
   onDrop?: () => void
   hideFloatingChat?: boolean
@@ -37,11 +40,13 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
     "onOpenModelSelect",
     "onOpenAgentSelect",
     "onInputRefChange",
+    "onPromptSubmit",
     "onDragProximity",
     "onDrop",
     "hideFloatingChat",
   ])
   const local = useLocal()
+  const sync = useSync()
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
   const navigateChange = (dir: 1 | -1) => {
@@ -382,7 +387,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
             "bottom-8": !!local.file.active(),
             "bottom-1/3": local.file.active() === undefined,
           }}
-          onSubmit={handlePromptSubmit}
+          onSubmit={localProps.onPromptSubmit}
           onOpenModelSelect={localProps.onOpenModelSelect}
           onOpenAgentSelect={localProps.onOpenAgentSelect}
           onInputRefChange={(element) => localProps.onInputRefChange(element ?? null)}

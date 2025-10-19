@@ -102,17 +102,17 @@ function init() {
       sdk.config
         .providers()
         .then((x) => setStore("provider", x.data!.providers))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load providers:', e)),
     path: () =>
       sdk.path
         .get()
         .then((x) => setStore("path", x.data!))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load path:', e)),
     agent: () =>
       sdk.app
         .agents()
         .then((x) => setStore("agent", x.data ?? []))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load agents:', e)),
     session: () =>
       sdk.session
         .list()
@@ -122,27 +122,36 @@ function init() {
             (x.data ?? []).slice().sort((a, b) => a.id.localeCompare(b.id)),
           ),
         )
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load sessions:', e)),
     config: () =>
       sdk.config
         .get()
         .then((x) => setStore("config", x.data!))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load config:', e)),
     changes: () =>
       sdk.file
         .status()
         .then((x) => setStore("changes", x.data!))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load changes:', e)),
     node: () =>
       sdk.file
         .list({ query: { path: "/" } })
         .then((x) => setStore("node", x.data!))
-        .catch(() => {}),
+        .catch((e) => console.error('[Sync] Failed to load files:', e)),
   }
 
   Promise.all(Object.values(load).map((p) => p()))
-    .then(() => setStore("ready", true))
-    .catch(() => {})
+    .then(() => {
+      console.log('[Sync] All data loaded:', {
+        providers: store.provider.length,
+        agents: store.agent.length,
+        sessions: store.session.length,
+        nodes: store.node.length,
+        path: store.path.directory,
+      })
+      setStore("ready", true)
+    })
+    .catch((e) => console.error('[Sync] Failed to load all data:', e))
 
   const sanitizer = createMemo(() => new RegExp(`${store.path.directory}/`, "g"))
   const sanitize = (text: string) => text.replace(sanitizer(), "")

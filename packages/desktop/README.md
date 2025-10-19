@@ -10,14 +10,46 @@ $ npm install # or pnpm install or yarn install
 
 ### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
 
+## Development
+
+### Web Development (Browser)
+Run backend + Vite dev server:
+```bash
+npm run dev:web
+```
+Then open: `http://127.0.0.1:5173/?directory=/Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/desktop`
+
+### Desktop Development (Tauri Native App)
+Run backend + Vite + Tauri:
+```bash
+npm start
+# or
+npm run dev:tauri
+```
+
+### Services Architecture
+
+The desktop app requires:
+1. **OpenCode Backend** (`127.0.0.1:4096`) - API server
+2. **Vite Dev Server** (`127.0.0.1:5173`) - UI with proxy to backend
+3. **Tauri** - Native app wrapper (optional for browser-only dev)
+
+**Important:** All services use `127.0.0.1` (not `localhost`) to avoid IPv4/IPv6 networking issues.
+
+The startup scripts handle this automatically:
+- `npm run dev:web` - Backend + Vite (browser testing)
+- `npm start` - Backend + Vite + Tauri (native app)
+
 ## Available Scripts
 
-In the project directory, you can run:
+### `npm start` or `npm run dev:tauri`
 
-### `npm run dev` or `npm start`
+Runs the Tauri native desktop app with backend and Vite dev server.
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### `npm run dev:web`
+
+Runs backend + Vite for browser-based development.<br>
+Open [http://127.0.0.1:5173/?directory=/path/to/project](http://127.0.0.1:5173/?directory=/path/to/project)
 
 The page will reload if you make edits.<br>
 

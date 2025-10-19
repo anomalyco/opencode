@@ -1,4 +1,4 @@
-import { FileIcon, Icon, IconButton, Tooltip } from "@/ui"
+import { FileIcon, Icon, IconButton, Tabs, Tooltip } from "@/ui"
 import * as KobalteTabs from "@kobalte/core/tabs"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
@@ -441,6 +441,7 @@ export default function Page() {
                 onInputRefChange={(element: HTMLTextAreaElement | null) => {
                   inputRef = element ?? undefined
                 }}
+                onPromptSubmit={handlePromptSubmit}
                 onDragProximity={handleDragProximity}
                 onDrop={handleDrop}
                 hideFloatingChat={local.session.chatDocked()}

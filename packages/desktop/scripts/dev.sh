@@ -14,17 +14,19 @@ NC='\033[0m' # No Color
 
 # Check if Backend is running
 check_backend() {
-  curl -s http://localhost:12345 > /dev/null 2>&1
+  curl -s http://127.0.0.1:4096 > /dev/null 2>&1
   return $?
 }
 
 # Start OpenCode Backend Server
 start_backend() {
-  echo -e "${BLUE}[BACKEND]${NC} Starting OpenCode backend server..."
+  export OPENCODE_PORT=4096
+  echo -e "${BLUE}[BACKEND]${NC} Starting OpenCode backend server on 127.0.0.1:4096..."
   if command -v opencode &> /dev/null; then
-    opencode serve &
+    opencode serve -p 4096 -h 127.0.0.1 &
     BACKEND_PID=$!
     echo -e "${BLUE}[BACKEND]${NC} Started (PID: $BACKEND_PID)"
+    sleep 2
   else
     echo -e "${RED}[BACKEND]${NC} opencode CLI not found. Install with: npm install -g @opencode-ai/cli"
     exit 1
@@ -63,17 +65,17 @@ echo -e "${GREEN}  OpenCode Development Environment${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Start in correct order: Native Desktop > Web > Backend
-start_desktop
-sleep 3
-
-# Start backend server
+# Start backend server FIRST
 if check_backend; then
   echo -e "${BLUE}[BACKEND]${NC} Already running ✓"
 else
   start_backend
-  sleep 2
+  sleep 3
 fi
+
+# Then start desktop and web
+start_desktop
+sleep 2
 
 # Web frontend is served by desktop app
 start_web
@@ -83,8 +85,8 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  All services started!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "Desktop (with Web): ${YELLOW}Native App Window${NC}"
-echo -e "Backend:            ${BLUE}opencode serve${NC}"
+echo -e "Desktop App:  ${YELLOW}http://127.0.0.1:5173${NC}"
+echo -e "Backend API:  ${BLUE}http://127.0.0.1:4096${NC}"
 echo ""
 echo -e "Press ${RED}Ctrl+C${NC} to stop all services"
 echo ""

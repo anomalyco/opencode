@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(opencode serve --help)",
+      "Read(//Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/opencode/src/cli/cmd/**)",
+      "Read(//Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/sdk/js/src/**)",
+      "Read(//Users/jkneen/Documents/GitHub/flows/opencode-stt/**)",
+      "Bash(curl -s http://localhost:4096)",
+      "Bash(curl -s http://localhost:4096/api/health)",
+      "Bash(curl -s http://localhost:4096/health)",
+      "Bash(lsof -i :4096)",
+      "Bash(curl -s http://localhost:4096/api/v1/session)",
+      "Bash(curl -v http://localhost:4096/v1/session)",
+      "Bash(curl -s http://localhost:4096/session)",
+      "Bash(curl -s http://localhost:4096/config)",
+      "Bash(curl -s \"http://localhost:4096/session?directory=/Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/desktop\")",
+      "Bash(curl -v http://localhost:4096/session)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(chmod +x /Users/jkneen/Documents/GitHub/flows/opencode-stt/packages/desktop/scripts/tauri-dev.sh)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

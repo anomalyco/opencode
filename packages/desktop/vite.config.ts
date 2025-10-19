@@ -28,9 +28,17 @@ export default defineConfig({
     }),
   ],
   server: {
-    host: process.env["TAURI_DEV_HOST"] || "0.0.0.0",
-    port: parseInt(process.env["PORT"] || String(Math.floor(Math.random() * (65535 - 49152) + 49152))),
+    host: process.env["TAURI_DEV_HOST"] || "127.0.0.1",
+    port: parseInt(process.env["PORT"] || "5173"),
     strictPort: false,
+    proxy: {
+      '/session': 'http://127.0.0.1:4096',
+      '/config': 'http://127.0.0.1:4096',
+      '/agent': 'http://127.0.0.1:4096',
+      '/file': 'http://127.0.0.1:4096',
+      '/path': 'http://127.0.0.1:4096',
+      '/event': 'http://127.0.0.1:4096',
+    },
   },
   build: {
     target: "esnext",

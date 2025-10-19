@@ -5,7 +5,7 @@
   "identifier": "ai.opencode.desktop",
   "build": {
     "frontendDist": "../dist",
-    "beforeDevCommand": "bun dev",
+    "beforeDevCommand": "../scripts/tauri-dev.sh",
     "beforeBuildCommand": "bun run build"
   },
   "app": {

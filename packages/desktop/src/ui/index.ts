@@ -10,4 +10,11 @@ export { Icon, type IconProps } from "./icon"
 export { IconButton, type IconButtonProps } from "./icon-button"
 export { Link, type LinkProps } from "./link"
 export { Logo, type LogoProps } from "./logo"
+export {
+  Tabs,
+  type TabsProps,
+  type TabsListProps,
+  type TabsTriggerProps,
+  type TabsContentProps,
+} from "./tabs"
 export { Tooltip, type TooltipProps } from "./tooltip"
