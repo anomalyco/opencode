@@ -83,6 +83,7 @@ export namespace Agent {
           "wc *": "allow",
           "whereis *": "allow",
           "which *": "allow",
+          "*": "ask",
         },
         webfetch: "allow",
       },
