@@ -74,26 +74,34 @@ export const RunCommand = cmd({
       .option("file", {
         alias: ["f"],
         type: "string",
-        describe: "file to read and prepend to the message",
+        array: true,
+        describe: "file(s) to read and prepend to the message (can be used multiple times)",
       })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
 
     if (args.file) {
-      try {
-        const filePath = path.resolve(process.cwd(), args.file)
-        const file = Bun.file(filePath)
-        if (!(await file.exists())) {
-          UI.error(`File not found: ${args.file}`)
+      const files = Array.isArray(args.file) ? args.file : [args.file]
+      const fileContents: string[] = []
+
+      for (const filePath of files) {
+        try {
+          const resolvedPath = path.resolve(process.cwd(), filePath)
+          const file = Bun.file(resolvedPath)
+          if (!(await file.exists())) {
+            UI.error(`File not found: ${filePath}`)
+            process.exit(1)
+          }
+          const content = await file.text()
+          fileContents.push(content)
+        } catch (error) {
+          UI.error(`Failed to read file: ${filePath}`)
           process.exit(1)
         }
-        const fileContent = await file.text()
-        message = fileContent + "\n\n" + message
-      } catch (error) {
-        UI.error(`Failed to read file: ${args.file}`)
-        process.exit(1)
       }
+
+      message = fileContents.join("\n\n") + "\n\n" + message
     }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
