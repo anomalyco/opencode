@@ -592,9 +592,6 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case opencode.EventListResponseEventMessageUpdated:
-		if a.app.AbortedSessions[msg.Properties.Info.SessionID] {
-			return a, nil
-		}
 		if msg.Properties.Info.SessionID == a.app.Session.ID {
 			matchIndex := slices.IndexFunc(a.app.Messages, func(m app.Message) bool {
 				switch casted := m.Info.(type) {
