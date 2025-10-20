@@ -227,6 +227,10 @@ export namespace File {
     const full = path.join(Instance.directory, file)
     const bunFile = Bun.file(full)
 
+    if (!(await bunFile.exists())) {
+      return { type: "text", content: "" }
+    }
+
     const isBinary = await isBinaryFile(full, bunFile)
 
     if (isBinary) {
