@@ -2,7 +2,6 @@ import { Plugin } from "../plugin"
 import { Share } from "../share/share"
 import { Format } from "../format"
 import { LSP } from "../lsp"
-import { Snapshot } from "../snapshot"
 import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
 import { Flag } from "../flag/flag"
@@ -13,7 +12,6 @@ export async function InstanceBootstrap() {
   Share.init()
   Format.init()
   LSP.init()
-  Snapshot.init()
   FileWatcher.init()
   File.init()
 }

@@ -26,6 +26,8 @@ curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+scoop bucket add extras; scoop install extras/opencode  # Windows
+winget install opencode            # Windows
 brew install sst/tap/opencode      # macOS and Linux
 paru -S opencode-bin               # Arch Linux
 ```

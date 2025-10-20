@@ -162,9 +162,15 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 1. Handle active modal
 		if a.modal != nil {
 			switch keyString {
-			// Escape always closes current modal
+			// Escape closes current modal, but give modal a chance to handle it first
 			case "esc":
-				cmd := a.modal.Close()
+				// give the modal a chance to handle the esc
+				updatedModal, cmd := a.modal.Update(msg)
+				a.modal = updatedModal.(layout.Modal)
+				if cmd != nil {
+					return a, cmd
+				}
+				cmd = a.modal.Close()
 				a.modal = nil
 				return a, cmd
 			case "ctrl+c":
