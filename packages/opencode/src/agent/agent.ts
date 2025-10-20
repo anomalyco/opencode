@@ -52,7 +52,6 @@ export namespace Agent {
       {
         edit: "deny",
         bash: {
-          "find * -delete*": "deny",
           "awk *": "allow",
           "cat *": "allow",
           "cut *": "allow",
