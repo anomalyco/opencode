@@ -1,6 +1,7 @@
 import z from "zod/v4"
 import { Bus } from "../bus"
-import { $, BunFile } from "bun"
+import { $ } from "bun"
+import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
