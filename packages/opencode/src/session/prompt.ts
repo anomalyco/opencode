@@ -1515,7 +1515,14 @@ export namespace SessionPrompt {
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? "build"
 
-    let template = command.template.replaceAll("$ARGUMENTS", input.arguments)
+    const args = input.arguments.split(/\s+/)
+    let template = command.template.replaceAll(/\$ARGUMENTS\[(\d+)(?:(\*)|:(\d+))?\]/g, (_, index, star, end) => {
+      const start = parseInt(index)
+      if (star) return args.slice(start).join(" ")
+      if (end) return args.slice(start, parseInt(end) + 1).join(" ")
+      return args[start] || ""
+    })
+    template = template.replaceAll("$ARGUMENTS", input.arguments)
 
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {
