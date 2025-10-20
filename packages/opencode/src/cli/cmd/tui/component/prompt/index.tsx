@@ -1,4 +1,4 @@
-import { InputRenderable, TextAttributes, BoxRenderable } from "@opentui/core"
+import { TextAttributes, BoxRenderable, TextareaRenderable, MouseEvent, KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, Match, Switch, type JSX } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { Theme } from "@tui/context/theme"
@@ -34,7 +34,7 @@ export type PromptRef = {
 }
 
 export function Prompt(props: PromptProps) {
-  let input: InputRenderable
+  let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
 
@@ -69,7 +69,8 @@ export function Prompt(props: PromptProps) {
               input: content,
               parts: [],
             })
-            input.cursorPosition = content.length
+            console.log("editor.open", content, Bun.stringWidth(content))
+            input.cursorOffset = Bun.stringWidth(content)
           }
         },
       },
@@ -141,7 +142,8 @@ export function Prompt(props: PromptProps) {
     },
     set(prompt) {
       setStore("prompt", prompt)
-      input.cursorPosition = prompt.input.length
+      console.log("prompt.set", prompt.input, Bun.stringWidth(prompt.input))
+      input.cursorOffset = Bun.stringWidth(prompt.input)
     },
     reset() {
       setStore("prompt", {
@@ -243,7 +245,8 @@ export function Prompt(props: PromptProps) {
         input={() => input}
         setPrompt={(cb) => {
           setStore("prompt", produce(cb))
-          input.cursorPosition = store.prompt.input.length
+          console.log("setPrompt", store.prompt.input, Bun.stringWidth(store.prompt.input))
+          input.cursorOffset = Bun.stringWidth(store.prompt.input)
         }}
         value={store.prompt.input}
       />
@@ -252,18 +255,23 @@ export function Prompt(props: PromptProps) {
           flexDirection="row"
           {...SplitBorder}
           borderColor={keybind.leader ? Theme.accent : store.mode === "shell" ? Theme.secondary : undefined}
+          justifyContent="space-evenly"
         >
-          <box backgroundColor={Theme.backgroundElement} width={3} justifyContent="center" alignItems="center">
+          <box
+            backgroundColor={Theme.backgroundElement}
+            width={3}
+            height="100%"
+            justifyContent="center"
+            alignItems="center"
+          >
             <text attributes={TextAttributes.BOLD} fg={Theme.primary}>
               {store.mode === "normal" ? ">" : "!"}
             </text>
           </box>
-          <box paddingTop={1} paddingBottom={2} backgroundColor={Theme.backgroundElement} flexGrow={1}>
-            <input
-              onPaste={async function (text) {
-                this.insertText(text)
-              }}
-              onInput={(value) => {
+          <box paddingTop={1} paddingBottom={1} backgroundColor={Theme.backgroundElement} flexGrow={1}>
+            <textarea
+              onContentChange={() => {
+                const value = input.value
                 let diff = value.length - store.prompt.input.length
                 setStore(
                   produce((draft) => {
@@ -272,7 +280,7 @@ export function Prompt(props: PromptProps) {
                       const part = draft.prompt.parts[i]
                       if (!part.source) continue
                       const source = part.type === "agent" ? part.source : part.source.text
-                      if (source.start >= input.cursorPosition) {
+                      if (source.start >= input.visualCursor.offset) {
                         source.start += diff
                         source.end += diff
                       }
@@ -282,7 +290,14 @@ export function Prompt(props: PromptProps) {
                         draft.prompt.input =
                           draft.prompt.input.slice(0, source.start) + draft.prompt.input.slice(source.end)
                         draft.prompt.parts.splice(i, 1)
-                        input.cursorPosition = Math.max(0, source.start - 1)
+                        console.log(
+                          "onContentChange setting cursor offset",
+                          value,
+                          input.visualCursor.offset,
+                          source.start,
+                          source.end,
+                        )
+                        input.cursorOffset = Math.max(0, source.start - 1)
                         i--
                       }
                     }
@@ -291,7 +306,7 @@ export function Prompt(props: PromptProps) {
                 autocomplete.onInput(value)
               }}
               value={store.prompt.input}
-              onKeyDown={async (e) => {
+              onKeyDown={async (e: KeyEvent) => {
                 if (props.disabled) {
                   e.preventDefault()
                   return
@@ -307,27 +322,31 @@ export function Prompt(props: PromptProps) {
                   await exit()
                   return
                 }
-                if (e.name === "!" && input.cursorPosition === 0) {
+                if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("mode", "shell")
                   e.preventDefault()
                   return
                 }
                 if (store.mode === "shell") {
-                  if ((e.name === "backspace" && input.cursorPosition === 0) || e.name === "escape") {
+                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
                     setStore("mode", "normal")
                     e.preventDefault()
                     return
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
-                if (!autocomplete.visible) {
+                if (!autocomplete.visible && input.visualCursor.offset === 0) {
                   if (e.name === "up" || e.name === "down") {
                     const direction = e.name === "up" ? -1 : 1
                     const item = history.move(direction)
                     setStore("prompt", item)
-                    input.cursorPosition = item.input.length
+                    console.log("commands.onKeyDown", "up", "down", 0)
+                    input.cursorOffset = 0
+                    e.preventDefault()
                     return
                   }
+                }
+                if (!autocomplete.visible) {
                   if (e.name === "escape" && props.sessionID) {
                     sdk.client.session.abort({
                       path: {
@@ -337,9 +356,9 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
-                const old = input.cursorPosition
+                const old = input.visualCursor.offset
                 setTimeout(() => {
-                  const position = input.cursorPosition
+                  const position = input.visualCursor.offset
                   const direction = Math.sign(old - position)
                   for (const part of store.prompt.parts) {
                     const source = iife(() => {
@@ -350,10 +369,12 @@ export function Prompt(props: PromptProps) {
                     if (source) {
                       if (position >= source.start && position < source.end) {
                         if (direction === 1) {
-                          input.cursorPosition = Math.max(0, source.start - 1)
+                          console.log("onKeyDown setting cursor offset", source.start - 1)
+                          input.cursorOffset = Math.max(0, source.start - 1)
                         }
                         if (direction === -1) {
-                          input.cursorPosition = source.end
+                          console.log("onKeyDown setting cursor offset", source.end)
+                          input.cursorOffset = source.end
                         }
                       }
                     }
@@ -361,8 +382,8 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onSubmit={submit}
-              ref={(r) => (input = r)}
-              onMouseDown={(r) => r.target?.focus()}
+              ref={(r: TextareaRenderable) => (input = r)}
+              onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={Theme.backgroundElement}
               cursorColor={Theme.primary}
               backgroundColor={Theme.backgroundElement}
@@ -371,7 +392,7 @@ export function Prompt(props: PromptProps) {
           <box backgroundColor={Theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrap={false}>
+          <text flexShrink={0} wrapMode="none">
             <span style={{ fg: Theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
             <span style={{ bold: true }}>{local.model.parsed().model}</span>
           </text>
