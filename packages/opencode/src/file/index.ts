@@ -1,6 +1,6 @@
 import z from "zod/v4"
 import { Bus } from "../bus"
-import { $ } from "bun"
+import { $, BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import fs from "fs"
@@ -68,6 +68,7 @@ export namespace File {
         type: z.literal("binary"),
         content: z.string(),
         mimeType: z.string(),
+        encoding: z.literal("base64"),
       }),
     ])
     .meta({
@@ -75,26 +76,25 @@ export namespace File {
     })
   export type Content = z.infer<typeof Content>
 
-  async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
-    const ext = path.extname(filepath).toLowerCase()
-
-    if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico"].includes(ext)) {
-      return true
-    }
-
-    if ([".zip", ".tar", ".gz", ".exe", ".dll", ".so", ".pdf", ".wasm"].includes(ext)) {
-      return true
+  async function isBinaryFile(file: BunFile): Promise<boolean> {
+    const type = file.type
+    if (type) {
+      if (type.startsWith("text/")) return false
+      if (type.includes("charset=")) return false
+      if (type === "application/json") return false
+      if (type === "application/javascript") return false
+      if (type === "application/xml") return false
+      if (type !== "application/octet-stream") return true
     }
 
     const stat = await file.stat()
     if (stat.size === 0) return false
 
-    const bufferSize = Math.min(512, stat.size)
-    const buffer = await file.arrayBuffer()
-    const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+    const size = Math.min(512, stat.size)
+    const view = new Uint8Array(await file.slice(0, size).arrayBuffer())
 
-    for (let i = 0; i < bytes.length; i++) {
-      if (bytes[i] === 0) return true
+    for (const byte of view) {
+      if (byte === 0) return true
     }
 
     return false
@@ -231,12 +231,13 @@ export namespace File {
       return { type: "text", content: "" }
     }
 
-    const isBinary = await isBinaryFile(full, bunFile)
+    const isBinary = await isBinaryFile(bunFile)
 
     if (isBinary) {
       const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
       const content = Buffer.from(buffer).toString("base64")
-      return { type: "binary", content, mimeType: bunFile.type }
+      const mimeType = bunFile.type || "application/octet-stream"
+      return { type: "binary", content, mimeType, encoding: "base64" }
     }
 
     const content = await bunFile
