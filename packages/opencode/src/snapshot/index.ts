@@ -10,20 +10,6 @@ import { Instance } from "../project/instance"
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
-  export function init() {
-    Array.fromAsync(
-      new Bun.Glob("**/snapshot").scan({
-        absolute: true,
-        onlyFiles: false,
-        cwd: Global.Path.data,
-      }),
-    ).then((files) => {
-      for (const file of files) {
-        fs.rmdir(file, { recursive: true })
-      }
-    })
-  }
-
   export async function track() {
     if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()

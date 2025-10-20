@@ -247,7 +247,8 @@ This is an **optional** config option. If not specified, defaults to your curren
 ### Subtask
 
 Use the `subtask` boolean to force the command to trigger a [subagent](/docs/agents/#subagents) invocation.
-This useful if you want the command to not pollute your primary context.
+This useful if you want the command to not pollute your primary context and will **force** the agent to act as a subagent,
+even if `mode` is set to `primary` on the [agent](/docs/agents) configuration.
 
 ```json title="opencode.json"
 {
