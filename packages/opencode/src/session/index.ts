@@ -18,6 +18,7 @@ import { Project } from "../project/project"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
+import { Snapshot } from "@/snapshot"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -146,7 +147,12 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -366,7 +372,9 @@ export namespace Session {
           .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
+          .add(
+            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
+          )
           .toNumber(),
         tokens,
       }
@@ -403,6 +411,49 @@ export namespace Session {
         ],
       })
       await Project.setInitialized(Instance.project.id)
+    },
+  )
+
+  export const diff = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message").optional(),
+    }),
+    async (input) => {
+      const all = await messages(input.sessionID)
+      const index = !input.messageID ? 0 : all.findIndex((x) => x.info.id === input.messageID)
+      if (index === -1) return []
+
+      let from: string | undefined
+      let to: string | undefined
+
+      // scan assistant messages to find earliest from and latest to
+      // snapshot
+      for (let i = index + 1; i < all.length; i++) {
+        const item = all[i]
+
+        // if messageID is provided, stop at the next user message
+        if (input.messageID && item.info.role === "user") break
+
+        if (!from) {
+          for (const part of item.parts) {
+            if (part.type === "step-start" && part.snapshot) {
+              from = part.snapshot
+              break
+            }
+          }
+        }
+
+        for (const part of item.parts) {
+          if (part.type === "step-finish" && part.snapshot) {
+            to = part.snapshot
+            break
+          }
+        }
+      }
+
+      if (from && to) return Snapshot.diffFull(from, to)
+      return []
     },
   )
 }

@@ -53,6 +53,8 @@ import type {
   SessionShareData,
   SessionShareResponses,
   SessionShareErrors,
+  SessionDiffData,
+  SessionDiffResponses,
   SessionSummarizeData,
   SessionSummarizeResponses,
   SessionSummarizeErrors,
@@ -383,6 +385,16 @@ class Session extends _HeyApiClient {
   public share<ThrowOnError extends boolean = false>(options: Options<SessionShareData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
       url: "/session/{id}/share",
+      ...options,
+    })
+  }
+
+  /**
+   * Get the diff that resulted from this user message
+   */
+  public diff<ThrowOnError extends boolean = false>(options: Options<SessionDiffData, ThrowOnError>) {
+    return (options.client ?? this._client).get<SessionDiffResponses, unknown, ThrowOnError>({
+      url: "/session/{id}/diff",
       ...options,
     })
   }

@@ -19,6 +19,7 @@ import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { AttachCommand } from "./cli/cmd/attach"
+import { AcpCommand } from "./cli/cmd/acp"
 
 const cancel = new AbortController()
 
@@ -67,6 +68,7 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .command(AcpCommand)
   .command(McpCommand)
   .command(TuiCommand)
   .command(AttachCommand)
