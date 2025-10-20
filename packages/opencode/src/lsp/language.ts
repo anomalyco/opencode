@@ -99,4 +99,5 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".vue": "vue",
   ".zig": "zig",
   ".zon": "zig",
+  ".astro": "astro",
 } as const
