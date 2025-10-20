@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import path from "path"
 import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
@@ -70,9 +71,30 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("file", {
+        alias: ["f"],
+        type: "string",
+        describe: "file to read and prepend to the message",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
+
+    if (args.file) {
+      try {
+        const filePath = path.resolve(process.cwd(), args.file)
+        const file = Bun.file(filePath)
+        if (!(await file.exists())) {
+          UI.error(`File not found: ${args.file}`)
+          process.exit(1)
+        }
+        const fileContent = await file.text()
+        message = fileContent + "\n\n" + message
+      } catch (error) {
+        UI.error(`Failed to read file: ${args.file}`)
+        process.exit(1)
+      }
+    }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
