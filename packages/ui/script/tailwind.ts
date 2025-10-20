@@ -1,10 +1,5 @@
 #!/usr/bin/env bun
 
-// read lines from colors.txt
-// parse each line into a color name and hex value
-// create a css variable for each color
-// NOTE: only use Bun file APIs here
-
 const colors = await Bun.file(import.meta.dir + "/colors.txt").text()
 
 const variables = []
@@ -25,7 +20,4 @@ const output = `
 }
 `
 
-// write to src/tailwind-colors.css
-Bun.file(import.meta.dir + "/../src/tailwind-colors.css").write(output.trim())
-
-// Bun.file(import.meta.dir + "../src/tailwind-colors.css").write(output.trim())
+await Bun.file(import.meta.dir + "/../src/styles/tailwind/colors.css").write(output.trim())

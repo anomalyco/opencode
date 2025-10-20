@@ -1,20 +1,20 @@
 import { Style, Link } from "@solidjs/meta"
-import geist from "@opencode-ai/css/fonts/geist.woff2"
-import geistMono from "@opencode-ai/css/fonts/geist-mono.woff2"
+import geist from "../assets/fonts/geist.woff2"
+import geistMono from "../assets/fonts/geist-mono.woff2"
 
 export const Fonts = () => {
   return (
     <>
       <Style>{`
         @font-face {
-          font-family: "geist";
+          font-family: "Geist";
           src: url("${geist}") format("woff2-variations");
           font-display: swap;
           font-style: normal;
           font-weight: 100 900;
         }
         @font-face {
-          font-family: "geist-fallback";
+          font-family: "Geist Fallback";
           src: local("Arial");
           size-adjust: 100%;
           ascent-override: 97%;
@@ -22,14 +22,14 @@ export const Fonts = () => {
           line-gap-override: 1%;
         }
         @font-face {
-          font-family: "geist-mono";
+          font-family: "Geist Mono";
           src: url("${geistMono}") format("woff2-variations");
           font-display: swap;
           font-style: normal;
           font-weight: 100 900;
         }
         @font-face {
-          font-family: "geist-mono-fallback";
+          font-family: "Geist Mono Fallback";
           src: local("Courier New");
           size-adjust: 100%;
           ascent-override: 97%;

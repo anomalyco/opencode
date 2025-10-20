@@ -30,13 +30,13 @@ export function Tooltip(props: TooltipProps) {
 
   return (
     <KobalteTooltip forceMount {...others} open={open()} onOpenChange={setOpen}>
-      <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger">
+      <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
         {c()}
       </KobalteTooltip.Trigger>
       <KobalteTooltip.Portal>
-        <KobalteTooltip.Content data-component="tooltip" data-placement={props.placement} class={local.class}>
+        <KobalteTooltip.Content data-component="tooltip" data-placement={props.placement}>
           {typeof others.value === "function" ? others.value() : others.value}
-          <KobalteTooltip.Arrow data-slot="arrow" size={18} />
+          {/* <KobalteTooltip.Arrow data-slot="arrow" size={18} /> */}
         </KobalteTooltip.Content>
       </KobalteTooltip.Portal>
     </KobalteTooltip>

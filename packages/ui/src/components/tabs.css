@@ -7,7 +7,7 @@
   border-style: solid;
   border-radius: var(--radius-sm);
   border-color: var(--border-weak-base);
-  background-color: var(--background-weaker);
+  background-color: var(--background-stronger);
   overflow: clip;
 
   & [data-slot="list"] {
@@ -31,7 +31,7 @@
       flex-grow: 1;
       height: 100%;
       border-bottom: 1px solid var(--border-weak-base);
-      background-color: var(--background-weak);
+      background-color: var(--background-base);
       border-top-right-radius: var(--radius-sm);
     }
 

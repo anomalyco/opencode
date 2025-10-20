@@ -27,12 +27,12 @@
 
 html,
 :host {
-  line-height: 1.5; /* 1 */
+  line-height: var(--line-height-large); /* 1 */
   -webkit-text-size-adjust: 100%; /* 2 */
   tab-size: 4; /* 3 */
-  font-family: var(--font-sans); /* 4 */
-  font-feature-settings: var(--font-sans--font-feature-settings, normal); /* 5 */
-  font-variation-settings: var(--default-font-variation-settings, normal); /* 6 */
+  font-family: var(--font-family-sans); /* 4 */
+  font-feature-settings: var(--font-family-sans--font-feature-settings, normal); /* 5 */
+  font-variation-settings: var(--font-family-sans--font-variation-settings, normal); /* 6 */
   -webkit-tap-highlight-color: transparent; /* 7 */
 }
 
@@ -101,9 +101,9 @@ code,
 kbd,
 samp,
 pre {
-  font-family: var(--font-mono); /* 1 */
-  font-feature-settings: var(--font-mono--font-feature-settings, normal); /* 2 */
-  font-variation-settings: var(--default-mono-font-variation-settings, normal); /* 3 */
+  font-family: var(--font-family-mono); /* 1 */
+  font-feature-settings: var(--font-family-mono--font-feature-settings, normal); /* 2 */
+  font-variation-settings: var(--font-family-mono--font-variation-settings, normal); /* 3 */
   font-size: 1em; /* 4 */
 }
 

@@ -6,17 +6,23 @@
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
-  border-radius: var(--radius-md);
-  background-color: var(--surface-base);
-  padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-base);
+  border-radius: 12px;
+  background-color: var(--surface-float-base);
+  color: var(--white);
+  padding: 2px 12px 2px 12px;
   box-shadow: var(--shadow-md);
   pointer-events: none !important;
   transition: all 150ms ease-out;
   transform: translate3d(0, 0, 0);
   transform-origin: var(--kb-tooltip-content-transform-origin);
+
+  /* text-14-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large); /* 171.429% */
+  letter-spacing: var(--letter-spacing-normal);
 
   &[data-expanded] {
     opacity: 1;

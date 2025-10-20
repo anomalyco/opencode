@@ -253,6 +253,13 @@ export function MemberSection() {
           </Show>
         </div>
       </div>
+      <div data-slot="beta-notice">
+        Workspaces are free for teams during the beta.{" "}
+        <a href="/docs/zen/#for-teams" target="_blank" rel="noopener noreferrer">
+          Learn more
+        </a>
+        .
+      </div>
       <Show when={store.show}>
         <form action={inviteMember} method="post" data-slot="create-form">
           <div data-slot="input-row">

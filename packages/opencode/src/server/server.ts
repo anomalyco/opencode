@@ -59,9 +59,7 @@ const ERRORS = {
     description: "Not found",
     content: {
       "application/json": {
-        schema: resolver(
-          Storage.NotFoundError.Schema
-        )
+        schema: resolver(Storage.NotFoundError.Schema),
       },
     },
   },
@@ -87,12 +85,9 @@ export namespace Server {
         })
         if (err instanceof NamedError) {
           let status: ContentfulStatusCode
-          if (err instanceof Storage.NotFoundError)
-            status = 404
-          else if (err instanceof Provider.ModelNotFoundError)
-            status = 400
-          else
-            status = 500
+          if (err instanceof Storage.NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else status = 500
           return c.json(err.toObject(), { status })
         }
         const message = err instanceof Error && err.stack ? err.stack : err.toString()

@@ -187,7 +187,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   return (
     <div
       classList={{
-        "size-full max-w-xl bg-surface-base border border-border-base": true,
+        "size-full max-w-xl bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
         "rounded-2xl overflow-clip focus-within:shadow-xs-border-selected": true,
         [props.class ?? ""]: !!props.class,
       }}

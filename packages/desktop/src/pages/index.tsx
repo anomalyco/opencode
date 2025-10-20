@@ -1,4 +1,4 @@
-import { Icon, Tooltip } from "@opencode-ai/ui"
+import { Button, Icon, List, Tooltip } from "@opencode-ai/ui"
 import { FileIcon, IconButton } from "@/ui"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
@@ -6,12 +6,12 @@ import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { SelectDialog } from "@/components/select-dialog"
 import { useSync, useSDK, useLocal } from "@/context"
 import type { LocalFile, TextSelection } from "@/context/local"
-import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
-import PromptForm, { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
+import { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
 import { PromptInput } from "@/components/prompt-input"
+import { DateTime } from "luxon"
 
 export default function Page() {
   const local = useLocal()
@@ -225,14 +225,51 @@ export default function Page() {
   )
 
   return (
-    <div class="relative h-screen flex flex-col bg-background-weak">
-      <header class="hidden h-12 shrink-0 bg-background-base border-b border-border-weak-base"></header>
+    <div class="relative h-screen flex flex-col">
+      <header class="hidden h-12 shrink-0 bg-background-strong border-b border-border-weak-base"></header>
       <main class="h-[calc(100vh-0rem)] flex">
-        <div class="shrink-0 w-70">
-          <SessionList />
+        <div class="shrink-0 w-70 p-1.5 bg-background-weak border-r border-border-weak-base flex flex-col items-start gap-1.5">
+          <div class="flex flex-col items-start self-stretch px-3 py-1">
+            <span class="text-12-medium overflow-hidden text-ellipsis">{sync.data.path.directory}</span>
+          </div>
+          <div class="flex flex-col items-start gap-4 self-stretch flex-1">
+            <div class="px-3 py-1.5 w-full">
+              <Button class="w-full" size="large">
+                New Session
+              </Button>
+            </div>
+            <List
+              data={sync.data.session}
+              key={(x) => x.id}
+              onSelect={(s) => local.session.setActive(s?.id)}
+              onHover={(s) => (!!s ? sync.session.sync(s?.id) : undefined)}
+            >
+              {(session) => (
+                <Tooltip placement="right" value={session.title}>
+                  <div>
+                    <div class="flex items-center self-stretch gap-6">
+                      <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                        {session.title}
+                      </span>
+                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                        {DateTime.fromMillis(session.time.updated).toRelative()}
+                      </span>
+                    </div>
+                    <div class="flex justify-between items-center self-stretch">
+                      <span class="text-12-regular text-text-weak">2 files changed</span>
+                      <div class="flex gap-2 justify-end items-center">
+                        <span class="text-12-mono text-right text-text-diff-add-base">+43</span>
+                        <span class="text-12-mono text-right text-text-diff-delete-base">-2</span>
+                      </div>
+                    </div>
+                  </div>
+                </Tooltip>
+              )}
+            </List>
+          </div>
         </div>
-        <div class="relative grid grid-cols-2">
-          <div class="min-w-0 overflow-y-auto no-scrollbar flex justify-center">
+        <div class="relative grid grid-cols-2 bg-background-base">
+          <div class="pt-1.5 min-w-0 overflow-y-auto no-scrollbar flex justify-center">
             <Show when={local.session.active()}>
               {(activeSession) => <SessionTimeline session={activeSession().id} class="w-full" />}
             </Show>

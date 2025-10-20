@@ -1,5 +1,7 @@
 [data-component="select"] {
   [data-slot="trigger"] {
+    padding: 0 4px 0 8px;
+
     [data-slot="value"] {
       overflow: hidden;
       text-overflow: ellipsis;

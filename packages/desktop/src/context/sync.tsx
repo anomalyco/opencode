@@ -1,4 +1,4 @@
-import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode } from "@opencode-ai/sdk"
+import type { Message, Agent, Provider, Session, Part, Config, Path, File, FileNode, Project } from "@opencode-ai/sdk"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createContext, createMemo, Show, useContext, type ParentProps } from "solid-js"
 import { useSDK, useEvent } from "@/context"
@@ -9,6 +9,7 @@ function init() {
     ready: boolean
     provider: Provider[]
     agent: Agent[]
+    project: Project
     config: Config
     path: Path
     session: Session[]
@@ -21,6 +22,7 @@ function init() {
     node: FileNode[]
     changes: File[]
   }>({
+    project: { id: "", worktree: "", time: { created: 0, initialized: 0 } },
     config: {},
     path: { state: "", config: "", worktree: "", directory: "" },
     ready: false,
@@ -96,6 +98,7 @@ function init() {
   const sdk = useSDK()
 
   const load = {
+    project: () => sdk.project.current().then((x) => setStore("project", x.data!)),
     provider: () => sdk.config.providers().then((x) => setStore("provider", x.data!.providers)),
     path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
     agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),

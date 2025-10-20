@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "0.15.7",
+  "version": "0.15.8",
   "description": "",
   "type": "module",
   "scripts": {
@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/css": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/event-bus": "1.1.2",
@@ -42,9 +41,9 @@
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "shiki": "3.9.2",
-    "solid-list": "0.3.0",
+    "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "0.42.3"
+    "virtua": "catalog:"
   },
   "prettier": {
     "semi": false,

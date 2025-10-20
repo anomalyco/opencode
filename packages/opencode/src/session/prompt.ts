@@ -211,6 +211,7 @@ export namespace SessionPrompt {
           sessionID: input.sessionID,
           model: model.info,
           providerID: model.providerID,
+          signal: abort.signal,
         }),
         (messages) => insertReminders({ messages, agent }),
       )
@@ -339,7 +340,12 @@ export namespace SessionPrompt {
     }
   }
 
-  async function getMessages(input: { sessionID: string; model: ModelsDev.Model; providerID: string }) {
+  async function getMessages(input: {
+    sessionID: string
+    model: ModelsDev.Model
+    providerID: string
+    signal: AbortSignal
+  }) {
     let msgs = await Session.messages(input.sessionID).then(MessageV2.filterSummarized)
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
@@ -353,6 +359,7 @@ export namespace SessionPrompt {
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
+        signal: input.signal,
       })
       const resumeMsgID = Identifier.ascending("message")
       const resumeMsg = {
@@ -1402,7 +1409,7 @@ export namespace SessionPrompt {
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? "build"
 
-    let template = command.template.replace("$ARGUMENTS", input.arguments)
+    let template = command.template.replaceAll("$ARGUMENTS", input.arguments)
 
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {

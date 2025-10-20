@@ -1,8 +1,8 @@
 import type { Component } from "solid-js"
-import { Button, Select, Tabs, Tooltip, Fonts } from "./components"
+import { Button, Select, Tabs, Tooltip, Fonts, List } from "./components"
 import "./index.css"
 
-const App: Component = () => {
+const Demo: Component = () => {
   const Content = (props: { dark?: boolean }) => (
     <div class={`${props.dark ? "dark" : ""}`}>
       <h3>Buttons</h3>
@@ -111,6 +111,12 @@ const App: Component = () => {
           <Button variant="primary">Dynamic Tooltip</Button>
         </Tooltip>
       </section>
+      <h3>List</h3>
+      <section style={{ height: "300px" }}>
+        <List data={["Item 1", "Item 2", "Item 3"]} key={(x) => x}>
+          {(x) => <div>{x}</div>}
+        </List>
+      </section>
     </div>
   )
 
@@ -125,4 +131,4 @@ const App: Component = () => {
   )
 }
 
-export default App
+export default Demo
