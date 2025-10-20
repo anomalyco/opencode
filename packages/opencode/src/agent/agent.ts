@@ -176,6 +176,16 @@ export namespace Agent {
 }
 
 function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+  if (typeof basePermission.bash === "string") {
+    basePermission.bash = {
+      "*": basePermission.bash,
+    }
+  }
+  if (typeof overridePermission.bash === "string") {
+    overridePermission.bash = {
+      "*": overridePermission.bash,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -183,12 +193,10 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       mergedBash = {
         "*": merged.bash,
       }
-    }
-    // if granular permissions are provided, default to "ask"
-    if (typeof merged.bash === "object") {
+    } else if (typeof merged.bash === "object") {
       mergedBash = mergeDeep(
         {
-          "*": "ask",
+          "*": "allow",
         },
         merged.bash,
       )
