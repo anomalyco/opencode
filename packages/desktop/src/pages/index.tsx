@@ -1,19 +1,17 @@
-import { FileIcon, Icon, IconButton, Tooltip } from "@/ui"
-import * as KobalteTabs from "@kobalte/core/tabs"
+import { Button, Icon, List, Tooltip } from "@opencode-ai/ui"
+import { FileIcon, IconButton } from "@/ui"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
 import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { SelectDialog } from "@/components/select-dialog"
 import { useSync, useSDK, useLocal } from "@/context"
 import type { LocalFile, TextSelection } from "@/context/local"
-import SessionList from "@/components/session-list"
 import SessionTimeline from "@/components/session-timeline"
-import PromptForm, { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
+import { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
-import { Select } from "@/components/select"
-import { Tabs } from "@/ui/tabs"
-import { Code } from "@/components/code"
+import { PromptInput } from "@/components/prompt-input"
+import { DateTime } from "luxon"
 
 export default function Page() {
   const local = useLocal()
@@ -52,7 +50,7 @@ export default function Page() {
     const focused = document.activeElement === inputRef
     if (focused) {
       if (event.key === "Escape") {
-        inputRef?.blur()
+        // inputRef?.blur()
       }
       return
     }
@@ -79,7 +77,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified") {
-      inputRef?.focus()
+      // inputRef?.focus()
     }
   }
 
@@ -105,6 +103,8 @@ export default function Page() {
       startClickTimer()
     }
   }
+
+  const handlePromptSubmit2 = () => {}
 
   const handlePromptSubmit = async (prompt: PromptSubmitValue) => {
     const existingSession = local.session.active()
@@ -226,56 +226,96 @@ export default function Page() {
 
   return (
     <div class="relative h-screen flex flex-col">
-      <header class="h-12 shrink-0"></header>
-      <main class="h-[calc(100vh-3rem)] flex">
-        <div class="hidden shrink-0 w-64">
-          <SessionList />
-        </div>
-        <div class="grow w-full min-w-0 overflow-y-auto flex justify-center">
-          <Show when={local.session.active()}>
-            {(activeSession) => <SessionTimeline session={activeSession().id} class="max-w-xl" />}
-          </Show>
-        </div>
-        <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
-          <FileTree path="" onFileClick={handleFileClick} />
-        </div>
-        <div class="hidden shrink-0 w-56 p-2">
-          <Show
-            when={local.file.changes().length}
-            fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
-          >
-            <ul class="">
-              <For each={local.file.changes()}>
-                {(path) => (
-                  <li>
-                    <button
-                      onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
-                      class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 cursor-pointer hover:bg-background-element"
-                    >
-                      <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
-                      <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
-                      <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
-                        {getDirectory(path)}
+      <header class="hidden h-12 shrink-0 bg-background-strong border-b border-border-weak-base"></header>
+      <main class="h-[calc(100vh-0rem)] flex">
+        <div class="shrink-0 w-70 p-1.5 bg-background-weak border-r border-border-weak-base flex flex-col items-start gap-1.5">
+          <div class="flex flex-col items-start self-stretch px-3 py-1">
+            <span class="text-12-medium overflow-hidden text-ellipsis">{sync.data.path.directory}</span>
+          </div>
+          <div class="flex flex-col items-start gap-4 self-stretch flex-1">
+            <div class="px-3 py-1.5 w-full">
+              <Button class="w-full" size="large">
+                New Session
+              </Button>
+            </div>
+            <List
+              data={sync.data.session}
+              key={(x) => x.id}
+              onSelect={(s) => local.session.setActive(s?.id)}
+              onHover={(s) => (!!s ? sync.session.sync(s?.id) : undefined)}
+            >
+              {(session) => (
+                <Tooltip placement="right" value={session.title}>
+                  <div>
+                    <div class="flex items-center self-stretch gap-6">
+                      <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                        {session.title}
                       </span>
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
+                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                        {DateTime.fromMillis(session.time.updated).toRelative()}
+                      </span>
+                    </div>
+                    <div class="flex justify-between items-center self-stretch">
+                      <span class="text-12-regular text-text-weak">2 files changed</span>
+                      <div class="flex gap-2 justify-end items-center">
+                        <span class="text-12-mono text-right text-text-diff-add-base">+43</span>
+                        <span class="text-12-mono text-right text-text-diff-delete-base">-2</span>
+                      </div>
+                    </div>
+                  </div>
+                </Tooltip>
+              )}
+            </List>
+          </div>
         </div>
-        <div class="hidden grow min-w-0">
-          <EditorPane onFileClick={handleFileClick} />
-        </div>
-        <div class="absolute bottom-4 inset-x-0 p-2 flex flex-col justify-center items-center gap-2 z-50">
-          <PromptForm
-            class="w-xl"
-            onSubmit={handlePromptSubmit}
-            onOpenModelSelect={() => setStore("modelSelectOpen", true)}
-            onInputRefChange={(element: HTMLTextAreaElement | undefined) => {
-              inputRef = element ?? undefined
-            }}
-          />
+        <div class="relative grid grid-cols-2 bg-background-base">
+          <div class="pt-1.5 min-w-0 overflow-y-auto no-scrollbar flex justify-center">
+            <Show when={local.session.active()}>
+              {(activeSession) => <SessionTimeline session={activeSession().id} class="w-full" />}
+            </Show>
+          </div>
+          <div class="p-1.5 pl-px flex flex-col items-center justify-center overflow-y-auto no-scrollbar">
+            <EditorPane onFileClick={handleFileClick} />
+          </div>
+          <div class="absolute bottom-4 inset-x-0 p-2 flex flex-col justify-center items-center z-50">
+            <PromptInput onSubmit={handlePromptSubmit2} />
+            {/* <PromptForm */}
+            {/*   class="w-2xl" */}
+            {/*   onSubmit={handlePromptSubmit} */}
+            {/*   onOpenModelSelect={() => setStore("modelSelectOpen", true)} */}
+            {/*   onInputRefChange={(element: HTMLTextAreaElement | undefined) => { */}
+            {/*     inputRef = element ?? undefined */}
+            {/*   }} */}
+            {/* /> */}
+          </div>
+          <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
+            <FileTree path="" onFileClick={handleFileClick} />
+          </div>
+          <div class="hidden shrink-0 w-56 p-2">
+            <Show
+              when={local.file.changes().length}
+              fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
+            >
+              <ul class="">
+                <For each={local.file.changes()}>
+                  {(path) => (
+                    <li>
+                      <button
+                        onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
+                        class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 cursor-pointer hover:bg-background-element"
+                      >
+                        <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
+                        <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
+                        <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
+                          {getDirectory(path)}
+                        </span>
+                      </button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
         </div>
       </main>
       <Show when={store.modelSelectOpen}>
@@ -343,8 +383,7 @@ export default function Page() {
             </div>
           )}
           onClose={() => setStore("fileSelectOpen", false)}
-          onSelect={(x) => (x ? local.context.openFile(x) : undefined)}
-          // onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
+          onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
         />
       </Show>
     </div>

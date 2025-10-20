@@ -10,7 +10,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { Billing } from "../../../../core/src/billing"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { ZenModel } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@opencode-ai/console-core/model.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
@@ -39,7 +39,8 @@ export async function handler(
   class UserLimitError extends Error {}
   class ModelError extends Error {}
 
-  type Model = z.infer<typeof ZenModel.ModelSchema>
+  type ZenData = Awaited<ReturnType<typeof ZenData.list>>
+  type Model = ZenData["models"][string]
 
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
@@ -66,8 +67,9 @@ export async function handler(
       session: input.request.headers.get("x-opencode-session"),
       request: input.request.headers.get("x-opencode-request"),
     })
-    const modelInfo = validateModel(body.model)
-    const providerInfo = selectProvider(modelInfo)
+    const zenData = ZenData.list()
+    const modelInfo = validateModel(zenData, body.model)
+    const providerInfo = selectProvider(zenData, modelInfo)
     const authInfo = await authenticate(modelInfo, providerInfo)
     validateBilling(modelInfo, authInfo)
     validateModelSettings(authInfo)
@@ -211,27 +213,29 @@ export async function handler(
     )
   }
 
-  function validateModel(reqModel: string) {
-    const json = JSON.parse(Resource.ZEN_MODELS.value)
-
-    const allModels = ZenModel.ModelsSchema.parse(json)
-
-    if (!(reqModel in allModels)) {
+  function validateModel(zenData: ZenData, reqModel: string) {
+    if (!(reqModel in zenData.models)) {
       throw new ModelError(`Model ${reqModel} not supported`)
     }
-    const modelId = reqModel as keyof typeof allModels
-    const modelData = allModels[modelId]
+    const modelId = reqModel as keyof typeof zenData.models
+    const modelData = zenData.models[modelId]
 
     logger.metric({ model: modelId })
 
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(model: Awaited<ReturnType<typeof validateModel>>) {
+  function selectProvider(zenData: ZenData, model: Awaited<ReturnType<typeof validateModel>>) {
     const providers = model.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
-    return providers[Math.floor(Math.random() * providers.length)]
+    const provider = providers[Math.floor(Math.random() * providers.length)]
+
+    if (!(provider.id in zenData.providers)) {
+      throw new ModelError(`Provider ${provider.id} not supported`)
+    }
+
+    return { ...provider, ...zenData.providers[provider.id] }
   }
 
   async function authenticate(

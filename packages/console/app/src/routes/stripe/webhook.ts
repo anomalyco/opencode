@@ -32,7 +32,8 @@ export async function POST(input: APIEvent) {
         .update(BillingTable)
         .set({
           paymentMethodID,
-          paymentMethodLast4: paymentMethod.card!.last4,
+          paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+          paymentMethodType: paymentMethod.type,
         })
         .where(eq(BillingTable.customerID, customerID))
     })
@@ -77,7 +78,8 @@ export async function POST(input: APIEvent) {
             balance: sql`${BillingTable.balance} + ${centsToMicroCents(Billing.CHARGE_AMOUNT)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
-            paymentMethodLast4: paymentMethod.card!.last4,
+            paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+            paymentMethodType: paymentMethod.type,
             reload: true,
             reloadError: null,
             timeReloadError: null,

@@ -1,8 +1,8 @@
 import { json, query, action, useParams, useAction, createAsync, useSubmission } from "@solidjs/router"
-import { createMemo, Show } from "solid-js"
+import { createMemo, Match, Show, Switch } from "solid-js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
-import { IconCreditCard } from "~/component/icon"
+import { IconCreditCard, IconStripe } from "~/component/icon"
 import styles from "./billing-section.module.css"
 import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
@@ -61,6 +61,7 @@ export function BillingSection() {
   // Scenario 1: User has not added billing details and has no balance
   // const balanceInfo = () => ({
   //   balance: 0,
+  //   paymentMethodType: null as string | null,
   //   paymentMethodLast4: null as string | null,
   //   reload: false,
   //   reloadError: null as string | null,
@@ -70,6 +71,7 @@ export function BillingSection() {
   // Scenario 2: User has not added billing details but has a balance
   // const balanceInfo = () => ({
   //   balance: 1500000000, // $15.00
+  //   paymentMethodType: null as string | null,
   //   paymentMethodLast4: null as string | null,
   //   reload: false,
   //   reloadError: null as string | null,
@@ -79,6 +81,7 @@ export function BillingSection() {
   // Scenario 3: User has added billing details (reload enabled)
   // const balanceInfo = () => ({
   //   balance: 750000000, // $7.50
+  //   paymentMethodType: "card",
   //   paymentMethodLast4: "4242",
   //   reload: true,
   //   reloadError: null as string | null,
@@ -88,10 +91,21 @@ export function BillingSection() {
   // Scenario 4: User has billing details but reload failed
   // const balanceInfo = () => ({
   //   balance: 250000000, // $2.50
+  //   paymentMethodType: "card",
   //   paymentMethodLast4: "4242",
   //   reload: true,
   //   reloadError: "Your card was declined." as string,
   //   timeReloadError: new Date(Date.now() - 3600000) as Date // 1 hour ago
+  // })
+
+  // Scenario 5: User has Link payment method
+  // const balanceInfo = () => ({
+  //   balance: 500000000, // $5.00
+  //   paymentMethodType: "link",
+  //   paymentMethodLast4: null as string | null,
+  //   reload: true,
+  //   reloadError: null as string | null,
+  //   timeReloadError: null as Date | null
   // })
 
   const balanceAmount = createMemo(() => {
@@ -136,13 +150,25 @@ export function BillingSection() {
         <div data-slot="payment">
           <div data-slot="credit-card">
             <div data-slot="card-icon">
-              <IconCreditCard style={{ width: "32px", height: "32px" }} />
+              <Switch fallback={<IconCreditCard style={{ width: "32px", height: "32px" }} />}>
+                <Match when={balanceInfo()?.paymentMethodType === "link"}>
+                  <IconStripe style={{ width: "32px", height: "32px" }} />
+                </Match>
+              </Switch>
             </div>
             <div data-slot="card-details">
-              <Show when={balanceInfo()?.paymentMethodLast4} fallback={<span data-slot="number">----</span>}>
-                <span data-slot="secret">••••</span>
-                <span data-slot="number">{balanceInfo()?.paymentMethodLast4}</span>
-              </Show>
+              <Switch
+                fallback={
+                  <Show when={balanceInfo()?.paymentMethodLast4} fallback={<span data-slot="number">----</span>}>
+                    <span data-slot="secret">••••</span>
+                    <span data-slot="number">{balanceInfo()?.paymentMethodLast4}</span>
+                  </Show>
+                }
+              >
+                <Match when={balanceInfo()?.paymentMethodType === "link"}>
+                  <span data-slot="type">Linked to Stripe</span>
+                </Match>
+              </Switch>
             </div>
           </div>
           <div data-slot="button-row">

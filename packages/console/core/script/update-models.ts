@@ -3,7 +3,7 @@
 import { $ } from "bun"
 import path from "path"
 import os from "os"
-import { ZenModel } from "../src/model"
+import { ZenData } from "../src/model"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
@@ -26,7 +26,7 @@ console.log("tempFile", tempFile.name)
 // open temp file in vim and read the file on close
 await $`vim ${tempFile.name}`
 const newValue = JSON.parse(await tempFile.text())
-ZenModel.ModelsSchema.parse(newValue)
+ZenData.validate(newValue)
 
 // update the secret
 await $`bun sst secret set ZEN_MODELS ${JSON.stringify(newValue)}`

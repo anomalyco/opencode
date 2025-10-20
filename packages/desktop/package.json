@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "0.15.4",
+  "version": "0.15.8",
   "description": "",
   "type": "module",
   "scripts": {
@@ -29,6 +29,7 @@
     "@solid-primitives/event-bus": "1.1.2",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
+    "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.3",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
@@ -40,9 +41,9 @@
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "shiki": "3.9.2",
-    "solid-list": "0.3.0",
+    "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "0.42.3"
+    "virtua": "catalog:"
   },
   "prettier": {
     "semi": false,

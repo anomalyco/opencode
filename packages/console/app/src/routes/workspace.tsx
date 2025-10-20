@@ -12,7 +12,7 @@ const getUserEmail = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const actor = Actor.assert("user")
-    const email = await User.getAccountEmail(actor.properties.userID)
+    const email = await User.getAuthEmail(actor.properties.userID)
     return email
   }, workspaceID)
 }, "userEmail")

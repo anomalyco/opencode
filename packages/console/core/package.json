@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "0.15.4",
+  "version": "0.15.8",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -24,6 +24,9 @@
     "db": "sst shell drizzle-kit",
     "db-dev": "sst shell --stage dev -- drizzle-kit",
     "db-prod": "sst shell --stage production -- drizzle-kit",
+    "shell": "sst shell -- bun",
+    "shell-dev": "sst shell --stage dev -- bun",
+    "shell-prod": "sst shell --stage production -- bun",
     "update-models": "script/update-models.ts",
     "promote-models-to-dev": "script/promote-models.ts dev",
     "promote-models-to-prod": "script/promote-models.ts production",

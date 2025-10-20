@@ -1,0 +1,124 @@
+[data-component="select"] {
+  [data-slot="trigger"] {
+    padding: 0 4px 0 8px;
+
+    [data-slot="value"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    [data-slot="icon"] {
+      width: fit-content;
+      height: fit-content;
+      flex-shrink: 0;
+      color: var(--text-weak);
+      transition: transform 0.1s ease-in-out;
+    }
+  }
+}
+
+[data-component="select-content"] {
+  min-width: 8rem;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border-weak-base);
+  background-color: var(--surface-raised-base);
+  padding: calc(var(--spacing) * 1);
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+
+  &[data-closed] {
+    animation: select-close 0.15s ease-out;
+  }
+
+  &[data-expanded] {
+    animation: select-open 0.15s ease-out;
+  }
+
+  [data-slot="list"] {
+    overflow-y: auto;
+    max-height: 12rem;
+    white-space: nowrap;
+    overflow-x: hidden;
+
+    &:focus {
+      outline: none;
+    }
+  }
+
+  [data-slot="section"] {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: var(--font-weight-light);
+    text-transform: uppercase;
+    color: var(--text-weak);
+    opacity: 0.6;
+    margin-top: calc(var(--spacing) * 3);
+    margin-left: calc(var(--spacing) * 2);
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  [data-slot="item"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    color: var(--text-base);
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease-in-out,
+      color 0.2s ease-in-out;
+    outline: none;
+    user-select: none;
+
+    &[data-highlighted] {
+      background-color: var(--surface-base);
+    }
+
+    &[data-disabled] {
+      background-color: var(--surface-disabled);
+      pointer-events: none;
+    }
+
+    [data-slot="item-indicator"] {
+      margin-left: auto;
+    }
+
+    &:focus {
+      outline: none;
+    }
+
+    &:hover {
+      background-color: var(--surface-hover);
+    }
+  }
+}
+
+@keyframes select-open {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes select-close {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}

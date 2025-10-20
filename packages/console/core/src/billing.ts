@@ -27,6 +27,7 @@ export namespace Billing {
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          paymentMethodType: BillingTable.paymentMethodType,
           paymentMethodLast4: BillingTable.paymentMethodLast4,
           balance: BillingTable.balance,
           reload: BillingTable.reload,
@@ -172,7 +173,7 @@ export namespace Billing {
       const user = Actor.assert("user")
       const { successUrl, cancelUrl } = input
 
-      const email = await User.getAccountEmail(user.properties.userID)
+      const email = await User.getAuthEmail(user.properties.userID)
       const customer = await Billing.get()
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
