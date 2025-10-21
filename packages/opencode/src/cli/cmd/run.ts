@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import path from "path"
 import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
@@ -70,9 +71,44 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("file", {
+        alias: ["f"],
+        type: "string",
+        array: true,
+        describe: "file(s) to attach to message",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
+
+    let fileParts: any[] = []
+    if (args.file) {
+      const files = Array.isArray(args.file) ? args.file : [args.file]
+
+      for (const filePath of files) {
+        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const file = Bun.file(resolvedPath)
+        const stats = await file.stat().catch(() => {})
+        if (!stats) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+        if (!(await file.exists())) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+
+        const stat = await file.stat()
+        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+
+        fileParts.push({
+          type: "file",
+          url: `file://${resolvedPath}`,
+          filename: path.basename(resolvedPath),
+          mime,
+        })
+      }
+    }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
@@ -244,6 +280,7 @@ export const RunCommand = cmd({
           },
           agent: agent.name,
           parts: [
+            ...fileParts,
             {
               id: Identifier.ascending("part"),
               type: "text",
