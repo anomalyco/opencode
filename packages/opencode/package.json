@@ -35,6 +35,7 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
+    "@agentclientprotocol/sdk": "0.4.9",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
@@ -47,7 +48,6 @@
     "@opencode-ai/sdk": "workspace:*",
     "@parcel/watcher": "2.5.1",
     "@standard-schema/spec": "1.0.0",
-    "@zed-industries/agent-client-protocol": "0.4.5",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "chokidar": "4.0.3",
