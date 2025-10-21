@@ -283,7 +283,8 @@ export namespace SessionPrompt {
         ),
         abortSignal: abort.signal,
         providerOptions: {
-          [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
+          [model.npm === "@ai-sdk/openai" || model.npm === "@ai-sdk/azure" ? "openai" : model.providerID]:
+            params.options,
         },
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
