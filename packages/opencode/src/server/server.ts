@@ -1,12 +1,6 @@
 import { Log } from "../util/log"
 import { Bus } from "../bus"
-import {
-  describeRoute,
-  generateSpecs,
-  validator,
-  resolver,
-  openAPIRouteHandler,
-} from "hono-openapi"
+import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
@@ -73,9 +67,7 @@ const ERRORS = {
 } as const
 
 function errors(...codes: number[]) {
-  return Object.fromEntries(
-    codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]),
-  )
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
 }
 
 export namespace Server {
@@ -99,8 +91,7 @@ export namespace Server {
           else status = 500
           return c.json(err.toObject(), { status })
         }
-        const message =
-          err instanceof Error && err.stack ? err.stack : err.toString()
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
         return c.json(new NamedError.Unknown({ message }).toObject(), {
           status: 500,
         })
@@ -194,17 +185,14 @@ export namespace Server {
       .get(
         "/experimental/tool/ids",
         describeRoute({
-          description:
-            "List all tool IDs (including built-in and dynamically registered)",
+          description: "List all tool IDs (including built-in and dynamically registered)",
           operationId: "tool.ids",
           responses: {
             200: {
               description: "Tool IDs",
               content: {
                 "application/json": {
-                  schema: resolver(
-                    z.array(z.string()).meta({ ref: "ToolIDs" }),
-                  ),
+                  schema: resolver(z.array(z.string()).meta({ ref: "ToolIDs" })),
                 },
               },
             },
@@ -218,8 +206,7 @@ export namespace Server {
       .get(
         "/experimental/tool",
         describeRoute({
-          description:
-            "List tools with JSON schema parameters for a provider/model",
+          description: "List tools with JSON schema parameters for a provider/model",
           operationId: "tool.list",
           responses: {
             200: {
@@ -260,9 +247,7 @@ export namespace Server {
               id: t.id,
               description: t.description,
               // Handle both Zod schemas and plain JSON schemas
-              parameters: (t.parameters as any)?._def
-                ? zodToJsonSchema(t.parameters as any)
-                : t.parameters,
+              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
             })),
           )
         },
@@ -1040,15 +1025,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = await Provider.list().then((x) =>
-            mapValues(x, (item) => item.info),
-          )
+          const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(
-              providers,
-              (item) => Provider.sort(Object.values(item.models))[0].id,
-            ),
+            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           })
         },
       )
@@ -1243,12 +1223,8 @@ export namespace Server {
         validator(
           "json",
           z.object({
-            service: z
-              .string()
-              .meta({ description: "Service name for the log entry" }),
-            level: z
-              .enum(["debug", "info", "error", "warn"])
-              .meta({ description: "Log level" }),
+            service: z.string().meta({ description: "Service name for the log entry" }),
+            level: z.enum(["debug", "info", "error", "warn"]).meta({ description: "Log level" }),
             message: z.string().meta({ description: "Log message" }),
             extra: z
               .record(z.string(), z.any())

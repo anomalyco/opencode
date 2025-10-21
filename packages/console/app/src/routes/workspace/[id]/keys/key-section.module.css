@@ -171,7 +171,6 @@
     }
 
     @media (max-width: 40rem) {
-
       th,
       td {
         padding: var(--space-2) var(--space-3);
@@ -181,8 +180,7 @@
       th {
         &:nth-child(3)
 
-        /* Date */
-          {
+        /* Date */ {
           display: none;
         }
       }
@@ -190,8 +188,7 @@
       td {
         &:nth-child(3)
 
-        /* Date */
-          {
+        /* Date */ {
           display: none;
         }
       }

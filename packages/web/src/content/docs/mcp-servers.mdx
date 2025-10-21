@@ -45,12 +45,12 @@ with a unique name. You can refer to that MCP by name when prompting the LLM.
   "mcp": {
     "name-of-mcp-server": {
       // ...
-      "enabled": true
+      "enabled": true,
     },
     "name-of-other-mcp-server": {
       // ...
-    }
-  }
+    },
+  },
 }
 ```
 
@@ -72,10 +72,10 @@ Add local MCP servers using `type` to `"local"` within the MCP object.
       "command": ["npx", "-y", "my-mcp-command"],
       "enabled": true,
       "environment": {
-        "MY_ENV_VAR": "my_env_var_value"
-      }
-    }
-  }
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
 }
 ```
 
@@ -91,8 +91,8 @@ For example, here's how I can add the test
     "mcp_everything": {
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
-    }
-  }
+    },
+  },
 }
 ```
 

@@ -33,9 +33,7 @@ test("tracks deleted files correctly", async () => {
 
       await $`rm ${tmp.path}/a.txt`.quiet()
 
-      expect((await Snapshot.patch(before!)).files).toContain(
-        `${tmp.path}/a.txt`,
-      )
+      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/a.txt`)
     },
   })
 })
@@ -93,15 +91,11 @@ test("multiple file operations", async () => {
 
       await Snapshot.revert([await Snapshot.patch(before!)])
 
-      expect(await Bun.file(`${tmp.path}/a.txt`).text()).toBe(
-        tmp.extra.aContent,
-      )
+      expect(await Bun.file(`${tmp.path}/a.txt`).text()).toBe(tmp.extra.aContent)
       expect(await Bun.file(`${tmp.path}/c.txt`).exists()).toBe(false)
       // Note: revert currently only removes files, not directories
       // The empty directory will remain
-      expect(await Bun.file(`${tmp.path}/b.txt`).text()).toBe(
-        tmp.extra.bContent,
-      )
+      expect(await Bun.file(`${tmp.path}/b.txt`).text()).toBe(tmp.extra.bContent)
     },
   })
 })
@@ -129,10 +123,7 @@ test("binary file handling", async () => {
       const before = await Snapshot.track()
       expect(before).toBeTruthy()
 
-      await Bun.write(
-        `${tmp.path}/image.png`,
-        new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-      )
+      await Bun.write(`${tmp.path}/image.png`, new Uint8Array([0x89, 0x50, 0x4e, 0x47]))
 
       const patch = await Snapshot.patch(before!)
       expect(patch.files).toContain(`${tmp.path}/image.png`)
@@ -153,9 +144,7 @@ test("symlink handling", async () => {
 
       await $`ln -s ${tmp.path}/a.txt ${tmp.path}/link.txt`.quiet()
 
-      expect((await Snapshot.patch(before!)).files).toContain(
-        `${tmp.path}/link.txt`,
-      )
+      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/link.txt`)
     },
   })
 })
@@ -170,9 +159,7 @@ test("large file handling", async () => {
 
       await Bun.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
-      expect((await Snapshot.patch(before!)).files).toContain(
-        `${tmp.path}/large.txt`,
-      )
+      expect((await Snapshot.patch(before!)).files).toContain(`${tmp.path}/large.txt`)
     },
   })
 })
@@ -190,9 +177,7 @@ test("nested directory revert", async () => {
 
       await Snapshot.revert([await Snapshot.patch(before!)])
 
-      expect(
-        await Bun.file(`${tmp.path}/level1/level2/level3/deep.txt`).exists(),
-      ).toBe(false)
+      expect(await Bun.file(`${tmp.path}/level1/level2/level3/deep.txt`).exists()).toBe(false)
     },
   })
 })
@@ -226,9 +211,7 @@ test("revert with empty patches", async () => {
       expect(Snapshot.revert([])).resolves.toBeUndefined()
 
       // Should not crash with patches that have empty file lists
-      expect(
-        Snapshot.revert([{ hash: "dummy", files: [] }]),
-      ).resolves.toBeUndefined()
+      expect(Snapshot.revert([{ hash: "dummy", files: [] }])).resolves.toBeUndefined()
     },
   })
 })
@@ -543,13 +526,9 @@ test("restore function", async () => {
       await Snapshot.restore(before!)
 
       expect(await Bun.file(`${tmp.path}/a.txt`).exists()).toBe(true)
-      expect(await Bun.file(`${tmp.path}/a.txt`).text()).toBe(
-        tmp.extra.aContent,
-      )
+      expect(await Bun.file(`${tmp.path}/a.txt`).text()).toBe(tmp.extra.aContent)
       expect(await Bun.file(`${tmp.path}/new.txt`).exists()).toBe(true) // New files should remain
-      expect(await Bun.file(`${tmp.path}/b.txt`).text()).toBe(
-        tmp.extra.bContent,
-      )
+      expect(await Bun.file(`${tmp.path}/b.txt`).text()).toBe(tmp.extra.bContent)
     },
   })
 })
@@ -601,9 +580,7 @@ test("revert preserves file that existed in snapshot when deleted then recreated
 
       expect(await Bun.file(`${tmp.path}/newfile.txt`).exists()).toBe(false)
       expect(await Bun.file(`${tmp.path}/existing.txt`).exists()).toBe(true)
-      expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe(
-        "original content",
-      )
+      expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe("original content")
     },
   })
 })

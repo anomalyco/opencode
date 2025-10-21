@@ -87,7 +87,7 @@
       @media (max-width: 30rem) {
         flex-direction: column;
 
-        >button {
+        > button {
           width: 100%;
         }
       }
@@ -97,7 +97,7 @@
       }
 
       /* Make Enable Billing button full width when it's the only button */
-      >button {
+      > button {
         flex: 1;
       }
     }
