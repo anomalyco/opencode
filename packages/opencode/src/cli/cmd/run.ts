@@ -81,9 +81,9 @@ export const RunCommand = cmd({
   handler: async (args) => {
     let message = args.message.join(" ")
 
+    let fileParts: any[] = []
     if (args.file) {
       const files = Array.isArray(args.file) ? args.file : [args.file]
-      const fileContents: string[] = []
 
       for (const filePath of files) {
         try {
@@ -93,15 +93,21 @@ export const RunCommand = cmd({
             UI.error(`File not found: ${filePath}`)
             process.exit(1)
           }
-          const content = await file.text()
-          fileContents.push(content)
+
+          const stat = await file.stat()
+          const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+
+          fileParts.push({
+            type: "file",
+            url: `file://${resolvedPath}`,
+            filename: path.basename(resolvedPath),
+            mime,
+          })
         } catch (error) {
           UI.error(`Failed to read file: ${filePath}`)
           process.exit(1)
         }
       }
-
-      message = fileContents.join("\n\n") + "\n\n" + message
     }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
@@ -274,6 +280,7 @@ export const RunCommand = cmd({
           },
           agent: agent.name,
           parts: [
+            ...fileParts,
             {
               id: Identifier.ascending("part"),
               type: "text",
