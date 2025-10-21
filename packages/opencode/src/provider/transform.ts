@@ -105,6 +105,29 @@ export namespace ProviderTransform {
     return result
   }
 
+  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
+    if (!npm) {
+      return {
+        [providerID]: options,
+      }
+    }
+    switch (npm) {
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+        return {
+          ["openai" as string]: options,
+        }
+      case "@ai-sdk/anthropic":
+        return {
+          ["anthropic" as string]: options,
+        }
+      default:
+        return {
+          [providerID]: options,
+        }
+    }
+  }
+
   export function maxOutputTokens(
     providerID: string,
     options: Record<string, any>,

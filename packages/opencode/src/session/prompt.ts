@@ -282,10 +282,7 @@ export namespace SessionPrompt {
           OUTPUT_TOKEN_MAX,
         ),
         abortSignal: abort.signal,
-        providerOptions: {
-          [model.npm === "@ai-sdk/openai" || model.npm === "@ai-sdk/azure" ? "openai" : model.providerID]:
-            params.options,
-        },
+        providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
         topP: params.topP,
@@ -1822,9 +1819,7 @@ export namespace SessionPrompt {
     }
     generateText({
       maxOutputTokens: small.info.reasoning ? 1500 : 20,
-      providerOptions: {
-        [small.providerID]: options,
-      },
+      providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
