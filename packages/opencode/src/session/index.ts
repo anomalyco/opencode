@@ -1,5 +1,5 @@
 import { Decimal } from "decimal.js"
-import { z } from "zod"
+import z from "zod/v4"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 
 import PROMPT_INITIALIZE from "../session/prompt/initialize.txt"
@@ -16,8 +16,9 @@ import { Log } from "../util/log"
 import { MessageV2 } from "./message-v2"
 import { Project } from "../project/project"
 import { Instance } from "../project/instance"
-import { Token } from "../util/token"
 import { SessionPrompt } from "./prompt"
+import { fn } from "@/util/fn"
+import { Snapshot } from "@/snapshot"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -56,7 +57,7 @@ export namespace Session {
         })
         .optional(),
     })
-    .openapi({
+    .meta({
       ref: "Session",
     })
   export type Info = z.output<typeof Info>
@@ -66,7 +67,7 @@ export namespace Session {
       secret: z.string(),
       url: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "SessionShare",
     })
   export type ShareInfo = z.output<typeof ShareInfo>
@@ -93,21 +94,65 @@ export namespace Session {
     ),
   }
 
-  export async function create(parentID?: string, title?: string) {
-    return createNext({
-      parentID,
-      directory: Instance.directory,
-      title,
-    })
-  }
+  export const create = fn(
+    z
+      .object({
+        parentID: Identifier.schema("session").optional(),
+        title: z.string().optional(),
+      })
+      .optional(),
+    async (input) => {
+      return createNext({
+        parentID: input?.parentID,
+        directory: Instance.directory,
+        title: input?.title,
+      })
+    },
+  )
 
-  export async function touch(sessionID: string) {
+  export const fork = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message").optional(),
+    }),
+    async (input) => {
+      const session = await createNext({
+        directory: Instance.directory,
+      })
+      const msgs = await messages(input.sessionID)
+      for (const msg of msgs) {
+        if (input.messageID && msg.info.id >= input.messageID) break
+        const cloned = await updateMessage({
+          ...msg.info,
+          sessionID: session.id,
+          id: Identifier.ascending("message"),
+        })
+
+        for (const part of msg.parts) {
+          await updatePart({
+            ...part,
+            id: Identifier.ascending("part"),
+            messageID: cloned.id,
+            sessionID: session.id,
+          })
+        }
+      }
+      return session
+    },
+  )
+
+  export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     await update(sessionID, (draft) => {
       draft.time.updated = Date.now()
     })
-  }
+  })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -139,16 +184,16 @@ export namespace Session {
     return result
   }
 
-  export async function get(id: string) {
+  export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
-  }
+  })
 
-  export async function getShare(id: string) {
+  export const getShare = fn(Identifier.schema("session"), async (id) => {
     return Storage.read<ShareInfo>(["share", id])
-  }
+  })
 
-  export async function share(id: string) {
+  export const share = fn(Identifier.schema("session"), async (id) => {
     const cfg = await Config.get()
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
@@ -171,9 +216,9 @@ export namespace Session {
       }
     }
     return share
-  }
+  })
 
-  export async function unshare(id: string) {
+  export const unshare = fn(Identifier.schema("session"), async (id) => {
     const share = await getShare(id)
     if (!share) return
     await Storage.remove(["share", id])
@@ -181,7 +226,7 @@ export namespace Session {
       draft.share = undefined
     })
     await Share.remove(id, share.secret)
-  }
+  })
 
   export async function update(id: string, editor: (session: Info) => void) {
     const project = Instance.project
@@ -195,7 +240,7 @@ export namespace Session {
     return result
   }
 
-  export async function messages(sessionID: string) {
+  export const messages = fn(Identifier.schema("session"), async (sessionID) => {
     const result = [] as MessageV2.WithParts[]
     for (const p of await Storage.list(["message", sessionID])) {
       const read = await Storage.read<MessageV2.Info>(p)
@@ -206,16 +251,22 @@ export namespace Session {
     }
     result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
     return result
-  }
+  })
 
-  export async function getMessage(sessionID: string, messageID: string) {
-    return {
-      info: await Storage.read<MessageV2.Info>(["message", sessionID, messageID]),
-      parts: await getParts(messageID),
-    }
-  }
+  export const getMessage = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      return {
+        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
+        parts: await getParts(input.messageID),
+      }
+    },
+  )
 
-  export async function getParts(messageID: string) {
+  export const getParts = fn(Identifier.schema("message"), async (messageID) => {
     const result = [] as MessageV2.Part[]
     for (const item of await Storage.list(["part", messageID])) {
       const read = await Storage.read<MessageV2.Part>(item)
@@ -223,7 +274,7 @@ export namespace Session {
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
-  }
+  })
 
   export async function* list() {
     const project = Instance.project
@@ -232,7 +283,7 @@ export namespace Session {
     }
   }
 
-  export async function children(parentID: string) {
+  export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
@@ -241,14 +292,14 @@ export namespace Session {
       result.push(session)
     }
     return result
-  }
+  })
 
-  export async function remove(sessionID: string, emitEvent = true) {
+  export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
     try {
       const session = await get(sessionID)
       for (const child of await children(sessionID)) {
-        await remove(child.id, false)
+        await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
       for (const msg of await Storage.list(["message", sessionID])) {
@@ -258,92 +309,77 @@ export namespace Session {
         await Storage.remove(msg)
       }
       await Storage.remove(["session", project.id, sessionID])
-      if (emitEvent) {
-        Bus.publish(Event.Deleted, {
-          info: session,
-        })
-      }
+      Bus.publish(Event.Deleted, {
+        info: session,
+      })
     } catch (e) {
       log.error(e)
     }
-  }
+  })
 
-  export async function updateMessage(msg: MessageV2.Info) {
+  export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await Storage.write(["message", msg.sessionID, msg.id], msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
     return msg
-  }
+  })
 
-  export async function removeMessage(sessionID: string, messageID: string) {
-    await Storage.remove(["message", sessionID, messageID])
-    Bus.publish(MessageV2.Event.Removed, {
-      sessionID,
-      messageID,
-    })
-    return messageID
-  }
+  export const removeMessage = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      await Storage.remove(["message", input.sessionID, input.messageID])
+      Bus.publish(MessageV2.Event.Removed, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+      })
+      return input.messageID
+    },
+  )
 
-  export async function updatePart(part: MessageV2.Part) {
+  export const updatePart = fn(MessageV2.Part, async (part) => {
     await Storage.write(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
     })
     return part
-  }
+  })
 
-  // goes backwards through parts until there are 40_000 tokens worth of tool
-  // calls. then erases output of previous tool calls. idea is to throw away old
-  // tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: string }) {
-    const msgs = await messages(input.sessionID)
-    let sum = 0
-    for (let msgIndex = msgs.length - 2; msgIndex >= 0; msgIndex--) {
-      const msg = msgs[msgIndex]
-      if (msg.info.role === "assistant" && msg.info.summary) return
-      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
-        const part = msg.parts[partIndex]
-        if (part.type === "tool")
-          if (part.state.status === "completed") {
-            if (part.state.time.compacted) return
-            sum += Token.estimate(part.state.output)
-            if (sum > 40_000) {
-              log.info("pruning", {
-                sum,
-                id: part.id,
-              })
-              part.state.time.compacted = Date.now()
-              await updatePart(part)
-            }
-          }
+  export const getUsage = fn(
+    z.object({
+      model: z.custom<ModelsDev.Model>(),
+      usage: z.custom<LanguageModelUsage>(),
+      metadata: z.custom<ProviderMetadata>().optional(),
+    }),
+    (input) => {
+      const tokens = {
+        input: input.usage.inputTokens ?? 0,
+        output: input.usage.outputTokens ?? 0,
+        reasoning: input.usage?.reasoningTokens ?? 0,
+        cache: {
+          write: (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+            // @ts-expect-error
+            input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+            0) as number,
+          read: input.usage.cachedInputTokens ?? 0,
+        },
       }
-    }
-  }
-
-  export function getUsage(model: ModelsDev.Model, usage: LanguageModelUsage, metadata?: ProviderMetadata) {
-    const tokens = {
-      input: usage.inputTokens ?? 0,
-      output: usage.outputTokens ?? 0,
-      reasoning: usage?.reasoningTokens ?? 0,
-      cache: {
-        write: (metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-          // @ts-expect-error
-          metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-          0) as number,
-        read: usage.cachedInputTokens ?? 0,
-      },
-    }
-    return {
-      cost: new Decimal(0)
-        .add(new Decimal(tokens.input).mul(model.cost?.input ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.output).mul(model.cost?.output ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.read).mul(model.cost?.cache_read ?? 0).div(1_000_000))
-        .add(new Decimal(tokens.cache.write).mul(model.cost?.cache_write ?? 0).div(1_000_000))
-        .toNumber(),
-      tokens,
-    }
-  }
+      return {
+        cost: new Decimal(0)
+          .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
+          .add(
+            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
+          )
+          .toNumber(),
+        tokens,
+      }
+    },
+  )
 
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {
@@ -351,27 +387,73 @@ export namespace Session {
     }
   }
 
-  export async function initialize(input: {
-    sessionID: string
-    modelID: string
-    providerID: string
-    messageID: string
-  }) {
-    await SessionPrompt.prompt({
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      model: {
-        providerID: input.providerID,
-        modelID: input.modelID,
-      },
-      parts: [
-        {
-          id: Identifier.ascending("part"),
-          type: "text",
-          text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+  export const initialize = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      modelID: z.string(),
+      providerID: z.string(),
+      messageID: Identifier.schema("message"),
+    }),
+    async (input) => {
+      await SessionPrompt.prompt({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model: {
+          providerID: input.providerID,
+          modelID: input.modelID,
         },
-      ],
-    })
-    await Project.setInitialized(Instance.project.id)
-  }
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+          },
+        ],
+      })
+      await Project.setInitialized(Instance.project.id)
+    },
+  )
+
+  export const diff = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message").optional(),
+    }),
+    async (input) => {
+      const all = await messages(input.sessionID)
+      const index = !input.messageID ? 0 : all.findIndex((x) => x.info.id === input.messageID)
+      if (index === -1) return []
+
+      let from: string | undefined
+      let to: string | undefined
+
+      // scan assistant messages to find earliest from and latest to
+      // snapshot
+      for (let i = index + 1; i < all.length; i++) {
+        const item = all[i]
+
+        // if messageID is provided, stop at the next user message
+        if (input.messageID && item.info.role === "user") break
+
+        if (!from) {
+          for (const part of item.parts) {
+            if (part.type === "step-start" && part.snapshot) {
+              from = part.snapshot
+              break
+            }
+          }
+        }
+
+        for (const part of item.parts) {
+          if (part.type === "step-finish" && part.snapshot) {
+            to = part.snapshot
+            break
+          }
+        }
+      }
+
+      if (from && to) return Snapshot.diffFull(from, to)
+      return []
+    },
+  )
 }

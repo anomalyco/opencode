@@ -478,9 +478,6 @@ func (m *messagesComponent) renderView() tea.Cmd {
 				}
 
 			case opencode.AssistantMessage:
-				if casted.Summary {
-					continue
-				}
 				if casted.ID == m.app.Session.Revert.MessageID {
 					reverted = true
 					revertedMessageCount = 1
@@ -667,7 +664,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 					error = err.Data.Message
 				}
 
-				if !hasContent && error == "" && !reverted {
+				if !hasContent && error == "" && !reverted && casted.Time.Completed == 0 {
 					content = renderText(
 						m.app,
 						message.Info,
@@ -898,8 +895,8 @@ func (m *messagesComponent) renderHeader() string {
 					continue
 				}
 				tokens = (usage.Input +
-					usage.Cache.Write +
 					usage.Cache.Read +
+					usage.Cache.Write +
 					usage.Output +
 					usage.Reasoning)
 			}

@@ -1,5 +1,5 @@
 import { Config } from "../config/config"
-import z from "zod"
+import z from "zod/v4"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
@@ -28,10 +28,10 @@ export namespace Agent {
         })
         .optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.boolean()),
+      tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
     })
-    .openapi({
+    .meta({
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
@@ -176,6 +176,16 @@ export namespace Agent {
 }
 
 function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+  if (typeof basePermission.bash === "string") {
+    basePermission.bash = {
+      "*": basePermission.bash,
+    }
+  }
+  if (typeof overridePermission.bash === "string") {
+    overridePermission.bash = {
+      "*": overridePermission.bash,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -183,12 +193,10 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       mergedBash = {
         "*": merged.bash,
       }
-    }
-    // if granular permissions are provided, default to "ask"
-    if (typeof merged.bash === "object") {
+    } else if (typeof merged.bash === "object") {
       mergedBash = mergeDeep(
         {
-          "*": "ask",
+          "*": "allow",
         },
         merged.bash,
       )

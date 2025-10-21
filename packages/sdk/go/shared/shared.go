@@ -7,7 +7,7 @@ import (
 )
 
 type MessageAbortedError struct {
-	Data interface{}             `json:"data,required"`
+	Data MessageAbortedErrorData `json:"data,required"`
 	Name MessageAbortedErrorName `json:"name,required"`
 	JSON messageAbortedErrorJSON `json:"-"`
 }
@@ -32,6 +32,27 @@ func (r messageAbortedErrorJSON) RawJSON() string {
 func (r MessageAbortedError) ImplementsEventListResponseEventSessionErrorPropertiesError() {}
 
 func (r MessageAbortedError) ImplementsAssistantMessageError() {}
+
+type MessageAbortedErrorData struct {
+	Message string                      `json:"message,required"`
+	JSON    messageAbortedErrorDataJSON `json:"-"`
+}
+
+// messageAbortedErrorDataJSON contains the JSON metadata for the struct
+// [MessageAbortedErrorData]
+type messageAbortedErrorDataJSON struct {
+	Message     apijson.Field
+	raw         string
+	ExtraFields map[string]apijson.Field
+}
+
+func (r *MessageAbortedErrorData) UnmarshalJSON(data []byte) (err error) {
+	return apijson.UnmarshalRoot(data, r)
+}
+
+func (r messageAbortedErrorDataJSON) RawJSON() string {
+	return r.raw
+}
 
 type MessageAbortedErrorName string
 

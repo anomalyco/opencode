@@ -1,0 +1,117 @@
+.root {
+  [data-slot="reload-error"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+
+    p {
+      color: var(--color-danger);
+      font-size: var(--font-size-sm);
+      line-height: 1.4;
+      margin: 0;
+      flex: 1;
+    }
+
+    [data-slot="create-form"] {
+      display: flex;
+      gap: var(--space-2);
+      margin: 0;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="payment"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    min-width: 14.5rem;
+    width: fit-content;
+
+    @media (max-width: 30rem) {
+      width: 100%;
+    }
+
+    [data-slot="credit-card"] {
+      padding: var(--space-3-5) var(--space-4);
+      background-color: var(--color-bg-surface);
+      border-radius: var(--border-radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+
+      [data-slot="card-icon"] {
+        display: flex;
+        align-items: center;
+        color: var(--color-text-muted);
+      }
+
+      [data-slot="card-details"] {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-1);
+
+        [data-slot="secret"] {
+          position: relative;
+          bottom: 2px;
+          font-size: var(--font-size-lg);
+          color: var(--color-text-muted);
+          font-weight: 400;
+        }
+
+        [data-slot="number"] {
+          font-size: var(--font-size-3xl);
+          font-weight: 500;
+          color: var(--color-text);
+        }
+
+        [data-slot="type"] {
+          font-size: var(--font-size-sm);
+          font-weight: 400;
+          color: var(--color-text-muted);
+        }
+      }
+    }
+
+    [data-slot="button-row"] {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+
+      @media (max-width: 30rem) {
+        flex-direction: column;
+
+        >button {
+          width: 100%;
+        }
+      }
+
+      [data-slot="create-form"] {
+        margin: 0;
+      }
+
+      /* Make Enable Billing button full width when it's the only button */
+      >button {
+        flex: 1;
+      }
+    }
+  }
+
+  [data-slot="usage"] {
+    p {
+      font-size: var(--font-size-sm);
+      line-height: 1.5;
+      color: var(--color-text-secondary);
+
+      b {
+        font-weight: 600;
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import z from "zod"
+import z from "zod/v4"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -16,12 +16,9 @@ import { Flag } from "../flag/flag"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  type CustomLoader = (
-    provider: ModelsDev.Provider,
-    api?: string,
-  ) => Promise<{
+  type CustomLoader = (provider: ModelsDev.Provider) => Promise<{
     autoload: boolean
-    getModel?: (sdk: any, modelID: string) => Promise<any>
+    getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
     options?: Record<string, any>
   }>
 
@@ -40,6 +37,19 @@ export namespace Provider {
       }
     },
     async opencode(input) {
+      const hasKey = await (async () => {
+        if (input.env.some((item) => process.env[item])) return true
+        if (await Auth.get(input.id)) return true
+        return false
+      })()
+
+      if (!hasKey) {
+        for (const [key, value] of Object.entries(input.models)) {
+          if (value.cost.input === 0) continue
+          delete input.models[key]
+        }
+      }
+
       return {
         autoload: Object.keys(input.models).length > 0,
         options: {},
@@ -48,7 +58,7 @@ export namespace Provider {
     openai: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
         options: {},
@@ -57,8 +67,12 @@ export namespace Provider {
     azure: async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string) {
-          return sdk.responses(modelID)
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (options?.["useCompletionUrls"]) {
+            return sdk.chat(modelID)
+          } else {
+            return sdk.responses(modelID)
+          }
         },
         options: {},
       }
@@ -76,7 +90,7 @@ export namespace Provider {
           region,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
@@ -106,12 +120,20 @@ export namespace Provider {
               break
             }
             case "ap": {
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              if (isAustraliaRegion && ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) =>
                 modelID.includes(m),
-              )
-              if (modelRequiresPrefix) {
-                regionPrefix = "apac"
+              )) {
+                regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
+              } else {
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "apac"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               }
               break
             }
@@ -143,6 +165,40 @@ export namespace Provider {
         },
       }
     },
+    "google-vertex": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }
+    },
+    "google-vertex-anthropic": async () => {
+      const project = process.env["GOOGLE_CLOUD_PROJECT"] ?? process.env["GCP_PROJECT"] ?? process.env["GCLOUD_PROJECT"]
+      const location = process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? "us-east5"
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+      return {
+        autoload: true,
+        options: {
+          project,
+          location,
+        },
+        async getModel(sdk: any, modelID: string) {
+          const id = String(modelID).trim()
+          return sdk.languageModel(id)
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -153,15 +209,17 @@ export namespace Provider {
       [providerID: string]: {
         source: Source
         info: ModelsDev.Provider
-        getModel?: (sdk: any, modelID: string) => Promise<any>
+        getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
         options: Record<string, any>
       }
     } = {}
     const models = new Map<
       string,
-      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel }
+      { providerID: string; modelID: string; info: ModelsDev.Model; language: LanguageModel; npm?: string }
     >()
     const sdk = new Map<number, SDK>()
+    // Maps `${provider}/${key}` to the provider’s actual model ID for custom aliases.
+    const realIdByKey = new Map<string, string>()
 
     log.info("init")
 
@@ -169,7 +227,7 @@ export namespace Provider {
       id: string,
       options: Record<string, any>,
       source: Source,
-      getModel?: (sdk: any, modelID: string) => Promise<any>,
+      getModel?: (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>,
     ) {
       const provider = providers[id]
       if (!provider) {
@@ -215,27 +273,35 @@ export namespace Provider {
           cost:
             !model.cost && !existing?.cost
               ? {
-                  input: 0,
-                  output: 0,
-                  cache_read: 0,
-                  cache_write: 0,
-                }
+                input: 0,
+                output: 0,
+                cache_read: 0,
+                cache_write: 0,
+              }
               : {
-                  cache_read: 0,
-                  cache_write: 0,
-                  ...existing?.cost,
-                  ...model.cost,
-                },
+                cache_read: 0,
+                cache_write: 0,
+                ...existing?.cost,
+                ...model.cost,
+              },
           options: {
             ...existing?.options,
             ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {
-              context: 0,
-              output: 0,
-            },
+            context: 0,
+            output: 0,
+          },
+          modalities: model.modalities ??
+            existing?.modalities ?? {
+            input: ["text"],
+            output: ["text"],
+          },
           provider: model.provider ?? existing?.provider,
+        }
+        if (model.id && model.id !== modelID) {
+          realIdByKey.set(`${providerID}/${modelID}`, model.id)
         }
         parsed.models[modelID] = parsedModel
       }
@@ -298,7 +364,10 @@ export namespace Provider {
               modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
-          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
+          .filter(
+            ([, model]) =>
+              (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
+          ),
       )
       provider.info.models = filteredModels
 
@@ -313,6 +382,7 @@ export namespace Provider {
       models,
       providers,
       sdk,
+      realIdByKey,
     }
   })
 
@@ -328,14 +398,39 @@ export namespace Provider {
       const s = await state()
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
       const options = { ...s.providers[provider.id]?.options }
+      if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
+        options["includeUsage"] = true
+      }
       const key = Bun.hash.xxHash32(JSON.stringify({ pkg, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
-      const mod = await import(await BunProc.install(pkg, "latest"))
+      const installedPath = await BunProc.install(pkg, "latest")
+      // The `google-vertex-anthropic` provider points to the `@ai-sdk/google-vertex` package.
+      // Ref: https://github.com/sst/models.dev/blob/0a87de42ab177bebad0620a889e2eb2b4a5dd4ab/providers/google-vertex-anthropic/provider.toml
+      // However, the actual export is at the subpath `@ai-sdk/google-vertex/anthropic`.
+      // Ref: https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex#google-vertex-anthropic-provider-usage
+      // In addition, Bun's dynamic import logic does not support subpath imports,
+      // so we patch the import path to load directly from `dist`.
+      const modPath =
+        provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
+      const mod = await import(modPath)
       if (options["timeout"] !== undefined) {
         // Only override fetch if user explicitly sets timeout
-        options["fetch"] = async (input: any, init?: any) => {
-          return await fetch(input, { ...init, timeout: options["timeout"] })
+        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          const { signal, ...rest } = init ?? {}
+
+          const signals: AbortSignal[] = []
+          if (signal) signals.push(signal)
+          signals.push(AbortSignal.timeout(options["timeout"]))
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          return fetch(input, {
+            ...rest,
+            signal: combined,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
         }
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
@@ -371,19 +466,25 @@ export namespace Provider {
     const sdk = await getSDK(provider.info, info)
 
     try {
-      const language = provider.getModel ? await provider.getModel(sdk, modelID) : sdk.languageModel(modelID)
+      const keyReal = `${providerID}/${modelID}`
+      const realID = s.realIdByKey.get(keyReal) ?? info.id
+      const language = provider.getModel
+        ? await provider.getModel(sdk, realID, provider.options)
+        : sdk.languageModel(realID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         providerID,
         modelID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       })
       return {
         modelID,
         providerID,
         info,
         language,
+        npm: info.provider?.npm ?? provider.info.npm,
       }
     } catch (e) {
       if (e instanceof NoSuchModelError)
@@ -449,11 +550,11 @@ export namespace Provider {
             model_id: string
           }[]
         }
-        const models = state?.recently_used_models ?? []
-        if (models.length > 0) {
+        const [model] = state?.recently_used_models ?? []
+        if (model) {
           return {
-            providerID: models[0].provider_id,
-            modelID: models[0].model_id,
+            providerID: model.provider_id,
+            modelID: model.model_id,
           }
         }
       })

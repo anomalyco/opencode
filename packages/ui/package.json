@@ -1,0 +1,33 @@
+{
+  "name": "@opencode-ai/ui",
+  "version": "0.15.10",
+  "type": "module",
+  "exports": {
+    ".": "./src/components/index.ts",
+    "./*": "./src/components/*.tsx",
+    "./styles": "./src/styles/index.css",
+    "./styles/tailwind": "./src/styles/tailwind/index.css",
+    "./fonts/*": "./src/assets/fonts/*"
+  },
+  "scripts": {
+    "dev": "vite",
+    "generate:tailwind": "bun run script/tailwind.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:",
+    "tailwindcss": "catalog:",
+    "@tailwindcss/vite": "catalog:"
+  },
+  "dependencies": {
+    "@kobalte/core": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "remeda": "catalog:",
+    "luxon": "catalog:",
+    "virtua": "catalog:",
+    "solid-js": "catalog:",
+    "solid-list": "catalog:"
+  }
+}

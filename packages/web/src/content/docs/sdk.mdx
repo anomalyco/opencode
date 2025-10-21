@@ -25,16 +25,15 @@ npm install @opencode-ai/sdk
 
 ## Create client
 
-Create a client instance to connect to your server:
+Create an instance of opencode:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const client = createOpencodeClient({
-  baseUrl: "http://localhost:4096",
-  responseStyle: "data",
-})
+const { client } = await createOpencode()
 ```
+
+This starts both a server and a client
 
 #### Options
 
@@ -48,29 +47,14 @@ const client = createOpencodeClient({
 
 ---
 
-## Start server
+## Config
 
-You can also programmatically start an opencode server:
-
-```javascript
-import { createOpencodeServer } from "@opencode-ai/sdk"
-
-const server = await createOpencodeServer({
-  hostname: "127.0.0.1",
-  port: 4096,
-})
-
-console.log(`Server running at ${server.url}`)
-
-server.close()
-```
-
-You can pass a configuration object to customize server behavior. The server still picks up your `opencode.json`, but you can override or add configuration inline:
+You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
 
 ```javascript
-import { createOpencodeServer } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk"
 
-const server = await createOpencodeServer({
+const opencode = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -78,9 +62,21 @@ const server = await createOpencodeServer({
   },
 })
 
-console.log(`Server running at ${server.url}`)
+console.log(`Server running at ${opencode.server.url}`)
 
-server.close()
+opencode.server.close()
+```
+
+## Client only
+
+If you aready have a running instance of opencode, you can create a client instance to connect to it:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
 ```
 
 #### Options

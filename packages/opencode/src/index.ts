@@ -1,4 +1,3 @@
-import "zod-openapi/extend"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -19,11 +18,10 @@ import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
+import { AttachCommand } from "./cli/cmd/attach"
+import { AcpCommand } from "./cli/cmd/acp"
 
 const cancel = new AbortController()
-
-try {
-} catch (e) {}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -54,10 +52,10 @@ const cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
-      dev: Installation.isDev(),
+      dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isDev()) return "DEBUG"
+        if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
     })
@@ -70,8 +68,10 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .command(AcpCommand)
   .command(McpCommand)
   .command(TuiCommand)
+  .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)

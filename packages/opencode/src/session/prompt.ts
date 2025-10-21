@@ -1,7 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import z, { ZodSchema } from "zod"
+import z from "zod/v4"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -19,8 +19,10 @@ import {
   type StreamTextResult,
   LoadAPIKeyError,
   stepCountIs,
+  jsonSchema,
 } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionLock } from "./lock"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -38,6 +40,7 @@ import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
+import { TaskTool } from "../tool/task"
 import { FileTime } from "../file/time"
 import { Permission } from "../permission"
 import { Snapshot } from "../snapshot"
@@ -45,7 +48,8 @@ import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
+import { $, fileURLToPath } from "bun"
+import { ConfigMarkdown } from "../config/markdown"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -62,7 +66,6 @@ export namespace SessionPrompt {
 
   const state = Instance.state(
     () => {
-      const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
         {
@@ -72,14 +75,11 @@ export namespace SessionPrompt {
       >()
 
       return {
-        pending,
         queued,
       }
     },
-    async (state) => {
-      for (const [_, controller] of state.pending) {
-        controller.abort()
-      }
+    async (current) => {
+      current.queued.clear()
     },
   )
 
@@ -94,7 +94,17 @@ export namespace SessionPrompt {
       .optional(),
     agent: z.string().optional(),
     system: z.string().optional(),
-    tools: z.record(z.boolean()).optional(),
+    tools: z.record(z.string(), z.boolean()).optional(),
+    /**
+     * ACP (Agent Client Protocol) connection details for streaming responses.
+     * When provided, enables real-time streaming and tool execution visibility.
+     */
+    acpConnection: z
+      .object({
+        connection: z.any(), // AgentSideConnection - using any to avoid circular deps
+        sessionId: z.string(), // ACP session ID (different from opencode sessionID)
+      })
+      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -104,7 +114,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "TextPartInput",
           }),
         MessageV2.FilePart.omit({
@@ -114,7 +124,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "FilePartInput",
           }),
         MessageV2.AgentPart.omit({
@@ -124,7 +134,7 @@ export namespace SessionPrompt {
           .partial({
             id: true,
           })
-          .openapi({
+          .meta({
             ref: "AgentPartInput",
           }),
       ]),
@@ -156,7 +166,7 @@ export namespace SessionPrompt {
       agent,
       model: input.model,
     }).then((x) => Provider.getModel(x.providerID, x.modelID))
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
     using abort = lock(input.sessionID)
 
     const system = await resolveSystemPrompt({
@@ -173,6 +183,7 @@ export namespace SessionPrompt {
       agent: agent.name,
       system,
       abort: abort.signal,
+      acpConnection: input.acpConnection,
     })
 
     const tools = await resolveTools({
@@ -211,6 +222,7 @@ export namespace SessionPrompt {
           sessionID: input.sessionID,
           model: model.info,
           providerID: model.providerID,
+          signal: abort.signal,
         }),
         (messages) => insertReminders({ messages, agent }),
       )
@@ -263,10 +275,16 @@ export namespace SessionPrompt {
             : undefined,
         maxRetries: 10,
         activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(
+          model.providerID,
+          params.options,
+          model.info.limit.output,
+          OUTPUT_TOKEN_MAX,
+        ),
         abortSignal: abort.signal,
         providerOptions: {
-          [model.providerID]: params.options,
+          [model.npm === "@ai-sdk/openai" || model.npm === "@ai-sdk/azure" ? "openai" : model.providerID]:
+            params.options,
         },
         stopWhen: stepCountIs(1),
         temperature: params.temperature,
@@ -278,7 +296,21 @@ export namespace SessionPrompt {
               content: x,
             }),
           ),
-          ...MessageV2.toModelMessage(msgs.filter((m) => !(m.info.role === "assistant" && m.info.error))),
+          ...MessageV2.toModelMessage(
+            msgs.filter((m) => {
+              if (m.info.role !== "assistant" || m.info.error === undefined) {
+                return true
+              }
+              if (
+                MessageV2.AbortedError.isInstance(m.info.error) &&
+                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+              ) {
+                return true
+              }
+
+              return false
+            }),
+          ),
         ],
         tools: model.info.tool_call === false ? undefined : tools,
         model: wrapLanguageModel({
@@ -315,12 +347,17 @@ export namespace SessionPrompt {
         item.callback(result)
       }
       state().queued.delete(input.sessionID)
-      // Session.prune(input)
+      SessionCompaction.prune(input)
       return result
     }
   }
 
-  async function getMessages(input: { sessionID: string; model: ModelsDev.Model; providerID: string }) {
+  async function getMessages(input: {
+    sessionID: string
+    model: ModelsDev.Model
+    providerID: string
+    signal: AbortSignal
+  }) {
     let msgs = await Session.messages(input.sessionID).then(MessageV2.filterSummarized)
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
@@ -330,12 +367,38 @@ export namespace SessionPrompt {
         model: input.model,
       })
     ) {
-      const msg = await SessionCompaction.run({
+      const summaryMsg = await SessionCompaction.run({
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
+        signal: input.signal,
       })
-      msgs = [msg]
+      const resumeMsgID = Identifier.ascending("message")
+      const resumeMsg = {
+        info: await Session.updateMessage({
+          id: resumeMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+        }),
+        parts: [
+          await Session.updatePart({
+            type: "text",
+            sessionID: input.sessionID,
+            messageID: resumeMsgID,
+            id: Identifier.ascending("part"),
+            text: "Use the above summary generated from your last session to resume from where you left off.",
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
+            synthetic: true,
+          }),
+        ],
+      }
+      msgs = [summaryMsg, resumeMsg]
     }
     return msgs
   }
@@ -388,10 +451,11 @@ export namespace SessionPrompt {
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
+      const schema = ProviderTransform.schema(input.providerID, input.modelID, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
-        inputSchema: item.parameters as ZodSchema,
+        inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           await Plugin.trigger(
             "tool.execute.before",
@@ -409,6 +473,10 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            extra: {
+              modelID: input.modelID,
+              providerID: input.providerID,
+            },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -480,6 +548,8 @@ export namespace SessionPrompt {
         )
 
         return {
+          title: "",
+          metadata: {},
           output,
         }
       }
@@ -538,9 +608,15 @@ export namespace SessionPrompt {
               }
               break
             case "file:":
+              log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filePath = decodeURIComponent(url.pathname)
+              const filepath = fileURLToPath(part.url)
+              const stat = await Bun.file(filepath).stat()
+
+              if (stat.isDirectory()) {
+                part.mime = "application/x-directory"
+              }
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -550,14 +626,14 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
+                  const filePathURI = part.url.split("?")[0]
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
+                    const symbols = await LSP.documentSymbol(filePathURI)
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
@@ -577,7 +653,7 @@ export namespace SessionPrompt {
                     limit = end - offset
                   }
                 }
-                const args = { filePath, offset, limit }
+                const args = { filePath: filepath, offset, limit }
                 const result = await ReadTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -615,7 +691,7 @@ export namespace SessionPrompt {
               }
 
               if (part.mime === "application/x-directory") {
-                const args = { path: filePath }
+                const args = { path: filepath }
                 const result = await ListTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -652,15 +728,15 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filePath)
-              FileTime.read(input.sessionID, filePath)
+              const file = Bun.file(filepath)
+              FileTime.read(input.sessionID, filepath)
               return [
                 {
                   id: Identifier.ascending("part"),
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filepath}\"}`,
                   synthetic: true,
                 },
                 {
@@ -709,6 +785,15 @@ export namespace SessionPrompt {
       }),
     ).then((x) => x.flat())
 
+    await Plugin.trigger(
+      "chat.message",
+      {},
+      {
+        message: info,
+        parts,
+      },
+    )
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
@@ -747,6 +832,60 @@ export namespace SessionPrompt {
     return input.messages
   }
 
+  /**
+   * Maps tool names to ACP tool kinds for consistent categorization.
+   * - read: Tools that read data (read, glob, grep, list, webfetch, docs)
+   * - edit: Tools that modify state (edit, write, bash)
+   * - other: All other tools (MCP tools, task, todowrite, etc.)
+   */
+  function determineToolKind(toolName: string): "read" | "edit" | "other" {
+    const readTools = [
+      "read",
+      "glob",
+      "grep",
+      "list",
+      "webfetch",
+      "context7_resolve_library_id",
+      "context7_get_library_docs",
+    ]
+    const editTools = ["edit", "write", "bash"]
+
+    if (readTools.includes(toolName.toLowerCase())) return "read"
+    if (editTools.includes(toolName.toLowerCase())) return "edit"
+    return "other"
+  }
+
+  /**
+   * Extracts file/directory locations from tool inputs for ACP notifications.
+   * Returns array of {path} objects that ACP clients can use for navigation.
+   *
+   * Examples:
+   * - read({filePath: "/foo/bar.ts"}) -> [{path: "/foo/bar.ts"}]
+   * - glob({pattern: "*.ts", path: "/src"}) -> [{path: "/src"}]
+   * - bash({command: "ls"}) -> [] (no file references)
+   */
+  function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
+    try {
+      switch (toolName.toLowerCase()) {
+        case "read":
+        case "edit":
+        case "write":
+          return input["filePath"] ? [{ path: input["filePath"] }] : []
+        case "glob":
+        case "grep":
+          return input["path"] ? [{ path: input["path"] }] : []
+        case "bash":
+          return []
+        case "list":
+          return input["path"] ? [{ path: input["path"] }] : []
+        default:
+          return []
+      }
+    } catch {
+      return []
+    }
+  }
+
   export type Processor = Awaited<ReturnType<typeof createProcessor>>
   async function createProcessor(input: {
     sessionID: string
@@ -755,6 +894,10 @@ export namespace SessionPrompt {
     system: string[]
     agent: string
     abort: AbortSignal
+    acpConnection?: {
+      connection: any
+      sessionId: string
+    }
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
@@ -841,6 +984,7 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
@@ -848,6 +992,7 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text += value.text
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   if (part.text) await Session.updatePart(part)
                 }
                 break
@@ -856,11 +1001,12 @@ export namespace SessionPrompt {
                 if (value.id in reasoningMap) {
                   const part = reasoningMap[value.id]
                   part.text = part.text.trimEnd()
-                  part.metadata = value.providerMetadata
+
                   part.time = {
                     ...part.time,
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
@@ -879,6 +1025,26 @@ export namespace SessionPrompt {
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
+
+                // Notify ACP client of pending tool call
+                if (input.acpConnection) {
+                  await input.acpConnection.connection
+                    .sessionUpdate({
+                      sessionId: input.acpConnection.sessionId,
+                      update: {
+                        sessionUpdate: "tool_call",
+                        toolCallId: value.id,
+                        title: value.toolName,
+                        kind: determineToolKind(value.toolName),
+                        status: "pending",
+                        locations: [], // Will be populated when we have input
+                        rawInput: {},
+                      },
+                    })
+                    .catch((err: Error) => {
+                      log.error("failed to send tool pending to ACP", { error: err })
+                    })
+                }
                 break
 
               case "tool-input-delta":
@@ -900,8 +1066,27 @@ export namespace SessionPrompt {
                         start: Date.now(),
                       },
                     },
+                    metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+
+                  // Notify ACP client that tool is running
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "in_progress",
+                          locations: extractLocations(value.toolName, value.input),
+                          rawInput: value.input,
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool in_progress to ACP", { error: err })
+                      })
+                  }
                 }
                 break
               }
@@ -920,8 +1105,36 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
+                      attachments: value.output.attachments,
                     },
                   })
+
+                  // Notify ACP client that tool completed
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "completed",
+                          content: [
+                            {
+                              type: "content",
+                              content: {
+                                type: "text",
+                                text: value.output.output,
+                              },
+                            },
+                          ],
+                          rawOutput: value.output,
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool completed to ACP", { error: err })
+                      })
+                  }
+
                   delete toolcalls[value.toolCallId]
                 }
                 break
@@ -943,6 +1156,35 @@ export namespace SessionPrompt {
                       },
                     },
                   })
+
+                  // Notify ACP client of tool error
+                  if (input.acpConnection) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: value.toolCallId,
+                          status: "failed",
+                          content: [
+                            {
+                              type: "content",
+                              content: {
+                                type: "text",
+                                text: `Error: ${(value.error as any).toString()}`,
+                              },
+                            },
+                          ],
+                          rawOutput: {
+                            error: (value.error as any).toString(),
+                          },
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send tool error to ACP", { error: err })
+                      })
+                  }
+
                   if (value.error instanceof Permission.RejectedError) {
                     blocked = true
                   }
@@ -954,21 +1196,27 @@ export namespace SessionPrompt {
                 throw value.error
 
               case "start-step":
+                snapshot = await Snapshot.track()
                 await Session.updatePart({
                   id: Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
+                  snapshot,
                   type: "step-start",
                 })
-                snapshot = await Snapshot.track()
                 break
 
               case "finish-step":
-                const usage = Session.getUsage(input.model, value.usage, value.providerMetadata)
+                const usage = Session.getUsage({
+                  model: input.model,
+                  usage: value.usage,
+                  metadata: value.providerMetadata,
+                })
                 assistantMsg.cost += usage.cost
                 assistantMsg.tokens = usage.tokens
                 await Session.updatePart({
                   id: Identifier.ascending("part"),
+                  snapshot: await Snapshot.track(),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
                   type: "step-finish",
@@ -1002,13 +1250,34 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
+
+                  // Send streaming chunk to ACP client
+                  if (input.acpConnection && value.text) {
+                    await input.acpConnection.connection
+                      .sessionUpdate({
+                        sessionId: input.acpConnection.sessionId,
+                        update: {
+                          sessionUpdate: "agent_message_chunk",
+                          content: {
+                            type: "text",
+                            text: value.text,
+                          },
+                        },
+                      })
+                      .catch((err: Error) => {
+                        log.error("failed to send text delta to ACP", { error: err })
+                        // Don't fail the whole request if ACP notification fails
+                      })
+                  }
                 }
                 break
 
@@ -1019,6 +1288,7 @@ export namespace SessionPrompt {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   await Session.updatePart(currentText)
                 }
                 currentText = undefined
@@ -1098,30 +1368,20 @@ export namespace SessionPrompt {
   }
 
   function isBusy(sessionID: string) {
-    return state().pending.has(sessionID)
-  }
-
-  export function abort(sessionID: string) {
-    const controller = state().pending.get(sessionID)
-    if (!controller) return false
-    log.info("aborting", {
-      sessionID,
-    })
-    controller.abort()
-    state().pending.delete(sessionID)
-    return true
+    return SessionLock.isLocked(sessionID)
   }
 
   function lock(sessionID: string) {
+    const handle = SessionLock.acquire({
+      sessionID,
+    })
     log.info("locking", { sessionID })
-    if (state().pending.has(sessionID)) throw new Error("TODO")
-    const controller = new AbortController()
-    state().pending.set(sessionID, controller)
     return {
-      signal: controller.signal,
+      signal: handle.signal,
+      abort: handle.abort,
       async [Symbol.dispose]() {
+        handle[Symbol.dispose]()
         log.info("unlocking", { sessionID })
-        state().pending.delete(sessionID)
 
         const session = await Session.get(sessionID)
         if (session.parentID) return
@@ -1209,20 +1469,42 @@ export namespace SessionPrompt {
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
-    const scripts: Record<string, string> = {
-      nu: input.command,
-      fish: `eval "${input.command}"`,
+    const invocations: Record<string, { args: string[] }> = {
+      nu: {
+        args: ["-c", input.command],
+      },
+      fish: {
+        args: ["-c", input.command],
+      },
+      zsh: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+            [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      bash: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      // Fallback: any shell that doesn't match those above
+      "": {
+        args: ["-c", "-l", `${input.command}`],
+      },
     }
 
-    const script =
-      scripts[shellName] ??
-      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-       eval "${input.command}"`
-
-    const isFishOrNu = shellName === "fish" || shellName === "nu"
-    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
+    const matchingInvocation = invocations[shellName] ?? invocations[""]
+    const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
@@ -1306,19 +1588,18 @@ export namespace SessionPrompt {
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
-  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agent = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? "build"
 
-    let template = command.template.replace("$ARGUMENTS", input.arguments)
+    let template = command.template.replaceAll("$ARGUMENTS", input.arguments)
 
-    const bash = Array.from(template.matchAll(bashRegex))
-    if (bash.length > 0) {
+    const shell = ConfigMarkdown.shell(template)
+    if (shell.length > 0) {
       const results = await Promise.all(
-        bash.map(async ([, cmd]) => {
+        shell.map(async ([, cmd]) => {
           try {
             return await $`${{ raw: cmd }}`.nothrow().text()
           } catch (error) {
@@ -1337,9 +1618,9 @@ export namespace SessionPrompt {
       },
     ] as PromptInput["parts"]
 
-    const matches = Array.from(template.matchAll(fileRegex))
+    const files = ConfigMarkdown.files(template)
     await Promise.all(
-      matches.map(async (match) => {
+      files.map(async (match) => {
         const name = match[1]
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
@@ -1381,22 +1662,134 @@ export namespace SessionPrompt {
         return Provider.parseModel(command.model)
       }
       if (command.agent) {
-        const agent = await Agent.get(command.agent)
-        if (agent.model) {
-          return agent.model
+        const cmdAgent = await Agent.get(command.agent)
+        if (cmdAgent.model) {
+          return cmdAgent.model
         }
       }
       if (input.model) {
         return Provider.parseModel(input.model)
       }
-      return undefined
+      return await Provider.defaultModel()
     })()
+
+    const agent = await Agent.get(agentName)
+    if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
+      using abort = lock(input.sessionID)
+
+      const userMsg: MessageV2.User = {
+        id: Identifier.ascending("message"),
+        sessionID: input.sessionID,
+        time: {
+          created: Date.now(),
+        },
+        role: "user",
+      }
+      await Session.updateMessage(userMsg)
+      const userPart: MessageV2.Part = {
+        type: "text",
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: input.sessionID,
+        text: "The following tool was executed by the user",
+        synthetic: true,
+      }
+      await Session.updatePart(userPart)
+
+      const assistantMsg: MessageV2.Assistant = {
+        id: Identifier.ascending("message"),
+        sessionID: input.sessionID,
+        system: [],
+        mode: agentName,
+        cost: 0,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        time: {
+          created: Date.now(),
+        },
+        role: "assistant",
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: model.modelID,
+        providerID: model.providerID,
+      }
+      await Session.updateMessage(assistantMsg)
+
+      const args = {
+        description: "Consulting " + agent.name,
+        subagent_type: agent.name,
+        prompt: template,
+      }
+      const toolPart: MessageV2.ToolPart = {
+        type: "tool",
+        id: Identifier.ascending("part"),
+        messageID: assistantMsg.id,
+        sessionID: input.sessionID,
+        tool: "task",
+        callID: ulid(),
+        state: {
+          status: "running",
+          time: {
+            start: Date.now(),
+          },
+          input: {
+            description: args.description,
+            subagent_type: args.subagent_type,
+            // truncate prompt to preserve context
+            prompt: args.prompt.length > 100 ? args.prompt.substring(0, 97) + "..." : args.prompt,
+          },
+        },
+      }
+      await Session.updatePart(toolPart)
+
+      const result = await TaskTool.init().then((t) =>
+        t.execute(args, {
+          sessionID: input.sessionID,
+          abort: abort.signal,
+          agent: agent.name,
+          messageID: assistantMsg.id,
+          extra: {},
+          metadata: async (metadata) => {
+            if (toolPart.state.status === "running") {
+              toolPart.state.metadata = metadata.metadata
+              toolPart.state.title = metadata.title
+              await Session.updatePart(toolPart)
+            }
+          },
+        }),
+      )
+
+      assistantMsg.time.completed = Date.now()
+      await Session.updateMessage(assistantMsg)
+      if (toolPart.state.status === "running") {
+        toolPart.state = {
+          status: "completed",
+          time: {
+            ...toolPart.state.time,
+            end: Date.now(),
+          },
+          input: toolPart.state.input,
+          title: "",
+          metadata: result.metadata,
+          output: result.output,
+        }
+        await Session.updatePart(toolPart)
+      }
+
+      return { info: assistantMsg, parts: [toolPart] }
+    }
 
     return prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
       model,
-      agent,
+      agent: agentName,
       parts,
     })
   }
@@ -1419,7 +1812,7 @@ export namespace SessionPrompt {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
     }
-    if (small.providerID === "openai") {
+    if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
       options["reasoningEffort"] = "minimal"
     }
     if (small.providerID === "google") {

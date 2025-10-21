@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai"
 import { unique } from "remeda"
+import type { JSONSchema } from "zod/v4/core"
 
 export namespace ProviderTransform {
   function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
@@ -91,25 +92,66 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      result["reasoningEffort"] = "high"
+      result["reasoningEffort"] = "medium"
       if (providerID !== "azure") {
-        result["textVerbosity"] = "low"
+        result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
+      }
+      if (providerID === "opencode") {
+        result["promptCacheKey"] = sessionID
+        result["include"] = ["reasoning.encrypted_content"]
+        result["reasoningSummary"] = "detailed"
       }
     }
     return result
   }
 
-  export function maxOutputTokens(providerID: string, outputLimit: number, options: Record<string, any>): number {
+  export function maxOutputTokens(
+    providerID: string,
+    options: Record<string, any>,
+    modelLimit: number,
+    globalLimit: number,
+  ): number {
+    const modelCap = modelLimit || globalLimit
+    const standardLimit = Math.min(modelCap, globalLimit)
+
     if (providerID === "anthropic") {
-      const thinking = options["thinking"]
-      if (typeof thinking === "object" && thinking !== null) {
-        const type = thinking["type"]
-        const budgetTokens = thinking["budgetTokens"]
-        if (type === "enabled" && typeof budgetTokens === "number" && budgetTokens > 0) {
-          return outputLimit - budgetTokens
+      const thinking = options?.["thinking"]
+      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+      const enabled = thinking?.["type"] === "enabled"
+      if (enabled && budgetTokens > 0) {
+        // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
+        if (budgetTokens + standardLimit <= modelCap) {
+          return standardLimit
+        }
+        return modelCap - budgetTokens
+      }
+    }
+
+    return standardLimit
+  }
+
+  export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
+    /*
+    if (["openai", "azure"].includes(providerID)) {
+      if (schema.type === "object" && schema.properties) {
+        for (const [key, value] of Object.entries(schema.properties)) {
+          if (schema.required?.includes(key)) continue
+          schema.properties[key] = {
+            anyOf: [
+              value as JSONSchema.JSONSchema,
+              {
+                type: "null",
+              },
+            ],
+          }
         }
       }
     }
-    return outputLimit
+
+    if (providerID === "google") {
+    }
+    */
+
+    return schema
   }
 }

@@ -3,26 +3,12 @@ import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
-import { z } from "zod"
+import z from "zod/v4"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
-
-  export function init() {
-    Array.fromAsync(
-      new Bun.Glob("**/snapshot").scan({
-        absolute: true,
-        onlyFiles: false,
-        cwd: Global.Path.data,
-      }),
-    ).then((files) => {
-      for (const file of files) {
-        fs.rmdir(file, { recursive: true })
-      }
-    })
-  }
 
   export async function track() {
     if (Instance.project.vcs !== "git") return
@@ -40,8 +26,15 @@ export namespace Snapshot {
         .nothrow()
       log.info("initialized")
     }
-    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
-    const hash = await $`git --git-dir ${git} write-tree`.quiet().cwd(Instance.directory).nothrow().text()
+    await $`git --git-dir ${git} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    const hash = await $`git --git-dir ${git} write-tree`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .text()
     log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
   }
@@ -54,8 +47,14 @@ export namespace Snapshot {
 
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
-    await $`git --git-dir ${git} add .`.quiet().cwd(Instance.directory).nothrow()
-    const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`.quiet().cwd(Instance.directory).nothrow()
+    await $`git --git-dir ${git} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    const result = await $`git --git-dir ${git} diff --name-only ${hash} -- .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
 
     // If git diff fails, return empty patch
     if (result.exitCode !== 0) {
@@ -78,10 +77,11 @@ export namespace Snapshot {
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const git = gitdir()
-    const result = await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
-      .quiet()
-      .cwd(Instance.worktree)
-      .nothrow()
+    const result =
+      await $`git --git-dir=${git} read-tree ${snapshot} && git --git-dir=${git} checkout-index -a -f`
+        .quiet()
+        .cwd(Instance.worktree)
+        .nothrow()
 
     if (result.exitCode !== 0) {
       log.error("failed to restore snapshot", {
@@ -100,13 +100,26 @@ export namespace Snapshot {
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
-        const result = await $`git --git-dir=${git} checkout ${item.hash} -- ${file}`
-          .quiet()
-          .cwd(Instance.worktree)
-          .nothrow()
+        const result =
+          await $`git --git-dir=${git} checkout ${item.hash} -- ${file}`
+            .quiet()
+            .cwd(Instance.worktree)
+            .nothrow()
         if (result.exitCode !== 0) {
-          log.info("file not found in history, deleting", { file })
-          await fs.unlink(file).catch(() => {})
+          const relativePath = path.relative(Instance.worktree, file)
+          const checkTree =
+            await $`git --git-dir=${git} ls-tree ${item.hash} -- ${relativePath}`
+              .quiet()
+              .cwd(Instance.worktree)
+              .nothrow()
+          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
+            log.info("file existed in snapshot but checkout failed, keeping", {
+              file,
+            })
+          } else {
+            log.info("file did not exist in snapshot, deleting", { file })
+            await fs.unlink(file).catch(() => {})
+          }
         }
         files.add(file)
       }
@@ -115,7 +128,14 @@ export namespace Snapshot {
 
   export async function diff(hash: string) {
     const git = gitdir()
-    const result = await $`git --git-dir=${git} diff ${hash} -- .`.quiet().cwd(Instance.worktree).nothrow()
+    await $`git --git-dir ${git} add .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    const result = await $`git --git-dir=${git} diff ${hash} -- .`
+      .quiet()
+      .cwd(Instance.worktree)
+      .nothrow()
 
     if (result.exitCode !== 0) {
       log.warn("failed to get diff", {
@@ -128,6 +148,45 @@ export namespace Snapshot {
     }
 
     return result.text().trim()
+  }
+
+  export const FileDiff = z
+    .object({
+      file: z.string(),
+      left: z.string(),
+      right: z.string(),
+    })
+    .meta({
+      ref: "FileDiff",
+    })
+  export type FileDiff = z.infer<typeof FileDiff>
+  export async function diffFull(
+    from: string,
+    to: string,
+  ): Promise<FileDiff[]> {
+    const git = gitdir()
+    const result: FileDiff[] = []
+    for await (const line of $`git --git-dir=${git} diff --name-only ${from} ${to} -- .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .lines()) {
+      if (!line) continue
+      const left = await $`git --git-dir=${git} show ${from}:${line}`
+        .quiet()
+        .nothrow()
+        .text()
+      const right = await $`git --git-dir=${git} show ${to}:${line}`
+        .quiet()
+        .nothrow()
+        .text()
+      result.push({
+        file: line,
+        left,
+        right,
+      })
+    }
+    return result
   }
 
   function gitdir() {
