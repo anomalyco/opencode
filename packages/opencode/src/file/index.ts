@@ -41,62 +41,71 @@ export namespace File {
   export type Node = z.infer<typeof Node>
 
   export const Content = z
-    .discriminatedUnion("type", [
-      z.object({
-        type: z.literal("text"),
-        content: z.string(),
-        diff: z.string().optional(),
-        patch: z
-          .object({
-            oldFileName: z.string(),
-            newFileName: z.string(),
-            oldHeader: z.string().optional(),
-            newHeader: z.string().optional(),
-            hunks: z.array(
-              z.object({
-                oldStart: z.number(),
-                oldLines: z.number(),
-                newStart: z.number(),
-                newLines: z.number(),
-                lines: z.array(z.string()),
-              }),
-            ),
-            index: z.string().optional(),
-          })
-          .optional(),
-      }),
-      z.object({
-        type: z.literal("binary"),
-        content: z.string(),
-        mimeType: z.string(),
-        encoding: z.literal("base64"),
-      }),
-    ])
+    .object({
+      type: z.literal("text"),
+      content: z.string(),
+      diff: z.string().optional(),
+      patch: z
+        .object({
+          oldFileName: z.string(),
+          newFileName: z.string(),
+          oldHeader: z.string().optional(),
+          newHeader: z.string().optional(),
+          hunks: z.array(
+            z.object({
+              oldStart: z.number(),
+              oldLines: z.number(),
+              newStart: z.number(),
+              newLines: z.number(),
+              lines: z.array(z.string()),
+            }),
+          ),
+          index: z.string().optional(),
+        })
+        .optional(),
+      encoding: z.literal("base64").optional(),
+      mimeType: z.string().optional(),
+    })
     .meta({
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
 
-  async function isBinaryFile(file: BunFile): Promise<boolean> {
-    const type = file.type
-    if (type) {
-      if (type.startsWith("text/")) return false
-      if (type.includes("charset=")) return false
-      if (type === "application/json") return false
-      if (type === "application/javascript") return false
-      if (type === "application/xml") return false
-      if (type !== "application/octet-stream") return true
-    }
+  async function shouldEncode(file: BunFile): Promise<boolean> {
+    const type = file.type?.toLowerCase()
+    if (!type) return false
 
-    const stat = await file.stat()
-    if (stat.size === 0) return false
+    if (type.startsWith("text/")) return false
+    if (type.includes("charset=")) return false
 
-    const size = Math.min(512, stat.size)
-    const view = new Uint8Array(await file.slice(0, size).arrayBuffer())
+    const parts = type.split("/", 2)
+    const top = parts[0]
+    const rest = parts[1] ?? ""
+    const sub = rest.split(";", 1)[0]
 
-    for (const byte of view) {
-      if (byte === 0) return true
-    }
+    const tops = ["image", "audio", "video", "font", "model", "multipart"]
+    if (tops.includes(top)) return true
+
+    if (type === "application/octet-stream") return true
+
+    const bins = [
+      "zip",
+      "gzip",
+      "bzip",
+      "compressed",
+      "binary",
+      "stream",
+      "pdf",
+      "msword",
+      "powerpoint",
+      "excel",
+      "ogg",
+      "exe",
+      "dmg",
+      "iso",
+      "rar",
+    ]
+    if (bins.some((mark) => sub.includes(mark))) return true
 
     return false
   }
@@ -232,13 +241,13 @@ export namespace File {
       return { type: "text", content: "" }
     }
 
-    const isBinary = await isBinaryFile(bunFile)
+    const encode = await shouldEncode(bunFile)
 
-    if (isBinary) {
+    if (encode) {
       const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
       const content = Buffer.from(buffer).toString("base64")
       const mimeType = bunFile.type || "application/octet-stream"
-      return { type: "binary", content, mimeType, encoding: "base64" }
+      return { type: "text", content, mimeType, encoding: "base64" }
     }
 
     const content = await bunFile
