@@ -1,4 +1,4 @@
-import type { McpServer } from "@zed-industries/agent-client-protocol"
+import type { McpServer } from "@agentclientprotocol/sdk"
 import { Identifier } from "../id/id"
 import { Session } from "../session"
 import type { ACPSessionState } from "./types"

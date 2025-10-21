@@ -1,4 +1,4 @@
-import { AgentSideConnection, ndJsonStream } from "@zed-industries/agent-client-protocol"
+import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { OpenCodeAgent } from "./agent"

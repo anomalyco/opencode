@@ -12,7 +12,7 @@ import type {
   NewSessionResponse,
   PromptRequest,
   PromptResponse,
-} from "@zed-industries/agent-client-protocol"
+} from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"

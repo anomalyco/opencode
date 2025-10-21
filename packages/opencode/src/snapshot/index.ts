@@ -131,8 +131,10 @@ export namespace Snapshot {
   export const FileDiff = z
     .object({
       file: z.string(),
-      left: z.string(),
-      right: z.string(),
+      before: z.string(),
+      after: z.string(),
+      additions: z.number(),
+      deletions: z.number(),
     })
     .meta({
       ref: "FileDiff",
@@ -141,18 +143,21 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git --git-dir=${git} diff --name-only ${from} ${to} -- .`
+    for await (const line of $`git --git-dir=${git} diff --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
       .lines()) {
       if (!line) continue
-      const left = await $`git --git-dir=${git} show ${from}:${line}`.quiet().nothrow().text()
-      const right = await $`git --git-dir=${git} show ${to}:${line}`.quiet().nothrow().text()
+      const [additions, deletions, file] = line.split("\t")
+      const before = await $`git --git-dir=${git} show ${from}:${file}`.quiet().nothrow().text()
+      const after = await $`git --git-dir=${git} show ${to}:${file}`.quiet().nothrow().text()
       result.push({
-        file: line,
-        left,
-        right,
+        file,
+        before,
+        after,
+        additions: parseInt(additions),
+        deletions: parseInt(deletions),
       })
     }
     return result

@@ -40,6 +40,7 @@ for (const [os, arch] of targets) {
   await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
 
   await Bun.build({
+    sourcemap: true,
     compile: {
       target: `bun-${os}-${arch}` as any,
       outfile: `dist/${name}/bin/opencode`,
