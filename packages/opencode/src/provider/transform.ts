@@ -106,11 +106,6 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
-    if (!npm) {
-      return {
-        [providerID]: options,
-      }
-    }
     switch (npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
