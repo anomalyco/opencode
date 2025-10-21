@@ -6,6 +6,16 @@
   "packageManager": "bun@1.3.0",
   "scripts": {
     "dev": "bun run packages/opencode/src/index.ts",
+    "dev:all": "bun run concurrently \"bun run packages/opencode/src/index.ts\" \"bun run packages/console/app/dev\" \"bun run packages/web/dev\"",
+    "dev:setup": "bun install && cd packages/tui && go mod download && cd ../..",
+    "test": "bun turbo test",
+    "test:watch": "bun turbo test --watch",
+    "test:coverage": "bun turbo test --coverage",
+    "lint": "bun run prettier --check . && eslint packages/*/src --ext .ts,.tsx",
+    "lint:fix": "bun run prettier --write . && eslint packages/*/src --ext .ts,.tsx --fix",
+    "build": "bun turbo build",
+    "build:all": "bun turbo build && bun run packages/console/app/build && bun run packages/web/build",
+    "clean": "bun run rimraf packages/*/dist packages/*/.output packages/*/node_modules/.cache && bun run turbo clean",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky"
   },
@@ -46,8 +56,11 @@
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
+    "concurrently": "9.1.0",
+    "eslint": "9.18.0",
     "husky": "9.1.7",
     "prettier": "3.6.2",
+    "rimraf": "6.0.1",
     "sst": "3.17.19",
     "turbo": "2.5.6"
   },
