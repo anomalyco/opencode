@@ -17,7 +17,7 @@ import type {
   WaitForTerminalExitResponse,
   WriteTextFileRequest,
   WriteTextFileResponse,
-} from "@zed-industries/agent-client-protocol"
+} from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 
 export class ACPClient implements Client {

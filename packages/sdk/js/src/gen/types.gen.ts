@@ -970,6 +970,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
+  type: "text"
   content: string
   diff?: string
   patch?: {
@@ -986,6 +987,8 @@ export type FileContent = {
     }>
     index?: string
   }
+  encoding?: "base64"
+  mimeType?: string
 }
 
 export type File = {
