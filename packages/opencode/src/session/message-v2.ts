@@ -130,6 +130,7 @@ export namespace MessageV2 {
 
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
+    snapshot: z.string().optional(),
   }).meta({
     ref: "StepStartPart",
   })
@@ -137,6 +138,7 @@ export namespace MessageV2 {
 
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
+    snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
       input: z.number(),

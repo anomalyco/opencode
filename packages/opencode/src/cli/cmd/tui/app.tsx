@@ -2,7 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -11,11 +11,11 @@ import { SyncProvider } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
+import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { KeybindProvider, useKeybind } from "@tui/context/keybind"
+import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -27,27 +27,29 @@ export async function tui(input: { url: string; onExit?: () => Promise<void> }) 
   await render(
     () => {
       return (
-        <ExitProvider onExit={input.onExit}>
-          <RouteProvider>
-            <SDKProvider url={input.url}>
-              <SyncProvider>
-                <ThemeProvider>
-                  <LocalProvider>
-                    <KeybindProvider>
-                      <DialogProvider>
-                        <CommandProvider>
-                          <PromptHistoryProvider>
-                            <App />
-                          </PromptHistoryProvider>
-                        </CommandProvider>
-                      </DialogProvider>
-                    </KeybindProvider>
-                  </LocalProvider>
-                </ThemeProvider>
-              </SyncProvider>
-            </SDKProvider>
-          </RouteProvider>
-        </ExitProvider>
+        <ErrorBoundary fallback={<text>Something went wrong</text>}>
+          <ExitProvider onExit={input.onExit}>
+            <RouteProvider>
+              <SDKProvider url={input.url}>
+                <SyncProvider>
+                  <ThemeProvider>
+                    <LocalProvider>
+                      <KeybindProvider>
+                        <DialogProvider>
+                          <CommandProvider>
+                            <PromptHistoryProvider>
+                              <App />
+                            </PromptHistoryProvider>
+                          </CommandProvider>
+                        </DialogProvider>
+                      </KeybindProvider>
+                    </LocalProvider>
+                  </ThemeProvider>
+                </SyncProvider>
+              </SDKProvider>
+            </RouteProvider>
+          </ExitProvider>
+        </ErrorBoundary>
       )
     },
     {

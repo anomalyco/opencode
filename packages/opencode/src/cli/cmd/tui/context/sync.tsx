@@ -211,7 +211,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     // non-blocking
     Promise.all([
-      sdk.client.session.list().then((x) => setStore("session", x.data ?? [])),
+      sdk.client.session.list().then((x) =>
+        setStore(
+          "session",
+          (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+        ),
+      ),
       sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
       sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
       sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
@@ -248,7 +253,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              draft.session[match.index] = session.data!
+              if (match.found) draft.session[match.index] = session.data!
+              if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {

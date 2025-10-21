@@ -206,7 +206,6 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo(() => {
-    console.log(agents())
     const mixed: AutocompleteOption[] = (store.visible === "@" ? [...agents(), ...files()] : [...commands()]).filter(
       (x) => x.disabled !== true,
     )
@@ -225,6 +224,7 @@ export function Autocomplete(props: {
 
   function move(direction: -1 | 1) {
     if (!store.visible) return
+    if (!options().length) return
     let next = store.selected + direction
     if (next < 0) next = options().length - 1
     if (next >= options().length) next = 0

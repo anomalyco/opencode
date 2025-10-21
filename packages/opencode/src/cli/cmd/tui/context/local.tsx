@@ -100,16 +100,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const fallback = createMemo(() => {
+        function isValid(providerID: string, modelID: string) {
+          const provider = sync.data.provider.find((x) => x.id === providerID)
+          if (!provider) return false
+          const model = provider.models[modelID]
+          if (!model) return false
+          return true
+        }
+
         if (sync.data.config.model) {
           const [providerID, modelID] = sync.data.config.model.split("/")
-          if (sync.data.provider.find((x) => x.id === providerID)?.models[modelID]) {
+          if (isValid(providerID, modelID)) {
             return {
               providerID,
               modelID,
             }
           }
         }
-        if (store.recent.length) return store.recent[0]
+
+        for (const item of store.recent) {
+          if (isValid(item.providerID, item.modelID)) {
+            return item
+          }
+        }
         const provider = sync.data.provider[0]
         const model = Object.values(provider.models)[0]
         return {

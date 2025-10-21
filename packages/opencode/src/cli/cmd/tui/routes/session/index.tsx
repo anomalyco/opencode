@@ -66,6 +66,11 @@ export function Session() {
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
+
+  const pending = createMemo(() => {
+    return messages().findLast((x) => x.role === "assistant" && !x.time?.completed)?.id
+  })
+
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">("auto")
 
@@ -467,6 +472,7 @@ export function Session() {
                         }
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
+                        pending={pending()}
                       />
                     </Match>
                     <Match when={message.role === "assistant"}>
@@ -510,12 +516,20 @@ const MIME_BADGE: Record<string, string> = {
   "application/x-directory": "dir",
 }
 
-function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: () => void; index: number }) {
+function UserMessage(props: {
+  message: UserMessage
+  parts: Part[]
+  onMouseUp: () => void
+  index: number
+  pending?: string
+}) {
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
+  const queued = createMemo(() => props.pending && props.message.id > props.pending)
+  const color = createMemo(() => (queued() ? theme().accent : theme().secondary))
 
   return (
     <Show when={text()}>
@@ -535,7 +549,7 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
         marginTop={props.index === 0 ? 0 : 1}
         backgroundColor={hover() ? theme().backgroundElement : theme().backgroundPanel}
         customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme().secondary}
+        borderColor={color()}
         flexShrink={0}
       >
         <text>{text()?.text}</text>
@@ -560,7 +574,12 @@ function UserMessage(props: { message: UserMessage; parts: Part[]; onMouseUp: ()
         </Show>
         <text>
           {sync.data.config.username ?? "You"}{" "}
-          <span style={{ fg: theme().textMuted }}>({Locale.time(props.message.time.created)})</span>
+          <Show
+            when={queued()}
+            fallback={<span style={{ fg: theme().textMuted }}>({Locale.time(props.message.time.created)})</span>}
+          >
+            <span style={{ bg: theme().accent, fg: theme().backgroundPanel, bold: true }}> QUEUED </span>
+          </Show>
         </text>
       </box>
     </Show>

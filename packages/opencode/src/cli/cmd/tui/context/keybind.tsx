@@ -77,7 +77,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         return {
           ctrl: evt.ctrl,
           name: evt.name,
-          shift: false,
+          shift: evt.shift,
           leader: store.leader,
           option: evt.option,
         }

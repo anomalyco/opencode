@@ -189,10 +189,6 @@ export function Prompt(props: PromptProps) {
           messageID,
         },
       })
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
     } else {
       sdk.client.session.prompt({
         path: {
@@ -324,9 +320,11 @@ export function Prompt(props: PromptProps) {
                 if (!autocomplete.visible) {
                   if (e.name === "up" || e.name === "down") {
                     const direction = e.name === "up" ? -1 : 1
-                    const item = history.move(direction)
-                    setStore("prompt", item)
-                    input.cursorPosition = item.input.length
+                    const item = history.move(direction, input.value)
+                    if (item) {
+                      setStore("prompt", item)
+                      input.cursorPosition = item.input.length
+                    }
                     return
                   }
                   if (e.name === "escape" && props.sessionID) {

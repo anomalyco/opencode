@@ -2,7 +2,6 @@ import z from "zod/v4"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
-import { lazy } from "../util/lazy"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 
@@ -13,7 +12,8 @@ const SIGKILL_TIMEOUT_MS = 200
 
 export const log = Log.create({ service: "bash-tool" })
 
-export const parser = lazy(async () => {
+/*
+const parser = lazy(async () => {
   try {
     const { default: Parser } = await import("tree-sitter")
     const Bash = await import("tree-sitter-bash")
@@ -39,6 +39,7 @@ export const parser = lazy(async () => {
     return p
   }
 })
+*/
 
 export const BashTool = Tool.define("bash", {
   description: DESCRIPTION,
