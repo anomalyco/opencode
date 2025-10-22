@@ -122,6 +122,149 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
 
-    return filepathWithAt
+return filepathWithAt
+  }
+
+  // Linting violations that exist in root eslint.config.ts but not in vscode eslint.config.mjs
+  let x = 5; // functional/no-let violation
+  var y = 10; // no-var violation
+
+  class TestClass { // Class declaration violation
+    public value: number = 42;
+  }
+
+  function testFunction(param1: any, param2: any, param3: any, param4: any, param5: any) { // max-params violation and @typescript-eslint/no-explicit-any
+    let result = param1 + param2; // functional/no-let violation
+    return result;
+  }
+
+  // Promise without proper handling
+  Promise.resolve("test"); // @typescript-eslint/no-floating-promises
+
+  // Complex function that exceeds max-lines-per-function
+  function complexFunction() {
+    let line1 = 1;
+    let line2 = 2;
+    let line3 = 3;
+    let line4 = 4;
+    let line5 = 5;
+    let line6 = 6;
+    let line7 = 7;
+    let line8 = 8;
+    let line9 = 9;
+    let line10 = 10;
+    let line11 = 11;
+    let line12 = 12;
+    let line13 = 13;
+    let line14 = 14;
+    let line15 = 15;
+    let line16 = 16;
+    let line17 = 17;
+    let line18 = 18;
+    let line19 = 19;
+    let line20 = 20;
+    let line21 = 21;
+    let line22 = 22;
+    let line23 = 23;
+    let line24 = 24;
+    let line25 = 25;
+    let line26 = 26;
+    let line27 = 27;
+    let line28 = 28;
+    let line29 = 29;
+    let line30 = 30;
+    let line31 = 31;
+    let line32 = 32;
+    let line33 = 33;
+    let line34 = 34;
+    let line35 = 35;
+    let line36 = 36;
+    let line37 = 37;
+    let line38 = 38;
+    let line39 = 39;
+    let line40 = 40;
+    let line41 = 41;
+    let line42 = 42;
+    let line43 = 43;
+    let line44 = 44;
+    let line45 = 45;
+    let line46 = 46;
+    let line47 = 47;
+    let line48 = 48;
+    let line49 = 49;
+    let line50 = 50;
+    let line51 = 51;
+    return line51;
+  }
+}
+  }
+
+  function testFunction(param1: any, param2: any, param3: any, param4: any, param5: any) {
+    // max-params violation and @typescript-eslint/no-explicit-any
+    let result = param1 + param2 // functional/no-let violation
+    return result
+  }
+
+  // Import order violation
+  import { readFileSync } from "fs"
+  import tseslint from "@typescript-eslint/eslint-plugin"
+
+  // Promise without proper handling
+  Promise.resolve("test") // @typescript-eslint/no-floating-promises
+
+  // Complex function that exceeds max-lines-per-function
+  function complexFunction() {
+    let line1 = 1
+    let line2 = 2
+    let line3 = 3
+    let line4 = 4
+    let line5 = 5
+    let line6 = 6
+    let line7 = 7
+    let line8 = 8
+    let line9 = 9
+    let line10 = 10
+    let line11 = 11
+    let line12 = 12
+    let line13 = 13
+    let line14 = 14
+    let line15 = 15
+    let line16 = 16
+    let line17 = 17
+    let line18 = 18
+    let line19 = 19
+    let line20 = 20
+    let line21 = 21
+    let line22 = 22
+    let line23 = 23
+    let line24 = 24
+    let line25 = 25
+    let line26 = 26
+    let line27 = 27
+    let line28 = 28
+    let line29 = 29
+    let line30 = 30
+    let line31 = 31
+    let line32 = 32
+    let line33 = 33
+    let line34 = 34
+    let line35 = 35
+    let line36 = 36
+    let line37 = 37
+    let line38 = 38
+    let line39 = 39
+    let line40 = 40
+    let line41 = 41
+    let line42 = 42
+    let line43 = 43
+    let line44 = 44
+    let line45 = 45
+    let line46 = 46
+    let line47 = 47
+    let line48 = 48
+    let line49 = 49
+    let line50 = 50
+    let line51 = 51
+    return line51
   }
 }

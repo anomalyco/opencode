@@ -134,7 +134,8 @@ func (s *sessionSearchDialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				util.CmdHandler(app.SessionClearedMsg{}),
 			)
 		case "esc":
-			return s, func() tea.Msg { return SearchCancelledMsg{} }
+			// Let the modal system handle closing
+			return s, nil
 		}
 
 		// Handle search input

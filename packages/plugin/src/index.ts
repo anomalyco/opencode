@@ -15,6 +15,8 @@ import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 
 export * from "./tool"
+export { DirectoryAwarenessPlugin } from "./directory-awareness"
+export { FileLockPlugin } from "./file-lock"
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>

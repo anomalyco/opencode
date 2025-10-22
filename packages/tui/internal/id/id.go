@@ -52,7 +52,7 @@ func generateID(prefix Prefix, descending bool, given ...string) string {
 		}
 		return given[0]
 	}
-	
+
 	return generateNewID(prefix, descending)
 }
 
@@ -61,36 +61,36 @@ func randomBase62(length int) string {
 	result := make([]byte, length)
 	bytes := make([]byte, length)
 	rand.Read(bytes)
-	
+
 	for i := 0; i < length; i++ {
 		result[i] = chars[bytes[i]%62]
 	}
-	
+
 	return string(result)
 }
 
 func generateNewID(prefix Prefix, descending bool) string {
 	mu.Lock()
 	defer mu.Unlock()
-	
+
 	currentTimestamp := time.Now().UnixMilli()
-	
+
 	if currentTimestamp != lastTimestamp {
 		lastTimestamp = currentTimestamp
 		counter = 0
 	}
 	counter++
-	
+
 	now := uint64(currentTimestamp)*0x1000 + uint64(counter)
-	
+
 	if descending {
 		now = ^now
 	}
-	
+
 	timeBytes := make([]byte, 6)
 	for i := 0; i < 6; i++ {
 		timeBytes[i] = byte((now >> (40 - 8*i)) & 0xff)
 	}
-	
+
 	return string(prefix) + "_" + hex.EncodeToString(timeBytes) + randomBase62(length-12)
 }

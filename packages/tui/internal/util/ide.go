@@ -28,4 +28,3 @@ func Ide() string {
 
 	return "unknown"
 }
-
