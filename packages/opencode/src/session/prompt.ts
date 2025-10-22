@@ -206,14 +206,14 @@ export namespace SessionPrompt {
         { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
         { optionId: "reject_once", kind: "reject_once", name: "Reject" },
       ]
-      return Bus.subscribe(Permission.Event.Updated, (event) => {
+      return Bus.subscribe(Permission.Event.Updated, async (event) => {
         const info = event.properties
         if (info.sessionID !== input.sessionID) return
         if (handled.has(info.id)) return
         handled.add(info.id)
         const toolCallId = info.callID ?? info.id
         const metadata = info.metadata ?? {}
-        return acp.connection
+        const res = await acp.connection
           .requestPermission({
             sessionId: acp.sessionId,
             toolCall: {
@@ -226,22 +226,6 @@ export namespace SessionPrompt {
             },
             options,
           })
-          .then((response: RequestPermissionResponse) => {
-            if (response.outcome.outcome !== "selected") {
-              Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-              return
-            }
-            const optionId = response.outcome.optionId
-            if (optionId === "allow_once") {
-              Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "once" })
-              return
-            }
-            if (optionId === "allow_always") {
-              Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "always" })
-              return
-            }
-            Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-          })
           .catch((error: Error) => {
             log.error("failed to request permission from ACP", {
               error,
@@ -249,12 +233,27 @@ export namespace SessionPrompt {
               sessionID: info.sessionID,
             })
             Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+            return
           })
+        if (!res) return
+        if (res.outcome.outcome !== "selected") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+          return
+        }
+        const optionId = res.outcome.optionId
+        if (optionId === "allow_once") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "once" })
+          return
+        }
+        if (optionId === "allow_always") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "always" })
+          return
+        }
+        Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
       })
     })()
     await using _permSub = defer(() => {
-      if (!permUnsub) return
-      permUnsub()
+      permUnsub?.()
     })
 
     const params = await Plugin.trigger(
