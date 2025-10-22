@@ -234,6 +234,11 @@ export type AgentConfig = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    mcp?:
+      | ("ask" | "allow" | "deny")
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
   }
   [key: string]:
     | unknown
@@ -252,6 +257,11 @@ export type AgentConfig = {
               [key: string]: "ask" | "allow" | "deny"
             }
         webfetch?: "ask" | "allow" | "deny"
+        mcp?:
+          | ("ask" | "allow" | "deny")
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
       }
     | undefined
 }
@@ -484,6 +494,11 @@ export type Config = {
           [key: string]: "ask" | "allow" | "deny"
         }
     webfetch?: "ask" | "allow" | "deny"
+    mcp?:
+      | ("ask" | "allow" | "deny")
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
   }
   tools?: {
     [key: string]: boolean
@@ -1013,6 +1028,9 @@ export type Agent = {
       [key: string]: "ask" | "allow" | "deny"
     }
     webfetch?: "ask" | "allow" | "deny"
+    mcp?: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
   }
   model?: {
     modelID: string
