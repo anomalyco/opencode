@@ -41,6 +41,7 @@ export namespace SessionCompaction {
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
+  const MAX_RETRIES = 10
 
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
@@ -254,10 +255,10 @@ export namespace SessionCompaction {
     let stream = doStream()
     let result = await process(stream, {
       count: 0,
-      max: SessionRetry.MAX_RETRIES,
+      max: MAX_RETRIES,
     })
     if (result.shouldRetry) {
-      for (let retry = 1; retry < SessionRetry.MAX_RETRIES; retry++) {
+      for (let retry = 1; retry < MAX_RETRIES; retry++) {
         const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
 
         if (lastRetryPart) {
@@ -294,7 +295,7 @@ export namespace SessionCompaction {
         stream = doStream()
         result = await process(stream, {
           count: retry,
-          max: SessionRetry.MAX_RETRIES,
+          max: MAX_RETRIES,
         })
         if (!result.shouldRetry) {
           break

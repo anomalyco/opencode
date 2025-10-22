@@ -54,6 +54,7 @@ import { MessageSummary } from "./summary"
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
+  const MAX_RETRIES = 10
 
   export const Event = {
     Idle: Bus.event(
@@ -331,10 +332,10 @@ export namespace SessionPrompt {
       let stream = doStream()
       let result = await processor.process(stream, {
         count: 0,
-        max: SessionRetry.MAX_RETRIES,
+        max: MAX_RETRIES,
       })
       if (result.shouldRetry) {
-        for (let retry = 1; retry < SessionRetry.MAX_RETRIES; retry++) {
+        for (let retry = 1; retry < MAX_RETRIES; retry++) {
           const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
 
           if (lastRetryPart) {
@@ -371,7 +372,7 @@ export namespace SessionPrompt {
           stream = doStream()
           result = await processor.process(stream, {
             count: retry,
-            max: SessionRetry.MAX_RETRIES,
+            max: MAX_RETRIES,
           })
           if (!result.shouldRetry) {
             break

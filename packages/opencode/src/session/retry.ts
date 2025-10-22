@@ -1,7 +1,6 @@
 import { MessageV2 } from "./message-v2"
 
 export namespace SessionRetry {
-  export const MAX_RETRIES = 10
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
 
