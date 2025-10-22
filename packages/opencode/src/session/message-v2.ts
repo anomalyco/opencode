@@ -2,7 +2,7 @@ import z from "zod/v4"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
-import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
@@ -18,8 +18,8 @@ export namespace MessageV2 {
       message: z.string(),
     }),
   )
-  export const APICallError = NamedError.create(
-    "APICallError",
+  export const APIError = NamedError.create(
+    "APIError",
     z.object({
       message: z.string(),
       statusCode: z.number().optional(),
@@ -28,7 +28,7 @@ export namespace MessageV2 {
       responseBody: z.string().optional(),
     }),
   )
-  export type APICallError = z.infer<typeof APICallError.Schema>
+  export type APIError = z.infer<typeof APIError.Schema>
 
   const PartBase = z.object({
     id: z.string(),
@@ -144,7 +144,7 @@ export namespace MessageV2 {
   export const RetryPart = PartBase.extend({
     type: z.literal("retry"),
     attempt: z.number(),
-    error: APICallError.Schema,
+    error: APIError.Schema,
     time: z.object({
       created: z.number(),
     }),
@@ -307,7 +307,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
-        APICallError.Schema,
+        APIError.Schema,
       ])
       .optional(),
     system: z.string().array(),
@@ -634,5 +634,42 @@ export namespace MessageV2 {
     const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
     if (i === -1) return msgs.slice()
     return msgs.slice(i)
+  }
+
+  export function fromError(e: unknown, ctx: { providerID: string }) {
+    switch (true) {
+      case e instanceof DOMException && e.name === "AbortError":
+        return new MessageV2.AbortedError(
+          { message: e.message },
+          {
+            cause: e,
+          },
+        ).toObject()
+      case MessageV2.OutputLengthError.isInstance(e):
+        return e
+      case LoadAPIKeyError.isInstance(e):
+        return new MessageV2.AuthError(
+          {
+            providerID: ctx.providerID,
+            message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      case APICallError.isInstance(e):
+        return new MessageV2.APIError(
+          {
+            message: e.message,
+            statusCode: e.statusCode,
+            isRetryable: e.isRetryable,
+            responseHeaders: e.responseHeaders,
+            responseBody: e.responseBody,
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error:
+        return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+      default:
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+    }
   }
 }

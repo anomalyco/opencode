@@ -17,10 +17,8 @@ import {
   tool,
   wrapLanguageModel,
   type StreamTextResult,
-  LoadAPIKeyError,
   stepCountIs,
   jsonSchema,
-  APICallError,
 } from "ai"
 import { SessionCompaction } from "./compaction"
 import { SessionLock } from "./lock"
@@ -29,6 +27,7 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
+import { SessionRetry } from "./retry"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -45,7 +44,6 @@ import { TaskTool } from "../tool/task"
 import { FileTime } from "../file/time"
 import { Permission } from "../permission"
 import { Snapshot } from "../snapshot"
-import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
@@ -56,59 +54,6 @@ import { MessageSummary } from "./summary"
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
-  const MAX_RETRIES = 10
-  const RETRY_INITIAL_DELAY = 2000
-  const RETRY_BACKOFF_FACTOR = 2
-
-  async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(resolve, ms)
-      signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timeout)
-          reject(new DOMException("Aborted", "AbortError"))
-        },
-        { once: true },
-      )
-    })
-  }
-
-  function getRetryDelayInMs(input: { error: MessageV2.APICallError; attempt: number }): number {
-    const exponentialDelay = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, input.attempt - 1)
-
-    const headers = input.error.data.responseHeaders
-    if (!headers) return exponentialDelay
-
-    let ms: number | undefined
-
-    // retry-after-ms is more precise and used by OpenAI
-    const retryAfterMs = headers["retry-after-ms"]
-    if (retryAfterMs) {
-      const timeoutMs = parseFloat(retryAfterMs)
-      if (!Number.isNaN(timeoutMs)) {
-        ms = timeoutMs
-      }
-    }
-
-    // Retry-After header: can be seconds or HTTP date
-    const retryAfter = headers["retry-after"]
-    if (retryAfter && ms === undefined) {
-      const timeoutSeconds = parseFloat(retryAfter)
-      if (!Number.isNaN(timeoutSeconds)) {
-        ms = timeoutSeconds * 1000
-      } else {
-        ms = Date.parse(retryAfter) - Date.now()
-      }
-    }
-
-    // Use server delay if reasonable (0-60s OR less than exponential)
-    if (ms != null && !Number.isNaN(ms) && ms >= 0 && (ms < 60 * 1000 || ms < exponentialDelay)) {
-      return ms
-    }
-
-    return exponentialDelay
-  }
 
   export const Event = {
     Idle: Bus.event(
@@ -386,24 +331,21 @@ export namespace SessionPrompt {
       let stream = doStream()
       let result = await processor.process(stream, {
         count: 0,
-        max: MAX_RETRIES,
+        max: SessionRetry.MAX_RETRIES,
       })
       if (result.shouldRetry) {
-        for (let retry = 1; retry < MAX_RETRIES; retry++) {
+        for (let retry = 1; retry < SessionRetry.MAX_RETRIES; retry++) {
           const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
 
           if (lastRetryPart) {
-            const delayMs = getRetryDelayInMs({
-              error: lastRetryPart.error,
-              attempt: retry,
-            })
+            const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
 
             log.info("retrying with backoff", {
               attempt: retry,
               delayMs,
             })
 
-            const stop = await sleep(delayMs, abort.signal)
+            const stop = await SessionRetry.sleep(delayMs, abort.signal)
               .then(() => false)
               .catch((error) => {
                 if (error instanceof DOMException && error.name === "AbortError") {
@@ -429,7 +371,7 @@ export namespace SessionPrompt {
           stream = doStream()
           result = await processor.process(stream, {
             count: retry,
-            max: MAX_RETRIES,
+            max: SessionRetry.MAX_RETRIES,
           })
           if (!result.shouldRetry) {
             break
@@ -1424,49 +1366,8 @@ export namespace SessionPrompt {
           log.error("process", {
             error: e,
           })
-          let isRetryable = false
-          let error: MessageV2.Assistant["error"] | undefined
-          switch (true) {
-            case e instanceof DOMException && e.name === "AbortError":
-              error = new MessageV2.AbortedError(
-                { message: e.message },
-                {
-                  cause: e,
-                },
-              ).toObject()
-              break
-            case MessageV2.OutputLengthError.isInstance(e):
-              error = e
-              break
-            case LoadAPIKeyError.isInstance(e):
-              error = new MessageV2.AuthError(
-                {
-                  providerID: input.providerID,
-                  message: e.message,
-                },
-                { cause: e },
-              ).toObject()
-              break
-            case APICallError.isInstance(e):
-              error = new MessageV2.APICallError(
-                {
-                  message: e.message,
-                  statusCode: e.statusCode,
-                  isRetryable: e.isRetryable,
-                  responseHeaders: e.responseHeaders,
-                  responseBody: e.responseBody,
-                },
-                { cause: e },
-              ).toObject()
-              isRetryable = e.isRetryable
-              break
-            case e instanceof Error:
-              error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
-              break
-            default:
-              error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
-          }
-          if (retries.count < retries.max && MessageV2.APICallError.isInstance(error) && error.data.isRetryable) {
+          const error = MessageV2.fromError(e, { providerID: input.providerID })
+          if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
             shouldRetry = true
             await Session.updatePart({
               id: Identifier.ascending("part"),
