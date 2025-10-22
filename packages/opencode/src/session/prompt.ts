@@ -518,6 +518,26 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
+        // Check MCP permissions
+        const mcpPermissions = input.agent.permission.mcp
+        if (mcpPermissions) {
+          const permission = mcpPermissions[key] ?? mcpPermissions["*"] ?? "ask"
+          if (permission === "ask") {
+            await Permission.ask({
+              type: "mcp",
+              pattern: key,
+              sessionID: input.sessionID,
+              messageID: input.processor.message.id,
+              callID: opts.toolCallId,
+              title: `Use MCP tool "${key}"`,
+              metadata: {
+                tool: key,
+                args,
+              },
+            })
+          }
+        }
+
         await Plugin.trigger(
           "tool.execute.before",
           {

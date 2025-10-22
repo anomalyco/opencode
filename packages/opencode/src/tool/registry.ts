@@ -126,6 +126,27 @@ export namespace ToolRegistry {
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
     }
+    
+    // Check MCP tool permissions
+    if (agent.permission.mcp) {
+      const mcpPermissions = agent.permission.mcp
+      if (mcpPermissions["*"] === "deny" && Object.keys(mcpPermissions).length === 1) {
+        // If global MCP permission is deny and no specific overrides, disable all MCP tools
+        const mcpTools = await import("../mcp").then(m => m.MCP.tools()).catch(() => ({}))
+        for (const toolName of Object.keys(mcpTools)) {
+          result[toolName] = false
+        }
+      } else {
+        // Check individual MCP tool permissions
+        const mcpTools = await import("../mcp").then(m => m.MCP.tools()).catch(() => ({}))
+        for (const toolName of Object.keys(mcpTools)) {
+          const permission = mcpPermissions[toolName] ?? mcpPermissions["*"] ?? "ask"
+          if (permission === "deny") {
+            result[toolName] = false
+          }
+        }
+      }
+    }
 
     return result
   }
