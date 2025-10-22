@@ -253,6 +253,39 @@ func SetClipboard(text string) tea.Cmd {
 	return tea.Sequence(cmds...)
 }
 
+func (a *App) updateModelForNewAgent() {
+	singleModelEnv := os.Getenv("OPENCODE_AGENTS_SWITCH_SINGLE_MODEL")
+	isSingleModel := singleModelEnv == "1" || singleModelEnv == "true"
+
+	if isSingleModel {
+		return
+	}
+	// Set up model for the new agent
+	modelID := a.Agent().Model.ModelID
+	providerID := a.Agent().Model.ProviderID
+	if modelID == "" {
+		if model, ok := a.State.AgentModel[a.Agent().Name]; ok {
+			modelID = model.ModelID
+			providerID = model.ProviderID
+		}
+	}
+
+	if modelID != "" {
+		for _, provider := range a.Providers {
+			if provider.ID == providerID {
+				a.Provider = &provider
+				for _, model := range provider.Models {
+					if model.ID == modelID {
+						a.Model = &model
+						break
+					}
+				}
+				break
+			}
+		}
+	}
+}
+
 func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 	if forward {
 		a.AgentIndex++
@@ -269,32 +302,7 @@ func (a *App) cycleMode(forward bool) (*App, tea.Cmd) {
 		return a.cycleMode(forward)
 	}
 
-	singleModelEnv := os.Getenv("OPENCODE_AGENTS_SWITCH_SINGLE_MODEL")
-	if singleModelEnv != "1" && singleModelEnv != "true" {
-		modelID := a.Agent().Model.ModelID
-		providerID := a.Agent().Model.ProviderID
-		if modelID == "" {
-			if model, ok := a.State.AgentModel[a.Agent().Name]; ok {
-				modelID = model.ModelID
-				providerID = model.ProviderID
-			}
-		}
-
-		if modelID != "" {
-			for _, provider := range a.Providers {
-				if provider.ID == providerID {
-					a.Provider = &provider
-					for _, model := range provider.Models {
-						if model.ID == modelID {
-							a.Model = &model
-							break
-						}
-					}
-					break
-				}
-			}
-		}
-	}
+	a.updateModelForNewAgent()
 
 	a.State.Agent = a.Agent().Name
 	a.State.UpdateAgentUsage(a.Agent().Name)
@@ -383,33 +391,7 @@ func (a *App) SwitchToAgent(agentName string) (*App, tea.Cmd) {
 		}
 	}
 
-	singleModelEnv := os.Getenv("OPENCODE_AGENTS_SWITCH_SINGLE_MODEL")
-	if singleModelEnv != "1" && singleModelEnv != "true" {
-		// Set up model for the new agent
-		modelID := a.Agent().Model.ModelID
-		providerID := a.Agent().Model.ProviderID
-		if modelID == "" {
-			if model, ok := a.State.AgentModel[a.Agent().Name]; ok {
-				modelID = model.ModelID
-				providerID = model.ProviderID
-			}
-		}
-
-		if modelID != "" {
-			for _, provider := range a.Providers {
-				if provider.ID == providerID {
-					a.Provider = &provider
-					for _, model := range provider.Models {
-						if model.ID == modelID {
-							a.Model = &model
-							break
-						}
-					}
-					break
-				}
-			}
-		}
-	}
+	a.updateModelForNewAgent()
 
 	a.State.Agent = a.Agent().Name
 	a.State.UpdateAgentUsage(agentName)
