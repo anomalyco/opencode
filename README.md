@@ -74,6 +74,16 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 
 The other confusingly named repo has no relation to this one. You can [read the story behind it here](https://x.com/thdxr/status/1933561254481666466).
 
+### Star History
+
+<a href="https://www.star-history.com/#sst/opencode&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=sst/opencode&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=sst/opencode&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=sst/opencode&type=Date" />
+ </picture>
+</a>
+
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
