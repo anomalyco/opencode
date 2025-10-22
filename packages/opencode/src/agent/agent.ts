@@ -16,11 +16,15 @@ export namespace Agent {
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
-      permission: z.object({
-        edit: Config.Permission,
-        bash: z.record(z.string(), Config.Permission),
-        webfetch: Config.Permission.optional(),
-      }).catchall(Config.Permission),
+      permission: z.record(z.string(), z.union([
+        Config.Permission,
+        z.record(z.string(), Config.Permission)
+      ])).refine((data) => {
+        // Ensure required fields exist and have correct types
+        return 'edit' in data && 
+               'bash' in data && 
+               (typeof data.bash === 'string' || typeof data.bash === 'object');
+      }),
       model: z
         .object({
           modelID: z.string(),

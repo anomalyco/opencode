@@ -121,7 +121,11 @@ export namespace ToolRegistry {
       result["patch"] = false
       result["write"] = false
     }
-    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
+    if (typeof agent.permission.bash === "object" && 
+        agent.permission.bash["*"] === "deny" && 
+        Object.keys(agent.permission.bash).length === 1) {
+      result["bash"] = false
+    } else if (agent.permission.bash === "deny") {
       result["bash"] = false
     }
     if (agent.permission.webfetch === "deny") {
