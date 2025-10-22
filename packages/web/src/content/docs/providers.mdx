@@ -422,6 +422,50 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ---
 
+### Google Vertex AI
+
+To use Google Vertex AI with OpenCode:
+
+1. Head over to the **Model Garden** in the Google Cloud Console and check the
+   models available in your region.
+
+   :::tip
+   You need to have a Google Cloud project with Vertex AI API enabled.
+   :::
+
+1. You'll need to set the following environment variables:
+   - `GOOGLE_VERTEX_PROJECT`: Your Google Cloud project ID
+   - `GOOGLE_VERTEX_REGION` (optional): The region for Vertex AI (defaults to us-east5)
+   - One of these authentication options:
+     - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
+     - Or authenticate using gcloud CLI with `gcloud auth application-default login`
+
+   Once you have these, set them while running opencode.
+
+   ```bash
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_VERTEX_PROJECT=your-project-id opencode
+   ```
+
+   Or add them to a `.env` file in the project root.
+
+   ```bash title=".env"
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   GOOGLE_VERTEX_PROJECT=your-project-id
+   GOOGLE_VERTEX_REGION=us-central1
+   ```
+
+   Or add them to your bash profile.
+
+   ```bash title="~/.bash_profile"
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_VERTEX_PROJECT=your-project-id
+   export GOOGLE_VERTEX_REGION=us-central1
+   ```
+
+1. Run the `/models` command to select the model you want.
+
+---
+
 ### LM Studio
 
 You can configure opencode to use local models through LM Studio.
