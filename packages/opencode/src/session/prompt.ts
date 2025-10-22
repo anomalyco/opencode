@@ -522,6 +522,13 @@ export namespace SessionPrompt {
         const mcpPermissions = input.agent.permission.mcp
         if (mcpPermissions) {
           const permission = mcpPermissions[key] ?? mcpPermissions["*"] ?? "ask"
+
+          if (permission === "deny") {
+            throw new Error(
+              `The user has specifically restricted access to this MCP tool, you are not allowed to execute it. Tool: ${key}`,
+            )
+          }
+
           if (permission === "ask") {
             await Permission.ask({
               type: "mcp",
