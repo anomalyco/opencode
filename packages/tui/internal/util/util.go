@@ -48,24 +48,24 @@ func Measure(tag string) func(...any) {
 	}
 }
 
-func GetEditor() (string, error) {
+func GetEditor() string {
 	if editor := os.Getenv("VISUAL"); editor != "" {
-		return editor, nil
+		return editor
 	}
 	if editor := os.Getenv("EDITOR"); editor != "" {
-		return editor, nil
+		return editor
 	}
 
-	commonEditors := []string{"code", "cursor", "nvim", "vim", "zed", "nano", "vi"}
+	commonEditors := []string{"vim", "nvim", "zed", "code", "cursor", "vi", "nano"}
 	if runtime.GOOS == "windows" {
-		commonEditors = []string{"code.cmd", "cursor.cmd", "notepad.exe", "nvim", "vim", "zed", "nano"}
+		commonEditors = []string{"vim", "nvim", "zed", "code.cmd", "cursor.cmd", "notepad.exe", "vi", "nano"}
 	}
 
 	for _, editor := range commonEditors {
 		if _, err := exec.LookPath(editor); err == nil {
-			return editor, nil
+			return editor
 		}
 	}
 
-	return "", nil
+	return ""
 }
