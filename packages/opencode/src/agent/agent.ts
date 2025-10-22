@@ -20,8 +20,7 @@ export namespace Agent {
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
-        mcp: z.record(z.string(), Config.Permission).optional(),
-      }),
+      }).catchall(Config.Permission),
       model: z
         .object({
           modelID: z.string(),
@@ -46,9 +45,7 @@ export namespace Agent {
         "*": "allow",
       },
       webfetch: "allow",
-      mcp: {
-        "*": "ask",
-      },
+      "*": "ask", // Default for all tools
     }
     const agentPermission = mergeAgentPermissions(defaultPermission, cfg.permission ?? {})
 
@@ -57,9 +54,7 @@ export namespace Agent {
         edit: "deny",
         bash: "ask",
         webfetch: "allow",
-        mcp: {
-          "*": "ask",
-        },
+        "*": "ask", // Default for all tools
       },
       cfg.permission ?? {},
     )
@@ -183,6 +178,7 @@ export namespace Agent {
 }
 
 function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+  // Handle bash permission normalization
   if (typeof basePermission.bash === "string") {
     basePermission.bash = {
       "*": basePermission.bash,
@@ -193,17 +189,10 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       "*": overridePermission.bash,
     }
   }
-  if (typeof basePermission.mcp === "string") {
-    basePermission.mcp = {
-      "*": basePermission.mcp,
-    }
-  }
-  if (typeof overridePermission.mcp === "string") {
-    overridePermission.mcp = {
-      "*": overridePermission.mcp,
-    }
-  }
+  
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
+  
+  // Handle bash merging
   let mergedBash
   if (merged.bash) {
     if (typeof merged.bash === "string") {
@@ -219,28 +208,15 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       )
     }
   }
-  
-  let mergedMcp
-  if (merged.mcp) {
-    if (typeof merged.mcp === "string") {
-      mergedMcp = {
-        "*": merged.mcp,
-      }
-    } else if (typeof merged.mcp === "object") {
-      mergedMcp = mergeDeep(
-        {
-          "*": "ask",
-        },
-        merged.mcp,
-      )
-    }
-  }
 
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
-    mcp: mergedMcp ?? { "*": "ask" },
+    // All other keys are tool permissions - they get merged automatically via mergeDeep
+    ...Object.fromEntries(
+      Object.entries(merged).filter(([key]) => !["edit", "webfetch", "bash"].includes(key))
+    ),
   }
 
   return result

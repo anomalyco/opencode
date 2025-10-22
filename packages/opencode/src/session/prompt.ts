@@ -518,31 +518,35 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
       item.execute = async (args, opts) => {
-        // Check MCP permissions
-        const mcpPermissions = input.agent.permission.mcp
-        if (mcpPermissions) {
-          const permission = mcpPermissions[key] ?? mcpPermissions["*"] ?? "ask"
+        // Check tool permissions using wildcard matching directly on permission object
+        // Exclude known non-tool fields
+        const toolPermissions = Object.fromEntries(
+          Object.entries(input.agent.permission).filter(
+            ([k]) => !["edit", "bash", "webfetch"].includes(k)
+          )
+        )
+        
+        const permission = Wildcard.all(key, toolPermissions)
 
-          if (permission === "deny") {
-            throw new Error(
-              `The user has specifically restricted access to this MCP tool, you are not allowed to execute it. Tool: ${key}`,
-            )
-          }
+        if (permission === "deny") {
+          throw new Error(
+            `The user has specifically restricted access to this tool, you are not allowed to execute it. Tool: ${key}`,
+          )
+        }
 
-          if (permission === "ask") {
-            await Permission.ask({
-              type: "mcp",
-              pattern: key,
-              sessionID: input.sessionID,
-              messageID: input.processor.message.id,
-              callID: opts.toolCallId,
-              title: `Use MCP tool "${key}"`,
-              metadata: {
-                tool: key,
-                args,
-              },
-            })
-          }
+        if (permission === "ask") {
+          await Permission.ask({
+            type: "tool",
+            pattern: key,
+            sessionID: input.sessionID,
+            messageID: input.processor.message.id,
+            callID: opts.toolCallId,
+            title: `Use tool "${key}"`,
+            metadata: {
+              tool: key,
+              args,
+            },
+          })
         }
 
         await Plugin.trigger(

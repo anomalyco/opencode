@@ -18,6 +18,7 @@ import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod/v4"
 import { Plugin } from "../plugin"
+import { Wildcard } from "../util/wildcard"
 
 export namespace ToolRegistry {
   export const state = Instance.state(async () => {
@@ -127,24 +128,22 @@ export namespace ToolRegistry {
       result["webfetch"] = false
     }
     
-    // Check MCP tool permissions
-    if (agent.permission.mcp) {
-      const mcpPermissions = agent.permission.mcp
-      if (mcpPermissions["*"] === "deny" && Object.keys(mcpPermissions).length === 1) {
-        // If global MCP permission is deny and no specific overrides, disable all MCP tools
-        const mcpTools = await import("../mcp").then(m => m.MCP.tools()).catch(() => ({}))
-        for (const toolName of Object.keys(mcpTools)) {
-          result[toolName] = false
-        }
-      } else {
-        // Check individual MCP tool permissions
-        const mcpTools = await import("../mcp").then(m => m.MCP.tools()).catch(() => ({}))
-        for (const toolName of Object.keys(mcpTools)) {
-          const permission = mcpPermissions[toolName] ?? mcpPermissions["*"] ?? "ask"
-          if (permission === "deny") {
-            result[toolName] = false
-          }
-        }
+    // Check tool permissions for all tools (including MCP tools)
+    // Extract tool permissions from the flattened permission object
+    const toolPermissions = Object.fromEntries(
+      Object.entries(agent.permission).filter(
+        ([key]) => !["edit", "bash", "webfetch"].includes(key)
+      )
+    )
+    
+    // Get all available MCP tools
+    const mcpTools = await import("../mcp").then(m => m.MCP.tools()).catch(() => ({}))
+    
+    // Check each tool's permission using wildcard matching
+    for (const toolName of Object.keys(mcpTools)) {
+      const permission = Wildcard.all(toolName, toolPermissions)
+      if (permission === "deny") {
+        result[toolName] = false
       }
     }
 
