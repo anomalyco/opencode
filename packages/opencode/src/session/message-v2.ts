@@ -18,6 +18,17 @@ export namespace MessageV2 {
       message: z.string(),
     }),
   )
+  export const APICallError = NamedError.create(
+    "APICallError",
+    z.object({
+      message: z.string(),
+      statusCode: z.number().optional(),
+      isRetryable: z.boolean(),
+      responseHeaders: z.record(z.string(), z.string()).optional(),
+      responseBody: z.string().optional(),
+    }),
+  )
+  export type APICallError = z.infer<typeof APICallError.Schema>
 
   const PartBase = z.object({
     id: z.string(),
@@ -129,6 +140,18 @@ export namespace MessageV2 {
     ref: "AgentPart",
   })
   export type AgentPart = z.infer<typeof AgentPart>
+
+  export const RetryPart = PartBase.extend({
+    type: z.literal("retry"),
+    attempt: z.number(),
+    error: APICallError.Schema,
+    time: z.object({
+      created: z.number(),
+    }),
+  }).meta({
+    ref: "RetryPart",
+  })
+  export type RetryPart = z.infer<typeof RetryPart>
 
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
@@ -265,6 +288,7 @@ export namespace MessageV2 {
       SnapshotPart,
       PatchPart,
       AgentPart,
+      RetryPart,
     ])
     .meta({
       ref: "Part",
@@ -283,6 +307,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        APICallError.Schema,
       ])
       .optional(),
     system: z.string().array(),
