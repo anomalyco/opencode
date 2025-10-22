@@ -20,6 +20,7 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { AttachCommand } from "./cli/cmd/attach"
 import { AcpCommand } from "./cli/cmd/acp"
+import { WorkflowCommand } from "./cli/cmd/workflow"
 import { EOL } from "os"
 
 const cancel = new AbortController()
@@ -84,6 +85,7 @@ const cli = yargs(hideBin(process.argv))
   .command(StatsCommand)
   .command(ExportCommand)
   .command(GithubCommand)
+  .command(WorkflowCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
