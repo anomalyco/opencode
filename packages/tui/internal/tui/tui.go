@@ -1209,6 +1209,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 	case commands.SessionListCommand:
 		sessionDialog := dialog.NewSessionDialog(a.app)
 		a.modal = sessionDialog
+	case commands.SessionSearchCommand:
+		sessionSearchDialog := dialog.NewSessionSearchDialog(a.app)
+		a.modal = sessionSearchDialog
 	case commands.SessionTimelineCommand:
 		if a.app.Session.ID == "" {
 			return a, toast.NewErrorToast("No active session")
