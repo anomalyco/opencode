@@ -1,7 +1,7 @@
-import type { CommandModule } from "yargs"
 import { ACPServer } from "../../acp/server"
+import { cmd } from "./cmd"
 
-export const AcpCommand: CommandModule = {
+export const AcpCommand = cmd({
   command: "acp",
   describe: "Start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
@@ -12,10 +12,7 @@ export const AcpCommand: CommandModule = {
     })
   },
   handler: async (opts) => {
-    if (opts["cwd"] && typeof opts["cwd"] === "string") {
-      process.chdir(opts["cwd"])
-    }
-
+    if (opts.cwd) process.chdir(opts["cwd"])
     await ACPServer.start()
   },
-}
+})

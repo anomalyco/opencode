@@ -2,9 +2,11 @@ import z from "zod/v4"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
-import { convertToModelMessages, type ModelMessage, type UIMessage } from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
+import { Snapshot } from "@/snapshot"
+import { fn } from "@/util/fn"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -16,6 +18,17 @@ export namespace MessageV2 {
       message: z.string(),
     }),
   )
+  export const APIError = NamedError.create(
+    "APIError",
+    z.object({
+      message: z.string(),
+      statusCode: z.number().optional(),
+      isRetryable: z.boolean(),
+      responseHeaders: z.record(z.string(), z.string()).optional(),
+      responseBody: z.string().optional(),
+    }),
+  )
+  export type APIError = z.infer<typeof APIError.Schema>
 
   const PartBase = z.object({
     id: z.string(),
@@ -127,6 +140,18 @@ export namespace MessageV2 {
     ref: "AgentPart",
   })
   export type AgentPart = z.infer<typeof AgentPart>
+
+  export const RetryPart = PartBase.extend({
+    type: z.literal("retry"),
+    attempt: z.number(),
+    error: APIError.Schema,
+    time: z.object({
+      created: z.number(),
+    }),
+  }).meta({
+    ref: "RetryPart",
+  })
+  export type RetryPart = z.infer<typeof RetryPart>
 
   export const StepStartPart = PartBase.extend({
     type: z.literal("step-start"),
@@ -241,6 +266,12 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
     }),
+    summary: z
+      .object({
+        diffs: Snapshot.FileDiff.array(),
+        text: z.string(),
+      })
+      .optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -257,6 +288,7 @@ export namespace MessageV2 {
       SnapshotPart,
       PatchPart,
       AgentPart,
+      RetryPart,
     ])
     .meta({
       ref: "Part",
@@ -275,9 +307,11 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        APIError.Schema,
       ])
       .optional(),
     system: z.string().array(),
+    parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
     mode: z.string(),
@@ -346,6 +380,7 @@ export namespace MessageV2 {
     if (v1.role === "assistant") {
       const info: Assistant = {
         id: v1.id,
+        parentID: "",
         sessionID: v1.metadata.sessionID,
         role: "assistant",
         time: {
@@ -595,9 +630,46 @@ export namespace MessageV2 {
     return convertToModelMessages(result)
   }
 
-  export function filterSummarized(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
+  export function filterCompacted(msgs: { info: MessageV2.Info; parts: MessageV2.Part[] }[]) {
     const i = msgs.findLastIndex((m) => m.info.role === "assistant" && !!m.info.summary)
     if (i === -1) return msgs.slice()
     return msgs.slice(i)
+  }
+
+  export function fromError(e: unknown, ctx: { providerID: string }) {
+    switch (true) {
+      case e instanceof DOMException && e.name === "AbortError":
+        return new MessageV2.AbortedError(
+          { message: e.message },
+          {
+            cause: e,
+          },
+        ).toObject()
+      case MessageV2.OutputLengthError.isInstance(e):
+        return e
+      case LoadAPIKeyError.isInstance(e):
+        return new MessageV2.AuthError(
+          {
+            providerID: ctx.providerID,
+            message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      case APICallError.isInstance(e):
+        return new MessageV2.APIError(
+          {
+            message: e.message,
+            statusCode: e.statusCode,
+            isRetryable: e.isRetryable,
+            responseHeaders: e.responseHeaders,
+            responseBody: e.responseBody,
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error:
+        return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+      default:
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+    }
   }
 }

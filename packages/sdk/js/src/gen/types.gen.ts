@@ -585,8 +585,10 @@ export type Todo = {
 
 export type FileDiff = {
   file: string
-  left: string
-  right: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
 }
 
 export type UserMessage = {
@@ -595,6 +597,10 @@ export type UserMessage = {
   role: "user"
   time: {
     created: number
+  }
+  summary?: {
+    diffs: Array<FileDiff>
+    text: string
   }
 }
 
@@ -627,6 +633,19 @@ export type MessageAbortedError = {
   }
 }
 
+export type ApiError = {
+  name: "APIError"
+  data: {
+    message: string
+    statusCode?: number
+    isRetryable: boolean
+    responseHeaders?: {
+      [key: string]: string
+    }
+    responseBody?: string
+  }
+}
+
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -635,8 +654,9 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   system: Array<string>
+  parentID: string
   modelID: string
   providerID: string
   mode: string
@@ -855,6 +875,18 @@ export type AgentPart = {
   }
 }
 
+export type RetryPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "retry"
+  attempt: number
+  error: ApiError
+  time: {
+    created: number
+  }
+}
+
 export type Part =
   | TextPart
   | ReasoningPart
@@ -865,6 +897,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | RetryPart
 
 export type TextPartInput = {
   id?: string
@@ -970,6 +1003,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
+  type: "text"
   content: string
   diff?: string
   patch?: {
@@ -986,6 +1020,8 @@ export type FileContent = {
     }>
     index?: string
   }
+  encoding?: "base64"
+  mimeType?: string
 }
 
 export type File = {
@@ -1173,7 +1209,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }
 

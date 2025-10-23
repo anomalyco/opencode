@@ -1,4 +1,4 @@
-import type { McpServer } from "@zed-industries/agent-client-protocol"
+import type { McpServer } from "@agentclientprotocol/sdk"
 
 export interface ACPSessionState {
   id: string
@@ -6,6 +6,10 @@ export interface ACPSessionState {
   mcpServers: McpServer[]
   openCodeSessionId: string
   createdAt: Date
+  model: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export interface ACPConfig {

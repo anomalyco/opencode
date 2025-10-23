@@ -3,7 +3,7 @@ import { spawn } from "child_process"
 
 describe("ACP Server", () => {
   test("initialize and shutdown", async () => {
-    const proc = spawn("bun", ["run", "--conditions=development", "src/index.ts", "acp"], {
+    const proc = spawn("bun", ["run", "dev", "acp"], {
       cwd: process.cwd(),
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, OPENCODE: "1" },
@@ -27,6 +27,9 @@ describe("ACP Server", () => {
       }
     })
 
+    // Wait for server to be ready
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
     proc.stdin.write(
       encoder.encode(
         JSON.stringify({
@@ -48,7 +51,7 @@ describe("ACP Server", () => {
   }, 10000)
 
   test("create session", async () => {
-    const proc = spawn("bun", ["run", "--conditions=development", "src/index.ts", "acp"], {
+    const proc = spawn("bun", ["run", "dev", "acp"], {
       cwd: process.cwd(),
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, OPENCODE: "1" },

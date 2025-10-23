@@ -147,12 +147,7 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: {
-    id?: string
-    title?: string
-    parentID?: string
-    directory: string
-  }) {
+  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -372,9 +367,7 @@ export namespace Session {
           .add(new Decimal(tokens.input).mul(input.model.cost?.input ?? 0).div(1_000_000))
           .add(new Decimal(tokens.output).mul(input.model.cost?.output ?? 0).div(1_000_000))
           .add(new Decimal(tokens.cache.read).mul(input.model.cost?.cache_read ?? 0).div(1_000_000))
-          .add(
-            new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000),
-          )
+          .add(new Decimal(tokens.cache.write).mul(input.model.cost?.cache_write ?? 0).div(1_000_000))
           .toNumber(),
         tokens,
       }

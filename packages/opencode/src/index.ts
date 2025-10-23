@@ -20,6 +20,7 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { AttachCommand } from "./cli/cmd/attach"
 import { AcpCommand } from "./cli/cmd/acp"
+import { EOL } from "os"
 
 const cancel = new AbortController()
 
@@ -129,7 +130,10 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (formatted === undefined) UI.error("Unexpected error, check log file at " + Log.file() + " for more details")
+  if (formatted === undefined) {
+    UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
+    console.error(e)
+  }
   process.exitCode = 1
 }
 

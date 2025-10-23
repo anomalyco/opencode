@@ -3,6 +3,8 @@ package util
 import (
 	"log/slog"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -44,4 +46,26 @@ func Measure(tag string) func(...any) {
 		args = append(args, []any{"timeTakenMs", time.Since(startTime).Milliseconds()}...)
 		slog.Debug(tag, args...)
 	}
+}
+
+func GetEditor() string {
+	if editor := os.Getenv("VISUAL"); editor != "" {
+		return editor
+	}
+	if editor := os.Getenv("EDITOR"); editor != "" {
+		return editor
+	}
+
+	commonEditors := []string{"vim", "nvim", "zed", "code", "cursor", "vi", "nano"}
+	if runtime.GOOS == "windows" {
+		commonEditors = []string{"vim", "nvim", "zed", "code.cmd", "cursor.cmd", "notepad.exe", "vi", "nano"}
+	}
+
+	for _, editor := range commonEditors {
+		if _, err := exec.LookPath(editor); err == nil {
+			return editor
+		}
+	}
+
+	return ""
 }

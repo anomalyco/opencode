@@ -1,3 +1,4 @@
+import { EOL } from "os"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
@@ -48,7 +49,7 @@ const FilesCommand = cmd({
         files.push(file)
         if (args.limit && files.length >= args.limit) break
       }
-      console.log(files.join("\n"))
+      console.log(files.join(EOL))
     })
   },
 })

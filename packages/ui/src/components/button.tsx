@@ -1,12 +1,14 @@
 import { Button as Kobalte } from "@kobalte/core/button"
 import { type ComponentProps, splitProps } from "solid-js"
 
-export interface ButtonProps {
+export interface ButtonProps
+  extends ComponentProps<typeof Kobalte>,
+    Pick<ComponentProps<"button">, "class" | "classList" | "children"> {
   size?: "normal" | "large"
   variant?: "primary" | "secondary" | "ghost"
 }
 
-export function Button(props: ComponentProps<"button"> & ButtonProps) {
+export function Button(props: ButtonProps) {
   const [split, rest] = splitProps(props, ["variant", "size", "class", "classList"])
   return (
     <Kobalte

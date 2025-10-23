@@ -8,7 +8,7 @@ The implementation follows a clean separation of concerns:
 
 ### Core Components
 
-- **`agent.ts`** - Implements the `Agent` interface from `@zed-industries/agent-client-protocol`
+- **`agent.ts`** - Implements the `Agent` interface from `@agentclientprotocol/sdk`
   - Handles initialization and capability negotiation
   - Manages session lifecycle (`session/new`, `session/load`)
   - Processes prompts and returns responses
@@ -130,7 +130,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 
 ### Why the Official Library?
 
-We use `@zed-industries/agent-client-protocol` instead of implementing JSON-RPC ourselves because:
+We use `@agentclientprotocol/sdk` instead of implementing JSON-RPC ourselves because:
 
 - Ensures protocol compliance
 - Handles edge cases and future protocol versions
@@ -160,5 +160,5 @@ ACP sessions map cleanly to opencode's internal session model:
 ## References
 
 - [ACP Specification](https://agentclientprotocol.com/)
-- [TypeScript Library](https://github.com/zed-industries/agent-client-protocol/tree/main/typescript)
-- [Protocol Examples](https://github.com/zed-industries/agent-client-protocol/tree/main/typescript/examples)
+- [TypeScript Library](https://github.com/agentclientprotocol/typescript-sdk)
+- [Protocol Examples](https://github.com/agentclientprotocol/typescript-sdk/tree/main/src/examples)
