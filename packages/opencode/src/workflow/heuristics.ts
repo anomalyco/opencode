@@ -6,7 +6,7 @@
  */
 
 import { Storage } from "../storage/storage.js"
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import { Metrics } from "./metrics.js"
 import { Orchestrator } from "./orchestrator.js"
 import type {
@@ -69,7 +69,7 @@ export namespace Heuristics {
       const confidence = calculateConfidence(group.errors)
 
       patterns.push({
-        id: ID.ascending(),
+        id: ulid(),
         type: firstError.type,
         description: generatePatternDescription(group.errors),
         occurrences: group.errors.length,
@@ -184,7 +184,7 @@ export namespace Heuristics {
       if (pattern.confidence < 0.6) continue
 
       optimizations.push({
-        id: ID.ascending(),
+        id: ulid(),
         target: "prompt",
         description: `Add context to ${pattern.stages.join(", ")} agent(s) about common failure: ${pattern.type}`,
         expectedImprovement: pattern.occurrences * 0.2, // Rough estimate
@@ -207,7 +207,7 @@ export namespace Heuristics {
 
       if (primaryCause.includes("timeout")) {
         optimizations.push({
-          id: ID.ascending(),
+          id: ulid(),
           target: "agent_config",
           description: `Increase timeout for ${bottleneck.stage} stage`,
           expectedImprovement: bottleneck.frequency * 0.3,
@@ -224,7 +224,7 @@ export namespace Heuristics {
 
       if (primaryCause.includes("dependency")) {
         optimizations.push({
-          id: ID.ascending(),
+          id: ulid(),
           target: "workflow_structure",
           description: `Optimize task dependencies in ${bottleneck.stage} stage`,
           expectedImprovement: bottleneck.frequency * 0.25,
@@ -240,7 +240,7 @@ export namespace Heuristics {
 
       if (primaryCause.includes("resource")) {
         optimizations.push({
-          id: ID.ascending(),
+          id: ulid(),
           target: "agent_config",
           description: `Optimize resource usage for ${bottleneck.agentID} agent`,
           expectedImprovement: bottleneck.frequency * 0.15,

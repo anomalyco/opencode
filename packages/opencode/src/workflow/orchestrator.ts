@@ -5,7 +5,7 @@
  * and coordinates specialized agents across workflow stages.
  */
 
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import { Storage } from "../storage/storage.js"
 import { Bus } from "../bus/index.js"
 import { Log } from "../util/log.js"
@@ -75,7 +75,7 @@ export namespace Orchestrator {
     const optimizedTasks = TaskMaster.optimizeTaskOrder(breakdown.tasks)
 
     // Create workflow instance
-    const workflowID = ID.ascending()
+    const workflowID = ulid()
     const now = Date.now()
 
     const workflow: WorkflowInstance = {
@@ -409,7 +409,7 @@ export namespace Orchestrator {
     }
 
     const workflowError: WorkflowError = {
-      id: ID.ascending(),
+      id: ulid(),
       workflowID,
       ...error,
     }
@@ -577,7 +577,7 @@ export namespace Orchestrator {
     }
   ): Promise<void> {
     const event: WorkflowEvent = {
-      id: ID.ascending(),
+      id: ulid(),
       workflowID: workflow.id,
       timestamp: Date.now(),
       stage: workflow.currentStage,

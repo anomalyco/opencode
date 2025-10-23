@@ -7,7 +7,7 @@
 
 import { Provider } from "../provider/provider.js"
 import { generateText } from "ai"
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import type {
   TaskBreakdown,
   Task,
@@ -332,7 +332,7 @@ Provide your task breakdown in JSON format:`
     const now = Date.now()
 
     return breakdown.tasks.map(taskTemplate => ({
-      id: ID.ascending(),
+      id: ulid(),
       workflowID,
       ...taskTemplate,
       status: "pending" as const,

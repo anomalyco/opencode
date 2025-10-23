@@ -8,7 +8,7 @@
 import z from "zod/v4"
 import { Project } from "../project/project.js"
 import { Storage } from "../storage/storage.js"
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import { $ } from "bun"
 import path from "path"
 import type { Workspace as WorkspaceType, Repository, WorkspaceConfig } from "./types.js"
@@ -158,7 +158,7 @@ export namespace Workspace {
     const repoInfo = await getRepositoryInfo(repository.path)
 
     const newRepo: Repository = {
-      id: ID.ascending(),
+      id: ulid(),
       name: repository.name,
       path: repository.path,
       branch: repoInfo.branch,
@@ -202,7 +202,7 @@ export namespace Workspace {
         provided.map(async (repo) => {
           const repoInfo = await getRepositoryInfo(repo.path)
           return {
-            id: ID.ascending(),
+            id: ulid(),
             name: repo.name,
             path: repo.path,
             branch: repoInfo.branch,
@@ -217,7 +217,7 @@ export namespace Workspace {
 
     return [
       {
-        id: ID.ascending(),
+        id: ulid(),
         name: path.basename(worktree),
         path: worktree,
         branch: mainRepoInfo.branch,

@@ -6,7 +6,7 @@
  */
 
 import { Storage } from "../storage/storage.js"
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import { Log } from "../util/log.js"
 import { Heuristics } from "./heuristics.js"
 import { Metrics } from "./metrics.js"
@@ -38,7 +38,7 @@ export namespace SelfHealing {
       for (const error of context.recentErrors) {
         if (error.type === pattern.type && error.stage === context.currentStage) {
           return {
-            id: ID.ascending(),
+            id: ulid(),
             type: "known_failure_pattern",
             description: `Detected known failure pattern: ${pattern.description}`,
             severity: pattern.occurrences > 10 ? "high" : "medium",
@@ -56,7 +56,7 @@ export namespace SelfHealing {
 
       if (actualTime > estimatedTime * 2) {
         return {
-          id: ID.ascending(),
+          id: ulid(),
           type: "performance_degradation",
           description: `Task taking ${Math.round(actualTime / estimatedTime)}x longer than estimated`,
           severity: "medium",
@@ -73,7 +73,7 @@ export namespace SelfHealing {
 
     if (recentFailures.length >= 3) {
       return {
-        id: ID.ascending(),
+        id: ulid(),
         type: "repeated_failures",
         description: `${recentFailures.length} failures in the last hour`,
         severity: "high",
@@ -91,7 +91,7 @@ export namespace SelfHealing {
   export async function generateAdaptation(issue: Issue): Promise<Adaptation> {
     log.info("Generating adaptation for issue", { issueType: issue.type })
 
-    const adaptationID = ID.ascending()
+    const adaptationID = ulid()
 
     // Based on issue type, generate appropriate adaptation
     switch (issue.type) {
@@ -371,7 +371,7 @@ export namespace SelfHealing {
   async function createAdaptationFromOptimization(
     optimization: Optimization
   ): Promise<Adaptation> {
-    const adaptationID = ID.ascending()
+    const adaptationID = ulid()
 
     let type: AdaptationType
     if (optimization.target === "prompt") {

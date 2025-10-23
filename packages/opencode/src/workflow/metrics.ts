@@ -5,7 +5,7 @@
  */
 
 import { Storage } from "../storage/storage.js"
-import { ID } from "../id/index.js"
+import { ulid } from "ulid"
 import type {
   WorkflowMetrics,
   AgentMetrics,
