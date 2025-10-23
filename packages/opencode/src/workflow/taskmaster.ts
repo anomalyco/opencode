@@ -278,16 +278,6 @@ Provide your task breakdown in JSON format:`
   }
 
 
-    const models = await provider.model.list()
-    const model = models.find(m => m.id === modelID)
-
-    if (!model) {
-      throw new Error(`Model ${modelID} not found for provider ${providerID}`)
-    }
-
-    return provider.model.get(modelID)
-  }
-
   /**
    * Check if a task has a circular dependency
    */
