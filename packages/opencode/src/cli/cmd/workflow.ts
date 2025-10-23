@@ -8,7 +8,7 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd.js"
 import { bootstrap } from "../bootstrap.js"
 import { UI } from "../ui.js"
-import { Orchestrator, Workspace, TaskMaster, Metrics, Heuristics, SelfHealing } from "../../workflow/index.js"
+import { Orchestrator, Workspace, TaskMaster, Metrics, Heuristics, SelfHealing, Executor } from "../../workflow/index.js"
 import type { WorkflowInstance } from "../../workflow/types.js"
 
 
@@ -131,6 +131,36 @@ export const WorkflowCommand = cmd({
             }
 
             displayWorkflowStatus(workflow)
+          })
+        },
+      })
+      .command({
+        command: "run <workflow-id>",
+        describe: "start workflow execution",
+        handler: async (argv) => {
+          await bootstrap(process.cwd(), async () => {
+            const workflowID = argv.workflowId as string
+
+            const workflow = await Orchestrator.getWorkflow(workflowID)
+            if (!workflow) {
+              output(UI.Style.TEXT_DANGER, `Workflow ${workflowID} not found`)
+              process.exit(1)
+            }
+
+            output(UI.Style.TEXT_SUCCESS_BOLD, `Starting workflow execution: ${workflow.title}`)
+            output(UI.Style.TEXT_INFO, `Workflow ID: ${workflowID}`)
+            UI.empty()
+
+            try {
+              // Run the workflow execution loop
+              await Executor.runWorkflow(workflowID)
+
+              output(UI.Style.TEXT_SUCCESS_BOLD, "✓ Workflow execution completed")
+            } catch (error) {
+              output(UI.Style.TEXT_DANGER_BOLD, "✗ Workflow execution failed")
+              output(UI.Style.TEXT_DANGER, error instanceof Error ? error.message : String(error))
+              process.exit(1)
+            }
           })
         },
       })
