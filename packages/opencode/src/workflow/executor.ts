@@ -22,15 +22,22 @@ const log = Log.create({ service: "executor" })
 
 export namespace Executor {
   /**
+   * Progress callback for reporting execution status
+   */
+  export type ProgressCallback = (message: string, data?: Record<string, any>) => void
+
+  /**
    * Execute a single task
    */
   export async function executeTask(params: {
     workflowID: string
     taskID: string
+    onProgress?: ProgressCallback
   }): Promise<void> {
-    const { workflowID, taskID } = params
+    const { workflowID, taskID, onProgress } = params
 
     log.info("Executing task", { workflowID, taskID })
+    onProgress?.("Executing task", { workflowID, taskID })
 
     const workflow = await Orchestrator.getWorkflow(workflowID)
     if (!workflow) {
@@ -49,6 +56,7 @@ export namespace Executor {
     }
 
     // Start the task
+    onProgress?.(`Starting task: ${task.title}`, { agent: agentConfig.name, stage: task.stage })
     await Orchestrator.startTask({
       workflowID,
       taskID,
@@ -57,9 +65,11 @@ export namespace Executor {
 
     try {
       // Get the AI model
+      onProgress?.("Getting AI model...", { agent: agentConfig.name })
       const model = await getModelForAgent(agentConfig)
 
       // Build the task execution prompt
+      onProgress?.("Building task context...", { task: task.title })
       const prompt = buildTaskPrompt(workflow, task, agentConfig)
 
       log.info("Running agent for task", {
@@ -70,6 +80,7 @@ export namespace Executor {
       })
 
       // Execute the task using the agent's prompt
+      onProgress?.(`Running ${agentConfig.name} agent...`, { task: task.title })
       const result = await generateText({
         model,
         prompt,
@@ -82,6 +93,8 @@ export namespace Executor {
         taskID,
         usage: result.usage,
       })
+
+      onProgress?.(`Completed: ${task.title}`, { outputLength: result.text.length })
 
       // Mark task as completed
       await Orchestrator.completeTask({
@@ -120,7 +133,10 @@ export namespace Executor {
   /**
    * Process all pending tasks in the current stage
    */
-  export async function processPendingTasks(workflowID: string): Promise<void> {
+  export async function processPendingTasks(
+    workflowID: string,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
     const workflow = await Orchestrator.getWorkflow(workflowID)
     if (!workflow) {
       throw new Error(`Workflow ${workflowID} not found`)
@@ -158,6 +174,7 @@ export namespace Executor {
           workflowID,
           stage: workflow.currentStage,
         })
+        onProgress?.(`Stage ${workflow.currentStage} complete, progressing...`, {})
         await Orchestrator.progressStage(workflowID)
       }
 
@@ -179,6 +196,7 @@ export namespace Executor {
       await executeTask({
         workflowID,
         taskID: task.id,
+        onProgress,
       })
     }
   }
@@ -186,8 +204,12 @@ export namespace Executor {
   /**
    * Continuous execution loop for a workflow
    */
-  export async function runWorkflow(workflowID: string): Promise<void> {
+  export async function runWorkflow(
+    workflowID: string,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
     log.info("Starting workflow execution loop", { workflowID })
+    onProgress?.("Starting workflow execution...", { workflowID })
 
     let iteration = 0
     const maxIterations = 1000 // Safety limit
@@ -202,21 +224,25 @@ export namespace Executor {
 
       if (workflow.status === "completed") {
         log.info("Workflow completed", { workflowID })
+        onProgress?.("Workflow completed!", {})
         break
       }
 
       if (workflow.status === "failed") {
         log.info("Workflow failed", { workflowID })
+        onProgress?.("Workflow failed", {})
         break
       }
 
       if (workflow.status === "paused") {
         log.info("Workflow paused", { workflowID })
+        onProgress?.("Workflow paused", {})
         break
       }
 
       // Process pending tasks
-      await processPendingTasks(workflowID)
+      onProgress?.(`Processing ${workflow.currentStage} stage...`, { iteration })
+      await processPendingTasks(workflowID, onProgress)
 
       // Small delay between iterations
       await new Promise((resolve) => setTimeout(resolve, 1000))

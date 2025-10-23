@@ -152,9 +152,20 @@ export const WorkflowCommand = cmd({
             UI.empty()
 
             try {
-              // Run the workflow execution loop
-              await Executor.runWorkflow(workflowID)
+              // Run the workflow execution loop with progress reporting
+              await Executor.runWorkflow(workflowID, (message, data) => {
+                if (message.startsWith("Completed:")) {
+                  output(UI.Style.TEXT_SUCCESS, `✓ ${message}`)
+                } else if (message.includes("complete") || message.includes("completed")) {
+                  output(UI.Style.TEXT_SUCCESS_BOLD, `✓ ${message}`)
+                } else if (message.includes("failed") || message.includes("error")) {
+                  output(UI.Style.TEXT_DANGER, `✗ ${message}`)
+                } else {
+                  output(UI.Style.TEXT_INFO, `⋯ ${message}`)
+                }
+              })
 
+              UI.empty()
               output(UI.Style.TEXT_SUCCESS_BOLD, "✓ Workflow execution completed")
             } catch (error) {
               output(UI.Style.TEXT_DANGER_BOLD, "✗ Workflow execution failed")
