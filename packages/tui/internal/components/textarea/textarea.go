@@ -1183,6 +1183,8 @@ func (m *Model) Reset() {
 	m.col = 0
 	m.row = 0
 	m.SetCursorColumn(0)
+	// Clear memoization cache to prevent memory leak during active typing
+	m.cache = NewMemoCache[line, [][]any](maxLines)
 }
 
 // san initializes or retrieves the rune sanitizer.
