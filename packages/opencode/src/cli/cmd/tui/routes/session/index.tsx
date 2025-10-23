@@ -426,17 +426,17 @@ export function Session() {
                             flexShrink={0}
                             border={["left"]}
                             customBorderChars={SplitBorder.customBorderChars}
-                            borderColor={theme().backgroundPanel}
+                            borderColor={theme.backgroundPanel}
                           >
                             <box
                               paddingTop={1}
                               paddingBottom={1}
                               paddingLeft={2}
-                              backgroundColor={hover() ? theme().backgroundElement : theme().backgroundPanel}
+                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
                             >
-                              <text fg={theme().textMuted}>{revert()!.reverted.length} message reverted</text>
-                              <text fg={theme().textMuted}>
-                                <span style={{ fg: theme().text }}>{keybind.print("messages_redo")}</span> or /redo to
+                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
+                              <text fg={theme.textMuted}>
+                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
                                 restore
                               </text>
                               <Show when={revert()!.diffFiles?.length}>
@@ -446,10 +446,10 @@ export function Session() {
                                       <text>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme().diffAdded }}> +{file.additions}</span>
+                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
                                         </Show>
                                         <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme().diffRemoved }}> -{file.deletions}</span>
+                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
                                         </Show>
                                       </text>
                                     )}
@@ -529,7 +529,7 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
-  const color = createMemo(() => (queued() ? theme().accent : theme().secondary))
+  const color = createMemo(() => (queued() ? theme.accent : theme.secondary))
 
   return (
     <Show when={text()}>
@@ -547,7 +547,7 @@ function UserMessage(props: {
         paddingBottom={1}
         paddingLeft={2}
         marginTop={props.index === 0 ? 0 : 1}
-        backgroundColor={hover() ? theme().backgroundElement : theme().backgroundPanel}
+        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={color()}
         flexShrink={0}
@@ -558,14 +558,14 @@ function UserMessage(props: {
             <For each={files()}>
               {(file) => {
                 const bg = createMemo(() => {
-                  if (file.mime.startsWith("image/")) return theme().accent
-                  if (file.mime === "application/pdf") return theme().primary
-                  return theme().secondary
+                  if (file.mime.startsWith("image/")) return theme.accent
+                  if (file.mime === "application/pdf") return theme.primary
+                  return theme.secondary
                 })
                 return (
                   <text>
-                    <span style={{ bg: bg(), fg: theme().background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                    <span style={{ bg: theme().backgroundElement, fg: theme().textMuted }}> {file.filename} </span>
+                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
                   </text>
                 )
               }}
@@ -579,9 +579,9 @@ function UserMessage(props: {
           {sync.data.config.username ?? "You"}{" "}
           <Show
             when={queued()}
-            fallback={<span style={{ fg: theme().textMuted }}>({Locale.time(props.message.time.created)})</span>}
+            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
           >
-            <span style={{ bg: theme().accent, fg: theme().backgroundPanel, bold: true }}> QUEUED </span>
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
           </Show>
         </text>
       </box>
@@ -611,11 +611,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           paddingBottom={1}
           paddingLeft={2}
           marginTop={1}
-          backgroundColor={theme().backgroundPanel}
+          backgroundColor={theme.backgroundPanel}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme().error}
+          borderColor={theme.error}
         >
-          <text fg={theme().textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
       <Show when={!props.message.time.completed || (props.last && props.message.finish === "tool-calls")}>
@@ -626,17 +626,17 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           gap={1}
           border={["left"]}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme().backgroundElement}
+          borderColor={theme.backgroundElement}
         >
           <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
-          <Shimmer text={`${props.message.modelID}`} color={theme().text} />
+          <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
       <Show when={props.message.time.completed && props.message.finish === "stop"}>
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
-            <span style={{ fg: theme().textMuted }}>{props.message.modelID}</span>
+            <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
         </box>
       </Show>
@@ -660,9 +660,9 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         flexShrink={0}
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme().backgroundPanel}
+        borderColor={theme.backgroundPanel}
       >
-        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme().backgroundPanel}>
+        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
           <text>{props.part.text.trim()}</text>
         </box>
       </box>
@@ -705,9 +705,9 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
             paddingLeft: 2,
             marginTop: 1,
             gap: 1,
-            backgroundColor: theme().backgroundPanel,
+            backgroundColor: theme.backgroundPanel,
             customBorderChars: SplitBorder.customBorderChars,
-            borderColor: permissionIndex === 0 ? theme().warning : theme().background,
+            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
           }
         : {
             paddingLeft: 3,
@@ -750,24 +750,24 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
         />
         {props.part.state.status === "error" && (
           <box paddingLeft={2}>
-            <text fg={theme().error}>{props.part.state.error.replace("Error: ", "")}</text>
+            <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>
           </box>
         )}
         {permission && (
           <box gap={1}>
-            <text fg={theme().text}>Permission required to run this tool:</text>
+            <text fg={theme.text}>Permission required to run this tool:</text>
             <box flexDirection="row" gap={2}>
               <text>
                 <b>enter</b>
-                <span style={{ fg: theme().textMuted }}> accept</span>
+                <span style={{ fg: theme.textMuted }}> accept</span>
               </text>
               <text>
                 <b>a</b>
-                <span style={{ fg: theme().textMuted }}> accept always</span>
+                <span style={{ fg: theme.textMuted }}> accept always</span>
               </text>
               <text>
                 <b>d</b>
-                <span style={{ fg: theme().textMuted }}> deny</span>
+                <span style={{ fg: theme.textMuted }}> deny</span>
               </text>
             </box>
           </box>
@@ -818,7 +818,7 @@ const ToolRegistry = (() => {
 function ToolTitle(props: { fallback: string; when: any; icon: string; children: JSX.Element }) {
   const { theme } = useTheme()
   return (
-    <text paddingLeft={3} fg={props.when ? theme().textMuted : theme().text}>
+    <text paddingLeft={3} fg={props.when ? theme.textMuted : theme.text}>
       <Show fallback={<>~ {props.fallback}</>} when={props.when}>
         <span style={{ bold: true }}>{props.icon}</span> {props.children}
       </Show>
@@ -838,11 +838,11 @@ ToolRegistry.register<typeof BashTool>({
           {props.input.description || "Shell"}
         </ToolTitle>
         <Show when={props.input.command}>
-          <text fg={theme().text}>$ {props.input.command}</text>
+          <text fg={theme.text}>$ {props.input.command}</text>
         </Show>
         <Show when={output()}>
           <box>
-            <text fg={theme().text}>{output()}</text>
+            <text fg={theme.text}>{output()}</text>
           </box>
         </Show>
       </>
@@ -892,7 +892,7 @@ ToolRegistry.register<typeof WriteTool>({
         </ToolTitle>
         <box flexDirection="row">
           <box flexShrink={0}>
-            <For each={numbers()}>{(value) => <text style={{ fg: theme().textMuted }}>{value}</text>}</For>
+            <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
             <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntaxTheme()} content={code()} />
@@ -965,7 +965,7 @@ ToolRegistry.register<typeof TaskTool>({
           <box>
             <For each={props.metadata.summary ?? []}>
               {(task) => (
-                <text style={{ fg: theme().textMuted }}>
+                <text style={{ fg: theme.textMuted }}>
                   ∟ {task.tool} {task.state.status === "completed" ? task.state.title : ""}
                 </text>
               )}
@@ -1125,7 +1125,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
       <box>
         <For each={props.input.todos ?? []}>
           {(todo) => (
-            <text style={{ fg: todo.status === "in_progress" ? theme().success : theme().textMuted }}>
+            <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
               [{todo.status === "completed" ? "✓" : " "}] {todo.content}
             </text>
           )}

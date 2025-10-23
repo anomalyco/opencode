@@ -23,22 +23,22 @@ export function DialogAlert(props: DialogAlertProps) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD}>{props.title}</text>
-        <text fg={theme().textMuted}>esc</text>
+        <text fg={theme.textMuted}>esc</text>
       </box>
       <box paddingBottom={1}>
-        <text fg={theme().textMuted}>{props.message}</text>
+        <text fg={theme.textMuted}>{props.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <box
           paddingLeft={3}
           paddingRight={3}
-          backgroundColor={theme().primary}
+          backgroundColor={theme.primary}
           onMouseDown={() => {
             props.onConfirm?.()
             dialog.clear()
           }}
         >
-          <text fg={theme().background}>ok</text>
+          <text fg={theme.background}>ok</text>
         </box>
       </box>
     </box>

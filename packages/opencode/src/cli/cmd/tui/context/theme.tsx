@@ -25,6 +25,7 @@ import tokyonight from "../../../../../../tui/internal/theme/themes/tokyonight.j
 import vesper from "../../../../../../tui/internal/theme/themes/vesper.json" with { type: "json" }
 import zenburn from "../../../../../../tui/internal/theme/themes/zenburn.json" with { type: "json" }
 import { iife } from "@/util/iife"
+import { createStore, reconcile } from "solid-js/store"
 
 type Theme = {
   primary: RGBA
@@ -307,6 +308,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: () => {
     const sync = useSync()
     const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("opencode")
+    const [theme, setTheme] = createStore({} as Theme)
+    const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
 
     createEffect(() => {
       if (!sync.ready) return
@@ -319,9 +322,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         }),
       )
     })
-
-    const theme = createMemo(() => THEMES[selectedTheme()])
-    const syntaxTheme = createMemo(() => SyntaxStyle.fromTheme(syntaxThemeDark))
+    createEffect(() => {
+      setTheme(reconcile(THEMES[selectedTheme()]))
+    })
 
     return {
       theme,

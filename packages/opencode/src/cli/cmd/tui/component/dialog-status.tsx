@@ -13,7 +13,7 @@ export function DialogStatus() {
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD}>Status</text>
-        <text fg={theme().textMuted}>esc</text>
+        <text fg={theme.textMuted}>esc</text>
       </box>
       <Show when={Object.keys(sync.data.mcp).length > 0}>
         <box>
@@ -25,9 +25,9 @@ export function DialogStatus() {
                   flexShrink={0}
                   style={{
                     fg: {
-                      connected: theme().success,
-                      failed: theme().error,
-                      disabled: theme().textMuted,
+                      connected: theme.success,
+                      failed: theme.error,
+                      disabled: theme.textMuted,
                     }[item.status],
                   }}
                 >
@@ -35,7 +35,7 @@ export function DialogStatus() {
                 </text>
                 <text wrapMode="word">
                   <b>{key}</b>{" "}
-                  <span style={{ fg: theme().textMuted }}>
+                  <span style={{ fg: theme.textMuted }}>
                     <Switch>
                       <Match when={item.status === "connected"}>Connected</Match>
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
@@ -58,15 +58,15 @@ export function DialogStatus() {
                   flexShrink={0}
                   style={{
                     fg: {
-                      connected: theme().success,
-                      error: theme().error,
+                      connected: theme.success,
+                      error: theme.error,
                     }[item.status],
                   }}
                 >
                   •
                 </text>
                 <text wrapMode="word">
-                  <b>{item.id}</b> <span style={{ fg: theme().textMuted }}>{item.root}</span>
+                  <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>
                 </text>
               </box>
             )}

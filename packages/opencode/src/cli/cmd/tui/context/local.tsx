@@ -22,12 +22,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
-        theme().secondary,
-        theme().accent,
-        theme().success,
-        theme().warning,
-        theme().primary,
-        theme().error,
+        theme.secondary,
+        theme.accent,
+        theme.success,
+        theme.warning,
+        theme.primary,
+        theme.error,
       ])
       return {
         list() {

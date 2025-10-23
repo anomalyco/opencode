@@ -188,7 +188,7 @@ function App() {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={theme().background}
+      backgroundColor={theme.background}
       onMouseUp={async () => {
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
@@ -214,27 +214,27 @@ function App() {
       </box>
       <box
         height={1}
-        backgroundColor={theme().backgroundPanel}
+        backgroundColor={theme.backgroundPanel}
         flexDirection="row"
         justifyContent="space-between"
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme().backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={theme().textMuted}>open</text>
+          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
+            <text fg={theme.textMuted}>open</text>
             <text attributes={TextAttributes.BOLD}>code </text>
-            <text fg={theme().textMuted}>v{Installation.VERSION}</text>
+            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
           </box>
           <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme().textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
+            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
           </box>
         </box>
         <box flexDirection="row" flexShrink={0}>
-          <text fg={theme().textMuted} paddingRight={1}>
+          <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
           <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={theme().background} wrapMode="none">
+          <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode="none">
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>
