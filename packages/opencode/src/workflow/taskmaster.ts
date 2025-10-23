@@ -8,34 +8,41 @@
 import { Provider } from "../provider/provider.js"
 import { generateText } from "ai"
 import { ulid } from "ulid"
-import type {
-  TaskBreakdown,
-  Task,
-  ValidationResult,
-  TaskMasterConfig,
-  WorkflowStage,
-} from "./types.js"
+import type { TaskBreakdown, Task, ValidationResult, TaskMasterConfig, WorkflowStage } from "./types.js"
 
 export namespace TaskMaster {
   /**
    * Parse a PRD and generate a structured task breakdown
    */
-  export async function parsePRD(
-    prd: string,
-    config?: TaskMasterConfig
-  ): Promise<TaskBreakdown> {
+  export async function parsePRD(prd: string, config?: TaskMasterConfig): Promise<TaskBreakdown> {
+    console.log(`\n🤖 TaskMaster AI: Analyzing PRD...`)
+    console.log(`📄 PRD length: ${prd.length} chars`)
+
     const model = await getModel(config)
+    console.log(`🧠 Using AI model for PRD analysis`)
 
     const prompt = buildPRDParsingPrompt(prd)
+    console.log(`📨 Sending PRD to AI for breakdown (${prompt.length} chars)`)
 
+    console.log(`⏳ Waiting for TaskMaster AI response...`)
     const result = await generateText({
       model,
       prompt,
       temperature: config?.temperature ?? 0.3,
-      maxSteps: config?.maxTokens ?? 4000,
     })
 
+    console.log(`✅ TaskMaster AI response received (${result.text.length} chars)`)
+    console.log(`📊 Token usage: ${JSON.stringify(result.usage)}`)
+
+    console.log(`🔄 Parsing task breakdown from response...`)
     const breakdown = parseTaskBreakdownFromResponse(result.text)
+
+    console.log(`✨ Task breakdown complete:`)
+    console.log(`   📋 Title: ${breakdown.title}`)
+    console.log(`   📝 Description: ${breakdown.description}`)
+    console.log(`   🎯 Complexity: ${breakdown.complexity}`)
+    console.log(`   ⏱️  Estimated duration: ${breakdown.estimatedDuration} minutes`)
+    console.log(`   📦 Total tasks: ${breakdown.tasks.length}`)
 
     return breakdown
   }
@@ -48,7 +55,7 @@ export namespace TaskMaster {
     const warnings: ValidationResult["warnings"] = []
 
     // Build a map of task titles for dependency validation
-    const taskTitles = new Set(tasks.map(t => t.title))
+    const taskTitles = new Set(tasks.map((t) => t.title))
 
     for (const task of tasks) {
       // Validate required fields
@@ -119,9 +126,9 @@ export namespace TaskMaster {
    * Optimize task order based on dependencies and priorities
    */
   export function optimizeTaskOrder(
-    tasks: Omit<Task, "id" | "workflowID" | "time">[]
+    tasks: Omit<Task, "id" | "workflowID" | "time">[],
   ): Omit<Task, "id" | "workflowID" | "time">[] {
-    const taskMap = new Map(tasks.map(t => [t.title, t]))
+    const taskMap = new Map(tasks.map((t) => [t.title, t]))
     const sorted: typeof tasks = []
     const visited = new Set<string>()
     const visiting = new Set<string>()
@@ -224,8 +231,7 @@ Provide your task breakdown in JSON format:`
    */
   function parseTaskBreakdownFromResponse(response: string): TaskBreakdown {
     // Extract JSON from markdown code block if present
-    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) ||
-                     response.match(/```\s*([\s\S]*?)\s*```/)
+    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || response.match(/```\s*([\s\S]*?)\s*```/)
 
     const jsonStr = jsonMatch ? jsonMatch[1] : response
 
@@ -282,16 +288,15 @@ Provide your task breakdown in JSON format:`
     return result.language
   }
 
-
   /**
    * Check if a task has a circular dependency
    */
   function hasSelfDependency(
     task: Omit<Task, "id" | "workflowID" | "time">,
-    allTasks: Omit<Task, "id" | "workflowID" | "time">[]
+    allTasks: Omit<Task, "id" | "workflowID" | "time">[],
   ): boolean {
     const visited = new Set<string>()
-    const taskMap = new Map(allTasks.map(t => [t.title, t]))
+    const taskMap = new Map(allTasks.map((t) => [t.title, t]))
 
     function checkDependency(currentTitle: string, targetTitle: string): boolean {
       if (currentTitle === targetTitle) return true
@@ -320,13 +325,10 @@ Provide your task breakdown in JSON format:`
   /**
    * Create tasks from a task breakdown and workflow ID
    */
-  export function createTasksFromBreakdown(
-    workflowID: string,
-    breakdown: TaskBreakdown
-  ): Task[] {
+  export function createTasksFromBreakdown(workflowID: string, breakdown: TaskBreakdown): Task[] {
     const now = Date.now()
 
-    return breakdown.tasks.map(taskTemplate => ({
+    return breakdown.tasks.map((taskTemplate) => ({
       id: ulid(),
       workflowID,
       ...taskTemplate,
