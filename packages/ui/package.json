@@ -1,10 +1,11 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "0.15.8",
+  "version": "0.15.13",
   "type": "module",
   "exports": {
     ".": "./src/components/index.ts",
     "./*": "./src/components/*.tsx",
+    "./hooks": "./src/hooks/index.ts",
     "./styles": "./src/styles/index.css",
     "./styles/tailwind": "./src/styles/tailwind/index.css",
     "./fonts/*": "./src/assets/fonts/*"
@@ -23,11 +24,13 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@pierre/precision-diffs": "0.0.2-alpha.1-1",
     "@solidjs/meta": "catalog:",
-    "remeda": "catalog:",
+    "fuzzysort": "catalog:",
     "luxon": "catalog:",
-    "virtua": "catalog:",
+    "remeda": "catalog:",
     "solid-js": "catalog:",
-    "solid-list": "catalog:"
+    "solid-list": "catalog:",
+    "virtua": "catalog:"
   }
 }

@@ -1,3 +1,4 @@
+import { EOL } from "os"
 import { File } from "../../../file"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
@@ -13,7 +14,7 @@ const FileSearchCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const results = await File.search({ query: args.query })
-      console.log(results.join("\n"))
+      console.log(results.join(EOL))
     })
   },
 })

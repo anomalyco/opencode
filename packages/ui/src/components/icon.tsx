@@ -128,28 +128,55 @@ const icons = {
   mic: '<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.75 8C8.75 6.20507 10.2051 4.75 12 4.75C13.7949 4.75 15.25 6.20507 15.25 8V11C15.25 12.7949 13.7949 14.25 12 14.25C10.2051 14.25 8.75 12.7949 8.75 11V8Z"></path><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5.75 12.75C5.75 12.75 6 17.25 12 17.25C18 17.25 18.25 12.75 18.25 12.75"></path><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 17.75V19.25"></path>',
 } as const
 
+const newIcons = {
+  "circle-x": `<path fill-rule="evenodd" clip-rule="evenodd" d="M1.6665 10.0003C1.6665 5.39795 5.39746 1.66699 9.99984 1.66699C14.6022 1.66699 18.3332 5.39795 18.3332 10.0003C18.3332 14.6027 14.6022 18.3337 9.99984 18.3337C5.39746 18.3337 1.6665 14.6027 1.6665 10.0003ZM7.49984 6.91107L6.91058 7.50033L9.41058 10.0003L6.91058 12.5003L7.49984 13.0896L9.99984 10.5896L12.4998 13.0896L13.0891 12.5003L10.5891 10.0003L13.0891 7.50033L12.4998 6.91107L9.99984 9.41107L7.49984 6.91107Z" fill="currentColor"/>`,
+  "magnifying-glass": `<path d="M15.8332 15.8337L13.0819 13.0824M14.6143 9.39088C14.6143 12.2759 12.2755 14.6148 9.39039 14.6148C6.50532 14.6148 4.1665 12.2759 4.1665 9.39088C4.1665 6.5058 6.50532 4.16699 9.39039 4.16699C12.2755 4.16699 14.6143 6.5058 14.6143 9.39088Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "plus-small": `<path d="M9.99984 5.41699V10.0003M9.99984 10.0003V14.5837M9.99984 10.0003H5.4165M9.99984 10.0003H14.5832" stroke="currentColor" stroke-linecap="square"/>`,
+  "chevron-down": `<path d="M6.6665 8.33325L9.99984 11.6666L13.3332 8.33325" stroke="currentColor" stroke-linecap="square"/>`,
+  "arrow-up": `<path fill-rule="evenodd" clip-rule="evenodd" d="M9.99991 2.24121L16.0921 8.33343L15.2083 9.21731L10.6249 4.63397V17.5001H9.37492V4.63398L4.7916 9.21731L3.90771 8.33343L9.99991 2.24121Z" fill="currentColor"/>`,
+}
+
 export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof icons
-  size?: number
+  name: keyof typeof icons | keyof typeof newIcons
+  size?: "small" | "normal" | "large"
 }
 
 export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
-  const size = local.size ?? 24
+
+  if (local.name in newIcons) {
+    return (
+      <div data-component="icon" data-size={local.size || "normal"}>
+        <svg
+          data-slot="svg"
+          classList={{
+            ...(local.classList || {}),
+            [local.class ?? ""]: !!local.class,
+          }}
+          fill="none"
+          viewBox="0 0 20 20"
+          innerHTML={newIcons[local.name as keyof typeof newIcons]}
+          aria-hidden="true"
+          {...others}
+        />
+      </div>
+    )
+  }
+
   return (
-    <svg
-      data-component="icon"
-      classList={{
-        ...(local.classList || {}),
-        [local.class ?? ""]: !!local.class,
-      }}
-      width={size}
-      height={size}
-      fill="none"
-      viewBox="0 0 24 24"
-      innerHTML={icons[local.name]}
-      aria-hidden="true"
-      {...others}
-    />
+    <div data-component="icon" data-size={local.size || "normal"}>
+      <svg
+        data-slot="svg"
+        classList={{
+          ...(local.classList || {}),
+          [local.class ?? ""]: !!local.class,
+        }}
+        fill="none"
+        viewBox="0 0 24 24"
+        innerHTML={icons[local.name as keyof typeof icons]}
+        aria-hidden="true"
+        {...others}
+      />
+    </div>
   )
 }

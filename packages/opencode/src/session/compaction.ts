@@ -15,6 +15,7 @@ import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionLock } from "./lock"
 import { NamedError } from "../util/error"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -97,7 +98,7 @@ export namespace SessionCompaction {
         draft.time.compacting = undefined
       })
     })
-    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterSummarized)
+    const toSummarize = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
     const model = await Provider.getModel(input.providerID, input.modelID)
     const system = [
       ...SystemPrompt.summarize(model.providerID),
@@ -108,6 +109,7 @@ export namespace SessionCompaction {
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
+      parentID: toSummarize.findLast((m) => m.info.role === "user")?.info.id!,
       sessionID: input.sessionID,
       system,
       mode: "build",
@@ -144,9 +146,7 @@ export namespace SessionCompaction {
     const stream = streamText({
       maxRetries: 10,
       model: model.language,
-      providerOptions: {
-        [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: model.info.options,
-      },
+      providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
       abortSignal: signal,
       onError(error) {
         log.error("stream error", {

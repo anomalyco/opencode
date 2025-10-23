@@ -1,11 +1,10 @@
 import { useLocal, useSync } from "@/context"
 import { Icon, Tooltip } from "@opencode-ai/ui"
 import { Collapsible } from "@/ui"
-import type { AssistantMessage, Part, ToolPart } from "@opencode-ai/sdk"
+import type { AssistantMessage, Message, Part, ToolPart } from "@opencode-ai/sdk"
 import { DateTime } from "luxon"
 import {
   createSignal,
-  onMount,
   For,
   Match,
   splitProps,
@@ -67,7 +66,7 @@ function ReadToolPart(props: { part: ToolPart }) {
         {(state) => {
           const path = state().input["filePath"] as string
           return (
-            <Part class="cursor-pointer" onClick={() => local.file.open(path)}>
+            <Part onClick={() => local.file.open(path)}>
               <span class="">Read</span> {getFilename(path)}
             </Part>
           )
@@ -253,7 +252,7 @@ export default function SessionTimeline(props: { session: string; class?: string
       case "patch":
         return false
       case "text":
-        return !part.synthetic
+        return !part.synthetic && part.text.trim()
       case "reasoning":
         return part.text.trim()
       case "tool":
@@ -270,8 +269,17 @@ export default function SessionTimeline(props: { session: string; class?: string
     }
   }
 
+  const hasValidParts = (message: Message) => {
+    return sync.data.part[message.id]?.filter(valid).length > 0
+  }
+
+  const hasTextPart = (message: Message) => {
+    return !!sync.data.part[message.id]?.filter(valid).find((p) => p.type === "text")
+  }
+
   const session = createMemo(() => sync.session.get(props.session))
   const messages = createMemo(() => sync.data.message[props.session] ?? [])
+  const messagesWithValidParts = createMemo(() => sync.data.message[props.session]?.filter(hasValidParts) ?? [])
   const working = createMemo(() => {
     const last = messages()[messages().length - 1]
     if (!last) return false
@@ -386,7 +394,7 @@ export default function SessionTimeline(props: { session: string; class?: string
         [props.class ?? ""]: !!props.class,
       }}
     >
-      <div class="py-1.5 px-10 flex justify-end items-center self-stretch">
+      <div class="py-1.5 px-6 flex justify-end items-center self-stretch">
         <div class="flex items-center gap-6">
           <Tooltip value={`${tokens()} Tokens`} class="flex items-center gap-1.5">
             <Show when={context()}>
@@ -397,11 +405,16 @@ export default function SessionTimeline(props: { session: string; class?: string
           <div class="text-14-regular text-text-strong text-right">{cost()}</div>
         </div>
       </div>
-      <ul role="list" class="flex flex-col gap-6 items-start self-stretch px-10 pt-2 pb-6">
-        <For each={messages()}>
+      <ul role="list" class="flex flex-col items-start self-stretch px-6 pt-2 pb-6 gap-1">
+        <For each={messagesWithValidParts()}>
           {(message) => (
-            <div class="flex flex-col gap-1 justify-center items-start self-stretch">
-              <For each={sync.data.part[message.id]?.filter(valid)}>
+            <div
+              classList={{
+                "flex flex-col gap-1 justify-center items-start self-stretch": true,
+                "mt-6": hasTextPart(message),
+              }}
+            >
+              <For each={sync.data.part[message.id]?.filter(valid) ?? []}>
                 {(part) => (
                   <li class="group/li">
                     <Switch fallback={<div class="">{part.type}</div>}>
@@ -449,9 +462,9 @@ export default function SessionTimeline(props: { session: string; class?: string
         <Collapsible defaultOpen={false}>
           <Collapsible.Trigger>
             <div class="mt-12 ml-1 flex items-center gap-x-2 text-xs text-text-muted">
-              <Icon name="file-code" size={16} />
+              <Icon name="file-code" />
               <span>Raw Session Data</span>
-              <Collapsible.Arrow size={18} class="text-text-muted" />
+              <Collapsible.Arrow class="text-text-muted" />
             </div>
           </Collapsible.Trigger>
           <Collapsible.Content class="mt-5">
@@ -460,9 +473,9 @@ export default function SessionTimeline(props: { session: string; class?: string
                 <Collapsible>
                   <Collapsible.Trigger>
                     <div class="flex items-center gap-x-2 text-xs text-text-muted ml-1">
-                      <Icon name="file-code" size={16} />
+                      <Icon name="file-code" />
                       <span>session</span>
-                      <Collapsible.Arrow size={18} class="text-text-muted" />
+                      <Collapsible.Arrow class="text-text-muted" />
                     </div>
                   </Collapsible.Trigger>
                   <Collapsible.Content>
@@ -477,9 +490,9 @@ export default function SessionTimeline(props: { session: string; class?: string
                       <Collapsible>
                         <Collapsible.Trigger>
                           <div class="flex items-center gap-x-2 text-xs text-text-muted ml-1">
-                            <Icon name="file-code" size={16} />
+                            <Icon name="file-code" />
                             <span>{message.role === "user" ? "user" : "assistant"}</span>
-                            <Collapsible.Arrow size={18} class="text-text-muted" />
+                            <Collapsible.Arrow class="text-text-muted" />
                           </div>
                         </Collapsible.Trigger>
                         <Collapsible.Content>
@@ -493,9 +506,9 @@ export default function SessionTimeline(props: { session: string; class?: string
                           <Collapsible>
                             <Collapsible.Trigger>
                               <div class="flex items-center gap-x-2 text-xs text-text-muted ml-1">
-                                <Icon name="file-code" size={16} />
+                                <Icon name="file-code" />
                                 <span>{part.type}</span>
-                                <Collapsible.Arrow size={18} class="text-text-muted" />
+                                <Collapsible.Arrow class="text-text-muted" />
                               </div>
                             </Collapsible.Trigger>
                             <Collapsible.Content>

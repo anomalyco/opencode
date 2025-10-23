@@ -162,9 +162,15 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 1. Handle active modal
 		if a.modal != nil {
 			switch keyString {
-			// Escape always closes current modal
+			// Escape closes current modal, but give modal a chance to handle it first
 			case "esc":
-				cmd := a.modal.Close()
+				// give the modal a chance to handle the esc
+				updatedModal, cmd := a.modal.Update(msg)
+				a.modal = updatedModal.(layout.Modal)
+				if cmd != nil {
+					return a, cmd
+				}
+				cmd = a.modal.Close()
 				a.modal = nil
 				return a, cmd
 			case "ctrl+c":
@@ -1152,9 +1158,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 			// status.Warn("Agent is working, please wait...")
 			return a, nil
 		}
-		editor := os.Getenv("EDITOR")
+		editor := util.GetEditor()
 		if editor == "" {
-			return a, toast.NewErrorToast("No EDITOR set, can't open editor")
+			return a, toast.NewErrorToast("No editor found. Set EDITOR environment variable (e.g., export EDITOR=vim)")
 		}
 
 		value := a.editor.Value()
@@ -1398,10 +1404,9 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		// Format to Markdown
 		markdownContent := formatConversationToMarkdown(messages)
 
-		// Check if EDITOR is set
-		editor := os.Getenv("EDITOR")
+		editor := util.GetEditor()
 		if editor == "" {
-			return a, toast.NewErrorToast("No EDITOR set, can't open editor")
+			return a, toast.NewErrorToast("No editor found. Set EDITOR environment variable (e.g., export EDITOR=vim)")
 		}
 
 		// Create and write to temp file

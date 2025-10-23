@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
+import { EOL } from "os"
 
 export const ExportCommand = cmd({
   command: "export [sessionID]",
@@ -67,7 +68,7 @@ export const ExportCommand = cmd({
         }
 
         process.stdout.write(JSON.stringify(exportData, null, 2))
-        process.stdout.write("\n")
+        process.stdout.write(EOL)
       } catch (error) {
         UI.error(`Session not found: ${sessionID!}`)
         process.exit(1)

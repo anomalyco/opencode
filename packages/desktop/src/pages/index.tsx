@@ -1,16 +1,14 @@
-import { Button, Icon, List, Tooltip } from "@opencode-ai/ui"
-import { FileIcon, IconButton } from "@/ui"
+import { Button, Icon, List, SelectDialog, Tooltip } from "@opencode-ai/ui"
+import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
 import EditorPane from "@/components/editor-pane"
-import { For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
-import { SelectDialog } from "@/components/select-dialog"
+import { For, onCleanup, onMount, Show } from "solid-js"
 import { useSync, useSDK, useLocal } from "@/context"
 import type { LocalFile, TextSelection } from "@/context/local"
 import SessionTimeline from "@/components/session-timeline"
-import { type PromptContentPart, type PromptSubmitValue } from "@/components/prompt-form"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
-import { PromptInput } from "@/components/prompt-input"
+import { ContentPart, PromptInput } from "@/components/prompt-input"
 import { DateTime } from "luxon"
 
 export default function Page() {
@@ -22,8 +20,7 @@ export default function Page() {
     modelSelectOpen: false,
     fileSelectOpen: false,
   })
-
-  let inputRef: HTMLTextAreaElement | undefined = undefined
+  let inputRef!: HTMLDivElement
 
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
 
@@ -50,7 +47,7 @@ export default function Page() {
     const focused = document.activeElement === inputRef
     if (focused) {
       if (event.key === "Escape") {
-        // inputRef?.blur()
+        inputRef?.blur()
       }
       return
     }
@@ -77,7 +74,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified") {
-      // inputRef?.focus()
+      inputRef?.focus()
     }
   }
 
@@ -104,9 +101,7 @@ export default function Page() {
     }
   }
 
-  const handlePromptSubmit2 = () => {}
-
-  const handlePromptSubmit = async (prompt: PromptSubmitValue) => {
+  const handlePromptSubmit = async (parts: ContentPart[]) => {
     const existingSession = local.session.active()
     let session = existingSession
     if (!session) {
@@ -134,6 +129,7 @@ export default function Page() {
 
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
+    const text = parts.map((part) => part.content).join("")
     const attachments = new Map<string, SubmissionAttachment>()
 
     const registerAttachment = (path: string, selection: TextSelection | undefined, label?: string) => {
@@ -147,30 +143,27 @@ export default function Page() {
       })
     }
 
-    const promptAttachments = prompt.parts.filter(
-      (part): part is Extract<PromptContentPart, { kind: "attachment" }> => part.kind === "attachment",
-    )
-
+    const promptAttachments = parts.filter((part) => part.type === "file")
     for (const part of promptAttachments) {
-      registerAttachment(part.path, part.selection, part.display)
+      registerAttachment(part.path, part.selection, part.content)
     }
 
-    const activeFile = local.context.active()
-    if (activeFile) {
-      registerAttachment(
-        activeFile.path,
-        activeFile.selection,
-        activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
-      )
-    }
+    // const activeFile = local.context.active()
+    // if (activeFile) {
+    //   registerAttachment(
+    //     activeFile.path,
+    //     activeFile.selection,
+    //     activeFile.name ?? formatAttachmentLabel(activeFile.path, activeFile.selection),
+    //   )
+    // }
 
-    for (const contextFile of local.context.all()) {
-      registerAttachment(
-        contextFile.path,
-        contextFile.selection,
-        formatAttachmentLabel(contextFile.path, contextFile.selection),
-      )
-    }
+    // for (const contextFile of local.context.all()) {
+    //   registerAttachment(
+    //     contextFile.path,
+    //     contextFile.selection,
+    //     formatAttachmentLabel(contextFile.path, contextFile.selection),
+    //   )
+    // }
 
     const attachmentParts = Array.from(attachments.values()).map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
@@ -205,7 +198,7 @@ export default function Page() {
         parts: [
           {
             type: "text",
-            text: prompt.text,
+            text,
           },
           ...attachmentParts,
         ],
@@ -213,16 +206,10 @@ export default function Page() {
     })
   }
 
-  const plus = (
-    <IconButton
-      class="text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
-      size="xs"
-      variant="secondary"
-      onClick={() => setStore("fileSelectOpen", true)}
-    >
-      <Icon name="plus" size={12} />
-    </IconButton>
-  )
+  const handleNewSession = () => {
+    local.session.setActive(undefined)
+    inputRef?.focus()
+  }
 
   return (
     <div class="relative h-screen flex flex-col">
@@ -234,7 +221,8 @@ export default function Page() {
           </div>
           <div class="flex flex-col items-start gap-4 self-stretch flex-1">
             <div class="px-3 py-1.5 w-full">
-              <Button class="w-full" size="large">
+              <Button class="w-full" size="large" onClick={handleNewSession}>
+                <Icon name="plus" />
                 New Session
               </Button>
             </div>
@@ -268,25 +256,30 @@ export default function Page() {
             </List>
           </div>
         </div>
-        <div class="relative grid grid-cols-2 bg-background-base">
+        <div class="relative grid grid-cols-2 bg-background-base w-full">
           <div class="pt-1.5 min-w-0 overflow-y-auto no-scrollbar flex justify-center">
             <Show when={local.session.active()}>
               {(activeSession) => <SessionTimeline session={activeSession().id} class="w-full" />}
             </Show>
           </div>
           <div class="p-1.5 pl-px flex flex-col items-center justify-center overflow-y-auto no-scrollbar">
-            <EditorPane onFileClick={handleFileClick} />
+            <Show when={local.session.active()}>
+              <EditorPane onFileClick={handleFileClick} />
+            </Show>
           </div>
-          <div class="absolute bottom-4 inset-x-0 p-2 flex flex-col justify-center items-center z-50">
-            <PromptInput onSubmit={handlePromptSubmit2} />
-            {/* <PromptForm */}
-            {/*   class="w-2xl" */}
-            {/*   onSubmit={handlePromptSubmit} */}
-            {/*   onOpenModelSelect={() => setStore("modelSelectOpen", true)} */}
-            {/*   onInputRefChange={(element: HTMLTextAreaElement | undefined) => { */}
-            {/*     inputRef = element ?? undefined */}
-            {/*   }} */}
-            {/* /> */}
+          <div
+            classList={{
+              "absolute inset-x-0 px-8 flex flex-col justify-center items-center z-50": true,
+              "bottom-8": !!local.session.active(),
+              "bottom-1/2 translate-y-1/2": !local.session.active(),
+            }}
+          >
+            <PromptInput
+              ref={(el) => {
+                inputRef = el
+              }}
+              onSubmit={handlePromptSubmit}
+            />
           </div>
           <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
             <FileTree path="" onFileClick={handleFileClick} />
@@ -302,7 +295,7 @@ export default function Page() {
                     <li>
                       <button
                         onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
-                        class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 cursor-pointer hover:bg-background-element"
+                        class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 hover:bg-background-element"
                       >
                         <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
                         <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
@@ -318,59 +311,16 @@ export default function Page() {
           </div>
         </div>
       </main>
-      <Show when={store.modelSelectOpen}>
-        <SelectDialog
-          key={(x) => `${x.provider.id}:${x.id}`}
-          items={local.model.list()}
-          current={local.model.current()}
-          render={(i) => (
-            <div class="w-full flex items-center justify-between">
-              <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
-                <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-4 invert opacity-40" />
-                <span class="text-xs text-text whitespace-nowrap">{i.name}</span>
-                <span class="text-xs text-text-muted/80 whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                  {i.id}
-                </span>
-              </div>
-              <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0">
-                <Tooltip forceMount={false} value="Reasoning">
-                  <Icon name="brain" size={16} classList={{ "text-accent": i.reasoning }} />
-                </Tooltip>
-                <Tooltip forceMount={false} value="Tools">
-                  <Icon name="hammer" size={16} classList={{ "text-secondary": i.tool_call }} />
-                </Tooltip>
-                <Tooltip forceMount={false} value="Attachments">
-                  <Icon name="photo" size={16} classList={{ "text-success": i.attachment }} />
-                </Tooltip>
-                <div class="rounded-full bg-text-muted/20 text-text-muted/80 w-9 h-4 flex items-center justify-center text-[10px]">
-                  {new Intl.NumberFormat("en-US", {
-                    notation: "compact",
-                    compactDisplay: "short",
-                  }).format(i.limit.context)}
-                </div>
-                <Tooltip forceMount={false} value={`$${i.cost?.input}/1M input, $${i.cost?.output}/1M output`}>
-                  <div class="rounded-full bg-success/20 text-success/80 w-9 h-4 flex items-center justify-center text-[10px]">
-                    <Switch fallback="FREE">
-                      <Match when={i.cost?.input > 10}>$$$</Match>
-                      <Match when={i.cost?.input > 1}>$$</Match>
-                      <Match when={i.cost?.input > 0.1}>$</Match>
-                    </Switch>
-                  </div>
-                </Tooltip>
-              </div>
-            </div>
-          )}
-          filter={["provider.name", "name", "id"]}
-          groupBy={(x) => x.provider.name}
-          onClose={() => setStore("modelSelectOpen", false)}
-          onSelect={(x) => local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined)}
-        />
-      </Show>
       <Show when={store.fileSelectOpen}>
         <SelectDialog
+          defaultOpen
+          title="Select file"
           items={local.file.search}
           key={(x) => x}
-          render={(i) => (
+          onOpenChange={(open) => setStore("fileSelectOpen", open)}
+          onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
+        >
+          {(i) => (
             <div class="w-full flex items-center justify-between">
               <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
                 <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
@@ -382,9 +332,7 @@ export default function Page() {
               <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
             </div>
           )}
-          onClose={() => setStore("fileSelectOpen", false)}
-          onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
-        />
+        </SelectDialog>
       </Show>
     </div>
   )

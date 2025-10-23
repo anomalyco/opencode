@@ -16,7 +16,7 @@ function CollapsibleTrigger(props: CollapsibleTriggerProps) {
   return (
     <KobalteCollapsible.Trigger
       classList={{
-        "w-full group/collapsible cursor-pointer": true,
+        "w-full group/collapsible": true,
         [local.class ?? ""]: !!local.class,
       }}
       {...others}

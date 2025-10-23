@@ -1,7 +1,6 @@
 import { For, Match, Show, Switch, createSignal, splitProps } from "solid-js"
-import { Tabs, Tooltip } from "@opencode-ai/ui"
-import { Icon } from "@opencode-ai/ui"
-import { FileIcon, IconButton } from "@/ui"
+import { IconButton, Tabs, Tooltip } from "@opencode-ai/ui"
+import { FileIcon } from "@/ui"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -92,20 +91,16 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                     <Show when={view !== "raw"}>
                       <div class="mr-1 flex items-center gap-1">
                         <Tooltip value="Previous change" placement="bottom">
-                          <IconButton size="xs" variant="ghost" onClick={() => navigateChange(-1)}>
-                            <Icon name="arrow-up" size={14} />
-                          </IconButton>
+                          <IconButton icon="arrow-up" variant="ghost" onClick={() => navigateChange(-1)} />
                         </Tooltip>
                         <Tooltip value="Next change" placement="bottom">
-                          <IconButton size="xs" variant="ghost" onClick={() => navigateChange(1)}>
-                            <Icon name="arrow-down" size={14} />
-                          </IconButton>
+                          <IconButton icon="arrow-down" variant="ghost" onClick={() => navigateChange(1)} />
                         </Tooltip>
                       </div>
                     </Show>
                     <Tooltip value="Raw" placement="bottom">
                       <IconButton
-                        size="xs"
+                        icon="file-text"
                         variant="ghost"
                         classList={{
                           "text-text": view === "raw",
@@ -113,13 +108,11 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           "bg-background-element": view === "raw",
                         }}
                         onClick={() => local.file.setView(activeFile.path, "raw")}
-                      >
-                        <Icon name="file-text" size={14} />
-                      </IconButton>
+                      />
                     </Tooltip>
                     <Tooltip value="Unified diff" placement="bottom">
                       <IconButton
-                        size="xs"
+                        icon="checklist"
                         variant="ghost"
                         classList={{
                           "text-text": view === "diff-unified",
@@ -127,13 +120,11 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           "bg-background-element": view === "diff-unified",
                         }}
                         onClick={() => local.file.setView(activeFile.path, "diff-unified")}
-                      >
-                        <Icon name="checklist" size={14} />
-                      </IconButton>
+                      />
                     </Tooltip>
                     <Tooltip value="Split diff" placement="bottom">
                       <IconButton
-                        size="xs"
+                        icon="columns"
                         variant="ghost"
                         classList={{
                           "text-text": view === "diff-split",
@@ -141,9 +132,7 @@ export default function EditorPane(props: EditorPaneProps): JSX.Element {
                           "bg-background-element": view === "diff-split",
                         }}
                         onClick={() => local.file.setView(activeFile.path, "diff-split")}
-                      >
-                        <Icon name="columns" size={14} />
-                      </IconButton>
+                      />
                     </Tooltip>
                   </div>
                 )
@@ -221,13 +210,11 @@ function SortableTab(props: {
             <TabVisual file={props.file} />
           </Tabs.Trigger>
           <IconButton
+            icon="close"
             class="absolute right-1 top-1.5 opacity-0 text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
-            size="xs"
             variant="ghost"
             onClick={() => props.onTabClose(props.file)}
-          >
-            <Icon name="close" size={16} />
-          </IconButton>
+          />
         </div>
       </Tooltip>
     </div>

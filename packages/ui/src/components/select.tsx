@@ -52,7 +52,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
             {props.label ? props.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
           <Kobalte.ItemIndicator data-slot="item-indicator">
-            <Icon name="checkmark" size={16} />
+            <Icon name="checkmark" />
           </Kobalte.ItemIndicator>
         </Kobalte.Item>
       )}
@@ -79,7 +79,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="icon">
-          <Icon name="chevron-down" size={16} />
+          <Icon name="chevron-down" size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>

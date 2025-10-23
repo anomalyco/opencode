@@ -20,6 +20,8 @@ import { ExportCommand } from "./cli/cmd/export"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
+import { AcpCommand } from "./cli/cmd/acp"
+import { EOL } from "os"
 
 const cancel = new AbortController()
 
@@ -68,6 +70,7 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
   .command(TuiSpawnCommand)
@@ -129,7 +132,10 @@ try {
   Log.Default.error("fatal", data)
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
-  if (formatted === undefined) UI.error("Unexpected error, check log file at " + Log.file() + " for more details")
+  if (formatted === undefined) {
+    UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
+    console.error(e)
+  }
   process.exitCode = 1
 }
 

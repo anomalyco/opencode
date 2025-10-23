@@ -137,7 +137,11 @@ export default new Hono<{ Bindings: Env }>()
     return c.json({})
   })
   .post("/share_delete_admin", async (c) => {
-    const id = c.env.SYNC_SERVER.idFromName("oVF8Rsiv")
+    const body = await c.req.json<{ sessionShortName: string; adminSecret: string }>()
+    const sessionShortName = body.sessionShortName
+    const adminSecret = body.adminSecret
+    if (adminSecret !== Resource.ADMIN_SECRET.value) throw new Error("Invalid admin secret")
+    const id = c.env.SYNC_SERVER.idFromName(sessionShortName)
     const stub = c.env.SYNC_SERVER.get(id)
     await stub.clear()
     return c.json({})

@@ -10,8 +10,6 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
-import { createTwoFilesPatch } from "diff"
-import { trimDiff } from "./edit"
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -28,13 +26,6 @@ export const WriteTool = Tool.define("write", {
     const file = Bun.file(filepath)
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
-
-    let oldContent = ""
-    let diff = ""
-
-    if (exists) {
-      oldContent = await file.text()
-    }
 
     const agent = await Agent.get(ctx.agent)
     if (agent.permission.edit === "ask")
@@ -56,9 +47,6 @@ export const WriteTool = Tool.define("write", {
       file: filepath,
     })
     FileTime.read(ctx.sessionID, filepath)
-
-    // Generate diff for the write operation
-    diff = trimDiff(createTwoFilesPatch(filepath, filepath, oldContent, params.content))
 
     let output = ""
     await LSP.touchFile(filepath, true)
