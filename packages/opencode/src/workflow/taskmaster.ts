@@ -273,10 +273,10 @@ Provide your task breakdown in JSON format:`
     const providerID = config?.model?.providerID || "anthropic"
     const modelID = config?.model?.modelID || "claude-sonnet-4"
 
-    const provider = await Provider.get(providerID)
-    if (!provider) {
-      throw new Error(`Provider ${providerID} not found`)
-    }
+    const result = await Provider.getModel(providerID, modelID)
+    return result.language
+  }
+
 
     const models = await provider.model.list()
     const model = models.find(m => m.id === modelID)
