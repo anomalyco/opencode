@@ -394,7 +394,7 @@ export function Code(props: Props) {
           [&_.diff-blank_.diff-oldln]:bg-background-element
           [&_.diff-blank_.diff-newln]:bg-background-element
           [&_.diff-collapsed]:block! [&_.diff-collapsed]:w-full [&_.diff-collapsed]:relative
-          [&_.diff-collapsed]:cursor-pointer [&_.diff-collapsed]:select-none
+          [&_.diff-collapsed]:select-none
           [&_.diff-collapsed]:bg-info/20 [&_.diff-collapsed]:hover:bg-info/40!
           [&_.diff-collapsed]:text-info/80 [&_.diff-collapsed]:hover:text-info
           [&_.diff-collapsed]:text-xs

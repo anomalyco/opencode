@@ -10,7 +10,7 @@
   background-color: var(--background-stronger);
   overflow: clip;
 
-  & [data-slot="list"] {
+  [data-slot="list"] {
     width: 100%;
     position: relative;
     display: flex;
@@ -40,7 +40,7 @@
     }
   }
 
-  & [data-slot="trigger"] {
+  [data-slot="trigger"] {
     position: relative;
     height: 36px;
     padding: 8px 12px;
@@ -49,7 +49,7 @@
     font-size: var(--text-sm);
     font-weight: var(--font-weight-medium);
     color: var(--text-weak);
-    cursor: pointer;
+
     white-space: nowrap;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border-weak-base);
@@ -77,7 +77,7 @@
     }
   }
 
-  & [data-slot="content"] {
+  [data-slot="content"] {
     overflow-y: auto;
     flex: 1;
 

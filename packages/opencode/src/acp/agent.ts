@@ -12,6 +12,8 @@ import type {
   NewSessionResponse,
   PromptRequest,
   PromptResponse,
+  SetSessionModelRequest,
+  SetSessionModelResponse,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -55,10 +57,16 @@ export class OpenCodeAgent implements Agent {
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
     this.log.info("newSession", { cwd: params.cwd, mcpServers: params.mcpServers.length })
 
-    const session = await this.sessionManager.create(params.cwd, params.mcpServers)
+    const model = await this.defaultModel()
+    const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+    const availableModels = await this.availableModels()
 
     return {
       sessionId: session.id,
+      models: {
+        currentModelId: `${model.providerID}/${model.modelID}`,
+        availableModels,
+      },
       _meta: {},
     }
   }
@@ -66,11 +74,62 @@ export class OpenCodeAgent implements Agent {
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
     this.log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
 
-    await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers)
+    const defaultModel = await this.defaultModel()
+    const session = await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers, defaultModel)
+    const availableModels = await this.availableModels()
+
+    return {
+      models: {
+        currentModelId: `${session.model.providerID}/${session.model.modelID}`,
+        availableModels,
+      },
+      _meta: {},
+    }
+  }
+
+  async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    this.log.info("setSessionModel", { sessionId: params.sessionId, modelId: params.modelId })
+
+    const session = this.sessionManager.get(params.sessionId)
+    if (!session) {
+      throw new Error(`Session not found: ${params.sessionId}`)
+    }
+
+    const parsed = Provider.parseModel(params.modelId)
+    const model = await Provider.getModel(parsed.providerID, parsed.modelID)
+
+    this.sessionManager.setModel(session.id, {
+      providerID: model.providerID,
+      modelID: model.modelID,
+    })
 
     return {
       _meta: {},
     }
+  }
+
+  private async defaultModel() {
+    const configured = this.config.defaultModel
+    if (configured) return configured
+    return Provider.defaultModel()
+  }
+
+  private async availableModels() {
+    const providers = await Provider.list()
+    const entries = Object.entries(providers).sort((a, b) => {
+      const nameA = a[1].info.name.toLowerCase()
+      const nameB = b[1].info.name.toLowerCase()
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+      return 0
+    })
+    return entries.flatMap(([providerID, provider]) => {
+      const models = Provider.sort(Object.values(provider.info.models))
+      return models.map((model) => ({
+        modelId: `${providerID}/${model.id}`,
+        name: `${provider.info.name}/${model.name}`,
+      }))
+    })
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
@@ -84,7 +143,11 @@ export class OpenCodeAgent implements Agent {
       throw new Error(`Session not found: ${params.sessionId}`)
     }
 
-    const model = this.config.defaultModel || (await Provider.defaultModel())
+    const current = acpSession.model
+    const model = current ?? (await this.defaultModel())
+    if (!current) {
+      this.sessionManager.setModel(acpSession.id, model)
+    }
 
     const parts = params.prompt.map((content) => {
       if (content.type === "text") {

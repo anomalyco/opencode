@@ -24,6 +24,10 @@ jobs:
       - run: git fetch --force --tags
       - run: bun install -g @vscode/vsce
 
+      - name: Install extension dependencies
+        run: bun install
+        working-directory: ./sdks/vscode
+
       - name: Publish
         run: |
           ./script/publish

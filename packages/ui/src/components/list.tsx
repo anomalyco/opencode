@@ -29,6 +29,7 @@ export function List<T>(props: ListProps<T>) {
   // }
   const handleSelect = (item: T) => {
     props.onSelect?.(item)
+    list.setActive(props.key(item))
   }
 
   const handleKey = (e: KeyboardEvent) => {
@@ -64,10 +65,10 @@ export function List<T>(props: ListProps<T>) {
           data-key={props.key(item)}
           data-active={props.key(item) === list.active()}
           onClick={() => handleSelect(item)}
-          onMouseMove={(e) => {
-            e.currentTarget.focus()
+          onMouseMove={() => {
+            // e.currentTarget.focus()
             setStore("mouseActive", true)
-            list.setActive(props.key(item))
+            // list.setActive(props.key(item))
           }}
         >
           {props.children(item)}
