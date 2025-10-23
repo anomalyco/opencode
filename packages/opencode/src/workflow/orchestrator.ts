@@ -40,9 +40,8 @@ export const WorkflowEventDef = Bus.event(
     agentID: z.string().optional(),
     taskID: z.string().optional(),
     data: z.record(z.string(), z.any()),
-  })
+  }),
 )
-
 
 export namespace Orchestrator {
   const DEFAULT_CONFIG: WorkflowConfig = {
@@ -84,9 +83,7 @@ export namespace Orchestrator {
     // Validate tasks
     const validation = TaskMaster.validateTasks(breakdown.tasks)
     if (!validation.valid) {
-      throw new Error(
-        `Task validation failed: ${validation.errors.map((e) => e.message).join(", ")}`
-      )
+      throw new Error(`Task validation failed: ${validation.errors.map((e) => e.message).join(", ")}`)
     }
 
     // Optimize task order
@@ -175,17 +172,13 @@ export namespace Orchestrator {
     const config = DEFAULT_CONFIG
 
     // Check if current stage is complete
-    const currentStageTasks = workflow.tasks.filter(
-      (t) => t.stage === workflow.currentStage
-    )
+    const currentStageTasks = workflow.tasks.filter((t) => t.stage === workflow.currentStage)
 
-    const incompleteTasks = currentStageTasks.filter(
-      (t) => t.status !== "completed" && t.status !== "skipped"
-    )
+    const incompleteTasks = currentStageTasks.filter((t) => t.status !== "completed" && t.status !== "skipped")
 
     if (incompleteTasks.length > 0) {
       throw new Error(
-        `Cannot progress: ${incompleteTasks.length} tasks still incomplete in ${workflow.currentStage} stage`
+        `Cannot progress: ${incompleteTasks.length} tasks still incomplete in ${workflow.currentStage} stage`,
       )
     }
 
@@ -193,10 +186,13 @@ export namespace Orchestrator {
     const currentIndex = config.stages.indexOf(workflow.currentStage)
     if (currentIndex === -1 || currentIndex === config.stages.length - 1) {
       // Workflow complete
+      console.log(`🏁 All stages complete! Completing workflow...`)
       return await completeWorkflow(workflowID)
     }
 
     const nextStage = config.stages[currentIndex + 1]
+
+    console.log(`🔄 Progressing from '${workflow.currentStage}' to '${nextStage}'`)
 
     // Update workflow
     await Storage.update<WorkflowInstance>(["workflow", workflowID], (draft) => {
@@ -230,17 +226,15 @@ export namespace Orchestrator {
       to: nextStage,
     })
 
+    console.log(`✅ Now in stage '${nextStage}'`)
+
     return updated
   }
 
   /**
    * Start a task
    */
-  export async function startTask(params: {
-    workflowID: string
-    taskID: string
-    agentID: string
-  }): Promise<Task> {
+  export async function startTask(params: { workflowID: string; taskID: string; agentID: string }): Promise<Task> {
     const { workflowID, taskID, agentID } = params
 
     const workflow = await getWorkflow(workflowID)
@@ -262,9 +256,7 @@ export namespace Orchestrator {
     })
 
     if (unmetDependencies.length > 0) {
-      throw new Error(
-        `Cannot start task: dependencies not met: ${unmetDependencies.join(", ")}`
-      )
+      throw new Error(`Cannot start task: dependencies not met: ${unmetDependencies.join(", ")}`)
     }
 
     // Update task status
@@ -318,9 +310,7 @@ export namespace Orchestrator {
     const task = workflow.tasks[taskIndex]
 
     // Calculate actual time
-    const actualTime = task.time.started
-      ? Date.now() - task.time.started
-      : 0
+    const actualTime = task.time.started ? Date.now() - task.time.started : 0
 
     // Update task
     await Storage.update<WorkflowInstance>(["workflow", workflowID], (draft) => {
@@ -537,9 +527,7 @@ export namespace Orchestrator {
    */
   export async function listWorkflows(workspaceID: string): Promise<WorkflowInstance[]> {
     const allKeys = await Storage.list(["workflow"])
-    const workflows = await Promise.all(
-      allKeys.map((key) => Storage.read<WorkflowInstance>(key))
-    )
+    const workflows = await Promise.all(allKeys.map((key) => Storage.read<WorkflowInstance>(key)))
 
     return workflows.filter((w) => w.workspaceID === workspaceID)
   }
@@ -565,9 +553,7 @@ export namespace Orchestrator {
       return null
     }
 
-    const currentStageTasks = workflow.tasks.filter(
-      (t) => t.stage === workflow.currentStage && t.status === "pending"
-    )
+    const currentStageTasks = workflow.tasks.filter((t) => t.stage === workflow.currentStage && t.status === "pending")
 
     // Find task with all dependencies met
     for (const task of currentStageTasks) {
@@ -592,7 +578,7 @@ export namespace Orchestrator {
     params: {
       type: WorkflowEventType
       data: Record<string, any>
-    }
+    },
   ): Promise<void> {
     const event: WorkflowEvent = {
       id: ulid(),
