@@ -32,7 +32,7 @@ export namespace TaskMaster {
       model,
       prompt,
       temperature: config?.temperature ?? 0.3,
-      maxTokens: config?.maxTokens ?? 4000,
+      maxSteps: config?.maxTokens ?? 4000,
     })
 
     const breakdown = parseTaskBreakdownFromResponse(result.text)
@@ -270,10 +270,15 @@ Provide your task breakdown in JSON format:`
    * Get the AI model for TaskMaster
    */
   async function getModel(config?: TaskMasterConfig) {
-    const providerID = config?.model?.providerID || "anthropic"
-    const modelID = config?.model?.modelID || "claude-sonnet-4"
+    // Use configured model if provided
+    if (config?.model?.providerID && config?.model?.modelID) {
+      const result = await Provider.getModel(config.model.providerID, config.model.modelID)
+      return result.language
+    }
 
-    const result = await Provider.getModel(providerID, modelID)
+    // Otherwise use the default model
+    const defaultModel = await Provider.defaultModel()
+    const result = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     return result.language
   }
 

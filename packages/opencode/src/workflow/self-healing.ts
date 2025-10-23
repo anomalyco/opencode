@@ -122,7 +122,7 @@ export namespace SelfHealing {
     await Storage.write(["adaptation", adaptation.id], adaptation)
 
     // Mark as active
-    await Storage.update(["adaptation", adaptation.id], (draft) => {
+    await Storage.update<Adaptation>(["adaptation", adaptation.id], (draft) => {
       draft.active = true
       draft.appliedAt = Date.now()
     })

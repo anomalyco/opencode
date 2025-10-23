@@ -2,7 +2,7 @@
  * Type definitions for the Autonomous Workflow System
  */
 
-import type { Project } from "../project/index.js"
+import type { Project } from "../project/project.js"
 import type { Agent } from "../agent/agent.js"
 
 // ============================================================================

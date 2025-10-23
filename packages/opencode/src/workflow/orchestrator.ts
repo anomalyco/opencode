@@ -26,6 +26,24 @@ import type {
 
 const log = Log.create({ service: "orchestrator" })
 
+// Event definitions
+import z from "zod/v4"
+
+export const WorkflowEventDef = Bus.event(
+  "workflow:event",
+  z.object({
+    id: z.string(),
+    workflowID: z.string(),
+    timestamp: z.number(),
+    stage: z.string(),
+    type: z.string(),
+    agentID: z.string().optional(),
+    taskID: z.string().optional(),
+    data: z.record(z.string(), z.any()),
+  })
+)
+
+
 export namespace Orchestrator {
   const DEFAULT_CONFIG: WorkflowConfig = {
     stages: ["planning", "coding", "testing", "deployment"],
@@ -591,7 +609,7 @@ export namespace Orchestrator {
     })
 
     // Publish via event bus
-    await Bus.publish("workflow:event", event)
+    await Bus.publish(WorkflowEventDef, event)
   }
 
   /**
