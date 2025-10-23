@@ -97,7 +97,7 @@ export const BashTool = Tool.define("bash", {
 
       // always allow cd if it passes above check
       if (command[0] !== "cd") {
-        const action = Wildcard.all(node.text, permissions)
+        const action = Wildcard.allStructured({ head: command[0], tail: command.slice(1) }, permissions)
         if (action === "deny") {
           throw new Error(
             `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
