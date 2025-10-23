@@ -6,6 +6,10 @@ export interface ACPSessionState {
   mcpServers: McpServer[]
   openCodeSessionId: string
   createdAt: Date
+  model: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export interface ACPConfig {

@@ -12,6 +12,7 @@ export namespace Flag {
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL_WATCHER = truthy("OPENCODE_EXPERIMENTAL_WATCHER")
+  export const OPENCODE_EXPERIMENTAL_TURN_SUMMARY = truthy("OPENCODE_EXPERIMENTAL_TURN_SUMMARY")
   export const OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP = truthy("OPENCODE_EXPERIMENTAL_NO_BOOTSTRAP")
 
   function truthy(key: string) {

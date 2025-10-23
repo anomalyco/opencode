@@ -36,6 +36,11 @@ export namespace Session {
       projectID: z.string(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
+      summary: z
+        .object({
+          diffs: Snapshot.FileDiff.array(),
+        })
+        .optional(),
       share: z
         .object({
           url: z.string(),
@@ -404,49 +409,6 @@ export namespace Session {
         ],
       })
       await Project.setInitialized(Instance.project.id)
-    },
-  )
-
-  export const diff = fn(
-    z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message").optional(),
-    }),
-    async (input) => {
-      const all = await messages(input.sessionID)
-      const index = !input.messageID ? 0 : all.findIndex((x) => x.info.id === input.messageID)
-      if (index === -1) return []
-
-      let from: string | undefined
-      let to: string | undefined
-
-      // scan assistant messages to find earliest from and latest to
-      // snapshot
-      for (let i = index + 1; i < all.length; i++) {
-        const item = all[i]
-
-        // if messageID is provided, stop at the next user message
-        if (input.messageID && item.info.role === "user") break
-
-        if (!from) {
-          for (const part of item.parts) {
-            if (part.type === "step-start" && part.snapshot) {
-              from = part.snapshot
-              break
-            }
-          }
-        }
-
-        for (const part of item.parts) {
-          if (part.type === "step-finish" && part.snapshot) {
-            to = part.snapshot
-            break
-          }
-        }
-      }
-
-      if (from && to) return Snapshot.diffFull(from, to)
-      return []
     },
   )
 }

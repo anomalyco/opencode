@@ -233,8 +233,8 @@ function App() {
           <text fg={theme().textMuted} paddingRight={1}>
             tab
           </text>
-          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={theme().background} wrap={false}>
+          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
+          <text bg={local.agent.color(local.agent.current().name)} fg={theme().background} wrapMode="none">
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>

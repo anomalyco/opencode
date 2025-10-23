@@ -10,20 +10,6 @@ export function Sidebar(props: { sessionID: string }) {
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
-  const files = createMemo(() => {
-    const result = new Set<string>()
-    for (const msg of messages()) {
-      const parts = sync.data.part[msg.id] ?? []
-      for (const part of parts) {
-        if (part.type === "patch") {
-          for (const file of part.files) {
-            result.add(file)
-          }
-        }
-      }
-    }
-    return [...result.values()].sort((a, b) => a.length - b.length)
-  })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -126,12 +112,22 @@ export function Sidebar(props: { sessionID: string }) {
             </For>
           </box>
         </Show>
-        <Show when={files().length > 0}>
+        <Show when={session().summary?.diffs}>
           <box>
             <text>
               <b>Modified Files</b>
             </text>
-            <For each={files()}>{(file) => <text fg={theme().textMuted}>{Locale.truncateMiddle(file, 40)}</text>}</For>
+            <For each={session().summary?.diffs || []}>
+              {(item) => (
+                <box flexDirection="row" gap={1} justifyContent="space-between">
+                  <text fg={theme().textMuted}>{Locale.truncateMiddle(item.file, 40)}</text>
+                  <box flexDirection="row" gap={1}>
+                    <text fg={theme().diffAdded}>+{item.additions}</text>
+                    <text fg={theme().diffRemoved}>-{item.deletions}</text>
+                  </box>
+                </box>
+              )}
+            </For>
           </box>
         </Show>
         <Show when={todo().length > 0}>

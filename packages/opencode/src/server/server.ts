@@ -37,6 +37,7 @@ import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
 
 const ERRORS = {
   400: {
@@ -631,19 +632,19 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            id: Session.diff.schema.shape.sessionID,
+            id: SessionSummary.diff.schema.shape.sessionID,
           }),
         ),
         validator(
           "query",
           z.object({
-            messageID: Session.diff.schema.shape.messageID,
+            messageID: SessionSummary.diff.schema.shape.messageID,
           }),
         ),
         async (c) => {
           const query = c.req.valid("query")
           const params = c.req.valid("param")
-          const result = await Session.diff({
+          const result = await SessionSummary.diff({
             sessionID: params.id,
             messageID: query.messageID,
           })

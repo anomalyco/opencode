@@ -73,13 +73,13 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       get leader() {
         return store.leader
       },
-      parse(evt: ParsedKey) {
+      parse(evt: ParsedKey): Keybind.Info {
         return {
           ctrl: evt.ctrl,
           name: evt.name,
           shift: evt.shift,
           leader: store.leader,
-          option: evt.option,
+          meta: evt.meta,
         }
       },
       match(key: keyof KeybindsConfig, evt: ParsedKey) {

@@ -3,107 +3,107 @@ import { Keybind } from "../src/util/keybind"
 
 describe("Keybind.toString", () => {
   test("should convert simple key to string", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "f" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "f" }
     expect(Keybind.toString(info)).toBe("f")
   })
 
   test("should convert ctrl modifier to string", () => {
-    const info: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "x" }
+    const info: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "x" }
     expect(Keybind.toString(info)).toBe("ctrl+x")
   })
 
   test("should convert leader key to string", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: false, leader: true, name: "f" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "f" }
     expect(Keybind.toString(info)).toBe("<leader> f")
   })
 
   test("should convert multiple modifiers to string", () => {
-    const info: Keybind.Info = { ctrl: true, option: true, shift: false, leader: false, name: "g" }
+    const info: Keybind.Info = { ctrl: true, meta: true, shift: false, leader: false, name: "g" }
     expect(Keybind.toString(info)).toBe("ctrl+alt+g")
   })
 
   test("should convert all modifiers to string", () => {
-    const info: Keybind.Info = { ctrl: true, option: true, shift: true, leader: true, name: "h" }
+    const info: Keybind.Info = { ctrl: true, meta: true, shift: true, leader: true, name: "h" }
     expect(Keybind.toString(info)).toBe("<leader> ctrl+alt+shift+h")
   })
 
   test("should convert shift modifier to string", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: true, leader: false, name: "enter" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: true, leader: false, name: "enter" }
     expect(Keybind.toString(info)).toBe("shift+enter")
   })
 
   test("should convert function key to string", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "f2" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "f2" }
     expect(Keybind.toString(info)).toBe("f2")
   })
 
   test("should convert special key to string", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "pgup" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "pgup" }
     expect(Keybind.toString(info)).toBe("pgup")
   })
 
   test("should handle empty name", () => {
-    const info: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "" }
+    const info: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "" }
     expect(Keybind.toString(info)).toBe("ctrl")
   })
 
   test("should handle only modifiers", () => {
-    const info: Keybind.Info = { ctrl: true, option: true, shift: true, leader: true, name: "" }
+    const info: Keybind.Info = { ctrl: true, meta: true, shift: true, leader: true, name: "" }
     expect(Keybind.toString(info)).toBe("<leader> ctrl+alt+shift")
   })
 
   test("should handle only leader with no other parts", () => {
-    const info: Keybind.Info = { ctrl: false, option: false, shift: false, leader: true, name: "" }
+    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "" }
     expect(Keybind.toString(info)).toBe("<leader>")
   })
 })
 
 describe("Keybind.match", () => {
   test("should match identical keybinds", () => {
-    const a: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "x" }
-    const b: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "x" }
+    const a: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "x" }
+    const b: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "x" }
     expect(Keybind.match(a, b)).toBe(true)
   })
 
   test("should not match different key names", () => {
-    const a: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "x" }
-    const b: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "y" }
+    const a: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "x" }
+    const b: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "y" }
     expect(Keybind.match(a, b)).toBe(false)
   })
 
   test("should not match different modifiers", () => {
-    const a: Keybind.Info = { ctrl: true, option: false, shift: false, leader: false, name: "x" }
-    const b: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "x" }
+    const a: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "x" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "x" }
     expect(Keybind.match(a, b)).toBe(false)
   })
 
   test("should match leader keybinds", () => {
-    const a: Keybind.Info = { ctrl: false, option: false, shift: false, leader: true, name: "f" }
-    const b: Keybind.Info = { ctrl: false, option: false, shift: false, leader: true, name: "f" }
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "f" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "f" }
     expect(Keybind.match(a, b)).toBe(true)
   })
 
   test("should not match leader vs non-leader", () => {
-    const a: Keybind.Info = { ctrl: false, option: false, shift: false, leader: true, name: "f" }
-    const b: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "f" }
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "f" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "f" }
     expect(Keybind.match(a, b)).toBe(false)
   })
 
   test("should match complex keybinds", () => {
-    const a: Keybind.Info = { ctrl: true, option: true, shift: false, leader: false, name: "g" }
-    const b: Keybind.Info = { ctrl: true, option: true, shift: false, leader: false, name: "g" }
+    const a: Keybind.Info = { ctrl: true, meta: true, shift: false, leader: false, name: "g" }
+    const b: Keybind.Info = { ctrl: true, meta: true, shift: false, leader: false, name: "g" }
     expect(Keybind.match(a, b)).toBe(true)
   })
 
   test("should not match with one modifier different", () => {
-    const a: Keybind.Info = { ctrl: true, option: true, shift: false, leader: false, name: "g" }
-    const b: Keybind.Info = { ctrl: true, option: true, shift: true, leader: false, name: "g" }
+    const a: Keybind.Info = { ctrl: true, meta: true, shift: false, leader: false, name: "g" }
+    const b: Keybind.Info = { ctrl: true, meta: true, shift: true, leader: false, name: "g" }
     expect(Keybind.match(a, b)).toBe(false)
   })
 
   test("should match simple key without modifiers", () => {
-    const a: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "a" }
-    const b: Keybind.Info = { ctrl: false, option: false, shift: false, leader: false, name: "a" }
+    const a: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "a" }
+    const b: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "a" }
     expect(Keybind.match(a, b)).toBe(true)
   })
 })
@@ -114,7 +114,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "f",
@@ -127,7 +127,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: true,
         name: "f",
@@ -140,7 +140,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "x",
@@ -153,7 +153,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: true,
+        meta: true,
         shift: false,
         leader: false,
         name: "u",
@@ -166,7 +166,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: true,
         leader: false,
         name: "f2",
@@ -174,12 +174,12 @@ describe("Keybind.parse", () => {
     ])
   })
 
-  test("should parse option/alt modifier", () => {
-    const result = Keybind.parse("option+g")
+  test("should parse meta/alt modifier", () => {
+    const result = Keybind.parse("meta+g")
     expect(result).toEqual([
       {
         ctrl: false,
-        option: true,
+        meta: true,
         shift: false,
         leader: false,
         name: "g",
@@ -192,7 +192,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: true,
         name: "h",
@@ -205,14 +205,14 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "c",
       },
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: true,
         name: "q",
@@ -225,7 +225,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: true,
         leader: false,
         name: "enter",
@@ -238,7 +238,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "j",
@@ -256,7 +256,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "pgup",
@@ -269,7 +269,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "f2",
@@ -282,7 +282,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: true,
+        meta: true,
         shift: false,
         leader: false,
         name: "g",
@@ -295,7 +295,7 @@ describe("Keybind.parse", () => {
     expect(result).toEqual([
       {
         ctrl: true,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "x",

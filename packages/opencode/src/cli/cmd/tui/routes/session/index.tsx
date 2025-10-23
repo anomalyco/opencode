@@ -572,6 +572,9 @@ function UserMessage(props: {
             </For>
           </box>
         </Show>
+        <Show when={props.message.summary}>
+          <text>EXPERIMENTAL: {props.message.summary!.text}</text>
+        </Show>
         <text>
           {sync.data.config.username ?? "You"}{" "}
           <Show

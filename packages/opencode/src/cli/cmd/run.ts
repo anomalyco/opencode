@@ -13,6 +13,7 @@ import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
 import { SessionPrompt } from "../../session/prompt"
+import { EOL } from "os"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -194,13 +195,12 @@ export const RunCommand = cmd({
             sessionID: session?.id,
             ...data,
           }
-          process.stdout.write(JSON.stringify(jsonEvent) + "\n")
+          process.stdout.write(JSON.stringify(jsonEvent) + EOL)
           return true
         }
         return false
       }
 
-      let text = ""
       const messageID = Identifier.ascending("message")
 
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -232,15 +232,14 @@ export const RunCommand = cmd({
         }
 
         if (part.type === "text") {
-          text = part.text
+          const text = part.text
+          const isPiped = !process.stdout.isTTY
 
           if (part.time?.end) {
             if (outputJsonEvent("text", { part })) return
-            UI.empty()
-            UI.println(UI.markdown(text))
-            UI.empty()
-            text = ""
-            return
+            if (!isPiped) UI.println()
+            process.stdout.write((isPiped ? text : UI.markdown(text)) + EOL)
+            if (!isPiped) UI.println()
           }
         }
       })
@@ -254,13 +253,13 @@ export const RunCommand = cmd({
         if ("data" in error && error.data && "message" in error.data) {
           err = error.data.message
         }
-        errorMsg = errorMsg ? errorMsg + "\n" + err : err
+        errorMsg = errorMsg ? errorMsg + EOL + err : err
 
         if (outputJsonEvent("error", { error })) return
         UI.error(err)
       })
 
-      const result = await (async () => {
+      await (async () => {
         if (args.command) {
           return await SessionPrompt.command({
             messageID,
@@ -289,15 +288,6 @@ export const RunCommand = cmd({
           ],
         })
       })()
-
-      const isPiped = !process.stdout.isTTY
-      if (isPiped) {
-        const match = result.parts.findLast((x: any) => x.type === "text") as any
-        if (outputJsonEvent("text", { text: match })) return
-        if (match) process.stdout.write(UI.markdown(match.text))
-        if (errorMsg) process.stdout.write(errorMsg)
-      }
-      UI.empty()
       if (errorMsg) process.exit(1)
     })
   },

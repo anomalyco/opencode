@@ -3,7 +3,7 @@ import { isDeepEqual } from "remeda"
 export namespace Keybind {
   export type Info = {
     ctrl: boolean
-    option: boolean
+    meta: boolean
     shift: boolean
     leader: boolean
     name: string
@@ -17,7 +17,7 @@ export namespace Keybind {
     const parts: string[] = []
 
     if (info.ctrl) parts.push("ctrl")
-    if (info.option) parts.push("alt")
+    if (info.meta) parts.push("alt")
     if (info.shift) parts.push("shift")
     if (info.name) {
       if (info.name === "delete") parts.push("del")
@@ -42,7 +42,7 @@ export namespace Keybind {
       const parts = normalized.toLowerCase().split("+")
       const info: Info = {
         ctrl: false,
-        option: false,
+        meta: false,
         shift: false,
         leader: false,
         name: "",
@@ -55,7 +55,7 @@ export namespace Keybind {
             break
           case "alt":
           case "option":
-            info.option = true
+            info.meta = true
             break
           case "shift":
             info.shift = true

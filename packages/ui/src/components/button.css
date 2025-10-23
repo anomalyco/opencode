@@ -1,5 +1,4 @@
 [data-component="button"] {
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -32,12 +31,7 @@
     border-color: var(--border-weak-base);
     background-color: var(--button-secondary-base);
     color: var(--text-strong);
-
-    /* shadow-xs */
-    box-shadow:
-      0 1px 2px -1px rgba(19, 16, 16, 0.04),
-      0 1px 2px 0 rgba(19, 16, 16, 0.06),
-      0 1px 3px 0 rgba(19, 16, 16, 0.08);
+    box-shadow: var(--shadow-xs);
 
     &:hover:not(:disabled) {
       border-color: var(--border-hover);
@@ -84,12 +78,11 @@
     padding: 0 8px 0 6px;
     gap: 8px;
 
-    /* text-12-medium */
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large); /* 166.667% */
+    line-height: var(--line-height-large); /* 171.429% */
     letter-spacing: var(--letter-spacing-normal);
   }
 

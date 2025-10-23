@@ -21,6 +21,7 @@ import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
+import { EOL } from "os"
 
 const cancel = new AbortController()
 
@@ -132,7 +133,7 @@ try {
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
-    UI.error("Unexpected error, check log file at " + Log.file() + " for more details\n")
+    UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
     console.error(e)
   }
   process.exitCode = 1
