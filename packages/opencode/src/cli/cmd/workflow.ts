@@ -11,6 +11,16 @@ import { UI } from "../ui.js"
 import { Orchestrator, Workspace, TaskMaster, Metrics, Heuristics, SelfHealing } from "../../workflow/index.js"
 import type { WorkflowInstance } from "../../workflow/types.js"
 
+
+// Helper function to output styled text
+function output(style?: string, message?: string) {
+  if (!style && !message) {
+    UI.empty()
+  } else if (style && message) {
+    UI.println(style + message + UI.Style.TEXT_NORMAL)
+  }
+}
+
 export const WorkflowCommand = cmd({
   command: "workflow <action>",
   describe: "manage autonomous workflows",
@@ -36,23 +46,23 @@ export const WorkflowCommand = cmd({
           const workspaceDir = (argv.workspace as string) || process.cwd()
 
           await bootstrap(workspaceDir, async () => {
-            UI.output(UI.Style.TEXT_SUCCESS_BOLD, "Creating autonomous workflow...")
-            UI.output()
+            output(UI.Style.TEXT_SUCCESS_BOLD, "Creating autonomous workflow...")
+            UI.empty()
 
             try {
               // Get or create workspace
               let workspace = await Workspace.fromDirectory(workspaceDir)
 
               if (!workspace) {
-                UI.output(UI.Style.TEXT_INFO, "Creating new workspace...")
+                output(UI.Style.TEXT_INFO, "Creating new workspace...")
                 workspace = await Workspace.create({
                   directory: workspaceDir,
                 })
-                UI.output(UI.Style.TEXT_SUCCESS, `✓ Workspace created: ${workspace.id}`)
-                UI.output()
+                output(UI.Style.TEXT_SUCCESS, `✓ Workspace created: ${workspace.id}`)
+                UI.empty()
               } else {
-                UI.output(UI.Style.TEXT_INFO, `Using workspace: ${workspace.id}`)
-                UI.output()
+                output(UI.Style.TEXT_INFO, `Using workspace: ${workspace.id}`)
+                UI.empty()
               }
 
               // Read PRD from file or use as text
@@ -62,8 +72,8 @@ export const WorkflowCommand = cmd({
                 prdContent = await fs.readFile(prd, "utf-8")
               }
 
-              UI.output(UI.Style.TEXT_INFO, "Analyzing PRD with TaskMaster AI...")
-              UI.output()
+              output(UI.Style.TEXT_INFO, "Analyzing PRD with TaskMaster AI...")
+              UI.empty()
 
               // Start workflow
               const workflow = await Orchestrator.startWorkflow({
@@ -71,14 +81,14 @@ export const WorkflowCommand = cmd({
                 prd: prdContent,
               })
 
-              UI.output(UI.Style.TEXT_SUCCESS_BOLD, `✓ Workflow created: ${workflow.id}`)
-              UI.output()
-              UI.output(UI.Style.TEXT_HIGHLIGHT, `Title: ${workflow.title}`)
-              UI.output(UI.Style.TEXT_DIM, `Description: ${workflow.description}`)
-              UI.output()
-              UI.output(UI.Style.TEXT_INFO, `Total tasks: ${workflow.tasks.length}`)
-              UI.output(UI.Style.TEXT_INFO, `Current stage: ${workflow.currentStage}`)
-              UI.output()
+              output(UI.Style.TEXT_SUCCESS_BOLD, `✓ Workflow created: ${workflow.id}`)
+              UI.empty()
+              output(UI.Style.TEXT_HIGHLIGHT, `Title: ${workflow.title}`)
+              output(UI.Style.TEXT_DIM, `Description: ${workflow.description}`)
+              UI.empty()
+              output(UI.Style.TEXT_INFO, `Total tasks: ${workflow.tasks.length}`)
+              output(UI.Style.TEXT_INFO, `Current stage: ${workflow.currentStage}`)
+              UI.empty()
 
               // Show task breakdown by stage
               const stageGroups = {
@@ -88,20 +98,20 @@ export const WorkflowCommand = cmd({
                 deployment: workflow.tasks.filter(t => t.stage === "deployment"),
               }
 
-              UI.output(UI.Style.TEXT_WARNING_BOLD, "Task Breakdown:")
+              output(UI.Style.TEXT_WARNING_BOLD, "Task Breakdown:")
               for (const [stage, tasks] of Object.entries(stageGroups)) {
                 if (tasks.length > 0) {
-                  UI.output(UI.Style.TEXT_INFO, `  ${stage}: ${tasks.length} tasks`)
+                  output(UI.Style.TEXT_INFO, `  ${stage}: ${tasks.length} tasks`)
                 }
               }
-              UI.output()
+              UI.empty()
 
-              UI.output(UI.Style.TEXT_SUCCESS, `Use 'opencode workflow status ${workflow.id}' to check progress`)
-              UI.output(UI.Style.TEXT_SUCCESS, `Use 'opencode workflow run ${workflow.id}' to start execution`)
+              output(UI.Style.TEXT_SUCCESS, `Use 'opencode workflow status ${workflow.id}' to check progress`)
+              output(UI.Style.TEXT_SUCCESS, `Use 'opencode workflow run ${workflow.id}' to start execution`)
 
             } catch (error) {
-              UI.output(UI.Style.TEXT_DANGER_BOLD, "✗ Failed to create workflow")
-              UI.output(UI.Style.TEXT_DANGER, error instanceof Error ? error.message : String(error))
+              output(UI.Style.TEXT_DANGER_BOLD, "✗ Failed to create workflow")
+              output(UI.Style.TEXT_DANGER, error instanceof Error ? error.message : String(error))
               process.exit(1)
             }
           })
@@ -116,7 +126,7 @@ export const WorkflowCommand = cmd({
 
             const workflow = await Orchestrator.getWorkflow(workflowID)
             if (!workflow) {
-              UI.output(UI.Style.TEXT_DANGER, `Workflow ${workflowID} not found`)
+              output(UI.Style.TEXT_DANGER, `Workflow ${workflowID} not found`)
               process.exit(1)
             }
 
@@ -148,19 +158,19 @@ export const WorkflowCommand = cmd({
               : workflows
 
             if (filtered.length === 0) {
-              UI.output(UI.Style.TEXT_DIM, "No workflows found")
+              output(UI.Style.TEXT_DIM, "No workflows found")
               return
             }
 
-            UI.output(UI.Style.TEXT_SUCCESS_BOLD, `Found ${filtered.length} workflow(s):\n`)
+            output(UI.Style.TEXT_SUCCESS_BOLD, `Found ${filtered.length} workflow(s):\n`)
 
             for (const workflow of filtered) {
-              UI.output(UI.Style.TEXT_HIGHLIGHT, `${workflow.id}`)
-              UI.output(UI.Style.TEXT_INFO, `  Title: ${workflow.title}`)
-              UI.output(UI.Style.TEXT_INFO, `  Status: ${workflow.status}`)
-              UI.output(UI.Style.TEXT_INFO, `  Stage: ${workflow.currentStage}`)
-              UI.output(UI.Style.TEXT_DIM, `  Tasks: ${workflow.tasks.filter(t => t.status === "completed").length}/${workflow.tasks.length} completed`)
-              UI.output()
+              output(UI.Style.TEXT_HIGHLIGHT, `${workflow.id}`)
+              output(UI.Style.TEXT_INFO, `  Title: ${workflow.title}`)
+              output(UI.Style.TEXT_INFO, `  Status: ${workflow.status}`)
+              output(UI.Style.TEXT_INFO, `  Stage: ${workflow.currentStage}`)
+              output(UI.Style.TEXT_DIM, `  Tasks: ${workflow.tasks.filter(t => t.status === "completed").length}/${workflow.tasks.length} completed`)
+              UI.empty()
             }
           })
         },
@@ -173,15 +183,15 @@ export const WorkflowCommand = cmd({
             const workflowID = argv.workflowId as string
 
             try {
-              UI.output(UI.Style.TEXT_INFO, "Progressing workflow to next stage...")
+              output(UI.Style.TEXT_INFO, "Progressing workflow to next stage...")
 
               const workflow = await Orchestrator.progressStage(workflowID)
 
-              UI.output(UI.Style.TEXT_SUCCESS_BOLD, `✓ Workflow progressed to ${workflow.currentStage}`)
+              output(UI.Style.TEXT_SUCCESS_BOLD, `✓ Workflow progressed to ${workflow.currentStage}`)
 
               displayWorkflowStatus(workflow)
             } catch (error) {
-              UI.output(UI.Style.TEXT_DANGER, error instanceof Error ? error.message : String(error))
+              output(UI.Style.TEXT_DANGER, error instanceof Error ? error.message : String(error))
               process.exit(1)
             }
           })
@@ -196,7 +206,7 @@ export const WorkflowCommand = cmd({
 
             await Orchestrator.pauseWorkflow(workflowID)
 
-            UI.output(UI.Style.TEXT_SUCCESS, `✓ Workflow paused`)
+            output(UI.Style.TEXT_SUCCESS, `✓ Workflow paused`)
           })
         },
       })
@@ -209,7 +219,7 @@ export const WorkflowCommand = cmd({
 
             await Orchestrator.resumeWorkflow(workflowID)
 
-            UI.output(UI.Style.TEXT_SUCCESS, `✓ Workflow resumed`)
+            output(UI.Style.TEXT_SUCCESS, `✓ Workflow resumed`)
           })
         },
       })
@@ -223,49 +233,49 @@ export const WorkflowCommand = cmd({
             const metrics = await Metrics.get(workflowID)
 
             if (!metrics) {
-              UI.output(UI.Style.TEXT_DANGER, "Metrics not found")
+              output(UI.Style.TEXT_DANGER, "Metrics not found")
               process.exit(1)
             }
 
-            UI.output(UI.Style.TEXT_SUCCESS_BOLD, "Workflow Metrics\n")
+            output(UI.Style.TEXT_SUCCESS_BOLD, "Workflow Metrics\n")
 
-            UI.output(UI.Style.TEXT_WARNING_BOLD, "Duration:")
-            UI.output(UI.Style.TEXT_INFO, `  Total: ${formatDuration(metrics.duration.total)}`)
-            UI.output(UI.Style.TEXT_INFO, `  Planning: ${formatDuration(metrics.duration.planning)}`)
-            UI.output(UI.Style.TEXT_INFO, `  Coding: ${formatDuration(metrics.duration.coding)}`)
-            UI.output(UI.Style.TEXT_INFO, `  Testing: ${formatDuration(metrics.duration.testing)}`)
-            UI.output(UI.Style.TEXT_INFO, `  Deployment: ${formatDuration(metrics.duration.deployment)}`)
-            UI.output()
+            output(UI.Style.TEXT_WARNING_BOLD, "Duration:")
+            output(UI.Style.TEXT_INFO, `  Total: ${formatDuration(metrics.duration.total)}`)
+            output(UI.Style.TEXT_INFO, `  Planning: ${formatDuration(metrics.duration.planning)}`)
+            output(UI.Style.TEXT_INFO, `  Coding: ${formatDuration(metrics.duration.coding)}`)
+            output(UI.Style.TEXT_INFO, `  Testing: ${formatDuration(metrics.duration.testing)}`)
+            output(UI.Style.TEXT_INFO, `  Deployment: ${formatDuration(metrics.duration.deployment)}`)
+            UI.empty()
 
-            UI.output(UI.Style.TEXT_WARNING_BOLD, "Tasks:")
-            UI.output(UI.Style.TEXT_INFO, `  Total: ${metrics.tasks.total}`)
-            UI.output(UI.Style.TEXT_SUCCESS, `  Completed: ${metrics.tasks.completed}`)
-            UI.output(UI.Style.TEXT_DANGER, `  Failed: ${metrics.tasks.failed}`)
-            UI.output(UI.Style.TEXT_DIM, `  Skipped: ${metrics.tasks.skipped}`)
-            UI.output()
+            output(UI.Style.TEXT_WARNING_BOLD, "Tasks:")
+            output(UI.Style.TEXT_INFO, `  Total: ${metrics.tasks.total}`)
+            output(UI.Style.TEXT_SUCCESS, `  Completed: ${metrics.tasks.completed}`)
+            output(UI.Style.TEXT_DANGER, `  Failed: ${metrics.tasks.failed}`)
+            output(UI.Style.TEXT_DIM, `  Skipped: ${metrics.tasks.skipped}`)
+            UI.empty()
 
             if (metrics.tests.total > 0) {
-              UI.output(UI.Style.TEXT_WARNING_BOLD, "Tests:")
-              UI.output(UI.Style.TEXT_INFO, `  Total: ${metrics.tests.total}`)
-              UI.output(UI.Style.TEXT_SUCCESS, `  Passed: ${metrics.tests.passed}`)
-              UI.output(UI.Style.TEXT_DANGER, `  Failed: ${metrics.tests.failed}`)
-              UI.output()
+              output(UI.Style.TEXT_WARNING_BOLD, "Tests:")
+              output(UI.Style.TEXT_INFO, `  Total: ${metrics.tests.total}`)
+              output(UI.Style.TEXT_SUCCESS, `  Passed: ${metrics.tests.passed}`)
+              output(UI.Style.TEXT_DANGER, `  Failed: ${metrics.tests.failed}`)
+              UI.empty()
             }
 
             if (metrics.errors.length > 0) {
-              UI.output(UI.Style.TEXT_DANGER_BOLD, `Errors: ${metrics.errors.length}`)
+              output(UI.Style.TEXT_DANGER_BOLD, `Errors: ${metrics.errors.length}`)
               for (const error of metrics.errors.slice(0, 5)) {
-                UI.output(UI.Style.TEXT_DANGER, `  ${error.type}: ${error.message}`)
+                output(UI.Style.TEXT_DANGER, `  ${error.type}: ${error.message}`)
               }
-              UI.output()
+              UI.empty()
             }
 
-            UI.output(UI.Style.TEXT_WARNING_BOLD, "Agent Performance:")
+            output(UI.Style.TEXT_WARNING_BOLD, "Agent Performance:")
             for (const [agentID, agentMetrics] of Object.entries(metrics.agents)) {
-              UI.output(UI.Style.TEXT_INFO, `  ${agentID}:`)
-              UI.output(UI.Style.TEXT_DIM, `    Invocations: ${agentMetrics.invocations}`)
-              UI.output(UI.Style.TEXT_DIM, `    Success rate: ${(agentMetrics.successRate * 100).toFixed(1)}%`)
-              UI.output(UI.Style.TEXT_DIM, `    Avg duration: ${formatDuration(agentMetrics.averageDuration)}`)
+              output(UI.Style.TEXT_INFO, `  ${agentID}:`)
+              output(UI.Style.TEXT_DIM, `    Invocations: ${agentMetrics.invocations}`)
+              output(UI.Style.TEXT_DIM, `    Success rate: ${(agentMetrics.successRate * 100).toFixed(1)}%`)
+              output(UI.Style.TEXT_DIM, `    Avg duration: ${formatDuration(agentMetrics.averageDuration)}`)
             }
           })
         },
@@ -275,40 +285,40 @@ export const WorkflowCommand = cmd({
         describe: "analyze workflow patterns and suggest optimizations",
         handler: async (argv) => {
           await bootstrap(process.cwd(), async () => {
-            UI.output(UI.Style.TEXT_INFO, "Analyzing workflow patterns...")
-            UI.output()
+            output(UI.Style.TEXT_INFO, "Analyzing workflow patterns...")
+            UI.empty()
 
             const patterns = await Heuristics.analyzeFailurePatterns()
             const bottlenecks = await Heuristics.identifyBottlenecks()
             const optimizations = await Heuristics.suggestOptimizations()
 
             if (patterns.length > 0) {
-              UI.output(UI.Style.TEXT_DANGER_BOLD, `Failure Patterns (${patterns.length}):\n`)
+              output(UI.Style.TEXT_DANGER_BOLD, `Failure Patterns (${patterns.length}):\n`)
               for (const pattern of patterns.slice(0, 5)) {
-                UI.output(UI.Style.TEXT_WARNING, `${pattern.type} (${pattern.occurrences} occurrences)`)
-                UI.output(UI.Style.TEXT_DIM, `  ${pattern.description}`)
-                UI.output(UI.Style.TEXT_SUCCESS, `  Fix: ${pattern.suggestedFix}`)
-                UI.output()
+                output(UI.Style.TEXT_WARNING, `${pattern.type} (${pattern.occurrences} occurrences)`)
+                output(UI.Style.TEXT_DIM, `  ${pattern.description}`)
+                output(UI.Style.TEXT_SUCCESS, `  Fix: ${pattern.suggestedFix}`)
+                UI.empty()
               }
             }
 
             if (bottlenecks.length > 0) {
-              UI.output(UI.Style.TEXT_WARNING_BOLD, `Bottlenecks (${bottlenecks.length}):\n`)
+              output(UI.Style.TEXT_WARNING_BOLD, `Bottlenecks (${bottlenecks.length}):\n`)
               for (const bottleneck of bottlenecks.slice(0, 5)) {
-                UI.output(UI.Style.TEXT_INFO, `${bottleneck.stage} (${bottleneck.agentID})`)
-                UI.output(UI.Style.TEXT_DIM, `  Avg delay: ${formatDuration(bottleneck.averageDelay)}`)
-                UI.output(UI.Style.TEXT_DIM, `  Causes: ${bottleneck.causes.join(", ")}`)
-                UI.output()
+                output(UI.Style.TEXT_INFO, `${bottleneck.stage} (${bottleneck.agentID})`)
+                output(UI.Style.TEXT_DIM, `  Avg delay: ${formatDuration(bottleneck.averageDelay)}`)
+                output(UI.Style.TEXT_DIM, `  Causes: ${bottleneck.causes.join(", ")}`)
+                UI.empty()
               }
             }
 
             if (optimizations.length > 0) {
-              UI.output(UI.Style.TEXT_SUCCESS_BOLD, `Optimizations (${optimizations.length}):\n`)
+              output(UI.Style.TEXT_SUCCESS_BOLD, `Optimizations (${optimizations.length}):\n`)
               for (const opt of optimizations.slice(0, 5)) {
-                UI.output(UI.Style.TEXT_HIGHLIGHT, opt.description)
-                UI.output(UI.Style.TEXT_DIM, `  Expected improvement: ${(opt.expectedImprovement * 100).toFixed(1)}%`)
-                UI.output(UI.Style.TEXT_DIM, `  Risk: ${opt.riskLevel}`)
-                UI.output()
+                output(UI.Style.TEXT_HIGHLIGHT, opt.description)
+                output(UI.Style.TEXT_DIM, `  Expected improvement: ${(opt.expectedImprovement * 100).toFixed(1)}%`)
+                output(UI.Style.TEXT_DIM, `  Risk: ${opt.riskLevel}`)
+                UI.empty()
               }
             }
           })
@@ -325,18 +335,18 @@ export const WorkflowCommand = cmd({
  * Display workflow status
  */
 function displayWorkflowStatus(workflow: WorkflowInstance) {
-  UI.output()
-  UI.output(UI.Style.TEXT_SUCCESS_BOLD, `Workflow: ${workflow.title}`)
-  UI.output()
-  UI.output(UI.Style.TEXT_INFO, `ID: ${workflow.id}`)
-  UI.output(UI.Style.TEXT_INFO, `Status: ${workflow.status}`)
-  UI.output(UI.Style.TEXT_INFO, `Current Stage: ${workflow.currentStage}`)
-  UI.output()
+  UI.empty()
+  output(UI.Style.TEXT_SUCCESS_BOLD, `Workflow: ${workflow.title}`)
+  UI.empty()
+  output(UI.Style.TEXT_INFO, `ID: ${workflow.id}`)
+  output(UI.Style.TEXT_INFO, `Status: ${workflow.status}`)
+  output(UI.Style.TEXT_INFO, `Current Stage: ${workflow.currentStage}`)
+  UI.empty()
 
   // Show task progress by stage
   const stages = ["planning", "coding", "testing", "deployment"] as const
 
-  UI.output(UI.Style.TEXT_WARNING_BOLD, "Progress:")
+  output(UI.Style.TEXT_WARNING_BOLD, "Progress:")
   for (const stage of stages) {
     const stageTasks = workflow.tasks.filter(t => t.stage === stage)
     const completed = stageTasks.filter(t => t.status === "completed").length
@@ -351,30 +361,30 @@ function displayWorkflowStatus(workflow: WorkflowInstance) {
     const statusText = `${statusIndicator} ${stage}: ${completed}/${stageTasks.length} completed`
 
     if (stage === workflow.currentStage) {
-      UI.output(UI.Style.TEXT_SUCCESS_BOLD, `  ${statusText}`)
+      output(UI.Style.TEXT_SUCCESS_BOLD, `  ${statusText}`)
     } else if (completed === stageTasks.length) {
-      UI.output(UI.Style.TEXT_DIM, `  ${statusText}`)
+      output(UI.Style.TEXT_DIM, `  ${statusText}`)
     } else {
-      UI.output(UI.Style.TEXT_INFO, `  ${statusText}`)
+      output(UI.Style.TEXT_INFO, `  ${statusText}`)
     }
 
     if (active > 0) {
-      UI.output(UI.Style.TEXT_WARNING, `    ${active} active`)
+      output(UI.Style.TEXT_WARNING, `    ${active} active`)
     }
     if (failed > 0) {
-      UI.output(UI.Style.TEXT_DANGER, `    ${failed} failed`)
+      output(UI.Style.TEXT_DANGER, `    ${failed} failed`)
     }
   }
 
-  UI.output()
+  UI.empty()
 
   // Show current task if any
   const currentTask = workflow.tasks.find(t => t.status === "active")
   if (currentTask) {
-    UI.output(UI.Style.TEXT_HIGHLIGHT_BOLD, "Current Task:")
-    UI.output(UI.Style.TEXT_INFO, `  ${currentTask.title}`)
-    UI.output(UI.Style.TEXT_DIM, `  Agent: ${currentTask.agentID || "unassigned"}`)
-    UI.output()
+    output(UI.Style.TEXT_HIGHLIGHT_BOLD, "Current Task:")
+    output(UI.Style.TEXT_INFO, `  ${currentTask.title}`)
+    output(UI.Style.TEXT_DIM, `  Agent: ${currentTask.agentID || "unassigned"}`)
+    UI.empty()
   }
 }
 
