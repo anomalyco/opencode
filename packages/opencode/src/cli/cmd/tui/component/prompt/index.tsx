@@ -305,6 +305,12 @@ export function Prompt(props: PromptProps) {
                 )
                 autocomplete.onInput(value)
               }}
+              keyBindings={[
+                { name: "return", meta: true, action: "newline" },
+                { name: "enter", meta: true, action: "newline" },
+                { name: "return", action: "submit" },
+                { name: "enter", action: "submit" },
+              ]}
               onKeyDown={async (e: KeyEvent) => {
                 if (props.disabled) {
                   e.preventDefault()
