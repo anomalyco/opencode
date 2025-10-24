@@ -57,14 +57,18 @@ export function Prompt(props: PromptProps) {
         value: "prompt.editor",
         onSelect: async (dialog) => {
           dialog.clear()
-          const value = input.value
-          input.value = ""
+          const value = input.plainText
+          const cursor = input.cursor
+          input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
           setStore("prompt", {
             input: "",
             parts: [],
           })
           const content = await Editor.open({ value, renderer })
           if (content) {
+            const cursor = input.cursor
+            input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
+            input.editBuffer.insertText(content)
             setStore("prompt", {
               input: content,
               parts: [],
@@ -141,6 +145,9 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
+      const cursor = input.cursor
+      input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
+      input.editBuffer.insertText(prompt.input)
       setStore("prompt", prompt)
       console.log("prompt.set", prompt.input, Bun.stringWidth(prompt.input))
       input.cursorOffset = Bun.stringWidth(prompt.input)
@@ -267,7 +274,7 @@ export function Prompt(props: PromptProps) {
           <box paddingTop={1} paddingBottom={1} backgroundColor={Theme.backgroundElement} flexGrow={1}>
             <textarea
               onContentChange={() => {
-                const value = input.value
+                const value = input.plainText
                 let diff = value.length - store.prompt.input.length
                 setStore(
                   produce((draft) => {
@@ -301,7 +308,6 @@ export function Prompt(props: PromptProps) {
                 )
                 autocomplete.onInput(value)
               }}
-              value={store.prompt.input}
               onKeyDown={async (e: KeyEvent) => {
                 if (props.disabled) {
                   e.preventDefault()
@@ -334,10 +340,13 @@ export function Prompt(props: PromptProps) {
                 if (!autocomplete.visible && input.visualCursor.offset === 0) {
                   if (e.name === "up" || e.name === "down") {
                     const direction = e.name === "up" ? -1 : 1
-                    const item = history.move(direction, input.value)
+                    const item = history.move(direction, input.plainText)
                     if (item) {
+                      const cursor = input.cursor
+                      input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
+                      input.editBuffer.insertText(item.input)
                       setStore("prompt", item)
-                      input.cursorPosition = item.input.length
+                      input.cursorOffset = 0
                       e.preventDefault()
                     }
                     return
