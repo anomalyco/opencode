@@ -256,16 +256,18 @@ export namespace Provider {
     }
 
     const configProviders = Object.entries(config.provider ?? {})
+    log.info("Processing config providers", { count: configProviders.length, providers: configProviders.map(([id]) => id) })
 
     for (const [providerID, provider] of configProviders) {
+      log.info("Processing config provider", { providerID, npm: provider.npm })
       const existing = database[providerID]
       const parsed: ModelsDev.Provider = {
         id: providerID,
         npm: provider.npm ?? existing?.npm,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
-        api: provider.api ?? existing?.api,
-        models: existing?.models ?? {},
+        api: provider.api ?? existing?.api ?? (provider.options?.["baseURL"] || providers[providerID]?.options?.["baseURL"]), // Use baseURL as api field if not explicitly set
+        models: existing?.models ?? {}, // Start with existing models if any
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
@@ -314,6 +316,16 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+      
+      // Also ensure the provider is marked in providers if it's newly added from config
+      if (!providers[providerID] && parsed.npm) {
+        providers[providerID] = {
+          source: "config",
+          info: parsed,
+          options: provider.options || {},
+        }
+        log.info("Added config provider to providers map", { providerID, npm: parsed.npm, hasModels: Object.keys(parsed.models).length > 0 })
+      }
     }
 
     const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
@@ -356,6 +368,112 @@ export namespace Provider {
       if (!plugin.auth.loader) continue
       const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
       mergeProvider(plugin.auth.provider, options ?? {}, "custom")
+    }
+
+    // Handle dynamic model fetching for OpenAI-compatible providers
+    // This is for custom providers that use @ai-sdk/openai-compatible and don't have predefined models
+    for (const [providerID, provider] of Object.entries(providers)) {
+      const providerInfo = database[providerID];
+      // Check if the provider is OpenAI-compatible through npm field or by checking if it's from config with the right npm
+      const isCompatible = providerInfo?.npm === "@ai-sdk/openai-compatible" || 
+                          (config.provider?.[providerID]?.npm === "@ai-sdk/openai-compatible");
+      
+      if (isCompatible && Object.keys(providerInfo?.models || {}).length === 0 && providers[providerID]?.options?.["baseURL"]) {
+        try {
+          // For custom config providers, we may need to get the npm field from config
+          const npmPackage = providerInfo?.npm || config.provider?.[providerID]?.npm;
+          if (npmPackage !== "@ai-sdk/openai-compatible") {
+            continue;
+          }
+          
+          const apiKey = providerInfo?.env?.map((item) => process.env[item]).find(Boolean) ||
+                        (await Auth.get(providerID)?.then(auth => auth?.type === "api" ? auth.key : null));
+          
+          if (!apiKey) {
+            log.warn("No API key found for OpenAI-compatible provider", { providerID });
+            continue;
+          }
+          
+          // Use the baseURL from provider options to construct the models URL
+          const baseURL = providers[providerID].options["baseURL"];
+          let modelsUrl = baseURL;
+          if (!modelsUrl.endsWith('/')) {
+            modelsUrl += '/';
+          }
+          modelsUrl += 'models';
+          
+          log.info("Fetching models from OpenAI-compatible API", {
+            url: modelsUrl,
+            provider: providerID
+          });
+          
+          const response = await fetch(modelsUrl, {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (!response.ok) {
+            log.warn("Failed to fetch models from OpenAI-compatible API", {
+              url: modelsUrl,
+              status: response.status,
+              statusText: response.statusText,
+            });
+            continue;
+          }
+          
+          const data = await response.json();
+          
+          // Parse the models response and add them to the provider's model list
+          if (data && data.data && Array.isArray(data.data)) {
+            const fetchedModels: Record<string, ModelsDev.Model> = {};
+            
+            log.info("Found models from API", {
+              count: data.data.length,
+              provider: providerID
+            });
+            
+            for (const modelData of data.data) {
+              // Create a default model entry with basic information
+              fetchedModels[modelData.id] = {
+                id: modelData.id,
+                name: modelData.id || modelData.name || modelData.object || "Unknown Model", // Use id, name, or object from API
+                cost: {
+                  input: 0, // Default to 0 cost if not specified
+                  output: 0,
+                  cache_read: 0,
+                  cache_write: 0,
+                },
+                limit: {
+                  context: 4096, // Default context limit
+                  output: 4096,  // Default output limit
+                },
+                attachment: false,
+                reasoning: false,
+                temperature: false,
+                tool_call: true, // Most models support tool calls
+                release_date: new Date().toISOString().split('T')[0], // Current date
+              };
+            }
+            
+            // Update the provider's models with the fetched ones
+            providerInfo.models = { ...providerInfo.models, ...fetchedModels };
+            
+            // Also add to the in-memory provider models to ensure they're available immediately
+            if (providers[providerID]) {
+              // Update the provider's info reference to include new models
+              providers[providerID].info = providerInfo;
+            }
+          }
+        } catch (error) {
+          log.error("Error fetching models from OpenAI-compatible API", {
+            error: error instanceof Error ? error.message : String(error),
+            url: providers[providerID].options["baseURL"],
+            providerID
+          });
+        }
+      }
     }
 
     // load config
