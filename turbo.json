@@ -1,14 +1,38 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
-    "typecheck": {},
+    "typecheck": {
+      "outputs": []
+    },
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", ".output/**"]
     },
-    "opencode#test": {
+    "test": {
       "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": false
+    },
+    "test:watch": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "lint": {
       "outputs": []
+    },
+    "lint:fix": {
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
     }
-  }
+  },
+  "globalEnv": ["NODE_ENV", "VITE_API_URL", "VITE_AUTH_URL"]
 }

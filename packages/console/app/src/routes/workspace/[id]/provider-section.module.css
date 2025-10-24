@@ -128,7 +128,6 @@
     }
 
     @media (max-width: 40rem) {
-
       th,
       td {
         padding: var(--space-2) var(--space-3);
