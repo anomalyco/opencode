@@ -157,7 +157,7 @@ export const TuiCommand = cmd({
 
         ;(async () => {
           // if (Installation.isLocal()) return
-          const config = await Config.global()
+          const config = await Config.get()
           if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
           const latest = await Installation.latest().catch(() => {})
           if (!latest) return
