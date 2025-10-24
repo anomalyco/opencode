@@ -58,9 +58,9 @@ export const BashTool = Tool.define("bash", {
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const tree = await parser().then((p) => p.parse(params.command))
     const bashPermission = await Agent.get(ctx.agent).then((x) => x.permission.bash)
-    const permissions = typeof bashPermission === "string" 
-      ? { "*": bashPermission } 
-      : bashPermission
+    const permissions = typeof bashPermission === "string"
+      ? { "*": bashPermission }
+      : (bashPermission ?? { "*": "ask" })
 
     const askPatterns = new Set<string>()
     for (const node of tree.rootNode.descendantsOfType("command")) {

@@ -16,15 +16,13 @@ export namespace Agent {
       builtIn: z.boolean(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
-      permission: z.record(z.string(), z.union([
-        Config.Permission,
-        z.record(z.string(), Config.Permission)
-      ])).refine((data) => {
-        // Ensure required fields exist and have correct types
-        return 'edit' in data && 
-               'bash' in data && 
-               (typeof data.bash === 'string' || typeof data.bash === 'object');
-      }),
+      permission: z
+        .object({
+          edit: Config.Permission.optional(),
+          bash: z.union([Config.Permission, z.record(z.string(), Config.Permission)]).optional(),
+          webfetch: Config.Permission.optional(),
+        })
+        .catchall(z.union([Config.Permission, z.record(z.string(), Config.Permission)])),
       model: z
         .object({
           modelID: z.string(),
@@ -181,7 +179,10 @@ export namespace Agent {
   }
 }
 
-function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+function mergeAgentPermissions(
+  basePermission: Partial<Agent.Info["permission"]>,
+  overridePermission: Partial<Agent.Info["permission"]>,
+): Agent.Info["permission"] {
   // Handle bash permission normalization
   if (typeof basePermission.bash === "string") {
     basePermission.bash = {
@@ -193,9 +194,9 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       "*": overridePermission.bash,
     }
   }
-  
-  const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
-  
+
+  const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {})
+
   // Handle bash merging
   let mergedBash
   if (merged.bash) {
