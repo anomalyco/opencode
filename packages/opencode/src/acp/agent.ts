@@ -452,16 +452,36 @@ export class ACPAgent implements Agent {
       }
     })
 
-    await SessionPrompt.prompt({
-      sessionID: acpSession.openCodeSessionId,
-      messageID: Identifier.ascending("message"),
-      model: {
-        providerID: model.providerID,
-        modelID: model.modelID,
-      },
-      parts,
-      agent,
-    })
+    const cmd = await (async () => {
+      const text = parts.map((part) => part.text).join("")
+      const match = text.match(/^\/(\w+)\s*(.*)$/)
+      if (!match) return
+
+      const [c, args] = match.slice(1)
+      const command = await Command.get(c)
+      if (!command) return
+      return { command, args }
+    })()
+
+    if (cmd) {
+      await SessionPrompt.command({
+        sessionID: acpSession.openCodeSessionId,
+        command: cmd.command.name,
+        arguments: cmd.args,
+        agent,
+      })
+    } else {
+      await SessionPrompt.prompt({
+        sessionID: acpSession.openCodeSessionId,
+        messageID: Identifier.ascending("message"),
+        model: {
+          providerID: model.providerID,
+          modelID: model.modelID,
+        },
+        parts,
+        agent,
+      })
+    }
 
     return {
       stopReason: "end_turn" as const,
