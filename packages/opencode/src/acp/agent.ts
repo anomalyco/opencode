@@ -26,6 +26,8 @@ import { SessionLock } from "@/session/lock"
 import { Bus } from "@/bus"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
+import { Command } from "@/command"
+import { Agent as Agents } from "@/agent/agent"
 
 export class ACPAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
@@ -54,90 +56,95 @@ export class ACPAgent implements Agent {
         if (!message || message.role !== "assistant") return
 
         if (part.type === "tool") {
-          if (part.state.status === "pending") {
-            await this.connection
-              .sessionUpdate({
-                sessionId: acpSession.id,
-                update: {
-                  sessionUpdate: "tool_call",
-                  toolCallId: part.callID,
-                  title: part.tool,
-                  kind: this.determineToolKind(part.tool),
-                  status: "pending",
-                  locations: [],
-                  rawInput: {},
-                },
-              })
-              .catch((err) => {
-                this.log.error("failed to send tool pending to ACP", { error: err })
-              })
-          } else if (part.state.status === "running") {
-            await this.connection
-              .sessionUpdate({
-                sessionId: acpSession.id,
-                update: {
-                  sessionUpdate: "tool_call_update",
-                  toolCallId: part.callID,
-                  status: "in_progress",
-                  locations: this.extractLocations(part.tool, part.state.input),
-                  rawInput: part.state.input,
-                },
-              })
-              .catch((err) => {
-                this.log.error("failed to send tool in_progress to ACP", { error: err })
-              })
-          } else if (part.state.status === "completed") {
-            await this.connection
-              .sessionUpdate({
-                sessionId: acpSession.id,
-                update: {
-                  sessionUpdate: "tool_call_update",
-                  toolCallId: part.callID,
-                  status: "completed",
-                  content: [
-                    {
-                      type: "content",
-                      content: {
-                        type: "text",
-                        text: part.state.output,
-                      },
-                    },
-                  ],
-                  rawOutput: {
-                    output: part.state.output,
-                    title: part.state.title,
-                    metadata: part.state.metadata,
+          switch (part.state.status) {
+            case "pending":
+              await this.connection
+                .sessionUpdate({
+                  sessionId: acpSession.id,
+                  update: {
+                    sessionUpdate: "tool_call",
+                    toolCallId: part.callID,
+                    title: part.tool,
+                    kind: this.determineToolKind(part.tool),
+                    status: "pending",
+                    locations: [],
+                    rawInput: {},
                   },
-                },
-              })
-              .catch((err) => {
-                this.log.error("failed to send tool completed to ACP", { error: err })
-              })
-          } else if (part.state.status === "error") {
-            await this.connection
-              .sessionUpdate({
-                sessionId: acpSession.id,
-                update: {
-                  sessionUpdate: "tool_call_update",
-                  toolCallId: part.callID,
-                  status: "failed",
-                  content: [
-                    {
-                      type: "content",
-                      content: {
-                        type: "text",
-                        text: `Error: ${part.state.error}`,
-                      },
-                    },
-                  ],
-                  rawOutput: {
-                    error: part.state.error,
+                })
+                .catch((err) => {
+                  this.log.error("failed to send tool pending to ACP", { error: err })
+                })
+              break
+            case "running":
+              await this.connection
+                .sessionUpdate({
+                  sessionId: acpSession.id,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "in_progress",
+                    locations: this.extractLocations(part.tool, part.state.input),
+                    rawInput: part.state.input,
                   },
-                },
-              })
-              .catch((err) => {
-                this.log.error("failed to send tool error to ACP", { error: err })
-              })
+                })
+                .catch((err) => {
+                  this.log.error("failed to send tool in_progress to ACP", { error: err })
+                })
+              break
+            case "completed":
+              await this.connection
+                .sessionUpdate({
+                  sessionId: acpSession.id,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "completed",
+                    content: [
+                      {
+                        type: "content",
+                        content: {
+                          type: "text",
+                          text: part.state.output,
+                        },
+                      },
+                    ],
+                    rawOutput: {
+                      output: part.state.output,
+                      title: part.state.title,
+                      metadata: part.state.metadata,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  this.log.error("failed to send tool completed to ACP", { error: err })
+                })
+              break
+            case "error":
+              await this.connection
+                .sessionUpdate({
+                  sessionId: acpSession.id,
+                  update: {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "failed",
+                    content: [
+                      {
+                        type: "content",
+                        content: {
+                          type: "text",
+                          text: `Error: ${part.state.error}`,
+                        },
+                      },
+                    ],
+                    rawOutput: {
+                      error: part.state.error,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  this.log.error("failed to send tool error to ACP", { error: err })
+                })
+              break
           }
         } else if (part.type === "text") {
           const delta = props.delta
@@ -157,6 +164,8 @@ export class ACPAgent implements Agent {
                 this.log.error("failed to send text to ACP", { error: err })
               })
           }
+        } else if (part.type === "reasoning") {
+          // TODO: Implement sending reasoning to ACP
         }
       }),
     )
@@ -208,10 +217,11 @@ export class ACPAgent implements Agent {
       protocolVersion: 1,
       agentCapabilities: {
         loadSession: false,
-        mcpCapabilities: {
-          http: true,
-          sse: true,
-        },
+        // TODO: map acp mcp
+        // mcpCapabilities: {
+        //   http: true,
+        //   sse: true,
+        // },
       },
       authMethods: [
         {
@@ -239,11 +249,40 @@ export class ACPAgent implements Agent {
     const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
     const availableModels = await this.availableModels()
 
+    const availableCommands = (await Command.list()).map((command) => ({
+      name: command.name,
+      description: command.description ?? "",
+    }))
+
+    setTimeout(() => {
+      this.connection.sessionUpdate({
+        sessionId: session.id,
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands,
+        },
+      })
+    }, 0)
+
+    const availableModes = (await Agents.list())
+      .filter((agent) => agent.mode !== "subagent")
+      .map((agent) => ({
+        id: agent.name,
+        name: agent.name,
+        description: agent.description,
+      }))
+
+    const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+
     return {
       sessionId: session.id,
       models: {
         currentModelId: `${model.providerID}/${model.modelID}`,
         availableModels,
+      },
+      modes: {
+        availableModes,
+        currentModeId,
       },
       _meta: {},
     }
