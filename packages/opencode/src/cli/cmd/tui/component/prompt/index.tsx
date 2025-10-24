@@ -145,10 +145,10 @@ export function Prompt(props: PromptProps) {
       const cursor = input.cursor
       input.setText(prompt.input, { history: false })
       setStore("prompt", prompt)
-      console.log("prompt.set", prompt.input, Bun.stringWidth(prompt.input))
-      input.cursorOffset = Bun.stringWidth(prompt.input)
+      input.gotoBufferEnd()
     },
     reset() {
+      input.clear()
       setStore("prompt", {
         input: "",
         parts: [],
@@ -387,7 +387,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={Theme.backgroundElement}
               cursorColor={Theme.primary}
-              backgroundColor={Theme.backgroundElement}
+              // backgroundColor={Theme.backgroundElement} <- can be transparent as parent box has backgroundColor
             />
           </box>
           <box backgroundColor={Theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
