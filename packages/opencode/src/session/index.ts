@@ -340,13 +340,22 @@ export namespace Session {
     },
   )
 
-  export const updatePart = fn(MessageV2.Part, async (part) => {
-    await Storage.write(["part", part.messageID, part.id], part)
-    Bus.publish(MessageV2.Event.PartUpdated, {
-      part,
-    })
-    return part
-  })
+  export const updatePart = fn(
+    z.object({
+      part: MessageV2.Part,
+      delta: z.string().optional(),
+    }),
+    async (input) => {
+      const part = typeof input === "object" && "part" in input ? input.part : input
+      const delta = typeof input === "object" && "delta" in input ? input.delta : undefined
+      await Storage.write(["part", part.messageID, part.id], part)
+      Bus.publish(MessageV2.Event.PartUpdated, {
+        part,
+        delta,
+      })
+      return part
+    },
+  )
 
   export const getUsage = fn(
     z.object({

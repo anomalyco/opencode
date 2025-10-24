@@ -358,6 +358,7 @@ export namespace MessageV2 {
       "message.part.updated",
       z.object({
         part: Part,
+        delta: z.string().optional(),
       }),
     ),
     PartRemoved: Bus.event(

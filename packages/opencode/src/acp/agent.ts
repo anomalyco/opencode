@@ -139,7 +139,8 @@ export class ACPAgent implements Agent {
               })
           }
         } else if (part.type === "text") {
-          if (part.text) {
+          const textToSend = event.properties.delta ?? part.text
+          if (textToSend && part.synthetic !== true) {
             await this.connection
               .sessionUpdate({
                 sessionId: acpSession.id,
@@ -147,7 +148,7 @@ export class ACPAgent implements Agent {
                   sessionUpdate: "agent_message_chunk",
                   content: {
                     type: "text",
-                    text: part.text,
+                    text: textToSend,
                   },
                 },
               })
