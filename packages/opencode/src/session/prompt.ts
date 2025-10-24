@@ -49,6 +49,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
+import type { RequestPermissionResponse } from "@agentclientprotocol/sdk"
 import { SessionSummary } from "./summary"
 
 export namespace SessionPrompt {
@@ -194,6 +195,65 @@ export namespace SessionPrompt {
       providerID: model.providerID,
       tools: input.tools,
       processor,
+    })
+
+    const permUnsub = (() => {
+      if (!input.acpConnection) return
+      const acp = input.acpConnection
+      const handled = new Set<string>()
+      const options = [
+        { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
+        { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
+        { optionId: "reject_once", kind: "reject_once", name: "Reject" },
+      ]
+      return Bus.subscribe(Permission.Event.Updated, async (event) => {
+        const info = event.properties
+        if (info.sessionID !== input.sessionID) return
+        if (handled.has(info.id)) return
+        handled.add(info.id)
+        const toolCallId = info.callID ?? info.id
+        const metadata = info.metadata ?? {}
+        const res = await acp.connection
+          .requestPermission({
+            sessionId: acp.sessionId,
+            toolCall: {
+              toolCallId,
+              status: "pending",
+              title: info.title,
+              rawInput: metadata,
+              kind: permissionTypeToToolKind(info.type),
+              locations: extractLocations(info.type, metadata),
+            },
+            options,
+          })
+          .catch((error: Error) => {
+            log.error("failed to request permission from ACP", {
+              error,
+              permissionID: info.id,
+              sessionID: info.sessionID,
+            })
+            Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+            return
+          })
+        if (!res) return
+        if (res.outcome.outcome !== "selected") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+          return
+        }
+        const optionId = res.outcome.optionId
+        if (optionId === "allow_once") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "once" })
+          return
+        }
+        if (optionId === "allow_always") {
+          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "always" })
+          return
+        }
+        Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+      })
+    })()
+    await using _permSub = defer(() => {
+      permUnsub?.()
     })
 
     const params = await Plugin.trigger(
@@ -936,6 +996,20 @@ export namespace SessionPrompt {
     } catch {
       return []
     }
+  }
+
+  function permissionTypeToToolKind(
+    type: string,
+  ): "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other" {
+    const value = type.toLowerCase()
+    if (value === "read") return "read"
+    if (value === "write" || value === "edit" || value === "patch") return "edit"
+    if (value === "bash" || value === "execute") return "execute"
+    if (value === "delete") return "delete"
+    if (value === "move") return "move"
+    if (value === "list" || value === "glob" || value === "grep") return "search"
+    if (value === "webfetch" || value === "fetch") return "fetch"
+    return "other"
   }
 
   export type Processor = Awaited<ReturnType<typeof createProcessor>>
