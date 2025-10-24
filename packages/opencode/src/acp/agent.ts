@@ -23,16 +23,180 @@ import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
 import { Installation } from "@/installation"
 import { SessionLock } from "@/session/lock"
+import { Bus } from "@/bus"
+import { MessageV2 } from "@/session/message-v2"
+import { Storage } from "@/storage/storage"
 
 export class ACPAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
   private sessionManager = new ACPSessionManager()
   private connection: AgentSideConnection
   private config: ACPConfig
+  private subscriptions: (() => void)[] = []
 
   constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
     this.connection = connection
     this.config = config
+    this.setupEventSubscriptions()
+  }
+
+  private setupEventSubscriptions() {
+    this.subscriptions.push(
+      Bus.subscribe(MessageV2.Event.PartUpdated, async (event) => {
+        const part = event.properties.part
+        const acpSession = this.sessionManager.getByOpenCodeSessionId(part.sessionID)
+        if (!acpSession) return
+
+        const message = await Storage.read<MessageV2.Info>(["message", part.sessionID, part.messageID]).catch(
+          () => undefined,
+        )
+        if (!message || message.role !== "assistant") return
+
+        if (part.type === "tool") {
+          if (part.state.status === "pending") {
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call",
+                  toolCallId: part.callID,
+                  title: part.tool,
+                  kind: this.determineToolKind(part.tool),
+                  status: "pending",
+                  locations: [],
+                  rawInput: {},
+                },
+              })
+              .catch((err) => {
+                this.log.error("failed to send tool pending to ACP", { error: err })
+              })
+          } else if (part.state.status === "running") {
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "in_progress",
+                  locations: this.extractLocations(part.tool, part.state.input),
+                  rawInput: part.state.input,
+                },
+              })
+              .catch((err) => {
+                this.log.error("failed to send tool in_progress to ACP", { error: err })
+              })
+          } else if (part.state.status === "completed") {
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "completed",
+                  content: [
+                    {
+                      type: "content",
+                      content: {
+                        type: "text",
+                        text: part.state.output,
+                      },
+                    },
+                  ],
+                  rawOutput: {
+                    output: part.state.output,
+                    title: part.state.title,
+                    metadata: part.state.metadata,
+                  },
+                },
+              })
+              .catch((err) => {
+                this.log.error("failed to send tool completed to ACP", { error: err })
+              })
+          } else if (part.state.status === "error") {
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "failed",
+                  content: [
+                    {
+                      type: "content",
+                      content: {
+                        type: "text",
+                        text: `Error: ${part.state.error}`,
+                      },
+                    },
+                  ],
+                  rawOutput: {
+                    error: part.state.error,
+                  },
+                },
+              })
+              .catch((err) => {
+                this.log.error("failed to send tool error to ACP", { error: err })
+              })
+          }
+        } else if (part.type === "text") {
+          if (part.text) {
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: {
+                    type: "text",
+                    text: part.text,
+                  },
+                },
+              })
+              .catch((err) => {
+                this.log.error("failed to send text to ACP", { error: err })
+              })
+          }
+        }
+      }),
+    )
+  }
+
+  private determineToolKind(toolName: string): "read" | "edit" | "other" {
+    const readTools = [
+      "read",
+      "glob",
+      "grep",
+      "list",
+      "webfetch",
+      "context7_resolve_library_id",
+      "context7_get_library_docs",
+    ]
+    const editTools = ["edit", "write", "bash"]
+
+    if (readTools.includes(toolName.toLowerCase())) return "read"
+    if (editTools.includes(toolName.toLowerCase())) return "edit"
+    return "other"
+  }
+
+  private extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
+    try {
+      switch (toolName.toLowerCase()) {
+        case "read":
+        case "edit":
+        case "write":
+          return input["filePath"] ? [{ path: input["filePath"] }] : []
+        case "glob":
+        case "grep":
+          return input["path"] ? [{ path: input["path"] }] : []
+        case "bash":
+          return []
+        case "list":
+          return input["path"] ? [{ path: input["path"] }] : []
+        default:
+          return []
+      }
+    } catch {
+      return []
+    }
   }
 
   async initialize(params: InitializeRequest) {
@@ -193,10 +357,6 @@ export class ACPAgent implements Agent {
         modelID: model.modelID,
       },
       parts,
-      acpConnection: {
-        connection: this.connection,
-        sessionId: params.sessionId,
-      },
     })
 
     this.log.debug("prompt response completed")

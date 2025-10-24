@@ -49,7 +49,6 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
-import type { RequestPermissionResponse } from "@agentclientprotocol/sdk"
 import { SessionSummary } from "./summary"
 
 export namespace SessionPrompt {
@@ -97,16 +96,6 @@ export namespace SessionPrompt {
     agent: z.string().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    /**
-     * ACP (Agent Client Protocol) connection details for streaming responses.
-     * When provided, enables real-time streaming and tool execution visibility.
-     */
-    acpConnection: z
-      .object({
-        connection: z.any(), // AgentSideConnection - using any to avoid circular deps
-        sessionId: z.string(), // ACP session ID (different from opencode sessionID)
-      })
-      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -185,7 +174,6 @@ export namespace SessionPrompt {
       agent: agent.name,
       system,
       abort: abort.signal,
-      acpConnection: input.acpConnection,
     })
 
     const tools = await resolveTools({
@@ -197,64 +185,27 @@ export namespace SessionPrompt {
       processor,
     })
 
-    const permUnsub = (() => {
-      if (!input.acpConnection) return
-      const acp = input.acpConnection
-      const handled = new Set<string>()
-      const options = [
-        { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
-        { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
-        { optionId: "reject_once", kind: "reject_once", name: "Reject" },
-      ]
-      return Bus.subscribe(Permission.Event.Updated, async (event) => {
-        const info = event.properties
-        if (info.sessionID !== input.sessionID) return
-        if (handled.has(info.id)) return
-        handled.add(info.id)
-        const toolCallId = info.callID ?? info.id
-        const metadata = info.metadata ?? {}
-        const res = await acp.connection
-          .requestPermission({
-            sessionId: acp.sessionId,
-            toolCall: {
-              toolCallId,
-              status: "pending",
-              title: info.title,
-              rawInput: metadata,
-              kind: permissionTypeToToolKind(info.type),
-              locations: extractLocations(info.type, metadata),
-            },
-            options,
-          })
-          .catch((error: Error) => {
-            log.error("failed to request permission from ACP", {
-              error,
-              permissionID: info.id,
-              sessionID: info.sessionID,
-            })
-            Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-            return
-          })
-        if (!res) return
-        if (res.outcome.outcome !== "selected") {
-          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-          return
-        }
-        const optionId = res.outcome.optionId
-        if (optionId === "allow_once") {
-          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "once" })
-          return
-        }
-        if (optionId === "allow_always") {
-          Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "always" })
-          return
-        }
-        Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-      })
-    })()
-    await using _permSub = defer(() => {
-      permUnsub?.()
-    })
+    // const permUnsub = (() => {
+    //   const handled = new Set<string>()
+    //   const options = [
+    //     { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
+    //     { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
+    //     { optionId: "reject_once", kind: "reject_once", name: "Reject" },
+    //   ]
+    //   return Bus.subscribe(Permission.Event.Updated, async (event) => {
+    //     const info = event.properties
+    //     if (info.sessionID !== input.sessionID) return
+    //     if (handled.has(info.id)) return
+    //     handled.add(info.id)
+    //     const toolCallId = info.callID ?? info.id
+    //     const metadata = info.metadata ?? {}
+    //     // TODO: emit permission event to bus for ACP to handle
+    //     Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
+    //   })
+    // })()
+    // await using _permSub = defer(() => {
+    //   permUnsub?.()
+    // })
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -944,74 +895,6 @@ export namespace SessionPrompt {
     return input.messages
   }
 
-  /**
-   * Maps tool names to ACP tool kinds for consistent categorization.
-   * - read: Tools that read data (read, glob, grep, list, webfetch, docs)
-   * - edit: Tools that modify state (edit, write, bash)
-   * - other: All other tools (MCP tools, task, todowrite, etc.)
-   */
-  function determineToolKind(toolName: string): "read" | "edit" | "other" {
-    const readTools = [
-      "read",
-      "glob",
-      "grep",
-      "list",
-      "webfetch",
-      "context7_resolve_library_id",
-      "context7_get_library_docs",
-    ]
-    const editTools = ["edit", "write", "bash"]
-
-    if (readTools.includes(toolName.toLowerCase())) return "read"
-    if (editTools.includes(toolName.toLowerCase())) return "edit"
-    return "other"
-  }
-
-  /**
-   * Extracts file/directory locations from tool inputs for ACP notifications.
-   * Returns array of {path} objects that ACP clients can use for navigation.
-   *
-   * Examples:
-   * - read({filePath: "/foo/bar.ts"}) -> [{path: "/foo/bar.ts"}]
-   * - glob({pattern: "*.ts", path: "/src"}) -> [{path: "/src"}]
-   * - bash({command: "ls"}) -> [] (no file references)
-   */
-  function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
-    try {
-      switch (toolName.toLowerCase()) {
-        case "read":
-        case "edit":
-        case "write":
-          return input["filePath"] ? [{ path: input["filePath"] }] : []
-        case "glob":
-        case "grep":
-          return input["path"] ? [{ path: input["path"] }] : []
-        case "bash":
-          return []
-        case "list":
-          return input["path"] ? [{ path: input["path"] }] : []
-        default:
-          return []
-      }
-    } catch {
-      return []
-    }
-  }
-
-  function permissionTypeToToolKind(
-    type: string,
-  ): "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other" {
-    const value = type.toLowerCase()
-    if (value === "read") return "read"
-    if (value === "write" || value === "edit" || value === "patch") return "edit"
-    if (value === "bash" || value === "execute") return "execute"
-    if (value === "delete") return "delete"
-    if (value === "move") return "move"
-    if (value === "list" || value === "glob" || value === "grep") return "search"
-    if (value === "webfetch" || value === "fetch") return "fetch"
-    return "other"
-  }
-
   export type Processor = Awaited<ReturnType<typeof createProcessor>>
   async function createProcessor(input: {
     sessionID: string
@@ -1020,10 +903,6 @@ export namespace SessionPrompt {
     system: string[]
     agent: string
     abort: AbortSignal
-    acpConnection?: {
-      connection: any
-      sessionId: string
-    }
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
@@ -1153,26 +1032,6 @@ export namespace SessionPrompt {
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
-
-                // Notify ACP client of pending tool call
-                if (input.acpConnection) {
-                  await input.acpConnection.connection
-                    .sessionUpdate({
-                      sessionId: input.acpConnection.sessionId,
-                      update: {
-                        sessionUpdate: "tool_call",
-                        toolCallId: value.id,
-                        title: value.toolName,
-                        kind: determineToolKind(value.toolName),
-                        status: "pending",
-                        locations: [], // Will be populated when we have input
-                        rawInput: {},
-                      },
-                    })
-                    .catch((err: Error) => {
-                      log.error("failed to send tool pending to ACP", { error: err })
-                    })
-                }
                 break
 
               case "tool-input-delta":
@@ -1197,24 +1056,6 @@ export namespace SessionPrompt {
                     metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
-
-                  // Notify ACP client that tool is running
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "in_progress",
-                          locations: extractLocations(value.toolName, value.input),
-                          rawInput: value.input,
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool in_progress to ACP", { error: err })
-                      })
-                  }
                 }
                 break
               }
@@ -1237,32 +1078,6 @@ export namespace SessionPrompt {
                     },
                   })
 
-                  // Notify ACP client that tool completed
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "completed",
-                          content: [
-                            {
-                              type: "content",
-                              content: {
-                                type: "text",
-                                text: value.output.output,
-                              },
-                            },
-                          ],
-                          rawOutput: value.output,
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool completed to ACP", { error: err })
-                      })
-                  }
-
                   delete toolcalls[value.toolCallId]
                 }
                 break
@@ -1284,34 +1099,6 @@ export namespace SessionPrompt {
                       },
                     },
                   })
-
-                  // Notify ACP client of tool error
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "failed",
-                          content: [
-                            {
-                              type: "content",
-                              content: {
-                                type: "text",
-                                text: `Error: ${(value.error as any).toString()}`,
-                              },
-                            },
-                          ],
-                          rawOutput: {
-                            error: (value.error as any).toString(),
-                          },
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool error to ACP", { error: err })
-                      })
-                  }
 
                   if (value.error instanceof Permission.RejectedError) {
                     blocked = true
@@ -1392,25 +1179,6 @@ export namespace SessionPrompt {
                   currentText.text += value.text
                   if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   if (currentText.text) await Session.updatePart(currentText)
-
-                  // Send streaming chunk to ACP client
-                  if (input.acpConnection && value.text) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "agent_message_chunk",
-                          content: {
-                            type: "text",
-                            text: value.text,
-                          },
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send text delta to ACP", { error: err })
-                        // Don't fail the whole request if ACP notification fails
-                      })
-                  }
                 }
                 break
 
