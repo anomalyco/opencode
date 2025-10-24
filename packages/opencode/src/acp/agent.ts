@@ -22,6 +22,7 @@ import { Provider } from "../provider/provider"
 import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
 import { Installation } from "@/installation"
+import { SessionLock } from "@/session/lock"
 
 export class ACPAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
@@ -34,7 +35,7 @@ export class ACPAgent implements Agent {
     this.config = config
   }
 
-  async initialize(params: InitializeRequest): Promise<InitializeResponse> {
+  async initialize(params: InitializeRequest) {
     this.log.info("initialize", { protocolVersion: params.protocolVersion })
 
     return {
@@ -61,11 +62,11 @@ export class ACPAgent implements Agent {
     }
   }
 
-  async authenticate(params: AuthenticateRequest): Promise<void | AuthenticateResponse> {
+  async authenticate(_params: AuthenticateRequest) {
     throw new Error("Authentication not implemented")
   }
 
-  async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
+  async newSession(params: NewSessionRequest) {
     this.log.info("newSession", { cwd: params.cwd, mcpServers: params.mcpServers.length })
 
     const model = await this.defaultModel()
@@ -82,7 +83,7 @@ export class ACPAgent implements Agent {
     }
   }
 
-  async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+  async loadSession(params: LoadSessionRequest) {
     this.log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
 
     const defaultModel = await this.defaultModel()
@@ -98,7 +99,7 @@ export class ACPAgent implements Agent {
     }
   }
 
-  async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+  async setSessionModel(params: SetSessionModelRequest) {
     this.log.info("setSessionModel", { sessionId: params.sessionId, modelId: params.modelId })
 
     const session = this.sessionManager.get(params.sessionId)
@@ -143,7 +144,7 @@ export class ACPAgent implements Agent {
     })
   }
 
-  async prompt(params: PromptRequest): Promise<PromptResponse> {
+  async prompt(params: PromptRequest) {
     this.log.info("prompt", {
       sessionId: params.sessionId,
       promptLength: params.prompt.length,
@@ -204,12 +205,12 @@ export class ACPAgent implements Agent {
     // No need to send final text chunk here
 
     return {
-      stopReason: "end_turn",
+      stopReason: "end_turn" as const,
       _meta: {},
     }
   }
 
-  async cancel(params: CancelNotification): Promise<void> {
-    this.log.info("cancel", { sessionId: params.sessionId })
+  async cancel(params: CancelNotification) {
+    SessionLock.abort(params.sessionId)
   }
 }
