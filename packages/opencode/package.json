@@ -29,7 +29,6 @@
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
-    "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
   },
   "dependencies": {
@@ -70,6 +69,7 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "3.24.5"
   }
 }

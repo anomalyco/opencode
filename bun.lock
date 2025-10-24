@@ -207,6 +207,7 @@
         "xdg-basedir": "5.1.0",
         "yargs": "18.0.0",
         "zod": "catalog:",
+        "zod-to-json-schema": "3.24.5",
       },
       "devDependencies": {
         "@ai-sdk/amazon-bedrock": "2.2.10",
@@ -222,7 +223,6 @@
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
         "vscode-languageserver-types": "3.17.5",
-        "zod-to-json-schema": "3.24.5",
       },
     },
     "packages/plugin": {
