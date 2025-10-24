@@ -21,6 +21,7 @@ import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
+import { Installation } from "@/installation"
 
 export class OpenCodeAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
@@ -43,7 +44,7 @@ export class OpenCodeAgent implements Agent {
       },
       _meta: {
         opencode: {
-          version: await import("../installation").then((m) => m.Installation.VERSION),
+          version: Installation.VERSION,
         },
       },
     }
