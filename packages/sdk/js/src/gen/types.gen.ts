@@ -546,11 +546,22 @@ export type Path = {
   directory: string
 }
 
+export type FileDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+}
+
 export type Session = {
   id: string
   projectID: string
   directory: string
   parentID?: string
+  summary?: {
+    diffs: Array<FileDiff>
+  }
   share?: {
     url: string
   }
@@ -595,14 +606,6 @@ export type Todo = {
   id: string
 }
 
-export type FileDiff = {
-  file: string
-  before: string
-  after: string
-  additions: number
-  deletions: number
-}
-
 export type UserMessage = {
   id: string
   sessionID: string
@@ -611,8 +614,9 @@ export type UserMessage = {
     created: number
   }
   summary?: {
+    title?: string
+    body?: string
     diffs: Array<FileDiff>
-    text: string
   }
 }
 
@@ -645,6 +649,19 @@ export type MessageAbortedError = {
   }
 }
 
+export type ApiError = {
+  name: "APIError"
+  data: {
+    message: string
+    statusCode?: number
+    isRetryable: boolean
+    responseHeaders?: {
+      [key: string]: string
+    }
+    responseBody?: string
+  }
+}
+
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -653,9 +670,8 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   system: Array<string>
-  finish?: string
   parentID: string
   modelID: string
   providerID: string
@@ -838,6 +854,7 @@ export type StepFinishPart = {
   sessionID: string
   messageID: string
   type: "step-finish"
+  reason: string
   snapshot?: string
   cost: number
   tokens: {
@@ -881,6 +898,18 @@ export type AgentPart = {
   }
 }
 
+export type RetryPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "retry"
+  attempt: number
+  error: ApiError
+  time: {
+    created: number
+  }
+}
+
 export type Part =
   | TextPart
   | ReasoningPart
@@ -891,6 +920,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | RetryPart
 
 export type TextPartInput = {
   id?: string
@@ -1271,7 +1301,7 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError
+    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
   }
 }
 

@@ -254,7 +254,7 @@ function Option(props: {
         fg={props.active ? Theme.background : props.current ? Theme.primary : Theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
-        wrap={false}
+        wrapMode="none"
       >
         {Locale.truncate(props.title, 62)}
         <span style={{ fg: props.active ? Theme.background : Theme.textMuted }}> {props.description}</span>

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.15.13",
+  "version": "0.15.16",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -9,7 +9,7 @@
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "random": "echo 'This is a modified random script'"
+    "random": "echo 'Random script updated at $(date)'"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -50,8 +50,8 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opentui/core": "0.0.0-20251010-2eed09fd",
-    "@opentui/solid": "0.0.0-20251010-2eed09fd",
+    "@opentui/core": "0.1.30",
+    "@opentui/solid": "0.1.30",
     "@parcel/watcher": "2.5.1",
     "@solid-primitives/event-bus": "1.1.2",
     "@standard-schema/spec": "1.0.0",
@@ -82,6 +82,7 @@
     "web-tree-sitter": "0.26.0",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "3.24.5"
   }
 }

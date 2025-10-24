@@ -16,7 +16,7 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { syntaxTheme, Theme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
@@ -48,6 +48,10 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+
+import parsers from "../../../../../../parsers-config.json"
+
+addDefaultParsers(parsers.parsers)
 
 const context = createContext<{
   width: number
@@ -570,9 +574,6 @@ function UserMessage(props: {
             </For>
           </box>
         </Show>
-        <Show when={props.message.summary}>
-          <text>EXPERIMENTAL: {props.message.summary!.text}</text>
-        </Show>
         <text>
           {sync.data.config.username ?? "You"}{" "}
           <Show
@@ -615,7 +616,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={Theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show when={!props.message.time.completed || (props.last && props.message.finish === "tool-calls")}>
+      <Show
+        when={
+          !props.message.time.completed ||
+          (props.last && props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
+        }
+      >
         <box
           paddingLeft={2}
           marginTop={1}
@@ -629,7 +635,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <Shimmer text={`${props.message.modelID}`} color={Theme.text} />
         </box>
       </Show>
-      <Show when={props.message.time.completed && props.message.finish === "stop"}>
+      <Show
+        when={
+          props.message.time.completed &&
+          props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
+        }
+      >
         <box paddingLeft={3}>
           <text marginTop={1}>
             <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}

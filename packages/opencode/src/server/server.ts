@@ -3,7 +3,7 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { stream, streamSSE } from "hono/streaming"
 import { Session } from "../session"
 import z from "zod/v4"
 import { Provider } from "../provider/provider"
@@ -37,6 +37,7 @@ import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
 
 const ERRORS = {
   400: {
@@ -631,19 +632,19 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            id: Session.diff.schema.shape.sessionID,
+            id: SessionSummary.diff.schema.shape.sessionID,
           }),
         ),
         validator(
           "query",
           z.object({
-            messageID: Session.diff.schema.shape.messageID,
+            messageID: SessionSummary.diff.schema.shape.messageID,
           }),
         ),
         async (c) => {
           const query = c.req.valid("query")
           const params = c.req.valid("param")
-          const result = await Session.diff({
+          const result = await SessionSummary.diff({
             sessionID: params.id,
             messageID: query.messageID,
           })
@@ -813,10 +814,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const sessionID = c.req.valid("param").id
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          return c.json(msg)
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
         },
       )
       .post(

@@ -2,6 +2,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { Theme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
 
 export function Sidebar(props: { sessionID: string }) {
@@ -9,20 +10,6 @@ export function Sidebar(props: { sessionID: string }) {
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
-  const files = createMemo(() => {
-    const result = new Set<string>()
-    for (const msg of messages()) {
-      const parts = sync.data.part[msg.id] ?? []
-      for (const part of parts) {
-        if (part.type === "patch") {
-          for (const file of part.files) {
-            result.add(file)
-          }
-        }
-      }
-    }
-    return [...result.values()].sort((a, b) => a.length - b.length)
-  })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -125,12 +112,36 @@ export function Sidebar(props: { sessionID: string }) {
             </For>
           </box>
         </Show>
-        <Show when={files().length > 0}>
+        <Show when={session().summary?.diffs}>
           <box>
             <text>
               <b>Modified Files</b>
             </text>
-            <For each={files()}>{(file) => <text fg={Theme.textMuted}>{Locale.truncateMiddle(file, 40)}</text>}</For>
+            <For each={session().summary?.diffs || []}>
+              {(item) => {
+                const file = createMemo(() => {
+                  const splits = item.file.split(path.sep).filter(Boolean)
+                  const last = splits.at(-1)!
+                  const rest = splits.slice(0, -1).join(path.sep)
+                  return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
+                })
+                return (
+                  <box flexDirection="row" gap={1} justifyContent="space-between">
+                    <text fg={Theme.textMuted} wrapMode="char">
+                      {file()}
+                    </text>
+                    <box flexDirection="row" gap={1} flexShrink={0}>
+                      <Show when={item.additions}>
+                        <text fg={Theme.diffAdded}>+{item.additions}</text>
+                      </Show>
+                      <Show when={item.deletions}>
+                        <text fg={Theme.diffRemoved}>-{item.deletions}</text>
+                      </Show>
+                    </box>
+                  </box>
+                )
+              }}
+            </For>
           </box>
         </Show>
         <Show when={todo().length > 0}>

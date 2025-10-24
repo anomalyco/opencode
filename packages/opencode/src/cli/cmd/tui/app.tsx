@@ -222,7 +222,7 @@ function App() {
             tab
           </text>
           <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={Theme.background} wrap={false}>
+          <text bg={local.agent.color(local.agent.current().name)} fg={Theme.background} wrapMode="none">
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>

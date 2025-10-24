@@ -315,19 +315,27 @@ export default function Page() {
         <SelectDialog
           defaultOpen
           title="Select file"
+          placeholder="Search files"
+          emptyMessage="No files found"
           items={local.file.search}
           key={(x) => x}
           onOpenChange={(open) => setStore("fileSelectOpen", open)}
           onSelect={(x) => (x ? local.file.open(x, { pinned: true }) : undefined)}
         >
           {(i) => (
-            <div class="w-full flex items-center justify-between">
-              <div class="flex items-center gap-x-2 text-text-muted grow min-w-0">
+            <div
+              classList={{
+                "w-full flex items-center justify-between rounded-md": true,
+              }}
+            >
+              <div class="flex items-center gap-x-2 grow min-w-0">
                 <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                <span class="text-xs text-text whitespace-nowrap">{getFilename(i)}</span>
-                <span class="text-xs text-text-muted/80 whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                  {getDirectory(i)}
-                </span>
+                <div class="flex items-center text-14-regular">
+                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                    {getDirectory(i)}/
+                  </span>
+                  <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
+                </div>
               </div>
               <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
             </div>

@@ -87,6 +87,8 @@
     }
     [data-slot="item-indicator"] {
       margin-left: auto;
+      width: 16px;
+      height: 16px;
     }
     &:focus {
       outline: none;

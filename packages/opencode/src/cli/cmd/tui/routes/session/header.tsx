@@ -47,13 +47,13 @@ export function Header() {
             <text fg={Theme.textMuted}>{session().share!.url}</text>
           </Match>
           <Match when={true}>
-            <text wrap={false}>
+            <text wrapMode="none">
               /share <span style={{ fg: Theme.textMuted }}>to create a shareable link</span>
             </text>
           </Match>
         </Switch>
         <Show when={context()}>
-          <text fg={Theme.textMuted} wrap={false}>
+          <text fg={Theme.textMuted} wrapMode="none">
             {context()} ({cost()})
           </text>
         </Show>
