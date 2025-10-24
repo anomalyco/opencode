@@ -1,3 +1,8 @@
 {
-  "$schema": "https://opencode.ai/config.json"
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "cat*": "ask"
+    }
+  }
 }

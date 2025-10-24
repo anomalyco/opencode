@@ -10,6 +10,7 @@ import type {
   LoadSessionResponse,
   NewSessionRequest,
   NewSessionResponse,
+  PermissionOption,
   PromptRequest,
   PromptResponse,
   SetSessionModelRequest,
@@ -30,13 +31,14 @@ import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
 import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
+import { Permission } from "@/permission"
+
+const log = Log.create({ service: "acp-agent" })
 
 export class ACPAgent implements Agent {
-  private log = Log.create({ service: "acp-agent" })
   private sessionManager = new ACPSessionManager()
   private connection: AgentSideConnection
   private config: ACPConfig
-  private subscriptions: (() => void)[] = []
 
   constructor(connection: AgentSideConnection, config: ACPConfig = {}) {
     this.connection = connection
@@ -45,132 +47,186 @@ export class ACPAgent implements Agent {
   }
 
   private setupEventSubscriptions() {
-    this.subscriptions.push(
-      Bus.subscribe(MessageV2.Event.PartUpdated, async (event) => {
-        const props = event.properties as typeof event.properties & { delta?: string }
-        const { part } = props
-        const acpSession = this.sessionManager.getByOpenCodeSessionId(part.sessionID)
-        if (!acpSession) return
+    const options: PermissionOption[] = [
+      { optionId: "once", kind: "allow_once", name: "Allow once" },
+      { optionId: "always", kind: "allow_always", name: "Always allow" },
+      { optionId: "reject", kind: "reject_once", name: "Reject" },
+    ]
+    Bus.subscribe(Permission.Event.Updated, async (event) => {
+      const acpSession = this.sessionManager.getByOpenCodeSessionId(event.properties.sessionID)
+      if (!acpSession) return
+      try {
+        const permission = event.properties
+        const res = await this.connection
+          .requestPermission({
+            sessionId: acpSession.id,
+            toolCall: {
+              toolCallId: permission.callID ?? permission.id,
+              status: "pending",
+              title: permission.title,
+              rawInput: permission.metadata,
+              // TODO: toToolKind
+              kind: "edit",
+              // TODO: make this better
+              locations: this.extractLocations(permission.type, permission.metadata),
+            },
+            options,
+          })
+          .catch((error) => {
+            log.error("failed to request permission from ACP", {
+              error,
+              permissionID: permission.id,
+              sessionID: permission.sessionID,
+            })
+            Permission.respond({
+              sessionID: permission.sessionID,
+              permissionID: permission.id,
+              response: "reject",
+            })
+            return
+          })
+        if (!res) return
+        if (res.outcome.outcome !== "selected") {
+          Permission.respond({ sessionID: permission.sessionID, permissionID: permission.id, response: "reject" })
+          return
+        }
+        Permission.respond({
+          sessionID: permission.sessionID,
+          permissionID: permission.id,
+          response: res.outcome.optionId as "once" | "always" | "reject",
+        })
+      } catch (err) {
+        if (!(err instanceof Permission.RejectedError)) {
+          log.error("unexpected error when handling permission", { error: err })
+          throw err
+        }
+      }
+    })
 
-        const message = await Storage.read<MessageV2.Info>(["message", part.sessionID, part.messageID]).catch(
-          () => undefined,
-        )
-        if (!message || message.role !== "assistant") return
+    Bus.subscribe(MessageV2.Event.PartUpdated, async (event) => {
+      const props = event.properties
+      const { part } = props
+      const acpSession = this.sessionManager.getByOpenCodeSessionId(part.sessionID)
+      if (!acpSession) return
 
-        if (part.type === "tool") {
-          switch (part.state.status) {
-            case "pending":
-              await this.connection
-                .sessionUpdate({
-                  sessionId: acpSession.id,
-                  update: {
-                    sessionUpdate: "tool_call",
-                    toolCallId: part.callID,
-                    title: part.tool,
-                    kind: this.determineToolKind(part.tool),
-                    status: "pending",
-                    locations: [],
-                    rawInput: {},
-                  },
-                })
-                .catch((err) => {
-                  this.log.error("failed to send tool pending to ACP", { error: err })
-                })
-              break
-            case "running":
-              await this.connection
-                .sessionUpdate({
-                  sessionId: acpSession.id,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "in_progress",
-                    locations: this.extractLocations(part.tool, part.state.input),
-                    rawInput: part.state.input,
-                  },
-                })
-                .catch((err) => {
-                  this.log.error("failed to send tool in_progress to ACP", { error: err })
-                })
-              break
-            case "completed":
-              await this.connection
-                .sessionUpdate({
-                  sessionId: acpSession.id,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "completed",
-                    content: [
-                      {
-                        type: "content",
-                        content: {
-                          type: "text",
-                          text: part.state.output,
-                        },
-                      },
-                    ],
-                    rawOutput: {
-                      output: part.state.output,
-                      title: part.state.title,
-                      metadata: part.state.metadata,
-                    },
-                  },
-                })
-                .catch((err) => {
-                  this.log.error("failed to send tool completed to ACP", { error: err })
-                })
-              break
-            case "error":
-              await this.connection
-                .sessionUpdate({
-                  sessionId: acpSession.id,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "failed",
-                    content: [
-                      {
-                        type: "content",
-                        content: {
-                          type: "text",
-                          text: `Error: ${part.state.error}`,
-                        },
-                      },
-                    ],
-                    rawOutput: {
-                      error: part.state.error,
-                    },
-                  },
-                })
-                .catch((err) => {
-                  this.log.error("failed to send tool error to ACP", { error: err })
-                })
-              break
-          }
-        } else if (part.type === "text") {
-          const delta = props.delta
-          if (delta && part.synthetic !== true) {
+      const message = await Storage.read<MessageV2.Info>(["message", part.sessionID, part.messageID]).catch(
+        () => undefined,
+      )
+      if (!message || message.role !== "assistant") return
+
+      if (part.type === "tool") {
+        switch (part.state.status) {
+          case "pending":
             await this.connection
               .sessionUpdate({
                 sessionId: acpSession.id,
                 update: {
-                  sessionUpdate: "agent_message_chunk",
-                  content: {
-                    type: "text",
-                    text: delta,
+                  sessionUpdate: "tool_call",
+                  toolCallId: part.callID,
+                  title: part.tool,
+                  kind: this.determineToolKind(part.tool),
+                  status: "pending",
+                  locations: [],
+                  rawInput: {},
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send tool pending to ACP", { error: err })
+              })
+            break
+          case "running":
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "in_progress",
+                  locations: this.extractLocations(part.tool, part.state.input),
+                  rawInput: part.state.input,
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send tool in_progress to ACP", { error: err })
+              })
+            break
+          case "completed":
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "completed",
+                  content: [
+                    {
+                      type: "content",
+                      content: {
+                        type: "text",
+                        text: part.state.output,
+                      },
+                    },
+                  ],
+                  rawOutput: {
+                    output: part.state.output,
+                    title: part.state.title,
+                    metadata: part.state.metadata,
                   },
                 },
               })
               .catch((err) => {
-                this.log.error("failed to send text to ACP", { error: err })
+                log.error("failed to send tool completed to ACP", { error: err })
               })
-          }
-        } else if (part.type === "reasoning") {
-          // TODO: Implement sending reasoning to ACP
+            break
+          case "error":
+            await this.connection
+              .sessionUpdate({
+                sessionId: acpSession.id,
+                update: {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "failed",
+                  content: [
+                    {
+                      type: "content",
+                      content: {
+                        type: "text",
+                        text: `Error: ${part.state.error}`,
+                      },
+                    },
+                  ],
+                  rawOutput: {
+                    error: part.state.error,
+                  },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send tool error to ACP", { error: err })
+              })
+            break
         }
-      }),
-    )
+      } else if (part.type === "text") {
+        const delta = props.delta
+        if (delta && part.synthetic !== true) {
+          await this.connection
+            .sessionUpdate({
+              sessionId: acpSession.id,
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: {
+                  type: "text",
+                  text: delta,
+                },
+              },
+            })
+            .catch((err) => {
+              log.error("failed to send text to ACP", { error: err })
+            })
+        }
+      } else if (part.type === "reasoning") {
+        // TODO: Implement sending reasoning to ACP
+      }
+    })
   }
 
   private determineToolKind(toolName: string): "read" | "edit" | "other" {
@@ -213,11 +269,12 @@ export class ACPAgent implements Agent {
   }
 
   async initialize(params: InitializeRequest) {
-    this.log.info("initialize", { protocolVersion: params.protocolVersion })
+    log.info("initialize", { protocolVersion: params.protocolVersion })
 
     return {
       protocolVersion: 1,
       agentCapabilities: {
+        // todo: load session
         loadSession: false,
         // TODO: map acp mcp
         // mcpCapabilities: {
@@ -245,8 +302,6 @@ export class ACPAgent implements Agent {
   }
 
   async newSession(params: NewSessionRequest) {
-    this.log.info("newSession", { cwd: params.cwd, mcpServers: params.mcpServers.length })
-
     const model = await this.defaultModel()
     const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
     const availableModels = await this.availableModels()
@@ -291,7 +346,7 @@ export class ACPAgent implements Agent {
   }
 
   // async loadSession(params: LoadSessionRequest) {
-  //   this.log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
+  //   log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
 
   //   const defaultModel = await this.defaultModel()
   //   const session = await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers, defaultModel)
@@ -407,11 +462,6 @@ export class ACPAgent implements Agent {
       parts,
       agent,
     })
-
-    this.log.debug("prompt response completed")
-
-    // Streaming notifications are now handled during prompt execution
-    // No need to send final text chunk here
 
     return {
       stopReason: "end_turn" as const,
