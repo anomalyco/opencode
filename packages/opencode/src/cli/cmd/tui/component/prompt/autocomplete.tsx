@@ -86,8 +86,8 @@ export function Autocomplete(props: {
                 props.setPrompt((draft) => {
                   const append = "@" + item + " "
                   const cursor = props.input().cursor
-                  props.input().editBuffer.deleteRange(0, store.index, cursor.line, cursor.visualColumn)
-                  props.input().editBuffer.insertText(append)
+                  props.input().deleteRange(0, store.index, cursor.line, cursor.visualColumn)
+                  props.input().insertText(append)
                   if (store.index === 0) draft.input = append
                   if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
                   draft.parts.push(part)
@@ -117,8 +117,8 @@ export function Autocomplete(props: {
             props.setPrompt((draft) => {
               const append = "@" + agent.name + " "
               const cursor = props.input().cursor
-              props.input().editBuffer.deleteRange(0, store.index, cursor.line, cursor.visualColumn)
-              props.input().editBuffer.insertText(append)
+              props.input().deleteRange(0, store.index, cursor.line, cursor.visualColumn)
+              props.input().insertText(append)
               draft.input = append
               draft.parts.push({
                 type: "agent",
@@ -146,8 +146,8 @@ export function Autocomplete(props: {
         onSelect: () => {
           const newText = "/" + command.name + " "
           const cursor = props.input().cursor
-          props.input().editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
-          props.input().editBuffer.insertText(newText)
+          props.input().deleteRange(0, 0, cursor.line, cursor.visualColumn)
+          props.input().insertText(newText)
           props.input().cursorOffset = Bun.stringWidth(newText)
         },
       })
@@ -262,7 +262,7 @@ export function Autocomplete(props: {
   function hide() {
     if (store.visible === "/" && !props.value.endsWith(" ")) {
       const cursor = props.input().cursor
-      props.input().editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
+      props.input().deleteRange(0, 0, cursor.line, cursor.visualColumn)
     }
     setStore("visible", false)
   }

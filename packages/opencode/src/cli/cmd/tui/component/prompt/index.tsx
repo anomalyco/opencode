@@ -58,8 +58,7 @@ export function Prompt(props: PromptProps) {
         onSelect: async (dialog) => {
           dialog.clear()
           const value = input.plainText
-          const cursor = input.cursor
-          input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
+          input.clear()
           setStore("prompt", {
             input: "",
             parts: [],
@@ -67,13 +66,11 @@ export function Prompt(props: PromptProps) {
           const content = await Editor.open({ value, renderer })
           if (content) {
             const cursor = input.cursor
-            input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
-            input.editBuffer.insertText(content)
+            input.setText(content, { history: false })
             setStore("prompt", {
               input: content,
               parts: [],
             })
-            console.log("editor.open", content, Bun.stringWidth(content))
             input.cursorOffset = Bun.stringWidth(content)
           }
         },
@@ -146,8 +143,7 @@ export function Prompt(props: PromptProps) {
     },
     set(prompt) {
       const cursor = input.cursor
-      input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
-      input.editBuffer.insertText(prompt.input)
+      input.setText(prompt.input, { history: false })
       setStore("prompt", prompt)
       console.log("prompt.set", prompt.input, Bun.stringWidth(prompt.input))
       input.cursorOffset = Bun.stringWidth(prompt.input)
@@ -278,6 +274,7 @@ export function Prompt(props: PromptProps) {
                 let diff = value.length - store.prompt.input.length
                 setStore(
                   produce((draft) => {
+                    // This handles virtual text like @filename
                     draft.prompt.input = value
                     for (let i = 0; i < draft.prompt.parts.length; i++) {
                       const part = draft.prompt.parts[i]
@@ -314,6 +311,7 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                  input.clear()
                   setStore("prompt", {
                     input: "",
                     parts: [],
@@ -337,16 +335,14 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
-                if (!autocomplete.visible && input.visualCursor.offset === 0) {
-                  if (e.name === "up" || e.name === "down") {
+                if (!autocomplete.visible) {
+                  if (e.option && (e.name === "up" || e.name === "down")) {
                     const direction = e.name === "up" ? -1 : 1
                     const item = history.move(direction, input.plainText)
                     if (item) {
                       const cursor = input.cursor
-                      input.editBuffer.deleteRange(0, 0, cursor.line, cursor.visualColumn)
-                      input.editBuffer.insertText(item.input)
+                      input.setText(item.input, { history: false })
                       setStore("prompt", item)
-                      input.cursorOffset = 0
                       e.preventDefault()
                     }
                     return
@@ -364,6 +360,7 @@ export function Prompt(props: PromptProps) {
                 }
                 const old = input.visualCursor.offset
                 setTimeout(() => {
+                  // This handles virtual text like @filename
                   const position = input.visualCursor.offset
                   const direction = Math.sign(old - position)
                   for (const part of store.prompt.parts) {
@@ -375,11 +372,9 @@ export function Prompt(props: PromptProps) {
                     if (source) {
                       if (position >= source.start && position < source.end) {
                         if (direction === 1) {
-                          console.log("onKeyDown setting cursor offset", source.start - 1)
                           input.cursorOffset = Math.max(0, source.start - 1)
                         }
                         if (direction === -1) {
-                          console.log("onKeyDown setting cursor offset", source.end)
                           input.cursorOffset = source.end
                         }
                       }
