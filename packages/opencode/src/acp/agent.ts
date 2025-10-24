@@ -23,7 +23,7 @@ import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
 import { Installation } from "@/installation"
 
-export class OpenCodeAgent implements Agent {
+export class ACPAgent implements Agent {
   private log = Log.create({ service: "acp-agent" })
   private sessionManager = new ACPSessionManager()
   private connection: AgentSideConnection
@@ -41,7 +41,18 @@ export class OpenCodeAgent implements Agent {
       protocolVersion: 1,
       agentCapabilities: {
         loadSession: false,
+        mcpCapabilities: {
+          http: true,
+          sse: true,
+        },
       },
+      authMethods: [
+        {
+          description: "Run `opencode auth login` in the terminal",
+          name: "Login with opencode",
+          id: "opencode-login",
+        },
+      ],
       _meta: {
         opencode: {
           version: Installation.VERSION,
@@ -51,8 +62,7 @@ export class OpenCodeAgent implements Agent {
   }
 
   async authenticate(params: AuthenticateRequest): Promise<void | AuthenticateResponse> {
-    this.log.info("authenticate", { methodId: params.methodId })
-    throw new Error("Authentication not yet implemented")
+    throw new Error("Authentication not implemented")
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {

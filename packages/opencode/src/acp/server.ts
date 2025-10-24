@@ -1,7 +1,7 @@
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
-import { OpenCodeAgent } from "./agent"
+import { ACPAgent } from "./agent"
 
 export namespace ACPServer {
   const log = Log.create({ service: "acp-server" })
@@ -32,7 +32,7 @@ export namespace ACPServer {
         const stream = ndJsonStream(stdout, stdin)
 
         new AgentSideConnection((conn) => {
-          return new OpenCodeAgent(conn)
+          return new ACPAgent(conn)
         }, stream)
 
         await new Promise<void>((resolve) => {
