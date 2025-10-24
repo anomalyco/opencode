@@ -14,6 +14,8 @@ import type {
   PromptResponse,
   SetSessionModelRequest,
   SetSessionModelResponse,
+  SetSessionModeRequest,
+  SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -288,25 +290,23 @@ export class ACPAgent implements Agent {
     }
   }
 
-  async loadSession(params: LoadSessionRequest) {
-    this.log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
+  // async loadSession(params: LoadSessionRequest) {
+  //   this.log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
 
-    const defaultModel = await this.defaultModel()
-    const session = await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers, defaultModel)
-    const availableModels = await this.availableModels()
+  //   const defaultModel = await this.defaultModel()
+  //   const session = await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers, defaultModel)
+  //   const availableModels = await this.availableModels()
 
-    return {
-      models: {
-        currentModelId: `${session.model.providerID}/${session.model.modelID}`,
-        availableModels,
-      },
-      _meta: {},
-    }
-  }
+  //   return {
+  //     models: {
+  //       currentModelId: `${session.model.providerID}/${session.model.modelID}`,
+  //       availableModels,
+  //     },
+  //     _meta: {},
+  //   }
+  // }
 
   async setSessionModel(params: SetSessionModelRequest) {
-    this.log.info("setSessionModel", { sessionId: params.sessionId, modelId: params.modelId })
-
     const session = this.sessionManager.get(params.sessionId)
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`)
@@ -323,6 +323,17 @@ export class ACPAgent implements Agent {
     return {
       _meta: {},
     }
+  }
+
+  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
+    const session = this.sessionManager.get(params.sessionId)
+    if (!session) {
+      throw new Error(`Session not found: ${params.sessionId}`)
+    }
+    await Agents.get(params.modeId).then((agent) => {
+      if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
+    })
+    this.sessionManager.setMode(params.sessionId, params.modeId)
   }
 
   private async defaultModel() {
@@ -350,11 +361,6 @@ export class ACPAgent implements Agent {
   }
 
   async prompt(params: PromptRequest) {
-    this.log.info("prompt", {
-      sessionId: params.sessionId,
-      promptLength: params.prompt.length,
-    })
-
     const acpSession = this.sessionManager.get(params.sessionId)
     if (!acpSession) {
       throw new Error(`Session not found: ${params.sessionId}`)
@@ -365,6 +371,7 @@ export class ACPAgent implements Agent {
     if (!current) {
       this.sessionManager.setModel(acpSession.id, model)
     }
+    const agent = acpSession.modeId ?? "build"
 
     const parts = params.prompt.map((content) => {
       if (content.type === "text") {
@@ -398,6 +405,7 @@ export class ACPAgent implements Agent {
         modelID: model.modelID,
       },
       parts,
+      agent,
     })
 
     this.log.debug("prompt response completed")

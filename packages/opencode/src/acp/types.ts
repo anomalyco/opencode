@@ -10,6 +10,7 @@ export interface ACPSessionState {
     providerID: string
     modelID: string
   }
+  modeId?: string
 }
 
 export interface ACPConfig {

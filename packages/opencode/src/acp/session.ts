@@ -27,17 +27,17 @@ export class ACPSessionManager {
     return state
   }
 
-  get(sessionId: string): ACPSessionState | undefined {
+  get(sessionId: string) {
     return this.sessions.get(sessionId)
   }
 
-  getByOpenCodeSessionId(openCodeSessionId: string): ACPSessionState | undefined {
+  getByOpenCodeSessionId(openCodeSessionId: string) {
     const acpSessionId = this.openCodeSessionToAcp.get(openCodeSessionId)
     if (!acpSessionId) return undefined
     return this.sessions.get(acpSessionId)
   }
 
-  async remove(sessionId: string): Promise<void> {
+  async remove(sessionId: string) {
     const state = this.sessions.get(sessionId)
     if (!state) return
 
@@ -46,41 +46,8 @@ export class ACPSessionManager {
     this.sessions.delete(sessionId)
   }
 
-  has(sessionId: string): boolean {
+  has(sessionId: string) {
     return this.sessions.has(sessionId)
-  }
-
-  async load(
-    sessionId: string,
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-  ): Promise<ACPSessionState> {
-    const existing = this.sessions.get(sessionId)
-    if (existing) {
-      if (!existing.model) {
-        const resolved = model ?? (await Provider.defaultModel())
-        existing.model = resolved
-        this.sessions.set(sessionId, existing)
-      }
-      return existing
-    }
-
-    const openCodeSession = await Session.create({ title: `ACP Session ${sessionId} (loaded)` })
-    const resolvedModel = model ?? (await Provider.defaultModel())
-
-    const state: ACPSessionState = {
-      id: sessionId,
-      cwd,
-      mcpServers,
-      openCodeSessionId: openCodeSession.id,
-      createdAt: new Date(),
-      model: resolvedModel,
-    }
-
-    this.sessions.set(sessionId, state)
-    this.openCodeSessionToAcp.set(openCodeSession.id, sessionId)
-    return state
   }
 
   getModel(sessionId: string) {
@@ -93,6 +60,14 @@ export class ACPSessionManager {
     const session = this.sessions.get(sessionId)
     if (!session) return
     session.model = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  setMode(sessionId: string, modeId: string) {
+    const session = this.sessions.get(sessionId)
+    if (!session) return
+    session.modeId = modeId
     this.sessions.set(sessionId, session)
     return session
   }
