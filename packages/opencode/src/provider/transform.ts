@@ -92,14 +92,16 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      result["reasoningEffort"] = "medium"
+      if (!modelID.includes("codex")) result["reasoningEffort"] = "medium"
+
       if (providerID !== "azure") {
         result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
       }
+
       if (providerID === "opencode") {
         result["promptCacheKey"] = sessionID
         result["include"] = ["reasoning.encrypted_content"]
-        result["reasoningSummary"] = "detailed"
+        result["reasoningSummary"] = "auto"
       }
     }
     return result

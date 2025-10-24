@@ -534,11 +534,22 @@ export type Path = {
   directory: string
 }
 
+export type FileDiff = {
+  file: string
+  before: string
+  after: string
+  additions: number
+  deletions: number
+}
+
 export type Session = {
   id: string
   projectID: string
   directory: string
   parentID?: string
+  summary?: {
+    diffs: Array<FileDiff>
+  }
   share?: {
     url: string
   }
@@ -581,14 +592,6 @@ export type Todo = {
    * Unique identifier for the todo item
    */
   id: string
-}
-
-export type FileDiff = {
-  file: string
-  before: string
-  after: string
-  additions: number
-  deletions: number
 }
 
 export type UserMessage = {

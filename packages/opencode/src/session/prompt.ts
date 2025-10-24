@@ -49,7 +49,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
-import { MessageSummary } from "./summary"
+import { SessionSummary } from "./summary"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -398,11 +398,6 @@ export namespace SessionPrompt {
       }
       state().queued.delete(input.sessionID)
       SessionCompaction.prune(input)
-      MessageSummary.summarize({
-        sessionID: input.sessionID,
-        messageID: result.info.parentID,
-        providerID: model.providerID,
-      })
       return result
     }
   }
@@ -588,10 +583,7 @@ export namespace SessionPrompt {
           },
         )
         const result = await execute(args, opts)
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
+
         await Plugin.trigger(
           "tool.execute.after",
           {
@@ -601,6 +593,11 @@ export namespace SessionPrompt {
           },
           result,
         )
+
+        const output = result.content
+          .filter((x: any) => x.type === "text")
+          .map((x: any) => x.text)
+          .join("\n\n")
 
         return {
           title: "",
@@ -1295,6 +1292,11 @@ export namespace SessionPrompt {
                   }
                   snapshot = undefined
                 }
+                SessionSummary.summarize({
+                  sessionID: input.sessionID,
+                  messageID: assistantMsg.parentID,
+                  providerID: assistantMsg.modelID,
+                })
                 break
 
               case "text-start":
@@ -1900,7 +1902,7 @@ export namespace SessionPrompt {
       .then((result) => {
         if (result.text)
           return Session.update(input.session.id, (draft) => {
-            const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+            const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").split("\n")[0]
             const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
             draft.title = title.trim()
           })
