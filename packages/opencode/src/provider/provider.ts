@@ -313,6 +313,17 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
+
+      if (provider.whitelist || provider.blacklist) {
+        parsed.models = Object.fromEntries(
+          Object.entries(parsed.models).filter(
+            ([modelID]) =>
+              (!provider.blacklist || !provider.blacklist.includes(modelID)) &&
+              (!provider.whitelist || provider.whitelist.includes(modelID)),
+          ),
+        )
+      }
+
       database[providerID] = parsed
     }
 

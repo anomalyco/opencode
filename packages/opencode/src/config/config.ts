@@ -475,6 +475,8 @@ export namespace Config {
           z.string(),
           ModelsDev.Provider.partial()
             .extend({
+              whitelist: z.array(z.string()).optional(),
+              blacklist: z.array(z.string()).optional(),
               models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
               options: z
                 .object({
