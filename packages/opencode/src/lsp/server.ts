@@ -841,7 +841,15 @@ export namespace LSPServer {
 
   export const LuaLS: Info = {
     id: "lua-ls",
-    root: NearestRoot([".luarc.json", ".luarc.jsonc", ".luacheckrc"]),
+    root: NearestRoot([
+      ".luarc.json",
+      ".luarc.jsonc",
+      ".luacheckrc",
+      ".stylua.toml",
+      "stylua.toml",
+      "selene.toml",
+      "selene.yml",
+    ]),
     extensions: [".lua"],
     async spawn(root) {
       let bin = Bun.which("lua-language-server", {
