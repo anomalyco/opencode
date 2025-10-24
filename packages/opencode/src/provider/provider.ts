@@ -454,6 +454,7 @@ export namespace Provider {
                 temperature: false,
                 tool_call: true, // Most models support tool calls
                 release_date: new Date().toISOString().split('T')[0], // Current date
+                options: {}, // Default empty options
               };
             }
             
