@@ -43,7 +43,8 @@ export class ACPAgent implements Agent {
   private setupEventSubscriptions() {
     this.subscriptions.push(
       Bus.subscribe(MessageV2.Event.PartUpdated, async (event) => {
-        const part = event.properties.part
+        const props = event.properties as typeof event.properties & { delta?: string }
+        const { part } = props
         const acpSession = this.sessionManager.getByOpenCodeSessionId(part.sessionID)
         if (!acpSession) return
 
@@ -139,8 +140,8 @@ export class ACPAgent implements Agent {
               })
           }
         } else if (part.type === "text") {
-          const textToSend = event.properties.delta ?? part.text
-          if (textToSend && part.synthetic !== true) {
+          const delta = props.delta
+          if (delta && part.synthetic !== true) {
             await this.connection
               .sessionUpdate({
                 sessionId: acpSession.id,
@@ -148,7 +149,7 @@ export class ACPAgent implements Agent {
                   sessionUpdate: "agent_message_chunk",
                   content: {
                     type: "text",
-                    text: textToSend,
+                    text: delta,
                   },
                 },
               })

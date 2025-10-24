@@ -340,22 +340,24 @@ export namespace Session {
     },
   )
 
-  export const updatePart = fn(
+  const UpdatePartInput = z.union([
+    MessageV2.Part,
     z.object({
-      part: MessageV2.Part,
-      delta: z.string().optional(),
+      part: MessageV2.TextPart,
+      delta: z.string(),
     }),
-    async (input) => {
-      const part = typeof input === "object" && "part" in input ? input.part : input
-      const delta = typeof input === "object" && "delta" in input ? input.delta : undefined
-      await Storage.write(["part", part.messageID, part.id], part)
-      Bus.publish(MessageV2.Event.PartUpdated, {
-        part,
-        delta,
-      })
-      return part
-    },
-  )
+  ])
+
+  export const updatePart = fn(UpdatePartInput, async (input) => {
+    const part = "delta" in input ? input.part : input
+    const delta = "delta" in input ? input.delta : undefined
+    await Storage.write(["part", part.messageID, part.id], part)
+    Bus.publish(MessageV2.Event.PartUpdated, {
+      part,
+      delta,
+    })
+    return part
+  })
 
   export const getUsage = fn(
     z.object({
