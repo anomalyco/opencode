@@ -2,7 +2,7 @@ import { Log } from "@/util/log"
 import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
-import { ACPAgent } from "@/acp/agent"
+import { ACP } from "@/acp/agent"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -52,7 +52,7 @@ export const AcpCommand = cmd({
       const stream = ndJsonStream(input, output)
 
       new AgentSideConnection((conn) => {
-        return new ACPAgent(conn)
+        return new ACP.Agent(conn)
       }, stream)
 
       log.info("setup connection")
