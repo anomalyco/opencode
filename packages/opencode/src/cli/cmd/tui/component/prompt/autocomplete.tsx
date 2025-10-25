@@ -243,11 +243,10 @@ export function Autocomplete(props: {
     const selected = options()[store.selected]
     if (!selected) return
     selected.onSelect?.()
-    setTimeout(() => hide(), 0)
+    hide()
   }
 
   function show(mode: "@" | "/") {
-    console.log("show", mode, props.input().visualCursor.offset)
     setStore({
       visible: mode,
       index: props.input().visualCursor.offset,
@@ -281,6 +280,7 @@ export function Autocomplete(props: {
           if (e.name === "down") move(1)
           if (e.name === "escape") hide()
           if (e.name === "return") select()
+          if (["up", "down", "return", "escape"].includes(e.name)) e.preventDefault()
         }
         if (!store.visible) {
           if (e.name === "@") {

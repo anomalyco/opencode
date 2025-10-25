@@ -65,7 +65,6 @@ export function Prompt(props: PromptProps) {
           })
           const content = await Editor.open({ value, renderer })
           if (content) {
-            const cursor = input.cursor
             input.setText(content, { history: false })
             setStore("prompt", {
               input: content,
@@ -142,7 +141,6 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      const cursor = input.cursor
       input.setText(prompt.input, { history: false })
       setStore("prompt", prompt)
       input.gotoBufferEnd()
@@ -290,13 +288,6 @@ export function Prompt(props: PromptProps) {
                         draft.prompt.input =
                           draft.prompt.input.slice(0, source.start) + draft.prompt.input.slice(source.end)
                         draft.prompt.parts.splice(i, 1)
-                        console.log(
-                          "onContentChange setting cursor offset",
-                          value,
-                          input.visualCursor.offset,
-                          source.start,
-                          source.end,
-                        )
                         input.cursorOffset = Math.max(0, source.start - 1)
                         i--
                       }
@@ -366,6 +357,8 @@ export function Prompt(props: PromptProps) {
                 }
                 const old = input.visualCursor.offset
                 setTimeout(() => {
+                  if (input.isDestroyed) return
+
                   // This handles virtual text like @filename
                   const position = input.visualCursor.offset
                   const direction = Math.sign(old - position)
