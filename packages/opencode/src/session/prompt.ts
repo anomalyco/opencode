@@ -913,6 +913,20 @@ export namespace SessionPrompt {
     let snapshot: string | undefined
     let blocked = false
 
+    const DOOM_LOOP_MODELS = {
+      "glm-4.6": `⚠️ Loop detected! You have been calling "%TOOL%" with the same parameters repeatedly. This is causing an infinite loop. Please STOP calling this tool and try a different approach or modify the parameters.`,
+      "grok-code": `⚠️ Loop detected! You're stuck repeating "%TOOL%" with identical inputs. Break this pattern and try a different strategy or change the parameters.`,
+    } as const
+    const LOOP_DETECTION_THRESHOLD = 3
+
+    const loopCounts = new Map<string, number>()
+    const getLoopMessage = (modelId: string, toolName: string) => {
+      const template = DOOM_LOOP_MODELS[modelId as keyof typeof DOOM_LOOP_MODELS]
+      return template
+        ? template.replace("%TOOL%", toolName)
+        : `⚠️ Loop detected: Stop repeating "${toolName}" with the same parameters.`
+    }
+
     async function createMessage(parentID: string) {
       const msg: MessageV2.Info = {
         id: Identifier.ascending("message"),
@@ -1048,6 +1062,25 @@ export namespace SessionPrompt {
               case "tool-call": {
                 const match = toolcalls[value.toolCallId]
                 if (match) {
+                  if (DOOM_LOOP_MODELS[input.model.id as keyof typeof DOOM_LOOP_MODELS]) {
+                    const key = `${value.toolName}|${JSON.stringify(value.input)}`
+                    const count = (loopCounts.get(key) || 0) + 1
+                    loopCounts.set(key, count)
+
+                    if (count >= LOOP_DETECTION_THRESHOLD) {
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: assistantMsg!.id,
+                        sessionID: assistantMsg!.sessionID,
+                        type: "text",
+                        text: getLoopMessage(input.model.id, value.toolName),
+                      })
+                      loopCounts.delete(key)
+                    } else {
+                      loopCounts.clear()
+                    }
+                  }
+
                   const part = await Session.updatePart({
                     ...match,
                     tool: value.toolName,
