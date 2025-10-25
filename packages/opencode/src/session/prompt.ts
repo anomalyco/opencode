@@ -94,6 +94,7 @@ export namespace SessionPrompt {
       })
       .optional(),
     agent: z.string().optional(),
+    noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     /**
@@ -151,6 +152,11 @@ export namespace SessionPrompt {
 
     const userMsg = await createUserMessage(input)
     await Session.touch(input.sessionID)
+
+    // Early return for context-only messages (no AI inference)
+    if (input.noReply) {
+      return userMsg
+    }
 
     if (isBusy(input.sessionID)) {
       return new Promise((resolve) => {

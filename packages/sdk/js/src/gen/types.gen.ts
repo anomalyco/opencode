@@ -1888,6 +1888,7 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    noReply?: boolean
     system?: string
     tools?: {
       [key: string]: boolean
