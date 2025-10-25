@@ -337,7 +337,6 @@ export function Prompt(props: PromptProps) {
                     const direction = e.name === "up" ? -1 : 1
                     const item = history.move(direction, input.plainText)
                     if (item) {
-                      const cursor = input.cursor
                       input.setText(item.input, { history: false })
                       setStore("prompt", item)
                       e.preventDefault()
