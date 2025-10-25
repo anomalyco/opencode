@@ -4,6 +4,7 @@ import type {
   AuthenticateRequest,
   CancelNotification,
   InitializeRequest,
+  LoadSessionRequest,
   NewSessionRequest,
   PermissionOption,
   PromptRequest,
@@ -16,7 +17,6 @@ import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
 import { SessionPrompt } from "../session/prompt"
-import { Identifier } from "../id/id"
 import { Installation } from "@/installation"
 import { SessionLock } from "@/session/lock"
 import { Bus } from "@/bus"
@@ -29,9 +29,7 @@ import { Permission } from "@/permission"
 const log = Log.create({ service: "acp-agent" })
 
 // TODO: cleanup tool kind, permission kind, etc
-// TODO: can we remove 2 different notions of ids?
 // TODO: mcp servers?
-// TODO: load session?
 
 export class ACPAgent implements Agent {
   private sessionManager = new ACPSessionManager()
@@ -302,6 +300,24 @@ export class ACPAgent implements Agent {
   async newSession(params: NewSessionRequest) {
     const model = await this.defaultModel()
     const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+
+    const load = await this.loadSession({
+      cwd: params.cwd,
+      mcpServers: params.mcpServers,
+      sessionId: session.id,
+    })
+
+    return {
+      sessionId: session.id,
+      models: load.models,
+      modes: load.modes,
+      _meta: {},
+    }
+  }
+
+  async loadSession(params: LoadSessionRequest) {
+    const model = await this.defaultModel()
+    const sessionId = params.sessionId
     const availableModels = await this.availableModels()
 
     const availableCommands = (await Command.list()).map((command) => ({
@@ -311,7 +327,7 @@ export class ACPAgent implements Agent {
 
     setTimeout(() => {
       this.connection.sessionUpdate({
-        sessionId: session.id,
+        sessionId,
         update: {
           sessionUpdate: "available_commands_update",
           availableCommands,
@@ -330,7 +346,7 @@ export class ACPAgent implements Agent {
     const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
 
     return {
-      sessionId: session.id,
+      sessionId,
       models: {
         currentModelId: `${model.providerID}/${model.modelID}`,
         availableModels,
@@ -342,22 +358,6 @@ export class ACPAgent implements Agent {
       _meta: {},
     }
   }
-
-  // async loadSession(params: LoadSessionRequest) {
-  //   log.info("loadSession", { sessionId: params.sessionId, cwd: params.cwd })
-
-  //   const defaultModel = await this.defaultModel()
-  //   const session = await this.sessionManager.load(params.sessionId, params.cwd, params.mcpServers, defaultModel)
-  //   const availableModels = await this.availableModels()
-
-  //   return {
-  //     models: {
-  //       currentModelId: `${session.model.providerID}/${session.model.modelID}`,
-  //       availableModels,
-  //     },
-  //     _meta: {},
-  //   }
-  // }
 
   async setSessionModel(params: SetSessionModelRequest) {
     const session = this.sessionManager.get(params.sessionId)
