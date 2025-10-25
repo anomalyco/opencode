@@ -30,7 +30,6 @@ export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
   // TODO: mcp servers?
-  // TODO: file parts & "@" references
 
   type ToolKind =
     | "read"
@@ -405,32 +404,48 @@ export namespace ACP {
       }
       const agent = acpSession.modeId ?? "build"
 
-      const parts = params.prompt.map((content) => {
-        if (content.type === "text") {
-          return {
-            type: "text" as const,
-            text: content.text,
-          }
+      const parts: SessionPrompt.PromptInput["parts"] = []
+      for (const part of params.prompt) {
+        switch (part.type) {
+          case "text":
+            parts.push({
+              type: "text" as const,
+              text: part.text,
+            })
+            break
+          case "image":
+            if (part.data) {
+              parts.push({
+                type: "file",
+                url: `data:${part.mimeType};base64,${part.data}`,
+                mime: part.mimeType,
+              })
+            } else if (part.uri && part.uri.startsWith("http:")) {
+              parts.push({
+                type: "file",
+                url: part.uri,
+                mime: part.mimeType,
+              })
+            }
+            break
+
+          case "resource":
+            const resource = part.resource
+            if ("text" in resource && typeof resource.text === "string") {
+              parts.push({
+                type: "text",
+                text: resource.text,
+              })
+            }
+            break
+
+          default:
+            break
         }
-        if (content.type === "resource") {
-          const resource = content.resource
-          let text = ""
-          if ("text" in resource && typeof resource.text === "string") {
-            text = resource.text
-          }
-          return {
-            type: "text" as const,
-            text,
-          }
-        }
-        return {
-          type: "text" as const,
-          text: JSON.stringify(content),
-        }
-      })
+      }
 
       const cmd = await (async () => {
-        const text = parts.map((part) => part.text).join("")
+        const text = parts.filter((part) => part.type === "text").join("")
         const match = text.match(/^\/(\w+)\s*(.*)$/)
         if (!match) return
 
