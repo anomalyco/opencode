@@ -931,9 +931,15 @@ export namespace LSPServer {
         await fs.mkdir(installDir, { recursive: true })
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().nothrow()
+          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
         } else {
-          await $`tar -xzf ${tempPath} -C ${installDir}`.nothrow()
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
         }
 
         await fs.rm(tempPath, { force: true })
@@ -947,7 +953,10 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          const ok = await $`chmod +x ${bin}`.quiet().catch((error) => {
+            log.error("Failed to set executable permission for lua-language-server binary", { error })
+          })
+          if (!ok) return
         }
 
         log.info(`installed lua-language-server`, { bin })
