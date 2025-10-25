@@ -75,10 +75,8 @@ export namespace ACP {
                 status: "pending",
                 title: permission.title,
                 rawInput: permission.metadata,
-                // TODO: toToolKind
-                kind: "edit",
-                // TODO: make this better
-                locations: extractLocations(permission.type, permission.metadata),
+                kind: toToolKind(permission.type),
+                locations: toLocations(permission.type, permission.metadata),
               },
               options,
             })
@@ -134,7 +132,7 @@ export namespace ACP {
                     sessionUpdate: "tool_call",
                     toolCallId: part.callID,
                     title: part.tool,
-                    kind: determineToolKind(part.tool),
+                    kind: toToolKind(part.tool),
                     status: "pending",
                     locations: [],
                     rawInput: {},
@@ -152,7 +150,7 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "in_progress",
-                    locations: extractLocations(part.tool, part.state.input),
+                    locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                   },
                 })
@@ -177,9 +175,9 @@ export namespace ACP {
                         },
                       },
                     ],
+                    title: part.state.title,
                     rawOutput: {
                       output: part.state.output,
-                      title: part.state.title,
                       metadata: part.state.metadata,
                     },
                   },
@@ -201,7 +199,7 @@ export namespace ACP {
                         type: "content",
                         content: {
                           type: "text",
-                          text: `Error: ${part.state.error}`,
+                          text: part.state.error,
                         },
                       },
                     ],
@@ -473,7 +471,7 @@ export namespace ACP {
     }
   }
 
-  function determineToolKind(toolName: string): ToolKind {
+  function toToolKind(toolName: string): ToolKind {
     const readTools = [
       "read",
       "glob",
@@ -490,25 +488,21 @@ export namespace ACP {
     return "other"
   }
 
-  function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
-    try {
-      switch (toolName.toLowerCase()) {
-        case "read":
-        case "edit":
-        case "write":
-          return input["filePath"] ? [{ path: input["filePath"] }] : []
-        case "glob":
-        case "grep":
-          return input["path"] ? [{ path: input["path"] }] : []
-        case "bash":
-          return []
-        case "list":
-          return input["path"] ? [{ path: input["path"] }] : []
-        default:
-          return []
-      }
-    } catch {
-      return []
+  function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
+    switch (toolName.toLowerCase()) {
+      case "read":
+      case "edit":
+      case "write":
+        return input["filePath"] ? [{ path: input["filePath"] }] : []
+      case "glob":
+      case "grep":
+        return input["path"] ? [{ path: input["path"] }] : []
+      case "bash":
+        return []
+      case "list":
+        return input["path"] ? [{ path: input["path"] }] : []
+      default:
+        return []
     }
   }
 
