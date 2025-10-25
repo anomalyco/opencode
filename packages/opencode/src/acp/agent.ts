@@ -123,12 +123,19 @@ export class OpenCodeAgent implements Agent {
       if (nameA > nameB) return 1
       return 0
     })
+    const seen = new Set<string>()
     return entries.flatMap(([providerID, provider]) => {
       const models = Provider.sort(Object.values(provider.info.models))
-      return models.map((model) => ({
-        modelId: `${providerID}/${model.id}`,
-        name: `${provider.info.name}/${model.name}`,
-      }))
+      return models
+        .map((model) => ({
+          modelId: `${providerID}/${model.id}`,
+          name: `${provider.info.name}/${model.name}`,
+        }))
+        .filter((model) => {
+          if (seen.has(model.name)) return false
+          seen.add(model.name)
+          return true
+        })
     })
   }
 
