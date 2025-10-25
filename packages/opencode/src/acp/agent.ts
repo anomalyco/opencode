@@ -2,19 +2,12 @@ import type {
   Agent,
   AgentSideConnection,
   AuthenticateRequest,
-  AuthenticateResponse,
   CancelNotification,
   InitializeRequest,
-  InitializeResponse,
-  LoadSessionRequest,
-  LoadSessionResponse,
   NewSessionRequest,
-  NewSessionResponse,
   PermissionOption,
   PromptRequest,
-  PromptResponse,
   SetSessionModelRequest,
-  SetSessionModelResponse,
   SetSessionModeRequest,
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
@@ -35,6 +28,11 @@ import { Permission } from "@/permission"
 
 const log = Log.create({ service: "acp-agent" })
 
+// TODO: cleanup tool kind, permission kind, etc
+// TODO: can we remove 2 different notions of ids?
+// TODO: mcp servers?
+// TODO: load session?
+
 export class ACPAgent implements Agent {
   private sessionManager = new ACPSessionManager()
   private connection: AgentSideConnection
@@ -53,7 +51,7 @@ export class ACPAgent implements Agent {
       { optionId: "reject", kind: "reject_once", name: "Reject" },
     ]
     Bus.subscribe(Permission.Event.Updated, async (event) => {
-      const acpSession = this.sessionManager.getByOpenCodeSessionId(event.properties.sessionID)
+      const acpSession = this.sessionManager.get(event.properties.sessionID)
       if (!acpSession) return
       try {
         const permission = event.properties
@@ -106,7 +104,7 @@ export class ACPAgent implements Agent {
     Bus.subscribe(MessageV2.Event.PartUpdated, async (event) => {
       const props = event.properties
       const { part } = props
-      const acpSession = this.sessionManager.getByOpenCodeSessionId(part.sessionID)
+      const acpSession = this.sessionManager.get(part.sessionID)
       if (!acpSession) return
 
       const message = await Storage.read<MessageV2.Info>(["message", part.sessionID, part.messageID]).catch(
@@ -416,9 +414,10 @@ export class ACPAgent implements Agent {
   }
 
   async prompt(params: PromptRequest) {
-    const acpSession = this.sessionManager.get(params.sessionId)
+    const sessionID = params.sessionId
+    const acpSession = this.sessionManager.get(sessionID)
     if (!acpSession) {
-      throw new Error(`Session not found: ${params.sessionId}`)
+      throw new Error(`Session not found: ${sessionID}`)
     }
 
     const current = acpSession.model
@@ -465,15 +464,14 @@ export class ACPAgent implements Agent {
 
     if (cmd) {
       await SessionPrompt.command({
-        sessionID: acpSession.openCodeSessionId,
+        sessionID,
         command: cmd.command.name,
         arguments: cmd.args,
         agent,
       })
     } else {
       await SessionPrompt.prompt({
-        sessionID: acpSession.openCodeSessionId,
-        messageID: Identifier.ascending("message"),
+        sessionID,
         model: {
           providerID: model.providerID,
           modelID: model.modelID,
