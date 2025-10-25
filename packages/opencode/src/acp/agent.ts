@@ -29,7 +29,6 @@ import { Permission } from "@/permission"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
-  // TODO: cleanup tool kind, permission kind, etc
   // TODO: mcp servers?
   // TODO: file parts & "@" references
 
@@ -472,24 +471,36 @@ export namespace ACP {
   }
 
   function toToolKind(toolName: string): ToolKind {
-    const readTools = [
-      "read",
-      "glob",
-      "grep",
-      "list",
-      "webfetch",
-      "context7_resolve_library_id",
-      "context7_get_library_docs",
-    ]
-    const editTools = ["edit", "write", "bash"]
+    const tool = toolName.toLocaleLowerCase()
+    switch (tool) {
+      case "bash":
+        return "execute"
+      case "webfetch":
+        return "fetch"
 
-    if (readTools.includes(toolName.toLowerCase())) return "read"
-    if (editTools.includes(toolName.toLowerCase())) return "edit"
-    return "other"
+      case "edit":
+      case "patch":
+      case "write":
+        return "edit"
+
+      case "grep":
+      case "glob":
+      case "context7_resolve_library_id":
+      case "context7_get_library_docs":
+        return "search"
+
+      case "list":
+      case "read":
+        return "read"
+
+      default:
+        return "other"
+    }
   }
 
   function toLocations(toolName: string, input: Record<string, any>): { path: string }[] {
-    switch (toolName.toLowerCase()) {
+    const tool = toolName.toLocaleLowerCase()
+    switch (tool) {
       case "read":
       case "edit":
       case "write":
