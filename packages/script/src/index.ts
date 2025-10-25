@@ -1,6 +1,6 @@
 import { $ } from "bun"
 
-if (process.versions.bun !== "1.3.0") {
+if (process.versions.bun !== "1.3.1") {
   throw new Error("This script requires bun@1.3.0")
 }
 

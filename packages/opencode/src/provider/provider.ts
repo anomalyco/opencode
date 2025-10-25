@@ -422,7 +422,7 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined) {
+      if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
