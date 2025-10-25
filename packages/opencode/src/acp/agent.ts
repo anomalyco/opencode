@@ -32,6 +32,8 @@ const log = Log.create({ service: "acp-agent" })
 // TODO: mcp servers?
 // TODO: file parts & "@" references
 
+type ToolKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "switch_mode" | "other"
+
 export class ACPAgent implements Agent {
   private sessionManager = new ACPSessionManager()
   private connection: AgentSideConnection
@@ -242,7 +244,7 @@ export class ACPAgent implements Agent {
     })
   }
 
-  private determineToolKind(toolName: string): "read" | "edit" | "other" {
+  private determineToolKind(toolName: string): ToolKind {
     const readTools = [
       "read",
       "glob",
