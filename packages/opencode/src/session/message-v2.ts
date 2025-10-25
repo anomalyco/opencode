@@ -6,7 +6,6 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
-import { fn } from "@/util/fn"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))

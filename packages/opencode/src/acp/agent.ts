@@ -30,6 +30,7 @@ const log = Log.create({ service: "acp-agent" })
 
 // TODO: cleanup tool kind, permission kind, etc
 // TODO: mcp servers?
+// TODO: file parts & "@" references
 
 export class ACPAgent implements Agent {
   private sessionManager = new ACPSessionManager()
@@ -220,7 +221,23 @@ export class ACPAgent implements Agent {
             })
         }
       } else if (part.type === "reasoning") {
-        // TODO: Implement sending reasoning to ACP
+        const delta = props.delta
+        if (delta) {
+          await this.connection
+            .sessionUpdate({
+              sessionId: acpSession.id,
+              update: {
+                sessionUpdate: "agent_thought_chunk",
+                content: {
+                  type: "text",
+                  text: delta,
+                },
+              },
+            })
+            .catch((err) => {
+              log.error("failed to send reasoning to ACP", { error: err })
+            })
+        }
       }
     })
   }
@@ -270,8 +287,7 @@ export class ACPAgent implements Agent {
     return {
       protocolVersion: 1,
       agentCapabilities: {
-        // todo: load session
-        loadSession: false,
+        loadSession: true,
         // TODO: map acp mcp
         // mcpCapabilities: {
         //   http: true,
