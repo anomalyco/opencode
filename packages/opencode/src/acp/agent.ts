@@ -429,9 +429,15 @@ export namespace ACP {
             }
             break
 
+          case "resource_link":
+            const parsed = parseUri(part.uri)
+            parts.push(parsed)
+
+            break
+
           case "resource":
             const resource = part.resource
-            if ("text" in resource && typeof resource.text === "string") {
+            if ("text" in resource) {
               parts.push({
                 type: "text",
                 text: resource.text,
@@ -443,6 +449,8 @@ export namespace ACP {
             break
         }
       }
+
+      log.info("parts", { parts })
 
       const cmd = await (async () => {
         const text = parts.filter((part) => part.type === "text").join("")
@@ -536,5 +544,44 @@ export namespace ACP {
     const configured = config.defaultModel
     if (configured) return configured
     return Provider.defaultModel()
+  }
+
+  function parseUri(
+    uri: string,
+  ): { type: "file"; url: string; filename: string; mime: string } | { type: "text"; text: string } {
+    try {
+      if (uri.startsWith("file://")) {
+        const path = uri.slice(7)
+        const name = path.split("/").pop() || path
+        return {
+          type: "file",
+          url: uri,
+          filename: name,
+          mime: "text/plain",
+        }
+      }
+      if (uri.startsWith("zed://")) {
+        const url = new URL(uri)
+        const path = url.searchParams.get("path")
+        if (path) {
+          const name = path.split("/").pop() || path
+          return {
+            type: "file",
+            url: `file://${path}`,
+            filename: name,
+            mime: "text/plain",
+          }
+        }
+      }
+      return {
+        type: "text",
+        text: uri,
+      }
+    } catch {
+      return {
+        type: "text",
+        text: uri,
+      }
+    }
   }
 }
