@@ -260,6 +260,20 @@ const syntaxThemeDark = [
     },
   },
   {
+    scope: ["extmark.file"],
+    style: {
+      foreground: "#7fd88f",
+      bold: true,
+    },
+  },
+  {
+    scope: ["extmark.agent"],
+    style: {
+      foreground: "#9d7cd8",
+      bold: true,
+    },
+  },
+  {
     scope: ["comment"],
     style: {
       foreground: "#808080",

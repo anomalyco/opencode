@@ -31,6 +31,8 @@ export function Autocomplete(props: {
   anchor: () => BoxRenderable
   input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
+  fileStyleId: number
+  agentStyleId: number
 }) {
   const sdk = useSDK()
   const sync = useSync()
@@ -64,10 +66,13 @@ export function Autocomplete(props: {
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + virtualText.length
 
+    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
+
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
+      styleId,
     })
 
     props.setPrompt((draft) => {

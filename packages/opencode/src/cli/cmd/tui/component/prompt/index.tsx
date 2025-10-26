@@ -1,7 +1,7 @@
-import { TextAttributes, BoxRenderable, TextareaRenderable, MouseEvent, KeyEvent } from "@opentui/core"
-import { createEffect, createMemo, Match, Switch, type JSX } from "solid-js"
+import { TextAttributes, BoxRenderable, TextareaRenderable, MouseEvent, KeyEvent, SyntaxStyle } from "@opentui/core"
+import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
-import { Theme } from "@tui/context/theme"
+import { Theme, syntaxTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -46,6 +46,9 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
+
+  const fileStyleId = syntaxTheme.getStyleId("extmark.file")!
+  const agentStyleId = syntaxTheme.getStyleId("extmark.agent")!
 
   command.register(() => {
     return [
@@ -300,6 +303,8 @@ export function Prompt(props: PromptProps) {
           })
         }}
         value={store.prompt.input}
+        fileStyleId={fileStyleId}
+        agentStyleId={agentStyleId}
       />
       <box ref={(r) => (anchor = r)}>
         <box
@@ -392,7 +397,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={Theme.backgroundElement}
               cursorColor={Theme.primary}
-              // backgroundColor={Theme.backgroundElement} <- can be transparent as parent box has backgroundColor
+              syntaxStyle={syntaxTheme}
             />
           </box>
           <box backgroundColor={Theme.backgroundElement} width={1} justifyContent="center" alignItems="center"></box>
