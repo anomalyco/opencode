@@ -141,6 +141,45 @@ export function Prompt(props: PromptProps) {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
   })
 
+  function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
+    input.extmarks.clear()
+    setStore("extmarkToPartIndex", new Map())
+
+    parts.forEach((part, partIndex) => {
+      let start = 0
+      let end = 0
+      let virtualText = ""
+      let styleId: number | undefined
+
+      if (part.type === "file" && part.source?.text) {
+        start = part.source.text.start
+        end = part.source.text.end
+        virtualText = part.source.text.value
+        styleId = fileStyleId
+      } else if (part.type === "agent" && part.source) {
+        start = part.source.start
+        end = part.source.end
+        virtualText = part.source.value
+        styleId = agentStyleId
+      }
+
+      if (virtualText) {
+        const extmarkId = input.extmarks.create({
+          start,
+          end,
+          virtual: true,
+          styleId,
+          typeId: promptPartTypeId,
+        })
+        setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+          const newMap = new Map(map)
+          newMap.set(extmarkId, partIndex)
+          return newMap
+        })
+      }
+    })
+  }
+
   function syncExtmarksWithPromptParts() {
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     setStore(
@@ -185,6 +224,7 @@ export function Prompt(props: PromptProps) {
     set(prompt) {
       input.setText(prompt.input, { history: false })
       setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
     },
     reset() {
@@ -372,6 +412,7 @@ export function Prompt(props: PromptProps) {
                     if (item) {
                       input.setText(item.input, { history: false })
                       setStore("prompt", item)
+                      restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
                     }
                     return
