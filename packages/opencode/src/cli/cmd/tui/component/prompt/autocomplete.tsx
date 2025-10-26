@@ -27,6 +27,7 @@ export function Autocomplete(props: {
   value: string
   sessionID?: string
   setPrompt: (input: (prompt: PromptInfo) => void) => void
+  setExtmark: (partIndex: number, extmarkId: number) => void
   anchor: () => BoxRenderable
   input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
@@ -68,21 +69,6 @@ export function Autocomplete(props: {
             (item): AutocompleteOption => ({
               display: item,
               onSelect: () => {
-                const part: PromptInfo["parts"][number] = {
-                  type: "file",
-                  mime: "text/plain",
-                  filename: item,
-                  url: `file://${process.cwd()}/${item}`,
-                  source: {
-                    type: "file",
-                    text: {
-                      start: store.index,
-                      end: store.index + item.length + 1,
-                      value: "@" + item,
-                    },
-                    path: item,
-                  },
-                }
                 props.setPrompt((draft) => {
                   const append = "@" + item + " "
                   const cursor = props.input().logicalCursor
@@ -90,7 +76,32 @@ export function Autocomplete(props: {
                   props.input().insertText(append)
                   if (store.index === 0) draft.input = append
                   if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
+
+                  const virtualText = "@" + item
+                  const extmarkId = props.input().extmarks.create({
+                    start: store.index,
+                    end: store.index + virtualText.length,
+                    virtual: true,
+                  })
+
+                  const part: PromptInfo["parts"][number] = {
+                    type: "file",
+                    mime: "text/plain",
+                    filename: item,
+                    url: `file://${process.cwd()}/${item}`,
+                    source: {
+                      type: "file",
+                      text: {
+                        start: store.index,
+                        end: store.index + virtualText.length,
+                        value: virtualText,
+                      },
+                      path: item,
+                    },
+                  }
+                  const partIndex = draft.parts.length
                   draft.parts.push(part)
+                  props.setExtmark(partIndex, extmarkId)
                 })
               },
             }),
@@ -120,15 +131,25 @@ export function Autocomplete(props: {
               props.input().deleteRange(0, store.index, cursor.row, cursor.col)
               props.input().insertText(append)
               draft.input = append
+
+              const virtualText = "@" + agent.name
+              const extmarkId = props.input().extmarks.create({
+                start: store.index,
+                end: store.index + virtualText.length,
+                virtual: true,
+              })
+
+              const partIndex = draft.parts.length
               draft.parts.push({
                 type: "agent",
                 source: {
                   start: store.index,
-                  end: store.index + agent.name.length + 1,
-                  value: "@" + agent.name,
+                  end: store.index + virtualText.length,
+                  value: virtualText,
                 },
                 name: agent.name,
               })
+              props.setExtmark(partIndex, extmarkId)
             })
           },
         }),

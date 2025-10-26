@@ -11,7 +11,6 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
-import { iife } from "@/util/iife"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
@@ -80,10 +79,12 @@ export function Prompt(props: PromptProps) {
         disabled: true,
         category: "Prompt",
         onSelect: (dialog) => {
+          input.extmarks.clear()
           setStore("prompt", {
             input: "",
             parts: [],
           })
+          setStore("extmarks", new Map())
           dialog.clear()
         },
       },
@@ -118,16 +119,60 @@ export function Prompt(props: PromptProps) {
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
+    extmarks: Map<number, number>
   }>({
     prompt: {
       input: "",
       parts: [],
     },
     mode: "normal",
+    extmarks: new Map(),
   })
 
   createEffect(() => {
     input.focus()
+  })
+
+  createEffect(() => {
+    if (!input) return
+    const extmarks = input.extmarks
+
+    const handleDelete = (evt: any) => {
+      setStore(
+        produce((draft) => {
+          const partIndex = Array.from(draft.extmarks.entries()).findIndex(([_, id]) => id === evt.extmark.id)
+          if (partIndex !== -1) {
+            draft.extmarks.delete(partIndex)
+            draft.prompt.parts.splice(partIndex, 1)
+          }
+        }),
+      )
+    }
+
+    const handleUpdate = (extmark: any) => {
+      setStore(
+        produce((draft) => {
+          const partIndex = Array.from(draft.extmarks.entries()).find(([_, id]) => id === extmark.id)?.[0]
+          if (partIndex !== undefined) {
+            const part = draft.prompt.parts[partIndex]
+            if (part.type === "agent" && part.source) {
+              part.source.start = extmark.start
+              part.source.end = extmark.end
+            } else if (part.type === "file" && part.source?.text) {
+              part.source.text.start = extmark.start
+              part.source.text.end = extmark.end
+            }
+          }
+        }),
+      )
+    }
+
+    extmarks.on("extmark-deleted", handleDelete)
+    extmarks.on("extmark-updated", handleUpdate)
+    return () => {
+      extmarks.off("extmark-deleted", handleDelete)
+      extmarks.off("extmark-updated", handleUpdate)
+    }
   })
 
   props.ref?.({
@@ -147,10 +192,12 @@ export function Prompt(props: PromptProps) {
     },
     reset() {
       input.clear()
+      input.extmarks.clear()
       setStore("prompt", {
         input: "",
         parts: [],
       })
+      setStore("extmarks", new Map())
     },
   })
 
@@ -165,7 +212,7 @@ export function Prompt(props: PromptProps) {
           return sessionID
         })()
     const messageID = Identifier.ascending("message")
-    const input = store.prompt.input
+    const inputText = store.prompt.input
     if (store.mode === "shell") {
       sdk.client.session.shell({
         path: {
@@ -173,12 +220,12 @@ export function Prompt(props: PromptProps) {
         },
         body: {
           agent: local.agent.current().name,
-          command: input,
+          command: inputText,
         },
       })
       setStore("mode", "normal")
-    } else if (input.startsWith("/")) {
-      const [command, ...args] = input.split(" ")
+    } else if (inputText.startsWith("/")) {
+      const [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
         path: {
           id: sessionID,
@@ -205,7 +252,7 @@ export function Prompt(props: PromptProps) {
             {
               id: Identifier.ascending("part"),
               type: "text",
-              text: input,
+              text: inputText,
             },
             ...store.prompt.parts.map((x) => ({
               id: Identifier.ascending("part"),
@@ -216,10 +263,12 @@ export function Prompt(props: PromptProps) {
       })
     }
     history.append(store.prompt)
+    input.extmarks.clear()
     setStore("prompt", {
       input: "",
       parts: [],
     })
+    setStore("extmarks", new Map())
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -245,6 +294,13 @@ export function Prompt(props: PromptProps) {
           console.log("setPrompt", store.prompt.input, Bun.stringWidth(store.prompt.input))
           input.cursorOffset = Bun.stringWidth(store.prompt.input)
         }}
+        setExtmark={(partIndex, extmarkId) => {
+          setStore("extmarks", (map) => {
+            const newMap = new Map(map)
+            newMap.set(partIndex, extmarkId)
+            return newMap
+          })
+        }}
         value={store.prompt.input}
       />
       <box ref={(r) => (anchor = r)}>
@@ -269,31 +325,7 @@ export function Prompt(props: PromptProps) {
             <textarea
               onContentChange={() => {
                 const value = input.plainText
-                let diff = value.length - store.prompt.input.length
-                setStore(
-                  produce((draft) => {
-                    // This handles virtual text like @filename
-                    draft.prompt.input = value
-                    for (let i = 0; i < draft.prompt.parts.length; i++) {
-                      const part = draft.prompt.parts[i]
-                      if (!part.source) continue
-                      const source = part.type === "agent" ? part.source : part.source.text
-                      if (source.start >= input.visualCursor.offset) {
-                        source.start += diff
-                        source.end += diff
-                      }
-                      const sliced = draft.prompt.input.slice(source.start, source.end)
-                      if (sliced != source.value && diff < 0) {
-                        diff -= source.value.length
-                        draft.prompt.input =
-                          draft.prompt.input.slice(0, source.start) + draft.prompt.input.slice(source.end)
-                        draft.prompt.parts.splice(i, 1)
-                        input.cursorOffset = Math.max(0, source.start - 1)
-                        i--
-                      }
-                    }
-                  }),
-                )
+                setStore("prompt", "input", value)
                 autocomplete.onInput(value)
               }}
               keyBindings={[
@@ -309,10 +341,12 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
+                  input.extmarks.clear()
                   setStore("prompt", {
                     input: "",
                     parts: [],
                   })
+                  setStore("extmarks", new Map())
                   return
                 }
                 if (keybind.match("app_exit", e)) {
@@ -354,31 +388,6 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
-                const old = input.visualCursor.offset
-                setTimeout(() => {
-                  if (input.isDestroyed) return
-
-                  // This handles virtual text like @filename
-                  const position = input.visualCursor.offset
-                  const direction = Math.sign(old - position)
-                  for (const part of store.prompt.parts) {
-                    const source = iife(() => {
-                      if (part.type === "agent") return part.source
-                      if (part.type === "file") return part.source?.text
-                      return
-                    })
-                    if (source) {
-                      if (position >= source.start && position < source.end) {
-                        if (direction === 1) {
-                          input.cursorOffset = Math.max(0, source.start - 1)
-                        }
-                        if (direction === -1) {
-                          input.cursorOffset = source.end
-                        }
-                      }
-                    }
-                  }
-                }, 0)
               }}
               onSubmit={submit}
               ref={(r: TextareaRenderable) => (input = r)}
