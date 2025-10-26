@@ -77,3 +77,44 @@ The other confusingly named repo has no relation to this one. You can [read the 
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+### SAP AI Core Provider
+
+Add SAP AI Core deployments as models using either a service key JSON or discrete environment variables.
+
+Environment (choose one approach):
+
+```bash
+# Single service key JSON
+export SAP_AI_CORE_SERVICE_KEY='{"url":"https://api.ai.example","uaa":{"clientid":"xxx","clientsecret":"yyy","url":"https://auth.example"}}'
+
+# Or discrete variables
+export SAP_AI_CORE_URL=https://api.ai.example
+export SAP_AI_CORE_OAUTH_URL=https://auth.example/oauth/token
+export SAP_AI_CORE_CLIENT_ID=xxx
+export SAP_AI_CORE_CLIENT_SECRET=yyy
+```
+
+Config alias mapping (map friendly key to real deployment id):
+
+```jsonc
+// opencode.json
+{
+  "provider": {
+    "sap-ai-core": {
+      "models": {
+        "my-llm": { "id": "deployment-guid-or-name" },
+      },
+    },
+  },
+}
+```
+
+Behavior:
+
+- Tokens cached in-memory with proactive refresh (~60s buffer + jitter)
+- 401/403 -> ProviderAuthError
+- 429 -> ProviderRateLimitError (includes optional retry ms)
+- Timeout can be set per request via model options
+
+Optional: dynamic deployment listing may be added later behind a flag.

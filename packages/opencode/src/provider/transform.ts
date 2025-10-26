@@ -1,6 +1,11 @@
 import type { ModelMessage } from "ai"
 import { unique } from "remeda"
-import type { JSONSchema } from "zod/v4/core"
+type JSONSchema =
+  | { type: "object"; properties?: Record<string, JSONSchema>; required?: string[] }
+  | { type: "array"; items?: JSONSchema }
+  | { type: "string" | "number" | "boolean" | "null" }
+  | { anyOf: JSONSchema[] }
+  | { [key: string]: unknown }
 
 export namespace ProviderTransform {
   function normalizeToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
@@ -154,7 +159,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {
+  export function schema(_providerID: string, _modelID: string, schema: JSONSchema) {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -162,7 +167,7 @@ export namespace ProviderTransform {
           if (schema.required?.includes(key)) continue
           schema.properties[key] = {
             anyOf: [
-              value as JSONSchema.JSONSchema,
+              value as JSONSchema,
               {
                 type: "null",
               },

@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -207,6 +207,116 @@ export namespace Provider {
         },
       }
     },
+    "sap-ai-core": async (input) => {
+      // Requires a provider definition present in config or models database
+      if (!input) return { autoload: false }
+      // Service key JSON or individual env vars
+      const serviceKeyRaw = process.env["SAP_AI_CORE_SERVICE_KEY"]
+      let url = process.env["SAP_AI_CORE_URL"]
+      let clientID = process.env["SAP_AI_CORE_CLIENT_ID"]
+      let clientSecret = process.env["SAP_AI_CORE_CLIENT_SECRET"]
+      let oauthURL = process.env["SAP_AI_CORE_OAUTH_URL"]
+      if (serviceKeyRaw) {
+        try {
+          const parsed = JSON.parse(serviceKeyRaw)
+          url = url || parsed.url || parsed.serviceurls?.AI_API_URL || parsed.endpoints?.api || parsed.api?.url
+          const uaa = parsed.uaa || parsed.authentication || {}
+          clientID = clientID || uaa.clientid || uaa.client_id
+          clientSecret = clientSecret || uaa.clientsecret || uaa.client_secret
+          // Common token endpoint patterns
+          oauthURL =
+            oauthURL ||
+            uaa.url ||
+            uaa.tokenurl ||
+            uaa.token_url ||
+            (uaa.url ? `${uaa.url.replace(/\/$/, "")}/oauth/token` : undefined)
+        } catch (_) {}
+      }
+      const haveCreds = Boolean(url && clientID && clientSecret && oauthURL)
+      if (!haveCreds) return { autoload: false }
+      let token: { value: string; expires: number } | undefined
+      let inflight: Promise<void> | undefined
+      async function refresh() {
+        if (inflight) return inflight
+        inflight = (async () => {
+          const body = new URLSearchParams({ grant_type: "client_credentials" }).toString()
+          const basic = Buffer.from(`${clientID}:${clientSecret}`).toString("base64")
+          const res = await fetch(oauthURL!, {
+            method: "POST",
+            headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+            signal: AbortSignal.timeout(30_000),
+          }).catch((e) => {
+            throw new Error("sap-ai-core auth failed", { cause: e })
+          })
+          if (!res.ok) {
+            const text = await res.text().catch(() => "")
+            throw new Error(`sap-ai-core auth error ${res.status} ${text}`)
+          }
+          const json = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number }
+          if (!json.access_token) throw new Error("sap-ai-core auth missing token")
+          const expiresInMs = (json.expires_in ?? 600) * 1000
+          token = {
+            value: json.access_token,
+            expires: Date.now() + expiresInMs - 60_000 - Math.floor(Math.random() * 30_000),
+          }
+        })()
+        try {
+          await inflight
+        } finally {
+          inflight = undefined
+        }
+      }
+      async function ensureToken() {
+        if (!token || Date.now() > token.expires) await refresh()
+        // proactive refresh if within 5s of expiry
+        if (token && Date.now() > token.expires - 5_000) await refresh()
+        return token!.value
+      }
+      // Fetch wrapper with auth + optional timeout (user may set timeout via config options later)
+      const fetchWrapper = async (input: any, init?: BunFetchRequestInit) => {
+        const authToken = await ensureToken()
+        const headers = { ...(init?.headers as Record<string, string>), Authorization: `Bearer ${authToken}` }
+        const timeout = input.options?.timeout ?? (input.timeout as number | undefined) ?? undefined
+        const signals: AbortSignal[] = []
+        if (init?.signal) signals.push(init.signal)
+        if (timeout && timeout !== false) signals.push(AbortSignal.timeout(timeout))
+        const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+        const res = await log
+          .time(async () => fetch(input, { ...init, headers, signal }), { event: "call", providerID: "sap-ai-core" })
+          .catch((e) => {
+            throw new InitError({ providerID: "sap-ai-core" }, { cause: e })
+          })
+        if (res.status === 429) {
+          const retryAfter = res.headers.get("Retry-After")
+          let retry: number | undefined
+          if (retryAfter) {
+            const secs = Number(retryAfter)
+            if (!Number.isNaN(secs)) retry = secs * 1000
+            else {
+              const date = Date.parse(retryAfter)
+              if (!Number.isNaN(date)) retry = Math.max(0, date - Date.now())
+            }
+          }
+          throw new ProviderRateLimitError({ providerID: "sap-ai-core", retry })
+        }
+        if (res.status === 401 || res.status === 403) {
+          throw new ProviderAuthError({ providerID: "sap-ai-core", status: res.status })
+        }
+        return res
+      }
+      return {
+        autoload: true,
+        options: {
+          baseURL: url,
+          fetch: fetchWrapper,
+          headers: {},
+        },
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.languageModel(modelID)
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -253,6 +363,10 @@ export namespace Provider {
       provider.options = mergeDeep(provider.options, options)
       provider.source = source
       provider.getModel = getModel ?? provider.getModel
+      if (provider.options.region) {
+        provider.options.headers = provider.options.headers || {}
+        provider.options.headers["AI-Core-Region"] = provider.options.region
+      }
     }
 
     const configProviders = Object.entries(config.provider ?? {})
@@ -612,5 +726,15 @@ export namespace Provider {
     z.object({
       providerID: z.string(),
     }),
+  )
+
+  export const ProviderRateLimitError = NamedError.create(
+    "ProviderRateLimitError",
+    z.object({ providerID: z.string(), retry: z.number().optional() }),
+  )
+
+  export const ProviderAuthError = NamedError.create(
+    "ProviderAuthError",
+    z.object({ providerID: z.string(), status: z.number() }),
   )
 }
