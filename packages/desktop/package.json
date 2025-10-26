@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun x tsc --noEmit"
   },
   "license": "MIT",
   "devDependencies": {

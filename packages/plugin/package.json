@@ -4,7 +4,7 @@
   "version": "0.15.18",
   "type": "module",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun x tsc --noEmit",
     "build": "tsc"
   },
   "exports": {

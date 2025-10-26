@@ -4,7 +4,7 @@ import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types
 import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import { Bus } from "../bus"
-import z from "zod/v4"
+import z from "zod"
 import type { LSPServer } from "./server"
 import { NamedError } from "../util/error"
 import { withTimeout } from "../util/timeout"

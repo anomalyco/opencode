@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { $ } from "bun"
 import type { BunFile } from "bun"

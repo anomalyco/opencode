@@ -2,7 +2,7 @@
   "name": "@opencode-ai/console-app",
   "type": "module",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "bun x tsc --noEmit",
     "dev": "vinxi dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.opencode.ai bun sst shell --stage=dev bun dev",
     "build": "vinxi build && ../../opencode/script/schema.ts ./.output/public/config.json",

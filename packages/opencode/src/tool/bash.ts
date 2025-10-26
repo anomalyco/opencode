@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"

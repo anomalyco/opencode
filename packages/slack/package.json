@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
