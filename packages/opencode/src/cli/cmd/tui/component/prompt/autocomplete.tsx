@@ -33,6 +33,7 @@ export function Autocomplete(props: {
   ref: (ref: AutocompleteRef) => void
   fileStyleId: number
   agentStyleId: number
+  promptPartTypeId: () => number
 }) {
   const sdk = useSDK()
   const sync = useSync()
@@ -73,6 +74,7 @@ export function Autocomplete(props: {
       end: extmarkEnd,
       virtual: true,
       styleId,
+      typeId: props.promptPartTypeId(),
     })
 
     props.setPrompt((draft) => {

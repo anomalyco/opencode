@@ -49,6 +49,7 @@ export function Prompt(props: PromptProps) {
 
   const fileStyleId = syntaxTheme.getStyleId("extmark.file")!
   const agentStyleId = syntaxTheme.getStyleId("extmark.agent")!
+  let promptPartTypeId: number
 
   command.register(() => {
     return [
@@ -87,7 +88,7 @@ export function Prompt(props: PromptProps) {
             input: "",
             parts: [],
           })
-          setStore("extmarks", new Map())
+          setStore("extmarkToPartIndex", new Map())
           dialog.clear()
         },
       },
@@ -122,61 +123,54 @@ export function Prompt(props: PromptProps) {
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
-    extmarks: Map<number, number>
+    extmarkToPartIndex: Map<number, number>
   }>({
     prompt: {
       input: "",
       parts: [],
     },
     mode: "normal",
-    extmarks: new Map(),
+    extmarkToPartIndex: new Map(),
   })
 
   createEffect(() => {
     input.focus()
   })
 
-  createEffect(() => {
-    if (!input) return
-    const extmarks = input.extmarks
+  onMount(() => {
+    promptPartTypeId = input.extmarks.registerType("prompt-part")
+  })
 
-    const handleDelete = (evt: any) => {
-      setStore(
-        produce((draft) => {
-          const partIndex = Array.from(draft.extmarks.entries()).findIndex(([_, id]) => id === evt.extmark.id)
-          if (partIndex !== -1) {
-            draft.extmarks.delete(partIndex)
-            draft.prompt.parts.splice(partIndex, 1)
-          }
-        }),
-      )
-    }
+  function syncExtmarksWithPromptParts() {
+    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
+    setStore(
+      produce((draft) => {
+        const newMap = new Map<number, number>()
+        const newParts: typeof draft.prompt.parts = []
 
-    const handleUpdate = (extmark: any) => {
-      setStore(
-        produce((draft) => {
-          const partIndex = Array.from(draft.extmarks.entries()).find(([_, id]) => id === extmark.id)?.[0]
+        for (const extmark of allExtmarks) {
+          const partIndex = draft.extmarkToPartIndex.get(extmark.id)
           if (partIndex !== undefined) {
             const part = draft.prompt.parts[partIndex]
-            if (part.type === "agent" && part.source) {
-              part.source.start = extmark.start
-              part.source.end = extmark.end
-            } else if (part.type === "file" && part.source?.text) {
-              part.source.text.start = extmark.start
-              part.source.text.end = extmark.end
+            if (part) {
+              if (part.type === "agent" && part.source) {
+                part.source.start = extmark.start
+                part.source.end = extmark.end
+              } else if (part.type === "file" && part.source?.text) {
+                part.source.text.start = extmark.start
+                part.source.text.end = extmark.end
+              }
+              newMap.set(extmark.id, newParts.length)
+              newParts.push(part)
             }
           }
-        }),
-      )
-    }
+        }
 
-    extmarks.on("extmark-deleted", handleDelete)
-    extmarks.on("extmark-updated", handleUpdate)
-    return () => {
-      extmarks.off("extmark-deleted", handleDelete)
-      extmarks.off("extmark-updated", handleUpdate)
-    }
-  })
+        draft.extmarkToPartIndex = newMap
+        draft.prompt.parts = newParts
+      }),
+    )
+  }
 
   props.ref?.({
     get focused() {
@@ -200,7 +194,7 @@ export function Prompt(props: PromptProps) {
         input: "",
         parts: [],
       })
-      setStore("extmarks", new Map())
+      setStore("extmarkToPartIndex", new Map())
     },
   })
 
@@ -271,7 +265,7 @@ export function Prompt(props: PromptProps) {
       input: "",
       parts: [],
     })
-    setStore("extmarks", new Map())
+    setStore("extmarkToPartIndex", new Map())
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -296,15 +290,16 @@ export function Prompt(props: PromptProps) {
           setStore("prompt", produce(cb))
         }}
         setExtmark={(partIndex, extmarkId) => {
-          setStore("extmarks", (map) => {
+          setStore("extmarkToPartIndex", (map: Map<number, number>) => {
             const newMap = new Map(map)
-            newMap.set(partIndex, extmarkId)
+            newMap.set(extmarkId, partIndex)
             return newMap
           })
         }}
         value={store.prompt.input}
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
+        promptPartTypeId={() => promptPartTypeId}
       />
       <box ref={(r) => (anchor = r)}>
         <box
@@ -330,6 +325,7 @@ export function Prompt(props: PromptProps) {
                 const value = input.plainText
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
+                syncExtmarksWithPromptParts()
               }}
               keyBindings={[
                 { name: "return", meta: true, action: "newline" },
@@ -349,7 +345,7 @@ export function Prompt(props: PromptProps) {
                     input: "",
                     parts: [],
                   })
-                  setStore("extmarks", new Map())
+                  setStore("extmarkToPartIndex", new Map())
                   return
                 }
                 if (keybind.match("app_exit", e)) {
