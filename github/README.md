@@ -104,7 +104,7 @@ To test locally:
    - `MODEL`: The model used by opencode. Same as the `MODEL` defined in the GitHub workflow.
    - `ANTHROPIC_API_KEY`: Your model provider API key. Same as the keys defined in the GitHub workflow.
    - `GITHUB_RUN_ID`: Dummy value to emulate GitHub action environment.
-   - `MOCK_TOKEN`: A GitHub persontal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
+   - `MOCK_TOKEN`: A GitHub personal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
    - `MOCK_EVENT`: Mock GitHub event payload (see templates below).
    - `/path/to/opencode`: Path to your cloned opencode repo. `bun /path/to/opencode/github/index.ts` runs your local version of `opencode`.
 
@@ -118,7 +118,7 @@ Replace:
 
 - `"owner":"sst"` with repo owner
 - `"repo":"hello-world"` with repo name
-- `"actor":"fwang"` with the GitHub username of commentor
+- `"actor":"fwang"` with the GitHub username of commenter
 - `"number":4` with the GitHub issue id
 - `"body":"hey opencode, summarize thread"` with comment body
 
