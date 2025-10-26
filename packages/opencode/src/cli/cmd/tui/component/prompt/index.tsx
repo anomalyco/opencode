@@ -361,6 +361,8 @@ export function Prompt(props: PromptProps) {
           </box>
           <box paddingTop={1} paddingBottom={1} backgroundColor={Theme.backgroundElement} flexGrow={1}>
             <textarea
+              minHeight={1}
+              maxHeight={6}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
