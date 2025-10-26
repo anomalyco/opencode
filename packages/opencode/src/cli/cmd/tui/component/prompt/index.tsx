@@ -291,8 +291,6 @@ export function Prompt(props: PromptProps) {
         input={() => input}
         setPrompt={(cb) => {
           setStore("prompt", produce(cb))
-          console.log("setPrompt", store.prompt.input, Bun.stringWidth(store.prompt.input))
-          input.cursorOffset = Bun.stringWidth(store.prompt.input)
         }}
         setExtmark={(partIndex, extmarkId) => {
           setStore("extmarks", (map) => {

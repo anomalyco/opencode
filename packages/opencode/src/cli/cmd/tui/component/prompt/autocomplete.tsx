@@ -69,21 +69,30 @@ export function Autocomplete(props: {
             (item): AutocompleteOption => ({
               display: item,
               onSelect: () => {
+                const append = "@" + item + " "
+                const input = props.input()
+                const currentCursorOffset = input.visualCursor.offset
+
+                const savedCursorOffset = currentCursorOffset
+                input.cursorOffset = store.index
+                const startCursor = input.logicalCursor
+                input.cursorOffset = savedCursorOffset
+                const endCursor = input.logicalCursor
+
+                input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+                input.insertText(append)
+
+                const virtualText = "@" + item
+                const extmarkStart = store.index
+                const extmarkEnd = extmarkStart + virtualText.length
+
+                const extmarkId = input.extmarks.create({
+                  start: extmarkStart,
+                  end: extmarkEnd,
+                  virtual: true,
+                })
+
                 props.setPrompt((draft) => {
-                  const append = "@" + item + " "
-                  const cursor = props.input().logicalCursor
-                  props.input().deleteRange(0, store.index, cursor.row, cursor.col)
-                  props.input().insertText(append)
-                  if (store.index === 0) draft.input = append
-                  if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
-
-                  const virtualText = "@" + item
-                  const extmarkId = props.input().extmarks.create({
-                    start: store.index,
-                    end: store.index + virtualText.length,
-                    virtual: true,
-                  })
-
                   const part: PromptInfo["parts"][number] = {
                     type: "file",
                     mime: "text/plain",
@@ -92,8 +101,8 @@ export function Autocomplete(props: {
                     source: {
                       type: "file",
                       text: {
-                        start: store.index,
-                        end: store.index + virtualText.length,
+                        start: extmarkStart,
+                        end: extmarkEnd,
                         value: virtualText,
                       },
                       path: item,
@@ -125,26 +134,36 @@ export function Autocomplete(props: {
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
           onSelect: () => {
+            const append = "@" + agent.name + " "
+            const input = props.input()
+            const currentCursorOffset = input.visualCursor.offset
+
+            const savedCursorOffset = currentCursorOffset
+            input.cursorOffset = store.index
+            const startCursor = input.logicalCursor
+            input.cursorOffset = savedCursorOffset
+            const endCursor = input.logicalCursor
+
+            input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+            input.insertText(append)
+
+            const virtualText = "@" + agent.name
+            const extmarkStart = store.index
+            const extmarkEnd = extmarkStart + virtualText.length
+
+            const extmarkId = input.extmarks.create({
+              start: extmarkStart,
+              end: extmarkEnd,
+              virtual: true,
+            })
+
             props.setPrompt((draft) => {
-              const append = "@" + agent.name + " "
-              const cursor = props.input().logicalCursor
-              props.input().deleteRange(0, store.index, cursor.row, cursor.col)
-              props.input().insertText(append)
-              draft.input = append
-
-              const virtualText = "@" + agent.name
-              const extmarkId = props.input().extmarks.create({
-                start: store.index,
-                end: store.index + virtualText.length,
-                virtual: true,
-              })
-
               const partIndex = draft.parts.length
               draft.parts.push({
                 type: "agent",
                 source: {
-                  start: store.index,
-                  end: store.index + virtualText.length,
+                  start: extmarkStart,
+                  end: extmarkEnd,
                   value: virtualText,
                 },
                 name: agent.name,
