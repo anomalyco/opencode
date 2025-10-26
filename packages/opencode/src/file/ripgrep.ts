@@ -2,7 +2,7 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
@@ -218,7 +218,7 @@ export namespace Ripgrep {
         code: "ENOENT",
         errno: -2,
         path: input.cwd,
-      });
+      })
     }
 
     const proc = Bun.spawn(args, {

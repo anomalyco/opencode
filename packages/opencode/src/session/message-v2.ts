@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
