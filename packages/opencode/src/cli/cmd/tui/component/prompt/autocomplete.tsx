@@ -47,6 +47,45 @@ export function Autocomplete(props: {
     return props.value.substring(store.index + 1).split(" ")[0]
   })
 
+  function insertPart(text: string, part: PromptInfo["parts"][number]) {
+    const append = "@" + text + " "
+    const input = props.input()
+    const currentCursorOffset = input.visualCursor.offset
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(append)
+
+    const virtualText = "@" + text
+    const extmarkStart = store.index
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+    })
+
+    props.setPrompt((draft) => {
+      if (part.type === "file" && part.source?.text) {
+        part.source.text.start = extmarkStart
+        part.source.text.end = extmarkEnd
+        part.source.text.value = virtualText
+      } else if (part.type === "agent" && part.source) {
+        part.source.start = extmarkStart
+        part.source.end = extmarkEnd
+        part.source.value = virtualText
+      }
+      const partIndex = draft.parts.length
+      draft.parts.push(part)
+      props.setExtmark(partIndex, extmarkId)
+    })
+  }
+
   const [files] = createResource(
     () => [filter()],
     async () => {
@@ -69,48 +108,20 @@ export function Autocomplete(props: {
             (item): AutocompleteOption => ({
               display: item,
               onSelect: () => {
-                const append = "@" + item + " "
-                const input = props.input()
-                const currentCursorOffset = input.visualCursor.offset
-
-                const savedCursorOffset = currentCursorOffset
-                input.cursorOffset = store.index
-                const startCursor = input.logicalCursor
-                input.cursorOffset = savedCursorOffset
-                const endCursor = input.logicalCursor
-
-                input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-                input.insertText(append)
-
-                const virtualText = "@" + item
-                const extmarkStart = store.index
-                const extmarkEnd = extmarkStart + virtualText.length
-
-                const extmarkId = input.extmarks.create({
-                  start: extmarkStart,
-                  end: extmarkEnd,
-                  virtual: true,
-                })
-
-                props.setPrompt((draft) => {
-                  const part: PromptInfo["parts"][number] = {
+                insertPart(item, {
+                  type: "file",
+                  mime: "text/plain",
+                  filename: item,
+                  url: `file://${process.cwd()}/${item}`,
+                  source: {
                     type: "file",
-                    mime: "text/plain",
-                    filename: item,
-                    url: `file://${process.cwd()}/${item}`,
-                    source: {
-                      type: "file",
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                      path: item,
+                    text: {
+                      start: 0,
+                      end: 0,
+                      value: "",
                     },
-                  }
-                  const partIndex = draft.parts.length
-                  draft.parts.push(part)
-                  props.setExtmark(partIndex, extmarkId)
+                    path: item,
+                  },
                 })
               },
             }),
@@ -134,41 +145,14 @@ export function Autocomplete(props: {
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
           onSelect: () => {
-            const append = "@" + agent.name + " "
-            const input = props.input()
-            const currentCursorOffset = input.visualCursor.offset
-
-            const savedCursorOffset = currentCursorOffset
-            input.cursorOffset = store.index
-            const startCursor = input.logicalCursor
-            input.cursorOffset = savedCursorOffset
-            const endCursor = input.logicalCursor
-
-            input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-            input.insertText(append)
-
-            const virtualText = "@" + agent.name
-            const extmarkStart = store.index
-            const extmarkEnd = extmarkStart + virtualText.length
-
-            const extmarkId = input.extmarks.create({
-              start: extmarkStart,
-              end: extmarkEnd,
-              virtual: true,
-            })
-
-            props.setPrompt((draft) => {
-              const partIndex = draft.parts.length
-              draft.parts.push({
-                type: "agent",
-                source: {
-                  start: extmarkStart,
-                  end: extmarkEnd,
-                  value: virtualText,
-                },
-                name: agent.name,
-              })
-              props.setExtmark(partIndex, extmarkId)
+            insertPart(agent.name, {
+              type: "agent",
+              name: agent.name,
+              source: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
             })
           },
         }),
