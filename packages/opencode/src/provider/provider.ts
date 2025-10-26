@@ -282,11 +282,15 @@ export namespace Provider {
         if (init?.signal) signals.push(init.signal)
         if (timeout && timeout !== false) signals.push(AbortSignal.timeout(timeout))
         const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-        const res = await log
-          .time(async () => fetch(input, { ...init, headers, signal }), { event: "call", providerID: "sap-ai-core" })
-          .catch((e) => {
-            throw new InitError({ providerID: "sap-ai-core" }, { cause: e })
-          })
+        const t = log.time("call", { event: "call", providerID: "sap-ai-core" })
+        const res = await (async () => {
+          try {
+            return await fetch(input, { ...init, headers, signal })
+          } catch (e) {
+            t.stop({ success: false })
+            throw new InitError({ providerID: "sap-ai-core" }, { cause: e as Error })
+          }
+        })()
         if (res.status === 429) {
           const retryAfter = res.headers.get("Retry-After")
           let retry: number | undefined
@@ -298,11 +302,14 @@ export namespace Provider {
               if (!Number.isNaN(date)) retry = Math.max(0, date - Date.now())
             }
           }
+          t.stop({ success: false })
           throw new ProviderRateLimitError({ providerID: "sap-ai-core", retry })
         }
         if (res.status === 401 || res.status === 403) {
+          t.stop({ success: false })
           throw new ProviderAuthError({ providerID: "sap-ai-core", status: res.status })
         }
+        t.stop({ success: true })
         return res
       }
       return {
@@ -427,6 +434,7 @@ export namespace Provider {
         }
         parsed.models[modelID] = parsedModel
       }
+      if (providerID === "sap-ai-core" && !parsed.npm) parsed.npm = "@ai-sdk/openai-compatible"
       database[providerID] = parsed
     }
 

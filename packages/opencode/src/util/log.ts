@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
-import z from "zod/v4"
+import z from "zod"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -151,11 +151,12 @@ export namespace Log {
       time(message: string, extra?: Record<string, any>) {
         const now = Date.now()
         result.info(message, { status: "started", ...extra })
-        function stop() {
+        function stop(append?: Record<string, any>) {
           result.info(message, {
             status: "completed",
             duration: Date.now() - now,
             ...extra,
+            ...append,
           })
         }
         return {

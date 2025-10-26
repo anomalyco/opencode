@@ -25,6 +25,62 @@ async function withProviderConfig(models?: any) {
 }
 
 describe("sap-ai-core provider", () => {
+  test("logs success=true on successful call and success=false on error", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await withProviderConfig()
+        const restore = setEnv({
+          SAP_AI_CORE_URL: "https://api.example.com",
+          SAP_AI_CORE_CLIENT_ID: "id",
+          SAP_AI_CORE_CLIENT_SECRET: "secret",
+          SAP_AI_CORE_OAUTH_URL: "https://auth.example.com/oauth/token",
+        })
+        const originalFetch = globalThis.fetch
+        const originalStderrWrite = process.stderr.write
+        let logs: string[] = []
+        // capture log output
+        // @ts-ignore
+        process.stderr.write = (chunk: any) => {
+          logs.push(String(chunk))
+          return true
+        }
+        let mode: "ok" | "fail" = "ok"
+        globalThis.fetch = Object.assign(
+          async (input: RequestInfo, init?: RequestInit) => {
+            const url = String(input)
+            if (url.includes("auth.example.com")) {
+              return new Response(JSON.stringify({ access_token: "t1", expires_in: 120 }), { status: 200 })
+            }
+            if (mode === "ok") return new Response("ok", { status: 200 })
+            return new Response("", { status: 429, headers: { "Retry-After": "1" } })
+          },
+          { preconnect: () => {} },
+        ) as typeof fetch
+        try {
+          const prov = await Provider.getProvider("sap-ai-core")
+          expect(prov.options.fetch).toBeDefined()
+          await prov.options.fetch!("https://api.example.com/infer")
+          const successLog = logs.find(
+            (l) => l.includes("providerID=sap-ai-core") && l.includes("status=completed") && l.includes("success=true"),
+          )
+          expect(successLog).toBeDefined()
+          mode = "fail"
+          await expect(prov.options.fetch!("https://api.example.com/infer")).rejects.toThrow("ProviderRateLimitError")
+          const failLog = logs.find(
+            (l) =>
+              l.includes("providerID=sap-ai-core") && l.includes("status=completed") && l.includes("success=false"),
+          )
+          expect(failLog).toBeDefined()
+        } finally {
+          globalThis.fetch = originalFetch
+          process.stderr.write = originalStderrWrite
+          restore()
+        }
+      },
+    })
+  })
   test("does not autoload without credentials", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
