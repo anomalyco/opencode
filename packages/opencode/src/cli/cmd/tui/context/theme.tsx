@@ -262,14 +262,14 @@ const syntaxThemeDark = [
   {
     scope: ["extmark.file"],
     style: {
-      foreground: "#7fd88f",
+      foreground: "#f5a742",
       bold: true,
     },
   },
   {
     scope: ["extmark.agent"],
     style: {
-      foreground: "#9d7cd8",
+      foreground: "#fab283",
       bold: true,
     },
   },
