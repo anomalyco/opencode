@@ -12,7 +12,7 @@
     "random": "echo 'Random script updated at $(date)'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "opencode": "./bin/run.js"
   },
   "exports": {
     "./*": "./src/*.ts"

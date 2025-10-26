@@ -1,7 +1,7 @@
 import { $ } from "bun"
 
-if (process.versions.bun !== "1.3.0") {
-  throw new Error("This script requires bun@1.3.0")
+if (!process.versions.bun.startsWith("1.3.")) {
+  throw new Error("This script requires bun@1.3+")
 }
 
 const CHANNEL = process.env["OPENCODE_CHANNEL"] ?? (await $`git branch --show-current`.text().then((x) => x.trim()))
