@@ -1,6 +1,6 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
-import z from "zod/v4"
+import z from "zod"
 import { Session } from "../session"
 import { Bus } from "../bus"
 import { MessageV2 } from "../session/message-v2"

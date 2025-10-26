@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"

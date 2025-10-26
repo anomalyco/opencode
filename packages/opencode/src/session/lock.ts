@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { NamedError } from "../util/error"

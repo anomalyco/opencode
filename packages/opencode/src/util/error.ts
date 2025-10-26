@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 
 export abstract class NamedError extends Error {
   abstract schema(): z.core.$ZodType
