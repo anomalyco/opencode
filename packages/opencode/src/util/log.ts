@@ -31,7 +31,7 @@ export namespace Log {
       message: string,
       extra?: Record<string, any>,
     ): {
-      stop(): void
+      stop(append?: Record<string, any>): void
       [Symbol.dispose](): void
     }
   }
