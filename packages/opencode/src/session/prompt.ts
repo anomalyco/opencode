@@ -191,28 +191,6 @@ export namespace SessionPrompt {
       processor,
     })
 
-    // const permUnsub = (() => {
-    //   const handled = new Set<string>()
-    //   const options = [
-    //     { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
-    //     { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
-    //     { optionId: "reject_once", kind: "reject_once", name: "Reject" },
-    //   ]
-    //   return Bus.subscribe(Permission.Event.Updated, async (event) => {
-    //     const info = event.properties
-    //     if (info.sessionID !== input.sessionID) return
-    //     if (handled.has(info.id)) return
-    //     handled.add(info.id)
-    //     const toolCallId = info.callID ?? info.id
-    //     const metadata = info.metadata ?? {}
-    //     // TODO: emit permission event to bus for ACP to handle
-    //     Permission.respond({ sessionID: info.sessionID, permissionID: info.id, response: "reject" })
-    //   })
-    // })()
-    // await using _permSub = defer(() => {
-    //   permUnsub?.()
-    // })
-
     const params = await Plugin.trigger(
       "chat.params",
       {
