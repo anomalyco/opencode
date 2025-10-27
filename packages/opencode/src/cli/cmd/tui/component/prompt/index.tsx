@@ -170,6 +170,11 @@ export function Prompt(props: PromptProps) {
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
+      } else if (part.type === "text" && part.source?.text) {
+        start = part.source.text.start
+        end = part.source.text.end
+        virtualText = part.source.text.value
+        styleId = pasteStyleId
       }
 
       if (virtualText) {
@@ -205,6 +210,9 @@ export function Prompt(props: PromptProps) {
                 part.source.start = extmark.start
                 part.source.end = extmark.end
               } else if (part.type === "file" && part.source?.text) {
+                part.source.text.start = extmark.start
+                part.source.text.end = extmark.end
+              } else if (part.type === "text" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
               }
@@ -468,19 +476,15 @@ export function Prompt(props: PromptProps) {
                   typeId: promptPartTypeId,
                 })
 
-                const part: PromptInfo["parts"][number] = {
-                  type: "file",
-                  mime: "text/plain",
-                  filename: "pasted-content.txt",
-                  url: `data:text/plain;base64,${btoa(pastedContent)}`,
+                const part = {
+                  type: "text" as const,
+                  text: pastedContent,
                   source: {
-                    type: "file",
                     text: {
                       start: extmarkStart,
                       end: extmarkEnd,
                       value: virtualText,
                     },
-                    path: "pasted-content.txt",
                   },
                 }
 
