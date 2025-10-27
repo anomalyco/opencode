@@ -25,6 +25,9 @@ import { Storage } from "@/storage/storage"
 import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
 import { Permission } from "@/permission"
+import { Session } from "@/session"
+import { Identifier } from "@/id/id"
+import { SessionCompaction } from "@/session/compaction"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -457,20 +460,16 @@ export namespace ACP {
         const match = text.match(/^\/(\w+)\s*(.*)$/)
         if (!match) return
 
-        const [c, args] = match.slice(1)
-        const command = await Command.get(c)
-        if (!command) return
-        return { command, args }
+        const [name, args] = match.slice(1)
+        return { name, args }
       })()
 
-      if (cmd) {
-        await SessionPrompt.command({
-          sessionID,
-          command: cmd.command.name,
-          arguments: cmd.args,
-          agent,
-        })
-      } else {
+      const done = {
+        stopReason: "end_turn" as const,
+        _meta: {},
+      }
+
+      if (!cmd) {
         await SessionPrompt.prompt({
           sessionID,
           model: {
@@ -480,12 +479,40 @@ export namespace ACP {
           parts,
           agent,
         })
+        return done
       }
 
-      return {
-        stopReason: "end_turn" as const,
-        _meta: {},
+      const command = await Command.get(cmd.name)
+      if (command) {
+        await SessionPrompt.command({
+          sessionID,
+          command: command.name,
+          arguments: cmd.args,
+          model: model.providerID + "/" + model.modelID,
+          agent,
+        })
+        return done
       }
+
+      switch (cmd.name) {
+        case "init":
+          await Session.initialize({
+            sessionID,
+            messageID: Identifier.ascending("message"),
+            providerID: model.providerID,
+            modelID: model.modelID,
+          })
+          break
+        case "compact":
+          await SessionCompaction.run({
+            sessionID,
+            providerID: model.providerID,
+            modelID: model.modelID,
+          })
+          break
+      }
+
+      return done
     }
 
     async cancel(params: CancelNotification) {
