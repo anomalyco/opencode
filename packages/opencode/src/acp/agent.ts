@@ -30,6 +30,7 @@ import { Session } from "@/session"
 import { Identifier } from "@/id/id"
 import { SessionCompaction } from "@/session/compaction"
 import type { Config } from "@/config/config"
+import { MCP } from "@/mcp"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -408,6 +409,12 @@ export namespace ACP {
           }
         }
       }
+
+      await Promise.all(
+        Object.entries(mcpServers).map(async ([key, mcp]) => {
+          await MCP.add(key, mcp)
+        }),
+      )
 
       return {
         sessionId,
