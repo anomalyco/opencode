@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { Storage } from "../storage/storage"
 
@@ -29,6 +29,8 @@ export namespace Todo {
   }
 
   export async function get(sessionID: string) {
-    return Storage.read<Info[]>(["todo", sessionID]) ?? []
+    return Storage.read<Info[]>(["todo", sessionID])
+      .then((x) => x || [])
+      .catch(() => [])
   }
 }

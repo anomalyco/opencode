@@ -20,10 +20,20 @@ export namespace LSPServer {
 
   type RootFunction = (file: string) => Promise<string | undefined>
 
-  const NearestRoot = (patterns: string[]): RootFunction => {
+  const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
     return async (file) => {
+      if (excludePatterns) {
+        const excludedFiles = Filesystem.up({
+          targets: excludePatterns,
+          start: path.dirname(file),
+          stop: Instance.directory,
+        })
+        const excluded = await excludedFiles.next()
+        await excludedFiles.return()
+        if (excluded.value) return undefined
+      }
       const files = Filesystem.up({
-        targets: patterns,
+        targets: includePatterns,
         start: path.dirname(file),
         stop: Instance.directory,
       })
@@ -42,9 +52,30 @@ export namespace LSPServer {
     spawn(root: string): Promise<Handle | undefined>
   }
 
+  export const Deno: Info = {
+    id: "deno",
+    root: NearestRoot(["deno.json", "deno.jsonc"]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs"],
+    async spawn(root) {
+      const deno = Bun.which("deno")
+      if (!deno) {
+        log.info("deno not found, please install deno first")
+        return
+      }
+      return {
+        process: spawn(deno, ["lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Typescript: Info = {
     id: "typescript",
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot(
+      ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
+      ["deno.json", "deno.jsonc"],
+    ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
@@ -670,6 +701,57 @@ export namespace LSPServer {
     },
   }
 
+  export const Astro: Info = {
+    id: "astro",
+    extensions: [".astro"],
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    async spawn(root) {
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      if (!tsserver) {
+        log.info("typescript not found, required for Astro language server")
+        return
+      }
+      const tsdk = path.dirname(tsserver)
+
+      let binary = Bun.which("astro-ls")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "@astrojs", "language-server", "bin", "nodeServer.js")
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "@astrojs/language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+        initialization: {
+          typescript: {
+            tsdk,
+          },
+        },
+      }
+    },
+  }
+
   export const JDTLS: Info = {
     id: "jdtls",
     root: NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"]),
@@ -753,6 +835,137 @@ export namespace LSPServer {
             cwd: root,
           },
         ),
+      }
+    },
+  }
+
+  export const LuaLS: Info = {
+    id: "lua-ls",
+    root: NearestRoot([
+      ".luarc.json",
+      ".luarc.jsonc",
+      ".luacheckrc",
+      ".stylua.toml",
+      "stylua.toml",
+      "selene.toml",
+      "selene.yml",
+    ]),
+    extensions: [".lua"],
+    async spawn(root) {
+      let bin = Bun.which("lua-language-server", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading lua-language-server from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch lua-language-server release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+
+        const platform = process.platform
+        const arch = process.arch
+        let assetName = ""
+
+        let lualsArch: string = arch
+        if (arch === "arm64") lualsArch = "arm64"
+        else if (arch === "x64") lualsArch = "x64"
+        else if (arch === "ia32") lualsArch = "ia32"
+
+        let lualsPlatform: string = platform
+        if (platform === "darwin") lualsPlatform = "darwin"
+        else if (platform === "linux") lualsPlatform = "linux"
+        else if (platform === "win32") lualsPlatform = "win32"
+
+        const ext = platform === "win32" ? "zip" : "tar.gz"
+
+        assetName = `lua-language-server-${release.tag_name}-${lualsPlatform}-${lualsArch}.${ext}`
+
+        const supportedCombos = [
+          "darwin-arm64.tar.gz",
+          "darwin-x64.tar.gz",
+          "linux-x64.tar.gz",
+          "linux-arm64.tar.gz",
+          "win32-x64.zip",
+          "win32-ia32.zip",
+        ]
+
+        const assetSuffix = `${lualsPlatform}-${lualsArch}.${ext}`
+        if (!supportedCombos.includes(assetSuffix)) {
+          log.error(`Platform ${platform} and architecture ${arch} is not supported by lua-language-server`)
+          return
+        }
+
+        const asset = release.assets.find((a: any) => a.name === assetName)
+        if (!asset) {
+          log.error(`Could not find asset ${assetName} in latest lua-language-server release`)
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download lua-language-server")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        // Unlike zls which is a single self-contained binary,
+        // lua-language-server needs supporting files (meta/, locale/, etc.)
+        // Extract entire archive to dedicated directory to preserve all files
+        const installDir = path.join(Global.Path.bin, `lua-language-server-${lualsArch}-${lualsPlatform}`)
+
+        // Remove old installation if exists
+        const stats = await fs.stat(installDir).catch(() => undefined)
+        if (stats) {
+          await fs.rm(installDir, { force: true, recursive: true })
+        }
+
+        await fs.mkdir(installDir, { recursive: true })
+
+        if (ext === "zip") {
+          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
+        } else {
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
+            log.error("Failed to extract lua-language-server archive", { error })
+          })
+          if (!ok) return
+        }
+
+        await fs.rm(tempPath, { force: true })
+
+        // Binary is located in bin/ subdirectory within the extracted archive
+        bin = path.join(installDir, "bin", "lua-language-server" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract lua-language-server binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          const ok = await $`chmod +x ${bin}`.quiet().catch((error) => {
+            log.error("Failed to set executable permission for lua-language-server binary", { error })
+          })
+          if (!ok) return
+        }
+
+        log.info(`installed lua-language-server`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
       }
     },
   }

@@ -1,0 +1,46 @@
+[data-component="collapsible"] {
+  display: flex;
+  flex-direction: column;
+
+  [data-slot="trigger"] {
+    cursor: pointer;
+    user-select: none;
+
+    &:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+
+    &[data-disabled] {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  [data-slot="content"] {
+    overflow: hidden;
+    /* animation: slideUp 250ms ease-out; */
+
+    /* &[data-expanded] { */
+    /*   animation: slideDown 250ms ease-out; */
+    /* } */
+  }
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--kb-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

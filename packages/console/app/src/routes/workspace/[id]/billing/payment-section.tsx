@@ -96,7 +96,7 @@ export function PaymentSection() {
                           }}
                           data-slot="receipt-button"
                         >
-                          view
+                          View
                         </button>
                       </td>
                     </tr>

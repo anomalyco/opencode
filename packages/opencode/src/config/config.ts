@@ -1,7 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
-import z from "zod/v4"
+import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
@@ -129,7 +129,7 @@ export namespace Config {
       }),
     )
     for (const item of invalid) {
-      throw new DirectoryError({
+      throw new ConfigDirectoryTypoError({
         path: dir,
         dir: item,
         suggestion: item.substring(0, item.length - 1),
@@ -721,8 +721,8 @@ export namespace Config {
     }),
   )
 
-  export const DirectoryError = NamedError.create(
-    "ConfigDirectoryError",
+  export const ConfigDirectoryTypoError = NamedError.create(
+    "ConfigDirectoryTypoError",
     z.object({
       path: z.string(),
       dir: z.string(),

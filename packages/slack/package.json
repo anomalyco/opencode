@@ -1,10 +1,10 @@
 {
   "name": "@opencode-ai/slack",
-  "version": "0.15.3",
+  "version": "0.15.18",
   "type": "module",
   "scripts": {
     "dev": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
     "@opencode-ai/sdk": "workspace:*",
@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   }
 }

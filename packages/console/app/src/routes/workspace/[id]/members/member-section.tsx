@@ -139,7 +139,7 @@ function MemberRow(props: { member: any; workspaceID: string; actorID: string; a
 
   return (
     <tr>
-      <td data-slot="member-email">{props.member.accountEmail ?? props.member.email}</td>
+      <td data-slot="member-email">{props.member.authEmail ?? props.member.email}</td>
       <td data-slot="member-role">
         <Show when={store.editing && !isCurrentUser()} fallback={<span>{props.member.role}</span>}>
           <RoleDropdown
@@ -252,6 +252,13 @@ export function MemberSection() {
             </button>
           </Show>
         </div>
+      </div>
+      <div data-slot="beta-notice">
+        Workspaces are free for teams during the beta.{" "}
+        <a href="/docs/zen/#for-teams" target="_blank" rel="noopener noreferrer">
+          Learn more
+        </a>
+        .
       </div>
       <Show when={store.show}>
         <form action={inviteMember} method="post" data-slot="create-form">

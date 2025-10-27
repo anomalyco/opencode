@@ -3,7 +3,6 @@ import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import path from "path"
 import { iconsSpritesheet } from "vite-plugin-icons-spritesheet"
-import { generateThemeCSS } from "./scripts/vite-theme-plugin"
 
 export default defineConfig({
   resolve: {
@@ -12,7 +11,6 @@ export default defineConfig({
     },
   },
   plugins: [
-    generateThemeCSS(),
     tailwindcss(),
     solidPlugin(),
     iconsSpritesheet({

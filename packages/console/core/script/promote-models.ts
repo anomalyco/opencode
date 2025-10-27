@@ -2,7 +2,7 @@
 
 import { $ } from "bun"
 import path from "path"
-import { ZenModel } from "../src/model"
+import { ZenData } from "../src/model"
 
 const stage = process.argv[2]
 if (!stage) throw new Error("Stage is required")
@@ -18,7 +18,7 @@ const value = ret
 if (!value) throw new Error("ZEN_MODELS not found")
 
 // validate value
-ZenModel.ModelsSchema.parse(JSON.parse(value))
+ZenData.validate(JSON.parse(value))
 
 // update the secret
 await $`bun sst secret set ZEN_MODELS ${value} --stage ${stage}`

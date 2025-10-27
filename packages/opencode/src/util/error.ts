@@ -1,7 +1,4 @@
-import z from "zod/v4"
-// import { Log } from "./log"
-
-// const log = Log.create()
+import z from "zod"
 
 export abstract class NamedError extends Error {
   abstract schema(): z.core.$ZodType

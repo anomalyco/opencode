@@ -1,11 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.15.3",
+  "version": "0.15.18",
   "name": "opencode",
   "type": "module",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run ./src/index.ts"
@@ -27,19 +27,26 @@
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
-    "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
   },
   "dependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "6.0.1",
+    "@agentclientprotocol/sdk": "0.4.9",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
+    "@octokit/graphql": "9.0.2",
+    "@octokit/rest": "22.0.0",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
+    "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@parcel/watcher": "2.5.1",
+    "@pierre/precision-diffs": "catalog:",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
@@ -63,6 +70,7 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "3.24.5"
   }
 }

@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 
