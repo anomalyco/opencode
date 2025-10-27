@@ -189,7 +189,11 @@ export namespace SessionCompaction {
             case "text-delta":
               part.text += value.text
               if (value.providerMetadata) part.metadata = value.providerMetadata
-              if (part.text) await Session.updatePart(part)
+              if (part.text)
+                await Session.updatePart({
+                  part,
+                  delta: value.text,
+                })
               continue
             case "text-end": {
               part.text = part.text.trimEnd()
