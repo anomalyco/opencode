@@ -1,4 +1,12 @@
-import { TextAttributes, BoxRenderable, TextareaRenderable, MouseEvent, KeyEvent, SyntaxStyle } from "@opentui/core"
+import {
+  TextAttributes,
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  KeyEvent,
+  SyntaxStyle,
+  PasteEvent,
+} from "@opentui/core"
 import { createEffect, createMemo, Match, Switch, type JSX, onMount } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { Theme, syntaxTheme } from "@tui/context/theme"
@@ -49,6 +57,7 @@ export function Prompt(props: PromptProps) {
 
   const fileStyleId = syntaxTheme.getStyleId("extmark.file")!
   const agentStyleId = syntaxTheme.getStyleId("extmark.agent")!
+  const pasteStyleId = syntaxTheme.getStyleId("extmark.paste")!
   let promptPartTypeId: number
 
   command.register(() => {
@@ -432,6 +441,57 @@ export function Prompt(props: PromptProps) {
                 }
               }}
               onSubmit={submit}
+              onPaste={(event: PasteEvent) => {
+                if (props.disabled) {
+                  event.preventDefault()
+                  return
+                }
+                event.preventDefault()
+
+                const pastedContent = event.text.trim()
+                if (!pastedContent) return
+
+                const byteLength = new TextEncoder().encode(pastedContent).length
+                const currentOffset = input.visualCursor.offset
+                const virtualText = `[Pasted ${byteLength} bytes]`
+                const textToInsert = virtualText + " "
+                const extmarkStart = currentOffset
+                const extmarkEnd = extmarkStart + virtualText.length
+
+                input.insertText(textToInsert)
+
+                const extmarkId = input.extmarks.create({
+                  start: extmarkStart,
+                  end: extmarkEnd,
+                  virtual: true,
+                  styleId: pasteStyleId,
+                  typeId: promptPartTypeId,
+                })
+
+                const part: PromptInfo["parts"][number] = {
+                  type: "file",
+                  mime: "text/plain",
+                  filename: "pasted-content.txt",
+                  url: `data:text/plain;base64,${btoa(pastedContent)}`,
+                  source: {
+                    type: "file",
+                    text: {
+                      start: extmarkStart,
+                      end: extmarkEnd,
+                      value: virtualText,
+                    },
+                    path: "pasted-content.txt",
+                  },
+                }
+
+                setStore(
+                  produce((draft) => {
+                    const partIndex = draft.prompt.parts.length
+                    draft.prompt.parts.push(part)
+                    draft.extmarkToPartIndex.set(extmarkId, partIndex)
+                  }),
+                )
+              }}
               ref={(r: TextareaRenderable) => (input = r)}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={Theme.backgroundElement}

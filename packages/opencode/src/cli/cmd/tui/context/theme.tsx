@@ -274,6 +274,13 @@ const syntaxThemeDark = [
     },
   },
   {
+    scope: ["extmark.paste"],
+    style: {
+      foreground: "#7fd88f",
+      bold: true,
+    },
+  },
+  {
     scope: ["comment"],
     style: {
       foreground: "#808080",
