@@ -1,15 +1,15 @@
 ---
-title: Agent Client Protocol
+title: ACP Support
 description: Use OpenCode in any ACP-compatible editor.
 ---
 
-OpenCode supports the [Agent Client Protocol (ACP)](https://agentclientprotocol.com), allowing you to use it directly in compatible editors and IDEs.
-
-ACP is an open protocol that standardizes communication between code editors and AI coding agents. Similar to LSP for language servers, ACP allows agents like OpenCode to work seamlessly across different development environments.
+OpenCode supports the [Agent Client Protocol](https://agentclientprotocol.com) or (ACP), allowing you to use it directly in compatible editors and IDEs.
 
 :::tip
-For a list of editors and tools that support ACP, see the [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+For a list of editors and tools that support ACP, check out the [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
+
+ACP is an open protocol that standardizes communication between code editors and AI coding agents.
 
 ---
 
@@ -25,9 +25,9 @@ Below are examples for popular editors that support ACP.
 
 ### Zed
 
-Add to your Zed configuration (`~/.config/zed/settings.json`):
+Add to your [Zed](https://zed.dev) configuration (`~/.config/zed/settings.json`):
 
-```json
+```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
@@ -38,11 +38,11 @@ Add to your Zed configuration (`~/.config/zed/settings.json`):
 }
 ```
 
-To open it, use the `agent: new thread` action in the Command Palette
+To open it, use the `agent: new thread` action in the **Command Palette**.
 
 You can also bind a keyboard shortcut by editing your `keymap.json`:
 
-```json
+```json title="keymap.json"
 [
   {
     "bindings": {
@@ -56,7 +56,7 @@ You can also bind a keyboard shortcut by editing your `keymap.json`:
 
 ### Avante.nvim
 
-Add to your Avante configuration:
+Add to your [Avante.nvim](https://github.com/yetone/avante.nvim) configuration:
 
 ```lua
 {
@@ -71,7 +71,7 @@ Add to your Avante configuration:
 
 If you need to pass environment variables:
 
-```lua
+```lua {6-8}
 {
   acp_providers = {
     ["opencode"] = {
@@ -87,9 +87,13 @@ If you need to pass environment variables:
 
 ---
 
-## Capabilities
+## Support
 
 OpenCode works the same via ACP as it does in the terminal. All features are supported:
+
+:::note
+Some built-in slash commands like `/undo` and `/redo` are currently unsupported.
+:::
 
 - Built-in tools (file operations, terminal commands, etc.)
 - Custom tools and slash commands
@@ -97,7 +101,3 @@ OpenCode works the same via ACP as it does in the terminal. All features are sup
 - Project-specific rules from `AGENTS.md`
 - Custom formatters and linters
 - Agents and permissions system
-
-:::note
-Some built-in slash commands like `/undo` and `/redo` are currently unsupported in ACP mode.
-:::
