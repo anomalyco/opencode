@@ -25,7 +25,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.0.2-alpha.1-1",
+      "@pierre/precision-diffs": "0.3.2",
       "@solidjs/meta": "0.29.4",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
@@ -53,8 +53,8 @@
     "turbo": "2.5.6"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/script": "workspace:*"
+    "@opencode-ai/script": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*"
   },
   "repository": {
     "type": "git",

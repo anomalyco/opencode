@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@pierre/precision-diffs": "0.0.2-alpha.1-1",
+    "@pierre/precision-diffs": "catalog:",
     "@solidjs/meta": "catalog:",
     "fuzzysort": "catalog:",
     "luxon": "catalog:",

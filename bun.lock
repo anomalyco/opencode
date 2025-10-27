@@ -276,7 +276,7 @@
       "version": "0.15.18",
       "dependencies": {
         "@kobalte/core": "catalog:",
-        "@pierre/precision-diffs": "0.0.2-alpha.1-1",
+        "@pierre/precision-diffs": "catalog:",
         "@solidjs/meta": "catalog:",
         "fuzzysort": "catalog:",
         "luxon": "catalog:",
@@ -343,7 +343,7 @@
     "@hono/zod-validator": "0.4.2",
     "@kobalte/core": "0.13.11",
     "@openauthjs/openauth": "0.0.0-20250322224806",
-    "@pierre/precision-diffs": "0.0.2-alpha.1-1",
+    "@pierre/precision-diffs": "0.3.2",
     "@solidjs/meta": "0.29.4",
     "@tailwindcss/vite": "4.1.11",
     "@tsconfig/bun": "1.0.9",
@@ -937,7 +937,7 @@
 
     "@petamoriken/float16": ["@petamoriken/float16@3.9.2", "", {}, "sha512-VgffxawQde93xKxT3qap3OH+meZf7VaSB5Sqd4Rqc+FP5alWbpOyan/7tRbOAvynjpG3GpdtAuGU/NdhQpmrog=="],
 
-    "@pierre/precision-diffs": ["@pierre/precision-diffs@0.0.2-alpha.1-1", "", { "dependencies": { "@shikijs/core": "3.13.0", "@shikijs/transformers": "3.13.0", "diff": "8.0.2", "fast-deep-equal": "3.1.3", "hast-util-to-html": "9.0.5", "shiki": "3.13.0" } }, "sha512-T43cwB7gMnbM+tp9p73NptUm4uUOfmrP5ihMOAHWQPpzBa/oeTjqZlmEmSQLpT8WKKnWG0lbKZPtlw7l0gW0Vw=="],
+    "@pierre/precision-diffs": ["@pierre/precision-diffs@0.3.2", "", { "dependencies": { "@shikijs/core": "3.13.0", "@shikijs/transformers": "3.13.0", "diff": "8.0.2", "fast-deep-equal": "3.1.3", "hast-util-to-html": "9.0.5", "shiki": "3.13.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" } }, "sha512-HE+wFB0TV+wmjur/J+qI5PsRQl5RN6tCEFTusW0S5FDfZJUIpkxJCacqUxyEI0DriXMKhgGQ+oCQShfaFELdrQ=="],
 
     "@pkgjs/parseargs": ["@pkgjs/parseargs@0.11.0", "", {}, "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="],
 
