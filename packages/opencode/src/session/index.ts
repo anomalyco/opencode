@@ -78,6 +78,12 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
+    Started: Bus.event(
+      "session.started",
+      z.object({
+        info: Info,
+      }),
+    ),
     Updated: Bus.event(
       "session.updated",
       z.object({
@@ -167,6 +173,9 @@ export namespace Session {
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
+    Bus.publish(Event.Started, {
+      info: result,
+    })
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
