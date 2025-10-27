@@ -97,24 +97,24 @@ export function Diff<T>(props: DiffProps<T>) {
       //
       // 'simple':
       // Just a subtle bar separator between each hunk
-      // hunkSeparators: "line-info",
-      hunkSeparators(hunkData: HunkData) {
-        const fragment = document.createDocumentFragment()
-        const numCol = document.createElement("div")
-        numCol.textContent = `${hunkData.lines}`
-        numCol.style.position = "sticky"
-        numCol.style.left = "0"
-        numCol.style.backgroundColor = "var(--pjs-bg)"
-        numCol.style.zIndex = "2"
-        fragment.appendChild(numCol)
-        const contentCol = document.createElement("div")
-        contentCol.textContent = "unmodified lines"
-        contentCol.style.position = "sticky"
-        contentCol.style.width = "var(--pjs-column-content-width)"
-        contentCol.style.left = "var(--pjs-column-number-width)"
-        fragment.appendChild(contentCol)
-        return fragment
-      },
+      hunkSeparators: "line-info",
+      // hunkSeparators(hunkData: HunkData) {
+      //   const fragment = document.createDocumentFragment()
+      //   const numCol = document.createElement("div")
+      //   numCol.textContent = `${hunkData.lines}`
+      //   numCol.style.position = "sticky"
+      //   numCol.style.left = "0"
+      //   numCol.style.backgroundColor = "var(--pjs-bg)"
+      //   numCol.style.zIndex = "2"
+      //   fragment.appendChild(numCol)
+      //   const contentCol = document.createElement("div")
+      //   contentCol.textContent = "unmodified lines"
+      //   contentCol.style.position = "sticky"
+      //   contentCol.style.width = "var(--pjs-column-content-width)"
+      //   contentCol.style.left = "var(--pjs-column-number-width)"
+      //   fragment.appendChild(contentCol)
+      //   return fragment
+      // },
       // On lines that have both additions and deletions, we can run a
       // separate diff check to mark parts of the lines that change.
       // 'none':
