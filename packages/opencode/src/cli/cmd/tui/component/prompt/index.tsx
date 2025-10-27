@@ -333,6 +333,7 @@ export function Prompt(props: PromptProps) {
           sessionID,
         })
       }, 50)
+    input.clear()
   }
   const exit = useExit()
 
