@@ -1,67 +1,41 @@
-import { z } from "zod"
 import type { APIEvent } from "@solidjs/start/server"
-import path from "node:path"
 import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { BillingTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
-import { Resource } from "@opencode-ai/console-resource"
-import { Billing } from "../../../../core/src/billing"
+import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
+import { logger } from "./logger"
+import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError } from "./error"
+import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
+import { Format } from "./format"
+import { anthropicHelper } from "./provider/anthropic"
+import { openaiHelper } from "./provider/openai"
+import { oaCompatHelper } from "./provider/openai-compatible"
+
+type ZenData = Awaited<ReturnType<typeof ZenData.list>>
+type Model = ZenData["models"][string]
 
 export async function handler(
   input: APIEvent,
   opts: {
-    modifyBody?: (body: any) => any
-    setAuthHeader: (headers: Headers, apiKey: string) => void
+    format: Format
     parseApiKey: (headers: Headers) => string | undefined
-    onStreamPart: (chunk: string) => void
-    getStreamUsage: () => any
-    normalizeUsage: (body: any) => {
-      inputTokens: number
-      outputTokens: number
-      reasoningTokens?: number
-      cacheReadTokens?: number
-      cacheWrite5mTokens?: number
-      cacheWrite1hTokens?: number
-    }
   },
 ) {
-  class AuthError extends Error {}
-  class CreditsError extends Error {}
-  class MonthlyLimitError extends Error {}
-  class UserLimitError extends Error {}
-  class ModelError extends Error {}
-
-  type ZenData = Awaited<ReturnType<typeof ZenData.list>>
-  type Model = ZenData["models"][string]
-
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
   ]
 
-  const logger = {
-    metric: (values: Record<string, any>) => {
-      console.log(`_metric:${JSON.stringify(values)}`)
-    },
-    log: console.log,
-    debug: (message: string) => {
-      if (Resource.App.stage === "production") return
-      console.debug(message)
-    },
-  }
-
   try {
-    const url = new URL(input.request.url)
     const body = await input.request.json()
-    logger.debug(JSON.stringify(body))
     logger.metric({
       is_tream: !!body.stream,
       session: input.request.headers.get("x-opencode-session"),
@@ -78,22 +52,28 @@ export async function handler(
 
     // Request to model provider
     const startTimestamp = Date.now()
-    const res = await fetch(path.posix.join(providerInfo.api, url.pathname.replace(/^\/zen\/v1/, "") + url.search), {
+    const reqUrl = providerInfo.modifyUrl(providerInfo.api)
+    const reqBody = JSON.stringify(
+      providerInfo.modifyBody({
+        ...createBodyConverter(opts.format, providerInfo.format)(body),
+        model: providerInfo.model,
+      }),
+    )
+    logger.debug("REQUEST URL: " + reqUrl)
+    logger.debug("REQUEST: " + reqBody)
+    const res = await fetch(reqUrl, {
       method: "POST",
       headers: (() => {
         const headers = input.request.headers
         headers.delete("host")
         headers.delete("content-length")
-        opts.setAuthHeader(headers, providerInfo.apiKey)
+        providerInfo.modifyHeaders(headers, providerInfo.apiKey)
         Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
           headers.set(k, headers.get(v)!)
         })
         return headers
       })(),
-      body: JSON.stringify({
-        ...(opts.modifyBody?.(body) ?? body),
-        model: providerInfo.model,
-      }),
+      body: reqBody,
     })
 
     // Scrub response headers
@@ -104,14 +84,19 @@ export async function handler(
         resHeaders.set(k, v)
       }
     }
+    logger.debug("STATUS: " + res.status + " " + res.statusText)
+    if (res.status === 400 || res.status === 503) {
+      logger.debug("RESPONSE: " + (await res.text()))
+    }
 
     // Handle non-streaming response
     if (!body.stream) {
+      const responseConverter = createResponseConverter(providerInfo.format, opts.format)
       const json = await res.json()
-      const body = JSON.stringify(json)
+      const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
-      logger.debug(body)
-      await trackUsage(authInfo, modelInfo, providerInfo.id, json.usage)
+      logger.debug("RESPONSE: " + body)
+      await trackUsage(authInfo, modelInfo, providerInfo, json.usage)
       await reload(authInfo)
       return new Response(body, {
         status: res.status,
@@ -121,10 +106,13 @@ export async function handler(
     }
 
     // Handle streaming response
+    const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
+    const usageParser = providerInfo.createUsageParser()
     const stream = new ReadableStream({
       start(c) {
         const reader = res.body?.getReader()
         const decoder = new TextDecoder()
+        const encoder = new TextEncoder()
         let buffer = ""
         let responseLength = 0
 
@@ -136,9 +124,9 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": Date.now(),
                 })
-                const usage = opts.getStreamUsage()
+                const usage = usageParser.retrieve()
                 if (usage) {
-                  await trackUsage(authInfo, modelInfo, providerInfo.id, usage)
+                  await trackUsage(authInfo, modelInfo, providerInfo, usage)
                   await reload(authInfo)
                 }
                 c.close()
@@ -158,12 +146,21 @@ export async function handler(
               const parts = buffer.split("\n\n")
               buffer = parts.pop() ?? ""
 
-              for (const part of parts) {
-                logger.debug(part)
-                opts.onStreamPart(part.trim())
+              for (let part of parts) {
+                logger.debug("PART: " + part)
+
+                part = part.trim()
+                usageParser.parse(part)
+
+                if (providerInfo.format !== opts.format) {
+                  part = streamConverter(part)
+                  c.enqueue(encoder.encode(part + "\n\n"))
+                }
               }
 
-              c.enqueue(value)
+              if (providerInfo.format === opts.format) {
+                c.enqueue(value)
+              }
 
               return pump()
             }) || Promise.resolve()
@@ -235,7 +232,11 @@ export async function handler(
       throw new ModelError(`Provider ${provider.id} not supported`)
     }
 
-    return { ...provider, ...zenData.providers[provider.id] }
+    return {
+      ...provider,
+      ...zenData.providers[provider.id],
+      ...(provider.id === "anthropic" ? anthropicHelper : provider.id === "openai" ? openaiHelper : oaCompatHelper),
+    }
   }
 
   async function authenticate(
@@ -356,11 +357,11 @@ export async function handler(
   async function trackUsage(
     authInfo: Awaited<ReturnType<typeof authenticate>>,
     modelInfo: ReturnType<typeof validateModel>,
-    providerId: string,
+    providerInfo: Awaited<ReturnType<typeof selectProvider>>,
     usage: any,
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
-      opts.normalizeUsage(usage)
+      providerInfo.normalizeUsage(usage)
 
     const modelCost =
       modelInfo.cost200K &&
@@ -421,7 +422,7 @@ export async function handler(
         workspaceID: authInfo.workspaceID,
         id: Identifier.create("usage"),
         model: modelInfo.id,
-        provider: providerId,
+        provider: providerInfo.id,
         inputTokens,
         outputTokens,
         reasoningTokens,
