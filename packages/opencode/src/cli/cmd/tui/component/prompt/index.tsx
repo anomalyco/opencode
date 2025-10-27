@@ -451,9 +451,9 @@ export function Prompt(props: PromptProps) {
                 const pastedContent = event.text.trim()
                 if (!pastedContent) return
 
-                const byteLength = new TextEncoder().encode(pastedContent).length
+                const charCount = Bun.stringWidth(pastedContent)
                 const currentOffset = input.visualCursor.offset
-                const virtualText = `[Pasted ${byteLength} bytes]`
+                const virtualText = `[Pasted ${charCount} chars]`
                 const textToInsert = virtualText + " "
                 const extmarkStart = currentOffset
                 const extmarkEnd = extmarkStart + virtualText.length

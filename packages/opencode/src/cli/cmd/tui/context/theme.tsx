@@ -276,7 +276,8 @@ const syntaxThemeDark = [
   {
     scope: ["extmark.paste"],
     style: {
-      foreground: "#7fd88f",
+      foreground: "#0a0a0a",
+      background: "#f5a742",
       bold: true,
     },
   },
