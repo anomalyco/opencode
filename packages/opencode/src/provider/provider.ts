@@ -207,6 +207,152 @@ export namespace Provider {
         },
       }
     },
+    "github-copilot": async () => {
+      // Import GitHub Copilot auth
+      const { AuthGithubCopilot } = await import("../auth/github-copilot")
+      
+      // Get GitHub Copilot token
+      const token = await AuthGithubCopilot.access()
+      if (!token) return { autoload: false }
+      
+      // Create a custom fetch that handles GitHub Copilot API routing
+      const customFetch = async (url: string, init?: RequestInit) => {
+        // Only intercept GitHub Copilot API calls
+        if (typeof url !== "string" || !url.includes("api.githubcopilot.com")) {
+          return fetch(url, init)
+        }
+        
+        // For chat/completions requests, try to route to the appropriate endpoint
+        if (url.includes("/chat/completions")) {
+          const body = JSON.parse(init?.body as string || "{}")
+          const model = body.model
+          
+          // Claude models use /chat/completions, others use /responses
+          if (model && model.includes("claude")) {
+            // Claude: pass through to /chat/completions directly
+            return fetch(url, {
+              ...init,
+              headers: {
+                ...(init?.headers as Record<string, string>),
+                "Authorization": `Bearer ${token}`,
+                "User-Agent": "GitHubCopilotChat/0.35.0",
+                "Editor-Version": "vscode/1.99.3",
+                "Editor-Plugin-Version": "copilot-chat/0.35.0",
+              },
+            })
+          }
+          
+          // GPT and other models: convert to /responses format
+          let input = ""
+          if (Array.isArray(body.messages)) {
+            for (const msg of body.messages) {
+              if (msg.role === "user" && msg.content) {
+                input = msg.content
+              }
+            }
+          }
+          
+          // Try /responses endpoint
+          const response = await fetch("https://api.githubcopilot.com/responses", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "User-Agent": "GitHubCopilotChat/0.35.0",
+              "Editor-Version": "vscode/1.99.3",
+              "Editor-Plugin-Version": "copilot-chat/0.35.0",
+            },
+            body: JSON.stringify({
+              model: model,
+              input: input,
+              intent: "chat",
+              temperature: body.temperature || 1,
+              max_output_tokens: body.max_tokens || 4096,
+            }),
+          })
+          
+          if (!response.ok) {
+            const errorText = await response.text()
+            // If /responses fails, try /chat/completions as fallback
+            if (response.status === 400 && errorText.includes("not supported via Responses API")) {
+              return fetch(url, {
+                ...init,
+                headers: {
+                  ...(init?.headers as Record<string, string>),
+                  "Authorization": `Bearer ${token}`,
+                  "User-Agent": "GitHubCopilotChat/0.35.0",
+                  "Editor-Version": "vscode/1.99.3",
+                  "Editor-Plugin-Version": "copilot-chat/0.35.0",
+                },
+              })
+            }
+            throw new Error(`GitHub Copilot API error: ${response.status} ${errorText}`)
+          }
+          
+          const data = await response.json()
+          
+          // Extract text and convert to OpenAI format
+          let text = ""
+          if (data.output && Array.isArray(data.output)) {
+            for (const output of data.output) {
+              if (output.type === "message" && output.content) {
+                for (const content of output.content) {
+                  if (content.type === "output_text") {
+                    text += content.text
+                  }
+                }
+              }
+            }
+          }
+          
+          // Return response in OpenAI format
+          return new Response(JSON.stringify({
+            id: data.id,
+            object: "chat.completion",
+            created: data.created_at,
+            model: data.model,
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: text },
+              finish_reason: data.status === "completed" ? "stop" : "length",
+            }],
+            usage: {
+              prompt_tokens: data.usage?.input_tokens || 0,
+              completion_tokens: data.usage?.output_tokens || 0,
+              total_tokens: data.usage?.total_tokens || 0,
+            },
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        
+        // For other API requests, add auth headers and pass through
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...(init?.headers as Record<string, string>),
+            "Authorization": `Bearer ${token}`,
+            "User-Agent": "GitHubCopilotChat/0.35.0",
+            "Editor-Version": "vscode/1.99.3",
+            "Editor-Plugin-Version": "copilot-chat/0.35.0",
+          },
+        })
+      }
+      
+      return {
+        autoload: true,
+        options: {
+          apiKey: token,
+          fetch: customFetch,
+          headers: {
+            "User-Agent": "GitHubCopilotChat/0.35.0",
+            "Editor-Version": "vscode/1.99.3",
+            "Editor-Plugin-Version": "copilot-chat/0.35.0",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {

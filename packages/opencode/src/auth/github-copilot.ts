@@ -1,3 +1,14 @@
+/**
+ * Direct Patch for OpenCode's GitHub Copilot Auth
+ * 
+ * This file contains the updated code to fix "model not supported" errors.
+ * Apply this by replacing the content of:
+ * packages/opencode/src/auth/github-copilot.ts
+ * 
+ * Or if you have OpenCode installed via Homebrew, you'll need to
+ * submit a PR to the OpenCode repository: https://github.com/sst/opencode
+ */
+
 import z from "zod"
 import { Auth } from "./index"
 import { NamedError } from "../util/error"
@@ -7,6 +18,11 @@ export namespace AuthGithubCopilot {
   const DEVICE_CODE_URL = "https://github.com/login/device/code"
   const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
   const COPILOT_API_KEY_URL = "https://api.github.com/copilot_internal/v2/token"
+
+  // UPDATED: Match latest Copilot CLI version (0.0.351+)
+  const USER_AGENT = "GitHubCopilotChat/0.35.0"
+  const EDITOR_VERSION = "vscode/1.99.3"
+  const EDITOR_PLUGIN_VERSION = "copilot-chat/0.35.0"
 
   interface DeviceCodeResponse {
     device_code: string
@@ -37,7 +53,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": USER_AGENT, // UPDATED
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -60,7 +76,7 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "User-Agent": USER_AGENT, // UPDATED
       },
       body: JSON.stringify({
         client_id: CLIENT_ID,
@@ -101,9 +117,9 @@ export namespace AuthGithubCopilot {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${info.refresh}`,
-        "User-Agent": "GitHubCopilotChat/0.26.7",
-        "Editor-Version": "vscode/1.99.3",
-        "Editor-Plugin-Version": "copilot-chat/0.26.7",
+        "User-Agent": USER_AGENT, // UPDATED
+        "Editor-Version": EDITOR_VERSION, // UPDATED
+        "Editor-Plugin-Version": EDITOR_PLUGIN_VERSION, // UPDATED
       },
     })
 
