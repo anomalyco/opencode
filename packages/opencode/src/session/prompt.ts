@@ -218,7 +218,7 @@ export namespace SessionPrompt {
           : undefined,
         topP: agent.topP ?? ProviderTransform.topP(model.providerID, model.modelID),
         options: {
-          ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
+          ...ProviderTransform.options(model.providerID, model.modelID, model.npm ?? "", input.sessionID),
           ...model.info.options,
           ...agent.options,
         },
@@ -1815,7 +1815,7 @@ export namespace SessionPrompt {
     const small =
       (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
     const options = {
-      ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
+      ...ProviderTransform.options(small.providerID, small.modelID, small.npm ?? "", input.session.id),
       ...small.info.options,
     }
     if (small.providerID === "openai" || small.modelID.includes("gpt-5")) {
