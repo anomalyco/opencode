@@ -29,11 +29,10 @@ import { Permission } from "@/permission"
 import { Session } from "@/session"
 import { Identifier } from "@/id/id"
 import { SessionCompaction } from "@/session/compaction"
+import type { Config } from "@/config/config"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
-
-  // TODO: mcp servers?
 
   type ToolKind =
     | "read"
@@ -284,11 +283,14 @@ export namespace ACP {
         protocolVersion: 1,
         agentCapabilities: {
           loadSession: true,
-          // TODO: map acp mcp
-          // mcpCapabilities: {
-          //   http: true,
-          //   sse: true,
-          // },
+          mcpCapabilities: {
+            http: true,
+            sse: true,
+          },
+          promptCapabilities: {
+            embeddedContext: true,
+            image: true,
+          },
         },
         authMethods: [
           {
@@ -313,6 +315,7 @@ export namespace ACP {
       const model = await defaultModel(this.config)
       const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
 
+      log.info("creating_session", { mcpServers: params.mcpServers.length })
       const load = await this.loadSession({
         cwd: params.cwd,
         mcpServers: params.mcpServers,
@@ -382,6 +385,29 @@ export namespace ACP {
         }))
 
       const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+
+      const mcpServers: Record<string, Config.Mcp> = {}
+      for (const server of params.mcpServers) {
+        if ("type" in server) {
+          mcpServers[server.name] = {
+            url: server.url,
+            headers: server.headers.reduce<Record<string, string>>((acc, { name, value }) => {
+              acc[name] = value
+              return acc
+            }, {}),
+            type: "remote",
+          }
+        } else {
+          mcpServers[server.name] = {
+            type: "local",
+            command: [server.command, ...server.args],
+            environment: server.env.reduce<Record<string, string>>((acc, { name, value }) => {
+              acc[name] = value
+              return acc
+            }, {}),
+          }
+        }
+      }
 
       return {
         sessionId,
