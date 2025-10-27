@@ -328,6 +328,17 @@ export namespace ACP {
         name: command.name,
         description: command.description ?? "",
       }))
+      const names = new Set(availableCommands.map((c) => c.name))
+      if (!names.has("init"))
+        availableCommands.push({
+          name: "init",
+          description: "create/update a AGENTS.md",
+        })
+      if (!names.has("compact"))
+        availableCommands.push({
+          name: "compact",
+          description: "compact the session",
+        })
 
       setTimeout(() => {
         this.connection.sessionUpdate({
@@ -455,13 +466,17 @@ export namespace ACP {
 
       log.info("parts", { parts })
 
-      const cmd = await (async () => {
-        const text = parts.filter((part) => part.type === "text").join("")
-        const match = text.match(/^\/(\w+)\s*(.*)$/)
-        if (!match) return
+      const cmd = (() => {
+        const text = parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .join("")
+          .trim()
 
-        const [name, args] = match.slice(1)
-        return { name, args }
+        if (!text.startsWith("/")) return
+
+        const [name, ...rest] = text.slice(1).split(/\s+/)
+        return { name, args: rest.join(" ").trim() }
       })()
 
       const done = {
