@@ -460,9 +460,9 @@ export function Prompt(props: PromptProps) {
                 const pastedContent = event.text.trim()
                 if (!pastedContent) return
 
-                const charCount = Bun.stringWidth(pastedContent)
+                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 const currentOffset = input.visualCursor.offset
-                const virtualText = `[Pasted ${charCount} chars]`
+                const virtualText = `[Pasted ~${lineCount} lines]`
                 const textToInsert = virtualText + " "
                 const extmarkStart = currentOffset
                 const extmarkEnd = extmarkStart + virtualText.length
