@@ -78,6 +78,12 @@ export const RunCommand = cmd({
         array: true,
         describe: "file(s) to attach to message",
       })
+      .option("reasoning-effort", {
+        alias: ["r"],
+        type: "string",
+        choices: ["low", "medium", "high"],
+        describe: "reasoning effort for the model",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -260,6 +266,7 @@ export const RunCommand = cmd({
       })
 
       await (async () => {
+        const options = args.reasoningEffort ? { reasoningEffort: args.reasoningEffort } : undefined
         if (args.command) {
           return await SessionPrompt.command({
             messageID,
@@ -268,6 +275,7 @@ export const RunCommand = cmd({
             model: providerID + "/" + modelID,
             command: args.command,
             arguments: message,
+            options,
           })
         }
         return await SessionPrompt.prompt({
@@ -278,6 +286,7 @@ export const RunCommand = cmd({
             modelID,
           },
           agent: agent.name,
+          options,
           parts: [
             ...fileParts,
             {

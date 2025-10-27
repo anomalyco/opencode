@@ -97,6 +97,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    options: z.record(z.string(), z.any()).optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -229,6 +230,7 @@ export namespace SessionPrompt {
           ...ProviderTransform.options(model.providerID, model.modelID, input.sessionID),
           ...model.info.options,
           ...agent.options,
+          ...input.options,
         },
       },
     )
@@ -1489,6 +1491,7 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    options: z.record(z.string(), z.any()).optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1701,6 +1704,7 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
+      options: input.options,
     })
   }
 
