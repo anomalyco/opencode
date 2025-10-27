@@ -460,13 +460,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return sync.data.message[store.active]?.find((m) => m.id === store.activeMessage)
       })
 
-      const activeAssistantMessages = createMemo(() => {
-        if (!store.active || !activeMessage()) return []
-        return sync.data.message[store.active]?.filter(
-          (m) => m.role === "assistant" && m.parentID == activeMessage()?.id,
-        )
-      })
-
       const model = createMemo(() => {
         if (!last()) return
         const model = sync.data.provider.find((x) => x.id === last().providerID)?.models[last().modelID]
@@ -504,7 +497,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return {
         active,
         activeMessage,
-        activeAssistantMessages,
         lastUserMessage,
         cost,
         last,

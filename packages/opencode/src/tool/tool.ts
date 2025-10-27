@@ -32,6 +32,9 @@ export namespace Tool {
     }>
   }
 
+  export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
+  export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
+
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: Info<Parameters, Result>["init"] | Awaited<ReturnType<Info<Parameters, Result>["init"]>>,

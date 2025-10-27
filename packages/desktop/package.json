@@ -12,12 +12,13 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "opencode": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/bun": "1.0.9",
     "@types/luxon": "3.7.1",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
     "vite-plugin-solid": "catalog:"

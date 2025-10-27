@@ -141,6 +141,7 @@
         "@types/luxon": "3.7.1",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "opencode": "workspace:*",
         "typescript": "catalog:",
         "vite": "catalog:",
         "vite-plugin-icons-spritesheet": "3.0.1",

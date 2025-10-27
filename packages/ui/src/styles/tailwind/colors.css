@@ -9,6 +9,9 @@
   --color-background-stronger: var(--background-stronger);
   --color-base: var(--base);
   --color-surface-base: var(--surface-base);
+  --color-surface-base-hover: var(--surface-base-hover);
+  --color-surface-base-active: var(--surface-base-active);
+  --color-surface-base-interactive-active: var(--surface-base-interactive-active);
   --color-base2: var(--base2);
   --color-base3: var(--base3);
   --color-surface-inset-base: var(--surface-inset-base);
@@ -45,9 +48,9 @@
   --color-surface-info-base: var(--surface-info-base);
   --color-surface-info-weak: var(--surface-info-weak);
   --color-surface-info-strong: var(--surface-info-strong);
+  --color-surface-diff-hidden-base: var(--surface-diff-hidden-base);
   --color-surface-diff-skip-base: var(--surface-diff-skip-base);
   --color-surface-diff-unchanged-base: var(--surface-diff-unchanged-base);
-  --color-surface-diff-hidden-base: var(--surface-diff-hidden-base);
   --color-surface-diff-hidden-weak: var(--surface-diff-hidden-weak);
   --color-surface-diff-hidden-weaker: var(--surface-diff-hidden-weaker);
   --color-surface-diff-hidden-strong: var(--surface-diff-hidden-strong);
@@ -72,8 +75,10 @@
   --color-text-weak: var(--text-weak);
   --color-text-weaker: var(--text-weaker);
   --color-text-strong: var(--text-strong);
+  --color-text-interactive-base: var(--text-interactive-base);
   --color-text-on-brand-base: var(--text-on-brand-base);
   --color-text-on-interactive-base: var(--text-on-interactive-base);
+  --color-text-on-interactive-weak: var(--text-on-interactive-weak);
   --color-text-on-success-base: var(--text-on-success-base);
   --color-text-on-warning-base: var(--text-on-warning-base);
   --color-text-on-info-base: var(--text-on-info-base);
@@ -91,6 +96,7 @@
   --color-text-on-brand-weaker: var(--text-on-brand-weaker);
   --color-text-on-brand-strong: var(--text-on-brand-strong);
   --color-button-secondary-base: var(--button-secondary-base);
+  --color-button-secondary-base-hover: var(--button-secondary-base-hover);
   --color-border-base: var(--border-base);
   --color-border-hover: var(--border-hover);
   --color-border-active: var(--border-active);
@@ -164,8 +170,6 @@
   --color-icon-on-brand-hover: var(--icon-on-brand-hover);
   --color-icon-on-brand-selected: var(--icon-on-brand-selected);
   --color-icon-on-interactive-base: var(--icon-on-interactive-base);
-  --color-icon-on-interactive-hover: var(--icon-on-interactive-hover);
-  --color-icon-on-interactive-selected: var(--icon-on-interactive-selected);
   --color-icon-agent-plan-base: var(--icon-agent-plan-base);
   --color-icon-agent-docs-base: var(--icon-agent-docs-base);
   --color-icon-agent-ask-base: var(--icon-agent-ask-base);
@@ -217,4 +221,10 @@
   --color-markdown-image-text: var(--markdown-image-text);
   --color-markdown-code-block: var(--markdown-code-block);
   --color-border-color: var(--border-color);
+  --color-border-weaker-base: var(--border-weaker-base);
+  --color-border-weaker-hover: var(--border-weaker-hover);
+  --color-border-weaker-active: var(--border-weaker-active);
+  --color-border-weaker-selected: var(--border-weaker-selected);
+  --color-border-weaker-disabled: var(--border-weaker-disabled);
+  --color-border-weaker-focus: var(--border-weaker-focus);
 }

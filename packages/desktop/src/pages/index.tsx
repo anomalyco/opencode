@@ -22,6 +22,10 @@ import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Diff } from "@/components/diff"
+import { ProgressCircle } from "@/components/progress-circle"
+import { AssistantMessage } from "@/components/assistant-message"
+import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
+import { DiffChanges } from "@/components/diff-changes"
 
 export default function Page() {
   const local = useLocal()
@@ -92,7 +96,7 @@ export default function Page() {
       }
     }
 
-    if (event.key.length === 1 && event.key !== "Unidentified") {
+    if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
       inputRef?.focus()
     }
   }
@@ -392,9 +396,6 @@ export default function Page() {
               {(session) => {
                 const diffs = createMemo(() => session.summary?.diffs ?? [])
                 const filesChanged = createMemo(() => diffs().length)
-                const additions = createMemo(() => diffs().reduce((acc, diff) => (acc ?? 0) + (diff.additions ?? 0), 0))
-                const deletions = createMemo(() => diffs().reduce((acc, diff) => (acc ?? 0) + (diff.deletions ?? 0), 0))
-
                 return (
                   <Tooltip placement="right" value={session.title}>
                     <div>
@@ -408,12 +409,7 @@ export default function Page() {
                       </div>
                       <div class="flex justify-between items-center self-stretch">
                         <span class="text-12-regular text-text-weak">{`${filesChanged() || "No"} file${filesChanged() !== 1 ? "s" : ""} changed`}</span>
-                        <Show when={additions() || deletions()}>
-                          <div class="flex gap-2 justify-end items-center">
-                            <span class="text-12-mono text-right text-text-diff-add-base">{`+${additions()}`}</span>
-                            <span class="text-12-mono text-right text-text-diff-delete-base">{`-${deletions()}`}</span>
-                          </div>
-                        </Show>
+                        <DiffChanges diff={diffs()} />
                       </div>
                     </div>
                   </Tooltip>
@@ -434,13 +430,12 @@ export default function Page() {
             <Tabs onChange={handleTabChange}>
               <div class="sticky top-0 shrink-0 flex">
                 <Tabs.List>
-                  <Tabs.Trigger value="chat" class="flex gap-x-1.5 items-center">
+                  <Tabs.Trigger value="chat" class="flex gap-x-4 items-center">
                     <div>Chat</div>
-                    <Show when={local.session.active()}>
-                      <div class="flex flex-col h-4 px-2 -mr-2 justify-center items-center rounded-full bg-surface-base text-12-medium text-text-strong">
-                        {local.session.context()}%
-                      </div>
-                    </Show>
+                    <Tooltip value={`${local.session.tokens() ?? 0} Tokens`} class="flex items-center gap-1.5">
+                      <ProgressCircle percentage={local.session.context() ?? 0} />
+                      <div class="text-14-regular text-text-weak text-right">{local.session.context() ?? 0}%</div>
+                    </Tooltip>
                   </Tabs.Trigger>
                   {/* <Tabs.Trigger value="review">Review</Tabs.Trigger> */}
                   <SortableProvider ids={local.file.opened().map((file) => file.path)}>
@@ -548,33 +543,114 @@ export default function Page() {
                           <Show when={local.session.userMessages().length > 1}>
                             <ul role="list" class="w-60 shrink-0 flex flex-col items-start gap-1">
                               <For each={local.session.userMessages()}>
-                                {(message) => (
-                                  <li
-                                    class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
-                                    onClick={() => local.session.setActiveMessage(message.id)}
-                                  >
-                                    <div class="w-[18px] shrink-0">
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">
-                                        <g>
-                                          <rect x="0" width="2" height="12" rx="1" fill="#CFCECD" />
-                                          <rect x="4" width="2" height="12" rx="1" fill="#CFCECD" />
-                                          <rect x="8" width="2" height="12" rx="1" fill="#CFCECD" />
-                                          <rect x="12" width="2" height="12" rx="1" fill="#CFCECD" />
-                                          <rect x="16" width="2" height="12" rx="1" fill="#CFCECD" />
-                                        </g>
-                                      </svg>
-                                    </div>
-                                    <div
-                                      data-active={local.session.activeMessage()?.id === message.id}
-                                      classList={{
-                                        "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                        "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                      }}
+                                {(message) => {
+                                  const countLines = (text: string) => {
+                                    if (!text) return 0
+                                    return text.split("\n").length
+                                  }
+
+                                  const additions = createMemo(
+                                    () =>
+                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.additions ?? 0), 0) ?? 0,
+                                  )
+
+                                  const deletions = createMemo(
+                                    () =>
+                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0) ?? 0,
+                                  )
+
+                                  const totalBeforeLines = createMemo(
+                                    () =>
+                                      message.summary?.diffs.reduce((acc, diff) => acc + countLines(diff.before), 0) ??
+                                      0,
+                                  )
+
+                                  const blockCounts = createMemo(() => {
+                                    const TOTAL_BLOCKS = 5
+
+                                    const adds = additions()
+                                    const dels = deletions()
+                                    const unchanged = Math.max(0, totalBeforeLines() - dels)
+
+                                    const totalActivity = unchanged + adds + dels
+
+                                    if (totalActivity === 0) {
+                                      return { added: 0, deleted: 0, neutral: TOTAL_BLOCKS }
+                                    }
+
+                                    const percentAdded = adds / totalActivity
+                                    const percentDeleted = dels / totalActivity
+                                    const added_raw = percentAdded * TOTAL_BLOCKS
+                                    const deleted_raw = percentDeleted * TOTAL_BLOCKS
+
+                                    let added = adds > 0 ? Math.ceil(added_raw) : 0
+                                    let deleted = dels > 0 ? Math.ceil(deleted_raw) : 0
+
+                                    let total_allocated = added + deleted
+                                    if (total_allocated > TOTAL_BLOCKS) {
+                                      if (added_raw < deleted_raw) {
+                                        added = Math.floor(added_raw)
+                                      } else {
+                                        deleted = Math.floor(deleted_raw)
+                                      }
+
+                                      total_allocated = added + deleted
+                                      if (total_allocated > TOTAL_BLOCKS) {
+                                        if (added_raw < deleted_raw) {
+                                          deleted = Math.floor(deleted_raw)
+                                        } else {
+                                          added = Math.floor(added_raw)
+                                        }
+                                      }
+                                    }
+
+                                    const neutral = Math.max(0, TOTAL_BLOCKS - added - deleted)
+
+                                    return { added, deleted, neutral }
+                                  })
+
+                                  const ADD_COLOR = "var(--icon-diff-add-base)"
+                                  const DELETE_COLOR = "var(--icon-diff-delete-base)"
+                                  const NEUTRAL_COLOR = "var(--icon-weak-base)"
+
+                                  const visibleBlocks = createMemo(() => {
+                                    const counts = blockCounts()
+                                    const blocks = [
+                                      ...Array(counts.added).fill(ADD_COLOR),
+                                      ...Array(counts.deleted).fill(DELETE_COLOR),
+                                      ...Array(counts.neutral).fill(NEUTRAL_COLOR),
+                                    ]
+                                    return blocks.slice(0, 5)
+                                  })
+
+                                  return (
+                                    <li
+                                      class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
+                                      onClick={() => local.session.setActiveMessage(message.id)}
                                     >
-                                      {message.summary?.title ?? local.session.getMessageText(message)}
-                                    </div>
-                                  </li>
-                                )}
+                                      <div class="w-[18px] shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">
+                                          <g>
+                                            <For each={visibleBlocks()}>
+                                              {(color, i) => (
+                                                <rect x={i() * 4} width="2" height="12" rx="1" fill={color} />
+                                              )}
+                                            </For>
+                                          </g>
+                                        </svg>
+                                      </div>
+                                      <div
+                                        data-active={local.session.activeMessage()?.id === message.id}
+                                        classList={{
+                                          "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                          "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                        }}
+                                      >
+                                        {message.summary?.title ?? local.session.getMessageText(message)}
+                                      </div>
+                                    </li>
+                                  )
+                                }}
                               </For>
                             </ul>
                           </Show>
@@ -585,6 +661,11 @@ export default function Page() {
                                   const title = createMemo(() => message.summary?.title)
                                   const prompt = createMemo(() => local.session.getMessageText(message))
                                   const summary = createMemo(() => message.summary?.body)
+                                  const assistantMessages = createMemo(() => {
+                                    return sync.data.message[activeSession().id]?.filter(
+                                      (m) => m.role === "assistant" && m.parentID == message.id,
+                                    ) as AssistantMessageType[]
+                                  })
 
                                   return (
                                     <div
@@ -633,10 +714,7 @@ export default function Page() {
                                                           </div>
                                                         </div>
                                                         <div class="flex gap-4 items-center justify-end">
-                                                          <div class="flex gap-2 justify-end items-center">
-                                                            <span class="text-12-mono text-right text-text-diff-add-base">{`+${diff.additions}`}</span>
-                                                            <span class="text-12-mono text-right text-text-diff-delete-base">{`-${diff.deletions}`}</span>
-                                                          </div>
+                                                          <DiffChanges diff={diff} />
                                                           <Icon name="chevron-grabber-vertical" size="small" />
                                                         </div>
                                                       </div>
@@ -661,9 +739,17 @@ export default function Page() {
                                         </Show>
                                       </div>
                                       {/* Response */}
-                                      <div data-todo="Response (Timeline)">
+                                      <div data-todo="Response" class="w-full">
                                         <div class="flex flex-col items-start gap-1 self-stretch">
                                           <h2 class="text-12-medium text-text-weak">Response</h2>
+                                        </div>
+                                        <div class="w-full flex flex-col items-start self-stretch gap-8">
+                                          <For each={assistantMessages()}>
+                                            {(assistantMessage) => {
+                                              const parts = createMemo(() => sync.data.part[assistantMessage.id])
+                                              return <AssistantMessage message={assistantMessage} parts={parts()} />
+                                            }}
+                                          </For>
                                         </div>
                                       </div>
                                     </div>
