@@ -11,6 +11,7 @@ import type {
   SetSessionModelRequest,
   SetSessionModeRequest,
   SetSessionModeResponse,
+  ToolCallContent,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -160,6 +161,35 @@ export namespace ACP {
                 })
               break
             case "completed":
+              const kind = toToolKind(part.tool)
+              const content: ToolCallContent[] = [
+                {
+                  type: "content",
+                  content: {
+                    type: "text",
+                    text: part.state.output,
+                  },
+                },
+              ]
+
+              if (kind === "edit") {
+                const input = part.state.input
+                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+                const newText =
+                  typeof input["newString"] === "string"
+                    ? input["newString"]
+                    : typeof input["content"] === "string"
+                      ? input["content"]
+                      : ""
+                content.push({
+                  type: "diff",
+                  path: filePath,
+                  oldText,
+                  newText,
+                })
+              }
+
               await this.connection
                 .sessionUpdate({
                   sessionId: acpSession.id,
@@ -167,15 +197,8 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "completed",
-                    content: [
-                      {
-                        type: "content",
-                        content: {
-                          type: "text",
-                          text: part.state.output,
-                        },
-                      },
-                    ],
+                    kind,
+                    content,
                     title: part.state.title,
                     rawOutput: {
                       output: part.state.output,
