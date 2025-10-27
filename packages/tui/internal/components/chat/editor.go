@@ -48,6 +48,7 @@ type EditorComponent interface {
 	SetInterruptKeyInDebounce(inDebounce bool)
 	SetExitKeyInDebounce(inDebounce bool)
 	RestoreFromHistory(index int)
+	GetAttachments() []*attachment.Attachment
 }
 
 type editorComponent struct {
@@ -471,6 +472,10 @@ func (m *editorComponent) Length() int {
 	return m.textarea.Length()
 }
 
+func (m *editorComponent) GetAttachments() []*attachment.Attachment {
+	return m.textarea.GetAttachments()
+}
+
 func (m *editorComponent) Submit() (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.Value())
 	if value == "" {
@@ -628,9 +633,7 @@ func (m *editorComponent) SetValueWithAttachments(value string) {
 			}
 			if end > start {
 				filePath := value[start:end]
-				slog.Debug("test", "filePath", filePath)
 				if _, err := os.Stat(filepath.Join(util.CwdPath, filePath)); err == nil {
-					slog.Debug("test", "found", true)
 					attachment := m.createAttachmentFromFile(filePath)
 					if attachment != nil {
 						m.textarea.InsertAttachment(attachment)
