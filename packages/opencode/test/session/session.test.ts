@@ -16,7 +16,7 @@ describe("session.started event", () => {
         let eventReceived = false
         let receivedInfo: Session.Info | undefined
 
-        const unsub = Bus.subscribe(Session.Event.Started, (event) => {
+        const unsub = Bus.subscribe(Session.Event.Created, (event) => {
           eventReceived = true
           receivedInfo = event.properties.info as Session.Info
         })
@@ -45,7 +45,7 @@ describe("session.started event", () => {
       fn: async () => {
         const events: string[] = []
 
-        const unsubStarted = Bus.subscribe(Session.Event.Started, () => {
+        const unsubStarted = Bus.subscribe(Session.Event.Created, () => {
           events.push("started")
         })
 

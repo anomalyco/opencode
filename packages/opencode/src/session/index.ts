@@ -78,8 +78,8 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
-    Started: Bus.event(
-      "session.started",
+    Created: Bus.event(
+      "session.created",
       z.object({
         info: Info,
       }),
@@ -173,7 +173,7 @@ export namespace Session {
     }
     log.info("created", result)
     await Storage.write(["session", Instance.project.id, result.id], result)
-    Bus.publish(Event.Started, {
+    Bus.publish(Event.Created, {
       info: result,
     })
     const cfg = await Config.get()
