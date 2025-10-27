@@ -155,6 +155,7 @@ export namespace SessionCompaction {
             error,
           })
         },
+        tools: model.info.tool_call ? {} : undefined,
         messages: [
           ...system.map(
             (x): ModelMessage => ({
