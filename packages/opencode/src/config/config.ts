@@ -61,9 +61,9 @@ export namespace Config {
       )),
     ]
 
-    if (Flag.OPENCODE_CONFIG_DIR) {
-      directories.push(Flag.OPENCODE_CONFIG_DIR)
-      log.debug("using custom config directory", { path: Flag.OPENCODE_CONFIG_DIR })
+    if (process.env["OPENCODE_CONFIG_DIR"]) {
+      directories.push(process.env["OPENCODE_CONFIG_DIR"])
+      log.debug("using custom config directory", { path: process.env["OPENCODE_CONFIG_DIR"] })
     }
 
     for (const dir of directories) {
