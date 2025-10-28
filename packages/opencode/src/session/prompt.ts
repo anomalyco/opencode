@@ -50,6 +50,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "@/config/config"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -330,12 +331,14 @@ export namespace SessionPrompt {
         })
 
       let stream = doStream()
+      const cfg = await Config.get()
+      const maxRetries = cfg.experimental?.chatMaxRetries ?? MAX_RETRIES
       let result = await processor.process(stream, {
         count: 0,
-        max: MAX_RETRIES,
+        max: maxRetries,
       })
       if (result.shouldRetry) {
-        for (let retry = 1; retry < MAX_RETRIES; retry++) {
+        for (let retry = 1; retry < maxRetries; retry++) {
           const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
 
           if (lastRetryPart) {
@@ -372,7 +375,7 @@ export namespace SessionPrompt {
           stream = doStream()
           result = await processor.process(stream, {
             count: retry,
-            max: MAX_RETRIES,
+            max: maxRetries,
           })
           if (!result.shouldRetry) {
             break

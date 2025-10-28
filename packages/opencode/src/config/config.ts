@@ -586,6 +586,7 @@ export namespace Config {
                 .optional(),
             })
             .optional(),
+          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
