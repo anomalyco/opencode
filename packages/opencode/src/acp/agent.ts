@@ -1,16 +1,20 @@
-import type {
-  Agent as ACPAgent,
-  AgentSideConnection,
-  AuthenticateRequest,
-  CancelNotification,
-  InitializeRequest,
-  LoadSessionRequest,
-  NewSessionRequest,
-  PermissionOption,
-  PromptRequest,
-  SetSessionModelRequest,
-  SetSessionModeRequest,
-  SetSessionModeResponse,
+import {
+  sessionModeSchema,
+  type Agent as ACPAgent,
+  type AgentSideConnection,
+  type AuthenticateRequest,
+  type CancelNotification,
+  type InitializeRequest,
+  type LoadSessionRequest,
+  type NewSessionRequest,
+  type PermissionOption,
+  type PlanEntry,
+  type PromptRequest,
+  type SetSessionModelRequest,
+  type SetSessionModeRequest,
+  type SetSessionModeResponse,
+  type ToolCallContent,
+  type ToolKind,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -25,23 +29,16 @@ import { Storage } from "@/storage/storage"
 import { Command } from "@/command"
 import { Agent as Agents } from "@/agent/agent"
 import { Permission } from "@/permission"
+import { Session } from "@/session"
+import { Identifier } from "@/id/id"
+import { SessionCompaction } from "@/session/compaction"
+import type { Config } from "@/config/config"
+import { MCP } from "@/mcp"
+import { Todo } from "@/session/todo"
+import { z } from "zod"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
-
-  // TODO: mcp servers?
-
-  type ToolKind =
-    | "read"
-    | "edit"
-    | "delete"
-    | "move"
-    | "search"
-    | "execute"
-    | "think"
-    | "fetch"
-    | "switch_mode"
-    | "other"
 
   export class Agent implements ACPAgent {
     private sessionManager = new ACPSessionManager()
@@ -157,6 +154,62 @@ export namespace ACP {
                 })
               break
             case "completed":
+              const kind = toToolKind(part.tool)
+              const content: ToolCallContent[] = [
+                {
+                  type: "content",
+                  content: {
+                    type: "text",
+                    text: part.state.output,
+                  },
+                },
+              ]
+
+              if (kind === "edit") {
+                const input = part.state.input
+                const filePath = typeof input["filePath"] === "string" ? input["filePath"] : ""
+                const oldText = typeof input["oldString"] === "string" ? input["oldString"] : ""
+                const newText =
+                  typeof input["newString"] === "string"
+                    ? input["newString"]
+                    : typeof input["content"] === "string"
+                      ? input["content"]
+                      : ""
+                content.push({
+                  type: "diff",
+                  path: filePath,
+                  oldText,
+                  newText,
+                })
+              }
+
+              if (part.tool === "todowrite") {
+                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+                if (parsedTodos.success) {
+                  await this.connection
+                    .sessionUpdate({
+                      sessionId: acpSession.id,
+                      update: {
+                        sessionUpdate: "plan",
+                        entries: parsedTodos.data.map((todo) => {
+                          const status: PlanEntry["status"] =
+                            todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
+                          return {
+                            priority: "medium",
+                            status,
+                            content: todo.content,
+                          }
+                        }),
+                      },
+                    })
+                    .catch((err) => {
+                      log.error("failed to send session update for todo", { error: err })
+                    })
+                } else {
+                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                }
+              }
+
               await this.connection
                 .sessionUpdate({
                   sessionId: acpSession.id,
@@ -164,15 +217,8 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "completed",
-                    content: [
-                      {
-                        type: "content",
-                        content: {
-                          type: "text",
-                          text: part.state.output,
-                        },
-                      },
-                    ],
+                    kind,
+                    content,
                     title: part.state.title,
                     rawOutput: {
                       output: part.state.output,
@@ -258,11 +304,14 @@ export namespace ACP {
         protocolVersion: 1,
         agentCapabilities: {
           loadSession: true,
-          // TODO: map acp mcp
-          // mcpCapabilities: {
-          //   http: true,
-          //   sse: true,
-          // },
+          mcpCapabilities: {
+            http: true,
+            sse: true,
+          },
+          promptCapabilities: {
+            embeddedContext: true,
+            image: true,
+          },
         },
         authMethods: [
           {
@@ -287,6 +336,7 @@ export namespace ACP {
       const model = await defaultModel(this.config)
       const session = await this.sessionManager.create(params.cwd, params.mcpServers, model)
 
+      log.info("creating_session", { mcpServers: params.mcpServers.length })
       const load = await this.loadSession({
         cwd: params.cwd,
         mcpServers: params.mcpServers,
@@ -325,6 +375,17 @@ export namespace ACP {
         name: command.name,
         description: command.description ?? "",
       }))
+      const names = new Set(availableCommands.map((c) => c.name))
+      if (!names.has("init"))
+        availableCommands.push({
+          name: "init",
+          description: "create/update a AGENTS.md",
+        })
+      if (!names.has("compact"))
+        availableCommands.push({
+          name: "compact",
+          description: "compact the session",
+        })
 
       setTimeout(() => {
         this.connection.sessionUpdate({
@@ -345,6 +406,35 @@ export namespace ACP {
         }))
 
       const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+
+      const mcpServers: Record<string, Config.Mcp> = {}
+      for (const server of params.mcpServers) {
+        if ("type" in server) {
+          mcpServers[server.name] = {
+            url: server.url,
+            headers: server.headers.reduce<Record<string, string>>((acc, { name, value }) => {
+              acc[name] = value
+              return acc
+            }, {}),
+            type: "remote",
+          }
+        } else {
+          mcpServers[server.name] = {
+            type: "local",
+            command: [server.command, ...server.args],
+            environment: server.env.reduce<Record<string, string>>((acc, { name, value }) => {
+              acc[name] = value
+              return acc
+            }, {}),
+          }
+        }
+      }
+
+      await Promise.all(
+        Object.entries(mcpServers).map(async ([key, mcp]) => {
+          await MCP.add(key, mcp)
+        }),
+      )
 
       return {
         sessionId,
@@ -452,25 +542,25 @@ export namespace ACP {
 
       log.info("parts", { parts })
 
-      const cmd = await (async () => {
-        const text = parts.filter((part) => part.type === "text").join("")
-        const match = text.match(/^\/(\w+)\s*(.*)$/)
-        if (!match) return
+      const cmd = (() => {
+        const text = parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .join("")
+          .trim()
 
-        const [c, args] = match.slice(1)
-        const command = await Command.get(c)
-        if (!command) return
-        return { command, args }
+        if (!text.startsWith("/")) return
+
+        const [name, ...rest] = text.slice(1).split(/\s+/)
+        return { name, args: rest.join(" ").trim() }
       })()
 
-      if (cmd) {
-        await SessionPrompt.command({
-          sessionID,
-          command: cmd.command.name,
-          arguments: cmd.args,
-          agent,
-        })
-      } else {
+      const done = {
+        stopReason: "end_turn" as const,
+        _meta: {},
+      }
+
+      if (!cmd) {
         await SessionPrompt.prompt({
           sessionID,
           model: {
@@ -480,12 +570,40 @@ export namespace ACP {
           parts,
           agent,
         })
+        return done
       }
 
-      return {
-        stopReason: "end_turn" as const,
-        _meta: {},
+      const command = await Command.get(cmd.name)
+      if (command) {
+        await SessionPrompt.command({
+          sessionID,
+          command: command.name,
+          arguments: cmd.args,
+          model: model.providerID + "/" + model.modelID,
+          agent,
+        })
+        return done
       }
+
+      switch (cmd.name) {
+        case "init":
+          await Session.initialize({
+            sessionID,
+            messageID: Identifier.ascending("message"),
+            providerID: model.providerID,
+            modelID: model.modelID,
+          })
+          break
+        case "compact":
+          await SessionCompaction.run({
+            sessionID,
+            providerID: model.providerID,
+            modelID: model.modelID,
+          })
+          break
+      }
+
+      return done
     }
 
     async cancel(params: CancelNotification) {
