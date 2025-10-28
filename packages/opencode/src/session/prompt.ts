@@ -582,7 +582,7 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const result = await execute(args, opts).catch((err) => {
+        const result = await execute(args, opts).catch((err: unknown) => {
           log.error("Error executing tool", { error: err, tool: key })
           return {
             content: [
