@@ -1,18 +1,19 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "0.15.1",
+  "version": "0.15.20",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20251008.0",
+    "@cloudflare/workers-types": "catalog:",
     "@tsconfig/node22": "22.0.2",
     "@types/node": "catalog:",
     "openai": "5.11.0",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.0",

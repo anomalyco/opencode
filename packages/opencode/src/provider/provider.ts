@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -69,7 +69,7 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (options?.["useCompletionUrls"]) {
-            return sdk.completion(modelID)
+            return sdk.chat(modelID)
           } else {
             return sdk.responses(modelID)
           }
@@ -95,7 +95,14 @@ export namespace Provider {
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
+              const modelRequiresPrefix = [
+                "nova-micro",
+                "nova-lite",
+                "nova-pro",
+                "nova-premier",
+                "claude",
+                "deepseek",
+              ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
               if (modelRequiresPrefix && !isGovCloud) {
                 modelID = `${regionPrefix}.${modelID}`
@@ -120,12 +127,21 @@ export namespace Provider {
               break
             }
             case "ap": {
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                modelID.includes(m),
-              )
-              if (modelRequiresPrefix) {
-                regionPrefix = "apac"
+              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              if (
+                isAustraliaRegion &&
+                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
+              ) {
+                regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
+              } else {
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "apac"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               }
               break
             }
@@ -356,7 +372,10 @@ export namespace Provider {
               modelID !== "gpt-5-chat-latest" && !(providerID === "openrouter" && modelID === "openai/gpt-5-chat"),
           )
           // Filter out experimental models
-          .filter(([, model]) => !model.experimental || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS),
+          .filter(
+            ([, model]) =>
+              (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
+          ),
       )
       provider.info.models = filteredModels
 
@@ -403,10 +422,23 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined) {
+      if (options["timeout"] !== undefined && options["timeout"] !== null) {
         // Only override fetch if user explicitly sets timeout
-        options["fetch"] = async (input: any, init?: any) => {
-          return await fetch(input, { ...init, timeout: options["timeout"] })
+        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          const { signal, ...rest } = init ?? {}
+
+          const signals: AbortSignal[] = []
+          if (signal) signals.push(signal)
+          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          return fetch(input, {
+            ...rest,
+            signal: combined,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
         }
       }
       const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
@@ -485,7 +517,11 @@ export namespace Provider {
 
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
-    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+    if (providerID === "github-copilot") {
+      priority = priority.filter((m) => m !== "claude-haiku-4.5")
+    }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)
@@ -526,11 +562,11 @@ export namespace Provider {
             model_id: string
           }[]
         }
-        const models = state?.recently_used_models ?? []
-        if (models.length > 0) {
+        const [model] = state?.recently_used_models ?? []
+        if (model) {
           return {
-            providerID: models[0].provider_id,
-            modelID: models[0].model_id,
+            providerID: model.provider_id,
+            modelID: model.model_id,
           }
         }
       })

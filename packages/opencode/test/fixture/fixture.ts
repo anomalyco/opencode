@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import { realpathSync } from "fs"
 import os from "os"
 import path from "path"
 
@@ -17,7 +18,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
       await options?.dispose?.(dirpath)
       await $`rm -rf ${dirpath}`.quiet()
     },
-    path: dirpath,
+    path: realpathSync(dirpath),
     extra: extra as T,
   }
   return result

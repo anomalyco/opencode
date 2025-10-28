@@ -58,6 +58,7 @@ jobs:
           ./script/publish.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_CHANNEL: latest
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

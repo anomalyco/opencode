@@ -1,26 +1,21 @@
 // @ts-nocheck
 import React from "react"
 import { Img, Row, Html, Link, Body, Head, Button, Column, Preview, Section, Container } from "@jsx-email/all"
-import { Hr, Text, Fonts, SplitString, Title, A, Span, B } from "../components"
+import { Text, Fonts, Title, A, Span } from "../components"
 import {
   unit,
   body,
-  code,
   frame,
-  medium,
-  heading,
+  headingText,
   container,
-  headingHr,
-  footerLink,
-  breadcrumb,
-  compactText,
-  buttonPrimary,
-  breadcrumbColonSeparator,
+  contentText,
+  button,
+  contentHighlightText,
+  linkText,
+  buttonText,
 } from "../styles"
 
-const LOCAL_ASSETS_URL = "/static"
 const CONSOLE_URL = "https://opencode.ai/"
-const DOC_URL = "https://opencode.ai/docs/zen"
 
 interface InviteEmailProps {
   inviter: string
@@ -32,9 +27,8 @@ export const InviteEmail = ({
   inviter = "test@anoma.ly",
   workspaceID = "wrk_01K6XFY7V53T8XN0A7X8G9BTN3",
   workspaceName = "anomaly",
-  assetsUrl = LOCAL_ASSETS_URL,
+  assetsUrl = `${CONSOLE_URL}email`,
 }: InviteEmailProps) => {
-  const subject = `You've been invited to join the ${workspaceName} workspace on OpenCode Console`
   const messagePlain = `${inviter} invited you to join the ${workspaceName} workspace.`
   const url = `${CONSOLE_URL}workspace/${workspaceID}`
   return (
@@ -55,50 +49,29 @@ export const InviteEmail = ({
               </Column>
             </Row>
 
-            <Row style={headingHr}>
-              <Column>
-                <Hr />
-              </Column>
-            </Row>
-
-            <Section style={{ padding: `${unit}px 0 0 0` }}>
-              <Text style={{ ...compactText }}>
-                <B>{inviter}</B> invited you to join the{" "}
-                <Link style={medium} href={url}>
-                  <B>{workspaceName}</B>
-                </Link>{" "}
-                workspace in the{" "}
-                <Link style={medium} href={`${CONSOLE_URL}zen`}>
-                  OpenCode Console
-                </Link>
-                .
+            <Section style={{ padding: `${unit * 2}px 0 0 0` }}>
+              <Text style={headingText}>Join your team's OpenCode workspace</Text>
+              <Text style={contentText}>
+                You have been invited by <Span style={contentHighlightText}>{inviter}</Span> to join the{" "}
+                <Span style={contentHighlightText}>{workspaceName}</Span> workspace on OpenCode.
               </Text>
             </Section>
 
             <Section style={{ padding: `${unit}px 0 0 0` }}>
-              <Button style={buttonPrimary} href={url}>
-                <Span style={code}>Join Workspace</Span>
+              <Button style={button} href={url}>
+                <Text style={buttonText}>
+                  Join workspace
+                  <Img width="24" height="24" src={`${assetsUrl}/right-arrow.png`} alt="Arrow right" />
+                </Text>
               </Button>
             </Section>
 
-            <Row style={headingHr}>
-              <Column>
-                <Hr />
-              </Column>
-            </Row>
-
-            <Row>
-              <Column>
-                <Link href={`${CONSOLE_URL}zen`} style={footerLink}>
-                  Console
-                </Link>
-              </Column>
-              <Column align="right">
-                <Link style={footerLink} href={DOC_URL}>
-                  About
-                </Link>
-              </Column>
-            </Row>
+            <Section style={{ padding: `${unit}px 0 0 0` }}>
+              <Text style={contentText}>Button not working? Copy the following link...</Text>
+              <Link href={url}>
+                <Text style={linkText}>{url}</Text>
+              </Link>
+            </Section>
           </Section>
         </Container>
       </Body>

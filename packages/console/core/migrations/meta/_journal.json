@@ -232,6 +232,34 @@
       "when": 1759976329502,
       "tag": "0032_white_doctor_doom",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1760637384217,
+      "tag": "0033_cynical_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1760651120251,
+      "tag": "0034_short_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1760666253896,
+      "tag": "0035_narrow_blindfold",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1760668952329,
+      "tag": "0036_slimy_energizer",
+      "breakpoints": true
     }
   ]
 }

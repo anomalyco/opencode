@@ -3,26 +3,12 @@ import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
-import z from "zod/v4"
+import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
-
-  export function init() {
-    Array.fromAsync(
-      new Bun.Glob("**/snapshot").scan({
-        absolute: true,
-        onlyFiles: false,
-        cwd: Global.Path.data,
-      }),
-    ).then((files) => {
-      for (const file of files) {
-        fs.rmdir(file, { recursive: true })
-      }
-    })
-  }
 
   export async function track() {
     if (Instance.project.vcs !== "git") return
@@ -111,7 +97,9 @@ export namespace Snapshot {
             .cwd(Instance.worktree)
             .nothrow()
           if (checkTree.exitCode === 0 && checkTree.text().trim()) {
-            log.info("file existed in snapshot but checkout failed, keeping", { file })
+            log.info("file existed in snapshot but checkout failed, keeping", {
+              file,
+            })
           } else {
             log.info("file did not exist in snapshot, deleting", { file })
             await fs.unlink(file).catch(() => {})
@@ -138,6 +126,41 @@ export namespace Snapshot {
     }
 
     return result.text().trim()
+  }
+
+  export const FileDiff = z
+    .object({
+      file: z.string(),
+      before: z.string(),
+      after: z.string(),
+      additions: z.number(),
+      deletions: z.number(),
+    })
+    .meta({
+      ref: "FileDiff",
+    })
+  export type FileDiff = z.infer<typeof FileDiff>
+  export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
+    const git = gitdir()
+    const result: FileDiff[] = []
+    for await (const line of $`git --git-dir=${git} diff --numstat ${from} ${to} -- .`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+      .lines()) {
+      if (!line) continue
+      const [additions, deletions, file] = line.split("\t")
+      const before = await $`git --git-dir=${git} show ${from}:${file}`.quiet().nothrow().text()
+      const after = await $`git --git-dir=${git} show ${to}:${file}`.quiet().nothrow().text()
+      result.push({
+        file,
+        before,
+        after,
+        additions: parseInt(additions),
+        deletions: parseInt(deletions),
+      })
+    }
+    return result
   }
 
   function gitdir() {

@@ -1,4 +1,5 @@
 import "./index.css"
+import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta, Link } from "@solidjs/meta"
 import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
@@ -15,8 +16,16 @@ import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
+import { getLastSeenWorkspaceID } from "../workspace/common"
+
+const checkLoggedIn = query(async () => {
+  "use server"
+  const workspaceID = await getLastSeenWorkspaceID()
+  if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
+}, "checkLoggedIn.get")
 
 export default function Home() {
+  createAsync(() => checkLoggedIn())
   return (
     <main data-page="zen">
       <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />

@@ -2,16 +2,28 @@ import { Model } from "@opencode-ai/console-core/model.js"
 import { query, action, useParams, createAsync, json } from "@solidjs/router"
 import { createMemo, For, Show } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
-import { ZenModel } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@opencode-ai/console-core/model.js"
 import styles from "./model-section.module.css"
 import { querySessionInfo } from "../common"
+import { IconAlibaba, IconAnthropic, IconMoonshotAI, IconOpenAI, IconStealth, IconXai, IconZai } from "~/component/icon"
+
+const getModelLab = (modelId: string) => {
+  if (modelId.startsWith("claude")) return "Anthropic"
+  if (modelId.startsWith("gpt")) return "OpenAI"
+  if (modelId.startsWith("kimi")) return "Moonshot AI"
+  if (modelId.startsWith("glm")) return "Z.ai"
+  if (modelId.startsWith("qwen")) return "Alibaba"
+  if (modelId.startsWith("grok")) return "xAI"
+  return "Stealth"
+}
 
 const getModelsInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     return {
-      all: Object.entries(ZenModel.list())
-        .filter(([id, _model]) => !["claude-3-5-haiku", "qwen3-max"].includes(id))
+      all: Object.entries(ZenData.list().models)
+        .filter(([id, _model]) => !["claude-3-5-haiku"].includes(id))
+        .filter(([id, _model]) => !id.startsWith("an-"))
         .sort(([_idA, modelA], [_idB, modelB]) => modelA.name.localeCompare(modelB.name))
         .map(([id, model]) => ({ id, name: model.name })),
       disabled: await Model.listDisabled(),
@@ -42,13 +54,21 @@ export function ModelSection() {
   const params = useParams()
   const modelsInfo = createAsync(() => getModelsInfo(params.id))
   const userInfo = createAsync(() => querySessionInfo(params.id))
+
+  const modelsWithLab = createMemo(() => {
+    const info = modelsInfo()
+    if (!info) return []
+    return info.all.map((model) => ({
+      ...model,
+      lab: getModelLab(model.id),
+    }))
+  })
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Models</h2>
         <p>
-          Manage which models workspace members can access. Requests will fail if a member tries to use a disabled
-          model.{userInfo()?.isAdmin ? "" : " To use a disabled model, contact your workspace’s admin."}
+          Manage which models workspace members can access. <a href="/docs/zen#pricing ">Learn more</a>.
         </p>
       </div>
       <div data-slot="models-list">
@@ -58,16 +78,40 @@ export function ModelSection() {
               <thead>
                 <tr>
                   <th>Model</th>
+                  <th></th>
                   <th>Enabled</th>
                 </tr>
               </thead>
               <tbody>
-                <For each={modelsInfo()!.all}>
-                  {({ id, name }) => {
+                <For each={modelsWithLab()}>
+                  {({ id, name, lab }) => {
                     const isEnabled = createMemo(() => !modelsInfo()!.disabled.includes(id))
                     return (
                       <tr data-slot="model-row" data-disabled={!isEnabled()}>
-                        <td data-slot="model-name">{name}</td>
+                        <td data-slot="model-name">
+                          <div>
+                            {(() => {
+                              switch (lab) {
+                                case "OpenAI":
+                                  return <IconOpenAI width={16} height={16} />
+                                case "Anthropic":
+                                  return <IconAnthropic width={16} height={16} />
+                                case "Moonshot AI":
+                                  return <IconMoonshotAI width={16} height={16} />
+                                case "Z.ai":
+                                  return <IconZai width={16} height={16} />
+                                case "Alibaba":
+                                  return <IconAlibaba width={16} height={16} />
+                                case "xAI":
+                                  return <IconXai width={16} height={16} />
+                                default:
+                                  return <IconStealth width={16} height={16} />
+                              }
+                            })()}
+                            <span>{name}</span>
+                          </div>
+                        </td>
+                        <td data-slot="model-lab">{lab}</td>
                         <td data-slot="model-toggle">
                           <form action={updateModel} method="post">
                             <input type="hidden" name="model" value={id} />

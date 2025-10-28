@@ -1,5 +1,5 @@
 import { spawn } from "bun"
-import z from "zod/v4"
+import z from "zod"
 import { NamedError } from "../util/error"
 import { Log } from "../util/log"
 import { Bus } from "../bus"

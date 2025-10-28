@@ -1,0 +1,49 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./utilities.css";
+
+@import "../index.css";
+
+@theme {
+  --*: initial;
+
+  --spacing: 0.25rem;
+  /* --spacing: var(--spacing); */
+
+  --font-sans: var(--font-family-sans);
+  --font-sans--font-feature-settings: var(--font-family-sans--font-feature-settings);
+  --font-mono: var(--font-family-mono);
+  --font-mono--font-feature-settings: var(--font-family-mono--font-feature-settings);
+
+  --text-sm: var(--font-size-small);
+  --text-base: var(--font-size-base);
+  --text-lg: var(--font-size-large);
+  --text-xl: var(--font-size-x-large);
+
+  --font-weight-regular: var(--font-weight-regular);
+  --font-weight-medium: var(--font-weight-medium);
+
+  --leading-lg: var(--line-height-large);
+  --leading-xl: var(--line-height-x-large);
+  --leading-2xl: var(--line-height-2x-large);
+
+  --tracking-normal: var(--letter-spacing-normal);
+  --tracking-tight: var(--letter-spacing-tight);
+  --tracking-tightest: var(--letter-spacing-tightest);
+
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-md: var(--shadow-md);
+  --shadow-xs-border-selected: var(--shadow-xs-border-selected);
+}
+
+@import "./colors.css";

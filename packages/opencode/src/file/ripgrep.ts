@@ -2,7 +2,7 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 import { NamedError } from "../util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
@@ -209,6 +209,16 @@ export namespace Ripgrep {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
       }
+    }
+
+    // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
+    // See https://github.com/oven-sh/bun/issues/24012
+    if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
+      throw Object.assign(new Error(`No such file or directory: '${input.cwd}'`), {
+        code: "ENOENT",
+        errno: -2,
+        path: input.cwd,
+      })
     }
 
     const proc = Bun.spawn(args, {
