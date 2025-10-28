@@ -398,7 +398,7 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
+  async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model, runtimeOptions?: Record<string, any>) {
     return (async () => {
       using _ = log.time("getSDK", {
         providerID: provider.id,
@@ -422,14 +422,15 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined && options["timeout"] !== null) {
+      const timeout = runtimeOptions?.timeout ?? options["timeout"]
+      if (timeout !== undefined && timeout !== null) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
           const signals: AbortSignal[] = []
           if (signal) signals.push(signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+          if (timeout !== false) signals.push(AbortSignal.timeout(timeout))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
@@ -457,10 +458,16 @@ export namespace Provider {
     return state().then((s) => s.providers[providerID])
   }
 
-  export async function getModel(providerID: string, modelID: string) {
-    const key = `${providerID}/${modelID}`
+  export async function getModel(providerID: string, modelID: string, runtimeOptions?: Record<string, any>) {
     const s = await state()
-    if (s.models.has(key)) return s.models.get(key)!
+
+    // Include runtime options in cache key
+    // Runtime options are only used from `opencode run` command
+    const cacheKey = runtimeOptions
+      ? `${providerID}/${modelID}:${Bun.hash.xxHash32(JSON.stringify(runtimeOptions))}`
+      : `${providerID}/${modelID}`
+
+    if (s.models.has(cacheKey)) return s.models.get(cacheKey)!
 
     log.info("getModel", {
       providerID,
@@ -471,7 +478,7 @@ export namespace Provider {
     if (!provider) throw new ModelNotFoundError({ providerID, modelID })
     const info = provider.info.models[modelID]
     if (!info) throw new ModelNotFoundError({ providerID, modelID })
-    const sdk = await getSDK(provider.info, info)
+    const sdk = await getSDK(provider.info, info, runtimeOptions)
 
     try {
       const keyReal = `${providerID}/${modelID}`
@@ -480,7 +487,7 @@ export namespace Provider {
         ? await provider.getModel(sdk, realID, provider.options)
         : sdk.languageModel(realID)
       log.info("found", { providerID, modelID })
-      s.models.set(key, {
+      s.models.set(cacheKey, {
         providerID,
         modelID,
         info,
