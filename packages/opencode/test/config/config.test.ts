@@ -352,121 +352,135 @@ test("gets config directories", async () => {
 })
 
 test("loads config from OPENCODE_CONFIG_DIR", async () => {
-  const originalEnv = process.env["OPENCODE_CONFIG_DIR"]
+  await using tmp = await tmpdir()
+  await using customDir = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
 
-  try {
-    await using tmp = await tmpdir()
-    await using customDir = await tmpdir({
-      init: async (dir) => {
-        const agentDir = path.join(dir, "agent")
-        await fs.mkdir(agentDir, { recursive: true })
-
-        await Bun.write(
-          path.join(agentDir, "custom-agent.md"),
-          `---
+      await Bun.write(
+        path.join(agentDir, "custom-agent.md"),
+        `---
 model: custom/model
 description: Custom agent from config dir
 ---
 Custom agent prompt`,
-        )
+      )
 
-        const commandDir = path.join(dir, "command")
-        await fs.mkdir(commandDir, { recursive: true })
+      const commandDir = path.join(dir, "command")
+      await fs.mkdir(commandDir, { recursive: true })
 
-        await Bun.write(
-          path.join(commandDir, "custom-command.md"),
-          `---
+      await Bun.write(
+        path.join(commandDir, "custom-command.md"),
+        `---
 description: Custom command from config dir
 ---
 Custom command template`,
-        )
-      },
-    })
+      )
+    },
+  })
 
-    process.env["OPENCODE_CONFIG_DIR"] = customDir.path
+  const result = Bun.spawnSync({
+    cmd: ["bun", "test", "--test-name-pattern", "OPENCODE_CONFIG_DIR subprocess test 1", import.meta.path],
+    env: {
+      ...process.env,
+      OPENCODE_CONFIG_DIR: customDir.path,
+      OPENCODE_CONFIG_TEST_DIR: tmp.path,
+      OPENCODE_CONFIG_TEST_CUSTOM_DIR: customDir.path,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
+  expect(result.exitCode).toBe(0)
+})
 
-        expect(config.agent?.["custom-agent"]).toEqual({
-          name: "custom-agent",
-          model: "custom/model",
-          description: "Custom agent from config dir",
-          prompt: "Custom agent prompt",
-        })
+test("OPENCODE_CONFIG_DIR subprocess test 1", async () => {
+  if (!process.env["OPENCODE_CONFIG_TEST_DIR"]) return
 
-        expect(config.command?.["custom-command"]).toEqual({
-          description: "Custom command from config dir",
-          template: "Custom command template",
-        })
-      },
-    })
-  } finally {
-    if (originalEnv !== undefined) {
-      process.env["OPENCODE_CONFIG_DIR"] = originalEnv
-    } else {
-      delete process.env["OPENCODE_CONFIG_DIR"]
-    }
-  }
+  const tmp = process.env["OPENCODE_CONFIG_TEST_DIR"]!
+  await Instance.provide({
+    directory: tmp,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["custom-agent"]).toEqual({
+        name: "custom-agent",
+        model: "custom/model",
+        description: "Custom agent from config dir",
+        prompt: "Custom agent prompt",
+      })
+
+      expect(config.command?.["custom-command"]).toEqual({
+        description: "Custom command from config dir",
+        template: "Custom command template",
+      })
+    },
+  })
 })
 
 test("OPENCODE_CONFIG_DIR overrides .opencode directory", async () => {
-  const originalEnv = process.env["OPENCODE_CONFIG_DIR"]
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentDir = path.join(opencodeDir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
 
-  try {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        const opencodeDir = path.join(dir, ".opencode")
-        await fs.mkdir(opencodeDir, { recursive: true })
-        const agentDir = path.join(opencodeDir, "agent")
-        await fs.mkdir(agentDir, { recursive: true })
-
-        await Bun.write(
-          path.join(agentDir, "test-agent.md"),
-          `---
+      await Bun.write(
+        path.join(agentDir, "test-agent.md"),
+        `---
 model: base/model
 ---
 Base agent prompt`,
-        )
-      },
-    })
+      )
+    },
+  })
 
-    await using customDir = await tmpdir({
-      init: async (dir) => {
-        const agentDir = path.join(dir, "agent")
-        await fs.mkdir(agentDir, { recursive: true })
+  await using customDir = await tmpdir({
+    init: async (dir) => {
+      const agentDir = path.join(dir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
 
-        await Bun.write(
-          path.join(agentDir, "test-agent.md"),
-          `---
+      await Bun.write(
+        path.join(agentDir, "test-agent.md"),
+        `---
 model: override/model
 ---
 Override agent prompt`,
-        )
-      },
-    })
+      )
+    },
+  })
 
-    process.env["OPENCODE_CONFIG_DIR"] = customDir.path
+  const result = Bun.spawnSync({
+    cmd: ["bun", "test", "--test-name-pattern", "OPENCODE_CONFIG_DIR subprocess test 2", import.meta.path],
+    env: {
+      ...process.env,
+      OPENCODE_CONFIG_DIR: customDir.path,
+      OPENCODE_CONFIG_TEST_DIR: tmp.path,
+      OPENCODE_CONFIG_TEST_CUSTOM_DIR: customDir.path,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
+  expect(result.exitCode).toBe(0)
+})
 
-        expect(config.agent?.["test-agent"]).toEqual({
-          name: "test-agent",
-          model: "override/model",
-          prompt: "Override agent prompt",
-        })
-      },
-    })
-  } finally {
-    if (originalEnv !== undefined) {
-      process.env["OPENCODE_CONFIG_DIR"] = originalEnv
-    } else {
-      delete process.env["OPENCODE_CONFIG_DIR"]
-    }
-  }
+test("OPENCODE_CONFIG_DIR subprocess test 2", async () => {
+  if (!process.env["OPENCODE_CONFIG_TEST_DIR"]) return
+
+  const tmp = process.env["OPENCODE_CONFIG_TEST_DIR"]!
+  await Instance.provide({
+    directory: tmp,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["test-agent"]).toEqual({
+        name: "test-agent",
+        model: "override/model",
+        prompt: "Override agent prompt",
+      })
+    },
+  })
 })
