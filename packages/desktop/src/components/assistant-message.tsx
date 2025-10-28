@@ -2,7 +2,7 @@ import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart } from "
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
-import { Collapsible, Icon, IconProps } from "@opencode-ai/ui"
+import { Checkbox, Collapsible, Icon, IconProps } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
 import type { Tool } from "opencode/tool/tool"
 import type { ReadTool } from "opencode/tool/read"
@@ -14,11 +14,11 @@ import type { TaskTool } from "opencode/tool/task"
 import type { BashTool } from "opencode/tool/bash"
 import type { EditTool } from "opencode/tool/edit"
 import type { WriteTool } from "opencode/tool/write"
+import type { TodoWriteTool } from "opencode/tool/todo"
 import { DiffChanges } from "./diff-changes"
-import { TodoWriteTool } from "opencode/tool/todo"
 
 export function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
-  const filteredParts = createMemo(() => props.parts.filter((x) => x.type !== "tool" || x.tool !== "todoread"))
+  const filteredParts = createMemo(() => props.parts?.filter((x) => x.type !== "tool" || x.tool !== "todoread"))
   return (
     <div class="w-full flex flex-col items-start gap-4">
       <For each={filteredParts()}>
@@ -394,6 +394,7 @@ ToolRegistry.register<typeof WriteTool>({
 ToolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
   render(props) {
+    console.log(props.input.todos)
     return (
       <BasicTool
         icon="checklist"
@@ -402,8 +403,16 @@ ToolRegistry.register<typeof TodoWriteTool>({
           subtitle: `${props.input.todos?.filter((t) => t.status === "completed").length}/${props.input.todos?.length}`,
         }}
       >
-        <Show when={false && props.output}>
-          <div class="whitespace-pre">{props.output}</div>
+        <Show when={props.input.todos?.length}>
+          <div class="px-12 pt-2.5 pb-6 flex flex-col gap-2">
+            <For each={props.input.todos}>
+              {(todo) => (
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <div classList={{ "line-through text-text-weaker": todo.status === "completed" }}>{todo.content}</div>
+                </Checkbox>
+              )}
+            </For>
+          </div>
         </Show>
       </BasicTool>
     )
