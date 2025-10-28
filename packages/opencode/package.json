@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-"typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "bun test",
     "build": "./script/build.ts",
     "dev": "bun run ./src/index.ts"
