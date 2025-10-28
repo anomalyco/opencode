@@ -30,22 +30,25 @@ export function POST(input: APIEvent) {
 
       let json
       try {
-        json = JSON.parse(data.slice(6)) as { usage?: Usage }
+        json = JSON.parse(data.slice(6))
       } catch (e) {
         return
       }
 
-      if (!json.usage) return
+      // ie. { type: "message_start"; message: { usage: Usage } }
+      // ie. { type: "message_delta"; usage: Usage }
+      const usageUpdate = json.usage ?? json.message?.usage
+      if (!usageUpdate) return
       usage = {
         ...usage,
-        ...json.usage,
+        ...usageUpdate,
         cache_creation: {
           ...usage?.cache_creation,
-          ...json.usage.cache_creation,
+          ...usageUpdate.cache_creation,
         },
         server_tool_use: {
           ...usage?.server_tool_use,
-          ...json.usage.server_tool_use,
+          ...usageUpdate.server_tool_use,
         },
       }
     },

@@ -3,9 +3,9 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { stream, streamSSE } from "hono/streaming"
 import { Session } from "../session"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
@@ -25,11 +25,18 @@ import { Global } from "../global"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
+import { SessionLock } from "../session/lock"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
+import { Todo } from "../session/todo"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { MCP } from "../mcp"
+import { Storage } from "../storage/storage"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
+import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
 
 const ERRORS = {
   400: {
@@ -39,16 +46,30 @@ const ERRORS = {
         schema: resolver(
           z
             .object({
-              data: z.record(z.string(), z.any()),
+              data: z.any().nullable(),
+              errors: z.array(z.record(z.string(), z.any())),
+              success: z.literal(false),
             })
             .meta({
-              ref: "Error",
+              ref: "BadRequestError",
             }),
         ),
       },
     },
   },
+  404: {
+    description: "Not found",
+    content: {
+      "application/json": {
+        schema: resolver(Storage.NotFoundError.Schema),
+      },
+    },
+  },
 } as const
+
+function errors(...codes: number[]) {
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
+}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -65,12 +86,15 @@ export namespace Server {
           error: err,
         })
         if (err instanceof NamedError) {
-          return c.json(err.toObject(), {
-            status: 400,
-          })
+          let status: ContentfulStatusCode
+          if (err instanceof Storage.NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else status = 500
+          return c.json(err.toObject(), { status })
         }
-        return c.json(new NamedError.Unknown({ message: err.toString() }).toObject(), {
-          status: 400,
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
+          status: 500,
         })
       })
       .use(async (c, next) => {
@@ -135,6 +159,30 @@ export namespace Server {
           return c.json(await Config.get())
         },
       )
+      .patch(
+        "/config",
+        describeRoute({
+          description: "Update config",
+          operationId: "config.update",
+          responses: {
+            200: {
+              description: "Successfully updated config",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Config.Info),
+        async (c) => {
+          const config = c.req.valid("json")
+          await Config.update(config)
+          return c.json(config)
+        },
+      )
       .get(
         "/experimental/tool/ids",
         describeRoute({
@@ -149,7 +197,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         async (c) => {
@@ -182,7 +230,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(
@@ -277,12 +325,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.get.schema,
           }),
         ),
         async (c) => {
@@ -305,12 +354,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.children.schema,
           }),
         ),
         async (c) => {
@@ -319,13 +369,42 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .get(
+        "/session/:id/todo",
+        describeRoute({
+          description: "Get the todo list for a session",
+          operationId: "session.todo",
+          responses: {
+            200: {
+              description: "Todo list",
+              content: {
+                "application/json": {
+                  schema: resolver(Todo.Info.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const todos = await Todo.get(sessionID)
+          return c.json(todos)
+        },
+      )
       .post(
         "/session",
         describeRoute({
           description: "Create a new session",
           operationId: "session.create",
           responses: {
-            ...ERRORS,
+            ...errors(400),
             200: {
               description: "Successfully created session",
               content: {
@@ -336,18 +415,10 @@ export namespace Server {
             },
           },
         }),
-        validator(
-          "json",
-          z
-            .object({
-              parentID: z.string().optional(),
-              title: z.string().optional(),
-            })
-            .optional(),
-        ),
+        validator("json", Session.create.schema.optional()),
         async (c) => {
           const body = c.req.valid("json") ?? {}
-          const session = await Session.create(body.parentID, body.title)
+          const session = await Session.create(body)
           return c.json(session)
         },
       )
@@ -365,12 +436,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.remove.schema,
           }),
         ),
         async (c) => {
@@ -392,6 +464,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -433,6 +506,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -441,19 +515,42 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
-        validator(
-          "json",
-          z.object({
-            messageID: z.string(),
-            providerID: z.string(),
-            modelID: z.string(),
-          }),
-        ),
+        validator("json", Session.initialize.schema.omit({ sessionID: true })),
         async (c) => {
           const sessionID = c.req.valid("param").id
           const body = c.req.valid("json")
           await Session.initialize({ ...body, sessionID })
           return c.json(true)
+        },
+      )
+      .post(
+        "/session/:id/fork",
+        describeRoute({
+          description: "Fork an existing session at a specific message",
+          operationId: "session.fork",
+          responses: {
+            200: {
+              description: "200",
+              content: {
+                "application/json": {
+                  schema: resolver(Session.Info),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: Session.fork.schema.shape.sessionID,
+          }),
+        ),
+        validator("json", Session.fork.schema.omit({ sessionID: true })),
+        async (c) => {
+          const sessionID = c.req.valid("param").id
+          const body = c.req.valid("json")
+          const result = await Session.fork({ ...body, sessionID })
+          return c.json(result)
         },
       )
       .post(
@@ -470,6 +567,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -479,7 +577,7 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          return c.json(SessionPrompt.abort(c.req.valid("param").id))
+          return c.json(SessionLock.abort(c.req.valid("param").id))
         },
       )
       .post(
@@ -496,6 +594,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -509,6 +608,44 @@ export namespace Server {
           await Session.share(id)
           const session = await Session.get(id)
           return c.json(session)
+        },
+      )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff that resulted from this user message",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "Successfully retrieved diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: SessionSummary.diff.schema.shape.sessionID,
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            messageID: SessionSummary.diff.schema.shape.messageID,
+          }),
+        ),
+        async (c) => {
+          const query = c.req.valid("query")
+          const params = c.req.valid("param")
+          const result = await SessionSummary.diff({
+            sessionID: params.id,
+            messageID: query.messageID,
+          })
+          return c.json(result)
         },
       )
       .delete(
@@ -525,12 +662,13 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
           "param",
           z.object({
-            id: z.string(),
+            id: Session.unshare.schema,
           }),
         ),
         async (c) => {
@@ -554,6 +692,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -590,6 +729,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -622,6 +762,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -633,7 +774,10 @@ export namespace Server {
         ),
         async (c) => {
           const params = c.req.valid("param")
-          const message = await Session.getMessage(params.id, params.messageID)
+          const message = await Session.getMessage({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
           return c.json(message)
         },
       )
@@ -656,6 +800,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -666,10 +811,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const sessionID = c.req.valid("param").id
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          return c.json(msg)
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
         },
       )
       .post(
@@ -691,6 +840,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -721,6 +871,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -751,6 +902,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -763,7 +915,10 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           log.info("revert", c.req.valid("json"))
-          const session = await SessionRevert.revert({ sessionID: id, ...c.req.valid("json") })
+          const session = await SessionRevert.revert({
+            sessionID: id,
+            ...c.req.valid("json"),
+          })
           return c.json(session)
         },
       )
@@ -781,6 +936,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -808,6 +964,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400, 404),
           },
         }),
         validator(
@@ -822,7 +979,11 @@ export namespace Server {
           const params = c.req.valid("param")
           const id = params.id
           const permissionID = params.permissionID
-          Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
+          Permission.respond({
+            sessionID: id,
+            permissionID,
+            response: c.req.valid("json").response,
+          })
           return c.json(true)
         },
       )
@@ -932,12 +1093,11 @@ export namespace Server {
         ),
         async (c) => {
           const query = c.req.valid("query").query
-          const result = await Ripgrep.files({
-            cwd: Instance.directory,
+          const results = await File.search({
             query,
             limit: 10,
           })
-          return c.json(result)
+          return c.json(results)
         },
       )
       .get(
@@ -963,9 +1123,12 @@ export namespace Server {
           }),
         ),
         async (c) => {
+          /*
           const query = c.req.valid("query").query
           const result = await LSP.workspaceSymbol(query)
           return c.json(result)
+          */
+          return c.json([])
         },
       )
       .get(
@@ -1059,6 +1222,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1116,6 +1280,26 @@ export namespace Server {
           return c.json(modes)
         },
       )
+      .get(
+        "/mcp",
+        describeRoute({
+          description: "Get MCP server status",
+          operationId: "mcp.status",
+          responses: {
+            200: {
+              description: "MCP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.any()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.status())
+        },
+      )
       .post(
         "/tui/append-prompt",
         describeRoute({
@@ -1130,6 +1314,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1262,6 +1447,7 @@ export namespace Server {
                 },
               },
             },
+            ...errors(400),
           },
         }),
         validator(
@@ -1313,7 +1499,7 @@ export namespace Server {
                 },
               },
             },
-            ...ERRORS,
+            ...errors(400),
           },
         }),
         validator(

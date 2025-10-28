@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import path from "path"
 import { Bus } from "../../bus"
 import { Provider } from "../../provider/provider"
 import { Session } from "../../session"
@@ -12,6 +13,7 @@ import { Identifier } from "../../id/id"
 import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
 import { SessionPrompt } from "../../session/prompt"
+import { EOL } from "os"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -70,9 +72,44 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("file", {
+        alias: ["f"],
+        type: "string",
+        array: true,
+        describe: "file(s) to attach to message",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
+
+    let fileParts: any[] = []
+    if (args.file) {
+      const files = Array.isArray(args.file) ? args.file : [args.file]
+
+      for (const filePath of files) {
+        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const file = Bun.file(resolvedPath)
+        const stats = await file.stat().catch(() => {})
+        if (!stats) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+        if (!(await file.exists())) {
+          UI.error(`File not found: ${filePath}`)
+          process.exit(1)
+        }
+
+        const stat = await file.stat()
+        const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
+
+        fileParts.push({
+          type: "file",
+          url: `file://${resolvedPath}`,
+          filename: path.basename(resolvedPath),
+          mime,
+        })
+      }
+    }
 
     if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
 
@@ -106,7 +143,7 @@ export const RunCommand = cmd({
 
         if (args.session) return Session.get(args.session)
 
-        return Session.create()
+        return Session.create({})
       })()
 
       if (!session) {
@@ -158,13 +195,13 @@ export const RunCommand = cmd({
             sessionID: session?.id,
             ...data,
           }
-          process.stdout.write(JSON.stringify(jsonEvent) + "\n")
+          process.stdout.write(JSON.stringify(jsonEvent) + EOL)
           return true
         }
         return false
       }
 
-      let text = ""
+      const messageID = Identifier.ascending("message")
 
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         if (evt.properties.part.sessionID !== session.id) return
@@ -186,16 +223,23 @@ export const RunCommand = cmd({
           }
         }
 
+        if (part.type === "step-start") {
+          if (outputJsonEvent("step_start", { part })) return
+        }
+
+        if (part.type === "step-finish") {
+          if (outputJsonEvent("step_finish", { part })) return
+        }
+
         if (part.type === "text") {
-          text = part.text
+          const text = part.text
+          const isPiped = !process.stdout.isTTY
 
           if (part.time?.end) {
             if (outputJsonEvent("text", { part })) return
-            UI.empty()
-            UI.println(UI.markdown(text))
-            UI.empty()
-            text = ""
-            return
+            if (!isPiped) UI.println()
+            process.stdout.write((isPiped ? text : UI.markdown(text)) + EOL)
+            if (!isPiped) UI.println()
           }
         }
       })
@@ -209,50 +253,41 @@ export const RunCommand = cmd({
         if ("data" in error && error.data && "message" in error.data) {
           err = error.data.message
         }
-        errorMsg = errorMsg ? errorMsg + "\n" + err : err
+        errorMsg = errorMsg ? errorMsg + EOL + err : err
 
         if (outputJsonEvent("error", { error })) return
         UI.error(err)
       })
 
-      if (args.command) {
-        await SessionPrompt.command({
-          messageID: Identifier.ascending("message"),
+      await (async () => {
+        if (args.command) {
+          return await SessionPrompt.command({
+            messageID,
+            sessionID: session.id,
+            agent: agent.name,
+            model: providerID + "/" + modelID,
+            command: args.command,
+            arguments: message,
+          })
+        }
+        return await SessionPrompt.prompt({
           sessionID: session.id,
-          agent: agent.name,
-          model: providerID + "/" + modelID,
-          command: args.command,
-          arguments: message,
-        })
-        return
-      }
-
-      const messageID = Identifier.ascending("message")
-      const result = await SessionPrompt.prompt({
-        sessionID: session.id,
-        messageID,
-        model: {
-          providerID,
-          modelID,
-        },
-        agent: agent.name,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: message,
+          messageID,
+          model: {
+            providerID,
+            modelID,
           },
-        ],
-      })
-
-      const isPiped = !process.stdout.isTTY
-      if (isPiped) {
-        const match = result.parts.findLast((x: any) => x.type === "text") as any
-        if (outputJsonEvent("text", { text: match })) return
-        if (match) process.stdout.write(UI.markdown(match.text))
-        if (errorMsg) process.stdout.write(errorMsg)
-      }
-      UI.empty()
+          agent: agent.name,
+          parts: [
+            ...fileParts,
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: message,
+            },
+          ],
+        })
+      })()
       if (errorMsg) process.exit(1)
     })
   },

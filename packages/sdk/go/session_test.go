@@ -27,7 +27,7 @@ func TestSessionNewWithOptionalParams(t *testing.T) {
 	)
 	_, err := client.Session.New(context.TODO(), opencode.SessionNewParams{
 		Directory: opencode.F("directory"),
-		ParentID:  opencode.F("parentID"),
+		ParentID:  opencode.F("sesJ!"),
 		Title:     opencode.F("title"),
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func TestSessionDeleteWithOptionalParams(t *testing.T) {
 	)
 	_, err := client.Session.Delete(
 		context.TODO(),
-		"id",
+		"sesJ!",
 		opencode.SessionDeleteParams{
 			Directory: opencode.F("directory"),
 		},
@@ -162,7 +162,7 @@ func TestSessionChildrenWithOptionalParams(t *testing.T) {
 	)
 	_, err := client.Session.Children(
 		context.TODO(),
-		"id",
+		"sesJ!",
 		opencode.SessionChildrenParams{
 			Directory: opencode.F("directory"),
 		},
@@ -223,7 +223,7 @@ func TestSessionGetWithOptionalParams(t *testing.T) {
 	)
 	_, err := client.Session.Get(
 		context.TODO(),
-		"id",
+		"sesJ!",
 		opencode.SessionGetParams{
 			Directory: opencode.F("directory"),
 		},
@@ -253,7 +253,7 @@ func TestSessionInitWithOptionalParams(t *testing.T) {
 		context.TODO(),
 		"id",
 		opencode.SessionInitParams{
-			MessageID:  opencode.F("messageID"),
+			MessageID:  opencode.F("msgJ!"),
 			ModelID:    opencode.F("modelID"),
 			ProviderID: opencode.F("providerID"),
 			Directory:  opencode.F("directory"),
@@ -342,9 +342,12 @@ func TestSessionPromptWithOptionalParams(t *testing.T) {
 		"id",
 		opencode.SessionPromptParams{
 			Parts: opencode.F([]opencode.SessionPromptParamsPartUnion{opencode.TextPartInputParam{
-				Text:      opencode.F("text"),
-				Type:      opencode.F(opencode.TextPartInputTypeText),
-				ID:        opencode.F("id"),
+				Text: opencode.F("text"),
+				Type: opencode.F(opencode.TextPartInputTypeText),
+				ID:   opencode.F("id"),
+				Metadata: opencode.F(map[string]interface{}{
+					"foo": "bar",
+				}),
 				Synthetic: opencode.F(true),
 				Time: opencode.F(opencode.TextPartInputTimeParam{
 					Start: opencode.F(0.000000),
@@ -533,7 +536,7 @@ func TestSessionUnshareWithOptionalParams(t *testing.T) {
 	)
 	_, err := client.Session.Unshare(
 		context.TODO(),
-		"id",
+		"sesJ!",
 		opencode.SessionUnshareParams{
 			Directory: opencode.F("directory"),
 		},

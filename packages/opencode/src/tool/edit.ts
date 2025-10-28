@@ -3,7 +3,7 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import z from "zod/v4"
+import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
@@ -550,7 +550,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
-function trimDiff(diff: string): string {
+export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>
@@ -596,13 +596,13 @@ export function replace(content: string, oldString: string, newString: string, r
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
-    // BlockAnchorReplacer,
+    BlockAnchorReplacer,
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
-    // TrimmedBoundaryReplacer,
-    // ContextAwareReplacer,
-    // MultiOccurrenceReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
@@ -621,6 +621,6 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString not found in content")
   }
   throw new Error(
-    "oldString found multiple times and requires more code context to uniquely identify the intended match",
+    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
   )
 }

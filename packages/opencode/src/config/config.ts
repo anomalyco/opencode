@@ -1,7 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
-import z from "zod/v4"
+import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe } from "remeda"
@@ -15,6 +15,8 @@ import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
+import { BunProc } from "@/bun"
+import { Installation } from "@/installation"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -49,6 +51,8 @@ export namespace Config {
     }
 
     result.agent = result.agent || {}
+    result.mode = result.mode || {}
+    result.plugin = result.plugin || []
 
     const directories = [
       Global.Path.config,
@@ -57,109 +61,15 @@ export namespace Config {
       )),
     ]
 
-    const markdownAgents = [
-      ...(await Filesystem.globUp("agent/**/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/agent/**/*.md", Instance.directory, Instance.worktree)),
-    ]
-    for (const item of markdownAgents) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
-      if (!md.data) continue
-
-      // Extract relative path from agent folder for nested agents
-      let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
-        : item.includes("/agent/")
-          ? item.split("/agent/")[1]
-          : agentName + ".md"
-
-      // If agent is in a subfolder, include folder path in name
-      if (agentFolderPath.includes("/")) {
-        const relativePath = agentFolderPath.replace(".md", "")
-        const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
-      }
-
-      const config = {
-        name: agentName,
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result.agent = mergeDeep(result.agent, {
-          [config.name]: parsed.data,
-        })
-        continue
-      }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
+    for (const dir of directories) {
+      await assertValid(dir)
+      installDependencies(dir)
+      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
+      result.agent = mergeDeep(result.agent, await loadAgent(dir))
+      result.agent = mergeDeep(result.agent, await loadMode(dir))
+      result.plugin.push(...(await loadPlugin(dir)))
     }
 
-    // Load mode markdown files
-    result.mode = result.mode || {}
-    const markdownModes = [
-      ...(await Filesystem.globUp("mode/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/mode/*.md", Instance.directory, Instance.worktree)),
-    ]
-    for (const item of markdownModes) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
-      if (!md.data) continue
-
-      const config = {
-        name: path.basename(item, ".md"),
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      const parsed = Agent.safeParse(config)
-      if (parsed.success) {
-        result.agent = mergeDeep(result.mode, {
-          [config.name]: {
-            ...parsed.data,
-            mode: "primary" as const,
-          },
-        })
-        continue
-      }
-    }
-
-    // Load command markdown files
-    result.command = result.command || {}
-    const markdownCommands = [
-      ...(await Filesystem.globUp("command/**/*.md", Global.Path.config, Global.Path.config)),
-      ...(await Filesystem.globUp(".opencode/command/**/*.md", Instance.directory, Instance.worktree)),
-    ]
-    for (const item of markdownCommands) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
-      if (!md.data) continue
-
-      const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
-        const pattern = patterns.find((p) => item.includes(p))
-
-        if (pattern) {
-          const index = item.indexOf(pattern)
-          return item.slice(index + pattern.length, -3)
-        }
-        return path.basename(item, ".md")
-      })()
-
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
-      }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result.command = mergeDeep(result.command, {
-          [config.name]: parsed.data,
-        })
-        continue
-      }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
-    }
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
       result.agent = mergeDeep(result.agent ?? {}, {
@@ -169,14 +79,6 @@ export namespace Config {
         },
       })
     }
-
-    result.plugin = result.plugin || []
-    result.plugin.push(
-      ...[
-        ...(await Filesystem.globUp("plugin/*.{ts,js}", Global.Path.config, Global.Path.config)),
-        ...(await Filesystem.globUp(".opencode/plugin/*.{ts,js}", Instance.directory, Instance.worktree)),
-      ].map((x) => "file://" + x),
-    )
 
     if (Flag.OPENCODE_PERMISSION) {
       result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
@@ -217,6 +119,152 @@ export namespace Config {
       directories,
     }
   })
+
+  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
+  async function assertValid(dir: string) {
+    const invalid = await Array.fromAsync(
+      INVALID_DIRS.scan({
+        onlyFiles: false,
+        cwd: dir,
+      }),
+    )
+    for (const item of invalid) {
+      throw new ConfigDirectoryTypoError({
+        path: dir,
+        dir: item,
+        suggestion: item.substring(0, item.length - 1),
+      })
+    }
+  }
+
+  async function installDependencies(dir: string) {
+    if (Installation.isLocal()) return
+
+    const pkg = path.join(dir, "package.json")
+
+    if (!(await Bun.file(pkg).exists())) {
+      await Bun.write(pkg, "{}")
+    }
+
+    const gitignore = path.join(dir, ".gitignore")
+    const hasGitIgnore = await Bun.file(gitignore).exists()
+    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+
+    await BunProc.run(
+      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
+      {
+        cwd: dir,
+      },
+    )
+  }
+
+  const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
+  async function loadCommand(dir: string) {
+    const result: Record<string, Command> = {}
+    for await (const item of COMMAND_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const name = (() => {
+        const patterns = ["/.opencode/command/", "/command/"]
+        const pattern = patterns.find((p) => item.includes(p))
+
+        if (pattern) {
+          const index = item.indexOf(pattern)
+          return item.slice(index + pattern.length, -3)
+        }
+        return path.basename(item, ".md")
+      })()
+
+      const config = {
+        name,
+        ...md.data,
+        template: md.content.trim(),
+      }
+      const parsed = Command.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = parsed.data
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+    return result
+  }
+
+  const AGENT_GLOB = new Bun.Glob("agent/**/*.md")
+  async function loadAgent(dir: string) {
+    const result: Record<string, Agent> = {}
+
+    for await (const item of AGENT_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      // Extract relative path from agent folder for nested agents
+      let agentName = path.basename(item, ".md")
+      const agentFolderPath = item.includes("/.opencode/agent/")
+        ? item.split("/.opencode/agent/")[1]
+        : item.includes("/agent/")
+          ? item.split("/agent/")[1]
+          : agentName + ".md"
+
+      // If agent is in a subfolder, include folder path in name
+      if (agentFolderPath.includes("/")) {
+        const relativePath = agentFolderPath.replace(".md", "")
+        const pathParts = relativePath.split("/")
+        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
+      }
+
+      const config = {
+        name: agentName,
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = parsed.data
+        continue
+      }
+      throw new InvalidError({ path: item }, { cause: parsed.error })
+    }
+    return result
+  }
+
+  const MODE_GLOB = new Bun.Glob("mode/*.md")
+  async function loadMode(dir: string) {
+    const result: Record<string, Agent> = {}
+    for await (const item of MODE_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+      const content = await Bun.file(item).text()
+      const md = matter(content)
+      if (!md.data) continue
+
+      const config = {
+        name: path.basename(item, ".md"),
+        ...md.data,
+        prompt: md.content.trim(),
+      }
+      const parsed = Agent.safeParse(config)
+      if (parsed.success) {
+        result[config.name] = {
+          ...parsed.data,
+          mode: "primary" as const,
+        }
+        continue
+      }
+    }
+    return result
+  }
+
+  const PLUGIN_GLOB = new Bun.Glob("plugin/*.{ts,js}")
+  async function loadPlugin(dir: string) {
+    const plugins: string[] = []
+
+    for await (const item of PLUGIN_GLOB.scan({ absolute: true, followSymlinks: true, dot: true, cwd: dir })) {
+      plugins.push("file://" + item)
+    }
+    return plugins
+  }
 
   export const McpLocal = z
     .object({
@@ -653,10 +701,10 @@ export namespace Config {
       }
       const data = parsed.data
       if (data.plugin) {
-        for (let i = 0; i < data.plugin?.length; i++) {
+        for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
           try {
-            data.plugin[i] = import.meta.resolve(plugin, configFilepath)
+            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
           } catch (err) {}
         }
       }
@@ -673,6 +721,15 @@ export namespace Config {
     }),
   )
 
+  export const ConfigDirectoryTypoError = NamedError.create(
+    "ConfigDirectoryTypoError",
+    z.object({
+      path: z.string(),
+      dir: z.string(),
+      suggestion: z.string(),
+    }),
+  )
+
   export const InvalidError = NamedError.create(
     "ConfigInvalidError",
     z.object({
@@ -684,6 +741,13 @@ export namespace Config {
 
   export async function get() {
     return state().then((x) => x.config)
+  }
+
+  export async function update(config: Info) {
+    const filepath = path.join(Instance.directory, "config.json")
+    const existing = await loadFile(filepath)
+    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    await Instance.dispose()
   }
 
   export async function directories() {

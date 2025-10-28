@@ -92,31 +92,68 @@ export namespace ProviderTransform {
     }
 
     if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      result["reasoningEffort"] = "medium"
+      if (!modelID.includes("codex") && !modelID.includes("gpt-5-pro")) {
+        result["reasoningEffort"] = "medium"
+      }
+
       if (providerID !== "azure") {
         result["textVerbosity"] = modelID.includes("codex") ? "medium" : "low"
       }
+
       if (providerID === "opencode") {
         result["promptCacheKey"] = sessionID
-        // result["include"] = ["reasoning.encrypted_content"]
-        // result["reasoningSummary"] = "auto"
+        result["include"] = ["reasoning.encrypted_content"]
+        result["reasoningSummary"] = "auto"
       }
     }
     return result
   }
 
-  export function maxOutputTokens(providerID: string, outputLimit: number, options: Record<string, any>): number {
-    if (providerID === "anthropic") {
-      const thinking = options["thinking"]
-      if (typeof thinking === "object" && thinking !== null) {
-        const type = thinking["type"]
-        const budgetTokens = thinking["budgetTokens"]
-        if (type === "enabled" && typeof budgetTokens === "number" && budgetTokens > 0) {
-          return outputLimit - budgetTokens
+  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
+    switch (npm) {
+      case "@ai-sdk/openai":
+      case "@ai-sdk/azure":
+        return {
+          ["openai" as string]: options,
         }
+      case "@ai-sdk/amazon-bedrock":
+        return {
+          ["bedrock" as string]: options,
+        }
+      case "@ai-sdk/anthropic":
+        return {
+          ["anthropic" as string]: options,
+        }
+      default:
+        return {
+          [providerID]: options,
+        }
+    }
+  }
+
+  export function maxOutputTokens(
+    providerID: string,
+    options: Record<string, any>,
+    modelLimit: number,
+    globalLimit: number,
+  ): number {
+    const modelCap = modelLimit || globalLimit
+    const standardLimit = Math.min(modelCap, globalLimit)
+
+    if (providerID === "anthropic") {
+      const thinking = options?.["thinking"]
+      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+      const enabled = thinking?.["type"] === "enabled"
+      if (enabled && budgetTokens > 0) {
+        // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
+        if (budgetTokens + standardLimit <= modelCap) {
+          return standardLimit
+        }
+        return modelCap - budgetTokens
       }
     }
-    return outputLimit
+
+    return standardLimit
   }
 
   export function schema(_providerID: string, _modelID: string, schema: JSONSchema.BaseSchema) {

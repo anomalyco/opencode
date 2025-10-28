@@ -15,6 +15,7 @@ export function useAuthSession() {
   return useSession<AuthSession>({
     password: "0".repeat(32),
     name: "auth",
+    maxAge: 60 * 60 * 24 * 365,
     cookie: {
       secure: false,
       httpOnly: true,

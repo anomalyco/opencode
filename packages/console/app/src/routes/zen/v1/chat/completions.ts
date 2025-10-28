@@ -47,11 +47,17 @@ export function POST(input: APIEvent) {
       usage = json.usage
     },
     getStreamUsage: () => usage,
-    normalizeUsage: (usage: Usage) => ({
-      inputTokens: usage.prompt_tokens ?? 0,
-      outputTokens: usage.completion_tokens ?? 0,
-      reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
-      cacheReadTokens: usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined,
-    }),
+    normalizeUsage: (usage: Usage) => {
+      const inputTokens = usage.prompt_tokens ?? 0
+      const outputTokens = usage.completion_tokens ?? 0
+      const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
+      const cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+      return {
+        inputTokens: inputTokens - (cacheReadTokens ?? 0),
+        outputTokens: outputTokens - (reasoningTokens ?? 0),
+        reasoningTokens,
+        cacheReadTokens,
+      }
+    },
   })
 }

@@ -4,10 +4,10 @@ import { BillingTable, PaymentTable, UsageTable } from "./schema/billing.sql"
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { User } from "./user"
-import { Resource } from "@opencode/console-resource"
+import { Resource } from "@opencode-ai/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
+import { User } from "./user"
 
 export namespace Billing {
   export const CHARGE_NAME = "opencode credits"
@@ -18,6 +18,7 @@ export namespace Billing {
   export const stripe = () =>
     new Stripe(Resource.STRIPE_SECRET_KEY.value, {
       apiVersion: "2025-03-31.basil",
+      httpClient: Stripe.createFetchHttpClient(),
     })
 
   export const get = async () => {
@@ -26,6 +27,7 @@ export namespace Billing {
         .select({
           customerID: BillingTable.customerID,
           paymentMethodID: BillingTable.paymentMethodID,
+          paymentMethodType: BillingTable.paymentMethodType,
           paymentMethodLast4: BillingTable.paymentMethodLast4,
           balance: BillingTable.balance,
           reload: BillingTable.reload,
@@ -168,10 +170,10 @@ export namespace Billing {
       cancelUrl: z.string(),
     }),
     async (input) => {
-      const account = Actor.assert("user")
+      const user = Actor.assert("user")
       const { successUrl, cancelUrl } = input
 
-      const user = await User.fromID(account.properties.userID)
+      const email = await User.getAuthEmail(user.properties.userID)
       const customer = await Billing.get()
       const session = await Billing.stripe().checkout.sessions.create({
         mode: "payment",
@@ -201,14 +203,14 @@ export namespace Billing {
         ...(customer.customerID
           ? {
               customer: customer.customerID,
+              customer_update: {
+                name: "auto",
+              },
             }
           : {
-              customer_email: user.email,
+              customer_email: email!,
               customer_creation: "always",
             }),
-        metadata: {
-          workspaceID: Actor.workspace(),
-        },
         currency: "usd",
         invoice_creation: {
           enabled: true,
@@ -219,6 +221,12 @@ export namespace Billing {
         payment_method_types: ["card"],
         payment_method_data: {
           allow_redisplay: "always",
+        },
+        tax_id_collection: {
+          enabled: true,
+        },
+        metadata: {
+          workspaceID: Actor.workspace(),
         },
         success_url: successUrl,
         cancel_url: cancelUrl,

@@ -4,6 +4,8 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "react",
     "types": ["@cloudflare/workers-types", "node"]
   }
 }

@@ -224,7 +224,7 @@ func (d *decoderBuilder) newUnionDecoder(t reflect.Type) decoderFunc {
 			}
 
 			if len(unionEntry.discriminatorKey) != 0 {
-				discriminatorValue := n.Get(unionEntry.discriminatorKey).Value()
+				discriminatorValue := n.Get(EscapeSJSONKey(unionEntry.discriminatorKey)).Value()
 				if discriminatorValue == variant.DiscriminatorValue {
 					inner := reflect.New(variant.Type).Elem()
 					err := decoder(n, inner, state)
