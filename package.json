@@ -6,7 +6,7 @@
   "packageManager": "bun@1.3.0",
   "scripts": {
     "dev": "bun run packages/opencode/src/index.ts",
-"typecheck": "bun turbo typecheck --filter=@opencode-ai/sdk",
+"typecheck": "bun turbo typecheck",
     "prepare": "husky"
   },
   "workspaces": {
