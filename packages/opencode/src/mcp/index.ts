@@ -161,6 +161,7 @@ export namespace MCP {
         }
         if (state.clients[key]) {
           result[key] = "connected"
+          continue
         }
         result[key] = "failed"
       }
