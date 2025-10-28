@@ -582,7 +582,17 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const result = await execute(args, opts)
+        const result = await execute(args, opts).catch((err) => {
+          log.error("Error executing tool", { error: err, tool: key })
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to execute tool: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+          }
+        })
 
         await Plugin.trigger(
           "tool.execute.after",
