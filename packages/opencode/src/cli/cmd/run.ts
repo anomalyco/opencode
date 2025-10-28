@@ -78,6 +78,11 @@ export const RunCommand = cmd({
         array: true,
         describe: "file(s) to attach to message",
       })
+      .option("provider-options", {
+        type: "string",
+        describe:
+          'JSON object with provider-specific options, passed to the AI SDK. Example: \'{"reasoningEffort": "high"}\'. See https://ai-sdk.dev/providers',
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -116,6 +121,26 @@ export const RunCommand = cmd({
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
       process.exit(1)
+    }
+
+    // Parse and validate custom options
+    let customProviderOptions: Record<string, unknown> | undefined
+    if (args.providerOptions) {
+      try {
+        customProviderOptions = JSON.parse(args.providerOptions)
+        if (
+          typeof customProviderOptions !== "object" ||
+          customProviderOptions === null ||
+          Array.isArray(customProviderOptions)
+        ) {
+          UI.error("--provider-options must be a JSON object")
+          process.exit(1)
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        UI.error(`Invalid JSON in --provider-options: ${msg}`)
+        process.exit(1)
+      }
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -268,6 +293,7 @@ export const RunCommand = cmd({
             model: providerID + "/" + modelID,
             command: args.command,
             arguments: message,
+            providerOptions: customProviderOptions,
           })
         }
         return await SessionPrompt.prompt({
@@ -286,6 +312,7 @@ export const RunCommand = cmd({
               text: message,
             },
           ],
+          providerOptions: customProviderOptions,
         })
       })()
       if (errorMsg) process.exit(1)
