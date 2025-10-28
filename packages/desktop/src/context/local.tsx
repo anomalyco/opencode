@@ -429,13 +429,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .sort((a, b) => b.id.localeCompare(a.id)),
       )
 
-      const working = createMemo(() => {
-        const last = messages()[messages().length - 1]
-        if (!last) return false
-        if (last.role === "user") return true
-        return !last.time.completed
-      })
-
       const cost = createMemo(() => {
         const total = pipe(
           messages(),
@@ -487,6 +480,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const getMessageText = (message: Message | Message[] | undefined): string => {
         if (!message) return ""
         if (Array.isArray(message)) return message.map((m) => getMessageText(m)).join(" ")
+        const fileParts = sync.data.part[message.id]?.filter((p) => p.type === "file")
+        console.log(fileParts)
+
         return sync.data.part[message.id]
           ?.filter((p) => p.type === "text")
           ?.filter((p) => !p.synthetic)
@@ -506,7 +502,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         messages,
         messagesWithValidParts,
         userMessages,
-        working,
+        // working,
         getMessageText,
         setActive(sessionId: string | undefined) {
           setStore("active", sessionId)

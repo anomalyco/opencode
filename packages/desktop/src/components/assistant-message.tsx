@@ -17,8 +17,15 @@ import type { WriteTool } from "opencode/tool/write"
 import type { TodoWriteTool } from "opencode/tool/todo"
 import { DiffChanges } from "./diff-changes"
 
-export function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
-  const filteredParts = createMemo(() => props.parts?.filter((x) => x.type !== "tool" || x.tool !== "todoread"))
+export function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; lastToolOnly?: boolean }) {
+  const filteredParts = createMemo(() => {
+    let tool = false
+    return props.parts?.filter((x) => {
+      if (x.type === "tool" && props.lastToolOnly && tool) return false
+      if (x.type === "tool") tool = true
+      return x.type !== "tool" || x.tool !== "todoread"
+    })
+  })
   return (
     <div class="w-full flex flex-col items-start gap-4">
       <For each={filteredParts()}>
@@ -71,17 +78,14 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     // const permission = permissions[permissionIndex]
 
     return (
-      <>
-        <Dynamic
-          component={render}
-          input={input}
-          tool={props.part.tool}
-          metadata={metadata}
-          // permission={permission?.metadata ?? {}}
-          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-        />
-        {/* <Show when={props.part.state.status === "error"}>{props.part.state.error.replace("Error: ", "")}</Show> */}
-      </>
+      <Dynamic
+        component={render}
+        input={input}
+        tool={props.part.tool}
+        metadata={metadata}
+        // permission={permission?.metadata ?? {}}
+        output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+      />
     )
   })
 
@@ -166,6 +170,9 @@ function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX
         <Collapsible.Content>{props.children}</Collapsible.Content>
       </Show>
     </Collapsible>
+    // <>
+    //   <Show when={props.part.state.status === "error"}>{props.part.state.error.replace("Error: ", "")}</Show>
+    // </>
   )
 }
 

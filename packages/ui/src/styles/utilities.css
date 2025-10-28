@@ -48,6 +48,35 @@
   border-width: 0;
 }
 
+.scroller {
+  --fade-height: 1.5rem;
+
+  --mask-top: linear-gradient(to bottom, transparent, black var(--fade-height));
+  --mask-bottom: linear-gradient(to top, transparent, black var(--fade-height));
+
+  mask-image: var(--mask-top), var(--mask-bottom);
+  mask-repeat: no-repeat;
+
+  mask-size: 100% var(--fade-height);
+
+  animation: adjust-masks linear;
+  animation-timeline: scroll(self);
+}
+
+@keyframes adjust-masks {
+  from {
+    mask-position:
+      0 calc(0% - var(--fade-height)),
+      0 100%;
+  }
+
+  to {
+    mask-position:
+      0 0,
+      0 calc(100% + var(--fade-height));
+  }
+}
+
 .truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;
