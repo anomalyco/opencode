@@ -28,9 +28,10 @@ func NewDecoder(res *http.Response) Decoder {
 	if t, ok := decoderTypes[contentType]; ok {
 		decoder = t(res.Body)
 	} else {
-		scn := bufio.NewScanner(res.Body)
-		scn.Buffer(nil, bufio.MaxScanTokenSize<<9)
-		decoder = &eventStreamDecoder{rc: res.Body, scn: scn}
+		// Use a large buffer (1MB) for efficient SSE streaming without hard size limits
+		// This is smaller than the old scanner buffer (32MB) but still provides good performance
+		reader := bufio.NewReaderSize(res.Body, 1024*1024)
+		decoder = &eventStreamDecoder{rc: res.Body, reader: reader}
 	}
 	return decoder
 }
@@ -48,10 +49,10 @@ type Event struct {
 
 // A base implementation of a Decoder for text/event-stream.
 type eventStreamDecoder struct {
-	evt Event
-	rc  io.ReadCloser
-	scn *bufio.Scanner
-	err error
+	evt    Event
+	rc     io.ReadCloser
+	reader *bufio.Reader
+	err    error
 }
 
 func (s *eventStreamDecoder) Next() bool {
@@ -62,11 +63,25 @@ func (s *eventStreamDecoder) Next() bool {
 	event := ""
 	data := bytes.NewBuffer(nil)
 
-	for s.scn.Scan() {
-		txt := s.scn.Bytes()
+	for {
+		line, err := s.reader.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				// Check if we have a partial event without trailing newline
+				if len(line) > 0 {
+					s.err = io.ErrUnexpectedEOF
+				}
+			} else {
+				s.err = err
+			}
+			return false
+		}
+
+		// Remove trailing newline characters
+		line = bytes.TrimRight(line, "\r\n")
 
 		// Dispatch event on an empty line
-		if len(txt) == 0 {
+		if len(line) == 0 {
 			s.evt = Event{
 				Type: event,
 				Data: data.Bytes(),
@@ -75,7 +90,7 @@ func (s *eventStreamDecoder) Next() bool {
 		}
 
 		// Split a string like "event: bar" into name="event" and value=" bar".
-		name, value, _ := bytes.Cut(txt, []byte(":"))
+		name, value, _ := bytes.Cut(line, []byte(":"))
 
 		// Consume an optional space after the colon if it exists.
 		if len(value) > 0 && value[0] == ' ' {
@@ -91,20 +106,14 @@ func (s *eventStreamDecoder) Next() bool {
 		case "data":
 			_, s.err = data.Write(value)
 			if s.err != nil {
-				break
+				return false
 			}
 			_, s.err = data.WriteRune('\n')
 			if s.err != nil {
-				break
+				return false
 			}
 		}
 	}
-
-	if s.scn.Err() != nil {
-		s.err = s.scn.Err()
-	}
-
-	return false
 }
 
 func (s *eventStreamDecoder) Event() Event {
