@@ -314,16 +314,6 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
 
-      if (provider.whitelist || provider.blacklist) {
-        parsed.models = Object.fromEntries(
-          Object.entries(parsed.models).filter(
-            ([modelID]) =>
-              (!provider.blacklist || !provider.blacklist.includes(modelID)) &&
-              (!provider.whitelist || provider.whitelist.includes(modelID)),
-          ),
-        )
-      }
-
       database[providerID] = parsed
     }
 
@@ -375,6 +365,7 @@ export namespace Provider {
     }
 
     for (const [providerID, provider] of Object.entries(providers)) {
+      const configProvider = config.provider?.[providerID]
       const filteredModels = Object.fromEntries(
         Object.entries(provider.info.models)
           // Filter out blacklisted models
@@ -386,7 +377,16 @@ export namespace Provider {
           .filter(
             ([, model]) =>
               (!model.experimental && model.status !== "alpha") || Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS,
-          ),
+          )
+          // Filter by provider's whitelist/blacklist from config
+          .filter(([modelID]) => {
+            if (!configProvider) return true
+
+            return (
+              (!configProvider.blacklist || !configProvider.blacklist.includes(modelID)) &&
+              (!configProvider.whitelist || configProvider.whitelist.includes(modelID))
+            )
+          }),
       )
       provider.info.models = filteredModels
 
