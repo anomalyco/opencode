@@ -4,7 +4,7 @@
   "version": "0.15.19",
   "type": "module",
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "build": "./script/build.ts"
   },
   "exports": {
