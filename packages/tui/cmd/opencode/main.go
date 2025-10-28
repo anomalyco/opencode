@@ -4,10 +4,12 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 	flag "github.com/spf13/pflag"
@@ -22,6 +24,78 @@ import (
 )
 
 var Version = "dev"
+
+// startEventStream starts the event streaming loop with reconnection logic
+func startEventStream(ctx context.Context, client *opencode.Client, program *tea.Program) {
+	const (
+		minBackoff = 1 * time.Second
+		maxBackoff = 30 * time.Second
+	)
+
+	attempt := 0
+	reconnected := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		stream := client.Event.ListStreaming(ctx, opencode.EventListParams{})
+		streamActive := false
+
+		for stream.Next() {
+			if !streamActive {
+				streamActive = true
+				// Notify UI that connection was restored after reconnection attempts
+				if reconnected {
+					program.Send(tui.ConnectionReconnectedMsg{Attempt: attempt})
+					reconnected = false
+				}
+				attempt = 0 // Reset attempt counter on successful stream
+			}
+			evt := stream.Current().AsUnion()
+			program.Send(evt)
+		}
+
+		if err := stream.Err(); err != nil {
+			slog.Error("Event stream error", "error", err, "attempt", attempt+1)
+		}
+
+		// If context is cancelled, exit
+		if ctx.Err() != nil {
+			return
+		}
+
+		// Calculate backoff with exponential increase
+		backoff := minBackoff
+		if streamActive {
+			// If stream was active and then dropped, use minimal backoff
+			backoff = minBackoff
+		} else {
+			// Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s, ...
+			backoff = time.Duration(math.Min(float64(minBackoff)*math.Pow(2, float64(attempt)), float64(maxBackoff)))
+		}
+
+		attempt++
+		reconnected = true
+
+		slog.Info("Reconnecting to event stream", "backoff_seconds", backoff.Seconds(), "attempt", attempt)
+
+		// Notify UI that we're trying to reconnect
+		program.Send(tui.ConnectionReconnectingMsg{
+			Attempt: attempt,
+			Backoff: backoff,
+		})
+
+		select {
+		case <-time.After(backoff):
+			// Continue to next iteration to reconnect
+		case <-ctx.Done():
+			return
+		}
+	}
+}
 
 func main() {
 	version := Version
@@ -135,17 +209,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 
-	go func() {
-		stream := httpClient.Event.ListStreaming(ctx, opencode.EventListParams{})
-		for stream.Next() {
-			evt := stream.Current().AsUnion()
-			program.Send(evt)
-		}
-		if err := stream.Err(); err != nil {
-			slog.Error("Error streaming events", "error", err)
-			program.Send(err)
-		}
-	}()
+	go startEventStream(ctx, httpClient, program)
 
 	go api.Start(ctx, program, httpClient)
 

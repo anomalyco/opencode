@@ -38,6 +38,17 @@ type InterruptDebounceTimeoutMsg struct{}
 // ExitDebounceTimeoutMsg is sent when the exit key debounce timeout expires
 type ExitDebounceTimeoutMsg struct{}
 
+// ConnectionReconnectingMsg is sent when the connection is being reconnected
+type ConnectionReconnectingMsg struct {
+	Attempt int
+	Backoff time.Duration
+}
+
+// ConnectionReconnectedMsg is sent when the connection is successfully reconnected
+type ConnectionReconnectedMsg struct {
+	Attempt int
+}
+
 // InterruptKeyState tracks the state of interrupt key presses for debouncing
 type InterruptKeyState int
 
@@ -393,6 +404,13 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return updated, cmd
 			}
 		}
+	case ConnectionReconnectingMsg:
+		return a, toast.NewInfoToast(fmt.Sprintf("Reconnecting to server (attempt %d)...", msg.Attempt))
+	case ConnectionReconnectedMsg:
+		if msg.Attempt > 1 {
+			return a, toast.NewSuccessToast(fmt.Sprintf("Reconnected to server after %d attempts", msg.Attempt))
+		}
+		return a, toast.NewSuccessToast("Reconnected to server")
 	case error:
 		return a, toast.NewErrorToast(msg.Error())
 	case app.SendPrompt:
