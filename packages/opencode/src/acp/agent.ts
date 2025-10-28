@@ -1,5 +1,4 @@
 import {
-  sessionModeSchema,
   type Agent as ACPAgent,
   type AgentSideConnection,
   type AuthenticateRequest,
