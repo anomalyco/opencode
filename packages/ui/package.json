@@ -12,7 +12,6 @@
   },
   "scripts": {
     "dev": "vite",
-    "typecheck": "tsgo --noEmit",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
