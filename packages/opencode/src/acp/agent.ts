@@ -1,17 +1,20 @@
-import type {
-  Agent as ACPAgent,
-  AgentSideConnection,
-  AuthenticateRequest,
-  CancelNotification,
-  InitializeRequest,
-  LoadSessionRequest,
-  NewSessionRequest,
-  PermissionOption,
-  PromptRequest,
-  SetSessionModelRequest,
-  SetSessionModeRequest,
-  SetSessionModeResponse,
-  ToolCallContent,
+import {
+  sessionModeSchema,
+  type Agent as ACPAgent,
+  type AgentSideConnection,
+  type AuthenticateRequest,
+  type CancelNotification,
+  type InitializeRequest,
+  type LoadSessionRequest,
+  type NewSessionRequest,
+  type PermissionOption,
+  type PlanEntry,
+  type PromptRequest,
+  type SetSessionModelRequest,
+  type SetSessionModeRequest,
+  type SetSessionModeResponse,
+  type ToolCallContent,
+  type ToolKind,
 } from "@agentclientprotocol/sdk"
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
@@ -31,21 +34,11 @@ import { Identifier } from "@/id/id"
 import { SessionCompaction } from "@/session/compaction"
 import type { Config } from "@/config/config"
 import { MCP } from "@/mcp"
+import { Todo } from "@/session/todo"
+import { z } from "zod"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
-
-  type ToolKind =
-    | "read"
-    | "edit"
-    | "delete"
-    | "move"
-    | "search"
-    | "execute"
-    | "think"
-    | "fetch"
-    | "switch_mode"
-    | "other"
 
   export class Agent implements ACPAgent {
     private sessionManager = new ACPSessionManager()
@@ -188,6 +181,33 @@ export namespace ACP {
                   oldText,
                   newText,
                 })
+              }
+
+              if (part.tool === "todowrite") {
+                const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
+                if (parsedTodos.success) {
+                  await this.connection
+                    .sessionUpdate({
+                      sessionId: acpSession.id,
+                      update: {
+                        sessionUpdate: "plan",
+                        entries: parsedTodos.data.map((todo) => {
+                          const status: PlanEntry["status"] =
+                            todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
+                          return {
+                            priority: "medium",
+                            status,
+                            content: todo.content,
+                          }
+                        }),
+                      },
+                    })
+                    .catch((err) => {
+                      log.error("failed to send session update for todo", { error: err })
+                    })
+                } else {
+                  log.error("failed to parse todo output", { error: parsedTodos.error })
+                }
               }
 
               await this.connection
