@@ -15,7 +15,7 @@ type Usage = {
 export const openaiHelper = {
   format: "openai",
   modifyUrl: (providerApi: string) => providerApi + "/responses",
-  modifyHeaders: (headers: Headers, apiKey: string) => {
+  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
   modifyBody: (body: Record<string, any>) => {

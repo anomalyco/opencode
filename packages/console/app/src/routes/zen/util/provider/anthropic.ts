@@ -17,9 +17,12 @@ type Usage = {
 export const anthropicHelper = {
   format: "anthropic",
   modifyUrl: (providerApi: string) => providerApi + "/messages",
-  modifyHeaders: (headers: Headers, apiKey: string) => {
+  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("x-api-key", apiKey)
     headers.set("anthropic-version", headers.get("anthropic-version") ?? "2023-06-01")
+    if (body.model.startsWith("claude-sonnet-")) {
+      headers.set("anthropic-beta", "context-1m-2025-08-07")
+    }
   },
   modifyBody: (body: Record<string, any>) => {
     return {

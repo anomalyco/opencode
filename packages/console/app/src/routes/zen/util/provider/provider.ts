@@ -28,7 +28,7 @@ import {
 export type ProviderHelper = {
   format: Format
   modifyUrl: (providerApi: string) => string
-  modifyHeaders: (headers: Headers, apiKey: string) => void
+  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
   createUsageParser: () => {
     parse: (chunk: string) => void

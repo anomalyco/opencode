@@ -67,7 +67,7 @@ export async function handler(
         const headers = input.request.headers
         headers.delete("host")
         headers.delete("content-length")
-        providerInfo.modifyHeaders(headers, providerInfo.apiKey)
+        providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
         Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
           headers.set(k, headers.get(v)!)
         })
