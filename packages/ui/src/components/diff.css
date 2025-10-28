@@ -1,0 +1,24 @@
+[data-component="diff"] {
+  [data-slot="diff-hunk-separator-line-number"] {
+    position: sticky;
+    left: 0;
+    background-color: hsla(209, 96%, 90%, 1);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    [data-slot="diff-hunk-separator-line-number-icon"] {
+      aspect-ratio: 1;
+      width: 24px;
+      height: 24px;
+    }
+  }
+  [data-slot="diff-hunk-separator-content"] {
+    position: sticky;
+    background-color: hsla(210, 100%, 96%, 1);
+    width: var(--pjs-column-content-width);
+    left: var(--pjs-column-number-width);
+    padding-left: 8px;
+  }
+}

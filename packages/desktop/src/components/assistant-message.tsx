@@ -394,7 +394,6 @@ ToolRegistry.register<typeof WriteTool>({
 ToolRegistry.register<typeof TodoWriteTool>({
   name: "todowrite",
   render(props) {
-    console.log(props.input.todos)
     return (
       <BasicTool
         icon="checklist"

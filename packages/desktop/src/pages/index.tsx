@@ -1,4 +1,4 @@
-import { Button, List, SelectDialog, Tooltip, IconButton, Tabs, Icon, Accordion } from "@opencode-ai/ui"
+import { Button, List, SelectDialog, Tooltip, IconButton, Tabs, Icon, Accordion, Diff } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
 import { For, onCleanup, onMount, Show, Match, Switch, createSignal, createEffect, createMemo } from "solid-js"
@@ -21,7 +21,6 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Diff } from "@/components/diff"
 import { ProgressCircle } from "@/components/progress-circle"
 import { AssistantMessage } from "@/components/assistant-message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
@@ -655,7 +654,7 @@ export default function Page() {
                             </ul>
                           </Show>
                           <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
-                            <div class="flex flex-col items-start gap-50 pb-[800px]">
+                            <div class="flex flex-col items-start gap-50 pb-50">
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const title = createMemo(() => message.summary?.title)
