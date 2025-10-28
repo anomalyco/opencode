@@ -2,7 +2,7 @@ import { Log } from "../util/log"
 import { LSPClient } from "./client"
 import path from "path"
 import { LSPServer } from "./server"
-import z from "zod/v4"
+import z from "zod"
 import { Config } from "../config/config"
 import { spawn } from "child_process"
 import { Instance } from "../project/instance"
@@ -113,7 +113,7 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext
+    const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
     for (const server of Object.values(s.servers)) {
       if (server.extensions.length && !server.extensions.includes(extension)) continue
@@ -166,6 +166,8 @@ export namespace LSP {
       const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
+    }).catch((err) => {
+      log.error("failed to touch file", { err, file: input })
     })
   }
 

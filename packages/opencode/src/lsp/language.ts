@@ -52,7 +52,8 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".m": "objective-c",
   ".mm": "objective-cpp",
   ".pl": "perl",
-  ".pm": "perl6",
+  ".pm": "perl",
+  ".pm6": "perl6",
   ".php": "php",
   ".ps1": "powershell",
   ".psm1": "powershell",
@@ -98,4 +99,5 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".vue": "vue",
   ".zig": "zig",
   ".zon": "zig",
+  ".astro": "astro",
 } as const

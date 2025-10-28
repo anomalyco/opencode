@@ -9,7 +9,6 @@ import { Installation } from "../../installation"
 import { Config } from "../../config/config"
 import { Bus } from "../../bus"
 import { Log } from "../../util/log"
-import { FileWatcher } from "../../file/watcher"
 import { Ide } from "../../ide"
 
 import { Flag } from "../../flag/flag"
@@ -157,9 +156,8 @@ export const TuiCommand = cmd({
         })
 
         ;(async () => {
-          if (Installation.isDev()) return
-          if (Installation.isSnapshot()) return
-          const config = await Config.global()
+          // if (Installation.isLocal()) return
+          const config = await Config.get()
           if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
           const latest = await Installation.latest().catch(() => {})
           if (!latest) return
@@ -178,7 +176,6 @@ export const TuiCommand = cmd({
             .then(() => Bus.publish(Ide.Event.Installed, { ide }))
             .catch(() => {})
         })()
-        FileWatcher.init()
 
         await proc.exited
         server.stop()
@@ -216,7 +213,7 @@ function getOpencodeCommand(): string[] {
 
   const execPath = process.execPath.toLowerCase()
 
-  if (Installation.isDev()) {
+  if (Installation.isLocal()) {
     // In development, use bun to run the TypeScript entry point
     return [execPath, "run", process.argv[1]]
   }

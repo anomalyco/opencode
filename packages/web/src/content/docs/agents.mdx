@@ -15,7 +15,7 @@ You can switch between agents during a session or invoke them with the `@` menti
 
 ## Types
 
-There are two types of agents in opencode; primary agents and subagents.
+There are two types of agents in OpenCode; primary agents and subagents.
 
 ---
 
@@ -27,7 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-opencode comes with two built-in primary agents, **Build** and **Plan**. We'll
+OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
 look at these below.
 
 ---
@@ -36,13 +36,13 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-opencode comes with one built-in subagent, **General**. We'll look at this below.
+OpenCode comes with one built-in subagent, **General**. We'll look at this below.
 
 ---
 
 ## Built-in
 
-opencode comes with two built-in primary agents and one built-in subagent.
+OpenCode comes with two built-in primary agents and one built-in subagent.
 
 ---
 
@@ -245,7 +245,7 @@ Temperature values typically range from 0.0 to 1.0:
 }
 ```
 
-If no temperature is specified, opencode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
+If no temperature is specified, OpenCode uses model-specific defaults; typically 0 for most models, 0.55 for Qwen models.
 
 ---
 
@@ -279,7 +279,7 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 }
 ```
 
-This path is relative to where the config file is located. So this works for both the global opencode config and the project specific config.
+This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
 
 ---
 
@@ -303,27 +303,33 @@ Use the `model` config to override the default model for this agent. Useful for 
 
 Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
 
-```json title="opencode.json"
+```json title="opencode.json" {3-6,9-12}
 {
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
   "agent": {
-    "readonly": {
+    "plan": {
       "tools": {
         "write": false,
-        "edit": false,
-        "bash": false,
-        "read": true,
-        "grep": true,
-        "glob": true
+        "bash": false
       }
     }
   }
 }
 ```
 
+:::note
+The agent-specific config overrides the global config.
+:::
+
 You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
 
 ```json title="opencode.json"
 {
+  "$schema": "https://opencode.ai/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -336,68 +342,39 @@ You can also use wildcards to control multiple tools at once. For example, to di
 }
 ```
 
-If no tools are specified, all tools are enabled by default.
-
----
-
-#### Available tools
-
-Here are all the tools can be controlled through the agent config.
-
-| Tool        | Description             |
-| ----------- | ----------------------- |
-| `bash`      | Execute shell commands  |
-| `edit`      | Modify existing files   |
-| `write`     | Create new files        |
-| `read`      | Read file contents      |
-| `grep`      | Search file contents    |
-| `glob`      | Find files by pattern   |
-| `list`      | List directory contents |
-| `patch`     | Apply patches to files  |
-| `todowrite` | Manage todo lists       |
-| `todoread`  | Read todo lists         |
-| `webfetch`  | Fetch web content       |
+[Learn more about tools](/docs/tools).
 
 ---
 
 ### Permissions
 
-Permissions control what actions an agent can take.
+You can configure permissions to manage what actions an agent can take. Currently, the permissions for the `edit`, `bash`, and `webfetch` tools can be configured to:
 
-- edit, bash, webfetch
-
-Each permission can be set to allow, ask, or deny.
-
-- allow, ask, deny
-
-Configure permissions globally in opencode.json.
+- `"ask"` — Prompt for approval before running the tool
+- `"allow"` — Allow all operations without approval
+- `"deny"` — Disable the tool
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "edit": "ask",
-    "bash": "allow",
-    "webfetch": "deny"
+    "edit": "deny"
   }
 }
 ```
 
-You can override permissions per agent in JSON.
+You can override these permissions per agent.
 
-```json title="opencode.json" {7-18}
+```json title="opencode.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
   "agent": {
     "build": {
       "permission": {
-        "edit": "allow",
-        "bash": {
-          "*": "allow",
-          "git push": "ask",
-          "terraform *": "deny"
-        },
-        "webfetch": "ask"
+        "edit": "ask"
       }
     }
   }
@@ -412,90 +389,70 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  bash: ask
+  bash:
+    "git diff": allow
+    "git log*": allow
+    "*": ask
   webfetch: deny
 ---
 
 Only analyze code and suggest changes.
 ```
 
-Bash permissions support granular patterns for fine-grained control.
+You can set permissions for specific bash commands.
 
-```json title="Allow most, ask for risky, deny terraform"
+```json title="opencode.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": {
-      "*": "allow",
-      "git push": "ask",
-      "terraform *": "deny"
-    }
-  }
-}
-```
-
-If you provide a granular bash map, the default becomes ask unless you set \* explicitly.
-
-```json title="Granular defaults to ask"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": {
-      "git status": "allow"
-    }
-  }
-}
-```
-
-Agent-level permissions merge over global settings.
-
-- Global sets defaults; agent overrides when specified
-
-Specific bash rules can override a global default.
-
-```json title="Global ask, agent allows safe commands"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": { "bash": "ask" },
   "agent": {
     "build": {
       "permission": {
-        "bash": { "git status": "allow", "*": "ask" }
+        "bash": {
+          "git push": "ask"
+        }
       }
     }
   }
 }
 ```
 
-Permissions affect tool availability and prompts differently.
+This can take a glob pattern.
 
-- deny hides tools (edit also hides write/patch); ask prompts; allow runs
-
-For quick reference, here are common setups.
-
-```json title="Read-only reviewer"
+```json title="opencode.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
-    "review": {
-      "permission": { "edit": "deny", "bash": "deny", "webfetch": "allow" }
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
     }
   }
 }
 ```
 
-```json title="Planning agent that can browse but cannot change code"
+And you can also use the `*` wildcard to manage permissions for all commands.
+Where the specific rule can override the `*` wildcard.
+
+```json title="opencode.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
-    "plan": {
-      "permission": { "edit": "deny", "bash": "deny", "webfetch": "ask" }
+    "build": {
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "*": "ask"
+        }
+      }
     }
   }
 }
 ```
 
-See the full [permissions guide](/docs/permissions) for more patterns.
+[Learn more about permissions](/docs/permissions).
 
 ---
 

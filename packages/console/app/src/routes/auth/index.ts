@@ -1,12 +1,11 @@
-import { Account } from "@opencode/console-core/account.js"
 import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
-import { withActor } from "~/context/auth.withActor"
+import { getLastSeenWorkspaceID } from "../workspace/common"
 
 export async function GET(input: APIEvent) {
   try {
-    const workspaces = await withActor(async () => Account.workspaces())
-    return redirect(`/workspace/${workspaces[0].id}`)
+    const workspaceID = await getLastSeenWorkspaceID()
+    return redirect(`/workspace/${workspaceID}`)
   } catch {
     return redirect("/auth/authorize")
   }

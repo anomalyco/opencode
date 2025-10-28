@@ -4,9 +4,12 @@ import { z } from "zod"
 export namespace Identifier {
   const prefixes = {
     account: "acc",
+    auth: "aut",
     billing: "bil",
     key: "key",
+    model: "mod",
     payment: "pay",
+    provider: "prv",
     usage: "usg",
     user: "usr",
     workspace: "wrk",

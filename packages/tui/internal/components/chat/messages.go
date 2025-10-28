@@ -664,7 +664,7 @@ func (m *messagesComponent) renderView() tea.Cmd {
 					error = err.Data.Message
 				}
 
-				if !hasContent && error == "" && !reverted {
+				if !hasContent && error == "" && !reverted && casted.Time.Completed == 0 {
 					content = renderText(
 						m.app,
 						message.Info,

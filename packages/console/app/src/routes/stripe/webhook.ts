@@ -1,11 +1,11 @@
-import { Billing } from "@opencode/console-core/billing.js"
+import { Billing } from "@opencode-ai/console-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, sql } from "@opencode/console-core/drizzle/index.js"
-import { BillingTable, PaymentTable } from "@opencode/console-core/schema/billing.sql.js"
-import { Identifier } from "@opencode/console-core/identifier.js"
-import { centsToMicroCents } from "@opencode/console-core/util/price.js"
-import { Actor } from "@opencode/console-core/actor.js"
-import { Resource } from "@opencode/console-resource"
+import { and, Database, eq, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { BillingTable, PaymentTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
+import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Resource } from "@opencode-ai/console-resource"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -32,7 +32,8 @@ export async function POST(input: APIEvent) {
         .update(BillingTable)
         .set({
           paymentMethodID,
-          paymentMethodLast4: paymentMethod.card!.last4,
+          paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+          paymentMethodType: paymentMethod.type,
         })
         .where(eq(BillingTable.customerID, customerID))
     })
@@ -41,12 +42,14 @@ export async function POST(input: APIEvent) {
     const workspaceID = body.data.object.metadata?.workspaceID
     const customerID = body.data.object.customer as string
     const paymentID = body.data.object.payment_intent as string
+    const invoiceID = body.data.object.invoice as string
     const amount = body.data.object.amount_total
 
     if (!workspaceID) throw new Error("Workspace ID not found")
     if (!customerID) throw new Error("Customer ID not found")
     if (!amount) throw new Error("Amount not found")
     if (!paymentID) throw new Error("Payment ID not found")
+    if (!invoiceID) throw new Error("Invoice ID not found")
 
     await Actor.provide("system", { workspaceID }, async () => {
       const customer = await Billing.get()
@@ -75,7 +78,8 @@ export async function POST(input: APIEvent) {
             balance: sql`${BillingTable.balance} + ${centsToMicroCents(Billing.CHARGE_AMOUNT)}`,
             customerID,
             paymentMethodID: paymentMethod.id,
-            paymentMethodLast4: paymentMethod.card!.last4,
+            paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+            paymentMethodType: paymentMethod.type,
             reload: true,
             reloadError: null,
             timeReloadError: null,
@@ -86,6 +90,7 @@ export async function POST(input: APIEvent) {
           id: Identifier.create("payment"),
           amount: centsToMicroCents(Billing.CHARGE_AMOUNT),
           paymentID,
+          invoiceID,
           customerID,
         })
       })

@@ -1,9 +1,10 @@
-import z from "zod/v4"
+import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
+import { Flag } from "@/flag/flag"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -31,6 +32,7 @@ export namespace Project {
       const project: Info = {
         id: "global",
         worktree: "/",
+        vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
         time: {
           created: Date.now(),
         },
@@ -62,14 +64,12 @@ export namespace Project {
       await Storage.write<Info>(["project", "global"], project)
       return project
     }
-    worktree = path.dirname(
-      await $`git rev-parse --path-format=absolute --git-common-dir`
-        .quiet()
-        .nothrow()
-        .cwd(worktree)
-        .text()
-        .then((x) => x.trim()),
-    )
+    worktree = await $`git rev-parse --path-format=absolute --show-toplevel`
+      .quiet()
+      .nothrow()
+      .cwd(worktree)
+      .text()
+      .then((x) => x.trim())
     const project: Info = {
       id,
       worktree,

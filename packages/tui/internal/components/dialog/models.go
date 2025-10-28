@@ -303,7 +303,8 @@ func (m *modelDialog) buildSearchResults(query string) []list.Item {
 	for _, match := range matches {
 		model := modelMap[match.Target]
 		// Create a unique key to avoid duplicates
-		key := fmt.Sprintf("%s:%s", model.Provider.ID, model.Model.ID)
+		// Include name to handle custom models with same ID but different names
+		key := fmt.Sprintf("%s:%s:%s", model.Provider.ID, model.Model.ID, model.Model.Name)
 		if seenModels[key] {
 			continue
 		}

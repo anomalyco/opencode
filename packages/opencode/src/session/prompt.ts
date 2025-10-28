@@ -1,7 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -9,7 +9,6 @@ import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import { Config } from "../config/config"
 import {
   generateText,
   streamText,
@@ -18,16 +17,17 @@ import {
   tool,
   wrapLanguageModel,
   type StreamTextResult,
-  LoadAPIKeyError,
   stepCountIs,
   jsonSchema,
 } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionLock } from "./lock"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
+import { SessionRetry } from "./retry"
 
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -44,15 +44,17 @@ import { TaskTool } from "../tool/task"
 import { FileTime } from "../file/time"
 import { Permission } from "../permission"
 import { Snapshot } from "../snapshot"
-import { NamedError } from "../util/error"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
+import { $, fileURLToPath } from "bun"
+import { ConfigMarkdown } from "../config/markdown"
+import { SessionSummary } from "./summary"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
+  const MAX_RETRIES = 10
 
   export const Event = {
     Idle: Bus.event(
@@ -65,7 +67,6 @@ export namespace SessionPrompt {
 
   const state = Instance.state(
     () => {
-      const pending = new Map<string, AbortController>()
       const queued = new Map<
         string,
         {
@@ -75,14 +76,11 @@ export namespace SessionPrompt {
       >()
 
       return {
-        pending,
         queued,
       }
     },
-    async (state) => {
-      for (const [_, controller] of state.pending) {
-        controller.abort()
-      }
+    async (current) => {
+      current.queued.clear()
     },
   )
 
@@ -96,6 +94,7 @@ export namespace SessionPrompt {
       })
       .optional(),
     agent: z.string().optional(),
+    noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     parts: z.array(
@@ -144,6 +143,11 @@ export namespace SessionPrompt {
     const userMsg = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
+    // Early return for context-only messages (no AI inference)
+    if (input.noReply) {
+      return userMsg
+    }
+
     if (isBusy(input.sessionID)) {
       return new Promise((resolve) => {
         const queue = state().queued.get(input.sessionID) ?? []
@@ -159,7 +163,7 @@ export namespace SessionPrompt {
       agent,
       model: input.model,
     }).then((x) => Provider.getModel(x.providerID, x.modelID))
-    const outputLimit = Math.min(model.info.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+
     using abort = lock(input.sessionID)
 
     const system = await resolveSystemPrompt({
@@ -214,10 +218,13 @@ export namespace SessionPrompt {
           sessionID: input.sessionID,
           model: model.info,
           providerID: model.providerID,
+          signal: abort.signal,
         }),
         (messages) => insertReminders({ messages, agent }),
       )
-      if (step === 0)
+      step++
+      await processor.next(msgs.findLast((m) => m.info.role === "user")?.info.id!)
+      if (step === 1) {
         ensureTitle({
           session,
           history: msgs,
@@ -225,96 +232,153 @@ export namespace SessionPrompt {
           providerID: model.providerID,
           modelID: model.info.id,
         })
-      step++
-      await processor.next()
+        SessionSummary.summarize({
+          sessionID: input.sessionID,
+          messageID: userMsg.info.id,
+        })
+      }
       await using _ = defer(async () => {
         await processor.end()
       })
-      const cfg = await Config.get()
-      const stream = streamText({
-        onError(error) {
-          log.error("stream error", {
-            error,
-          })
-        },
-        async experimental_repairToolCall(input) {
-          const lower = input.toolCall.toolName.toLowerCase()
-          if (lower !== input.toolCall.toolName && tools[lower]) {
-            log.info("repairing tool call", {
-              tool: input.toolCall.toolName,
-              repaired: lower,
+      const doStream = () =>
+        streamText({
+          onError(error) {
+            log.error("stream error", {
+              error,
             })
+          },
+          async experimental_repairToolCall(input) {
+            const lower = input.toolCall.toolName.toLowerCase()
+            if (lower !== input.toolCall.toolName && tools[lower]) {
+              log.info("repairing tool call", {
+                tool: input.toolCall.toolName,
+                repaired: lower,
+              })
+              return {
+                ...input.toolCall,
+                toolName: lower,
+              }
+            }
             return {
               ...input.toolCall,
-              toolName: lower,
+              input: JSON.stringify({
+                tool: input.toolCall.toolName,
+                error: input.error.message,
+              }),
+              toolName: "invalid",
             }
-          }
-          return {
-            ...input.toolCall,
-            input: JSON.stringify({
-              tool: input.toolCall.toolName,
-              error: input.error.message,
-            }),
-            toolName: "invalid",
-          }
-        },
-        headers:
-          model.providerID === "opencode"
-            ? {
-                "x-opencode-session": input.sessionID,
-                "x-opencode-request": userMsg.info.id,
-              }
-            : undefined,
-        maxRetries: cfg.experimental?.chatMaxRetries ?? 10,
-        activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(model.providerID, outputLimit, params.options),
-        abortSignal: abort.signal,
-        providerOptions: {
-          [model.npm === "@ai-sdk/openai" ? "openai" : model.providerID]: params.options,
-        },
-        stopWhen: stepCountIs(1),
-        temperature: params.temperature,
-        topP: params.topP,
-        messages: [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...MessageV2.toModelMessage(
-            msgs.filter((m) => {
-              if (m.info.role !== "assistant" || m.info.error === undefined) {
-                return true
-              }
-              if (
-                MessageV2.AbortedError.isInstance(m.info.error) &&
-                m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-              ) {
-                return true
-              }
-
-              return false
-            }),
-          ),
-        ],
-        tools: model.info.tool_call === false ? undefined : tools,
-        model: wrapLanguageModel({
-          model: model.language,
-          middleware: [
-            {
-              async transformParams(args) {
-                if (args.type === "stream") {
-                  // @ts-expect-error
-                  args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+          },
+          headers:
+            model.providerID === "opencode"
+              ? {
+                  "x-opencode-session": input.sessionID,
+                  "x-opencode-request": userMsg.info.id,
                 }
-                return args.params
-              },
-            },
+              : undefined,
+          // set to 0, we handle loop
+          maxRetries: 0,
+          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+          maxOutputTokens: ProviderTransform.maxOutputTokens(
+            model.providerID,
+            params.options,
+            model.info.limit.output,
+            OUTPUT_TOKEN_MAX,
+          ),
+          abortSignal: abort.signal,
+          providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
+          stopWhen: stepCountIs(1),
+          temperature: params.temperature,
+          topP: params.topP,
+          messages: [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...MessageV2.toModelMessage(
+              msgs.filter((m) => {
+                if (m.info.role !== "assistant" || m.info.error === undefined) {
+                  return true
+                }
+                if (
+                  MessageV2.AbortedError.isInstance(m.info.error) &&
+                  m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+                ) {
+                  return true
+                }
+
+                return false
+              }),
+            ),
           ],
-        }),
+          tools: model.info.tool_call === false ? undefined : tools,
+          model: wrapLanguageModel({
+            model: model.language,
+            middleware: [
+              {
+                async transformParams(args) {
+                  if (args.type === "stream") {
+                    // @ts-expect-error
+                    args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+                  }
+                  return args.params
+                },
+              },
+            ],
+          }),
+        })
+
+      let stream = doStream()
+      let result = await processor.process(stream, {
+        count: 0,
+        max: MAX_RETRIES,
       })
-      const result = await processor.process(stream)
+      if (result.shouldRetry) {
+        for (let retry = 1; retry < MAX_RETRIES; retry++) {
+          const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
+
+          if (lastRetryPart) {
+            const delayMs = SessionRetry.getRetryDelayInMs(lastRetryPart.error, retry)
+
+            log.info("retrying with backoff", {
+              attempt: retry,
+              delayMs,
+            })
+
+            const stop = await SessionRetry.sleep(delayMs, abort.signal)
+              .then(() => false)
+              .catch((error) => {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                  const err = new MessageV2.AbortedError(
+                    { message: error.message },
+                    {
+                      cause: error,
+                    },
+                  ).toObject()
+                  result.info.error = err
+                  Bus.publish(Session.Event.Error, {
+                    sessionID: result.info.sessionID,
+                    error: result.info.error,
+                  })
+                  return true
+                }
+                throw error
+              })
+
+            if (stop) break
+          }
+
+          stream = doStream()
+          result = await processor.process(stream, {
+            count: retry,
+            max: MAX_RETRIES,
+          })
+          if (!result.shouldRetry) {
+            break
+          }
+        }
+      }
       await processor.end()
 
       const queued = state().queued.get(input.sessionID) ?? []
@@ -338,8 +402,13 @@ export namespace SessionPrompt {
     }
   }
 
-  async function getMessages(input: { sessionID: string; model: ModelsDev.Model; providerID: string }) {
-    let msgs = await Session.messages(input.sessionID).then(MessageV2.filterSummarized)
+  async function getMessages(input: {
+    sessionID: string
+    model: ModelsDev.Model
+    providerID: string
+    signal: AbortSignal
+  }) {
+    let msgs = await Session.messages(input.sessionID).then(MessageV2.filterCompacted)
     const lastAssistant = msgs.findLast((msg) => msg.info.role === "assistant")
     if (
       lastAssistant?.info.role === "assistant" &&
@@ -352,6 +421,7 @@ export namespace SessionPrompt {
         sessionID: input.sessionID,
         providerID: input.providerID,
         modelID: input.model.id,
+        signal: input.signal,
       })
       const resumeMsgID = Identifier.ascending("message")
       const resumeMsg = {
@@ -453,6 +523,10 @@ export namespace SessionPrompt {
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            extra: {
+              modelID: input.modelID,
+              providerID: input.providerID,
+            },
             agent: input.agent.name,
             metadata: async (val) => {
               const match = input.processor.partFromToolCall(options.toolCallId)
@@ -508,11 +582,18 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const result = await execute(args, opts)
-        const output = result.content
-          .filter((x: any) => x.type === "text")
-          .map((x: any) => x.text)
-          .join("\n\n")
+        const result = await execute(args, opts).catch((err: unknown) => {
+          log.error("Error executing tool", { error: err, tool: key })
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to execute tool: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+          }
+        })
+
         await Plugin.trigger(
           "tool.execute.after",
           {
@@ -523,7 +604,14 @@ export namespace SessionPrompt {
           result,
         )
 
+        const output = result.content
+          .filter((x: any) => x.type === "text")
+          .map((x: any) => x.text)
+          .join("\n\n")
+
         return {
+          title: "",
+          metadata: {},
           output,
         }
       }
@@ -582,9 +670,15 @@ export namespace SessionPrompt {
               }
               break
             case "file:":
+              log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filePath = decodeURIComponent(url.pathname)
+              const filepath = fileURLToPath(part.url)
+              const stat = await Bun.file(filepath).stat()
+
+              if (stat.isDirectory()) {
+                part.mime = "application/x-directory"
+              }
 
               if (part.mime === "text/plain") {
                 let offset: number | undefined = undefined
@@ -594,14 +688,14 @@ export namespace SessionPrompt {
                   end: url.searchParams.get("end"),
                 }
                 if (range.start != null) {
-                  const filePath = part.url.split("?")[0]
+                  const filePathURI = part.url.split("?")[0]
                   let start = parseInt(range.start)
                   let end = range.end ? parseInt(range.end) : undefined
                   // some LSP servers (eg, gopls) don't give full range in
                   // workspace/symbol searches, so we'll try to find the
                   // symbol in the document to get the full range
                   if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePath)
+                    const symbols = await LSP.documentSymbol(filePathURI)
                     for (const symbol of symbols) {
                       let range: LSP.Range | undefined
                       if ("range" in symbol) {
@@ -621,7 +715,7 @@ export namespace SessionPrompt {
                     limit = end - offset
                   }
                 }
-                const args = { filePath, offset, limit }
+                const args = { filePath: filepath, offset, limit }
                 const result = await ReadTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -659,7 +753,7 @@ export namespace SessionPrompt {
               }
 
               if (part.mime === "application/x-directory") {
-                const args = { path: filePath }
+                const args = { path: filepath }
                 const result = await ListTool.init().then((t) =>
                   t.execute(args, {
                     sessionID: input.sessionID,
@@ -696,15 +790,15 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filePath)
-              FileTime.read(input.sessionID, filePath)
+              const file = Bun.file(filepath)
+              FileTime.read(input.sessionID, filepath)
               return [
                 {
                   id: Identifier.ascending("part"),
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "text",
-                  text: `Called the Read tool with the following input: {\"filePath\":\"${filePath}\"}`,
+                  text: `Called the Read tool with the following input: {\"filePath\":\"${filepath}\"}`,
                   synthetic: true,
                 },
                 {
@@ -813,9 +907,10 @@ export namespace SessionPrompt {
     let snapshot: string | undefined
     let blocked = false
 
-    async function createMessage() {
+    async function createMessage(parentID: string) {
       const msg: MessageV2.Info = {
         id: Identifier.ascending("message"),
+        parentID,
         role: "assistant",
         system: input.system,
         mode: input.agent,
@@ -851,11 +946,11 @@ export namespace SessionPrompt {
           assistantMsg = undefined
         }
       },
-      async next() {
+      async next(parentID: string) {
         if (assistantMsg) {
           throw new Error("end previous assistant message first")
         }
-        assistantMsg = await createMessage()
+        assistantMsg = await createMessage(parentID)
         return assistantMsg
       },
       get message() {
@@ -865,9 +960,10 @@ export namespace SessionPrompt {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
-      async process(stream: StreamTextResult<Record<string, AITool>, never>) {
+      async process(stream: StreamTextResult<Record<string, AITool>, never>, retries: { count: number; max: number }) {
         log.info("process")
         if (!assistantMsg) throw new Error("call next() first before processing")
+        let shouldRetry = false
         try {
           let currentText: MessageV2.TextPart | undefined
           let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
@@ -894,6 +990,7 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
@@ -902,7 +999,7 @@ export namespace SessionPrompt {
                   const part = reasoningMap[value.id]
                   part.text += value.text
                   if (value.providerMetadata) part.metadata = value.providerMetadata
-                  if (part.text) await Session.updatePart(part)
+                  if (part.text) await Session.updatePart({ part, delta: value.text })
                 }
                 break
 
@@ -915,6 +1012,7 @@ export namespace SessionPrompt {
                     ...part.time,
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) part.metadata = value.providerMetadata
                   await Session.updatePart(part)
                   delete reasoningMap[value.id]
                 }
@@ -954,6 +1052,7 @@ export namespace SessionPrompt {
                         start: Date.now(),
                       },
                     },
+                    metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
@@ -974,8 +1073,10 @@ export namespace SessionPrompt {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
+                      attachments: value.output.attachments,
                     },
                   })
+
                   delete toolcalls[value.toolCallId]
                 }
                 break
@@ -997,6 +1098,7 @@ export namespace SessionPrompt {
                       },
                     },
                   })
+
                   if (value.error instanceof Permission.RejectedError) {
                     blocked = true
                   }
@@ -1008,21 +1110,28 @@ export namespace SessionPrompt {
                 throw value.error
 
               case "start-step":
+                snapshot = await Snapshot.track()
                 await Session.updatePart({
                   id: Identifier.ascending("part"),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
+                  snapshot,
                   type: "step-start",
                 })
-                snapshot = await Snapshot.track()
                 break
 
               case "finish-step":
-                const usage = Session.getUsage(input.model, value.usage, value.providerMetadata)
+                const usage = Session.getUsage({
+                  model: input.model,
+                  usage: value.usage,
+                  metadata: value.providerMetadata,
+                })
                 assistantMsg.cost += usage.cost
                 assistantMsg.tokens = usage.tokens
                 await Session.updatePart({
                   id: Identifier.ascending("part"),
+                  reason: value.finishReason,
+                  snapshot: await Snapshot.track(),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
                   type: "step-finish",
@@ -1044,6 +1153,10 @@ export namespace SessionPrompt {
                   }
                   snapshot = undefined
                 }
+                SessionSummary.summarize({
+                  sessionID: input.sessionID,
+                  messageID: assistantMsg.parentID,
+                })
                 break
 
               case "text-start":
@@ -1056,13 +1169,19 @@ export namespace SessionPrompt {
                   time: {
                     start: Date.now(),
                   },
+                  metadata: value.providerMetadata,
                 }
                 break
 
               case "text-delta":
                 if (currentText) {
                   currentText.text += value.text
-                  if (currentText.text) await Session.updatePart(currentText)
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                  if (currentText.text)
+                    await Session.updatePart({
+                      part: currentText,
+                      delta: value.text,
+                    })
                 }
                 break
 
@@ -1073,6 +1192,7 @@ export namespace SessionPrompt {
                     start: Date.now(),
                     end: Date.now(),
                   }
+                  if (value.providerMetadata) currentText.metadata = value.providerMetadata
                   await Session.updatePart(currentText)
                 }
                 currentText = undefined
@@ -1094,37 +1214,27 @@ export namespace SessionPrompt {
           log.error("process", {
             error: e,
           })
-          switch (true) {
-            case e instanceof DOMException && e.name === "AbortError":
-              assistantMsg.error = new MessageV2.AbortedError(
-                { message: e.message },
-                {
-                  cause: e,
-                },
-              ).toObject()
-              break
-            case MessageV2.OutputLengthError.isInstance(e):
-              assistantMsg.error = e
-              break
-            case LoadAPIKeyError.isInstance(e):
-              assistantMsg.error = new MessageV2.AuthError(
-                {
-                  providerID: input.providerID,
-                  message: e.message,
-                },
-                { cause: e },
-              ).toObject()
-              break
-            case e instanceof Error:
-              assistantMsg.error = new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
-              break
-            default:
-              assistantMsg.error = new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+          const error = MessageV2.fromError(e, { providerID: input.providerID })
+          if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
+            shouldRetry = true
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: assistantMsg.id,
+              sessionID: assistantMsg.sessionID,
+              type: "retry",
+              attempt: retries.count + 1,
+              time: {
+                created: Date.now(),
+              },
+              error,
+            })
+          } else {
+            assistantMsg.error = error
+            Bus.publish(Session.Event.Error, {
+              sessionID: assistantMsg.sessionID,
+              error: assistantMsg.error,
+            })
           }
-          Bus.publish(Session.Event.Error, {
-            sessionID: assistantMsg.sessionID,
-            error: assistantMsg.error,
-          })
         }
         const p = await Session.getParts(assistantMsg.id)
         for (const part of p) {
@@ -1143,39 +1253,31 @@ export namespace SessionPrompt {
             })
           }
         }
-        assistantMsg.time.completed = Date.now()
+        if (!shouldRetry) {
+          assistantMsg.time.completed = Date.now()
+        }
         await Session.updateMessage(assistantMsg)
-        return { info: assistantMsg, parts: p, blocked }
+        return { info: assistantMsg, parts: p, blocked, shouldRetry }
       },
     }
     return result
   }
 
   function isBusy(sessionID: string) {
-    return state().pending.has(sessionID)
-  }
-
-  export function abort(sessionID: string) {
-    const controller = state().pending.get(sessionID)
-    if (!controller) return false
-    log.info("aborting", {
-      sessionID,
-    })
-    controller.abort()
-    state().pending.delete(sessionID)
-    return true
+    return SessionLock.isLocked(sessionID)
   }
 
   function lock(sessionID: string) {
+    const handle = SessionLock.acquire({
+      sessionID,
+    })
     log.info("locking", { sessionID })
-    if (state().pending.has(sessionID)) throw new Error("TODO")
-    const controller = new AbortController()
-    state().pending.set(sessionID, controller)
     return {
-      signal: controller.signal,
+      signal: handle.signal,
+      abort: handle.abort,
       async [Symbol.dispose]() {
+        handle[Symbol.dispose]()
         log.info("unlocking", { sessionID })
-        state().pending.delete(sessionID)
 
         const session = await Session.get(sessionID)
         if (session.parentID) return
@@ -1221,6 +1323,7 @@ export namespace SessionPrompt {
     const msg: MessageV2.Assistant = {
       id: Identifier.ascending("message"),
       sessionID: input.sessionID,
+      parentID: userMsg.id,
       system: [],
       mode: input.agent,
       cost: 0,
@@ -1263,20 +1366,42 @@ export namespace SessionPrompt {
     const shell = process.env["SHELL"] ?? "bash"
     const shellName = path.basename(shell)
 
-    const scripts: Record<string, string> = {
-      nu: input.command,
-      fish: `eval "${input.command}"`,
+    const invocations: Record<string, { args: string[] }> = {
+      nu: {
+        args: ["-c", input.command],
+      },
+      fish: {
+        args: ["-c", input.command],
+      },
+      zsh: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+            [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      bash: {
+        args: [
+          "-c",
+          "-l",
+          `
+            [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+            ${input.command}
+          `,
+        ],
+      },
+      // Fallback: any shell that doesn't match those above
+      "": {
+        args: ["-c", "-l", `${input.command}`],
+      },
     }
 
-    const script =
-      scripts[shellName] ??
-      `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-       [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-       [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-       eval "${input.command}"`
-
-    const isFishOrNu = shellName === "fish" || shellName === "nu"
-    const args = isFishOrNu ? ["-c", script] : ["-c", "-l", script]
+    const matchingInvocation = invocations[shellName] ?? invocations[""]
+    const args = matchingInvocation?.args
 
     const proc = spawn(shell, args, {
       cwd: Instance.directory,
@@ -1360,19 +1485,18 @@ export namespace SessionPrompt {
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
-  export const fileRegex = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
 
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? "build"
 
-    let template = command.template.replace("$ARGUMENTS", input.arguments)
+    let template = command.template.replaceAll("$ARGUMENTS", input.arguments)
 
-    const bash = Array.from(template.matchAll(bashRegex))
-    if (bash.length > 0) {
+    const shell = ConfigMarkdown.shell(template)
+    if (shell.length > 0) {
       const results = await Promise.all(
-        bash.map(async ([, cmd]) => {
+        shell.map(async ([, cmd]) => {
           try {
             return await $`${{ raw: cmd }}`.nothrow().text()
           } catch (error) {
@@ -1391,9 +1515,9 @@ export namespace SessionPrompt {
       },
     ] as PromptInput["parts"]
 
-    const matches = Array.from(template.matchAll(fileRegex))
+    const files = ConfigMarkdown.files(template)
     await Promise.all(
-      matches.map(async (match) => {
+      files.map(async (match) => {
         const name = match[1]
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
@@ -1472,6 +1596,7 @@ export namespace SessionPrompt {
       const assistantMsg: MessageV2.Assistant = {
         id: Identifier.ascending("message"),
         sessionID: input.sessionID,
+        parentID: userMsg.id,
         system: [],
         mode: agentName,
         cost: 0,
@@ -1595,9 +1720,7 @@ export namespace SessionPrompt {
     }
     generateText({
       maxOutputTokens: small.info.reasoning ? 1500 : 20,
-      providerOptions: {
-        [small.providerID]: options,
-      },
+      providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
         ...SystemPrompt.title(small.providerID).map(
           (x): ModelMessage => ({
@@ -1624,9 +1747,15 @@ export namespace SessionPrompt {
       .then((result) => {
         if (result.text)
           return Session.update(input.session.id, (draft) => {
-            const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+            const cleaned = result.text
+              .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              .split("\n")
+              .map((line) => line.trim())
+              .find((line) => line.length > 0)
+            if (!cleaned) return
+
             const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-            draft.title = title.trim()
+            draft.title = title
           })
       })
       .catch((error) => {

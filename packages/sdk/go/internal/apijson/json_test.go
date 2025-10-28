@@ -362,7 +362,7 @@ var tests = map[string]struct {
 	"date_time_nano_missing_t_coerce":         {`"2007-03-01 13:03:05.123456789Z"`, time.Date(2007, time.March, 1, 13, 3, 5, 123456789, time.UTC)},
 
 	"map_string":                       {`{"foo":"bar"}`, map[string]string{"foo": "bar"}},
-	"map_string_with_sjson_path_chars": {`{":a.b.c*:d*-1e.f":"bar"}`, map[string]string{":a.b.c*:d*-1e.f": "bar"}},
+	"map_string_with_sjson_path_chars": {`{":a.b.c*:d*-1e.f@g?h":"bar"}`, map[string]string{":a.b.c*:d*-1e.f@g?h": "bar"}},
 	"map_interface":                    {`{"a":1,"b":"str","c":false}`, map[string]interface{}{"a": float64(1), "b": "str", "c": false}},
 
 	"primitive_struct": {

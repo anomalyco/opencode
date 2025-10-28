@@ -120,6 +120,146 @@
       "when": 1758663086739,
       "tag": "0016_cold_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1758755183232,
+      "tag": "0017_woozy_thaddeus_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1759077265040,
+      "tag": "0018_nervous_iron_lad",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1759103696975,
+      "tag": "0019_dazzling_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1759169697658,
+      "tag": "0020_supreme_jack_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1759186023755,
+      "tag": "0021_flawless_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1759427432588,
+      "tag": "0022_nice_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1759444220653,
+      "tag": "0023_optimal_paibok",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1759522925614,
+      "tag": "0024_early_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1759525451885,
+      "tag": "0025_legal_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1759546980316,
+      "tag": "0026_numerous_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1759553466608,
+      "tag": "0027_hot_wong",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1759805025276,
+      "tag": "0028_careful_cerise",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1759811835558,
+      "tag": "0029_panoramic_harrier",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1759878278492,
+      "tag": "0030_ordinary_ultragirl",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1759940238478,
+      "tag": "0031_outgoing_outlaw_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1759976329502,
+      "tag": "0032_white_doctor_doom",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1760637384217,
+      "tag": "0033_cynical_jack_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1760651120251,
+      "tag": "0034_short_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1760666253896,
+      "tag": "0035_narrow_blindfold",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1760668952329,
+      "tag": "0036_slimy_energizer",
+      "breakpoints": true
     }
   ]
 }

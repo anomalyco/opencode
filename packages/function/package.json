@@ -1,11 +1,12 @@
 {
-  "name": "@opencode/function",
-  "version": "0.11.3",
+  "name": "@opencode-ai/function",
+  "version": "0.15.20",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20250522.0",
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "22.0.2",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   },

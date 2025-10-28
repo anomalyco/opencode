@@ -1,41 +1,62 @@
+import { Show } from "solid-js"
+import { createAsync, RouteSectionProps, useParams, A } from "@solidjs/router"
+import { querySessionInfo } from "./common"
 import "./[id].css"
-import { MonthlyLimitSection } from "~/component/workspace/monthly-limit-section"
-import { NewUserSection } from "~/component/workspace/new-user-section"
-import { BillingSection } from "~/component/workspace/billing-section"
-import { PaymentSection } from "~/component/workspace/payment-section"
-import { UsageSection } from "~/component/workspace/usage-section"
-import { KeySection } from "~/component/workspace/key-section"
 
-export default function () {
+export default function WorkspaceLayout(props: RouteSectionProps) {
+  const params = useParams()
+  const userInfo = createAsync(() => querySessionInfo(params.id))
+
   return (
-    <div data-page="workspace-[id]">
-      <section data-component="title-section">
-        <h1>Zen</h1>
-        <p>
-          Curated list of models provided by opencode.{" "}
-          <a target="_blank" href="/docs/zen">
-            Learn more
-          </a>
-          .
-        </p>
-      </section>
+    <main data-page="workspace">
+      <div data-component="workspace-container">
+        <nav data-component="workspace-nav">
+          <nav data-component="nav-desktop">
+            <div data-component="workspace-nav-items">
+              <A href={`/workspace/${params.id}`} end activeClass="active" data-nav-button>
+                Zen
+              </A>
+              <A href={`/workspace/${params.id}/keys`} activeClass="active" data-nav-button>
+                API Keys
+              </A>
+              <A href={`/workspace/${params.id}/members`} activeClass="active" data-nav-button>
+                Members
+              </A>
+              <Show when={userInfo()?.isAdmin}>
+                <A href={`/workspace/${params.id}/billing`} activeClass="active" data-nav-button>
+                  Billing
+                </A>
+                <A href={`/workspace/${params.id}/settings`} activeClass="active" data-nav-button>
+                  Settings
+                </A>
+              </Show>
+            </div>
+          </nav>
 
-      <div data-slot="sections">
-        <NewUserSection />
-        <KeySection />
-        <BillingSection />
-        <MonthlyLimitSection />
-        <UsageSection />
-        <PaymentSection />
+          <nav data-component="nav-mobile">
+            <div data-component="workspace-nav-items">
+              <A href={`/workspace/${params.id}`} end activeClass="active" data-nav-button>
+                Zen
+              </A>
+              <A href={`/workspace/${params.id}/keys`} activeClass="active" data-nav-button>
+                API Keys
+              </A>
+              <A href={`/workspace/${params.id}/members`} activeClass="active" data-nav-button>
+                Members
+              </A>
+              <Show when={userInfo()?.isAdmin}>
+                <A href={`/workspace/${params.id}/billing`} activeClass="active" data-nav-button>
+                  Billing
+                </A>
+                <A href={`/workspace/${params.id}/settings`} activeClass="active" data-nav-button>
+                  Settings
+                </A>
+              </Show>
+            </div>
+          </nav>
+        </nav>
+        <div data-component="workspace-content">{props.children}</div>
       </div>
-    </div>
+    </main>
   )
-}
-
-export function isBeta(workspaceID: string) {
-  return [
-    "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // production
-    "wrk_01K4NFRR5P7FSYWH88307B4DDS", // dev
-    "wrk_01K4PJRKJ2WPQZN3FFYRV4673F", // frank
-  ].includes(workspaceID)
 }

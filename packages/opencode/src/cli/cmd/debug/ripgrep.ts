@@ -1,3 +1,4 @@
+import { EOL } from "os"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
@@ -40,13 +41,15 @@ const FilesCommand = cmd({
       }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      const files = await Ripgrep.files({
+      const files: string[] = []
+      for await (const file of Ripgrep.files({
         cwd: Instance.directory,
-        query: args.query,
         glob: args.glob ? [args.glob] : undefined,
-        limit: args.limit,
-      })
-      console.log(files.join("\n"))
+      })) {
+        files.push(file)
+        if (args.limit && files.length >= args.limit) break
+      }
+      console.log(files.join(EOL))
     })
   },
 })
