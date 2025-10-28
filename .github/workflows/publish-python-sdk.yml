@@ -39,14 +39,16 @@ jobs:
       - name: Set version from release tag
         shell: bash
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${GITHUB_REF_NAME:-}"
+          if [ -z "$TAG" ]; then
+            TAG="$(git describe --tags --abbrev=0 || echo 0.0.0)"
+          fi
           echo "Using version: $TAG"
-          # Update pyproject.toml version
-          python - <<'PY'
-import re, pathlib, os
+          VERSION="$TAG" ~/.local/bin/uv run --project packages/sdk/python python - <<'PY'
+import os, re, pathlib
 root = pathlib.Path('packages/sdk/python')
 pt = (root / 'pyproject.toml').read_text()
-version = os.environ['GITHUB_REF_NAME']
+version = os.environ.get('VERSION','0.0.0').lstrip('v')
 pt = re.sub(r'(?m)^(version\s*=\s*")[^"]+("\s*)$', f"\\1{version}\\2", pt)
 (root / 'pyproject.toml').write_text(pt)
 # Also update generator config override for consistency
