@@ -29,7 +29,7 @@ export const AcpCommand = cmd({
       const input = new WritableStream<Uint8Array>({
         write(chunk) {
           return new Promise<void>((resolve, reject) => {
-            process.stdout.write(Buffer.from(chunk), (err) => {
+            process.stdout.write(chunk, (err) => {
               if (err) {
                 reject(err)
               } else {
