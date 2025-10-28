@@ -696,24 +696,24 @@ export default function Page() {
                                                 <Accordion.Item value={diff.file}>
                                                   <Accordion.Header>
                                                     <Accordion.Trigger onClick={handleDiffTriggerClick}>
-                                                      <div class="flex items-center justify-between w-full">
-                                                        <div class="flex items-center gap-5">
+                                                      <div class="flex items-center justify-between w-full gap-5">
+                                                        <div class="grow flex items-center gap-5 min-w-0">
                                                           <FileIcon
                                                             node={{ path: diff.file, type: "file" }}
                                                             class="shrink-0 size-4"
                                                           />
-                                                          <div class="flex">
+                                                          <div class="flex grow min-w-0">
                                                             <Show when={diff.file.includes("/")}>
-                                                              <span class="text-text-base">
-                                                                {getDirectory(diff.file)}
+                                                              <span class="text-text-base truncate-start">
+                                                                {getDirectory(diff.file)}&lrm;
                                                               </span>
                                                             </Show>
-                                                            <span class="text-text-strong">
+                                                            <span class="text-text-strong shrink-0">
                                                               {getFilename(diff.file)}
                                                             </span>
                                                           </div>
                                                         </div>
-                                                        <div class="flex gap-4 items-center justify-end">
+                                                        <div class="shrink-0 flex gap-4 items-center justify-end">
                                                           <DiffChanges diff={diff} />
                                                           <Icon name="chevron-grabber-vertical" size="small" />
                                                         </div>

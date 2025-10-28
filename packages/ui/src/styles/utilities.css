@@ -48,6 +48,14 @@
   border-width: 0;
 }
 
+.truncate-start {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
 .text-12-regular {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
