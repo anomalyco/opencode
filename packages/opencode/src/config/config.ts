@@ -61,6 +61,11 @@ export namespace Config {
       )),
     ]
 
+    if (Flag.OPENCODE_CONFIG_DIR) {
+      directories.push(Flag.OPENCODE_CONFIG_DIR)
+      log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+    }
+
     for (const dir of directories) {
       await assertValid(dir)
       installDependencies(dir)
