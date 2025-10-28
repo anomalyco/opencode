@@ -25,7 +25,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.3.5",
+      "@pierre/precision-diffs": "0.3.6",
       "@solidjs/meta": "0.29.4",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
@@ -63,7 +63,7 @@
   "license": "MIT",
   "prettier": {
     "semi": false,
-    "printWidth": 120
+    "printWidth": 100
   },
   "trustedDependencies": [
     "esbuild",

@@ -24,7 +24,13 @@ export type DiffProps<T = {}> = Omit<DiffFileRendererOptions<T>, "themes"> & {
 
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["before", "after", "class", "classList", "annotations"])
+  const [local, others] = splitProps(props, [
+    "before",
+    "after",
+    "class",
+    "classList",
+    "annotations",
+  ])
 
   // const lineAnnotations: DiffLineAnnotation<ThreadMetadata>[] = [
   //   {
@@ -165,6 +171,7 @@ export function Diff<T>(props: DiffProps<T>) {
         "--pjs-tab-size": 4,
         "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
         "--pjs-header-font-family": "var(--font-family-sans)",
+        "--pjs-gap-block": 0,
       }}
       ref={container}
     />

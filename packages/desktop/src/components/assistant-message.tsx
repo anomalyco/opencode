@@ -2,7 +2,7 @@ import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart } from "
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
-import { Checkbox, Collapsible, Icon, IconProps } from "@opencode-ai/ui"
+import { Checkbox, Collapsible, Diff, Icon, IconProps } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
 import type { Tool } from "opencode/tool/tool"
 import type { ReadTool } from "opencode/tool/read"
@@ -357,12 +357,21 @@ ToolRegistry.register<typeof EditTool>({
                 <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
               </div>
             </div>
-            <div class="flex gap-4 items-center justify-end">{/* <DiffChanges diff={diff} /> */}</div>
+            <div class="flex gap-4 items-center justify-end">
+              <Show when={props.metadata.filediff}>
+                <DiffChanges diff={props.metadata.filediff} />
+              </Show>
+            </div>
           </div>
         }
       >
-        <Show when={false && props.output}>
-          <div class="whitespace-pre">{props.output}</div>
+        <Show when={props.metadata.filediff}>
+          <div class="border-t border-border-weaker-base">
+            <Diff
+              before={{ name: getFilename(props.metadata.filediff.path), contents: props.metadata.filediff.before }}
+              after={{ name: getFilename(props.metadata.filediff.path), contents: props.metadata.filediff.after }}
+            />
+          </div>
         </Show>
       </BasicTool>
     )
