@@ -289,7 +289,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
                     <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}/
+                      {getDirectory(i)}
                     </span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                   </div>

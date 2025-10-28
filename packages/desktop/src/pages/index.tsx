@@ -521,7 +521,7 @@ export default function Page() {
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
                           <div class="text-12-medium text-text-weak">
-                            {getDirectory(sync.data.path.directory)}/
+                            {getDirectory(sync.data.path.directory)}
                             <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
                           </div>
                         </div>
@@ -705,7 +705,7 @@ export default function Page() {
                                                           <div class="flex">
                                                             <Show when={diff.file.includes("/")}>
                                                               <span class="text-text-base">
-                                                                {getDirectory(diff.file)}/
+                                                                {getDirectory(diff.file)}
                                                               </span>
                                                             </Show>
                                                             <span class="text-text-strong">
@@ -858,7 +858,7 @@ export default function Page() {
                 <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(i)}/
+                    {getDirectory(i)}
                   </span>
                   <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                 </div>

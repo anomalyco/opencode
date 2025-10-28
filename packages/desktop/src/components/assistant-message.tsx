@@ -1,11 +1,11 @@
 import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk"
-import type { Tool } from "opencode/tool/tool"
-import type { ReadTool } from "opencode/tool/read"
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
 import { Collapsible, Icon, IconProps } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
+import type { Tool } from "opencode/tool/tool"
+import type { ReadTool } from "opencode/tool/read"
 import type { ListTool } from "opencode/tool/ls"
 import type { GlobTool } from "opencode/tool/glob"
 import type { GrepTool } from "opencode/tool/grep"
@@ -188,7 +188,7 @@ ToolRegistry.register<typeof ListTool>({
   name: "list",
   render(props) {
     return (
-      <BasicTool icon="bullet-list" trigger={{ title: props.tool, subtitle: props.input.path || "/" }}>
+      <BasicTool icon="bullet-list" trigger={{ title: props.tool, subtitle: getDirectory(props.input.path || "/") }}>
         <Show when={false && props.output}>
           <div class="whitespace-pre">{props.output}</div>
         </Show>
@@ -205,7 +205,7 @@ ToolRegistry.register<typeof GlobTool>({
         icon="magnifying-glass-menu"
         trigger={{
           title: props.tool,
-          subtitle: props.input.path || "/",
+          subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
@@ -228,7 +228,7 @@ ToolRegistry.register<typeof GrepTool>({
         icon="magnifying-glass-menu"
         trigger={{
           title: props.tool,
-          subtitle: props.input.path || "/",
+          subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
       >
@@ -315,7 +315,7 @@ ToolRegistry.register<typeof EditTool>({
               <div class="text-12-medium text-text-base capitalize">Edit</div>
               <div class="flex">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}/</span>
+                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}</span>
                 </Show>
                 <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
               </div>
@@ -344,7 +344,7 @@ ToolRegistry.register<typeof WriteTool>({
               <div class="text-12-medium text-text-base capitalize">Write</div>
               <div class="flex">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}/</span>
+                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}</span>
                 </Show>
                 <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
               </div>
