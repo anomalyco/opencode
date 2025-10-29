@@ -1,11 +1,11 @@
 import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk"
-import type { Tool } from "opencode/tool/tool"
-import type { ReadTool } from "opencode/tool/read"
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
-import { Collapsible, Icon, IconProps } from "@opencode-ai/ui"
+import { Checkbox, Collapsible, Diff, Icon, IconProps } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
+import type { Tool } from "opencode/tool/tool"
+import type { ReadTool } from "opencode/tool/read"
 import type { ListTool } from "opencode/tool/ls"
 import type { GlobTool } from "opencode/tool/glob"
 import type { GrepTool } from "opencode/tool/grep"
@@ -14,12 +14,21 @@ import type { TaskTool } from "opencode/tool/task"
 import type { BashTool } from "opencode/tool/bash"
 import type { EditTool } from "opencode/tool/edit"
 import type { WriteTool } from "opencode/tool/write"
+import type { TodoWriteTool } from "opencode/tool/todo"
 import { DiffChanges } from "./diff-changes"
 
-export function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
+export function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; lastToolOnly?: boolean }) {
+  const filteredParts = createMemo(() => {
+    let tool = false
+    return props.parts?.filter((x) => {
+      if (x.type === "tool" && props.lastToolOnly && tool) return false
+      if (x.type === "tool") tool = true
+      return x.type !== "tool" || x.tool !== "todoread"
+    })
+  })
   return (
     <div class="w-full flex flex-col items-start gap-4">
-      <For each={props.parts}>
+      <For each={filteredParts()}>
         {(part) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
@@ -69,17 +78,14 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
     // const permission = permissions[permissionIndex]
 
     return (
-      <>
-        <Dynamic
-          component={render}
-          input={input}
-          tool={props.part.tool}
-          metadata={metadata}
-          // permission={permission?.metadata ?? {}}
-          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-        />
-        {/* <Show when={props.part.state.status === "error"}>{props.part.state.error.replace("Error: ", "")}</Show> */}
-      </>
+      <Dynamic
+        component={render}
+        input={input}
+        tool={props.part.tool}
+        metadata={metadata}
+        // permission={permission?.metadata ?? {}}
+        output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+      />
     )
   })
 
@@ -88,8 +94,11 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
 
 type TriggerTitle = {
   title: string
+  titleClass?: string
   subtitle?: string
+  subtitleClass?: string
   args?: string[]
+  argsClass?: string
   action?: JSX.Element
 }
 
@@ -99,34 +108,58 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
 
 function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX.Element; children?: JSX.Element }) {
   const resolved = children(() => props.children)
-
   return (
     <Collapsible>
       <Collapsible.Trigger>
         <div class="w-full flex items-center self-stretch gap-5 justify-between">
           <div class="w-full flex items-center self-stretch gap-5">
-            <Icon name={props.icon} size="small" />
-            <Switch>
-              <Match when={isTriggerTitle(props.trigger)}>
-                <div class="w-full flex items-center gap-2 justify-between">
-                  <div class="flex items-center gap-2">
-                    <span class="text-12-medium text-text-base capitalize">
-                      {(props.trigger as TriggerTitle).title}
-                    </span>
-                    <Show when={(props.trigger as TriggerTitle).subtitle}>
-                      <span class="text-12-medium text-text-weak">{(props.trigger as TriggerTitle).subtitle}</span>
-                    </Show>
-                    <Show when={(props.trigger as TriggerTitle).args?.length}>
-                      <For each={(props.trigger as TriggerTitle).args}>
-                        {(arg) => <span class="text-12-regular text-text-weaker">{arg}</span>}
-                      </For>
-                    </Show>
-                  </div>
-                  <Show when={(props.trigger as TriggerTitle).action}>{(props.trigger as TriggerTitle).action}</Show>
-                </div>
-              </Match>
-              <Match when={true}>{props.trigger as JSX.Element}</Match>
-            </Switch>
+            <Icon name={props.icon} size="small" class="shrink-0" />
+            <div class="grow min-w-0">
+              <Switch>
+                <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+                  {(trigger) => (
+                    <div class="w-full flex items-center gap-2 justify-between">
+                      <div class="flex items-center gap-2 whitespace-nowrap truncate">
+                        <span
+                          classList={{
+                            "text-12-medium text-text-base": true,
+                            [trigger().titleClass ?? ""]: !!trigger().titleClass,
+                          }}
+                        >
+                          {trigger().title}
+                        </span>
+                        <Show when={trigger().subtitle}>
+                          <span
+                            classList={{
+                              "text-12-medium text-text-weak": true,
+                              [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                            }}
+                          >
+                            {trigger().subtitle}
+                          </span>
+                        </Show>
+                        <Show when={trigger().args?.length}>
+                          <For each={trigger().args}>
+                            {(arg) => (
+                              <span
+                                classList={{
+                                  "text-12-regular text-text-weak": true,
+                                  [trigger().argsClass ?? ""]: !!trigger().argsClass,
+                                }}
+                              >
+                                {arg}
+                              </span>
+                            )}
+                          </For>
+                        </Show>
+                      </div>
+                      <Show when={trigger().action}>{trigger().action}</Show>
+                    </div>
+                  )}
+                </Match>
+                <Match when={true}>{props.trigger as JSX.Element}</Match>
+              </Switch>
+            </div>
           </div>
           <Show when={resolved()}>
             <Collapsible.Arrow />
@@ -137,6 +170,9 @@ function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX
         <Collapsible.Content>{props.children}</Collapsible.Content>
       </Show>
     </Collapsible>
+    // <>
+    //   <Show when={props.part.state.status === "error"}>{props.part.state.error.replace("Error: ", "")}</Show>
+    // </>
   )
 }
 
@@ -178,7 +214,7 @@ ToolRegistry.register<typeof ReadTool>({
     return (
       <BasicTool
         icon="glasses"
-        trigger={{ title: props.tool, subtitle: props.input.filePath ? getFilename(props.input.filePath) : "" }}
+        trigger={{ title: "Read", subtitle: props.input.filePath ? getFilename(props.input.filePath) : "" }}
       />
     )
   },
@@ -188,7 +224,7 @@ ToolRegistry.register<typeof ListTool>({
   name: "list",
   render(props) {
     return (
-      <BasicTool icon="bullet-list" trigger={{ title: props.tool, subtitle: props.input.path || "/" }}>
+      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
         <Show when={false && props.output}>
           <div class="whitespace-pre">{props.output}</div>
         </Show>
@@ -204,8 +240,8 @@ ToolRegistry.register<typeof GlobTool>({
       <BasicTool
         icon="magnifying-glass-menu"
         trigger={{
-          title: props.tool,
-          subtitle: props.input.path || "/",
+          title: "Glob",
+          subtitle: getDirectory(props.input.path || "/"),
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
@@ -227,8 +263,8 @@ ToolRegistry.register<typeof GrepTool>({
       <BasicTool
         icon="magnifying-glass-menu"
         trigger={{
-          title: props.tool,
-          subtitle: props.input.path || "/",
+          title: "Grep",
+          subtitle: getDirectory(props.input.path || "/"),
           args,
         }}
       >
@@ -247,7 +283,7 @@ ToolRegistry.register<typeof WebFetchTool>({
       <BasicTool
         icon="window-cursor"
         trigger={{
-          title: props.tool,
+          title: "Webfetch",
           subtitle: props.input.url || "",
           args: props.input.format ? ["format=" + props.input.format] : [],
           action: (
@@ -273,6 +309,7 @@ ToolRegistry.register<typeof TaskTool>({
         icon="task"
         trigger={{
           title: `${props.input.subagent_type || props.tool} Agent`,
+          titleClass: "capitalize",
           subtitle: props.input.description,
         }}
       >
@@ -311,11 +348,49 @@ ToolRegistry.register<typeof EditTool>({
         icon="code-lines"
         trigger={
           <div class="flex items-center justify-between w-full">
-            <div class="flex items-center gap-5">
+            <div class="flex items-center gap-2">
               <div class="text-12-medium text-text-base capitalize">Edit</div>
               <div class="flex">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}/</span>
+                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}</span>
+                </Show>
+                <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
+              </div>
+            </div>
+            <div class="flex gap-4 items-center justify-end">
+              <Show when={props.metadata.filediff}>
+                <DiffChanges diff={props.metadata.filediff} />
+              </Show>
+            </div>
+          </div>
+        }
+      >
+        <Show when={props.metadata.filediff}>
+          <div class="border-t border-border-weaker-base">
+            <Diff
+              before={{ name: getFilename(props.metadata.filediff.path), contents: props.metadata.filediff.before }}
+              after={{ name: getFilename(props.metadata.filediff.path), contents: props.metadata.filediff.after }}
+            />
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register<typeof WriteTool>({
+  name: "write",
+  render(props) {
+    return (
+      <BasicTool
+        icon="code-lines"
+        trigger={
+          <div class="flex items-center justify-between w-full">
+            <div class="flex items-center gap-2">
+              <div class="text-12-medium text-text-base capitalize">Write</div>
+              <div class="flex">
+                <Show when={props.input.filePath?.includes("/")}>
+                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}</span>
                 </Show>
                 <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
               </div>
@@ -332,29 +407,27 @@ ToolRegistry.register<typeof EditTool>({
   },
 })
 
-ToolRegistry.register<typeof WriteTool>({
-  name: "write",
+ToolRegistry.register<typeof TodoWriteTool>({
+  name: "todowrite",
   render(props) {
     return (
       <BasicTool
-        icon="code-lines"
-        trigger={
-          <div class="flex items-center justify-between w-full">
-            <div class="flex items-center gap-5">
-              <div class="text-12-medium text-text-base capitalize">Write</div>
-              <div class="flex">
-                <Show when={props.input.filePath?.includes("/")}>
-                  <span class="text-text-weak">{getDirectory(props.input.filePath!)}/</span>
-                </Show>
-                <span class="text-text-strong">{getFilename(props.input.filePath ?? "")}</span>
-              </div>
-            </div>
-            <div class="flex gap-4 items-center justify-end">{/* <DiffChanges diff={diff} /> */}</div>
-          </div>
-        }
+        icon="checklist"
+        trigger={{
+          title: "To-dos",
+          subtitle: `${props.input.todos?.filter((t) => t.status === "completed").length}/${props.input.todos?.length}`,
+        }}
       >
-        <Show when={false && props.output}>
-          <div class="whitespace-pre">{props.output}</div>
+        <Show when={props.input.todos?.length}>
+          <div class="px-12 pt-2.5 pb-6 flex flex-col gap-2">
+            <For each={props.input.todos}>
+              {(todo) => (
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <div classList={{ "line-through text-text-weaker": todo.status === "completed" }}>{todo.content}</div>
+                </Checkbox>
+              )}
+            </For>
+          </div>
         </Show>
       </BasicTool>
     )

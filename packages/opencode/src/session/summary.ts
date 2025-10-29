@@ -86,7 +86,7 @@ export namespace SessionSummary {
     ) {
       const result = await generateText({
         model: small.language,
-        maxOutputTokens: 50,
+        maxOutputTokens: 100,
         messages: [
           {
             role: "user",

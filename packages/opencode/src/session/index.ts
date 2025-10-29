@@ -23,11 +23,17 @@ import { Snapshot } from "@/snapshot"
 export namespace Session {
   const log = Log.create({ service: "session" })
 
-  const parentSessionTitlePrefix = "New session - "
-  const childSessionTitlePrefix = "Child session - "
+  const parentTitlePrefix = "New session - "
+  const childTitlePrefix = "Child session - "
 
   function createDefaultTitle(isChild = false) {
-    return (isChild ? childSessionTitlePrefix : parentSessionTitlePrefix) + new Date().toISOString()
+    return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+  }
+
+  export function isDefaultTitle(title: string) {
+    return new RegExp(
+      `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+    ).test(title)
   }
 
   export const Info = z

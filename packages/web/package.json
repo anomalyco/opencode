@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/web",
   "type": "module",
-  "version": "0.15.20",
+  "version": "0.15.23",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "0.15.20",
+  "version": "0.15.23",
   "description": "",
   "type": "module",
   "scripts": {
@@ -26,7 +26,7 @@
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@pierre/precision-diffs": "0.3.5",
+    "@pierre/precision-diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
     "@solid-primitives/event-bus": "1.1.2",

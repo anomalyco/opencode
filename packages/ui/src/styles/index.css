@@ -7,6 +7,8 @@
 
 @import "../components/accordion.css" layer(components);
 @import "../components/button.css" layer(components);
+@import "../components/checkbox.css" layer(components);
+@import "../components/diff.css" layer(components);
 @import "../components/collapsible.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/icon.css" layer(components);

@@ -78,6 +78,10 @@ export const RunCommand = cmd({
         array: true,
         describe: "file(s) to attach to message",
       })
+      .option("title", {
+        type: "string",
+        describe: "title for the session (uses truncated prompt if no value provided)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -143,7 +147,19 @@ export const RunCommand = cmd({
 
         if (args.session) return Session.get(args.session)
 
-        return Session.create({})
+        const title = (() => {
+          if (args.title !== undefined) {
+            if (args.title === "") {
+              return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+            }
+            return args.title
+          }
+          return undefined
+        })()
+
+        return Session.create({
+          title,
+        })
       })()
 
       if (!session) {

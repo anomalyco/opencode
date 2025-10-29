@@ -14,7 +14,7 @@ const FileSearchCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const results = await File.search({ query: args.query })
-      console.log(results.join(EOL))
+      process.stdout.write(results.join(EOL) + EOL)
     })
   },
 })
@@ -30,7 +30,7 @@ const FileReadCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const content = await File.read(args.path)
-      console.log(content)
+      process.stdout.write(JSON.stringify(content, null, 2) + EOL)
     })
   },
 })
@@ -41,7 +41,7 @@ const FileStatusCommand = cmd({
   async handler() {
     await bootstrap(process.cwd(), async () => {
       const status = await File.status()
-      console.log(JSON.stringify(status, null, 2))
+      process.stdout.write(JSON.stringify(status, null, 2) + EOL)
     })
   },
 })
@@ -57,7 +57,7 @@ const FileListCommand = cmd({
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
       const files = await File.list(args.path)
-      console.log(JSON.stringify(files, null, 2))
+      process.stdout.write(JSON.stringify(files, null, 2) + EOL)
     })
   },
 })

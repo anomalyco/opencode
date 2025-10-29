@@ -7,7 +7,7 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Permission } from "../permission"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
@@ -16,6 +16,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { Snapshot } from "@/snapshot"
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -114,10 +115,23 @@ export const EditTool = Tool.define("edit", {
       }
     }
 
+    const filediff: Snapshot.FileDiff = {
+      file: filePath,
+      before: contentOld,
+      after: contentNew,
+      additions: 0,
+      deletions: 0,
+    }
+    for (const change of diffLines(contentOld, contentNew)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
+    }
+
     return {
       metadata: {
         diagnostics,
         diff,
+        filediff,
       },
       title: `${path.relative(Instance.worktree, filePath)}`,
       output,

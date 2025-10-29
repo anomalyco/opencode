@@ -1,8 +1,19 @@
-import { Button, List, SelectDialog, Tooltip, IconButton, Tabs, Icon, Accordion } from "@opencode-ai/ui"
+import {
+  Button,
+  List,
+  SelectDialog,
+  Tooltip,
+  IconButton,
+  Tabs,
+  Icon,
+  Accordion,
+  Diff,
+  Collapsible,
+} from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
 import { For, onCleanup, onMount, Show, Match, Switch, createSignal, createEffect, createMemo } from "solid-js"
-import { useLocal, type LocalFile, type TextSelection } from "@/context/local"
+import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { getDirectory, getFilename } from "@/utils"
 import { ContentPart, PromptInput } from "@/components/prompt-input"
@@ -21,7 +32,6 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Diff } from "@/components/diff"
 import { ProgressCircle } from "@/components/progress-circle"
 import { AssistantMessage } from "@/components/assistant-message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
@@ -186,42 +196,10 @@ export default function Page() {
     }
     if (!session) return
 
-    interface SubmissionAttachment {
-      path: string
-      selection?: TextSelection
-      label: string
-    }
-
-    const createAttachmentKey = (path: string, selection?: TextSelection) => {
-      if (!selection) return path
-      return `${path}:${selection.startLine}:${selection.startChar}:${selection.endLine}:${selection.endChar}`
-    }
-
-    const formatAttachmentLabel = (path: string, selection?: TextSelection) => {
-      if (!selection) return getFilename(path)
-      return `${getFilename(path)} (${selection.startLine}-${selection.endLine})`
-    }
-
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
     const text = parts.map((part) => part.content).join("")
-    const attachments = new Map<string, SubmissionAttachment>()
-
-    const registerAttachment = (path: string, selection: TextSelection | undefined, label?: string) => {
-      if (!path) return
-      const key = createAttachmentKey(path, selection)
-      if (attachments.has(key)) return
-      attachments.set(key, {
-        path,
-        selection,
-        label: label ?? formatAttachmentLabel(path, selection),
-      })
-    }
-
-    const promptAttachments = parts.filter((part) => part.type === "file")
-    for (const part of promptAttachments) {
-      registerAttachment(part.path, part.selection, part.content)
-    }
+    const attachments = parts.filter((part) => part.type === "file")
 
     // const activeFile = local.context.active()
     // if (activeFile) {
@@ -240,7 +218,7 @@ export default function Page() {
     //   )
     // }
 
-    const attachmentParts = Array.from(attachments.values()).map((attachment) => {
+    const attachmentParts = attachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
       const query = attachment.selection
         ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
@@ -253,9 +231,9 @@ export default function Page() {
         source: {
           type: "file" as const,
           text: {
-            value: `@${attachment.label}`,
-            start: 0,
-            end: 0,
+            value: attachment.content,
+            start: attachment.start,
+            end: attachment.end,
           },
           path: absolute,
         },
@@ -511,8 +489,8 @@ export default function Page() {
                   </Show>
                 </div>
               </div>
-              <Tabs.Content value="chat" class="select-text flex flex-col flex-1 min-h-0">
-                <div class="p-6 pt-12 max-w-[904px] w-full mx-auto flex flex-col flex-1 min-h-0">
+              <Tabs.Content value="chat" class="select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
+                <div class="px-6 pt-12 max-w-[904px] w-full mx-auto flex flex-col flex-1 min-h-0">
                   <Show
                     when={local.session.active()}
                     fallback={
@@ -521,7 +499,7 @@ export default function Page() {
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
                           <div class="text-12-medium text-text-weak">
-                            {getDirectory(sync.data.path.directory)}/
+                            {getDirectory(sync.data.path.directory)}
                             <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
                           </div>
                         </div>
@@ -538,7 +516,7 @@ export default function Page() {
                     }
                   >
                     {(activeSession) => (
-                      <div class="py-3 flex flex-col flex-1 min-h-0">
+                      <div class="pt-3 flex flex-col flex-1 min-h-0">
                         <div class="flex items-start gap-8 flex-1 min-h-0">
                           <Show when={local.session.userMessages().length > 1}>
                             <ul role="list" class="w-60 shrink-0 flex flex-col items-start gap-1">
@@ -655,7 +633,7 @@ export default function Page() {
                             </ul>
                           </Show>
                           <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
-                            <div class="flex flex-col items-start gap-50 pb-[800px]">
+                            <div class="flex flex-col items-start gap-50 pb-50">
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const title = createMemo(() => message.summary?.title)
@@ -666,54 +644,89 @@ export default function Page() {
                                       (m) => m.role === "assistant" && m.parentID == message.id,
                                     ) as AssistantMessageType[]
                                   })
+                                  const working = createMemo(() => {
+                                    const last = assistantMessages()[assistantMessages().length - 1]
+                                    if (!last) return false
+                                    return !last.time.completed
+                                  })
+                                  const lastWithContent = createMemo(() =>
+                                    assistantMessages().findLast((m) => {
+                                      const parts = sync.data.part[m.id]
+                                      return parts?.find((p) => p.type === "text" || p.type === "tool")
+                                    }),
+                                  )
 
                                   return (
-                                    <div
-                                      data-message={message.id}
-                                      class="flex flex-col items-start self-stretch gap-14 pt-1.5"
-                                    >
+                                    <div data-message={message.id} class="flex flex-col items-start self-stretch gap-8">
                                       {/* Title */}
-                                      <div class="flex flex-col items-start gap-2 self-stretch">
+                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger">
                                         <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
                                           {title() ?? prompt()}
                                         </h1>
-                                        <Show when={title}>
-                                          <div class="text-12-regular text-text-base">{prompt()}</div>
+                                      </div>
+                                      <Show when={title}>
+                                        <div class="-mt-5 text-12-regular text-text-base line-clamp-3">{prompt()}</div>
+                                      </Show>
+                                      {/* Response */}
+                                      <div class="w-full flex flex-col gap-2">
+                                        <Collapsible variant="ghost">
+                                          <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
+                                            <div class="flex items-center gap-1 self-stretch">
+                                              <h2 class="text-12-medium">Show steps</h2>
+                                              <Collapsible.Arrow />
+                                            </div>
+                                          </Collapsible.Trigger>
+                                          <Collapsible.Content>
+                                            <div class="w-full flex flex-col items-start self-stretch gap-8">
+                                              <For each={assistantMessages()}>
+                                                {(assistantMessage) => {
+                                                  const parts = createMemo(() => sync.data.part[assistantMessage.id])
+                                                  return <AssistantMessage message={assistantMessage} parts={parts()} />
+                                                }}
+                                              </For>
+                                            </div>
+                                          </Collapsible.Content>
+                                        </Collapsible>
+                                        <Show when={working() && lastWithContent()}>
+                                          {(last) => {
+                                            const lastParts = createMemo(() => sync.data.part[last().id])
+                                            return (
+                                              <AssistantMessage lastToolOnly message={last()} parts={lastParts()} />
+                                            )
+                                          }}
                                         </Show>
                                       </div>
                                       {/* Summary */}
-                                      <div class="w-full flex flex-col gap-6 items-start self-stretch">
-                                        <Show when={summary}>
+                                      <Show when={!working()}>
+                                        <div class="w-full flex flex-col gap-6 items-start self-stretch">
                                           <div class="flex flex-col items-start gap-1 self-stretch">
                                             <h2 class="text-12-medium text-text-weak">Summary</h2>
                                             <div class="text-14-regular text-text-base self-stretch">{summary()}</div>
                                           </div>
-                                        </Show>
-                                        <Show when={message.summary?.diffs.length}>
                                           <Accordion class="w-full" multiple>
                                             <For each={message.summary?.diffs || []}>
                                               {(diff) => (
                                                 <Accordion.Item value={diff.file}>
                                                   <Accordion.Header>
                                                     <Accordion.Trigger onClick={handleDiffTriggerClick}>
-                                                      <div class="flex items-center justify-between w-full">
-                                                        <div class="flex items-center gap-5">
+                                                      <div class="flex items-center justify-between w-full gap-5">
+                                                        <div class="grow flex items-center gap-5 min-w-0">
                                                           <FileIcon
                                                             node={{ path: diff.file, type: "file" }}
                                                             class="shrink-0 size-4"
                                                           />
-                                                          <div class="flex">
+                                                          <div class="flex grow min-w-0">
                                                             <Show when={diff.file.includes("/")}>
-                                                              <span class="text-text-base">
-                                                                {getDirectory(diff.file)}/
+                                                              <span class="text-text-base truncate-start">
+                                                                {getDirectory(diff.file)}&lrm;
                                                               </span>
                                                             </Show>
-                                                            <span class="text-text-strong">
+                                                            <span class="text-text-strong shrink-0">
                                                               {getFilename(diff.file)}
                                                             </span>
                                                           </div>
                                                         </div>
-                                                        <div class="flex gap-4 items-center justify-end">
+                                                        <div class="shrink-0 flex gap-4 items-center justify-end">
                                                           <DiffChanges diff={diff} />
                                                           <Icon name="chevron-grabber-vertical" size="small" />
                                                         </div>
@@ -736,22 +749,8 @@ export default function Page() {
                                               )}
                                             </For>
                                           </Accordion>
-                                        </Show>
-                                      </div>
-                                      {/* Response */}
-                                      <div data-todo="Response" class="w-full">
-                                        <div class="flex flex-col items-start gap-1 self-stretch">
-                                          <h2 class="text-12-medium text-text-weak">Response</h2>
                                         </div>
-                                        <div class="w-full flex flex-col items-start self-stretch gap-8">
-                                          <For each={assistantMessages()}>
-                                            {(assistantMessage) => {
-                                              const parts = createMemo(() => sync.data.part[assistantMessage.id])
-                                              return <AssistantMessage message={assistantMessage} parts={parts()} />
-                                            }}
-                                          </For>
-                                        </div>
-                                      </div>
+                                      </Show>
                                     </div>
                                   )
                                 }}
@@ -858,7 +857,7 @@ export default function Page() {
                 <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(i)}/
+                    {getDirectory(i)}
                   </span>
                   <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                 </div>

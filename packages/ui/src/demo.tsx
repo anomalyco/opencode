@@ -3,6 +3,7 @@ import { createSignal } from "solid-js"
 import {
   Accordion,
   Button,
+  Checkbox,
   Select,
   Tabs,
   Tooltip,
@@ -21,6 +22,8 @@ const Demo: Component = () => {
   const [dialogOpen, setDialogOpen] = createSignal(false)
   const [selectDialogOpen, setSelectDialogOpen] = createSignal(false)
   const [inputValue, setInputValue] = createSignal("")
+  const [checked, setChecked] = createSignal(false)
+  const [termsAccepted, setTermsAccepted] = createSignal(false)
 
   const Content = (props: { dark?: boolean }) => (
     <div class={`${props.dark ? "dark" : ""}`}>
@@ -142,6 +145,28 @@ const Demo: Component = () => {
         />
         <Input placeholder="Disabled input" disabled />
         <Input type="password" placeholder="Password input" />
+      </section>
+      <h3>Checkbox</h3>
+      <section style={{ "flex-direction": "column", "align-items": "flex-start", gap: "12px" }}>
+        <Checkbox label="Simple checkbox" />
+        <Checkbox label="Checked by default" defaultChecked />
+        <Checkbox label="Disabled checkbox" disabled />
+        <Checkbox label="Disabled & checked" disabled checked />
+        <Checkbox
+          label="Controlled checkbox"
+          description="This checkbox is controlled by state"
+          checked={checked()}
+          onChange={setChecked}
+        />
+        <Checkbox label="With description" description="This is a helpful description for the checkbox" />
+        <Checkbox label="Indeterminate state" description="Useful for nested checkbox lists" indeterminate />
+        <Checkbox
+          label="I agree to the Terms and Conditions"
+          description="You must agree to continue"
+          checked={termsAccepted()}
+          onChange={setTermsAccepted}
+          validationState={!termsAccepted() ? "invalid" : "valid"}
+        />
       </section>
       <h3>Icons</h3>
       <section>

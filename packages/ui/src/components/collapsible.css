@@ -57,6 +57,27 @@
     /*   animation: slideDown 250ms ease-out; */
     /* } */
   }
+
+  &[data-variant="ghost"] {
+    background-color: transparent;
+    border: none;
+
+    > [data-slot="collapsible-trigger"] {
+      background-color: transparent;
+      border: none;
+      padding: 0;
+
+      /* &:hover { */
+      /*   color: var(--text-strong); */
+      /* } */
+      &:focus-visible {
+        outline: none;
+      }
+      &[data-disabled] {
+        cursor: not-allowed;
+      }
+    }
+  }
 }
 
 @keyframes slideDown {

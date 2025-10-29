@@ -505,6 +505,10 @@ export type Config = {
         }
       }>
     }
+    /**
+     * Number of retries for chat completions on failure
+     */
+    chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
 }
@@ -658,7 +662,12 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ApiError
   system: Array<string>
   parentID: string
   modelID: string
@@ -1222,7 +1231,12 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ApiError
   }
 }
 

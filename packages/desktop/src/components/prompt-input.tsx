@@ -10,13 +10,15 @@ import { DateTime } from "luxon"
 
 interface PartBase {
   content: string
+  start: number
+  end: number
 }
 
-interface TextPart extends PartBase {
+export interface TextPart extends PartBase {
   type: "text"
 }
 
-interface FileAttachmentPart extends PartBase {
+export interface FileAttachmentPart extends PartBase {
   type: "file"
   path: string
   selection?: TextSelection
@@ -34,7 +36,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   let editorRef!: HTMLDivElement
 
-  const defaultParts = [{ type: "text", content: "" } as const]
+  const defaultParts = [{ type: "text", content: "", start: 0, end: 0 } as const]
   const [store, setStore] = createStore<{
     contentParts: ContentPart[]
     popoverIsOpen: boolean
@@ -51,7 +53,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     event.stopPropagation()
     // @ts-expect-error
     const plainText = (event.clipboardData || window.clipboardData)?.getData("text/plain") ?? ""
-    addPart({ type: "text", content: plainText })
+    addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
   onMount(() => {
@@ -74,7 +76,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     key: (x) => x,
     onSelect: (path) => {
       if (!path) return
-      addPart({ type: "file", path, content: "@" + getFilename(path) })
+      addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
       setStore("popoverIsOpen", false)
     },
   })
@@ -117,17 +119,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const parseFromDOM = (): ContentPart[] => {
     const newParts: ContentPart[] = []
+    let position = 0
     editorRef.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent) newParts.push({ type: "text", content: node.textContent })
+        if (node.textContent) {
+          const content = node.textContent
+          newParts.push({ type: "text", content, start: position, end: position + content.length })
+          position += content.length
+        }
       } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
         switch ((node as HTMLElement).dataset.type) {
           case "file":
+            const content = node.textContent!
             newParts.push({
               type: "file",
               path: (node as HTMLElement).dataset.path!,
-              content: node.textContent!,
+              content,
+              start: position,
+              end: position + content.length,
             })
+            position += content.length
             break
           default:
             break
@@ -163,17 +174,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const startIndex = atMatch ? atMatch.index! : cursorPosition
     const endIndex = atMatch ? cursorPosition : cursorPosition
 
-    const pushText = (acc: { parts: ContentPart[] }, value: string) => {
+    const pushText = (acc: { parts: ContentPart[]; runningIndex: number }, value: string) => {
       if (!value) return
       const last = acc.parts[acc.parts.length - 1]
       if (last && last.type === "text") {
         acc.parts[acc.parts.length - 1] = {
           type: "text",
           content: last.content + value,
+          start: last.start,
+          end: last.end + value.length,
         }
         return
       }
-      acc.parts.push({ type: "text", content: value })
+      acc.parts.push({ type: "text", content: value, start: acc.runningIndex, end: acc.runningIndex + value.length })
     }
 
     const {
@@ -183,20 +196,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     } = store.contentParts.reduce(
       (acc, item) => {
         if (acc.inserted) {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex += item.content.length
           return acc
         }
 
         const nextIndex = acc.runningIndex + item.content.length
         if (nextIndex <= startIndex) {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex = nextIndex
           return acc
         }
 
         if (item.type !== "text") {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex = nextIndex
           return acc
         }
@@ -207,24 +220,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         const tail = item.content.slice(tailLength)
 
         pushText(acc, head)
+        acc.runningIndex += head.length
 
         if (part.type === "text") {
           pushText(acc, part.content)
+          acc.runningIndex += part.content.length
         }
         if (part.type !== "text") {
-          acc.parts.push({ ...part })
+          acc.parts.push({ ...part, start: acc.runningIndex, end: acc.runningIndex + part.content.length })
+          acc.runningIndex += part.content.length
         }
 
         const needsGap = Boolean(atMatch)
         const rest = needsGap ? (tail ? (/^\s/.test(tail) ? tail : ` ${tail}`) : " ") : tail
         pushText(acc, rest)
+        acc.runningIndex += rest.length
 
         const baseCursor = startIndex + part.content.length
         const cursorAddition = needsGap && rest.length > 0 ? 1 : 0
         acc.cursorPositionAfter = baseCursor + cursorAddition
 
         acc.inserted = true
-        acc.runningIndex = nextIndex
         return acc
       },
       {
@@ -237,9 +253,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!inserted) {
       const baseParts = store.contentParts.filter((item) => !(item.type === "text" && item.content === ""))
-      const appendedAcc = { parts: [...baseParts] as ContentPart[] }
-      if (part.type === "text") pushText(appendedAcc, part.content)
-      if (part.type !== "text") appendedAcc.parts.push({ ...part })
+      const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
+      const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
+      if (part.type === "text") {
+        pushText(appendedAcc, part.content)
+      }
+      if (part.type !== "text") {
+        appendedAcc.parts.push({
+          ...part,
+          start: appendedAcc.runningIndex,
+          end: appendedAcc.runningIndex + part.content.length,
+        })
+      }
       const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : defaultParts
       setStore("contentParts", next)
       setStore("popoverIsOpen", false)
@@ -289,7 +314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
                     <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}/
+                      {getDirectory(i)}
                     </span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                   </div>
