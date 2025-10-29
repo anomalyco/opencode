@@ -8,9 +8,9 @@ const TuiRequest = z.object({
   body: z.any(),
 })
 
-type Request = z.infer<typeof TuiRequest>
+type TuiRequest = z.infer<typeof TuiRequest>
 
-const request = new AsyncQueue<Request>()
+const request = new AsyncQueue<TuiRequest>()
 const response = new AsyncQueue<any>()
 
 export async function callTui(ctx: Context) {
