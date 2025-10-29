@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCode WebSocket Test</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+
+    h1 {
+      color: #4ec9b0;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .panel {
+      background: #252526;
+      border: 1px solid #3e3e42;
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .panel h2 {
+      color: #569cd6;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+
+    .status.connected {
+      background: #0e639c;
+      color: white;
+    }
+
+    .status.disconnected {
+      background: #a1260d;
+      color: white;
+    }
+
+    button {
+      background: #0e639c;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin: 5px 5px 5px 0;
+    }
+
+    button:hover {
+      background: #1177bb;
+    }
+
+    button:disabled {
+      background: #3e3e42;
+      cursor: not-allowed;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      background: #1e1e1e;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .log {
+      background: #1e1e1e;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+      padding: 15px;
+      height: 400px;
+      overflow-y: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px;
+    }
+
+    .log-entry {
+      padding: 5px;
+      margin: 2px 0;
+      border-left: 3px solid transparent;
+    }
+
+    .log-entry.info {
+      border-left-color: #569cd6;
+    }
+
+    .log-entry.error {
+      border-left-color: #f48771;
+      background: rgba(244, 135, 113, 0.1);
+    }
+
+    .log-entry.event {
+      border-left-color: #4ec9b0;
+    }
+
+    .log-entry .timestamp {
+      color: #858585;
+      margin-right: 10px;
+    }
+
+    .json {
+      background: #2d2d30;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 5px;
+      overflow-x: auto;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #858585;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 OpenCode WebSocket Test Client</h1>
+
+  <div class="controls">
+    <button id="connect" onclick="connect()">Connect</button>
+    <button id="disconnect" onclick="disconnect()" disabled>Disconnect</button>
+    <span id="status" class="status disconnected">Disconnected</span>
+  </div>
+
+  <div class="container">
+    <div class="panel">
+      <h2>Controls</h2>
+
+      <div class="input-group">
+        <label>WebSocket URL</label>
+        <input type="text" id="wsUrl" value="ws://localhost:3000/ws" />
+      </div>
+
+      <div class="input-group">
+        <label>Session ID (optional)</label>
+        <input type="text" id="sessionId" placeholder="Leave empty to create new session" />
+      </div>
+
+      <button onclick="createSession()">Create New Session</button>
+      <button onclick="listSessions()">List Sessions</button>
+      <button onclick="subscribeToSession()" id="subscribeBtn" disabled>Subscribe to Session</button>
+
+      <hr style="margin: 20px 0; border-color: #3e3e42;">
+
+      <div class="input-group">
+        <label>Prompt Message</label>
+        <textarea id="prompt" placeholder="Enter your message...">Tell me a joke about programming</textarea>
+      </div>
+
+      <button onclick="sendPrompt()" id="sendBtn" disabled>Send Prompt</button>
+      <button onclick="ping()" id="pingBtn" disabled>Send Ping</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="panel">
+      <h2>Event Log</h2>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let currentSessionID = null;
+    const API_URL = 'http://localhost:3000';
+
+    function log(message, type = 'info', data = null) {
+      const logDiv = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+
+      const timestamp = new Date().toLocaleTimeString();
+      entry.innerHTML = `
+        <span class="timestamp">[${timestamp}]</span>
+        <span>${message}</span>
+      `;
+
+      if (data) {
+        const jsonDiv = document.createElement('div');
+        jsonDiv.className = 'json';
+        jsonDiv.textContent = JSON.stringify(data, null, 2);
+        entry.appendChild(jsonDiv);
+      }
+
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '';
+    }
+
+    function updateStatus(connected) {
+      const statusEl = document.getElementById('status');
+      const connectBtn = document.getElementById('connect');
+      const disconnectBtn = document.getElementById('disconnect');
+      const subscribeBtn = document.getElementById('subscribeBtn');
+      const sendBtn = document.getElementById('sendBtn');
+      const pingBtn = document.getElementById('pingBtn');
+
+      if (connected) {
+        statusEl.className = 'status connected';
+        statusEl.textContent = 'Connected';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        subscribeBtn.disabled = false;
+        sendBtn.disabled = false;
+        pingBtn.disabled = false;
+      } else {
+        statusEl.className = 'status disconnected';
+        statusEl.textContent = 'Disconnected';
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        subscribeBtn.disabled = true;
+        sendBtn.disabled = true;
+        pingBtn.disabled = true;
+      }
+    }
+
+    function connect() {
+      const url = document.getElementById('wsUrl').value;
+
+      log('Connecting to ' + url, 'info');
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        log('WebSocket connected!', 'event');
+        updateStatus(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          switch (data.type) {
+            case 'event':
+              log('Event received: ' + data.data.type, 'event', data.data);
+
+              // Auto-extract session ID from session events
+              if (data.data.properties?.sessionID) {
+                currentSessionID = data.data.properties.sessionID;
+                document.getElementById('sessionId').value = currentSessionID;
+              }
+              break;
+
+            case 'subscribed':
+              log('Subscribed to session: ' + data.data.sessionID, 'event', data);
+              currentSessionID = data.data.sessionID;
+              break;
+
+            case 'pong':
+              log('Pong received', 'info');
+              break;
+
+            case 'error':
+              log('Error: ' + data.error, 'error', data);
+              break;
+
+            default:
+              log('Unknown message type: ' + data.type, 'info', data);
+          }
+        } catch (err) {
+          log('Failed to parse message: ' + err.message, 'error');
+        }
+      };
+
+      ws.onerror = (error) => {
+        log('WebSocket error', 'error', error);
+      };
+
+      ws.onclose = () => {
+        log('WebSocket disconnected', 'info');
+        updateStatus(false);
+        ws = null;
+      };
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    async function createSession() {
+      try {
+        log('Creating new session...', 'info');
+
+        const response = await fetch(`${API_URL}/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+
+        const session = await response.json();
+        log('Session created: ' + session.id, 'event', session);
+
+        document.getElementById('sessionId').value = session.id;
+        currentSessionID = session.id;
+      } catch (err) {
+        log('Failed to create session: ' + err.message, 'error');
+      }
+    }
+
+    async function listSessions() {
+      try {
+        log('Fetching sessions...', 'info');
+
+        const response = await fetch(`${API_URL}/session`);
+        const sessions = await response.json();
+
+        log('Sessions retrieved (' + sessions.length + ')', 'event', sessions);
+      } catch (err) {
+        log('Failed to list sessions: ' + err.message, 'error');
+      }
+    }
+
+    function subscribeToSession() {
+      const sessionID = document.getElementById('sessionId').value;
+
+      if (!sessionID) {
+        log('Please enter a session ID first', 'error');
+        return;
+      }
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket not connected', 'error');
+        return;
+      }
+
+      log('Subscribing to session: ' + sessionID, 'info');
+
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        sessionID: sessionID
+      }));
+    }
+
+    function sendPrompt() {
+      const sessionID = document.getElementById('sessionId').value;
+      const content = document.getElementById('prompt').value;
+
+      if (!sessionID) {
+        log('Please subscribe to a session first', 'error');
+        return;
+      }
+
+      if (!content) {
+        log('Please enter a prompt message', 'error');
+        return;
+      }
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket not connected', 'error');
+        return;
+      }
+
+      log('Sending prompt...', 'info', { sessionID, content });
+
+      ws.send(JSON.stringify({
+        type: 'prompt',
+        sessionID: sessionID,
+        content: content
+      }));
+    }
+
+    function ping() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket not connected', 'error');
+        return;
+      }
+
+      log('Sending ping...', 'info');
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }
+
+    // Auto-connect on load
+    window.addEventListener('load', () => {
+      log('WebSocket test client ready', 'info');
+      log('Click "Connect" to start', 'info');
+    });
+  </script>
+</body>
+</html>

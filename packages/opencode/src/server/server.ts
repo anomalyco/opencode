@@ -37,6 +37,7 @@ import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
+import { WebSocketServer } from "./websocket"
 
 const ERRORS = {
   400: {
@@ -1517,6 +1518,36 @@ export namespace Server {
         },
       )
       .get(
+        "/ws",
+        describeRoute({
+          description: "WebSocket connection for real-time communication",
+          operationId: "websocket.connect",
+          responses: {
+            101: {
+              description: "WebSocket connection established",
+            },
+            400: {
+              description: "Bad request - WebSocket upgrade failed",
+            },
+          },
+        }),
+        async (c) => {
+          const clientID = crypto.randomUUID()
+          const upgraded = c.env?.server?.upgrade(c.req.raw, {
+            data: {
+              clientID,
+              subscribed: false,
+            } as WebSocketServer.WebSocketData,
+          })
+
+          if (!upgraded) {
+            return c.text("WebSocket upgrade failed", 400)
+          }
+
+          return undefined as any
+        },
+      )
+      .get(
         "/event",
         describeRoute({
           description: "Get events",
@@ -1581,8 +1612,19 @@ export namespace Server {
       port: opts.port,
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch(req, server) {
+        // Store server reference in request context for WebSocket upgrade
+        return App().fetch(req, { server })
+      },
+      websocket: WebSocketServer.handlers,
     })
+
+    log.info("server started", {
+      port: opts.port,
+      hostname: opts.hostname,
+      websocket: "enabled",
+    })
+
     return server
   }
 }
