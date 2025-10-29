@@ -161,18 +161,11 @@ export namespace SessionPrompt {
       })
     }
 
-    // Build runtime options
-    let runtimeOptions: Record<string, unknown> | undefined = undefined
-    if (input.timeout) {
-      runtimeOptions ??= {}
-      runtimeOptions.timeout = input.timeout
-    }
-
     const agent = await Agent.get(input.agent ?? "build")
     const model = await resolveModel({
       agent,
       model: input.model,
-    }).then((x) => Provider.getModel(x.providerID, x.modelID, runtimeOptions))
+    }).then((x) => Provider.getModel(x.providerID, x.modelID))
 
     using abort = lock(input.sessionID)
 
