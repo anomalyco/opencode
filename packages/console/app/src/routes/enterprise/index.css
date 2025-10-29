@@ -309,29 +309,21 @@
       color: var(--color-text);
     }
 
-    ul {
-      list-style: none;
-      padding: 0;
-      margin-bottom: 2rem;
+    [data-component="testimonial"] {
+      margin-top: 4rem;
+      font-weight: 500;
+      color: var(--color-text-strong);
 
-      li {
-        margin-bottom: 0.75rem;
-        padding-left: 1.5rem;
-        position: relative;
-        line-height: 1.5;
-        color: var(--color-text);
-
-        &::before {
-          content: "•";
-          position: absolute;
-          left: 0;
-          color: var(--color-background-interactive);
-          font-weight: bold;
+      [data-component="quotation"] {
+        svg {
+          margin-bottom: 1rem;
+          opacity: 20%;
         }
+      }
 
-        strong {
-          color: var(--color-text-strong);
-          font-weight: 500;
+      [data-component="testimonial-logo"] {
+        svg {
+          margin-top: 1.5rem;
         }
       }
     }
