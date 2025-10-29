@@ -33,7 +33,7 @@ import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { ProgressCircle } from "@/components/progress-circle"
-import { AssistantMessage, Part } from "@/components/assistant-message"
+import { Message, Part } from "@/components/message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { DiffChanges } from "@/components/diff-changes"
 
@@ -198,6 +198,7 @@ export default function Page() {
     }
     if (!session) return
 
+    local.session.setActive(session.id)
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
 
     const text = parts.map((part) => part.content).join("")
@@ -259,7 +260,6 @@ export default function Page() {
         ],
       },
     })
-    local.session.setActive(session.id)
   }
 
   const handleNewSession = () => {
@@ -639,8 +639,9 @@ export default function Page() {
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const [expanded, setExpanded] = createSignal(false)
-                                  const title = createMemo(() => message.summary?.title)
+                                  const parts = createMemo(() => sync.data.part[message.id])
                                   const prompt = createMemo(() => local.session.getMessageText(message))
+                                  const title = createMemo(() => message.summary?.title)
                                   const summary = createMemo(() => message.summary?.body)
                                   const assistantMessages = createMemo(() => {
                                     return sync.data.message[activeSession().id]?.filter(
@@ -665,7 +666,9 @@ export default function Page() {
                                         </h1>
                                       </div>
                                       <Show when={title}>
-                                        <div class="-mt-8 text-12-regular text-text-base line-clamp-3">{prompt()}</div>
+                                        <div class="-mt-8">
+                                          <Message message={message} parts={parts()} />
+                                        </div>
                                       </Show>
                                       {/* Response */}
                                       <div class="w-full flex flex-col gap-2">
@@ -686,7 +689,7 @@ export default function Page() {
                                               <For each={assistantMessages()}>
                                                 {(assistantMessage) => {
                                                   const parts = createMemo(() => sync.data.part[assistantMessage.id])
-                                                  return <AssistantMessage message={assistantMessage} parts={parts()} />
+                                                  return <Message message={assistantMessage} parts={parts()} />
                                                 }}
                                               </For>
                                             </div>
@@ -722,7 +725,9 @@ export default function Page() {
                                                       const lastTextPart = createMemo(() =>
                                                         sync.data.part[last().id].findLast((p) => p.type === "text"),
                                                       )
-                                                      return <Part message={last()} part={lastTextPart()!} readonly />
+                                                      return (
+                                                        <Part message={last()} part={lastTextPart()!} hideDetails />
+                                                      )
                                                     }}
                                                   </Match>
                                                   <Match when={lastMessageWithReasoning()}>
@@ -733,7 +738,11 @@ export default function Page() {
                                                         ),
                                                       )
                                                       return (
-                                                        <Part message={last()} part={lastReasoningPart()!} readonly />
+                                                        <Part
+                                                          message={last()}
+                                                          part={lastReasoningPart()!}
+                                                          hideDetails
+                                                        />
                                                       )
                                                     }}
                                                   </Match>
@@ -745,7 +754,7 @@ export default function Page() {
                                                         (p) => p.type === "tool" && p.state.status === "completed",
                                                       ),
                                                     )
-                                                    return <Part message={last()} part={lastToolPart()!} readonly />
+                                                    return <Part message={last()} part={lastToolPart()!} hideDetails />
                                                   }}
                                                 </Show>
                                               </div>
