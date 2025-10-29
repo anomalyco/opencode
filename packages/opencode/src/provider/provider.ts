@@ -270,10 +270,6 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existing = parsed.models[modelID]
-        const hdrs = [existing?.headers, model.headers].filter(
-          (item): item is Record<string, string> => Boolean(item),
-        )
-        const headers = hdrs.length ? Object.assign({}, ...hdrs) : undefined
         const parsedModel: ModelsDev.Model = {
           id: modelID,
           name: model.name ?? existing?.name ?? modelID,
@@ -310,7 +306,7 @@ export namespace Provider {
               input: ["text"],
               output: ["text"],
             },
-          headers,
+          headers: model.headers,
           provider: model.provider ?? existing?.provider,
         }
         if (model.id && model.id !== modelID) {

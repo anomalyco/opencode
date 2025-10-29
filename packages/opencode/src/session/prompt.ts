@@ -276,7 +276,10 @@ export namespace SessionPrompt {
               toolName: "invalid",
             }
           },
-          headers: ProviderTransform.headers(sessionHeaders, model.info.headers),
+          headers: {
+            ...sessionHeaders,
+            ...model.info.headers
+          },
           // set to 0, we handle loop
           maxRetries: 0,
           activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
@@ -1770,7 +1773,7 @@ export namespace SessionPrompt {
           },
         ]),
       ],
-      headers: ProviderTransform.headers(undefined, small.info.headers),
+      headers: small.info.headers,
       model: small.language,
     })
       .then((result) => {
