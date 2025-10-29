@@ -35,7 +35,6 @@ export namespace SessionSummary {
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files),
     )
-    console.log(files)
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => files.has(x.file)),
     )
