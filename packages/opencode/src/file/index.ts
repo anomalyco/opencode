@@ -10,6 +10,7 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
+import { Config } from "../config/config"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -126,7 +127,9 @@ export namespace File {
     const fn = async (result: Entry) => {
       fetching = true
       const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+      const cfg = await Config.get()
+      const noIgnoreVcs = cfg.file?.no_ignore_vcs ?? false
+      for await (const file of Ripgrep.files({ cwd: Instance.directory, noIgnoreVcs })) {
         result.files.push(file)
         let current = file
         while (true) {

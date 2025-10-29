@@ -337,6 +337,15 @@ export type Config = {
   watcher?: {
     ignore?: Array<string>
   }
+  /**
+   * File search configuration
+   */
+  file?: {
+    /**
+     * Do not respect VCS ignore files like .gitignore when searching files
+     */
+    no_ignore_vcs?: boolean
+  }
   plugin?: Array<string>
   snapshot?: boolean
   /**

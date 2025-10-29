@@ -435,6 +435,16 @@ export namespace Config {
           ignore: z.array(z.string()).optional(),
         })
         .optional(),
+      file: z
+        .object({
+          no_ignore_vcs: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Do not respect VCS ignore files like .gitignore when searching files"),
+        })
+        .optional()
+        .describe("File search configuration"),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
       share: z

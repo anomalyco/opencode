@@ -4,6 +4,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
+import { Config } from "../config/config"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -20,12 +21,16 @@ export const GlobTool = Tool.define("glob", {
     let search = params.path ?? Instance.directory
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
 
+    const cfg = await Config.get()
+    const noIgnoreVcs = cfg.file?.no_ignore_vcs ?? false
+
     const limit = 100
     const files = []
     let truncated = false
     for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
+      noIgnoreVcs,
     })) {
       if (files.length >= limit) {
         truncated = true

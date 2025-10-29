@@ -203,8 +203,13 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function* files(input: { cwd: string; glob?: string[] }) {
+  export async function* files(input: { cwd: string; glob?: string[]; noIgnoreVcs?: boolean }) {
     const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
+
+    if (input.noIgnoreVcs) {
+      args.push("--no-ignore-vcs")
+    }
+
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)
