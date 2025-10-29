@@ -505,6 +505,10 @@ export type Config = {
         }
       }>
     }
+    /**
+     * Number of retries for chat completions on failure
+     */
+    chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
 }
@@ -658,7 +662,12 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ApiError
   system: Array<string>
   parentID: string
   modelID: string
@@ -1222,7 +1231,12 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ApiError
   }
 }
 
@@ -2617,6 +2631,46 @@ export type TuiShowToastResponses = {
 }
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
+
+export type TuiControlNextData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/next"
+}
+
+export type TuiControlNextResponses = {
+  /**
+   * Next TUI request
+   */
+  200: {
+    path: string
+    body: unknown
+  }
+}
+
+export type TuiControlNextResponse = TuiControlNextResponses[keyof TuiControlNextResponses]
+
+export type TuiControlResponseData = {
+  body?: unknown
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/response"
+}
+
+export type TuiControlResponseResponses = {
+  /**
+   * Response submitted successfully
+   */
+  200: boolean
+}
+
+export type TuiControlResponseResponse =
+  TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
 export type AuthSetData = {
   body?: Auth

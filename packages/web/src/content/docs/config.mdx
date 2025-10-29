@@ -61,6 +61,22 @@ opencode run "Hello world"
 
 ---
 
+### Custom directory
+
+You can specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+environment variable. This directory will be searched for agents, commands,
+modes, and plugins just like the standard `.opencode` directory, and should
+follow the same structure.
+
+```bash
+export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+opencode run "Hello world"
+```
+
+Note: The custom directory is loaded after the global config and `.opencode` directories, so it can override their settings.
+
+---
+
 ## Schema
 
 The config file has a schema that's defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).

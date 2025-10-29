@@ -5,13 +5,15 @@ import { Icon } from "./icon"
 export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
   class?: string
   classList?: ComponentProps<"div">["classList"]
+  variant?: "normal" | "ghost"
 }
 
 function CollapsibleRoot(props: CollapsibleProps) {
-  const [local, others] = splitProps(props, ["class", "classList"])
+  const [local, others] = splitProps(props, ["class", "classList", "variant"])
   return (
     <Kobalte
       data-component="collapsible"
+      data-variant={local.variant || "normal"}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,

@@ -43,7 +43,7 @@ export async function handler(
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, body.model)
-    const providerInfo = selectProvider(zenData, modelInfo)
+    const providerInfo = selectProvider(zenData, modelInfo, input.request.headers.get("x-real-ip") ?? "")
     const authInfo = await authenticate(modelInfo, providerInfo)
     validateBilling(modelInfo, authInfo)
     validateModelSettings(authInfo)
@@ -222,11 +222,15 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, model: Awaited<ReturnType<typeof validateModel>>) {
+  function selectProvider(zenData: ZenData, model: Awaited<ReturnType<typeof validateModel>>, ip: string) {
     const providers = model.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
-    const provider = providers[Math.floor(Math.random() * providers.length)]
+
+    // Use last character of IP address to select a provider
+    const lastChar = ip.charCodeAt(ip.length - 1) || 0
+    const index = lastChar % providers.length
+    const provider = providers[index]
 
     if (!(provider.id in zenData.providers)) {
       throw new ModelError(`Provider ${provider.id} not supported`)

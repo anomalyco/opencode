@@ -50,9 +50,11 @@
   --radius-4xl: 2rem;
 
   --shadow-xs:
-    0 1px 2px -1px rgba(19, 16, 16, 0.04), 0 1px 2px 0 rgba(19, 16, 16, 0.06), 0 1px 3px 0 rgba(19, 16, 16, 0.08);
+    0 1px 2px -1px rgba(19, 16, 16, 0.04), 0 1px 2px 0 rgba(19, 16, 16, 0.06),
+    0 1px 3px 0 rgba(19, 16, 16, 0.08);
   --shadow-md:
-    0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12), 0 1px 2px -1px rgba(19, 16, 16, 0.12);
+    0 6px 8px -4px rgba(19, 16, 16, 0.12), 0 4px 3px -2px rgba(19, 16, 16, 0.12),
+    0 1px 2px -1px rgba(19, 16, 16, 0.12);
   --shadow-xs-border-selected:
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
     0 0 0 1px var(--border-selected, rgba(0, 74, 255, 0.99)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
@@ -66,8 +68,8 @@
   --background-weak: var(--smoke-light-3);
   --background-strong: var(--smoke-light-1);
   --background-stronger: #fcfcfc;
-  --base: var(--smoke-light-alpha-2);
   --surface-base: var(--smoke-light-alpha-2);
+  --base: var(--smoke-light-alpha-2);
   --surface-base-hover: #0500000f;
   --surface-base-active: var(--smoke-light-alpha-3);
   --surface-base-interactive-active: var(--cobalt-light-alpha-3);
@@ -81,6 +83,7 @@
   --surface-float-base: var(--smoke-dark-1);
   --surface-float-base-hover: var(--smoke-dark-2);
   --surface-raised-base-hover: var(--smoke-light-alpha-2);
+  --surface-raised-base-active: var(--smoke-light-alpha-3);
   --surface-raised-strong: var(--smoke-light-1);
   --surface-raised-strong-hover: var(--white);
   --surface-raised-stronger: var(--white);
@@ -107,9 +110,9 @@
   --surface-info-base: var(--lilac-light-3);
   --surface-info-weak: var(--lilac-light-2);
   --surface-info-strong: var(--lilac-light-9);
-  --surface-diff-hidden-base: var(--blue-light-3);
-  --surface-diff-skip-base: var(--smoke-light-2);
   --surface-diff-unchanged-base: #ffffff00;
+  --surface-diff-skip-base: var(--smoke-light-2);
+  --surface-diff-hidden-base: var(--blue-light-3);
   --surface-diff-hidden-weak: var(--blue-light-2);
   --surface-diff-hidden-weaker: var(--blue-light-1);
   --surface-diff-hidden-strong: var(--blue-light-5);
@@ -142,7 +145,7 @@
   --text-on-warning-base: var(--smoke-dark-alpha-11);
   --text-on-info-base: var(--smoke-dark-alpha-11);
   --text-diff-add-base: var(--mint-light-11);
-  --text-diff-delete-base: var(--ember-light-11);
+  --text-diff-delete-base: var(--ember-light-10);
   --text-diff-delete-strong: var(--ember-light-12);
   --text-diff-add-strong: var(--mint-light-12);
   --text-on-info-weak: var(--smoke-dark-alpha-9);
@@ -198,19 +201,19 @@
   --icon-selected: var(--smoke-light-12);
   --icon-disabled: var(--smoke-light-8);
   --icon-focus: var(--smoke-light-12);
-  --icon-weak-base: var(--smoke-light-7);
   --icon-invert-base: #ffffff;
+  --icon-weak-base: var(--smoke-light-7);
   --icon-weak-hover: var(--smoke-light-8);
   --icon-weak-active: var(--smoke-light-9);
   --icon-weak-selected: var(--smoke-light-10);
   --icon-weak-disabled: var(--smoke-light-6);
   --icon-weak-focus: var(--smoke-light-9);
   --icon-strong-base: var(--smoke-light-12);
-  --icon-strong-hover: var(--smoke-light-12);
-  --icon-strong-active: var(--smoke-light-12);
-  --icon-strong-selected: var(--smoke-light-12);
+  --icon-strong-hover: #151313;
+  --icon-strong-active: #020202;
+  --icon-strong-selected: #020202;
   --icon-strong-disabled: var(--smoke-light-8);
-  --icon-strong-focus: var(--smoke-light-12);
+  --icon-strong-focus: #020202;
   --icon-brand-base: var(--smoke-light-12);
   --icon-interactive-base: var(--cobalt-light-9);
   --icon-success-base: var(--apple-light-7);
@@ -248,9 +251,8 @@
   --icon-diff-add-base: var(--mint-light-11);
   --icon-diff-add-hover: var(--mint-light-12);
   --icon-diff-add-active: var(--mint-light-12);
-  --icon-diff-delete-base: var(--ember-light-9);
-  --icon-diff-delete-hover: var(--ember-light-10);
-  --icon-diff-delete-active: var(--ember-light-11);
+  --icon-diff-delete-base: var(--ember-light-10);
+  --icon-diff-delete-hover: var(--ember-light-11);
   --syntax-comment: #8a8a8a;
   --syntax-string: #d68c27;
   --syntax-keyword: #3b7dd8;
@@ -286,6 +288,8 @@
   --border-weaker-selected: var(--cobalt-light-alpha-4);
   --border-weaker-disabled: var(--smoke-light-alpha-2);
   --border-weaker-focus: var(--smoke-light-alpha-6);
+  --button-ghost-hover: var(--smoke-light-alpha-2);
+  --button-ghost-hover2: var(--smoke-light-alpha-3);
 
   @media (prefers-color-scheme: dark) {
     /* OC-1-Dark */
@@ -294,8 +298,8 @@
     --background-weak: #201d1d;
     --background-strong: #151313;
     --background-stronger: #201c1c;
-    --base: var(--smoke-dark-alpha-2);
     --surface-base: var(--smoke-dark-alpha-2);
+    --base: var(--smoke-dark-alpha-2);
     --surface-base-hover: #e0b7b716;
     --surface-base-active: var(--smoke-dark-alpha-3);
     --surface-base-interactive-active: var(--cobalt-dark-alpha-2);
@@ -309,6 +313,7 @@
     --surface-float-base: var(--smoke-dark-1);
     --surface-float-base-hover: var(--smoke-dark-2);
     --surface-raised-base-hover: var(--smoke-dark-alpha-4);
+    --surface-raised-base-active: var(--smoke-dark-alpha-5);
     --surface-raised-strong: var(--smoke-dark-alpha-4);
     --surface-raised-strong-hover: var(--smoke-dark-alpha-6);
     --surface-raised-stronger: var(--smoke-dark-alpha-6);
@@ -329,15 +334,15 @@
     --surface-warning-base: var(--solaris-light-3);
     --surface-warning-weak: var(--solaris-light-2);
     --surface-warning-strong: var(--solaris-light-9);
-    --surface-critical-base: var(--ember-light-3);
-    --surface-critical-weak: var(--ember-light-2);
-    --surface-critical-strong: var(--ember-light-9);
+    --surface-critical-base: var(--ember-dark-3);
+    --surface-critical-weak: var(--ember-dark-2);
+    --surface-critical-strong: var(--ember-dark-9);
     --surface-info-base: var(--lilac-light-3);
     --surface-info-weak: var(--lilac-light-2);
     --surface-info-strong: var(--lilac-light-9);
-    --surface-diff-hidden-base: var(--blue-dark-2);
-    --surface-diff-skip-base: var(--smoke-dark-alpha-1);
     --surface-diff-unchanged-base: var(--smoke-dark-1);
+    --surface-diff-skip-base: var(--smoke-dark-alpha-1);
+    --surface-diff-hidden-base: var(--blue-dark-2);
     --surface-diff-hidden-weak: var(--blue-dark-1);
     --surface-diff-hidden-weaker: var(--blue-dark-3);
     --surface-diff-hidden-strong: var(--blue-dark-5);
@@ -414,9 +419,9 @@
     --border-warning-base: var(--solaris-light-6);
     --border-warning-hover: var(--solaris-light-7);
     --border-warning-selected: var(--solaris-light-9);
-    --border-critical-base: var(--ember-light-6);
-    --border-critical-hover: var(--ember-light-7);
-    --border-critical-selected: var(--ember-light-9);
+    --border-critical-base: var(--ember-dark-5);
+    --border-critical-hover: var(--ember-dark-7);
+    --border-critical-selected: var(--ember-dark-9);
     --border-info-base: var(--lilac-light-6);
     --border-info-hover: var(--lilac-light-7);
     --border-info-selected: var(--lilac-light-9);
@@ -426,19 +431,19 @@
     --icon-selected: var(--smoke-dark-12);
     --icon-disabled: var(--smoke-dark-7);
     --icon-focus: var(--smoke-dark-12);
-    --icon-weak-base: var(--smoke-dark-6);
     --icon-invert-base: var(--smoke-dark-1);
+    --icon-weak-base: var(--smoke-dark-6);
     --icon-weak-hover: var(--smoke-light-7);
     --icon-weak-active: var(--smoke-light-8);
     --icon-weak-selected: var(--smoke-light-9);
     --icon-weak-disabled: var(--smoke-light-4);
     --icon-weak-focus: var(--smoke-light-9);
     --icon-strong-base: var(--smoke-dark-12);
-    --icon-strong-hover: var(--smoke-light-12);
-    --icon-strong-active: var(--smoke-light-12);
-    --icon-strong-selected: var(--smoke-light-12);
-    --icon-strong-disabled: var(--smoke-light-8);
-    --icon-strong-focus: var(--smoke-light-12);
+    --icon-strong-hover: #f6f3f3;
+    --icon-strong-active: #fcfcfc;
+    --icon-strong-selected: #fdfcfc;
+    --icon-strong-disabled: var(--smoke-dark-8);
+    --icon-strong-focus: #fdfcfc;
     --icon-brand-base: var(--white);
     --icon-interactive-base: var(--cobalt-dark-9);
     --icon-success-base: var(--apple-dark-7);
@@ -478,7 +483,6 @@
     --icon-diff-add-active: var(--mint-dark-11);
     --icon-diff-delete-base: var(--ember-dark-9);
     --icon-diff-delete-hover: var(--ember-dark-10);
-    --icon-diff-delete-active: var(--ember-dark-11);
     --syntax-comment: #808080;
     --syntax-string: #9d7cd8;
     --syntax-keyword: #fab283;
@@ -514,5 +518,7 @@
     --border-weaker-selected: var(--cobalt-dark-alpha-3);
     --border-weaker-disabled: var(--smoke-dark-alpha-2);
     --border-weaker-focus: var(--smoke-dark-alpha-6);
+    --button-ghost-hover: var(--smoke-dark-alpha-2);
+    --button-ghost-hover2: var(--smoke-dark-alpha-3);
   }
 }
