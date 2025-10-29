@@ -173,6 +173,72 @@ export class OpenCodeClient {
   }
 
   // ========================================
+  // File Operations
+  // ========================================
+
+  /**
+   * List files and directories
+   */
+  async listFiles(path: string): Promise<any[]> {
+    const response = await fetch(`${this.baseURL}/file?path=${encodeURIComponent(path)}`)
+    return response.json()
+  }
+
+  /**
+   * Read file content
+   */
+  async readFile(path: string): Promise<{ content: string; language?: string }> {
+    const response = await fetch(`${this.baseURL}/file/content?path=${encodeURIComponent(path)}`)
+    return response.json()
+  }
+
+  /**
+   * Get project file status (git status)
+   */
+  async getFileStatus(): Promise<any[]> {
+    const response = await fetch(`${this.baseURL}/file/status`)
+    return response.json()
+  }
+
+  /**
+   * Search files by name
+   */
+  async searchFiles(query: string): Promise<string[]> {
+    const response = await fetch(`${this.baseURL}/find/file?query=${encodeURIComponent(query)}`)
+    return response.json()
+  }
+
+  /**
+   * Search text in files
+   */
+  async searchText(pattern: string): Promise<any[]> {
+    const response = await fetch(`${this.baseURL}/find?pattern=${encodeURIComponent(pattern)}`)
+    return response.json()
+  }
+
+  /**
+   * Write file (via project API)
+   */
+  async writeFile(path: string, content: string): Promise<boolean> {
+    const response = await fetch(`${this.baseURL}/project/file`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, content }),
+    })
+    return response.json()
+  }
+
+  /**
+   * Delete file (via project API)
+   */
+  async deleteFile(path: string): Promise<boolean> {
+    const response = await fetch(`${this.baseURL}/project/file?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    })
+    return response.json()
+  }
+
+  // ========================================
   // WebSocket Methods
   // ========================================
 

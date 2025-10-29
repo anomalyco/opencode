@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "solid-js": "^1.9.9"
+    "solid-js": "^1.9.9",
+    "@monaco-editor/loader": "^1.4.0",
+    "monaco-editor": "^0.45.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
