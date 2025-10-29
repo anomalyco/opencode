@@ -25,8 +25,8 @@ export async function GET(input: APIEvent) {
       object: "list",
       data: Object.entries(zenData.models)
         .filter(([id]) => !disabledModels.includes(id))
-        .map(([id, model]) => ({
-          id: `opencode/${id}`,
+        .map(([id, _model]) => ({
+          id,
           object: "model",
           created: Math.floor(Date.now() / 1000),
           owned_by: "opencode",
@@ -50,7 +50,10 @@ export async function GET(input: APIEvent) {
         })
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
-        .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), isNull(ModelTable.timeDeleted)))
+        .leftJoin(
+          ModelTable,
+          and(eq(ModelTable.workspaceID, KeyTable.workspaceID), isNull(ModelTable.timeDeleted)),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows.map((row) => row.model)),
     )
