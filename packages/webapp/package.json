@@ -1,0 +1,24 @@
+{
+  "name": "@opencode/webapp",
+  "version": "0.0.1",
+  "description": "OpenCode Web Application",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.8.2",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.10.0"
+  }
+}
