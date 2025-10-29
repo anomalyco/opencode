@@ -98,23 +98,29 @@ export namespace SessionSummary {
           m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
       )
     ) {
-      const result = await generateText({
-        model: small.language,
-        maxOutputTokens: 100,
-        messages: [
-          {
-            role: "user",
-            content: `
+      let summary = messages
+        .findLast((m) => m.info.role === "assistant")
+        ?.parts.findLast((p) => p.type === "text")?.text
+      if (!summary || diffs.length > 0) {
+        const result = await generateText({
+          model: small.language,
+          maxOutputTokens: 100,
+          messages: [
+            {
+              role: "user",
+              content: `
             Summarize the following conversation into 2 sentences MAX explaining what the assistant did and why. Do not explain the user's input. Do not speak in the third person about the assistant.
             <conversation>
             ${JSON.stringify(MessageV2.toModelMessage(messages))}
             </conversation>
             `,
-          },
-        ],
-      })
-      userMsg.summary.body = result.text
-      log.info("body", { body: result.text })
+            },
+          ],
+        })
+        summary = result.text
+      }
+      userMsg.summary.body = summary
+      log.info("body", { body: summary })
       await Session.updateMessage(userMsg)
     }
   }
