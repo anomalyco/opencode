@@ -1,4 +1,4 @@
-import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart, Message } from "@opencode-ai/sdk"
+import type { Part, ReasoningPart, TextPart, ToolPart, Message, AssistantMessage, UserMessage } from "@opencode-ai/sdk"
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
@@ -17,7 +17,20 @@ import type { WriteTool } from "opencode/tool/write"
 import type { TodoWriteTool } from "opencode/tool/todo"
 import { DiffChanges } from "./diff-changes"
 
-export function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
+export function Message(props: { message: Message; parts: Part[] }) {
+  return (
+    <Switch>
+      <Match when={props.message.role === "user" && props.message}>
+        {(userMessage) => <UserMessage message={userMessage()} parts={props.parts} />}
+      </Match>
+      <Match when={props.message.role === "assistant" && props.message}>
+        {(assistantMessage) => <AssistantMessage message={assistantMessage()} parts={props.parts} />}
+      </Match>
+    </Switch>
+  )
+}
+
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
   const filteredParts = createMemo(() => {
     return props.parts?.filter((x) => {
       if (x.type === "reasoning") return false
@@ -31,11 +44,26 @@ export function AssistantMessage(props: { message: AssistantMessage; parts: Part
   )
 }
 
-export function Part(props: { part: Part; message: Message; readonly?: boolean }) {
+function UserMessage(props: { message: UserMessage; parts: Part[] }) {
+  const text = createMemo(() =>
+    props.parts
+      ?.filter((p) => p.type === "text" && !p.synthetic)
+      ?.map((p) => (p as TextPart).text)
+      ?.join(""),
+  )
+  return <div class="text-12-regular text-text-base line-clamp-3">{text()}</div>
+}
+
+export function Part(props: { part: Part; message: Message; hideDetails?: boolean }) {
   const component = createMemo(() => PART_MAPPING[props.part.type as keyof typeof PART_MAPPING])
   return (
     <Show when={component()}>
-      <Dynamic component={component()} part={props.part as any} message={props.message} readonly={props.readonly} />
+      <Dynamic
+        component={component()}
+        part={props.part as any}
+        message={props.message}
+        hideDetails={props.hideDetails}
+      />
     </Show>
   )
 }
@@ -62,7 +90,7 @@ function TextPart(props: { part: TextPart; message: Message }) {
   )
 }
 
-function ToolPart(props: { part: ToolPart; message: Message; readonly?: boolean }) {
+function ToolPart(props: { part: ToolPart; message: Message; hideDetails?: boolean }) {
   const component = createMemo(() => {
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
@@ -75,7 +103,7 @@ function ToolPart(props: { part: ToolPart; message: Message; readonly?: boolean 
         tool={props.part.tool}
         metadata={metadata}
         output={props.part.state.status === "completed" ? props.part.state.output : undefined}
-        readonly={props.readonly}
+        hideDetails={props.hideDetails}
       />
     )
   })
@@ -101,7 +129,7 @@ function BasicTool(props: {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
-  readonly?: boolean
+  hideDetails?: boolean
 }) {
   const resolved = children(() => props.children)
   return (
@@ -157,12 +185,12 @@ function BasicTool(props: {
               </Switch>
             </div>
           </div>
-          <Show when={resolved() && !props.readonly}>
+          <Show when={resolved() && !props.hideDetails}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={resolved() && !props.readonly}>
+      <Show when={resolved() && !props.hideDetails}>
         <Collapsible.Content>{resolved()}</Collapsible.Content>
       </Show>
     </Collapsible>
@@ -173,7 +201,7 @@ function BasicTool(props: {
 }
 
 function GenericTool(props: ToolProps<any>) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} readonly={props.readonly} />
+  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
 }
 
 type ToolProps<T extends Tool.Info> = {
@@ -181,7 +209,7 @@ type ToolProps<T extends Tool.Info> = {
   metadata: Partial<Tool.InferMetadata<T>>
   tool: string
   output?: string
-  readonly?: boolean
+  hideDetails?: boolean
 }
 
 const ToolRegistry = (() => {
