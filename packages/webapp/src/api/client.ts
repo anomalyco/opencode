@@ -29,6 +29,44 @@ export class OpenCodeClient {
   }
 
   // ========================================
+  // Generic HTTP Methods
+  // ========================================
+
+  async get(endpoint: string): Promise<any> {
+    const response = await fetch(`${this.baseURL}${endpoint}`)
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    return response.json()
+  }
+
+  async post(endpoint: string, data?: any): Promise<any> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: data ? JSON.stringify(data) : undefined,
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    return response.json()
+  }
+
+  async patch(endpoint: string, data: any): Promise<any> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    return response.json()
+  }
+
+  async delete(endpoint: string): Promise<any> {
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      method: "DELETE",
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    return response.json()
+  }
+
+  // ========================================
   // REST API Methods
   // ========================================
 
