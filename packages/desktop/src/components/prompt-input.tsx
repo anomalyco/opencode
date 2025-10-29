@@ -393,9 +393,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0 " />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                        {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
-                      </span>
+                      <Show when={i.release_date}>
+                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
+                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                   <Show when={!i.cost || i.cost?.input === 0}>
