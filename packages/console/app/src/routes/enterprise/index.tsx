@@ -53,7 +53,7 @@ export default function Enterprise() {
 
   return (
     <main data-page="enterprise">
-      <Title>OpenCode Enterprise | How can we help your organisation?</Title>
+      <Title>OpenCode | Enterprise solutions for your organisation</Title>
       <Meta name="description" content="Contact OpenCode for enterprise solutions" />
       <div data-component="container">
         <Header />
@@ -64,10 +64,10 @@ export default function Enterprise() {
               <div data-component="enterprise-column-1">
                 <h2>Your code is yours</h2>
                 <p>
-                  Run OpenCode securely inside your organization with no data or context stored, and
-                  no licensing restrictions or ownership claims. Start a trial with your team today,
-                  then scale with enterprise features like SSO, private registries, and
-                  self-hosting.
+                  OpenCode operates securely inside your organization with no data or context stored and no licensing restrictions or ownership claims. Start a trial with your team today, then scale confidently with enterprise-grade features including SSO, private registries, and self-hosting.
+                </p>
+                <p>
+                  Let us know and how we can help.
                 </p>
               </div>
 
@@ -129,7 +129,7 @@ export default function Enterprise() {
 
                   {showSuccess() && (
                     <div data-component="success-message">
-                      Message successfully sent, we'll be in touch soon.
+                      Message sent, we'll be in touch soon.
                     </div>
                   )}
                 </div>

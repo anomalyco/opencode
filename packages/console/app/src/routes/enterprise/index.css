@@ -23,6 +23,7 @@
   --color-text-weaker: hsl(30, 2%, 81%);
   --color-text-strong: hsl(0, 5%, 12%);
   --color-text-inverted: hsl(0, 20%, 99%);
+  --color-text-success: hsl(119, 100%, 35%);
 
   --color-border: hsl(30, 2%, 81%);
   --color-border-weak: hsl(0, 1%, 85%);
@@ -49,6 +50,8 @@
     --color-text-weaker: hsl(0, 3%, 28%);
     --color-text-strong: hsl(0, 15%, 94%);
     --color-text-inverted: hsl(0, 9%, 7%);
+    --color-text-success: hsl(119, 60%, 72%);
+
 
     --color-border: hsl(0, 3%, 28%);
     --color-border-weak: hsl(0, 4%, 23%);
@@ -428,12 +431,9 @@
 
       [data-component="success-message"] {
         margin-top: 1rem;
-        padding: 1rem;
-        background: var(--color-success);
-        color: white;
-        border-radius: 4px;
-        font-size: 0.875rem;
-        text-align: center;
+        padding: 1rem 0;
+        color: var(--color-text-success);
+        text-align: left;
       }
     }
   }
