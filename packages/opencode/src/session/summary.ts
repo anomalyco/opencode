@@ -29,7 +29,16 @@ export namespace SessionSummary {
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
-    const diffs = await computeDiff({ messages: input.messages })
+    const files = new Set(
+      input.messages
+        .flatMap((x) => x.parts)
+        .filter((x) => x.type === "patch")
+        .flatMap((x) => x.files),
+    )
+    console.log(files)
+    const diffs = await computeDiff({ messages: input.messages }).then((x) =>
+      x.filter((x) => files.has(x.file)),
+    )
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
         diffs,
@@ -39,7 +48,9 @@ export namespace SessionSummary {
 
   async function summarizeMessage(input: { messageID: string; messages: MessageV2.WithParts[] }) {
     const messages = input.messages.filter(
-      (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      (m) =>
+        m.info.id === input.messageID ||
+        (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
     const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
     const userMsg = msgWithParts.info as MessageV2.User
@@ -50,11 +61,14 @@ export namespace SessionSummary {
     }
     await Session.updateMessage(userMsg)
 
-    const assistantMsg = messages.find((m) => m.info.role === "assistant")!.info as MessageV2.Assistant
+    const assistantMsg = messages.find((m) => m.info.role === "assistant")!
+      .info as MessageV2.Assistant
     const small = await Provider.getSmallModel(assistantMsg.providerID)
     if (!small) return
 
-    const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
+    const textPart = msgWithParts.parts.find(
+      (p) => p.type === "text" && !p.synthetic,
+    ) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
       const result = await generateText({
         maxOutputTokens: small.info.reasoning ? 1500 : 20,
@@ -81,7 +95,8 @@ export namespace SessionSummary {
     if (
       messages.some(
         (m) =>
-          m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
+          m.info.role === "assistant" &&
+          m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
       )
     ) {
       const result = await generateText({
@@ -114,7 +129,9 @@ export namespace SessionSummary {
       let all = await Session.messages(input.sessionID)
       if (input.messageID)
         all = all.filter(
-          (x) => x.info.id === input.messageID || (x.info.role === "assistant" && x.info.parentID === input.messageID),
+          (x) =>
+            x.info.id === input.messageID ||
+            (x.info.role === "assistant" && x.info.parentID === input.messageID),
         )
 
       return computeDiff({
