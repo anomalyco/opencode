@@ -50,128 +50,173 @@ export namespace MCP {
       ref: "MCPStatus",
     })
   export type Status = z.infer<typeof Status>
+  type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
+      const config = cfg.mcp ?? {}
       const clients: Record<string, Client> = {}
       const status: Record<string, Status> = {}
-      for (const [key, mcp] of Object.entries(cfg.mcp ?? {})) {
-        if (mcp.enabled === false) {
-          log.info("mcp server disabled", { key })
-          continue
-        }
-        log.info("found", { key, type: mcp.type })
-        if (mcp.type === "remote") {
-          const transports = [
-            {
-              name: "StreamableHTTP",
-              transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
-                requestInit: {
-                  headers: mcp.headers,
-                },
-              }),
-            },
-            {
-              name: "SSE",
-              transport: new SSEClientTransport(new URL(mcp.url), {
-                requestInit: {
-                  headers: mcp.headers,
-                },
-              }),
-            },
-          ]
-          let lastError: Error | undefined
-          for (const { name, transport } of transports) {
-            const result = await experimental_createMCPClient({
-              name: "opencode",
-              transport,
-            })
-              .then((client) => {
-                log.info("connected", { key, transport: name })
-                clients[key] = client
-                status[key] = {
-                  status: "connected",
-                }
-                return true
-              })
-              .catch((error) => {
-                lastError = error instanceof Error ? error : new Error(String(error))
-                log.debug("transport connection failed", {
-                  key,
-                  transport: name,
-                  url: mcp.url,
-                  error: lastError.message,
-                })
-                status[key] = {
-                  status: "failed",
-                  error: lastError.message,
-                }
-                return false
-              })
-            if (result) break
+
+      await Promise.all(
+        Object.entries(config).map(async ([key, mcp]) => {
+          const result = await create(key, mcp).catch(() => undefined)
+          if (!result) return
+
+          status[key] = result.status
+
+          if (result.mcpClient) {
+            clients[key] = result.mcpClient
           }
-        }
-
-        if (mcp.type === "local") {
-          const [cmd, ...args] = mcp.command
-          await experimental_createMCPClient({
-            name: "opencode",
-            transport: new StdioClientTransport({
-              stderr: "ignore",
-              command: cmd,
-              args,
-              env: {
-                ...process.env,
-                ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-                ...mcp.environment,
-              },
-            }),
-          })
-            .then((client) => {
-              clients[key] = client
-              status[key] = {
-                status: "connected",
-              }
-            })
-            .catch((error) => {
-              log.error("local mcp startup failed", {
-                key,
-                command: mcp.command,
-                error: error instanceof Error ? error.message : String(error),
-              })
-              status[key] = {
-                status: "failed",
-                error: error instanceof Error ? error.message : String(error),
-              }
-            })
-        }
-      }
-
-      for (const [key, client] of Object.entries(clients)) {
-        log.info("checking tools", { key })
-        const result = await withTimeout(client.tools(), 5000).catch(() => {})
-        if (!result) {
-          client.close()
-          delete clients[key]
-          status[key] = {
-            status: "failed",
-            error: "Failed to get tools",
-          }
-        }
-      }
-
+        }),
+      )
       return {
         status,
         clients,
       }
     },
     async (state) => {
-      for (const client of Object.values(state.clients)) {
-        client.close()
-      }
+      await Promise.all(Object.values(state.clients).map(async (client) => await client.close()))
     },
   )
+
+  export async function add(name: string, mcp: Config.Mcp) {
+    const s = await state()
+    const result = await create(name, mcp)
+    if (!result) return
+    if (!result.mcpClient) {
+      s.status[name] = result.status
+      return
+    }
+    s.clients[name] = result.mcpClient
+    s.status[name] = result.status
+  }
+
+  async function create(key: string, mcp: Config.Mcp) {
+    if (mcp.enabled === false) {
+      log.info("mcp server disabled", { key })
+      return
+    }
+    log.info("found", { key, type: mcp.type })
+    let mcpClient: MCPClient | undefined
+    let status: Status | undefined
+
+    if (mcp.type === "remote") {
+      const transports = [
+        {
+          name: "StreamableHTTP",
+          transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
+            requestInit: {
+              headers: mcp.headers,
+            },
+          }),
+        },
+        {
+          name: "SSE",
+          transport: new SSEClientTransport(new URL(mcp.url), {
+            requestInit: {
+              headers: mcp.headers,
+            },
+          }),
+        },
+      ]
+      let lastError: Error | undefined
+      for (const { name, transport } of transports) {
+        const result = await experimental_createMCPClient({
+          name: "opencode",
+          transport,
+        })
+          .then((client) => {
+            log.info("connected", { key, transport: name })
+            mcpClient = client
+            status = { status: "connected" }
+            return true
+          })
+          .catch((error) => {
+            lastError = error instanceof Error ? error : new Error(String(error))
+            log.debug("transport connection failed", {
+              key,
+              transport: name,
+              url: mcp.url,
+              error: lastError.message,
+            })
+            status = {
+              status: "failed",
+              error: lastError.message,
+            }
+            return false
+          })
+        if (result) break
+      }
+    }
+
+    if (mcp.type === "local") {
+      const [cmd, ...args] = mcp.command
+      await experimental_createMCPClient({
+        name: "opencode",
+        transport: new StdioClientTransport({
+          stderr: "ignore",
+          command: cmd,
+          args,
+          env: {
+            ...process.env,
+            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+            ...mcp.environment,
+          },
+        }),
+      })
+        .then((client) => {
+          mcpClient = client
+          status = {
+            status: "connected",
+          }
+        })
+        .catch((error) => {
+          log.error("local mcp startup failed", {
+            key,
+            command: mcp.command,
+            error: error instanceof Error ? error.message : String(error),
+          })
+          status = {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+          }
+        })
+    }
+
+    if (!status) {
+      status = {
+        status: "failed",
+        error: "Unknown error",
+      }
+    }
+
+    if (!mcpClient) {
+      return {
+        mcpClient: undefined,
+        status,
+      }
+    }
+
+    const result = await withTimeout(mcpClient.tools(), 5000).catch(() => {})
+    if (!result) {
+      await mcpClient.close()
+      status = {
+        status: "failed",
+        error: "Failed to get tools",
+      }
+      return {
+        mcpClient: undefined,
+        status,
+      }
+    }
+
+    return {
+      mcpClient,
+      status,
+    }
+  }
 
   export async function status() {
     return state().then((state) => state.status)

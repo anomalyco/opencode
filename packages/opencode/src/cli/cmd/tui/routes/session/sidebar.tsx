@@ -2,6 +2,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
 
 export function Sidebar(props: { sessionID: string }) {
@@ -20,10 +21,16 @@ export function Sidebar(props: { sessionID: string }) {
   })
 
   const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    const last = messages().findLast(
+      (x) => x.role === "assistant" && x.tokens.output > 0,
+    ) as AssistantMessage
     if (!last) return
     const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+      last.tokens.input +
+      last.tokens.output +
+      last.tokens.reasoning +
+      last.tokens.cache.read +
+      last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
       tokens: total.toLocaleString(),
@@ -75,7 +82,9 @@ export function Sidebar(props: { sessionID: string }) {
                     <span style={{ fg: theme.textMuted }}>
                       <Switch>
                         <Match when={item.status === "connected"}>Connected</Match>
-                        <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
+                        <Match when={item.status === "failed" && item}>
+                          {(val) => <i>{val().error}</i>}
+                        </Match>
                         <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       </Switch>
                     </span>
@@ -118,15 +127,29 @@ export function Sidebar(props: { sessionID: string }) {
               <b>Modified Files</b>
             </text>
             <For each={session().summary?.diffs || []}>
-              {(item) => (
-                <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text fg={theme.textMuted}>{Locale.truncateMiddle(item.file, 40)}</text>
-                  <box flexDirection="row" gap={1}>
-                    <text fg={theme.diffAdded}>+{item.additions}</text>
-                    <text fg={theme.diffRemoved}>-{item.deletions}</text>
+              {(item) => {
+                const file = createMemo(() => {
+                  const splits = item.file.split(path.sep).filter(Boolean)
+                  const last = splits.at(-1)!
+                  const rest = splits.slice(0, -1).join(path.sep)
+                  return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
+                })
+                return (
+                  <box flexDirection="row" gap={1} justifyContent="space-between">
+                    <text fg={theme.textMuted} wrapMode="char">
+                      {file()}
+                    </text>
+                    <box flexDirection="row" gap={1} flexShrink={0}>
+                      <Show when={item.additions}>
+                        <text fg={theme.diffAdded}>+{item.additions}</text>
+                      </Show>
+                      <Show when={item.deletions}>
+                        <text fg={theme.diffRemoved}>-{item.deletions}</text>
+                      </Show>
+                    </box>
                   </box>
-                </box>
-              )}
+                )
+              }}
             </For>
           </box>
         </Show>
@@ -137,7 +160,9 @@ export function Sidebar(props: { sessionID: string }) {
             </text>
             <For each={todo()}>
               {(todo) => (
-                <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
+                <text
+                  style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
+                >
                   [{todo.status === "completed" ? "✓" : " "}] {todo.content}
                 </text>
               )}

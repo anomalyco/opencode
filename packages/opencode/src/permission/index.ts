@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"

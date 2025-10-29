@@ -517,6 +517,10 @@ export type Config = {
         }
       }>
     }
+    /**
+     * Number of retries for chat completions on failure
+     */
+    chatMaxRetries?: number
     disable_paste_summary?: boolean
   }
 }
@@ -614,8 +618,9 @@ export type UserMessage = {
     created: number
   }
   summary?: {
+    title?: string
+    body?: string
     diffs: Array<FileDiff>
-    text: string
   }
 }
 
@@ -669,9 +674,13 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ApiError
   system: Array<string>
-  finish?: string
   parentID: string
   modelID: string
   providerID: string
@@ -854,6 +863,7 @@ export type StepFinishPart = {
   sessionID: string
   messageID: string
   type: "step-finish"
+  reason: string
   snapshot?: string
   cost: number
   tokens: {
@@ -1203,6 +1213,7 @@ export type EventMessagePartUpdated = {
   type: "message.part.updated"
   properties: {
     part: Part
+    delta?: string
   }
 }
 
@@ -1282,6 +1293,13 @@ export type EventSessionIdle = {
   }
 }
 
+export type EventSessionCreated = {
+  type: "session.created"
+  properties: {
+    info: Session
+  }
+}
+
 export type EventSessionUpdated = {
   type: "session.updated"
   properties: {
@@ -1300,7 +1318,12 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ApiError
   }
 }
 
@@ -1326,6 +1349,7 @@ export type Event =
   | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventSessionIdle
+  | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
@@ -1975,13 +1999,10 @@ export type SessionPromptData = {
       modelID: string
     }
     agent?: string
+    noReply?: boolean
     system?: string
     tools?: {
       [key: string]: boolean
-    }
-    acpConnection?: {
-      connection: unknown
-      sessionId: string
     }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput>
   }
@@ -2742,6 +2763,46 @@ export type TuiPublishResponses = {
 }
 
 export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses]
+
+export type TuiControlNextData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/next"
+}
+
+export type TuiControlNextResponses = {
+  /**
+   * Next TUI request
+   */
+  200: {
+    path: string
+    body: unknown
+  }
+}
+
+export type TuiControlNextResponse = TuiControlNextResponses[keyof TuiControlNextResponses]
+
+export type TuiControlResponseData = {
+  body?: unknown
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/control/response"
+}
+
+export type TuiControlResponseResponses = {
+  /**
+   * Response submitted successfully
+   */
+  200: boolean
+}
+
+export type TuiControlResponseResponse =
+  TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
 export type AuthSetData = {
   body?: Auth

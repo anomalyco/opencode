@@ -1,7 +1,7 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import z from "zod/v4"
+import z from "zod"
 import { Identifier } from "../id/id"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -50,6 +50,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Config } from "@/config/config"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -94,18 +95,9 @@ export namespace SessionPrompt {
       })
       .optional(),
     agent: z.string().optional(),
+    noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    /**
-     * ACP (Agent Client Protocol) connection details for streaming responses.
-     * When provided, enables real-time streaming and tool execution visibility.
-     */
-    acpConnection: z
-      .object({
-        connection: z.any(), // AgentSideConnection - using any to avoid circular deps
-        sessionId: z.string(), // ACP session ID (different from opencode sessionID)
-      })
-      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -152,6 +144,11 @@ export namespace SessionPrompt {
     const userMsg = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
+    // Early return for context-only messages (no AI inference)
+    if (input.noReply) {
+      return userMsg
+    }
+
     if (isBusy(input.sessionID)) {
       return new Promise((resolve) => {
         const queue = state().queued.get(input.sessionID) ?? []
@@ -184,7 +181,6 @@ export namespace SessionPrompt {
       agent: agent.name,
       system,
       abort: abort.signal,
-      acpConnection: input.acpConnection,
     })
 
     const tools = await resolveTools({
@@ -227,7 +223,9 @@ export namespace SessionPrompt {
         }),
         (messages) => insertReminders({ messages, agent }),
       )
-      if (step === 0)
+      step++
+      await processor.next(msgs.findLast((m) => m.info.role === "user")?.info.id!)
+      if (step === 1) {
         ensureTitle({
           session,
           history: msgs,
@@ -235,8 +233,11 @@ export namespace SessionPrompt {
           providerID: model.providerID,
           modelID: model.info.id,
         })
-      step++
-      await processor.next(msgs.findLast((m) => m.info.role === "user")?.info.id!)
+        SessionSummary.summarize({
+          sessionID: input.sessionID,
+          messageID: userMsg.info.id,
+        })
+      }
       await using _ = defer(async () => {
         await processor.end()
       })
@@ -285,7 +286,11 @@ export namespace SessionPrompt {
             OUTPUT_TOKEN_MAX,
           ),
           abortSignal: abort.signal,
-          providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, params.options),
+          providerOptions: ProviderTransform.providerOptions(
+            model.npm,
+            model.providerID,
+            params.options,
+          ),
           stopWhen: stepCountIs(1),
           temperature: params.temperature,
           topP: params.topP,
@@ -320,7 +325,11 @@ export namespace SessionPrompt {
                 async transformParams(args) {
                   if (args.type === "stream") {
                     // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(args.params.prompt, model.providerID, model.modelID)
+                    args.params.prompt = ProviderTransform.message(
+                      args.params.prompt,
+                      model.providerID,
+                      model.modelID,
+                    )
                   }
                   return args.params
                 },
@@ -330,12 +339,14 @@ export namespace SessionPrompt {
         })
 
       let stream = doStream()
+      const cfg = await Config.get()
+      const maxRetries = cfg.experimental?.chatMaxRetries ?? MAX_RETRIES
       let result = await processor.process(stream, {
         count: 0,
-        max: MAX_RETRIES,
+        max: maxRetries,
       })
       if (result.shouldRetry) {
-        for (let retry = 1; retry < MAX_RETRIES; retry++) {
+        for (let retry = 1; retry < maxRetries; retry++) {
           const lastRetryPart = result.parts.findLast((p) => p.type === "retry")
 
           if (lastRetryPart) {
@@ -372,7 +383,7 @@ export namespace SessionPrompt {
           stream = doStream()
           result = await processor.process(stream, {
             count: retry,
-            max: MAX_RETRIES,
+            max: maxRetries,
           })
           if (!result.shouldRetry) {
             break
@@ -501,7 +512,11 @@ export namespace SessionPrompt {
     )
     for (const item of await ToolRegistry.tools(input.providerID, input.modelID)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
-      const schema = ProviderTransform.schema(input.providerID, input.modelID, z.toJSONSchema(item.parameters))
+      const schema = ProviderTransform.schema(
+        input.providerID,
+        input.modelID,
+        z.toJSONSchema(item.parameters),
+      )
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
@@ -518,6 +533,7 @@ export namespace SessionPrompt {
               args,
             },
           )
+          item.parameters.parse(args)
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
@@ -796,7 +812,9 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
+                  url:
+                    `data:${part.mime};base64,` +
+                    Buffer.from(await file.bytes()).toString("base64"),
                   mime: part.mime,
                   filename: part.filename!,
                   source: part.source,
@@ -870,7 +888,9 @@ export namespace SessionPrompt {
         synthetic: true,
       })
     }
-    const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.mode === "plan")
+    const wasPlan = input.messages.some(
+      (msg) => msg.info.role === "assistant" && msg.info.mode === "plan",
+    )
     if (wasPlan && input.agent.name === "build") {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
@@ -884,60 +904,6 @@ export namespace SessionPrompt {
     return input.messages
   }
 
-  /**
-   * Maps tool names to ACP tool kinds for consistent categorization.
-   * - read: Tools that read data (read, glob, grep, list, webfetch, docs)
-   * - edit: Tools that modify state (edit, write, bash)
-   * - other: All other tools (MCP tools, task, todowrite, etc.)
-   */
-  function determineToolKind(toolName: string): "read" | "edit" | "other" {
-    const readTools = [
-      "read",
-      "glob",
-      "grep",
-      "list",
-      "webfetch",
-      "context7_resolve_library_id",
-      "context7_get_library_docs",
-    ]
-    const editTools = ["edit", "write", "bash"]
-
-    if (readTools.includes(toolName.toLowerCase())) return "read"
-    if (editTools.includes(toolName.toLowerCase())) return "edit"
-    return "other"
-  }
-
-  /**
-   * Extracts file/directory locations from tool inputs for ACP notifications.
-   * Returns array of {path} objects that ACP clients can use for navigation.
-   *
-   * Examples:
-   * - read({filePath: "/foo/bar.ts"}) -> [{path: "/foo/bar.ts"}]
-   * - glob({pattern: "*.ts", path: "/src"}) -> [{path: "/src"}]
-   * - bash({command: "ls"}) -> [] (no file references)
-   */
-  function extractLocations(toolName: string, input: Record<string, any>): { path: string }[] {
-    try {
-      switch (toolName.toLowerCase()) {
-        case "read":
-        case "edit":
-        case "write":
-          return input["filePath"] ? [{ path: input["filePath"] }] : []
-        case "glob":
-        case "grep":
-          return input["path"] ? [{ path: input["path"] }] : []
-        case "bash":
-          return []
-        case "list":
-          return input["path"] ? [{ path: input["path"] }] : []
-        default:
-          return []
-      }
-    } catch {
-      return []
-    }
-  }
-
   export type Processor = Awaited<ReturnType<typeof createProcessor>>
   async function createProcessor(input: {
     sessionID: string
@@ -946,10 +912,6 @@ export namespace SessionPrompt {
     system: string[]
     agent: string
     abort: AbortSignal
-    acpConnection?: {
-      connection: any
-      sessionId: string
-    }
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
@@ -1008,7 +970,10 @@ export namespace SessionPrompt {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
-      async process(stream: StreamTextResult<Record<string, AITool>, never>, retries: { count: number; max: number }) {
+      async process(
+        stream: StreamTextResult<Record<string, AITool>, never>,
+        retries: { count: number; max: number },
+      ) {
         log.info("process")
         if (!assistantMsg) throw new Error("call next() first before processing")
         let shouldRetry = false
@@ -1047,7 +1012,7 @@ export namespace SessionPrompt {
                   const part = reasoningMap[value.id]
                   part.text += value.text
                   if (value.providerMetadata) part.metadata = value.providerMetadata
-                  if (part.text) await Session.updatePart(part)
+                  if (part.text) await Session.updatePart({ part, delta: value.text })
                 }
                 break
 
@@ -1081,26 +1046,6 @@ export namespace SessionPrompt {
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
-
-                // Notify ACP client of pending tool call
-                if (input.acpConnection) {
-                  await input.acpConnection.connection
-                    .sessionUpdate({
-                      sessionId: input.acpConnection.sessionId,
-                      update: {
-                        sessionUpdate: "tool_call",
-                        toolCallId: value.id,
-                        title: value.toolName,
-                        kind: determineToolKind(value.toolName),
-                        status: "pending",
-                        locations: [], // Will be populated when we have input
-                        rawInput: {},
-                      },
-                    })
-                    .catch((err: Error) => {
-                      log.error("failed to send tool pending to ACP", { error: err })
-                    })
-                }
                 break
 
               case "tool-input-delta":
@@ -1125,24 +1070,6 @@ export namespace SessionPrompt {
                     metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
-
-                  // Notify ACP client that tool is running
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "in_progress",
-                          locations: extractLocations(value.toolName, value.input),
-                          rawInput: value.input,
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool in_progress to ACP", { error: err })
-                      })
-                  }
                 }
                 break
               }
@@ -1165,32 +1092,6 @@ export namespace SessionPrompt {
                     },
                   })
 
-                  // Notify ACP client that tool completed
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "completed",
-                          content: [
-                            {
-                              type: "content",
-                              content: {
-                                type: "text",
-                                text: value.output.output,
-                              },
-                            },
-                          ],
-                          rawOutput: value.output,
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool completed to ACP", { error: err })
-                      })
-                  }
-
                   delete toolcalls[value.toolCallId]
                 }
                 break
@@ -1205,41 +1106,16 @@ export namespace SessionPrompt {
                       status: "error",
                       input: value.input,
                       error: (value.error as any).toString(),
-                      metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
+                      metadata:
+                        value.error instanceof Permission.RejectedError
+                          ? value.error.metadata
+                          : undefined,
                       time: {
                         start: match.state.time.start,
                         end: Date.now(),
                       },
                     },
                   })
-
-                  // Notify ACP client of tool error
-                  if (input.acpConnection) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "tool_call_update",
-                          toolCallId: value.toolCallId,
-                          status: "failed",
-                          content: [
-                            {
-                              type: "content",
-                              content: {
-                                type: "text",
-                                text: `Error: ${(value.error as any).toString()}`,
-                              },
-                            },
-                          ],
-                          rawOutput: {
-                            error: (value.error as any).toString(),
-                          },
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send tool error to ACP", { error: err })
-                      })
-                  }
 
                   if (value.error instanceof Permission.RejectedError) {
                     blocked = true
@@ -1272,6 +1148,7 @@ export namespace SessionPrompt {
                 assistantMsg.tokens = usage.tokens
                 await Session.updatePart({
                   id: Identifier.ascending("part"),
+                  reason: value.finishReason,
                   snapshot: await Snapshot.track(),
                   messageID: assistantMsg.id,
                   sessionID: assistantMsg.sessionID,
@@ -1297,7 +1174,6 @@ export namespace SessionPrompt {
                 SessionSummary.summarize({
                   sessionID: input.sessionID,
                   messageID: assistantMsg.parentID,
-                  providerID: assistantMsg.modelID,
                 })
                 break
 
@@ -1319,26 +1195,11 @@ export namespace SessionPrompt {
                 if (currentText) {
                   currentText.text += value.text
                   if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                  if (currentText.text) await Session.updatePart(currentText)
-
-                  // Send streaming chunk to ACP client
-                  if (input.acpConnection && value.text) {
-                    await input.acpConnection.connection
-                      .sessionUpdate({
-                        sessionId: input.acpConnection.sessionId,
-                        update: {
-                          sessionUpdate: "agent_message_chunk",
-                          content: {
-                            type: "text",
-                            text: value.text,
-                          },
-                        },
-                      })
-                      .catch((err: Error) => {
-                        log.error("failed to send text delta to ACP", { error: err })
-                        // Don't fail the whole request if ACP notification fails
-                      })
-                  }
+                  if (currentText.text)
+                    await Session.updatePart({
+                      part: currentText,
+                      delta: value.text,
+                    })
                 }
                 break
 
@@ -1357,8 +1218,6 @@ export namespace SessionPrompt {
 
               case "finish":
                 assistantMsg.time.completed = Date.now()
-                assistantMsg.finish = value.finishReason
-                if (blocked) assistantMsg.finish = "rejected"
                 await Session.updateMessage(assistantMsg)
                 break
 
@@ -1373,9 +1232,12 @@ export namespace SessionPrompt {
           log.error("process", {
             error: e,
           })
-          assistantMsg.finish = "error"
           const error = MessageV2.fromError(e, { providerID: input.providerID })
-          if (retries.count < retries.max && MessageV2.APIError.isInstance(error) && error.data.isRetryable) {
+          if (
+            retries.count < retries.max &&
+            MessageV2.APIError.isInstance(error) &&
+            error.data.isRetryable
+          ) {
             shouldRetry = true
             await Session.updatePart({
               id: Identifier.ascending("part"),
@@ -1398,7 +1260,11 @@ export namespace SessionPrompt {
         }
         const p = await Session.getParts(assistantMsg.id)
         for (const part of p) {
-          if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+          if (
+            part.type === "tool" &&
+            part.state.status !== "completed" &&
+            part.state.status !== "error"
+          ) {
             await Session.updatePart({
               ...part,
               state: {
@@ -1860,12 +1726,15 @@ export namespace SessionPrompt {
     modelID: string
   }) {
     if (input.session.parentID) return
+    if (!Session.isDefaultTitle(input.session.title)) return
     const isFirst =
-      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
-        .length === 1
+      input.history.filter(
+        (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+      ).length === 1
     if (!isFirst) return
     const small =
-      (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
+      (await Provider.getSmallModel(input.providerID)) ??
+      (await Provider.getModel(input.providerID, input.modelID))
     const options = {
       ...ProviderTransform.options(small.providerID, small.modelID, input.session.id),
       ...small.info.options,
@@ -1907,9 +1776,15 @@ export namespace SessionPrompt {
       .then((result) => {
         if (result.text)
           return Session.update(input.session.id, (draft) => {
-            const cleaned = result.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").split("\n")[0]
+            const cleaned = result.text
+              .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+              .split("\n")
+              .map((line) => line.trim())
+              .find((line) => line.length > 0)
+            if (!cleaned) return
+
             const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-            draft.title = title.trim()
+            draft.title = title
           })
       })
       .catch((error) => {

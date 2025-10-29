@@ -71,13 +71,40 @@ You can also access our models through the following API endpoints.
 | Claude Haiku 4.5  | claude-haiku-4-5  | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
 | Claude Haiku 3.5  | claude-3-5-haiku  | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
 | Claude Opus 4.1   | claude-opus-4-1   | `https://opencode.ai/zen/v1/messages`         | `@ai-sdk/anthropic`         |
+| GLM 4.6           | glm-4.6           | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2           | kimi-k2           | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B  | qwen3-coder       | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Grok Code Fast 1  | grok-code         | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2           | kimi-k2           | `https://opencode.ai/zen/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode/<model-id>`. For example, for GPT 5 Codex, you would
 use `opencode/gpt-5-codex` in your config.
+
+---
+
+### Unified
+
+All models in Zen can also be accessed through a single unified endpoint:
+
+```
+https://opencode.ai/zen/v1/chat/completions
+```
+
+This endpoint is OpenAI-compatible, so it works seamlessly with the `@ai-sdk/openai-compatible` package and any OpenAI-compatible SDKs or tools.
+
+Use this if you want to simplify integration across multiple models without changing endpoints or SDKs.
+
+This feature is currently in beta.
+
+---
+
+### Models
+
+You can fetch the full list of available models and their metadata from:
+
+```
+https://opencode.ai/zen/v1/models
+```
 
 ---
 
@@ -87,8 +114,9 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 
 | Model                             | Input  | Output | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
-| Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
+| GLM 4.6                           | $0.60  | $1.90  | $0.11       | -            |
 | Kimi K2                           | $0.60  | $2.50  | $0.36       | -            |
+| Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
 | Grok Code Fast 1                  | Free   | Free   | -           | -            |
 | Code Supernova                    | Free   | Free   | -           | -            |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |

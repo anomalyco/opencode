@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo, createSignal } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -7,15 +7,69 @@ import path from "path"
 import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
+import { useToast } from "../ui/toast"
+import type { Provider } from "@opencode-ai/sdk"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
-  init: () => {
+  init: (props: { initialModel?: string; initialAgent?: string }) => {
     const sync = useSync()
+    const toast = useToast()
+
+    function isModelValid(model: { providerID: string, modelID: string }) {
+      const provider = sync.data.provider.find((x) => x.id === model.providerID)
+      return !!provider?.models[model.modelID]
+    }
+
+    function getFirstValidModel(...modelFns: (() => { providerID: string, modelID: string } | undefined)[]) {
+      for (const modelFn of modelFns) {
+        const model = modelFn()
+        if (!model) continue
+        if (isModelValid(model))
+          return model
+      }
+    }
+
+    // Set initial model if provided
+    onMount(() => {
+      batch(() => {
+        if (props.initialAgent) {
+          agent.set(props.initialAgent)
+        }
+        if (props.initialModel) {
+          const [providerID, modelID] = props.initialModel.split("/")
+          if (!providerID || !modelID)
+            return toast.show({
+              type: "warning",
+              message: `Invalid model format: ${props.initialModel}`,
+              duration: 3000,
+            })
+          model.set({ providerID, modelID }, { recent: true })
+        }
+      })
+    })
+
+    // Automatically update model when agent changes
+    createEffect(() => {
+      const value = agent.current()
+      if (value.model) {
+        if (isModelValid(value.model))
+          model.set({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+        else
+          toast.show({
+            type: "warning",
+            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+            duration: 3000,
+          })
+      }
+    })
 
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
-      const [store, setStore] = createStore<{
+      const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
         current: agents()[0].name,
@@ -34,22 +88,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === store.current)!
+          return agents().find((x) => x.name === agentStore.current)!
         },
         set(name: string) {
-          setStore("current", name)
+          if (!agents().some((x) => x.name === name))
+            return toast.show({
+              type: "warning",
+              message: `Agent not found: ${name}`,
+              duration: 3000,
+            })
+          setAgentStore("current", name)
         },
         move(direction: 1 | -1) {
-          let next = agents().findIndex((x) => x.name === store.current) + direction
-          if (next < 0) next = agents().length - 1
-          if (next >= agents().length) next = 0
-          const value = agents()[next]
-          setStore("current", value.name)
-          if (value.model)
-            model.set({
-              providerID: value.model.providerID,
-              modelID: value.model.modelID,
-            })
+          batch(() => {
+            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
+            if (next < 0) next = agents().length - 1
+            if (next >= agents().length) next = 0
+            const value = agents()[next]
+            setAgentStore("current", value.name)
+          })
         },
         color(name: string) {
           const index = agents().findIndex((x) => x.name === name)
@@ -59,7 +116,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const model = iife(() => {
-      const [store, setStore] = createStore<{
+      const [modelStore, setModelStore] = createStore<{
         ready: boolean
         model: Record<
           string,
@@ -83,34 +140,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       file
         .json()
         .then((x) => {
-          setStore("recent", x.recent)
+          setModelStore("recent", x.recent)
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
-          setStore("ready", true)
+          setModelStore("ready", true)
         })
 
       createEffect(() => {
         Bun.write(
           file,
           JSON.stringify({
-            recent: store.recent,
+            recent: modelStore.recent,
           }),
         )
       })
 
-      const fallback = createMemo(() => {
-        function isValid(providerID: string, modelID: string) {
-          const provider = sync.data.provider.find((x) => x.id === providerID)
-          if (!provider) return false
-          const model = provider.models[modelID]
-          if (!model) return false
-          return true
-        }
-
+      const fallbackModel = createMemo(() => {
         if (sync.data.config.model) {
           const [providerID, modelID] = sync.data.config.model.split("/")
-          if (isValid(providerID, modelID)) {
+          if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
               modelID,
@@ -118,8 +167,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        for (const item of store.recent) {
-          if (isValid(item.providerID, item.modelID)) {
+        for (const item of modelStore.recent) {
+          if (isModelValid(item)) {
             return item
           }
         }
@@ -131,21 +180,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       })
 
-      const current = createMemo(() => {
+      const currentModel = createMemo(() => {
         const a = agent.current()
-        return store.model[agent.current().name] ?? (a.model ? a.model : fallback())
+        return getFirstValidModel(
+          () => modelStore.model[a.name],
+          () => a.model,
+          fallbackModel,
+        )!
       })
 
       return {
-        current,
+        current: currentModel,
         get ready() {
-          return store.ready
+          return modelStore.ready
         },
         recent() {
-          return store.recent
+          return modelStore.recent
         },
         parsed: createMemo(() => {
-          const value = current()
+          const value = currentModel()
           const provider = sync.data.provider.find((x) => x.id === value.providerID)!
           const model = provider.models[value.modelID]
           return {
@@ -155,11 +208,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }),
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
-            setStore("model", agent.current().name, model)
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                type: "warning",
+                duration: 3000,
+              })
+              return
+            }
+
+            setModelStore("model", agent.current().name, model)
             if (options?.recent) {
-              const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
+              const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
-              setStore("recent", uniq)
+              setModelStore("recent", uniq)
             }
           })
         },
@@ -168,7 +230,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const kv = iife(() => {
       const [ready, setReady] = createSignal(false)
-      const [store, setStore] = createStore({
+      const [kvStore, setKvStore] = createStore({
         openrouter_warning: false,
       })
       const file = Bun.file(path.join(Global.Path.state, "kv.json"))
@@ -176,22 +238,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       file
         .json()
         .then((x) => {
-          setStore(x)
+          setKvStore(x)
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           setReady(true)
         })
 
       return {
         get data() {
-          return store
+          return kvStore
         },
         get ready() {
           return ready()
         },
         set(key: string, value: any) {
-          setStore(key as any, value)
+          setKvStore(key as any, value)
           Bun.write(
             file,
             JSON.stringify({

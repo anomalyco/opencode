@@ -2,6 +2,8 @@ import { $ } from "bun"
 import { platform } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
+import { tmpdir } from "os"
+import path from "path"
 
 export namespace Clipboard {
   export interface Content {
@@ -13,9 +15,17 @@ export namespace Clipboard {
     const os = platform()
 
     if (os === "darwin") {
-      const imageBuffer = await $`osascript -e 'try' -e 'the clipboard as «class PNGf»' -e 'end try'`.nothrow().text()
-      if (imageBuffer) {
-        return { data: Buffer.from(imageBuffer).toString("base64url"), mime: "image/png" }
+      const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
+      try {
+        await $`osascript -e 'set imageData to the clipboard as "PNGf"' -e 'set fileRef to open for access POSIX file "${tmpfile}" with write permission' -e 'set eof fileRef to 0' -e 'write imageData to fileRef' -e 'close access fileRef'`
+          .nothrow()
+          .quiet()
+        const file = Bun.file(tmpfile)
+        const buffer = await file.arrayBuffer()
+        return { data: Buffer.from(buffer).toString("base64"), mime: "image/png" }
+      } catch {
+      } finally {
+        await $`rm -f "${tmpfile}"`.nothrow().quiet()
       }
     }
 

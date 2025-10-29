@@ -16,9 +16,16 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
-import { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk"
+import type {
+  AssistantMessage,
+  Part,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+} from "@opencode-ai/sdk"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -48,6 +55,11 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import parsers from "../../../../../../parsers-config.json"
+import { Clipboard } from "../../util/clipboard"
+import { Toast, useToast } from "../../ui/toast"
+
+addDefaultParsers(parsers.parsers)
 
 const context = createContext<{
   width: number
@@ -384,7 +396,14 @@ export function Session() {
         },
       }}
     >
-      <box flexDirection="row" paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={2}>
+      <box
+        flexDirection="row"
+        paddingBottom={1}
+        paddingTop={1}
+        paddingLeft={2}
+        paddingRight={2}
+        gap={2}
+      >
         <box flexGrow={1} gap={1}>
           <Show when={session()}>
             <Show when={!sidebarVisible()}>
@@ -432,12 +451,18 @@ export function Session() {
                               paddingTop={1}
                               paddingBottom={1}
                               paddingLeft={2}
-                              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+                              backgroundColor={
+                                hover() ? theme.backgroundElement : theme.backgroundPanel
+                              }
                             >
-                              <text fg={theme.textMuted}>{revert()!.reverted.length} message reverted</text>
                               <text fg={theme.textMuted}>
-                                <span style={{ fg: theme.text }}>{keybind.print("messages_redo")}</span> or /redo to
-                                restore
+                                {revert()!.reverted.length} message reverted
+                              </text>
+                              <text fg={theme.textMuted}>
+                                <span style={{ fg: theme.text }}>
+                                  {keybind.print("messages_redo")}
+                                </span>{" "}
+                                or /redo to restore
                               </text>
                               <Show when={revert()!.diffFiles?.length}>
                                 <box marginTop={1}>
@@ -446,10 +471,16 @@ export function Session() {
                                       <text>
                                         {file.filename}
                                         <Show when={file.additions > 0}>
-                                          <span style={{ fg: theme.diffAdded }}> +{file.additions}</span>
+                                          <span style={{ fg: theme.diffAdded }}>
+                                            {" "}
+                                            +{file.additions}
+                                          </span>
                                         </Show>
                                         <Show when={file.deletions > 0}>
-                                          <span style={{ fg: theme.diffRemoved }}> -{file.deletions}</span>
+                                          <span style={{ fg: theme.diffRemoved }}>
+                                            {" "}
+                                            -{file.deletions}
+                                          </span>
                                         </Show>
                                       </text>
                                     )}
@@ -468,7 +499,9 @@ export function Session() {
                       <UserMessage
                         index={index()}
                         onMouseUp={() =>
-                          dialog.replace(() => <DialogMessage messageID={message.id} sessionID={route.sessionID} />)
+                          dialog.replace(() => (
+                            <DialogMessage messageID={message.id} sessionID={route.sessionID} />
+                          ))
                         }
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
@@ -523,7 +556,9 @@ function UserMessage(props: {
   index: number
   pending?: string
 }) {
-  const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
+  const text = createMemo(
+    () => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0],
+  )
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
@@ -564,24 +599,34 @@ function UserMessage(props: {
                 })
                 return (
                   <text>
-                    <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                    <span style={{ bg: bg(), fg: theme.background }}>
+                      {" "}
+                      {MIME_BADGE[file.mime] ?? file.mime}{" "}
+                    </span>
+                    <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>
+                      {" "}
+                      {file.filename}{" "}
+                    </span>
                   </text>
                 )
               }}
             </For>
           </box>
         </Show>
-        <Show when={props.message.summary}>
-          <text>EXPERIMENTAL: {props.message.summary!.text}</text>
-        </Show>
         <text>
           {sync.data.config.username ?? "You"}{" "}
           <Show
             when={queued()}
-            fallback={<span style={{ fg: theme.textMuted }}>({Locale.time(props.message.time.created)})</span>}
+            fallback={
+              <span style={{ fg: theme.textMuted }}>
+                ({Locale.time(props.message.time.created)})
+              </span>
+            }
           >
-            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+            <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}>
+              {" "}
+              QUEUED{" "}
+            </span>
           </Show>
         </text>
       </box>
@@ -618,7 +663,13 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Show when={!props.message.time.completed || (props.last && props.message.finish === "tool-calls")}>
+      <Show
+        when={
+          !props.message.time.completed ||
+          (props.last &&
+            props.parts.some((item) => item.type === "step-finish" && item.reason === "tool-calls"))
+        }
+      >
         <box
           paddingLeft={2}
           marginTop={1}
@@ -628,14 +679,23 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.backgroundElement}
         >
-          <text fg={local.agent.color(props.message.mode)}>{Locale.titlecase(props.message.mode)}</text>
+          <text fg={local.agent.color(props.message.mode)}>
+            {Locale.titlecase(props.message.mode)}
+          </text>
           <Shimmer text={`${props.message.modelID}`} color={theme.text} />
         </box>
       </Show>
-      <Show when={props.message.time.completed && props.message.finish === "stop"}>
+      <Show
+        when={
+          props.message.time.completed &&
+          props.parts.some((item) => item.type === "step-finish" && item.reason !== "tool-calls")
+        }
+      >
         <box paddingLeft={3}>
           <text marginTop={1}>
-            <span style={{ fg: local.agent.color(props.message.mode) }}>{Locale.titlecase(props.message.mode)}</span>{" "}
+            <span style={{ fg: local.agent.color(props.message.mode) }}>
+              {Locale.titlecase(props.message.mode)}
+            </span>{" "}
             <span style={{ fg: theme.textMuted }}>{props.message.modelID}</span>
           </text>
         </box>
@@ -662,7 +722,12 @@ function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundPanel}
       >
-        <box paddingTop={1} paddingBottom={1} paddingLeft={2} backgroundColor={theme.backgroundPanel}>
+        <box
+          paddingTop={1}
+          paddingBottom={1}
+          paddingLeft={2}
+          backgroundColor={theme.backgroundPanel}
+        >
           <text>{props.part.text.trim()}</text>
         </box>
       </box>
@@ -795,7 +860,10 @@ function GenericTool(props: ToolProps<any>) {
 }
 
 const ToolRegistry = (() => {
-  const state: Record<string, { name: string; container: "inline" | "block"; render?: Component<ToolProps<any>> }> = {}
+  const state: Record<
+    string,
+    { name: string; container: "inline" | "block"; render?: Component<ToolProps<any>> }
+  > = {}
   function register<T extends Tool.Info>(input: {
     name: string
     container: "inline" | "block"
@@ -892,10 +960,16 @@ ToolRegistry.register<typeof WriteTool>({
         </ToolTitle>
         <box flexDirection="row">
           <box flexShrink={0}>
-            <For each={numbers()}>{(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}</For>
+            <For each={numbers()}>
+              {(value) => <text style={{ fg: theme.textMuted }}>{value}</text>}
+            </For>
           </box>
           <box paddingLeft={1} flexGrow={1}>
-            <code filetype={filetype(props.input.filePath!)} syntaxStyle={syntaxTheme()} content={code()} />
+            <code
+              filetype={filetype(props.input.filePath!)}
+              syntaxStyle={syntaxTheme()}
+              content={code()}
+            />
           </box>
         </box>
       </>
@@ -910,7 +984,8 @@ ToolRegistry.register<typeof GlobTool>({
     return (
       <>
         <ToolTitle icon="✱" fallback="Finding files..." when={props.input.pattern}>
-          Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+          Glob "{props.input.pattern}"{" "}
+          <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
           <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
         </ToolTitle>
       </>
@@ -924,7 +999,8 @@ ToolRegistry.register<typeof GrepTool>({
   render(props) {
     return (
       <ToolTitle icon="✱" fallback="Searching content..." when={props.input.pattern}>
-        Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+        Grep "{props.input.pattern}"{" "}
+        <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
         <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
       </ToolTitle>
     )

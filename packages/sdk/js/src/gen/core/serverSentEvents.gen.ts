@@ -60,7 +60,11 @@ export interface StreamEvent<TData = unknown> {
 }
 
 export type ServerSentEventsResult<TData = unknown, TReturn = void, TNext = unknown> = {
-  stream: AsyncGenerator<TData extends Record<string, unknown> ? TData[keyof TData] : TData, TReturn, TNext>
+  stream: AsyncGenerator<
+    TData extends Record<string, unknown> ? TData[keyof TData] : TData,
+    TReturn,
+    TNext
+  >
 }
 
 export const createSseClient = <TData = unknown>({

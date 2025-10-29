@@ -1,4 +1,3 @@
-import { useLocal, useSync } from "@/context"
 import { Icon, Tooltip } from "@opencode-ai/ui"
 import { Collapsible } from "@/ui"
 import type { AssistantMessage, Message, Part, ToolPart } from "@opencode-ai/sdk"
@@ -22,6 +21,8 @@ import { createElementSize } from "@solid-primitives/resize-observer"
 import { createScrollPosition } from "@solid-primitives/scroll"
 import { ProgressCircle } from "./progress-circle"
 import { pipe, sumBy } from "remeda"
+import { useSync } from "@/context/sync"
+import { useLocal } from "@/context/local"
 
 function Part(props: ParentProps & ComponentProps<"div">) {
   const [local, others] = splitProps(props, ["class", "classList", "children"])
@@ -386,6 +387,11 @@ export default function SessionTimeline(props: { session: string; class?: string
     }
   }
 
+  createEffect(() => {
+    console.log("WHAT")
+    console.log(JSON.stringify(messagesWithValidParts()))
+  })
+
   return (
     <div
       ref={setRoot}
@@ -394,7 +400,7 @@ export default function SessionTimeline(props: { session: string; class?: string
         [props.class ?? ""]: !!props.class,
       }}
     >
-      <div class="py-1.5 px-6 flex justify-end items-center self-stretch">
+      <div class="flex justify-end items-center self-stretch">
         <div class="flex items-center gap-6">
           <Tooltip value={`${tokens()} Tokens`} class="flex items-center gap-1.5">
             <Show when={context()}>
@@ -405,7 +411,7 @@ export default function SessionTimeline(props: { session: string; class?: string
           <div class="text-14-regular text-text-strong text-right">{cost()}</div>
         </div>
       </div>
-      <ul role="list" class="flex flex-col items-start self-stretch px-6 pt-2 pb-6 gap-1">
+      <ul role="list" class="flex flex-col items-start self-stretch">
         <For each={messagesWithValidParts()}>
           {(message) => (
             <div

@@ -45,6 +45,10 @@
       border-color: var(--border-focus);
       background-color: var(--surface-focus);
     }
+
+    [data-slot="icon"] {
+      color: var(--icon-strong-base);
+    }
   }
 
   &[data-variant="ghost"] {
@@ -66,7 +70,10 @@
   }
 
   &[data-size="normal"] {
-    padding: 0 6px 0 6px;
+    padding: 0 6px;
+    &[data-icon] {
+      padding: 0 6px 0 4px;
+    }
 
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
@@ -75,7 +82,12 @@
 
   &[data-size="large"] {
     height: 32px;
-    padding: 0 8px 0 6px;
+    padding: 0 8px;
+
+    &[data-icon] {
+      padding: 0 8px 0 6px;
+    }
+
     gap: 8px;
 
     font-family: var(--font-family-sans);

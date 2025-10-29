@@ -1,45 +1,45 @@
+import { createSimpleContext } from "./helper"
 import { createHighlighter, type ThemeInput } from "shiki"
-import { createContext, useContext, type ParentProps } from "solid-js"
 
 const theme: ThemeInput = {
   colors: {
-    "actionBar.toggledBackground": "var(--theme-background-element)",
-    "activityBarBadge.background": "var(--theme-accent)",
-    "checkbox.border": "var(--theme-border)",
+    "actionBar.toggledBackground": "var(--surface-raised-base)",
+    "activityBarBadge.background": "var(--surface-brand-base)",
+    "checkbox.border": "var(--border-base)",
     "editor.background": "transparent",
-    "editor.foreground": "var(--theme-text)",
-    "editor.inactiveSelectionBackground": "var(--theme-background-element)",
-    "editor.selectionHighlightBackground": "var(--theme-border-active)",
-    "editorIndentGuide.activeBackground1": "var(--theme-border-subtle)",
-    "editorIndentGuide.background1": "var(--theme-border-subtle)",
-    "input.placeholderForeground": "var(--theme-text-muted)",
-    "list.activeSelectionIconForeground": "var(--theme-text)",
-    "list.dropBackground": "var(--theme-background-element)",
-    "menu.background": "var(--theme-background-panel)",
-    "menu.border": "var(--theme-border)",
-    "menu.foreground": "var(--theme-text)",
-    "menu.selectionBackground": "var(--theme-primary)",
-    "menu.separatorBackground": "var(--theme-border)",
-    "ports.iconRunningProcessForeground": "var(--theme-success)",
+    "editor.foreground": "var(--text-base)",
+    "editor.inactiveSelectionBackground": "var(--surface-raised-base)",
+    "editor.selectionHighlightBackground": "var(--border-active)",
+    "editorIndentGuide.activeBackground1": "var(--border-weak-base)",
+    "editorIndentGuide.background1": "var(--border-weak-base)",
+    "input.placeholderForeground": "var(--text-weak)",
+    "list.activeSelectionIconForeground": "var(--text-base)",
+    "list.dropBackground": "var(--surface-raised-base)",
+    "menu.background": "var(--surface-base)",
+    "menu.border": "var(--border-base)",
+    "menu.foreground": "var(--text-base)",
+    "menu.selectionBackground": "var(--surface-interactive-base)",
+    "menu.separatorBackground": "var(--border-base)",
+    "ports.iconRunningProcessForeground": "var(--icon-success-base)",
     "sideBarSectionHeader.background": "transparent",
-    "sideBarSectionHeader.border": "var(--theme-border-subtle)",
-    "sideBarTitle.foreground": "var(--theme-text-muted)",
-    "statusBarItem.remoteBackground": "var(--theme-success)",
-    "statusBarItem.remoteForeground": "var(--theme-text)",
-    "tab.lastPinnedBorder": "var(--theme-border-subtle)",
-    "tab.selectedBackground": "var(--theme-background-element)",
-    "tab.selectedForeground": "var(--theme-text-muted)",
-    "terminal.inactiveSelectionBackground": "var(--theme-background-element)",
-    "widget.border": "var(--theme-border)",
+    "sideBarSectionHeader.border": "var(--border-weak-base)",
+    "sideBarTitle.foreground": "var(--text-weak)",
+    "statusBarItem.remoteBackground": "var(--surface-success-base)",
+    "statusBarItem.remoteForeground": "var(--text-base)",
+    "tab.lastPinnedBorder": "var(--border-weak-base)",
+    "tab.selectedBackground": "var(--surface-raised-base)",
+    "tab.selectedForeground": "var(--text-weak)",
+    "terminal.inactiveSelectionBackground": "var(--surface-raised-base)",
+    "widget.border": "var(--border-base)",
   },
   displayName: "opencode",
   name: "opencode",
   semanticHighlighting: true,
   semanticTokenColors: {
-    customLiteral: "var(--theme-syntax-function)",
-    newOperator: "var(--theme-syntax-operator)",
-    numberLiteral: "var(--theme-syntax-number)",
-    stringLiteral: "var(--theme-syntax-string)",
+    customLiteral: "var(--syntax-function)",
+    newOperator: "var(--syntax-operator)",
+    numberLiteral: "var(--syntax-number)",
+    stringLiteral: "var(--syntax-string)",
   },
   tokenColors: [
     {
@@ -50,7 +50,7 @@ const theme: ThemeInput = {
         "variable.legacy.builtin.python",
       ],
       settings: {
-        foreground: "var(--theme-text)",
+        foreground: "var(--text-base)",
       },
     },
     {
@@ -68,19 +68,19 @@ const theme: ThemeInput = {
     {
       scope: "header",
       settings: {
-        foreground: "var(--theme-markdown-heading)",
+        foreground: "var(--markdown-heading)",
       },
     },
     {
       scope: "comment",
       settings: {
-        foreground: "var(--theme-syntax-comment)",
+        foreground: "var(--syntax-comment)",
       },
     },
     {
       scope: "constant.language",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
@@ -91,31 +91,31 @@ const theme: ThemeInput = {
         "keyword.operator.minus.exponent",
       ],
       settings: {
-        foreground: "var(--theme-syntax-number)",
+        foreground: "var(--syntax-number)",
       },
     },
     {
       scope: "constant.regexp",
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: "entity.name.tag",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: ["entity.name.tag.css", "entity.name.tag.less"],
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: "entity.other.attribute-name",
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
@@ -131,13 +131,13 @@ const theme: ThemeInput = {
         "entity.other.attribute-name.scss",
       ],
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: "invalid",
       settings: {
-        foreground: "var(--theme-error)",
+        foreground: "var(--syntax-critical)",
       },
     },
     {
@@ -150,7 +150,7 @@ const theme: ThemeInput = {
       scope: "markup.bold",
       settings: {
         fontStyle: "bold",
-        foreground: "var(--theme-markdown-strong)",
+        foreground: "var(--markdown-strong)",
       },
     },
     {
@@ -175,115 +175,115 @@ const theme: ThemeInput = {
     {
       scope: "markup.inserted",
       settings: {
-        foreground: "var(--theme-diff-added)",
+        foreground: "var(--text-diff-add-base)",
       },
     },
     {
       scope: "markup.deleted",
       settings: {
-        foreground: "var(--theme-diff-removed)",
+        foreground: "var(--text-diff-delete-base)",
       },
     },
     {
       scope: "markup.changed",
       settings: {
-        foreground: "var(--theme-diff-context)",
+        foreground: "var(--text-base)",
       },
     },
     {
       scope: "punctuation.definition.quote.begin.markdown",
       settings: {
-        foreground: "var(--theme-markdown-block-quote)",
+        foreground: "var(--markdown-block-quote)",
       },
     },
     {
       scope: "punctuation.definition.list.begin.markdown",
       settings: {
-        foreground: "var(--theme-markdown-list-enumeration)",
+        foreground: "var(--markdown-list-enumeration)",
       },
     },
     {
       scope: "markup.inline.raw",
       settings: {
-        foreground: "var(--theme-markdown-code)",
+        foreground: "var(--markdown-code)",
       },
     },
     {
       scope: "punctuation.definition.tag",
       settings: {
-        foreground: "var(--theme-syntax-punctuation)",
+        foreground: "var(--syntax-punctuation)",
       },
     },
     {
       scope: ["meta.preprocessor", "entity.name.function.preprocessor"],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "meta.preprocessor.string",
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
       scope: "meta.preprocessor.numeric",
       settings: {
-        foreground: "var(--theme-syntax-number)",
+        foreground: "var(--syntax-number)",
       },
     },
     {
       scope: "meta.structure.dictionary.key.python",
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
       scope: "meta.diff.header",
       settings: {
-        foreground: "var(--theme-diff-hunk-header)",
+        foreground: "var(--text-weak)",
       },
     },
     {
       scope: "storage",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "storage.type",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: ["storage.modifier", "keyword.operator.noexcept"],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: ["string", "meta.embedded.assembly"],
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
       scope: "string.tag",
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
       scope: "string.value",
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
       scope: "string.regexp",
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
@@ -293,13 +293,13 @@ const theme: ThemeInput = {
         "punctuation.section.embedded",
       ],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: ["meta.template.expression"],
       settings: {
-        foreground: "var(--theme-text)",
+        foreground: "var(--text-base)",
       },
     },
     {
@@ -310,25 +310,25 @@ const theme: ThemeInput = {
         "source.coffee.embedded",
       ],
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
       scope: "keyword",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "keyword.control",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "keyword.operator",
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
@@ -345,43 +345,43 @@ const theme: ThemeInput = {
         "keyword.operator.wordlike",
       ],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "keyword.other.unit",
       settings: {
-        foreground: "var(--theme-syntax-number)",
+        foreground: "var(--syntax-number)",
       },
     },
     {
       scope: ["punctuation.section.embedded.begin.php", "punctuation.section.embedded.end.php"],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "support.function.git-rebase",
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
       scope: "constant.sha.git-rebase",
       settings: {
-        foreground: "var(--theme-syntax-number)",
+        foreground: "var(--syntax-number)",
       },
     },
     {
       scope: ["storage.modifier.import.java", "variable.language.wildcard.java", "storage.modifier.package.java"],
       settings: {
-        foreground: "var(--theme-text)",
+        foreground: "var(--text-base)",
       },
     },
     {
       scope: "variable.language",
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
@@ -393,7 +393,7 @@ const theme: ThemeInput = {
         "entity.name.operator.custom-literal",
       ],
       settings: {
-        foreground: "var(--theme-syntax-function)",
+        foreground: "var(--syntax-function)",
       },
     },
     {
@@ -432,7 +432,7 @@ const theme: ThemeInput = {
         "storage.type.primitive.groovy",
       ],
       settings: {
-        foreground: "var(--theme-syntax-type)",
+        foreground: "var(--syntax-type)",
       },
     },
     {
@@ -446,7 +446,7 @@ const theme: ThemeInput = {
         "punctuation.separator.namespace.ruby",
       ],
       settings: {
-        foreground: "var(--theme-syntax-type)",
+        foreground: "var(--syntax-type)",
       },
     },
     {
@@ -460,7 +460,7 @@ const theme: ThemeInput = {
         "entity.name.operator",
       ],
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
@@ -472,19 +472,19 @@ const theme: ThemeInput = {
         "constant.other.placeholder",
       ],
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
       scope: ["variable.other.constant", "variable.other.enummember"],
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
       scope: ["meta.object-literal.key"],
       settings: {
-        foreground: "var(--theme-syntax-variable)",
+        foreground: "var(--syntax-variable)",
       },
     },
     {
@@ -498,7 +498,7 @@ const theme: ThemeInput = {
         "support.constant.color",
       ],
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
@@ -512,7 +512,7 @@ const theme: ThemeInput = {
         "support.other.parenthesis.regexp",
       ],
       settings: {
-        foreground: "var(--theme-syntax-string)",
+        foreground: "var(--syntax-string)",
       },
     },
     {
@@ -523,37 +523,37 @@ const theme: ThemeInput = {
         "constant.character.set.regexp",
       ],
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: ["keyword.operator.or.regexp", "keyword.control.anchor.regexp"],
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: "keyword.operator.quantifier.regexp",
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: ["constant.character", "constant.other.option"],
       settings: {
-        foreground: "var(--theme-syntax-keyword)",
+        foreground: "var(--syntax-keyword)",
       },
     },
     {
       scope: "constant.character.escape",
       settings: {
-        foreground: "var(--theme-syntax-operator)",
+        foreground: "var(--syntax-operator)",
       },
     },
     {
       scope: "entity.name.label",
       settings: {
-        foreground: "var(--theme-text-muted)",
+        foreground: "var(--text-weak)",
       },
     },
   ],
@@ -565,18 +565,9 @@ const highlighter = await createHighlighter({
   langs: [],
 })
 
-type ShikiContext = typeof highlighter
-
-const ctx = createContext<ShikiContext>()
-
-export function ShikiProvider(props: ParentProps) {
-  return <ctx.Provider value={highlighter}>{props.children}</ctx.Provider>
-}
-
-export function useShiki() {
-  const value = useContext(ctx)
-  if (!value) {
-    throw new Error("useShiki must be used within a ShikiProvider")
-  }
-  return value
-}
+export const { use: useShiki, provider: ShikiProvider } = createSimpleContext({
+  name: "Shiki",
+  init: () => {
+    return highlighter
+  },
+})

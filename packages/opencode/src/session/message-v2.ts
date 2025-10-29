@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import { Bus } from "../bus"
 import { NamedError } from "../util/error"
 import { Message } from "./message"
@@ -162,6 +162,7 @@ export namespace MessageV2 {
 
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
+    reason: z.string(),
     snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
@@ -269,8 +270,9 @@ export namespace MessageV2 {
     }),
     summary: z
       .object({
+        title: z.string().optional(),
+        body: z.string().optional(),
         diffs: Snapshot.FileDiff.array(),
-        text: z.string(),
       })
       .optional(),
   }).meta({
@@ -312,7 +314,6 @@ export namespace MessageV2 {
       ])
       .optional(),
     system: z.string().array(),
-    finish: z.string().optional(),
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
@@ -360,6 +361,7 @@ export namespace MessageV2 {
       "message.part.updated",
       z.object({
         part: Part,
+        delta: z.string().optional(),
       }),
     ),
     PartRemoved: Bus.event(

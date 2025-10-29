@@ -6,6 +6,7 @@ import type { KeybindsConfig } from "@opencode-ai/sdk"
 import { Logo } from "../component/logo"
 import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
+import { Toast } from "../ui/toast"
 
 export function Home() {
   const sync = useSync()
@@ -25,7 +26,11 @@ export function Home() {
             </Match>
             <Match when={true}>
               <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(Object.values(sync.data.mcp).length, "{} mcp server", "{} mcp servers")}
+              {Locale.pluralize(
+                Object.values(sync.data.mcp).length,
+                "{} mcp server",
+                "{} mcp servers",
+              )}
             </Match>
           </Switch>
         </text>
@@ -34,7 +39,14 @@ export function Home() {
   )
 
   return (
-    <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
+    <box
+      flexGrow={1}
+      justifyContent="center"
+      alignItems="center"
+      paddingLeft={2}
+      paddingRight={2}
+      gap={1}
+    >
       <Logo />
       <box width={39}>
         <HelpRow keybind="command_list">Commands</HelpRow>
@@ -45,6 +57,7 @@ export function Home() {
       <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
         <Prompt hint={Hint} />
       </box>
+      <Toast />
     </box>
   )
 }

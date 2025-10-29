@@ -1,23 +1,24 @@
-import { useLocal } from "@/context"
-import { Button, Icon, IconButton, Select, SelectDialog, Tooltip } from "@opencode-ai/ui"
+import { Button, Icon, IconButton, Select, SelectDialog } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, createMemo, Show, Switch, Match, For } from "solid-js"
+import { createEffect, on, Component, createMemo, Show, For, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
-import { TextSelection } from "@/context/local"
+import { TextSelection, useLocal } from "@/context/local"
 import { DateTime } from "luxon"
 
 interface PartBase {
   content: string
+  start: number
+  end: number
 }
 
-interface TextPart extends PartBase {
+export interface TextPart extends PartBase {
   type: "text"
 }
 
-interface FileAttachmentPart extends PartBase {
+export interface FileAttachmentPart extends PartBase {
   type: "file"
   path: string
   selection?: TextSelection
@@ -35,7 +36,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   let editorRef!: HTMLDivElement
 
-  const defaultParts = [{ type: "text", content: "" } as const]
+  const defaultParts = [{ type: "text", content: "", start: 0, end: 0 } as const]
   const [store, setStore] = createStore<{
     contentParts: ContentPart[]
     popoverIsOpen: boolean
@@ -46,6 +47,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
   const isFocused = createFocusSignal(() => editorRef)
+
+  const handlePaste = (event: ClipboardEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    // @ts-expect-error
+    const plainText = (event.clipboardData || window.clipboardData)?.getData("text/plain") ?? ""
+    addPart({ type: "text", content: plainText, start: 0, end: 0 })
+  }
+
+  onMount(() => {
+    editorRef.addEventListener("paste", handlePaste)
+  })
+  onCleanup(() => {
+    editorRef.removeEventListener("paste", handlePaste)
+  })
 
   createEffect(() => {
     if (isFocused()) {
@@ -60,7 +76,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     key: (x) => x,
     onSelect: (path) => {
       if (!path) return
-      addPart({ type: "file", path, content: "@" + getFilename(path) })
+      addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
       setStore("popoverIsOpen", false)
     },
   })
@@ -103,17 +119,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const parseFromDOM = (): ContentPart[] => {
     const newParts: ContentPart[] = []
+    let position = 0
     editorRef.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent) newParts.push({ type: "text", content: node.textContent })
+        if (node.textContent) {
+          const content = node.textContent
+          newParts.push({ type: "text", content, start: position, end: position + content.length })
+          position += content.length
+        }
       } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
         switch ((node as HTMLElement).dataset.type) {
           case "file":
+            const content = node.textContent!
             newParts.push({
               type: "file",
               path: (node as HTMLElement).dataset.path!,
-              content: node.textContent!,
+              content,
+              start: position,
+              end: position + content.length,
             })
+            position += content.length
             break
           default:
             break
@@ -145,33 +170,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawText = store.contentParts.map((p) => p.content).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
-    if (!atMatch) return
 
-    const startIndex = atMatch.index!
-    const endIndex = cursorPosition
+    const startIndex = atMatch ? atMatch.index! : cursorPosition
+    const endIndex = atMatch ? cursorPosition : cursorPosition
+
+    const pushText = (acc: { parts: ContentPart[]; runningIndex: number }, value: string) => {
+      if (!value) return
+      const last = acc.parts[acc.parts.length - 1]
+      if (last && last.type === "text") {
+        acc.parts[acc.parts.length - 1] = {
+          type: "text",
+          content: last.content + value,
+          start: last.start,
+          end: last.end + value.length,
+        }
+        return
+      }
+      acc.parts.push({ type: "text", content: value, start: acc.runningIndex, end: acc.runningIndex + value.length })
+    }
 
     const {
       parts: nextParts,
-      cursorIndex,
-      cursorOffset,
       inserted,
+      cursorPositionAfter,
     } = store.contentParts.reduce(
       (acc, item) => {
         if (acc.inserted) {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex += item.content.length
           return acc
         }
 
         const nextIndex = acc.runningIndex + item.content.length
         if (nextIndex <= startIndex) {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex = nextIndex
           return acc
         }
 
         if (item.type !== "text") {
-          acc.parts.push(item)
+          acc.parts.push({ ...item, start: acc.runningIndex, end: acc.runningIndex + item.content.length })
           acc.runningIndex = nextIndex
           return acc
         }
@@ -181,48 +219,64 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         const head = item.content.slice(0, headLength)
         const tail = item.content.slice(tailLength)
 
-        if (head) acc.parts.push({ type: "text", content: head })
+        pushText(acc, head)
+        acc.runningIndex += head.length
 
-        acc.parts.push(part)
-
-        const rest = /^\s/.test(tail) ? tail : ` ${tail}`
-        if (rest) {
-          acc.cursorIndex = acc.parts.length
-          acc.cursorOffset = Math.min(1, rest.length)
-          acc.parts.push({ type: "text", content: rest })
+        if (part.type === "text") {
+          pushText(acc, part.content)
+          acc.runningIndex += part.content.length
+        }
+        if (part.type !== "text") {
+          acc.parts.push({ ...part, start: acc.runningIndex, end: acc.runningIndex + part.content.length })
+          acc.runningIndex += part.content.length
         }
 
+        const needsGap = Boolean(atMatch)
+        const rest = needsGap ? (tail ? (/^\s/.test(tail) ? tail : ` ${tail}`) : " ") : tail
+        pushText(acc, rest)
+        acc.runningIndex += rest.length
+
+        const baseCursor = startIndex + part.content.length
+        const cursorAddition = needsGap && rest.length > 0 ? 1 : 0
+        acc.cursorPositionAfter = baseCursor + cursorAddition
+
         acc.inserted = true
-        acc.runningIndex = nextIndex
         return acc
       },
       {
         parts: [] as ContentPart[],
         runningIndex: 0,
         inserted: false,
-        cursorIndex: null as number | null,
-        cursorOffset: 0,
+        cursorPositionAfter: cursorPosition + part.content.length,
       },
     )
 
-    if (!inserted || cursorIndex === null) return
+    if (!inserted) {
+      const baseParts = store.contentParts.filter((item) => !(item.type === "text" && item.content === ""))
+      const runningIndex = baseParts.reduce((sum, p) => sum + p.content.length, 0)
+      const appendedAcc = { parts: [...baseParts] as ContentPart[], runningIndex }
+      if (part.type === "text") {
+        pushText(appendedAcc, part.content)
+      }
+      if (part.type !== "text") {
+        appendedAcc.parts.push({
+          ...part,
+          start: appendedAcc.runningIndex,
+          end: appendedAcc.runningIndex + part.content.length,
+        })
+      }
+      const next = appendedAcc.parts.length > 0 ? appendedAcc.parts : defaultParts
+      setStore("contentParts", next)
+      setStore("popoverIsOpen", false)
+      const nextCursor = rawText.length + part.content.length
+      queueMicrotask(() => setCursorPosition(editorRef, nextCursor))
+      return
+    }
 
     setStore("contentParts", nextParts)
     setStore("popoverIsOpen", false)
 
-    queueMicrotask(() => {
-      const node = editorRef.childNodes[cursorIndex]
-      if (node && node.nodeType === Node.TEXT_NODE) {
-        const range = document.createRange()
-        const selection = window.getSelection()
-        const length = node.textContent ? node.textContent.length : 0
-        const offset = cursorOffset > length ? length : cursorOffset
-        range.setStart(node, offset)
-        range.collapse(true)
-        selection?.removeAllRanges()
-        selection?.addRange(range)
-      }
-    })
+    queueMicrotask(() => setCursorPosition(editorRef, cursorPositionAfter))
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -245,7 +299,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   return (
-    <div class="relative size-full max-w-[640px] _max-h-[320px] flex flex-col gap-3">
+    <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
         <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
           <For each={flat()}>
@@ -260,7 +314,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular">
                     <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}/
+                      {getDirectory(i)}
                     </span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                   </div>
@@ -339,9 +393,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <img src={`https://models.dev/logos/${i.provider.id}.svg`} class="size-6 p-0.5 shrink-0 " />
                     <div class="flex gap-x-3 items-baseline flex-[1_0_0]">
                       <span class="text-14-medium text-text-strong overflow-hidden text-ellipsis">{i.name}</span>
-                      <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
-                        {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
-                      </span>
+                      <Show when={i.release_date}>
+                        <span class="text-12-medium text-text-weak overflow-hidden text-ellipsis truncate min-w-0">
+                          {DateTime.fromFormat(i.release_date, "yyyy-MM-dd").toFormat("LLL yyyy")}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                   <Show when={!i.cost || i.cost?.input === 0}>

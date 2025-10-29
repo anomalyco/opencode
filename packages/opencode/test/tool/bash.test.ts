@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
-import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 
 const ctx = {
@@ -15,7 +14,6 @@ const ctx = {
 
 const bash = await BashTool.init()
 const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
 
 describe("tool.bash", () => {
   test("basic", async () => {

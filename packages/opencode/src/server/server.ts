@@ -3,9 +3,9 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { stream, streamSSE } from "hono/streaming"
 import { Session } from "../session"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
@@ -814,10 +814,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const sessionID = c.req.valid("param").id
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          return c.json(msg)
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
         },
       )
       .post(

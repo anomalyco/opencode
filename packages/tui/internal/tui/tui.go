@@ -1164,6 +1164,14 @@ func (a Model) executeCommand(command commands.Command) (tea.Model, tea.Cmd) {
 		}
 
 		value := a.editor.Value()
+
+		// Expand text attachments before opening editor
+		for _, att := range a.editor.GetAttachments() {
+			if textSource, ok := att.GetTextSource(); ok {
+				value = strings.Replace(value, att.Display, textSource.Value, 1)
+			}
+		}
+
 		updated, cmd := a.editor.Clear()
 		a.editor = updated.(chat.EditorComponent)
 		cmds = append(cmds, cmd)

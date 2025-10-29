@@ -1,8 +1,5 @@
 [data-component="list"] {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  /* overflow-y: auto; */
 
   /* Hide scrollbar */
   &::-webkit-scrollbar {
@@ -13,6 +10,7 @@
 
   [data-slot="item"] {
     width: 100%;
+    margin-bottom: 6px;
     padding: 4px 12px;
     text-align: left;
 

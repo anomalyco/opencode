@@ -1,24 +1,29 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 
-type Route =
-  | {
-      type: "home"
-    }
-  | {
-      type: "session"
-      sessionID: string
-    }
+export type HomeRoute = {
+  type: "home"
+}
+
+export type SessionRoute = {
+  type: "session"
+  sessionID: string
+}
+
+export type Route = HomeRoute | SessionRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
-  init: () => {
+  init: (props: { data?: Route }) => {
     const [store, setStore] = createStore<Route>(
-      process.env["OPENCODE_ROUTE"]
-        ? JSON.parse(process.env["OPENCODE_ROUTE"])
-        : {
+      props.data ??
+      (
+        process.env["OPENCODE_ROUTE"]
+          ? JSON.parse(process.env["OPENCODE_ROUTE"])
+          : {
             type: "home",
-          },
+          }
+      ),
     )
 
     return {

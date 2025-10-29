@@ -41,15 +41,34 @@ for (const [name] of Object.entries(binaries)) {
 await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
+  const major = Script.version.split(".")[0]
+  const majorTag = `latest-${major}`
+  for (const [name] of Object.entries(binaries)) {
+    await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
+  }
+  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+}
+
+if (!Script.preview) {
   for (const key of Object.keys(binaries)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+
+  const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
   // arch
   const binaryPkgbuild = [
@@ -57,7 +76,8 @@ if (!Script.preview) {
     "# Maintainer: adam",
     "",
     "pkgname='opencode-bin'",
-    `pkgver=${Script.version.split("-")[0]}`,
+    `pkgver=${pkgver}`,
+    `_subver=${_subver}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
     "pkgdesc='The AI coding agent built for the terminal.'",
@@ -68,10 +88,10 @@ if (!Script.preview) {
     "conflicts=('opencode')",
     "depends=('fzf' 'ripgrep')",
     "",
-    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-arm64.zip")`,
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.zip::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.zip")`,
     `sha256sums_aarch64=('${arm64Sha}')`,
     "",
-    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v${Script.version}/opencode-linux-x64.zip")`,
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.zip::https://github.com/sst/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.zip")`,
     `sha256sums_x86_64=('${x64Sha}')`,
     "",
     "package() {",
@@ -86,7 +106,8 @@ if (!Script.preview) {
     "# Maintainer: adam",
     "",
     "pkgname='opencode'",
-    `pkgver=${Script.version.split("-")[0]}`,
+    `pkgver=${pkgver}`,
+    `_subver=${_subver}`,
     "options=('!debug' '!strip')",
     "pkgrel=1",
     "pkgdesc='The AI coding agent built for the terminal.'",
@@ -98,7 +119,7 @@ if (!Script.preview) {
     "depends=('fzf' 'ripgrep')",
     "makedepends=('git' 'bun-bin' 'go')",
     "",
-    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v${Script.version}.tar.gz")`,
+    `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v\${pkgver}\${_subver}.tar.gz")`,
     `sha256sums=('SKIP')`,
     "",
     "build() {",

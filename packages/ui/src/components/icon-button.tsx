@@ -5,11 +5,12 @@ import { Icon, IconProps } from "./icon"
 export interface IconButtonProps {
   icon: IconProps["name"]
   size?: "normal" | "large"
+  iconSize?: IconProps["size"]
   variant?: "primary" | "secondary" | "ghost"
 }
 
 export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
-  const [split, rest] = splitProps(props, ["variant", "size", "class", "classList"])
+  const [split, rest] = splitProps(props, ["variant", "size", "iconSize", "class", "classList"])
   return (
     <Kobalte
       {...rest}
@@ -21,7 +22,7 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Icon data-slot="icon" name={props.icon} size={split.size === "large" ? "normal" : "small"} />
+      <Icon data-slot="icon" name={props.icon} size={split.iconSize ?? (split.size === "large" ? "normal" : "small")} />
     </Kobalte>
   )
 }

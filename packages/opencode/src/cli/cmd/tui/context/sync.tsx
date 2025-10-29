@@ -246,7 +246,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           const [session, messages, todo] = await Promise.all([
-            sdk.client.session.get({ path: { id: sessionID } }),
+            sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
             sdk.client.session.messages({ path: { id: sessionID } }),
             sdk.client.session.todo({ path: { id: sessionID } }),
           ])

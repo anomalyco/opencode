@@ -1,13 +1,21 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
-import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary } from "solid-js"
+import { RouteProvider, useRoute, type Route } from "@tui/context/route"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createMemo,
+  createSignal,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
-import { SyncProvider } from "@tui/context/sync"
+import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel } from "@tui/component/dialog-model"
 import { DialogStatus } from "@tui/component/dialog-status"
@@ -21,33 +29,49 @@ import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
+import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider } from "./context/exit"
+import type { SessionRoute } from "./context/route"
 
-export async function tui(input: { url: string; onExit?: () => Promise<void> }) {
+export async function tui(input: {
+  url: string
+  sessionID?: string
+  model?: string
+  agent?: string
+  onExit?: () => Promise<void>
+}) {
+  const routeData: Route | undefined = input.sessionID
+    ? {
+        type: "session",
+        sessionID: input.sessionID,
+      }
+    : undefined
   await render(
     () => {
       return (
         <ErrorBoundary fallback={<text>Something went wrong</text>}>
           <ExitProvider onExit={input.onExit}>
-            <RouteProvider>
-              <SDKProvider url={input.url}>
-                <SyncProvider>
-                  <ThemeProvider>
-                    <LocalProvider>
-                      <KeybindProvider>
-                        <DialogProvider>
-                          <CommandProvider>
-                            <PromptHistoryProvider>
-                              <App />
-                            </PromptHistoryProvider>
-                          </CommandProvider>
-                        </DialogProvider>
-                      </KeybindProvider>
-                    </LocalProvider>
-                  </ThemeProvider>
-                </SyncProvider>
-              </SDKProvider>
-            </RouteProvider>
+            <ToastProvider>
+              <RouteProvider data={routeData}>
+                <SDKProvider url={input.url}>
+                  <SyncProvider>
+                    <ThemeProvider>
+                      <LocalProvider initialModel={input.model} initialAgent={input.agent}>
+                        <KeybindProvider>
+                          <DialogProvider>
+                            <CommandProvider>
+                              <PromptHistoryProvider>
+                                <App />
+                              </PromptHistoryProvider>
+                            </CommandProvider>
+                          </DialogProvider>
+                        </KeybindProvider>
+                      </LocalProvider>
+                    </ThemeProvider>
+                  </SyncProvider>
+                </SDKProvider>
+              </RouteProvider>
+            </ToastProvider>
           </ExitProvider>
         </ErrorBoundary>
       )
@@ -56,7 +80,6 @@ export async function tui(input: { url: string; onExit?: () => Promise<void> }) 
       targetFps: 60,
       gatherStats: false,
       exitOnCtrlC: false,
-      useKittyKeyboard: true,
     },
   )
 }
@@ -70,6 +93,9 @@ function App() {
   const local = useLocal()
   const command = useCommandDialog()
   const { event } = useSDK()
+  const sync = useSync()
+  const toast = useToast()
+  const [sessionExists, setSessionExists] = createSignal(false)
   const { theme } = useTheme()
 
   useKeyboard(async (evt) => {
@@ -81,6 +107,21 @@ function App() {
     if (evt.meta && evt.name === "d") {
       renderer.console.toggle()
       return
+    }
+  })
+
+  // Make sure session is valid, otherwise redirect to home
+  createEffect(async () => {
+    if (route.data.type === "session") {
+      const data = route.data as SessionRoute
+      await sync.session.sync(data.sessionID).catch(() => {
+        toast.show({
+          message: `Session not found: ${data.sessionID}`,
+          type: "error",
+        })
+        return route.navigate({ type: "home" })
+      })
+      setSessionExists(true)
     }
   })
 
@@ -207,7 +248,7 @@ function App() {
           <Match when={route.data.type === "home"}>
             <Home />
           </Match>
-          <Match when={route.data.type === "session"}>
+          <Match when={route.data.type === "session" && sessionExists()}>
             <Session />
           </Match>
         </Switch>
@@ -220,7 +261,12 @@ function App() {
         flexShrink={0}
       >
         <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
+          <box
+            flexDirection="row"
+            backgroundColor={theme.backgroundElement}
+            paddingLeft={1}
+            paddingRight={1}
+          >
             <text fg={theme.textMuted}>open</text>
             <text attributes={TextAttributes.BOLD}>code </text>
             <text fg={theme.textMuted}>v{Installation.VERSION}</text>
@@ -234,7 +280,11 @@ function App() {
             tab
           </text>
           <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-          <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode="none">
+          <text
+            bg={local.agent.color(local.agent.current().name)}
+            fg={theme.background}
+            wrapMode="none"
+          >
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>

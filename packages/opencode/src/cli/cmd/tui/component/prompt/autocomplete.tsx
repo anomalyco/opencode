@@ -1,4 +1,4 @@
-import type { ParsedKey, BoxRenderable, InputRenderable } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable, KeyEvent } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, For, Show } from "solid-js"
@@ -12,7 +12,7 @@ import type { PromptInfo } from "./history"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  onKeyDown: (e: ParsedKey) => void
+  onKeyDown: (e: KeyEvent) => void
   visible: false | "@" | "/"
 }
 
@@ -27,9 +27,13 @@ export function Autocomplete(props: {
   value: string
   sessionID?: string
   setPrompt: (input: (prompt: PromptInfo) => void) => void
+  setExtmark: (partIndex: number, extmarkId: number) => void
   anchor: () => BoxRenderable
-  input: () => InputRenderable
+  input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
+  fileStyleId: number
+  agentStyleId: number
+  promptPartTypeId: () => number
 }) {
   const sdk = useSDK()
   const sync = useSync()
@@ -46,6 +50,57 @@ export function Autocomplete(props: {
     if (!store.visible) return
     return props.value.substring(store.index + 1).split(" ")[0]
   })
+
+  function insertPart(text: string, part: PromptInfo["parts"][number]) {
+    const input = props.input()
+    const currentCursorOffset = input.visualCursor.offset
+
+    const charAfterCursor = props.value.at(currentCursorOffset)
+    const needsSpace = charAfterCursor !== " " && charAfterCursor !== undefined
+    const append = "@" + text + (needsSpace ? " " : "")
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(append)
+
+    const virtualText = "@" + text
+    const extmarkStart = store.index
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    const styleId =
+      part.type === "file"
+        ? props.fileStyleId
+        : part.type === "agent"
+          ? props.agentStyleId
+          : undefined
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId,
+      typeId: props.promptPartTypeId(),
+    })
+
+    props.setPrompt((draft) => {
+      if (part.type === "file" && part.source?.text) {
+        part.source.text.start = extmarkStart
+        part.source.text.end = extmarkEnd
+        part.source.text.value = virtualText
+      } else if (part.type === "agent" && part.source) {
+        part.source.start = extmarkStart
+        part.source.end = extmarkEnd
+        part.source.value = virtualText
+      }
+      const partIndex = draft.parts.length
+      draft.parts.push(part)
+      props.setExtmark(partIndex, extmarkId)
+    })
+  }
 
   const [files] = createResource(
     () => [filter()],
@@ -69,7 +124,7 @@ export function Autocomplete(props: {
             (item): AutocompleteOption => ({
               display: item,
               onSelect: () => {
-                const part: PromptInfo["parts"][number] = {
+                insertPart(item, {
                   type: "file",
                   mime: "text/plain",
                   filename: item,
@@ -77,18 +132,12 @@ export function Autocomplete(props: {
                   source: {
                     type: "file",
                     text: {
-                      start: store.index,
-                      end: store.index + item.length + 1,
-                      value: "@" + item,
+                      start: 0,
+                      end: 0,
+                      value: "",
                     },
                     path: item,
                   },
-                }
-                props.setPrompt((draft) => {
-                  const append = "@" + item + " "
-                  if (store.index === 0) draft.input = append
-                  if (store.index > 0) draft.input = draft.input.slice(0, store.index) + append
-                  draft.parts.push(part)
                 })
               },
             }),
@@ -112,25 +161,23 @@ export function Autocomplete(props: {
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
           onSelect: () => {
-            props.setPrompt((draft) => {
-              const append = "@" + agent.name + " "
-              draft.input = append
-              draft.parts.push({
-                type: "agent",
-                source: {
-                  start: store.index,
-                  end: store.index + agent.name.length + 1,
-                  value: "@" + agent.name,
-                },
-                name: agent.name,
-              })
+            insertPart(agent.name, {
+              type: "agent",
+              name: agent.name,
+              source: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
             })
           },
         }),
       )
   })
 
-  const session = createMemo(() => (props.sessionID ? sync.session.get(props.sessionID) : undefined))
+  const session = createMemo(() =>
+    props.sessionID ? sync.session.get(props.sessionID) : undefined,
+  )
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = []
     const s = session()
@@ -139,8 +186,11 @@ export function Autocomplete(props: {
         display: "/" + command.name,
         description: command.description,
         onSelect: () => {
-          props.input().value = "/" + command.name + " "
-          props.input().cursorPosition = props.input().value.length
+          const newText = "/" + command.name + " "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
         },
       })
     }
@@ -206,9 +256,9 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo(() => {
-    const mixed: AutocompleteOption[] = (store.visible === "@" ? [...agents(), ...files()] : [...commands()]).filter(
-      (x) => x.disabled !== true,
-    )
+    const mixed: AutocompleteOption[] = (
+      store.visible === "@" ? [...agents(), ...files()] : [...commands()]
+    ).filter((x) => x.disabled !== true)
     if (!filter()) return mixed.slice(0, 10)
     const result = fuzzysort.go(filter()!, mixed, {
       keys: ["display", "description"],
@@ -235,13 +285,13 @@ export function Autocomplete(props: {
     const selected = options()[store.selected]
     if (!selected) return
     selected.onSelect?.()
-    setTimeout(() => hide(), 0)
+    hide()
   }
 
   function show(mode: "@" | "/") {
     setStore({
       visible: mode,
-      index: props.input().cursorPosition,
+      index: props.input().visualCursor.offset,
       position: {
         x: props.anchor().x,
         y: props.anchor().y,
@@ -251,7 +301,11 @@ export function Autocomplete(props: {
   }
 
   function hide() {
-    if (store.visible === "/" && !props.value.endsWith(" ")) props.input().value = ""
+    const text = props.input().plainText
+    if (store.visible === "/" && !text.endsWith(" ")) {
+      const cursor = props.input().logicalCursor
+      props.input().deleteRange(0, 0, cursor.row, cursor.col)
+    }
     setStore("visible", false)
   }
 
@@ -263,23 +317,30 @@ export function Autocomplete(props: {
       onInput(value: string) {
         if (store.visible && value.length <= store.index) hide()
       },
-      onKeyDown(e: ParsedKey) {
+      onKeyDown(e: KeyEvent) {
         if (store.visible) {
           if (e.name === "up") move(-1)
           if (e.name === "down") move(1)
           if (e.name === "escape") hide()
           if (e.name === "return") select()
+          if (["up", "down", "return", "escape"].includes(e.name)) e.preventDefault()
         }
         if (!store.visible) {
           if (e.name === "@") {
-            const last = props.value.at(-1)
-            if (last === " " || last === undefined) {
+            const cursorOffset = props.input().visualCursor.offset
+            const charBeforeCursor =
+              cursorOffset === 0 ? undefined : props.value.at(cursorOffset - 1)
+            if (
+              charBeforeCursor === " " ||
+              charBeforeCursor === "\n" ||
+              charBeforeCursor === undefined
+            ) {
               show("@")
             }
           }
 
           if (e.name === "/") {
-            if (props.input().cursorPosition === 0) show("/")
+            if (props.input().visualCursor.offset === 0) show("/")
           }
         }
       },
@@ -317,9 +378,13 @@ export function Autocomplete(props: {
               backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? theme.background : theme.text}>{option.display}</text>
+              <text fg={index() === store.selected ? theme.background : theme.text}>
+                {option.display}
+              </text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? theme.background : theme.textMuted}>{option.description}</text>
+                <text fg={index() === store.selected ? theme.background : theme.textMuted}>
+                  {option.description}
+                </text>
               </Show>
             </box>
           )}

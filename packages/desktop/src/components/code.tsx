@@ -1,8 +1,8 @@
 import { bundledLanguages, type BundledLanguage, type ShikiTransformer } from "shiki"
 import { splitProps, type ComponentProps, createEffect, onMount, onCleanup, createMemo, createResource } from "solid-js"
-import { useLocal, useShiki } from "@/context"
-import type { TextSelection } from "@/context/local"
+import { useLocal, type TextSelection } from "@/context/local"
 import { getFileExtension, getNodeOffsetInLine, getSelectionInContainer } from "@/utils"
+import { useShiki } from "@/context/shiki"
 
 type DefinedSelection = Exclude<TextSelection, undefined>
 

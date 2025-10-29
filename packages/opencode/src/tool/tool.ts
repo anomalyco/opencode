@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 
 export namespace Tool {

@@ -131,6 +131,28 @@ const syntaxThemeDark = [
     },
   },
   {
+    scope: ["extmark.file"],
+    style: {
+      foreground: "#f5a742",
+      bold: true,
+    },
+  },
+  {
+    scope: ["extmark.agent"],
+    style: {
+      foreground: "#fab283",
+      bold: true,
+    },
+  },
+  {
+    scope: ["extmark.paste"],
+    style: {
+      foreground: "#0a0a0a",
+      background: "#f5a742",
+      bold: true,
+    },
+  },
+  {
     scope: ["comment"],
     style: {
       foreground: "#808080",

@@ -54,6 +54,7 @@ export namespace Keybind {
             info.ctrl = true
             break
           case "alt":
+          case "meta":
           case "option":
             info.meta = true
             break
