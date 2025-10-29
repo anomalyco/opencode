@@ -120,6 +120,33 @@ You can manage the tools an LLM can use through the `tools` option.
 
 ---
 
+### File Search
+
+You can configure file search behavior through the `file` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "file": {
+    "no_ignore_vcs": true
+  }
+}
+```
+
+**Options:**
+
+- `no_ignore_vcs` - When set to `true`, OpenCode will not respect VCS ignore files like `.gitignore` when searching for files. This is useful when you want to include files that are normally ignored by version control (such as `node_modules`, build artifacts, etc.). Defaults to `false`.
+
+By default, OpenCode respects `.gitignore` rules when:
+
+- Searching files in the TUI with `@` file search
+- Using the Glob tool to match file patterns
+- Listing files for context
+
+When `no_ignore_vcs` is enabled, all files will be searchable except for the `.git` directory itself, which is always excluded.
+
+---
+
 ### Models
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
