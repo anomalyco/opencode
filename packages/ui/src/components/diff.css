@@ -18,6 +18,7 @@
   [data-slot="diff-hunk-separator-content"] {
     position: sticky;
     background-color: var(--surface-diff-hidden-base);
+    color: var(--text-base);
     width: var(--pjs-column-content-width);
     left: var(--pjs-column-number-width);
     padding-left: 8px;

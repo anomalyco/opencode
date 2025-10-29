@@ -33,7 +33,7 @@ import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { ProgressCircle } from "@/components/progress-circle"
-import { AssistantMessage } from "@/components/assistant-message"
+import { AssistantMessage, Part } from "@/components/assistant-message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { DiffChanges } from "@/components/diff-changes"
 
@@ -178,6 +178,8 @@ export default function Page() {
   }
 
   const handleDiffTriggerClick = (event: MouseEvent) => {
+    // disabling scroll to diff for now
+    return
     const target = event.currentTarget as HTMLElement
     queueMicrotask(() => {
       if (target.getAttribute("aria-expanded") !== "true") return
@@ -636,6 +638,7 @@ export default function Page() {
                             <div class="flex flex-col items-start gap-50 pb-50">
                               <For each={local.session.userMessages()}>
                                 {(message) => {
+                                  const [expanded, setExpanded] = createSignal(false)
                                   const title = createMemo(() => message.summary?.title)
                                   const prompt = createMemo(() => local.session.getMessageText(message))
                                   const summary = createMemo(() => message.summary?.body)
@@ -649,15 +652,12 @@ export default function Page() {
                                     if (!last) return false
                                     return !last.time.completed
                                   })
-                                  const lastWithContent = createMemo(() =>
-                                    assistantMessages().findLast((m) => {
-                                      const parts = sync.data.part[m.id]
-                                      return parts?.find((p) => p.type === "text" || p.type === "tool")
-                                    }),
-                                  )
 
                                   return (
-                                    <div data-message={message.id} class="flex flex-col items-start self-stretch gap-8">
+                                    <div
+                                      data-message={message.id}
+                                      class="flex flex-col items-start self-stretch gap-8 min-h-[calc(100vh-15rem)]"
+                                    >
                                       {/* Title */}
                                       <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger">
                                         <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
@@ -665,14 +665,19 @@ export default function Page() {
                                         </h1>
                                       </div>
                                       <Show when={title}>
-                                        <div class="-mt-5 text-12-regular text-text-base line-clamp-3">{prompt()}</div>
+                                        <div class="-mt-8 text-12-regular text-text-base line-clamp-3">{prompt()}</div>
                                       </Show>
                                       {/* Response */}
                                       <div class="w-full flex flex-col gap-2">
-                                        <Collapsible variant="ghost">
+                                        <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
                                           <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
                                             <div class="flex items-center gap-1 self-stretch">
-                                              <h2 class="text-12-medium">Show steps</h2>
+                                              <h2 class="text-12-medium">
+                                                <Switch>
+                                                  <Match when={expanded()}>Hide steps</Match>
+                                                  <Match when={!expanded()}>Show steps</Match>
+                                                </Switch>
+                                              </h2>
                                               <Collapsible.Arrow />
                                             </div>
                                           </Collapsible.Trigger>
@@ -687,11 +692,63 @@ export default function Page() {
                                             </div>
                                           </Collapsible.Content>
                                         </Collapsible>
-                                        <Show when={working() && lastWithContent()}>
-                                          {(last) => {
-                                            const lastParts = createMemo(() => sync.data.part[last().id])
+                                        <Show when={working() && !expanded()}>
+                                          {(_) => {
+                                            const lastMessageWithText = createMemo(() =>
+                                              assistantMessages().findLast((m) => {
+                                                const parts = sync.data.part[m.id]
+                                                return parts?.find((p) => p.type === "text")
+                                              }),
+                                            )
+                                            const lastMessageWithReasoning = createMemo(() =>
+                                              assistantMessages().findLast((m) => {
+                                                const parts = sync.data.part[m.id]
+                                                return parts?.find((p) => p.type === "reasoning")
+                                              }),
+                                            )
+                                            const lastMessageWithTool = createMemo(() =>
+                                              assistantMessages().findLast((m) => {
+                                                const parts = sync.data.part[m.id]
+                                                return parts?.find(
+                                                  (p) => p.type === "tool" && p.state.status === "completed",
+                                                )
+                                              }),
+                                            )
                                             return (
-                                              <AssistantMessage lastToolOnly message={last()} parts={lastParts()} />
+                                              <div class="w-full flex flex-col gap-2">
+                                                <Switch>
+                                                  <Match when={lastMessageWithText()}>
+                                                    {(last) => {
+                                                      const lastTextPart = createMemo(() =>
+                                                        sync.data.part[last().id].findLast((p) => p.type === "text"),
+                                                      )
+                                                      return <Part message={last()} part={lastTextPart()!} readonly />
+                                                    }}
+                                                  </Match>
+                                                  <Match when={lastMessageWithReasoning()}>
+                                                    {(last) => {
+                                                      const lastReasoningPart = createMemo(() =>
+                                                        sync.data.part[last().id].findLast(
+                                                          (p) => p.type === "reasoning",
+                                                        ),
+                                                      )
+                                                      return (
+                                                        <Part message={last()} part={lastReasoningPart()!} readonly />
+                                                      )
+                                                    }}
+                                                  </Match>
+                                                </Switch>
+                                                <Show when={lastMessageWithTool()}>
+                                                  {(last) => {
+                                                    const lastToolPart = createMemo(() =>
+                                                      sync.data.part[last().id].findLast(
+                                                        (p) => p.type === "tool" && p.state.status === "completed",
+                                                      ),
+                                                    )
+                                                    return <Part message={last()} part={lastToolPart()!} readonly />
+                                                  }}
+                                                </Show>
+                                              </div>
                                             )
                                           }}
                                         </Show>
