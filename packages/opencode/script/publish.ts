@@ -42,7 +42,7 @@ await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.chan
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]
-  const majorTag = `v${major}`
+  const majorTag = `latest-${major}`
   for (const [name] of Object.entries(binaries)) {
     await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
   }
