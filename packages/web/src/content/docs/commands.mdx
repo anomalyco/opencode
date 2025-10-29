@@ -129,13 +129,12 @@ Run the command with arguments:
 
 And `$ARGUMENTS` will be replaced with `Button`.
 
-You can also access individual arguments or ranges using array notation:
+You can also access individual arguments using positional parameters:
 
-- `$ARGUMENTS[0]` - First argument
-- `$ARGUMENTS[1]` - Second argument
-- `$ARGUMENTS[0*]` - First argument and all following arguments
-- `$ARGUMENTS[1*]` - Second argument and all following arguments
-- `$ARGUMENTS[0:2]` - First through third arguments (inclusive)
+- `$1` - First argument
+- `$2` - Second argument
+- `$3` - Third argument
+- And so on...
 
 For example:
 
@@ -144,8 +143,8 @@ For example:
 description: Create a new file with content
 ---
 
-Create a file named $ARGUMENTS[0] in the directory $ARGUMENTS[1]
-with the following content: $ARGUMENTS[2*]
+Create a file named $1 in the directory $2
+with the following content: $3
 ```
 
 Run the command:
@@ -156,9 +155,9 @@ Run the command:
 
 This replaces:
 
-- `$ARGUMENTS[0]` with `config.json`
-- `$ARGUMENTS[1]` with `src`
-- `$ARGUMENTS[2*]` with `{ "key": "value" }`
+- `$1` with `config.json`
+- `$2` with `src`
+- `$3` with `{ "key": "value" }`
 
 ---
 
