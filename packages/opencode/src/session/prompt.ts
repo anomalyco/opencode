@@ -98,7 +98,6 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    timeout: z.number().int().positive().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -160,7 +159,6 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
-
     const agent = await Agent.get(input.agent ?? "build")
     const model = await resolveModel({
       agent,
@@ -1482,7 +1480,6 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
-    timeout: z.number().int().positive().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1695,7 +1692,6 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
-      timeout: input.timeout,
     })
   }
 
