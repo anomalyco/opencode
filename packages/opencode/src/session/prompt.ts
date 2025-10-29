@@ -241,13 +241,6 @@ export namespace SessionPrompt {
       await using _ = defer(async () => {
         await processor.end()
       })
-      const sessionHeaders =
-        model.providerID === "opencode"
-          ? {
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": userMsg.info.id,
-            }
-          : undefined
       const doStream = () =>
         streamText({
           onError(error) {
@@ -277,8 +270,13 @@ export namespace SessionPrompt {
             }
           },
           headers: {
-            ...sessionHeaders,
-            ...model.info.headers
+            ...(model.providerID === "opencode"
+              ? {
+                  "x-opencode-session": input.sessionID,
+                  "x-opencode-request": userMsg.info.id,
+                }
+              : undefined),
+            ...model.info.headers,
           },
           // set to 0, we handle loop
           maxRetries: 0,
