@@ -3,7 +3,6 @@ import { AWS } from "@opencode-ai/console-core/aws.js"
 
 interface EnterpriseFormData {
   name: string
-  company: string
   role: string
   email: string
   message: string
@@ -14,7 +13,7 @@ export async function POST(event: APIEvent) {
     const body = (await event.request.json()) as EnterpriseFormData
 
     // Validate required fields
-    if (!body.name || !body.company || !body.role || !body.email || !body.message) {
+    if (!body.name || !body.role || !body.email || !body.message) {
       return Response.json({ error: "All fields are required" }, { status: 400 })
     }
 
@@ -29,7 +28,6 @@ export async function POST(event: APIEvent) {
 New Enterprise Inquiry
 
 Name: ${body.name}
-Company: ${body.company}
 Role: ${body.role}
 Email: ${body.email}
 
@@ -40,7 +38,7 @@ ${body.message}
     // Send email using AWS SES
     await AWS.sendEmail({
       to: "enterprise@opencode.ai",
-      subject: `Enterprise Inquiry from ${body.company}`,
+      subject: `Enterprise Inquiry from ${body.name}`,
       body: emailContent,
     })
 
