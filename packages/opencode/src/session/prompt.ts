@@ -1048,7 +1048,7 @@ export namespace SessionPrompt {
               case "tool-call": {
                 const match = toolcalls[value.toolCallId]
                 if (match) {
-                  const currentParts = await Session.getParts(assistantMsg!.id)
+                  const currentParts = await Session.getParts(assistantMsg.id)
                   const toolParts = currentParts.filter(
                     (p): p is MessageV2.ToolPart => p.type === "tool" && p.state.status !== "pending",
                   )
@@ -1063,9 +1063,9 @@ export namespace SessionPrompt {
                     )
                   ) {
                     await Permission.ask({
-                      type: "tool-call",
-                      sessionID: assistantMsg!.sessionID,
-                      messageID: assistantMsg!.id,
+                      type: tool.name,
+                      sessionID: assistantMsg.sessionID,
+                      messageID: assistantMsg.id,
                       callID: value.toolCallId,
                       title: `⚠️ Potential doom loop detected: "${value.toolName}"`,
                       metadata: {
