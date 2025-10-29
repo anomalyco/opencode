@@ -41,15 +41,32 @@ for (const [name] of Object.entries(binaries)) {
 await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
+  const major = Script.version.split(".")[0]
+  const majorTag = `v${major}`
+  for (const [name] of Object.entries(binaries)) {
+    await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
+  }
+  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+}
+
+if (!Script.preview) {
   for (const key of Object.keys(binaries)) {
     await $`cd dist/${key}/bin && zip -r ../../${key}.zip *`
   }
 
   // Calculate SHA values
-  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
-  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`
+    .text()
+    .then((x) => x.trim())
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
