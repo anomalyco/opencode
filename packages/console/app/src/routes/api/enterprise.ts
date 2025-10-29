@@ -25,11 +25,10 @@ export async function POST(event: APIEvent) {
 
     // Create email content
     const emailContent = `
-${body.message}
-
+${body.message}<br><br>
 --
-${body.name}
-${body.role}
+${body.name}<br>
+${body.role}<br>
 ${body.email}`.trim()
 
     // Send email using AWS SES
