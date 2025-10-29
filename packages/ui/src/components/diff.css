@@ -2,7 +2,7 @@
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;
     left: 0;
-    background-color: hsla(209, 96%, 90%, 1);
+    background-color: var(--surface-diff-hidden-strong);
     z-index: 2;
     display: flex;
     align-items: center;
@@ -12,11 +12,12 @@
       aspect-ratio: 1;
       width: 24px;
       height: 24px;
+      color: var(--icon-strong-base);
     }
   }
   [data-slot="diff-hunk-separator-content"] {
     position: sticky;
-    background-color: hsla(210, 100%, 96%, 1);
+    background-color: var(--surface-diff-hidden-base);
     width: var(--pjs-column-content-width);
     left: var(--pjs-column-number-width);
     padding-left: 8px;
