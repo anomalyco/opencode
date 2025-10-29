@@ -54,18 +54,20 @@ export function Diff<T>(props: DiffProps<T>) {
   // When ready to render, simply call .render with old/new file, optional
   // annotations and a container element to hold the diff
   createEffect(() => {
+    // @ts-expect-error
     const instance = new FileDiff<T>({
-      theme: "pierre-light",
+      // theme: "pierre-light",
+      // theme: "pierre-light",
       // Or can also provide a 'themes' prop, which allows the code to adapt
       // to your OS light or dark theme
-      // themes: { dark: 'pierre-night', light: 'pierre-light' },
+      themes: { dark: "pierre-dark", light: "pierre-light" },
       // When using the 'themes' prop, 'themeType' allows you to force 'dark'
       // or 'light' theme, or inherit from the OS ('system') theme.
       themeType: "system",
       // Disable the line numbers for your diffs, generally not recommended
       disableLineNumbers: false,
       // Whether code should 'wrap' with long lines or 'scroll'.
-      overflow: "scroll",
+      overflow: "wrap",
       // Normally you shouldn't need this prop, but if you don't provide a
       // valid filename or your file doesn't have an extension you may want to
       // override the automatic detection. You can specify that language here:

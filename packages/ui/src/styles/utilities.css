@@ -48,6 +48,71 @@
   border-width: 0;
 }
 
+.scroller {
+  /* --fade-height: 1.5rem; */
+  /**/
+  /* --mask-top: linear-gradient(to bottom, transparent, black var(--fade-height)); */
+  /* --mask-bottom: linear-gradient(to top, transparent, black var(--fade-height)); */
+  /**/
+  /* mask-image: var(--mask-top), var(--mask-bottom); */
+  /* mask-repeat: no-repeat; */
+  /* mask-size: 100% var(--fade-height); */
+
+  animation: scroll-fade linear;
+  animation-timeline: scroll(self);
+}
+
+/* Define the keyframes for the mask.
+  These percentages now map to scroll positions:
+  0% = Scrolled to the top
+  100% = Scrolled to the bottom
+*/
+@keyframes scroll-fade {
+  /* At the very top (0% scroll) */
+  0% {
+    mask-image: linear-gradient(
+      to bottom,
+      black 90%,
+      /* Opaque, but start fade to bottom */ transparent 100%
+    );
+  }
+
+  /* A small amount scrolled (e.g., 5%)
+    This is where the top fade should be fully visible.
+  */
+  5% {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 10%,
+      /* Fade-in top */ black 90%,
+      /* Fade-out bottom */ transparent 100%
+    );
+  }
+
+  /* Nearing the bottom (e.g., 95%)
+    The bottom fade should start disappearing.
+  */
+  95% {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 10%,
+      /* Fade-in top */ black 90%,
+      /* Fade-out bottom */ transparent 100%
+    );
+  }
+
+  /* At the very bottom (100% scroll) */
+  100% {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 10% /* Opaque, but start fade from top */
+    );
+  }
+}
+
 .truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;

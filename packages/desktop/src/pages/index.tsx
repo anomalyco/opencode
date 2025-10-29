@@ -670,98 +670,6 @@ export default function Page() {
                                           <Message message={message} parts={parts()} />
                                         </div>
                                       </Show>
-                                      {/* Response */}
-                                      <div class="w-full flex flex-col gap-2">
-                                        <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
-                                          <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
-                                            <div class="flex items-center gap-1 self-stretch">
-                                              <h2 class="text-12-medium">
-                                                <Switch>
-                                                  <Match when={expanded()}>Hide steps</Match>
-                                                  <Match when={!expanded()}>Show steps</Match>
-                                                </Switch>
-                                              </h2>
-                                              <Collapsible.Arrow />
-                                            </div>
-                                          </Collapsible.Trigger>
-                                          <Collapsible.Content>
-                                            <div class="w-full flex flex-col items-start self-stretch gap-8">
-                                              <For each={assistantMessages()}>
-                                                {(assistantMessage) => {
-                                                  const parts = createMemo(() => sync.data.part[assistantMessage.id])
-                                                  return <Message message={assistantMessage} parts={parts()} />
-                                                }}
-                                              </For>
-                                            </div>
-                                          </Collapsible.Content>
-                                        </Collapsible>
-                                        <Show when={working() && !expanded()}>
-                                          {(_) => {
-                                            const lastMessageWithText = createMemo(() =>
-                                              assistantMessages().findLast((m) => {
-                                                const parts = sync.data.part[m.id]
-                                                return parts?.find((p) => p.type === "text")
-                                              }),
-                                            )
-                                            const lastMessageWithReasoning = createMemo(() =>
-                                              assistantMessages().findLast((m) => {
-                                                const parts = sync.data.part[m.id]
-                                                return parts?.find((p) => p.type === "reasoning")
-                                              }),
-                                            )
-                                            const lastMessageWithTool = createMemo(() =>
-                                              assistantMessages().findLast((m) => {
-                                                const parts = sync.data.part[m.id]
-                                                return parts?.find(
-                                                  (p) => p.type === "tool" && p.state.status === "completed",
-                                                )
-                                              }),
-                                            )
-                                            return (
-                                              <div class="w-full flex flex-col gap-2">
-                                                <Switch>
-                                                  <Match when={lastMessageWithText()}>
-                                                    {(last) => {
-                                                      const lastTextPart = createMemo(() =>
-                                                        sync.data.part[last().id].findLast((p) => p.type === "text"),
-                                                      )
-                                                      return (
-                                                        <Part message={last()} part={lastTextPart()!} hideDetails />
-                                                      )
-                                                    }}
-                                                  </Match>
-                                                  <Match when={lastMessageWithReasoning()}>
-                                                    {(last) => {
-                                                      const lastReasoningPart = createMemo(() =>
-                                                        sync.data.part[last().id].findLast(
-                                                          (p) => p.type === "reasoning",
-                                                        ),
-                                                      )
-                                                      return (
-                                                        <Part
-                                                          message={last()}
-                                                          part={lastReasoningPart()!}
-                                                          hideDetails
-                                                        />
-                                                      )
-                                                    }}
-                                                  </Match>
-                                                </Switch>
-                                                <Show when={lastMessageWithTool()}>
-                                                  {(last) => {
-                                                    const lastToolPart = createMemo(() =>
-                                                      sync.data.part[last().id].findLast(
-                                                        (p) => p.type === "tool" && p.state.status === "completed",
-                                                      ),
-                                                    )
-                                                    return <Part message={last()} part={lastToolPart()!} hideDetails />
-                                                  }}
-                                                </Show>
-                                              </div>
-                                            )
-                                          }}
-                                        </Show>
-                                      </div>
                                       {/* Summary */}
                                       <Show when={!working()}>
                                         <div class="w-full flex flex-col gap-6 items-start self-stretch">
@@ -817,6 +725,48 @@ export default function Page() {
                                           </Accordion>
                                         </div>
                                       </Show>
+                                      {/* Response */}
+                                      <div class="w-full">
+                                        <Switch>
+                                          <Match when={working()}>
+                                            <div class="w-full flex flex-col-reverse items-start self-stretch gap-6 max-h-30 overflow-y-auto no-scrollbar pointer-events-none mask-alpha mask-y-from-66% mask-y-from-background-base mask-y-to-transparent">
+                                              <For each={assistantMessages()?.toReversed()}>
+                                                {(assistantMessage) => {
+                                                  const parts = createMemo(() => sync.data.part[assistantMessage.id])
+                                                  return <Message message={assistantMessage} parts={parts()} />
+                                                }}
+                                              </For>
+                                            </div>
+                                          </Match>
+                                          <Match when={!working()}>
+                                            <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
+                                              <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
+                                                <div class="flex items-center gap-1 self-stretch">
+                                                  <div class="text-12-medium">
+                                                    <Switch>
+                                                      <Match when={expanded()}>Hide steps</Match>
+                                                      <Match when={!expanded()}>Show steps</Match>
+                                                    </Switch>
+                                                  </div>
+                                                  <Collapsible.Arrow />
+                                                </div>
+                                              </Collapsible.Trigger>
+                                              <Collapsible.Content>
+                                                <div class="w-full flex flex-col-reverse items-start self-stretch gap-8">
+                                                  <For each={assistantMessages()}>
+                                                    {(assistantMessage) => {
+                                                      const parts = createMemo(
+                                                        () => sync.data.part[assistantMessage.id],
+                                                      )
+                                                      return <Message message={assistantMessage} parts={parts()} />
+                                                    }}
+                                                  </For>
+                                                </div>
+                                              </Collapsible.Content>
+                                            </Collapsible>
+                                          </Match>
+                                        </Switch>
+                                      </div>
                                     </div>
                                   )
                                 }}
