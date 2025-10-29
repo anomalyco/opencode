@@ -84,6 +84,7 @@ export namespace SessionSummary {
             content: textPart?.text ?? "",
           },
         ],
+        headers: ProviderTransform.headers(undefined, small.info.headers),
         model: small.language,
       })
       log.info("title", { title: result.text })
@@ -116,6 +117,7 @@ export namespace SessionSummary {
             `,
             },
           ],
+          headers: ProviderTransform.headers(undefined, small.info.headers),
         })
         summary = result.text
       }

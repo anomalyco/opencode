@@ -131,6 +131,15 @@ export namespace ProviderTransform {
     }
   }
 
+  export function headers(
+    base?: Record<string, string>,
+    extra?: Record<string, string>,
+  ): Record<string, string> | undefined {
+    const items = [base, extra].filter((item): item is Record<string, string> => Boolean(item))
+    if (items.length === 0) return undefined
+    return Object.assign({}, ...items)
+  }
+
   export function maxOutputTokens(
     providerID: string,
     options: Record<string, any>,
