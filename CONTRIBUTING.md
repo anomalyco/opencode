@@ -17,6 +17,7 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 - [`help wanted`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
 - [`good first issue`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
 - [`bug`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
+- [`perf`](https://github.com/sst/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
 
 > [!NOTE]
 > PRs that ignore these guardrails will likely be closed.
