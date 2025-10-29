@@ -1504,6 +1504,9 @@ export namespace SessionPrompt {
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
+  const argsRegex = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g
+  const placeholderRegex = /\$(\d+)/g
+  const quoteTrimRegex = /^["']|["']$/g
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -1515,7 +1518,25 @@ export namespace SessionPrompt {
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? "build"
 
-    let template = command.template.replaceAll("$ARGUMENTS", input.arguments)
+    const raw = input.arguments.match(argsRegex) ?? []
+    const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+
+    const placeholders = command.template.match(placeholderRegex) ?? []
+    let last = 0
+    for (const item of placeholders) {
+      const value = Number(item.slice(1))
+      if (value > last) last = value
+    }
+
+    // Let the final placeholder swallow any extra arguments so prompts read naturally
+    const withArgs = command.template.replaceAll(placeholderRegex, (_, index) => {
+      const position = Number(index)
+      const argIndex = position - 1
+      if (argIndex >= args.length) return ""
+      if (position === last) return args.slice(argIndex).join(" ")
+      return args[argIndex]
+    })
+    let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
 
     const shell = ConfigMarkdown.shell(template)
     if (shell.length > 0) {
