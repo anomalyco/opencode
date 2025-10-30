@@ -361,21 +361,21 @@ export namespace SessionPrompt {
             const stop = await SessionRetry.sleep(delayMs, abort.signal)
               .then(() => false)
               .catch((error) => {
+                let err = error
                 if (error instanceof DOMException && error.name === "AbortError") {
-                  const err = new MessageV2.AbortedError(
+                  err = new MessageV2.AbortedError(
                     { message: error.message },
                     {
                       cause: error,
                     },
                   ).toObject()
-                  result.info.error = err
-                  Bus.publish(Session.Event.Error, {
-                    sessionID: result.info.sessionID,
-                    error: result.info.error,
-                  })
-                  return true
                 }
-                throw error
+                result.info.error = err
+                Bus.publish(Session.Event.Error, {
+                  sessionID: result.info.sessionID,
+                  error: result.info.error,
+                })
+                return true
               })
 
             if (stop) break
