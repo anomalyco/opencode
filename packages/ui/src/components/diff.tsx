@@ -109,8 +109,11 @@ export function Diff<T>(props: DiffProps<T>) {
         numCol.dataset["slot"] = "diff-hunk-separator-line-number"
         fragment.appendChild(numCol)
         const contentCol = document.createElement("div")
-        contentCol.textContent = `${hunkData.lines} unmodified lines`
         contentCol.dataset["slot"] = "diff-hunk-separator-content"
+        const span = document.createElement("span")
+        span.dataset["slot"] = "diff-hunk-separator-content-span"
+        span.textContent = `${hunkData.lines} unmodified lines`
+        contentCol.appendChild(span)
         fragment.appendChild(contentCol)
         return fragment
       },
@@ -166,7 +169,7 @@ export function Diff<T>(props: DiffProps<T>) {
         "--pjs-font-family": "var(--font-family-mono)",
         "--pjs-font-size": "var(--font-size-small)",
         "--pjs-line-height": "24px",
-        "--pjs-tab-size": 4,
+        "--pjs-tab-size": 2,
         "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
         "--pjs-header-font-family": "var(--font-family-sans)",
         "--pjs-gap-block": 0,

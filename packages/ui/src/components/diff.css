@@ -22,5 +22,9 @@
     width: var(--pjs-column-content-width);
     left: var(--pjs-column-number-width);
     padding-left: 8px;
+
+    [data-slot="diff-hunk-separator-content-span"] {
+      mix-blend-mode: var(--text-mix-blend-mode);
+    }
   }
 }
