@@ -25,19 +25,15 @@ export async function POST(event: APIEvent) {
 
     // Create email content
     const emailContent = `
-New Enterprise Inquiry
-
-Name: ${body.name}
-Role: ${body.role}
-Email: ${body.email}
-
-Message:
-${body.message}
-    `.trim()
+${body.message}<br><br>
+--
+${body.name}<br>
+${body.role}<br>
+${body.email}`.trim()
 
     // Send email using AWS SES
     await AWS.sendEmail({
-      to: "enterprise@opencode.ai",
+      to: "contact@anoma.ly",
       subject: `Enterprise Inquiry from ${body.name}`,
       body: emailContent,
     })

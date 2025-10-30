@@ -275,6 +275,10 @@ export type McpLocalConfig = {
    * Enable or disable the MCP server on startup
    */
   enabled?: boolean
+  /**
+   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   */
+  timeout?: number
 }
 
 export type McpRemoteConfig = {
@@ -296,6 +300,10 @@ export type McpRemoteConfig = {
   headers?: {
     [key: string]: string
   }
+  /**
+   * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
+   */
+  timeout?: number
 }
 
 /**
