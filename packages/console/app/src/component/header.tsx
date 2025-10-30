@@ -40,12 +40,20 @@ export function Header(props: { zen?: boolean }) {
       setStore("contextMenuOpen", false)
     }
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setStore("contextMenuOpen", false)
+      }
+    }
+
     if (store.contextMenuOpen) {
       document.addEventListener("click", handleClickOutside)
       document.addEventListener("contextmenu", handleContextMenu)
+      document.addEventListener("keydown", handleKeyDown)
       onCleanup(() => {
         document.removeEventListener("click", handleClickOutside)
         document.removeEventListener("contextmenu", handleContextMenu)
+        document.removeEventListener("keydown", handleKeyDown)
       })
     }
   })
@@ -118,25 +126,18 @@ export function Header(props: { zen?: boolean }) {
           style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
         >
           <button class="context-menu-item" onClick={copyLogoToClipboard}>
-            <img data-slot="copy light" src={copyLogoLight}
-                 alt="Logo"/>
-            <img data-slot="copy dark" src={copyLogoDark}
-                 alt="Logo"/>
+            <img data-slot="copy light" src={copyLogoLight} alt="Logo" />
+            <img data-slot="copy dark" src={copyLogoDark} alt="Logo" />
             Copy logo as SVG
           </button>
           <button class="context-menu-item" onClick={copyWordmarkToClipboard}>
-            <img data-slot="copy light" src={copyWordmarkLight}
-                 alt="Wordmark"/>
-            <img data-slot="copy dark" src={copyWordmarkDark}
-                 alt="Wordmark"/>
+            <img data-slot="copy light" src={copyWordmarkLight} alt="Wordmark" />
+            <img data-slot="copy dark" src={copyWordmarkDark} alt="Wordmark" />
             Copy wordmark as SVG
           </button>
-          <button class="context-menu-item"
-                  onClick={() => (window.location.href = "/brand")}>
-            <img data-slot="copy light" src={copyBrandAssetsLight}
-                 alt="Brand Assets"/>
-            <img data-slot="copy dark" src={copyBrandAssetsDark}
-                 alt="Brand Assets"/>
+          <button class="context-menu-item" onClick={() => (window.location.href = "/brand")}>
+            <img data-slot="copy light" src={copyBrandAssetsLight} alt="Brand Assets" />
+            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="Brand Assets" />
             Brand assets
           </button>
         </div>
@@ -157,7 +158,7 @@ export function Header(props: { zen?: boolean }) {
           <li>
             <Switch>
               <Match when={props.zen}>
-              <a href="/auth">Login</a>
+                <a href="/auth">Login</a>
               </Match>
               <Match when={!props.zen}>
                 <A href="/zen">Zen</A>
