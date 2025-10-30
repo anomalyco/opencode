@@ -9,15 +9,18 @@
 @import "../components/button.css" layer(components);
 @import "../components/checkbox.css" layer(components);
 @import "../components/diff.css" layer(components);
+@import "../components/diff-changes.css" layer(components);
 @import "../components/collapsible.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/icon.css" layer(components);
 @import "../components/icon-button.css" layer(components);
 @import "../components/input.css" layer(components);
 @import "../components/list.css" layer(components);
+@import "../components/message-part.css" layer(components);
 @import "../components/select.css" layer(components);
 @import "../components/select-dialog.css" layer(components);
 @import "../components/tabs.css" layer(components);
+@import "../components/tool-display.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 
 @import "./utilities.css" layer(utilities);

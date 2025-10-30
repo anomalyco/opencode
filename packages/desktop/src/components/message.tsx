@@ -1,238 +1,57 @@
-import type { Part, ReasoningPart, TextPart, ToolPart, Message, AssistantMessage, UserMessage } from "@opencode-ai/sdk"
-import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
+import type { Part, TextPart, ToolPart, Message } from "@opencode-ai/sdk"
+import { createMemo, For, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
-import { Checkbox, Collapsible, Diff, Icon, IconProps } from "@opencode-ai/ui"
+import { Checkbox, Diff, Icon } from "@opencode-ai/ui"
+import { Message as MessageDisplay, registerPartComponent } from "@opencode-ai/ui"
+import { BasicTool, GenericTool, ToolRegistry, DiffChanges } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
-import type { Tool } from "opencode/tool/tool"
-import type { ReadTool } from "opencode/tool/read"
-import type { ListTool } from "opencode/tool/ls"
-import type { GlobTool } from "opencode/tool/glob"
-import type { GrepTool } from "opencode/tool/grep"
-import type { WebFetchTool } from "opencode/tool/webfetch"
-import type { TaskTool } from "opencode/tool/task"
-import type { BashTool } from "opencode/tool/bash"
-import type { EditTool } from "opencode/tool/edit"
-import type { WriteTool } from "opencode/tool/write"
-import type { TodoWriteTool } from "opencode/tool/todo"
-import { DiffChanges } from "./diff-changes"
 
 export function Message(props: { message: Message; parts: Part[] }) {
-  return (
-    <Switch>
-      <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => <UserMessage message={userMessage()} parts={props.parts} />}
-      </Match>
-      <Match when={props.message.role === "assistant" && props.message}>
-        {(assistantMessage) => <AssistantMessage message={assistantMessage()} parts={props.parts} />}
-      </Match>
-    </Switch>
-  )
+  return <MessageDisplay message={props.message} parts={props.parts} />
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
-  const filteredParts = createMemo(() => {
-    return props.parts?.filter((x) => {
-      if (x.type === "reasoning") return false
-      return x.type !== "tool" || x.tool !== "todoread"
-    })
-  })
+registerPartComponent("text", function TextPartDisplay(props) {
+  const part = props.part as TextPart
   return (
-    <div class="w-full flex flex-col items-start gap-4">
-      <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
-    </div>
-  )
-}
-
-function UserMessage(props: { message: UserMessage; parts: Part[] }) {
-  const text = createMemo(() =>
-    props.parts
-      ?.filter((p) => p.type === "text" && !p.synthetic)
-      ?.map((p) => (p as TextPart).text)
-      ?.join(""),
-  )
-  return <div class="text-12-regular text-text-base line-clamp-3">{text()}</div>
-}
-
-export function Part(props: { part: Part; message: Message; hideDetails?: boolean }) {
-  const component = createMemo(() => PART_MAPPING[props.part.type as keyof typeof PART_MAPPING])
-  return (
-    <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part as any}
-        message={props.message}
-        hideDetails={props.hideDetails}
-      />
+    <Show when={part.text.trim()}>
+      <Markdown text={part.text.trim()} />
     </Show>
   )
-}
+})
 
-const PART_MAPPING = {
-  text: TextPart,
-  tool: ToolPart,
-  reasoning: ReasoningPart,
-}
-
-function ReasoningPart(props: { part: ReasoningPart; message: Message }) {
+registerPartComponent("reasoning", function ReasoningPartDisplay(props) {
+  const part = props.part as any
   return (
-    <Show when={props.part.text.trim()}>
-      <Markdown text={props.part.text.trim()} />
+    <Show when={part.text.trim()}>
+      <Markdown text={part.text.trim()} />
     </Show>
   )
-}
+})
 
-function TextPart(props: { part: TextPart; message: Message }) {
-  return (
-    <Show when={props.part.text.trim()}>
-      <Markdown text={props.part.text.trim()} />
-    </Show>
-  )
-}
-
-function ToolPart(props: { part: ToolPart; message: Message; hideDetails?: boolean }) {
+registerPartComponent("tool", function ToolPartDisplay(props) {
+  const part = props.part as ToolPart
   const component = createMemo(() => {
-    const render = ToolRegistry.render(props.part.tool) ?? GenericTool
-    const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
-    const input = props.part.state.status === "completed" ? props.part.state.input : {}
+    const render = ToolRegistry.render(part.tool) ?? GenericTool
+    const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
+    const input = part.state.status === "completed" ? part.state.input : {}
 
     return (
       <Dynamic
         component={render}
         input={input}
-        tool={props.part.tool}
+        tool={part.tool}
         metadata={metadata}
-        output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+        output={part.state.status === "completed" ? part.state.output : undefined}
         hideDetails={props.hideDetails}
       />
     )
   })
 
   return <Show when={component()}>{component()}</Show>
-}
+})
 
-type TriggerTitle = {
-  title: string
-  titleClass?: string
-  subtitle?: string
-  subtitleClass?: string
-  args?: string[]
-  argsClass?: string
-  action?: JSX.Element
-}
-
-const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return typeof val === "object" && val !== null && "title" in val && !(val instanceof Node)
-}
-
-function BasicTool(props: {
-  icon: IconProps["name"]
-  trigger: TriggerTitle | JSX.Element
-  children?: JSX.Element
-  hideDetails?: boolean
-}) {
-  const resolved = children(() => props.children)
-  return (
-    <Collapsible>
-      <Collapsible.Trigger>
-        <div class="w-full flex items-center self-stretch gap-5 justify-between">
-          <div class="w-full flex items-center self-stretch gap-5">
-            <Icon name={props.icon} size="small" class="shrink-0" />
-            <div class="grow min-w-0">
-              <Switch>
-                <Match when={isTriggerTitle(props.trigger) && props.trigger}>
-                  {(trigger) => (
-                    <div class="w-full flex items-center gap-2 justify-between">
-                      <div class="flex items-center gap-2 whitespace-nowrap truncate">
-                        <span
-                          classList={{
-                            "text-12-medium text-text-base": true,
-                            [trigger().titleClass ?? ""]: !!trigger().titleClass,
-                          }}
-                        >
-                          {trigger().title}
-                        </span>
-                        <Show when={trigger().subtitle}>
-                          <span
-                            classList={{
-                              "text-12-medium text-text-weak": true,
-                              [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
-                            }}
-                          >
-                            {trigger().subtitle}
-                          </span>
-                        </Show>
-                        <Show when={trigger().args?.length}>
-                          <For each={trigger().args}>
-                            {(arg) => (
-                              <span
-                                classList={{
-                                  "text-12-regular text-text-weak": true,
-                                  [trigger().argsClass ?? ""]: !!trigger().argsClass,
-                                }}
-                              >
-                                {arg}
-                              </span>
-                            )}
-                          </For>
-                        </Show>
-                      </div>
-                      <Show when={trigger().action}>{trigger().action}</Show>
-                    </div>
-                  )}
-                </Match>
-                <Match when={true}>{props.trigger as JSX.Element}</Match>
-              </Switch>
-            </div>
-          </div>
-          <Show when={resolved() && !props.hideDetails}>
-            <Collapsible.Arrow />
-          </Show>
-        </div>
-      </Collapsible.Trigger>
-      <Show when={resolved() && !props.hideDetails}>
-        <Collapsible.Content>{resolved()}</Collapsible.Content>
-      </Show>
-    </Collapsible>
-    // <>
-    //   <Show when={props.part.state.status === "error"}>{props.part.state.error.replace("Error: ", "")}</Show>
-    // </>
-  )
-}
-
-function GenericTool(props: ToolProps<any>) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
-}
-
-type ToolProps<T extends Tool.Info> = {
-  input: Partial<Tool.InferParameters<T>>
-  metadata: Partial<Tool.InferMetadata<T>>
-  tool: string
-  output?: string
-  hideDetails?: boolean
-}
-
-const ToolRegistry = (() => {
-  const state: Record<
-    string,
-    {
-      name: string
-      render?: Component<ToolProps<any>>
-    }
-  > = {}
-  function register<T extends Tool.Info>(input: { name: string; render?: Component<ToolProps<T>> }) {
-    state[input.name] = input
-    return input
-  }
-  return {
-    register,
-    render(name: string) {
-      return state[name]?.render
-    },
-  }
-})()
-
-ToolRegistry.register<typeof ReadTool>({
+ToolRegistry.register({
   name: "read",
   render(props) {
     return (
@@ -244,7 +63,7 @@ ToolRegistry.register<typeof ReadTool>({
   },
 })
 
-ToolRegistry.register<typeof ListTool>({
+ToolRegistry.register({
   name: "list",
   render(props) {
     return (
@@ -257,7 +76,7 @@ ToolRegistry.register<typeof ListTool>({
   },
 })
 
-ToolRegistry.register<typeof GlobTool>({
+ToolRegistry.register({
   name: "glob",
   render(props) {
     return (
@@ -277,7 +96,7 @@ ToolRegistry.register<typeof GlobTool>({
   },
 })
 
-ToolRegistry.register<typeof GrepTool>({
+ToolRegistry.register({
   name: "grep",
   render(props) {
     const args = []
@@ -300,7 +119,7 @@ ToolRegistry.register<typeof GrepTool>({
   },
 })
 
-ToolRegistry.register<typeof WebFetchTool>({
+ToolRegistry.register({
   name: "webfetch",
   render(props) {
     return (
@@ -325,7 +144,7 @@ ToolRegistry.register<typeof WebFetchTool>({
   },
 })
 
-ToolRegistry.register<typeof TaskTool>({
+ToolRegistry.register({
   name: "task",
   render(props) {
     return (
@@ -345,7 +164,7 @@ ToolRegistry.register<typeof TaskTool>({
   },
 })
 
-ToolRegistry.register<typeof BashTool>({
+ToolRegistry.register({
   name: "bash",
   render(props) {
     return (
@@ -364,7 +183,7 @@ ToolRegistry.register<typeof BashTool>({
   },
 })
 
-ToolRegistry.register<typeof EditTool>({
+ToolRegistry.register({
   name: "edit",
   render(props) {
     return (
@@ -402,7 +221,7 @@ ToolRegistry.register<typeof EditTool>({
   },
 })
 
-ToolRegistry.register<typeof WriteTool>({
+ToolRegistry.register({
   name: "write",
   render(props) {
     return (
@@ -431,7 +250,7 @@ ToolRegistry.register<typeof WriteTool>({
   },
 })
 
-ToolRegistry.register<typeof TodoWriteTool>({
+ToolRegistry.register({
   name: "todowrite",
   render(props) {
     return (
@@ -439,13 +258,13 @@ ToolRegistry.register<typeof TodoWriteTool>({
         icon="checklist"
         trigger={{
           title: "To-dos",
-          subtitle: `${props.input.todos?.filter((t) => t.status === "completed").length}/${props.input.todos?.length}`,
+          subtitle: `${props.input.todos?.filter((t: any) => t.status === "completed").length}/${props.input.todos?.length}`,
         }}
       >
         <Show when={props.input.todos?.length}>
           <div class="px-12 pt-2.5 pb-6 flex flex-col gap-2">
             <For each={props.input.todos}>
-              {(todo) => (
+              {(todo: any) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div classList={{ "line-through text-text-weaker": todo.status === "completed" }}>{todo.content}</div>
                 </Checkbox>

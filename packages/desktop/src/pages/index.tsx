@@ -9,6 +9,7 @@ import {
   Accordion,
   Diff,
   Collapsible,
+  Part,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -33,9 +34,9 @@ import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { ProgressCircle } from "@/components/progress-circle"
-import { Message, Part } from "@/components/message"
+import { Message } from "@/components/message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { DiffChanges } from "@/components/diff-changes"
+import { DiffChanges } from "@opencode-ai/ui"
 import { Markdown } from "@/components/markdown"
 
 export default function Page() {
@@ -497,7 +498,7 @@ export default function Page() {
                   <Show
                     when={local.session.active()}
                     fallback={
-                      <div class="flex flex-col pb-36 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
+                      <div class="flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
                         <div class="text-20-medium text-text-weaker">New session</div>
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
@@ -660,7 +661,7 @@ export default function Page() {
                                       class="flex flex-col items-start self-stretch gap-8 min-h-screen"
                                     >
                                       {/* Title */}
-                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger">
+                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
                                         <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
                                           {title() ?? prompt()}
                                         </h1>

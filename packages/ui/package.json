@@ -11,6 +11,7 @@
     "./fonts/*": "./src/assets/fonts/*"
   },
   "scripts": {
+    "typecheck": "tsgo --noEmit",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
@@ -24,6 +25,7 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@opencode-ai/sdk": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
     "@solidjs/meta": "catalog:",
     "fuzzysort": "catalog:",
