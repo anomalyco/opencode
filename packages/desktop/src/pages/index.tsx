@@ -272,7 +272,7 @@ export default function Page() {
   const TabVisual = (props: { file: LocalFile }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
-        <FileIcon node={props.file} class="_grayscale-100" />
+        <FileIcon node={props.file} class="grayscale-100 group-data-[selected]/tab:grayscale-0" />
         <span
           classList={{
             "text-14-medium": true,
@@ -311,15 +311,21 @@ export default function Page() {
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
         <Tooltip value={props.file.path} placement="bottom" class="h-full">
           <div class="relative h-full">
-            <Tabs.Trigger value={props.file.path} class="peer/tab pr-7" onClick={() => props.onTabClick(props.file)}>
+            <Tabs.Trigger
+              value={props.file.path}
+              class="group/tab pl-3 pr-1"
+              onClick={() => props.onTabClick(props.file)}
+            >
               <TabVisual file={props.file} />
+              <IconButton
+                icon="close"
+                class="mt-0.5 opacity-0 text-text-muted/60 group-data-[selected]/tab:opacity-100
+                       group-data-[selected]/tab:text-text group-data-[selected]/tab:hover:bg-border-subtle
+                       hover:opacity-100 group-hover/tab:opacity-100"
+                variant="ghost"
+                onClick={() => props.onTabClose(props.file)}
+              />
             </Tabs.Trigger>
-            <IconButton
-              icon="close"
-              class="absolute right-1 top-1.5 opacity-0 text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
-              variant="ghost"
-              onClick={() => props.onTabClose(props.file)}
-            />
           </div>
         </Tooltip>
       </div>
@@ -874,7 +880,7 @@ export default function Page() {
                 const draggedFile = local.file.node(id)
                 if (!draggedFile) return null
                 return (
-                  <div class="relative px-3 h-8 flex items-center text-sm font-medium text-text whitespace-nowrap shrink-0 bg-background-panel border-x border-border-subtle/40 border-b border-b-transparent">
+                  <div class="relative px-3 h-10 flex items-center bg-background-base border-x border-border-weak-base border-b border-b-transparent">
                     <TabVisual file={draggedFile} />
                   </div>
                 )
