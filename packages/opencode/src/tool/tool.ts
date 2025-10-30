@@ -42,8 +42,13 @@ export namespace Tool {
     return {
       id,
       init: async () => {
-        if (init instanceof Function) return init()
-        return init
+        const toolInfo = init instanceof Function ? await init() : init
+        const execute = toolInfo.execute
+        toolInfo.execute = (args, ctx) => {
+          toolInfo.parameters.parse(args)
+          return execute(args, ctx)
+        }
+        return toolInfo
       },
     }
   }
