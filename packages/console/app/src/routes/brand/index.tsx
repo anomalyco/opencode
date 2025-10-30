@@ -21,6 +21,7 @@ import wordmarkLightSvg from "../../asset/brand/opencode-wordmark-light.svg"
 import wordmarkDarkSvg from "../../asset/brand/opencode-wordmark-dark.svg"
 import wordmarkSimpleLightSvg from "../../asset/brand/opencode-wordmark-simple-light.svg"
 import wordmarkSimpleDarkSvg from "../../asset/brand/opencode-wordmark-simple-dark.svg"
+import brandAssets from "../../asset/brand/opencode-brand-assets.zip"
 
 
 export default function Brand() {
@@ -43,16 +44,19 @@ export default function Brand() {
         <div data-component="content">
           <section data-component="brand-content">
             <h2>Brand guidelines</h2>
-            <p>Resources and assets to help you work with the OpenCode brand.</p>
-            <button data-component="download-button">
+            <p>Resources and assets to help you work with the OpenCode
+              brand.</p>
+            <button data-component="download-button" onClick={() => downloadFile(brandAssets, "opencode-brand-assets.zip")}>
               Download all assets
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
                    xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
-                  stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+                  stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="square"/>
               </svg>
             </button>
+
 
             <div data-component="brand-grid">
               <div>
@@ -65,16 +69,19 @@ export default function Brand() {
                          xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
-                        stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoLightSvg, "opencode-logo-light.svg")}>
+                  <button
+                    onClick={() => downloadFile(logoLightSvg, "opencode-logo-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
                          xmlns="http://www.w3.org/2000/svg">
                       <path
                         d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
-                        stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
                     </svg>
                   </button>
                 </div>
@@ -107,7 +114,8 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkLight} alt="OpenCode brand guidelines"/>
+                <img src={previewWordmarkLight}
+                     alt="OpenCode brand guidelines"/>
                 <div data-component="actions">
                   <button
                     onClick={() => downloadFile(wordmarkLightPng, "opencode-wordmark-light.png")}>
@@ -161,7 +169,8 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleLight} alt="OpenCode brand guidelines"/>
+                <img src={previewWordmarkSimpleLight}
+                     alt="OpenCode brand guidelines"/>
                 <div data-component="actions">
                   <button
                     onClick={() => downloadFile(wordmarkSimpleLightPng, "opencode-wordmark-simple-light.png")}>
@@ -188,7 +197,8 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleDark} alt="OpenCode brand guidelines"/>
+                <img src={previewWordmarkSimpleDark}
+                     alt="OpenCode brand guidelines"/>
                 <div data-component="actions">
                   <button
                     onClick={() => downloadFile(wordmarkSimpleDarkPng, "opencode-wordmark-simple-dark.png")}>
