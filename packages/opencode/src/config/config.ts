@@ -280,6 +280,14 @@ export namespace Config {
         .optional()
         .describe("Environment variables to set when running the MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in milliseconds for tools verification. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({
@@ -292,6 +300,14 @@ export namespace Config {
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
       headers: z.record(z.string(), z.string()).optional().describe("Headers to send with the request"),
+      timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "Timeout in milliseconds for tools verification. Defaults to 5000 (5 seconds) if not specified.",
+        ),
     })
     .strict()
     .meta({

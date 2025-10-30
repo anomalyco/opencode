@@ -112,6 +112,7 @@ Here are all the options for configuring a local MCP server.
 | `command`     | Array   | Y        | Command and arguments to run the MCP server.          |
 | `environment` | Object  |          | Environment variables to set when running the server. |
 | `enabled`     | Boolean |          | Enable or disable the MCP server on startup.          |
+| `timeout`     | Number  |          | Timeout in milliseconds for tools verification. Defaults to 5000 (5 seconds). |
 
 ---
 
@@ -145,6 +146,7 @@ Here the `url` is the URL of the remote MCP server and with the `headers` option
 | `url`     | String  | Y        | URL of the remote MCP server.                      |
 | `enabled` | Boolean |          | Enable or disable the MCP server on startup.       |
 | `headers` | Object  |          | Headers to send with the request.                  |
+| `timeout` | Number  |          | Timeout in milliseconds for tools verification. Defaults to 5000 (5 seconds). |
 
 ---
 
