@@ -8,6 +8,7 @@ import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 
+import { formatDiagnosticsWithServers as formatDiagnosticsWithServersUtil } from "../util/diagnostic"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
@@ -319,6 +320,25 @@ export namespace LSP {
       const col = diagnostic.range.start.character + 1
 
       return `${severity} [${line}:${col}] ${diagnostic.message}`
+    }
+
+    export function prettyWithServer(diagnostic: LSPClient.Diagnostic, serverID: string) {
+      const sanitizedServerID = serverID
+        .replace(/[\x00-\x1F\x7F]/g, "") // Remove control characters
+        .replace(/[\r\n]/g, "") // Remove newlines
+        .replace(/[\[\]]/g, "") // Remove square brackets
+        .replace(/[{}|\\]/g, "") // Remove other potentially problematic chars
+        .replace(/[^a-zA-Z0-9_-]/g, "_") // Replace other unsafe chars with underscore
+        .substring(0, 50) // Limit length
+        .trim() || "Unknown"
+      
+      return `${pretty(diagnostic)} [${sanitizedServerID}]`
+    }
+
+    export function formatDiagnosticsWithServers(
+      diagnostics: Array<{ diagnostic: LSPClient.Diagnostic; serverID: string }>,
+    ): string {
+      return formatDiagnosticsWithServersUtil(diagnostics)
     }
   }
 }

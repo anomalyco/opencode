@@ -129,9 +129,24 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
-          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
+          input.path = path.isAbsolute(input.path)
+            ? input.path
+            : path.resolve(Instance.directory, input.path)
           const file = Bun.file(input.path)
-          const text = await file.text()
+          let text = ""
+          try {
+            text = await file.text()
+          } catch (error) {
+            // Check if it's a file not found error
+            if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+              // File doesn't exist, use empty content
+              text = ""
+            } else {
+              // Log other I/O errors and rethrow
+              log.error(`Failed to read file ${input.path}:`, { error })
+              throw error
+            }
+          }
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
