@@ -55,11 +55,7 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
       return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
     })
   })
-  return (
-    <div data-component="assistant-message">
-      <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
-    </div>
-  )
+  return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {

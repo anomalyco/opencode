@@ -832,7 +832,7 @@ export default function Page() {
                                                 </div>
                                               </Collapsible.Trigger>
                                               <Collapsible.Content>
-                                                <div class="w-full flex flex-col items-start self-stretch gap-8">
+                                                <div class="w-full flex flex-col items-start self-stretch gap-3">
                                                   <For each={assistantMessages()}>
                                                     {(assistantMessage) => {
                                                       const parts = createMemo(

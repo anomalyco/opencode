@@ -15,7 +15,7 @@ registerPartComponent("text", function TextPartDisplay(props) {
   const part = props.part as TextPart
   return (
     <Show when={part.text.trim()}>
-      <Markdown text={part.text.trim()} />
+      <Markdown text={part.text.trim()} class="mt-8" />
     </Show>
   )
 })
@@ -36,36 +36,41 @@ registerPartComponent("tool", function ToolPartDisplay(props) {
     const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
     const input = part.state.status === "completed" ? part.state.input : {}
 
-    if (part.state.status === "error") {
-      const error = part.state.error.replace("Error: ", "")
-      const [title, ...rest] = error.split(": ")
-      return (
-        <Card variant="error">
-          <div class="flex items-center gap-2">
-            <Icon name="circle-ban-sign" size="small" class="text-icon-critical-active" />
-            <Switch>
-              <Match when={title}>
-                <div class="flex items-center gap-2">
-                  <div class="text-12-medium text-[var(--ember-light-11)] capitalize">{title}</div>
-                  <span>{rest.join(": ")}</span>
-                </div>
-              </Match>
-              <Match when={true}>{error}</Match>
-            </Switch>
-          </div>
-        </Card>
-      )
-    }
-
     return (
-      <Dynamic
-        component={render}
-        input={input}
-        tool={part.tool}
-        metadata={metadata}
-        output={part.state.status === "completed" ? part.state.output : undefined}
-        hideDetails={props.hideDetails}
-      />
+      <Switch>
+        <Match when={part.state.status === "error" && part.state.error}>
+          {(error) => {
+            const cleaned = error().replace("Error: ", "")
+            const [title, ...rest] = cleaned.split(": ")
+            return (
+              <Card variant="error">
+                <div class="flex items-center gap-2">
+                  <Icon name="circle-ban-sign" size="small" class="text-icon-critical-active" />
+                  <Switch>
+                    <Match when={title}>
+                      <div class="flex items-center gap-2">
+                        <div class="text-12-medium text-[var(--ember-light-11)] capitalize">{title}</div>
+                        <span>{rest.join(": ")}</span>
+                      </div>
+                    </Match>
+                    <Match when={true}>{cleaned}</Match>
+                  </Switch>
+                </div>
+              </Card>
+            )
+          }}
+        </Match>
+        <Match when={true}>
+          <Dynamic
+            component={render}
+            input={input}
+            tool={part.tool}
+            metadata={metadata}
+            output={part.state.status === "completed" ? part.state.output : undefined}
+            hideDetails={props.hideDetails}
+          />
+        </Match>
+      </Switch>
     )
   })
 

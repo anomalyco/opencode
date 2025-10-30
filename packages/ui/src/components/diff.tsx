@@ -3,12 +3,12 @@ import {
   FileDiff,
   type DiffLineAnnotation,
   type HunkData,
-  DiffFileRendererOptions,
+  FileDiffOptions,
   // registerCustomTheme,
 } from "@pierre/precision-diffs"
 import { ComponentProps, createEffect, splitProps } from "solid-js"
 
-export type DiffProps<T = {}> = Omit<DiffFileRendererOptions<T>, "themes"> & {
+export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
@@ -54,13 +54,9 @@ export function Diff<T>(props: DiffProps<T>) {
   // When ready to render, simply call .render with old/new file, optional
   // annotations and a container element to hold the diff
   createEffect(() => {
-    // @ts-expect-error
     const instance = new FileDiff<T>({
       // theme: "pierre-light",
-      // theme: "pierre-light",
-      // Or can also provide a 'themes' prop, which allows the code to adapt
-      // to your OS light or dark theme
-      themes: { dark: "pierre-dark", light: "pierre-light" },
+      theme: { dark: "pierre-dark", light: "pierre-light" },
       // When using the 'themes' prop, 'themeType' allows you to force 'dark'
       // or 'light' theme, or inherit from the OS ('system') theme.
       themeType: "system",
