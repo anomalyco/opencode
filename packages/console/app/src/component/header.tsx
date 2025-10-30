@@ -4,6 +4,8 @@ import { A, createAsync } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
+import { createEffect, onCleanup } from "solid-js"
+import "./header-context-menu.css"
 
 export function Header(props: { zen?: boolean }) {
   const githubData = createAsync(() => github())
@@ -18,14 +20,68 @@ export function Header(props: { zen?: boolean }) {
 
   const [store, setStore] = createStore({
     mobileMenuOpen: false,
+    contextMenuOpen: false,
+    contextMenuPosition: { x: 0, y: 0 },
   })
+
+  createEffect(() => {
+    const handleClickOutside = () => {
+      setStore("contextMenuOpen", false)
+    }
+
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault()
+      setStore("contextMenuOpen", false)
+    }
+
+    if (store.contextMenuOpen) {
+      document.addEventListener("click", handleClickOutside)
+      document.addEventListener("contextmenu", handleContextMenu)
+      onCleanup(() => {
+        document.removeEventListener("click", handleClickOutside)
+        document.removeEventListener("contextmenu", handleContextMenu)
+      })
+    }
+  })
+
+  const handleLogoContextMenu = (event: MouseEvent) => {
+    event.preventDefault()
+    setStore("contextMenuPosition", { x: event.clientX, y: event.clientY })
+    setStore("contextMenuOpen", true)
+  }
 
   return (
     <section data-component="top">
-      <A href="/">
-        <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
-        <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
-      </A>
+      <div onContextMenu={handleLogoContextMenu}>
+        <A href="/">
+          <img data-slot="logo light" src={logoLight} alt="opencode logo light" />
+          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
+        </A>
+      </div>
+
+      <Show when={store.contextMenuOpen}>
+        <div
+          class="context-menu"
+          style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
+        >
+          <button
+            className="context-menu-item"
+            onClick={() => window.open("https://github.com/sst/opencode", "_blank")}
+          >
+            Copy logo as SVG
+          </button>
+          <button
+            className="context-menu-item"
+            onClick={() => window.open("https://github.com/sst/opencode", "_blank")}
+          >
+            Copy wordmark as SVG
+          </button>
+          <button className="context-menu-item"
+                  onClick={() => (window.location.href = "/brand")}>
+            Brand assets
+          </button>
+        </div>
+      </Show>
       <nav data-component="nav-desktop">
         <ul>
           <li>
@@ -34,20 +90,7 @@ export function Header(props: { zen?: boolean }) {
             </a>
           </li>
           <li>
-            <a href="/docs">Docs</a>
-          </li>
-          <li>
-            <A href="/enterprise">Enterprise</A>
-          </li>
-          <li>
-            <Switch>
-              <Match when={props.zen}>
-                <a href="/auth">Login</a>
-              </Match>
-              <Match when={!props.zen}>
-                <A href="/zen">Zen</A>
-              </Match>
-            </Switch>
+            <a href="/brand">Brand assets</a>
           </li>
         </ul>
       </nav>
@@ -108,20 +151,7 @@ export function Header(props: { zen?: boolean }) {
                   </a>
                 </li>
                 <li>
-                  <a href="/docs">Docs</a>
-                </li>
-                <li>
-                  <A href="/enterprise">Enterprise</A>
-                </li>
-                <li>
-                  <Switch>
-                    <Match when={props.zen}>
-                      <a href="/auth">Login</a>
-                    </Match>
-                    <Match when={!props.zen}>
-                      <A href="/zen">Zen</A>
-                    </Match>
-                  </Switch>
+                  <a href="/brand">Brand assets</a>
                 </li>
               </ul>
             </nav>
