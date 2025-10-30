@@ -245,6 +245,7 @@ func NewCompletionDialogComponent(
 ) CompletionDialog {
 	ti := textarea.New()
 	ti.SetValue(trigger)
+	ti.VirtualCursor = false
 
 	// Use a generic empty message if we have multiple providers
 	emptyMessage := "no matching items"

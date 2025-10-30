@@ -99,7 +99,7 @@ func NewSearchDialog(placeholder string, maxVisibleHeight int) *SearchDialog {
 		Background(bgColor).
 		Lipgloss()
 	ti.Styles.Cursor.Color = t.Primary()
-	ti.VirtualCursor = true
+	ti.VirtualCursor = false
 
 	ti.Prompt = " "
 	ti.CharLimit = -1

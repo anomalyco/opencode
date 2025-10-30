@@ -1,0 +1,120 @@
+[
+  {
+    "server": "everything",
+    "type": "local",
+    "passed": true,
+    "toolCount": 10,
+    "tools": [
+      "echo",
+      "add",
+      "longRunningOperation",
+      "printEnv",
+      "sampleLLM",
+      "getTinyImage",
+      "annotatedMessage",
+      "getResourceReference",
+      "getResourceLinks",
+      "structuredContent"
+    ]
+  },
+  {
+    "server": "filesystem",
+    "type": "local",
+    "passed": true,
+    "toolCount": 14,
+    "tools": [
+      "read_file",
+      "read_text_file",
+      "read_media_file",
+      "read_multiple_files",
+      "write_file",
+      "edit_file",
+      "create_directory",
+      "list_directory",
+      "list_directory_with_sizes",
+      "directory_tree",
+      "move_file",
+      "search_files",
+      "get_file_info",
+      "list_allowed_directories"
+    ]
+  },
+  {
+    "server": "memory",
+    "type": "local",
+    "passed": true,
+    "toolCount": 9,
+    "tools": [
+      "create_entities",
+      "create_relations",
+      "add_observations",
+      "delete_entities",
+      "delete_observations",
+      "delete_relations",
+      "read_graph",
+      "search_nodes",
+      "open_nodes"
+    ]
+  },
+  {
+    "server": "sequential-thinking",
+    "type": "local",
+    "passed": true,
+    "toolCount": 1,
+    "tools": [
+      "sequentialthinking"
+    ]
+  },
+  {
+    "server": "puppeteer",
+    "type": "local",
+    "passed": true,
+    "toolCount": 7,
+    "tools": [
+      "puppeteer_navigate",
+      "puppeteer_screenshot",
+      "puppeteer_click",
+      "puppeteer_fill",
+      "puppeteer_select",
+      "puppeteer_hover",
+      "puppeteer_evaluate"
+    ]
+  },
+  {
+    "server": "time",
+    "type": "local",
+    "passed": false,
+    "toolCount": 0,
+    "tools": [],
+    "error": "Executable not found in $PATH: \"uvx\""
+  },
+  {
+    "server": "git",
+    "type": "local",
+    "passed": false,
+    "toolCount": 0,
+    "tools": [],
+    "error": "Executable not found in $PATH: \"uvx\""
+  },
+  {
+    "server": "context7",
+    "type": "remote",
+    "transport": "StreamableHTTP",
+    "passed": true,
+    "toolCount": 2,
+    "tools": [
+      "resolve-library-id",
+      "get-library-docs"
+    ]
+  },
+  {
+    "server": "gh_grep",
+    "type": "remote",
+    "transport": "StreamableHTTP",
+    "passed": true,
+    "toolCount": 1,
+    "tools": [
+      "searchGitHub"
+    ]
+  }
+]

@@ -284,6 +284,7 @@ func (s *sessionDialog) setupRenameInput(currentTitle string) {
 	s.renameInput.Focus()
 	s.renameInput.CharLimit = 100
 	s.renameInput.SetWidth(layout.Current.Container.Width - 20)
+	s.renameInput.VirtualCursor = false
 
 	s.renameInput.Styles.Blurred.Placeholder = styles.NewStyle().
 		Foreground(textMutedColor).

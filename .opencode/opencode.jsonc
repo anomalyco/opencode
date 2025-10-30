@@ -1,0 +1,43 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "conexus": {
+      "type": "local",
+      "command": ["bunx", "@agentic-conexus/mcp"],
+      "environment": {
+        "CONEXUS_PORT": "0",
+        "CONEXUS_DB_PATH": "{env:CONEXUS_DB_PATH:./data/conexus.db}",
+        "CONEXUS_LOG_LEVEL": "info",
+        "CONEXUS_SENTRY_ENABLED": "true",
+        "CONEXUS_SENTRY_DSN": "https://7e54c8bc81fb554a460d4331e5c23fe0@sentry.fergify.work/15",
+        "CONEXUS_SENTRY_ENVIRONMENT": "development",
+        "CONEXUS_SENTRY_SAMPLE_RATE": "1.0",
+        "CONEXUS_SENTRY_RELEASE": "0.1.0-alpha",
+      },
+      "enabled": true
+    },
+"everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+      "enabled": true
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true
+    },
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app",
+      "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "enabled": true
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true
+    }
