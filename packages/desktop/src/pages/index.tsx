@@ -535,101 +535,14 @@ export default function Page() {
                             >
                               <For each={local.session.userMessages()}>
                                 {(message) => {
-                                  const countLines = (text: string) => {
-                                    if (!text) return 0
-                                    return text.split("\n").length
-                                  }
-
-                                  const additions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.additions ?? 0), 0) ?? 0,
-                                  )
-
-                                  const deletions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0) ?? 0,
-                                  )
-
-                                  const totalBeforeLines = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + countLines(diff.before), 0) ??
-                                      0,
-                                  )
-
-                                  const blockCounts = createMemo(() => {
-                                    const TOTAL_BLOCKS = 5
-
-                                    const adds = additions()
-                                    const dels = deletions()
-                                    const unchanged = Math.max(0, totalBeforeLines() - dels)
-
-                                    const totalActivity = unchanged + adds + dels
-
-                                    if (totalActivity === 0) {
-                                      return { added: 0, deleted: 0, neutral: TOTAL_BLOCKS }
-                                    }
-
-                                    const percentAdded = adds / totalActivity
-                                    const percentDeleted = dels / totalActivity
-                                    const added_raw = percentAdded * TOTAL_BLOCKS
-                                    const deleted_raw = percentDeleted * TOTAL_BLOCKS
-
-                                    let added = adds > 0 ? Math.ceil(added_raw) : 0
-                                    let deleted = dels > 0 ? Math.ceil(deleted_raw) : 0
-
-                                    let total_allocated = added + deleted
-                                    if (total_allocated > TOTAL_BLOCKS) {
-                                      if (added_raw < deleted_raw) {
-                                        added = Math.floor(added_raw)
-                                      } else {
-                                        deleted = Math.floor(deleted_raw)
-                                      }
-
-                                      total_allocated = added + deleted
-                                      if (total_allocated > TOTAL_BLOCKS) {
-                                        if (added_raw < deleted_raw) {
-                                          deleted = Math.floor(deleted_raw)
-                                        } else {
-                                          added = Math.floor(added_raw)
-                                        }
-                                      }
-                                    }
-
-                                    const neutral = Math.max(0, TOTAL_BLOCKS - added - deleted)
-
-                                    return { added, deleted, neutral }
-                                  })
-
-                                  const ADD_COLOR = "var(--icon-diff-add-base)"
-                                  const DELETE_COLOR = "var(--icon-diff-delete-base)"
-                                  const NEUTRAL_COLOR = "var(--icon-weak-base)"
-
-                                  const visibleBlocks = createMemo(() => {
-                                    const counts = blockCounts()
-                                    const blocks = [
-                                      ...Array(counts.added).fill(ADD_COLOR),
-                                      ...Array(counts.deleted).fill(DELETE_COLOR),
-                                      ...Array(counts.neutral).fill(NEUTRAL_COLOR),
-                                    ]
-                                    return blocks.slice(0, 5)
-                                  })
+                                  const diffs = createMemo(() => message.summary?.diffs ?? [])
 
                                   return (
                                     <li
                                       class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
                                       onClick={() => local.session.setActiveMessage(message.id)}
                                     >
-                                      <div class="w-[18px] shrink-0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">
-                                          <g>
-                                            <For each={visibleBlocks()}>
-                                              {(color, i) => (
-                                                <rect x={i() * 4} width="2" height="12" rx="1" fill={color} />
-                                              )}
-                                            </For>
-                                          </g>
-                                        </svg>
-                                      </div>
+                                      <DiffChanges diff={diffs()} variant="bars" />
                                       <div
                                         data-active={local.session.activeMessage()?.id === message.id}
                                         classList={{

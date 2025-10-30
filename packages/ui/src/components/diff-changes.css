@@ -26,3 +26,14 @@
     color: var(--text-diff-delete-base);
   }
 }
+
+[data-component="diff-changes"][data-variant="bars"] {
+  width: 18px;
+  flex-shrink: 0;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
