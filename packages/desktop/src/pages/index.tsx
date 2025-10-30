@@ -12,6 +12,7 @@ import {
   Part,
   DiffChanges,
   ProgressCircle,
+  Message,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -35,9 +36,8 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Message } from "@/components/message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { Markdown } from "@/components/markdown"
+import { Markdown } from "@opencode-ai/ui"
 
 export default function Page() {
   const local = useLocal()

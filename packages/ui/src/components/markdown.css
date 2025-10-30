@@ -1,0 +1,24 @@
+[data-component="markdown"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+  color: var(--text-base);
+
+  /* text-14-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large); /* 142.857% */
+  letter-spacing: var(--letter-spacing-normal);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* p { */
+  /*   margin-top: 8px; */
+  /*   margin-bottom: 8px; */
+  /* } */
+}

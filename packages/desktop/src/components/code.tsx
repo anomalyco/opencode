@@ -2,7 +2,7 @@ import { bundledLanguages, type BundledLanguage, type ShikiTransformer } from "s
 import { splitProps, type ComponentProps, createEffect, onMount, onCleanup, createMemo, createResource } from "solid-js"
 import { useLocal, type TextSelection } from "@/context/local"
 import { getFileExtension, getNodeOffsetInLine, getSelectionInContainer } from "@/utils"
-import { useShiki } from "@/context/shiki"
+import { useShiki } from "@opencode-ai/ui"
 
 type DefinedSelection = Exclude<TextSelection, undefined>
 

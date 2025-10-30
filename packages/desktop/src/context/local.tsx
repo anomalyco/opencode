@@ -480,8 +480,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const getMessageText = (message: Message | Message[] | undefined): string => {
         if (!message) return ""
         if (Array.isArray(message)) return message.map((m) => getMessageText(m)).join(" ")
-        const fileParts = sync.data.part[message.id]?.filter((p) => p.type === "file")
-
         return sync.data.part[message.id]
           ?.filter((p) => p.type === "text")
           ?.filter((p) => !p.synthetic)

@@ -373,7 +373,11 @@ const theme: ThemeInput = {
       },
     },
     {
-      scope: ["storage.modifier.import.java", "variable.language.wildcard.java", "storage.modifier.package.java"],
+      scope: [
+        "storage.modifier.import.java",
+        "variable.language.wildcard.java",
+        "storage.modifier.package.java",
+      ],
       settings: {
         foreground: "var(--text-base)",
       },

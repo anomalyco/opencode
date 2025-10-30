@@ -6,6 +6,7 @@
 @import "./base.css" layer(base);
 
 @import "../components/accordion.css" layer(components);
+@import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../components/checkbox.css" layer(components);
@@ -17,12 +18,12 @@
 @import "../components/icon-button.css" layer(components);
 @import "../components/input.css" layer(components);
 @import "../components/list.css" layer(components);
+@import "../components/markdown.css" layer(components);
 @import "../components/message-part.css" layer(components);
 @import "../components/progress-circle.css" layer(components);
 @import "../components/select.css" layer(components);
 @import "../components/select-dialog.css" layer(components);
 @import "../components/tabs.css" layer(components);
-@import "../components/tool-display.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
