@@ -33,6 +33,14 @@ export const TaskTool = Tool.define("task", async () => {
       })
       const msg = await Session.getMessage({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+      ctx.metadata({
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+        },
+      })
+
       const messageID = Identifier.ascending("message")
       const parts: Record<string, MessageV2.ToolPart> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
@@ -44,6 +52,7 @@ export const TaskTool = Tool.define("task", async () => {
           title: params.description,
           metadata: {
             summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+            sessionId: session.id,
           },
         })
       })
@@ -87,6 +96,7 @@ export const TaskTool = Tool.define("task", async () => {
         title: params.description,
         metadata: {
           summary: all,
+          sessionId: session.id,
         },
         output: (result.parts.findLast((x: any) => x.type === "text") as any)?.text ?? "",
       }
