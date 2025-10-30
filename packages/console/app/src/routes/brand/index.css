@@ -296,12 +296,16 @@
       width: fit-content;
       align-items: center;
       gap: 12px;
-      transition: background-color 0.2s ease;
+      transition: all 0.2s ease;
       text-decoration: none;
 
 
       &:hover:not(:disabled) {
         background: var(--color-background-strong-hover);
+      }
+
+      &:active {
+        transform: scale(0.98);
       }
 
       &:disabled {
@@ -345,18 +349,19 @@
       opacity: 0;
       transition: opacity 0.2s ease;
 
-      @media (max-width: 60rem) {
+      @media (max-width: 40rem) {
         position: static;
         opacity: 1;
+        background: none;
         margin-top: 1rem;
-        justify-content: center;
+        justify-content: start;
       }
     }
 
     [data-component="brand-grid"] > div:hover [data-component="actions"] {
       opacity: 1;
 
-      @media (max-width: 60rem) {
+      @media (max-width: 40rem) {
         opacity: 1;
       }
     }
@@ -371,7 +376,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      transition: background-color 0.2s ease;
+      transition: all 0.2s ease;
       cursor: pointer;
       box-shadow:
         0 0 0 1px rgba(19, 16, 16, 0.08),
@@ -379,9 +384,19 @@
         0 4px 3px -2px rgba(19, 16, 16, 0.12),
         0 1px 2px -1px rgba(19, 16, 16, 0.12);
 
+      @media (max-width: 40rem) {
+        box-shadow:
+          0 0 0 1px rgba(19, 16, 16, 0.16)
+      }
+
 
       &:hover {
         background: var(--color-background);
+      }
+
+      &:active {
+        transform: scale(0.98);
+        box-shadow: 0 0 0 1px rgba(19, 16, 16, 0.08), 0 6px 8px -8px rgba(19, 16, 16, 0.50);
       }
     }
 
