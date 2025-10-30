@@ -1,8 +1,8 @@
 import type { Part, TextPart, ToolPart, Message } from "@opencode-ai/sdk"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
-import { Checkbox, Diff, Icon } from "@opencode-ai/ui"
+import { Card, Checkbox, Diff, Icon } from "@opencode-ai/ui"
 import { Message as MessageDisplay, registerPartComponent } from "@opencode-ai/ui"
 import { BasicTool, GenericTool, ToolRegistry, DiffChanges } from "@opencode-ai/ui"
 import { getDirectory, getFilename } from "@/utils"
@@ -35,6 +35,27 @@ registerPartComponent("tool", function ToolPartDisplay(props) {
     const render = ToolRegistry.render(part.tool) ?? GenericTool
     const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
     const input = part.state.status === "completed" ? part.state.input : {}
+
+    if (part.state.status === "error") {
+      const error = part.state.error.replace("Error: ", "")
+      const [title, ...rest] = error.split(": ")
+      return (
+        <Card variant="error">
+          <div class="flex items-center gap-2">
+            <Icon name="circle-ban-sign" size="small" class="text-icon-critical-active" />
+            <Switch>
+              <Match when={title}>
+                <div class="flex items-center gap-2">
+                  <div class="text-12-medium text-[var(--ember-light-11)] capitalize">{title}</div>
+                  <span>{rest.join(": ")}</span>
+                </div>
+              </Match>
+              <Match when={true}>{error}</Match>
+            </Switch>
+          </div>
+        </Card>
+      )
+    }
 
     return (
       <Dynamic
