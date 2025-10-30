@@ -1,5 +1,4 @@
-import { useLocal } from "@/context"
-import type { LocalFile } from "@/context/local"
+import { useLocal, type LocalFile } from "@/context/local"
 import { Tooltip } from "@opencode-ai/ui"
 import { Collapsible, FileIcon } from "@/ui"
 import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
@@ -19,7 +18,7 @@ export default function FileTree(props: {
     <Dynamic
       component={p.as ?? "div"}
       classList={{
-        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element cursor-pointer": true,
+        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element": true,
         "bg-background-element": local.file.active()?.path === p.node.path,
         [props.nodeClass ?? ""]: !!props.nodeClass,
       }}
@@ -83,7 +82,7 @@ export default function FileTree(props: {
                 >
                   <Collapsible.Trigger>
                     <Node node={node}>
-                      <Collapsible.Arrow size={16} class="text-text-muted/60 ml-1" />
+                      <Collapsible.Arrow class="text-text-muted/60 ml-1" />
                       <FileIcon
                         node={node}
                         expanded={local.file.node(node.path).expanded}

@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import * as fs from "fs"
 import * as path from "path"
 import { Tool } from "./tool"

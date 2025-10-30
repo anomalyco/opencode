@@ -128,28 +128,70 @@ const icons = {
   mic: '<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.75 8C8.75 6.20507 10.2051 4.75 12 4.75C13.7949 4.75 15.25 6.20507 15.25 8V11C15.25 12.7949 13.7949 14.25 12 14.25C10.2051 14.25 8.75 12.7949 8.75 11V8Z"></path><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5.75 12.75C5.75 12.75 6 17.25 12 17.25C18 17.25 18.25 12.75 18.25 12.75"></path><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 17.75V19.25"></path>',
 } as const
 
+const newIcons = {
+  "circle-x": `<path fill-rule="evenodd" clip-rule="evenodd" d="M1.6665 10.0003C1.6665 5.39795 5.39746 1.66699 9.99984 1.66699C14.6022 1.66699 18.3332 5.39795 18.3332 10.0003C18.3332 14.6027 14.6022 18.3337 9.99984 18.3337C5.39746 18.3337 1.6665 14.6027 1.6665 10.0003ZM7.49984 6.91107L6.91058 7.50033L9.41058 10.0003L6.91058 12.5003L7.49984 13.0896L9.99984 10.5896L12.4998 13.0896L13.0891 12.5003L10.5891 10.0003L13.0891 7.50033L12.4998 6.91107L9.99984 9.41107L7.49984 6.91107Z" fill="currentColor"/>`,
+  "magnifying-glass": `<path d="M15.8332 15.8337L13.0819 13.0824M14.6143 9.39088C14.6143 12.2759 12.2755 14.6148 9.39039 14.6148C6.50532 14.6148 4.1665 12.2759 4.1665 9.39088C4.1665 6.5058 6.50532 4.16699 9.39039 4.16699C12.2755 4.16699 14.6143 6.5058 14.6143 9.39088Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "plus-small": `<path d="M9.99984 5.41699V10.0003M9.99984 10.0003V14.5837M9.99984 10.0003H5.4165M9.99984 10.0003H14.5832" stroke="currentColor" stroke-linecap="square"/>`,
+  "chevron-down": `<path d="M6.6665 8.33325L9.99984 11.6666L13.3332 8.33325" stroke="currentColor" stroke-linecap="square"/>`,
+  "arrow-up": `<path fill-rule="evenodd" clip-rule="evenodd" d="M9.99991 2.24121L16.0921 8.33343L15.2083 9.21731L10.6249 4.63397V17.5001H9.37492V4.63398L4.7916 9.21731L3.90771 8.33343L9.99991 2.24121Z" fill="currentColor"/>`,
+  "check-small": `<path d="M6.5 11.4412L8.97059 13.5L13.5 6.5" stroke="currentColor" stroke-linecap="square"/>`,
+  "edit-small-2": `<path d="M17.0834 17.0833V17.5833H17.5834V17.0833H17.0834ZM2.91675 17.0833H2.41675V17.5833H2.91675V17.0833ZM2.91675 2.91659V2.41659H2.41675V2.91659H2.91675ZM9.58341 3.41659H10.0834V2.41659H9.58341V2.91659V3.41659ZM17.5834 10.4166V9.91659H16.5834V10.4166H17.0834H17.5834ZM10.4167 7.08325L10.0632 6.7297L9.91675 6.87615V7.08325H10.4167ZM10.4167 9.58325H9.91675V10.0833H10.4167V9.58325ZM12.9167 9.58325V10.0833H13.1239L13.2703 9.93681L12.9167 9.58325ZM15.4167 2.08325L15.7703 1.7297L15.4167 1.37615L15.0632 1.7297L15.4167 2.08325ZM17.9167 4.58325L18.2703 4.93681L18.6239 4.58325L18.2703 4.2297L17.9167 4.58325ZM17.0834 17.0833V16.5833H2.91675V17.0833V17.5833H17.0834V17.0833ZM2.91675 17.0833H3.41675V2.91659H2.91675H2.41675V17.0833H2.91675ZM2.91675 2.91659V3.41659H9.58341V2.91659V2.41659H2.91675V2.91659ZM17.0834 10.4166H16.5834V17.0833H17.0834H17.5834V10.4166H17.0834ZM10.4167 7.08325H9.91675V9.58325H10.4167H10.9167V7.08325H10.4167ZM10.4167 9.58325V10.0833H12.9167V9.58325V9.08325H10.4167V9.58325ZM10.4167 7.08325L10.7703 7.43681L15.7703 2.43681L15.4167 2.08325L15.0632 1.7297L10.0632 6.7297L10.4167 7.08325ZM15.4167 2.08325L15.0632 2.43681L17.5632 4.93681L17.9167 4.58325L18.2703 4.2297L15.7703 1.7297L15.4167 2.08325ZM17.9167 4.58325L17.5632 4.2297L12.5632 9.2297L12.9167 9.58325L13.2703 9.93681L18.2703 4.93681L17.9167 4.58325Z" fill="currentColor"/>`,
+  folder: `<path d="M2.08301 2.91675V16.2501H17.9163V5.41675H9.99967L8.33301 2.91675H2.08301Z" stroke="currentColor" stroke-linecap="round"/>`,
+  "pencil-line": `<path d="M9.58301 17.9166H17.9163M17.9163 5.83325L14.1663 2.08325L2.08301 14.1666V17.9166H5.83301L17.9163 5.83325Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "chevron-grabber-vertical": `<path d="M6.66675 12.4998L10.0001 15.8332L13.3334 12.4998M6.66675 7.49984L10.0001 4.1665L13.3334 7.49984" stroke="currentColor" stroke-linecap="square"/>`,
+  mcp: `<g><path d="M0.972656 9.37176L9.5214 1.60019C10.7018 0.527151 12.6155 0.527151 13.7957 1.60019C14.9761 2.67321 14.9761 4.41295 13.7957 5.48599L7.3397 11.3552" stroke="currentColor" stroke-linecap="round"/><path d="M7.42871 11.2747L13.7957 5.48643C14.9761 4.41338 16.8898 4.41338 18.0702 5.48643L18.1147 5.52688C19.2951 6.59993 19.2951 8.33966 18.1147 9.4127L10.3831 16.4414C9.98966 16.7991 9.98966 17.379 10.3831 17.7366L11.9707 19.1799" stroke="currentColor" stroke-linecap="round"/><path d="M11.6587 3.54346L5.33619 9.29119C4.15584 10.3642 4.15584 12.1039 5.33619 13.177C6.51649 14.25 8.43019 14.25 9.61054 13.177L15.9331 7.42923" stroke="currentColor" stroke-linecap="round"/></g>`,
+  glasses: `<path d="M0.416626 7.91667H1.66663M19.5833 7.91667H18.3333M11.866 7.57987C11.3165 7.26398 10.6793 7.08333 9.99996 7.08333C9.32061 7.08333 8.68344 7.26398 8.13389 7.57987M8.74996 10C8.74996 12.0711 7.07103 13.75 4.99996 13.75C2.92889 13.75 1.24996 12.0711 1.24996 10C1.24996 7.92893 2.92889 6.25 4.99996 6.25C7.07103 6.25 8.74996 7.92893 8.74996 10ZM18.75 10C18.75 12.0711 17.071 13.75 15 13.75C12.9289 13.75 11.25 12.0711 11.25 10C11.25 7.92893 12.9289 6.25 15 6.25C17.071 6.25 18.75 7.92893 18.75 10Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "bullet-list": `<path d="M9.58329 13.7497H17.0833M9.58329 6.24967H17.0833M6.24996 6.24967C6.24996 7.17015 5.50377 7.91634 4.58329 7.91634C3.66282 7.91634 2.91663 7.17015 2.91663 6.24967C2.91663 5.3292 3.66282 4.58301 4.58329 4.58301C5.50377 4.58301 6.24996 5.3292 6.24996 6.24967ZM6.24996 13.7497C6.24996 14.6701 5.50377 15.4163 4.58329 15.4163C3.66282 15.4163 2.91663 14.6701 2.91663 13.7497C2.91663 12.8292 3.66282 12.083 4.58329 12.083C5.50377 12.083 6.24996 12.8292 6.24996 13.7497Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "magnifying-glass-menu": `<path d="M2.08325 10.0002H4.58325M2.08325 5.41683H5.41659M2.08325 14.5835H5.41659M16.4583 13.9585L18.7499 16.2502M17.9166 10.0002C17.9166 12.9917 15.4915 15.4168 12.4999 15.4168C9.50838 15.4168 7.08325 12.9917 7.08325 10.0002C7.08325 7.00862 9.50838 4.5835 12.4999 4.5835C15.4915 4.5835 17.9166 7.00862 17.9166 10.0002Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "window-cursor": `<path d="M17.9166 10.4167V3.75H2.08325V17.0833H10.4166M17.9166 13.5897L11.6666 11.6667L13.5897 17.9167L15.032 15.0321L17.9166 13.5897Z" stroke="currentColor" stroke-width="1.07143" stroke-linecap="square"/><path d="M5.00024 6.125C5.29925 6.12518 5.54126 6.36795 5.54126 6.66699C5.54108 6.96589 5.29914 7.20783 5.00024 7.20801C4.7012 7.20801 4.45843 6.966 4.45825 6.66699C4.45825 6.36784 4.70109 6.125 5.00024 6.125ZM7.91626 6.125C8.21541 6.125 8.45825 6.36784 8.45825 6.66699C8.45808 6.966 8.21531 7.20801 7.91626 7.20801C7.61736 7.20783 7.37542 6.96589 7.37524 6.66699C7.37524 6.36795 7.61726 6.12518 7.91626 6.125ZM10.8333 6.125C11.1324 6.125 11.3752 6.36784 11.3752 6.66699C11.3751 6.966 11.1323 7.20801 10.8333 7.20801C10.5342 7.20801 10.2914 6.966 10.2913 6.66699C10.2913 6.36784 10.5341 6.125 10.8333 6.125Z" fill="currentColor" stroke="currentColor" stroke-width="0.25" stroke-linecap="square"/>`,
+  task: `<path d="M9.99992 2.0835V17.9168M7.08325 3.75016H2.08325V16.2502H7.08325M12.9166 16.2502H17.9166V3.75016H12.9166" stroke="currentColor" stroke-linecap="square"/>`,
+  checklist: `<path d="M9.58342 13.7498H17.0834M9.58342 6.24984H17.0834M2.91675 6.6665L4.58341 7.9165L7.08341 4.1665M2.91675 14.1665L4.58341 15.4165L7.08341 11.6665" stroke="currentColor" stroke-linecap="square"/>`,
+  console: `<path d="M3.75 5.4165L8.33333 9.99984L3.75 14.5832M10.4167 14.5832H16.25" stroke="currentColor" stroke-linecap="square"/>`,
+  "code-lines": `<path d="M2.08325 3.75H11.2499M14.5833 3.75H17.9166M2.08325 10L7.08325 10M10.4166 10L17.9166 10M2.08325 16.25L8.74992 16.25M12.0833 16.25L17.9166 16.25" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
+  "square-arrow-top-right": `<path d="M7.91675 2.9165H2.91675V17.0832H17.0834V12.0832M12.0834 2.9165H17.0834V7.9165M9.58342 10.4165L16.6667 3.33317" stroke="currentColor" stroke-linecap="square"/>`,
+}
+
 export interface IconProps extends ComponentProps<"svg"> {
-  name: keyof typeof icons
-  size?: number
+  name: keyof typeof icons | keyof typeof newIcons
+  size?: "small" | "normal" | "large"
 }
 
 export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
-  const size = local.size ?? 24
+
+  if (local.name in newIcons) {
+    return (
+      <div data-component="icon" data-size={local.size || "normal"}>
+        <svg
+          data-slot="svg"
+          classList={{
+            ...(local.classList || {}),
+            [local.class ?? ""]: !!local.class,
+          }}
+          fill="none"
+          viewBox="0 0 20 20"
+          innerHTML={newIcons[local.name as keyof typeof newIcons]}
+          aria-hidden="true"
+          {...others}
+        />
+      </div>
+    )
+  }
+
   return (
-    <svg
-      data-component="icon"
-      classList={{
-        ...(local.classList || {}),
-        [local.class ?? ""]: !!local.class,
-      }}
-      width={size}
-      height={size}
-      fill="none"
-      viewBox="0 0 24 24"
-      innerHTML={icons[local.name]}
-      aria-hidden="true"
-      {...others}
-    />
+    <div data-component="icon" data-size={local.size || "normal"}>
+      <svg
+        data-slot="svg"
+        classList={{
+          ...(local.classList || {}),
+          [local.class ?? ""]: !!local.class,
+        }}
+        fill="none"
+        viewBox="0 0 24 24"
+        innerHTML={icons[local.name as keyof typeof icons]}
+        aria-hidden="true"
+        {...others}
+      />
+    </div>
   )
 }

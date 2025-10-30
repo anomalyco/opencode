@@ -1,4 +1,4 @@
-import { useMarked } from "@/context"
+import { useMarked } from "@/context/marked"
 import { createResource } from "solid-js"
 
 function strip(text: string): string {

@@ -16,7 +16,7 @@ import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
-import z from "zod/v4"
+import z from "zod"
 import { Plugin } from "../plugin"
 
 export namespace ToolRegistry {

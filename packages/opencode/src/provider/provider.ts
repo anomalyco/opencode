@@ -1,4 +1,4 @@
-import z from "zod/v4"
+import z from "zod"
 import path from "path"
 import { Config } from "../config/config"
 import { mergeDeep, sortBy } from "remeda"
@@ -95,7 +95,14 @@ export namespace Provider {
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = ["claude", "deepseek"].some((m) => modelID.includes(m))
+              const modelRequiresPrefix = [
+                "nova-micro",
+                "nova-lite",
+                "nova-pro",
+                "nova-premier",
+                "claude",
+                "deepseek",
+              ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
               if (modelRequiresPrefix && !isGovCloud) {
                 modelID = `${regionPrefix}.${modelID}`
@@ -121,9 +128,10 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
-              if (isAustraliaRegion && ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) =>
-                modelID.includes(m),
-              )) {
+              if (
+                isAustraliaRegion &&
+                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
+              ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
               } else {
@@ -273,31 +281,31 @@ export namespace Provider {
           cost:
             !model.cost && !existing?.cost
               ? {
-                input: 0,
-                output: 0,
-                cache_read: 0,
-                cache_write: 0,
-              }
+                  input: 0,
+                  output: 0,
+                  cache_read: 0,
+                  cache_write: 0,
+                }
               : {
-                cache_read: 0,
-                cache_write: 0,
-                ...existing?.cost,
-                ...model.cost,
-              },
+                  cache_read: 0,
+                  cache_write: 0,
+                  ...existing?.cost,
+                  ...model.cost,
+                },
           options: {
             ...existing?.options,
             ...model.options,
           },
           limit: model.limit ??
             existing?.limit ?? {
-            context: 0,
-            output: 0,
-          },
+              context: 0,
+              output: 0,
+            },
           modalities: model.modalities ??
             existing?.modalities ?? {
-            input: ["text"],
-            output: ["text"],
-          },
+              input: ["text"],
+              output: ["text"],
+            },
           provider: model.provider ?? existing?.provider,
         }
         if (model.id && model.id !== modelID) {
@@ -414,14 +422,14 @@ export namespace Provider {
       const modPath =
         provider.id === "google-vertex-anthropic" ? `${installedPath}/dist/anthropic/index.mjs` : installedPath
       const mod = await import(modPath)
-      if (options["timeout"] !== undefined) {
+      if (options["timeout"] !== undefined && options["timeout"] !== null) {
         // Only override fetch if user explicitly sets timeout
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const { signal, ...rest } = init ?? {}
 
           const signals: AbortSignal[] = []
           if (signal) signals.push(signal)
-          signals.push(AbortSignal.timeout(options["timeout"]))
+          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
 
           const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
@@ -509,7 +517,11 @@ export namespace Provider {
 
     const provider = await state().then((state) => state.providers[providerID])
     if (!provider) return
-    const priority = ["3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    let priority = ["claude-haiku-4-5", "claude-haiku-4.5", "3-5-haiku", "3.5-haiku", "gemini-2.5-flash", "gpt-5-nano"]
+    // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
+    if (providerID === "github-copilot") {
+      priority = priority.filter((m) => m !== "claude-haiku-4.5")
+    }
     for (const item of priority) {
       for (const model of Object.keys(provider.info.models)) {
         if (model.includes(item)) return getModel(providerID, model)

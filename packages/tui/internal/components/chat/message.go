@@ -504,7 +504,11 @@ func renderToolDetails(
 		base := styles.NewStyle().Background(backgroundColor)
 		text := base.Foreground(t.Text()).Bold(true).Render
 		muted := base.Foreground(t.TextMuted()).Render
-		permissionContent = "Permission required to run this tool:\n\n"
+		if permission.Type == "doom-loop" {
+			permissionContent = permission.Title + "\n\n"
+		} else {
+			permissionContent = "Permission required to run this tool:\n\n"
+		}
 		permissionContent += text(
 			"enter ",
 		) + muted(
@@ -642,9 +646,9 @@ func renderToolDetails(
 				for _, item := range todos.([]any) {
 					todo := item.(map[string]any)
 					content := todo["content"]
-          if content == nil {
-            continue
-          }
+					if content == nil {
+						continue
+					}
 					switch todo["status"] {
 					case "completed":
 						body += fmt.Sprintf("- [x] %s\n", content)

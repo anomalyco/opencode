@@ -1,8 +1,5 @@
 [data-component="list"] {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  /* overflow-y: auto; */
 
   /* Hide scrollbar */
   &::-webkit-scrollbar {
@@ -12,8 +9,8 @@
   scrollbar-width: none;
 
   [data-slot="item"] {
-    cursor: pointer;
     width: 100%;
+    margin-bottom: 6px;
     padding: 4px 12px;
     text-align: left;
 
@@ -21,6 +18,9 @@
     transition: background-color 0.2s ease-in-out;
 
     &[data-active="true"] {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &:hover {
       background-color: var(--surface-raised-base-hover);
     }
     &:focus {

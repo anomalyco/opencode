@@ -1,8 +1,30 @@
 import type { Component } from "solid-js"
-import { Button, Select, Tabs, Tooltip, Fonts, List } from "./components"
+import { createSignal } from "solid-js"
+import {
+  Accordion,
+  Button,
+  Checkbox,
+  Select,
+  Tabs,
+  Tooltip,
+  Fonts,
+  List,
+  Dialog,
+  Icon,
+  IconButton,
+  Input,
+  SelectDialog,
+  Collapsible,
+} from "./components"
 import "./index.css"
 
 const Demo: Component = () => {
+  const [dialogOpen, setDialogOpen] = createSignal(false)
+  const [selectDialogOpen, setSelectDialogOpen] = createSignal(false)
+  const [inputValue, setInputValue] = createSignal("")
+  const [checked, setChecked] = createSignal(false)
+  const [termsAccepted, setTermsAccepted] = createSignal(false)
+
   const Content = (props: { dark?: boolean }) => (
     <div class={`${props.dark ? "dark" : ""}`}>
       <h3>Buttons</h3>
@@ -35,9 +57,6 @@ const Demo: Component = () => {
       <h3>Select</h3>
       <section>
         <Select
-          // we have to pass dark bc of the portal,
-          // normally wouldn't be needed bc root element
-          // would have theme class
           class={props.dark ? "dark" : ""}
           variant="primary"
           options={["Option 1", "Option 2", "Option 3"]}
@@ -116,6 +135,145 @@ const Demo: Component = () => {
         <List data={["Item 1", "Item 2", "Item 3"]} key={(x) => x}>
           {(x) => <div>{x}</div>}
         </List>
+      </section>
+      <h3>Input</h3>
+      <section>
+        <Input
+          placeholder="Enter text..."
+          value={inputValue()}
+          onInput={(e: InputEvent & { currentTarget: HTMLInputElement }) => setInputValue(e.currentTarget.value)}
+        />
+        <Input placeholder="Disabled input" disabled />
+        <Input type="password" placeholder="Password input" />
+      </section>
+      <h3>Checkbox</h3>
+      <section style={{ "flex-direction": "column", "align-items": "flex-start", gap: "12px" }}>
+        <Checkbox label="Simple checkbox" />
+        <Checkbox label="Checked by default" defaultChecked />
+        <Checkbox label="Disabled checkbox" disabled />
+        <Checkbox label="Disabled & checked" disabled checked />
+        <Checkbox
+          label="Controlled checkbox"
+          description="This checkbox is controlled by state"
+          checked={checked()}
+          onChange={setChecked}
+        />
+        <Checkbox label="With description" description="This is a helpful description for the checkbox" />
+        <Checkbox label="Indeterminate state" description="Useful for nested checkbox lists" indeterminate />
+        <Checkbox
+          label="I agree to the Terms and Conditions"
+          description="You must agree to continue"
+          checked={termsAccepted()}
+          onChange={setTermsAccepted}
+          validationState={!termsAccepted() ? "invalid" : "valid"}
+        />
+      </section>
+      <h3>Icons</h3>
+      <section>
+        <Icon name="close" />
+        <Icon name="checkmark" />
+        <Icon name="chevron-down" />
+        <Icon name="chevron-up" />
+        <Icon name="chevron-left" />
+        <Icon name="chevron-right" />
+        <Icon name="search" />
+        <Icon name="loading" />
+      </section>
+      <h3>Icon Buttons</h3>
+      <section>
+        <IconButton icon="close" onClick={() => console.log("Close clicked")} />
+        <IconButton icon="checkmark" onClick={() => console.log("Check clicked")} />
+        <IconButton icon="search" onClick={() => console.log("Search clicked")} disabled />
+      </section>
+      <h3>Dialog</h3>
+      <section>
+        <Button onClick={() => setDialogOpen(true)}>Open Dialog</Button>
+        <Dialog open={dialogOpen()} onOpenChange={setDialogOpen}>
+          <Dialog.Title>Example Dialog</Dialog.Title>
+          <Dialog.Description>This is an example dialog with a title and description.</Dialog.Description>
+          <div style={{ "margin-top": "16px", display: "flex", gap: "8px", "justify-content": "flex-end" }}>
+            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => setDialogOpen(false)}>
+              Confirm
+            </Button>
+          </div>
+        </Dialog>
+      </section>
+      <h3>Select Dialog</h3>
+      <section>
+        <Button onClick={() => setSelectDialogOpen(true)}>Open Select Dialog</Button>
+        <SelectDialog
+          title="Select an Option"
+          defaultOpen={selectDialogOpen()}
+          onOpenChange={setSelectDialogOpen}
+          items={["Option 1", "Option 2", "Option 3", "Option 4", "Option 5"]}
+          key={(x) => x}
+          onSelect={(option) => {
+            console.log("Selected:", option)
+            setSelectDialogOpen(false)
+          }}
+          placeholder="Search options..."
+        >
+          {(item) => <div>{item}</div>}
+        </SelectDialog>
+      </section>
+      <h3>Collapsible</h3>
+      <section>
+        <Collapsible>
+          <Collapsible.Trigger>
+            <Button variant="secondary">Toggle Content</Button>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div
+              style={{
+                padding: "16px",
+                "background-color": "var(--surface-base)",
+                "border-radius": "8px",
+                "margin-top": "8px",
+              }}
+            >
+              <p>This is collapsible content that can be toggled open and closed.</p>
+              <p>It animates smoothly using CSS animations.</p>
+            </div>
+          </Collapsible.Content>
+        </Collapsible>
+      </section>
+      <h3>Accordion</h3>
+      <section>
+        <Accordion collapsible>
+          <Accordion.Item value="item-1">
+            <Accordion.Header>
+              <Accordion.Trigger>What is Kobalte?</Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              <div style={{ padding: "16px" }}>
+                <p>Kobalte is a UI toolkit for building accessible web apps and design systems with SolidJS.</p>
+              </div>
+            </Accordion.Content>
+          </Accordion.Item>
+          <Accordion.Item value="item-2">
+            <Accordion.Header>
+              <Accordion.Trigger>Is it accessible?</Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              <div style={{ padding: "16px" }}>
+                <p>Yes. It adheres to the WAI-ARIA design patterns.</p>
+              </div>
+            </Accordion.Content>
+          </Accordion.Item>
+          <Accordion.Item value="item-3">
+            <Accordion.Header>
+              <Accordion.Trigger>Can it be animated?</Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              <div style={{ padding: "16px" }}>
+                <p>Yes! You can animate the content height using CSS animations.</p>
+              </div>
+            </Accordion.Content>
+          </Accordion.Item>
+        </Accordion>
       </section>
     </div>
   )

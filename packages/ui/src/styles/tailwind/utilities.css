@@ -7,3 +7,11 @@
     scrollbar-width: none; /* Firefox */
   }
 }
+
+@utility truncate-start {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}

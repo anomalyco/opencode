@@ -1,3 +1,4 @@
+import { EOL } from "os"
 import { Ripgrep } from "../../../file/ripgrep"
 import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
@@ -17,7 +18,7 @@ const TreeCommand = cmd({
     }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
-      console.log(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }))
+      process.stdout.write(await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit }) + EOL)
     })
   },
 })
@@ -48,7 +49,7 @@ const FilesCommand = cmd({
         files.push(file)
         if (args.limit && files.length >= args.limit) break
       }
-      console.log(files.join("\n"))
+      process.stdout.write(files.join(EOL) + EOL)
     })
   },
 })
@@ -77,6 +78,6 @@ const SearchCommand = cmd({
       glob: args.glob as string[] | undefined,
       limit: args.limit,
     })
-    console.log(JSON.stringify(results, null, 2))
+    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   },
 })

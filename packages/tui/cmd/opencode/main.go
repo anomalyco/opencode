@@ -13,9 +13,11 @@ import (
 	flag "github.com/spf13/pflag"
 	"github.com/sst/opencode-sdk-go"
 	"github.com/sst/opencode-sdk-go/option"
+	"github.com/sst/opencode-sdk-go/packages/ssestream"
 	"github.com/sst/opencode/internal/api"
 	"github.com/sst/opencode/internal/app"
 	"github.com/sst/opencode/internal/clipboard"
+	"github.com/sst/opencode/internal/decoders"
 	"github.com/sst/opencode/internal/tui"
 	"github.com/sst/opencode/internal/util"
 	"golang.org/x/sync/errgroup"
@@ -60,6 +62,11 @@ func main() {
 			}
 		}
 	}
+
+	// Register custom SSE decoder to handle large events (>32MB)
+	// This is a workaround for the bufio.Scanner token size limit in the auto-generated SDK
+	// See: packages/tui/internal/decoders/decoder.go
+	ssestream.RegisterDecoder("text/event-stream", decoders.NewUnboundedDecoder)
 
 	httpClient := opencode.NewClient(
 		option.WithBaseURL(url),

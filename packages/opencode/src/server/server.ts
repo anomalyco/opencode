@@ -3,9 +3,9 @@ import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
+import { stream, streamSSE } from "hono/streaming"
 import { Session } from "../session"
-import z from "zod/v4"
+import z from "zod"
 import { Provider } from "../provider/provider"
 import { mapValues } from "remeda"
 import { NamedError } from "../util/error"
@@ -35,6 +35,8 @@ import { InstanceBootstrap } from "../project/bootstrap"
 import { MCP } from "../mcp"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
+import { Snapshot } from "@/snapshot"
+import { SessionSummary } from "@/session/summary"
 
 const ERRORS = {
   400: {
@@ -608,6 +610,44 @@ export namespace Server {
           return c.json(session)
         },
       )
+      .get(
+        "/session/:id/diff",
+        describeRoute({
+          description: "Get the diff that resulted from this user message",
+          operationId: "session.diff",
+          responses: {
+            200: {
+              description: "Successfully retrieved diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: SessionSummary.diff.schema.shape.sessionID,
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            messageID: SessionSummary.diff.schema.shape.messageID,
+          }),
+        ),
+        async (c) => {
+          const query = c.req.valid("query")
+          const params = c.req.valid("param")
+          const result = await SessionSummary.diff({
+            sessionID: params.id,
+            messageID: query.messageID,
+          })
+          return c.json(result)
+        },
+      )
       .delete(
         "/session/:id/share",
         describeRoute({
@@ -734,7 +774,10 @@ export namespace Server {
         ),
         async (c) => {
           const params = c.req.valid("param")
-          const message = await Session.getMessage({ sessionID: params.id, messageID: params.messageID })
+          const message = await Session.getMessage({
+            sessionID: params.id,
+            messageID: params.messageID,
+          })
           return c.json(message)
         },
       )
@@ -768,10 +811,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const sessionID = c.req.valid("param").id
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          return c.json(msg)
+          c.status(200)
+          c.header("Content-Type", "application/json")
+          return stream(c, async (stream) => {
+            const sessionID = c.req.valid("param").id
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          })
         },
       )
       .post(
@@ -868,7 +915,10 @@ export namespace Server {
         async (c) => {
           const id = c.req.valid("param").id
           log.info("revert", c.req.valid("json"))
-          const session = await SessionRevert.revert({ sessionID: id, ...c.req.valid("json") })
+          const session = await SessionRevert.revert({
+            sessionID: id,
+            ...c.req.valid("json"),
+          })
           return c.json(session)
         },
       )
@@ -929,7 +979,11 @@ export namespace Server {
           const params = c.req.valid("param")
           const id = params.id
           const permissionID = params.permissionID
-          Permission.respond({ sessionID: id, permissionID, response: c.req.valid("json").response })
+          Permission.respond({
+            sessionID: id,
+            permissionID,
+            response: c.req.valid("json").response,
+          })
           return c.json(true)
         },
       )

@@ -1,29 +1,37 @@
-import { createContext, useContext, type ParentProps } from "solid-js"
-import { createOpencodeClient } from "@opencode-ai/sdk/client"
+import { createOpencodeClient, type Event } from "@opencode-ai/sdk/client"
+import { createSimpleContext } from "./helper"
+import { createGlobalEmitter } from "@solid-primitives/event-bus"
+import { onCleanup } from "solid-js"
 
-const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
-const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
+export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
+  name: "SDK",
+  init: (props: { url: string }) => {
+    const abort = new AbortController()
+    const sdk = createOpencodeClient({
+      baseUrl: props.url,
+      signal: abort.signal,
+      fetch: (req) => {
+        // @ts-ignore
+        req.timeout = false
+        return fetch(req)
+      },
+    })
 
-function init() {
-  const client = createOpencodeClient({
-    baseUrl: `http://${host}:${port}`,
-  })
-  return client
-}
+    const emitter = createGlobalEmitter<{
+      [key in Event["type"]]: Extract<Event, { type: key }>
+    }>()
 
-type SDKContext = ReturnType<typeof init>
+    sdk.event.subscribe().then(async (events) => {
+      for await (const event of events.stream) {
+        console.log("event", event.type)
+        emitter.emit(event.type, event)
+      }
+    })
 
-const ctx = createContext<SDKContext>()
+    onCleanup(() => {
+      abort.abort()
+    })
 
-export function SDKProvider(props: ParentProps) {
-  const value = init()
-  return <ctx.Provider value={value}>{props.children}</ctx.Provider>
-}
-
-export function useSDK() {
-  const value = useContext(ctx)
-  if (!value) {
-    throw new Error("useSDK must be used within a SDKProvider")
-  }
-  return value
-}
+    return { client: sdk, event: emitter }
+  },
+})

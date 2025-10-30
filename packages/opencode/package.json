@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.15.8",
+  "version": "0.15.29",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -20,6 +20,10 @@
     "@ai-sdk/amazon-bedrock": "2.2.10",
     "@ai-sdk/google-vertex": "3.0.16",
     "@octokit/webhooks-types": "7.6.1",
+    "@parcel/watcher-darwin-arm64": "2.5.1",
+    "@parcel/watcher-darwin-x64": "2.5.1",
+    "@parcel/watcher-linux-arm64-glibc": "2.5.1",
+    "@parcel/watcher-linux-x64-glibc": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
@@ -29,12 +33,12 @@
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:",
     "vscode-languageserver-types": "3.17.5",
-    "zod-to-json-schema": "3.24.5",
     "@opencode-ai/script": "workspace:*"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
+    "@agentclientprotocol/sdk": "0.4.9",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
@@ -46,6 +50,7 @@
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@parcel/watcher": "2.5.1",
+    "@pierre/precision-diffs": "catalog:",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
@@ -69,6 +74,7 @@
     "web-tree-sitter": "0.22.6",
     "xdg-basedir": "5.1.0",
     "yargs": "18.0.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "3.24.5"
   }
 }
