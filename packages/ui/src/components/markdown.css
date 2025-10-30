@@ -17,8 +17,21 @@
     display: none;
   }
 
-  /* p { */
-  /*   margin-top: 8px; */
-  /*   margin-bottom: 8px; */
-  /* } */
+  h1,
+  h2,
+  h3 {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: var(--font-weight-medium);
+  }
+
+  p {
+    margin-bottom: 8px;
+  }
+
+  ul,
+  ol {
+    margin-top: 16px;
+    margin-bottom: 16px;
+  }
 }
