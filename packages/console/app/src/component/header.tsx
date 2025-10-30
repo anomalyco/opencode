@@ -13,7 +13,7 @@ export function Header(props: { zen?: boolean }) {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()?.stars!)
-      : "25K",
+      : "29K",
   )
 
   const [store, setStore] = createStore({
