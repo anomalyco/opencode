@@ -26,7 +26,7 @@ export async function POST(event: APIEvent) {
     // Create email content
     const emailContent = `
 ${body.message}<br><br>
---
+--<br>
 ${body.name}<br>
 ${body.role}<br>
 ${body.email}`.trim()

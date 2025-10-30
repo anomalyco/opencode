@@ -13,7 +13,11 @@ import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError } from "./error"
-import { createBodyConverter, createStreamPartConverter, createResponseConverter } from "./provider/provider"
+import {
+  createBodyConverter,
+  createStreamPartConverter,
+  createResponseConverter,
+} from "./provider/provider"
 import { Format } from "./format"
 import { anthropicHelper } from "./provider/anthropic"
 import { openaiHelper } from "./provider/openai"
@@ -43,7 +47,11 @@ export async function handler(
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, body.model)
-    const providerInfo = selectProvider(zenData, modelInfo, input.request.headers.get("x-real-ip") ?? "")
+    const providerInfo = selectProvider(
+      zenData,
+      modelInfo,
+      input.request.headers.get("x-real-ip") ?? "",
+    )
     const authInfo = await authenticate(modelInfo, providerInfo)
     validateBilling(modelInfo, authInfo)
     validateModelSettings(authInfo)
@@ -222,7 +230,11 @@ export async function handler(
     return { id: modelId, ...modelData }
   }
 
-  function selectProvider(zenData: ZenData, model: Awaited<ReturnType<typeof validateModel>>, ip: string) {
+  function selectProvider(
+    zenData: ZenData,
+    model: Awaited<ReturnType<typeof validateModel>>,
+    ip: string,
+  ) {
     const providers = model.providers
       .filter((provider) => !provider.disabled)
       .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
@@ -239,7 +251,11 @@ export async function handler(
     return {
       ...provider,
       ...zenData.providers[provider.id],
-      ...(provider.id === "anthropic" ? anthropicHelper : provider.id === "openai" ? openaiHelper : oaCompatHelper),
+      ...(provider.id === "anthropic"
+        ? anthropicHelper
+        : provider.id === "openai"
+          ? openaiHelper
+          : oaCompatHelper),
     }
   }
 
@@ -279,11 +295,20 @@ export async function handler(
         .from(KeyTable)
         .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, KeyTable.workspaceID))
         .innerJoin(BillingTable, eq(BillingTable.workspaceID, KeyTable.workspaceID))
-        .innerJoin(UserTable, and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)))
-        .leftJoin(ModelTable, and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)))
+        .innerJoin(
+          UserTable,
+          and(eq(UserTable.workspaceID, KeyTable.workspaceID), eq(UserTable.id, KeyTable.userID)),
+        )
+        .leftJoin(
+          ModelTable,
+          and(eq(ModelTable.workspaceID, KeyTable.workspaceID), eq(ModelTable.model, model.id)),
+        )
         .leftJoin(
           ProviderTable,
-          and(eq(ProviderTable.workspaceID, KeyTable.workspaceID), eq(ProviderTable.provider, providerInfo.id)),
+          and(
+            eq(ProviderTable.workspaceID, KeyTable.workspaceID),
+            eq(ProviderTable.provider, providerInfo.id),
+          ),
         )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
@@ -307,12 +332,20 @@ export async function handler(
   }
 
   function validateBilling(model: Model, authInfo: Awaited<ReturnType<typeof authenticate>>) {
-    if (!authInfo || authInfo.isFree) return
+    if (!authInfo) return
+    if (authInfo.provider?.credentials) return
+    if (authInfo.isFree) return
     if (model.allowAnonymous) return
 
     const billing = authInfo.billing
-    if (!billing.paymentMethodID) throw new CreditsError("No payment method")
-    if (billing.balance <= 0) throw new CreditsError("Insufficient balance")
+    if (!billing.paymentMethodID)
+      throw new CreditsError(
+        `No payment method. Add a payment method here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+      )
+    if (billing.balance <= 0)
+      throw new CreditsError(
+        `Insufficient balance. Manage your billing here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+      )
 
     const now = new Date()
     const currentYear = now.getUTCFullYear()
@@ -327,7 +360,7 @@ export async function handler(
       const dateMonth = billing.timeMonthlyUsageUpdated.getUTCMonth()
       if (currentYear === dateYear && currentMonth === dateMonth)
         throw new MonthlyLimitError(
-          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}.`,
+          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
         )
     }
 
@@ -340,7 +373,9 @@ export async function handler(
       const dateYear = authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear()
       const dateMonth = authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
       if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new UserLimitError(`You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}.`)
+        throw new UserLimitError(
+          `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
+        )
     }
   }
 
@@ -364,12 +399,19 @@ export async function handler(
     providerInfo: Awaited<ReturnType<typeof selectProvider>>,
     usage: any,
   ) {
-    const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
-      providerInfo.normalizeUsage(usage)
+    const {
+      inputTokens,
+      outputTokens,
+      reasoningTokens,
+      cacheReadTokens,
+      cacheWrite5mTokens,
+      cacheWrite1hTokens,
+    } = providerInfo.normalizeUsage(usage)
 
     const modelCost =
       modelInfo.cost200K &&
-      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) > 200_000
+      inputTokens + (cacheReadTokens ?? 0) + (cacheWrite5mTokens ?? 0) + (cacheWrite1hTokens ?? 0) >
+        200_000
         ? modelInfo.cost200K
         : modelInfo.cost
 
@@ -420,7 +462,8 @@ export async function handler(
 
     if (!authInfo) return
 
-    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    const cost =
+      authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.transaction(async (tx) => {
       await tx.insert(UsageTable).values({
         workspaceID: authInfo.workspaceID,
@@ -460,7 +503,9 @@ export async function handler(
             `,
           timeMonthlyUsageUpdated: sql`now()`,
         })
-        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
+        .where(
+          and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)),
+        )
     })
 
     await Database.use((tx) =>
@@ -487,7 +532,10 @@ export async function handler(
             eq(BillingTable.workspaceID, authInfo.workspaceID),
             eq(BillingTable.reload, true),
             lt(BillingTable.balance, centsToMicroCents(Billing.CHARGE_THRESHOLD)),
-            or(isNull(BillingTable.timeReloadLockedTill), lt(BillingTable.timeReloadLockedTill, sql`now()`)),
+            or(
+              isNull(BillingTable.timeReloadLockedTill),
+              lt(BillingTable.timeReloadLockedTill, sql`now()`),
+            ),
           ),
         ),
     )

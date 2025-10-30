@@ -57,9 +57,6 @@
     border-bottom: 1px solid var(--border-weak-base);
     border-right: 1px solid var(--border-weak-base);
     background-color: var(--background-base);
-    transition:
-      background-color 0.15s ease,
-      color 0.15s ease;
 
     &:disabled {
       pointer-events: none;

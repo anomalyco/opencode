@@ -11,11 +11,13 @@
     "./fonts/*": "./src/assets/fonts/*"
   },
   "scripts": {
+    "typecheck": "tsgo --noEmit",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@tsconfig/node22": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:",
@@ -24,11 +26,17 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
+    "@opencode-ai/sdk": "workspace:*",
     "@pierre/precision-diffs": "catalog:",
+    "@shikijs/transformers": "3.9.2",
     "@solidjs/meta": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "fuzzysort": "catalog:",
     "luxon": "catalog:",
+    "marked": "16.2.0",
+    "marked-shiki": "1.2.1",
     "remeda": "catalog:",
+    "shiki": "3.9.2",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "virtua": "catalog:"

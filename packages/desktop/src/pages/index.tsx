@@ -9,6 +9,10 @@ import {
   Accordion,
   Diff,
   Collapsible,
+  Part,
+  DiffChanges,
+  ProgressCircle,
+  Message,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -32,11 +36,8 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { ProgressCircle } from "@/components/progress-circle"
-import { Message, Part } from "@/components/message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { DiffChanges } from "@/components/diff-changes"
-import { Markdown } from "@/components/markdown"
+import { Markdown } from "@opencode-ai/ui"
 
 export default function Page() {
   const local = useLocal()
@@ -271,7 +272,7 @@ export default function Page() {
   const TabVisual = (props: { file: LocalFile }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
-        <FileIcon node={props.file} class="_grayscale-100" />
+        <FileIcon node={props.file} class="grayscale-100 group-data-[selected]/tab:grayscale-0" />
         <span
           classList={{
             "text-14-medium": true,
@@ -310,15 +311,21 @@ export default function Page() {
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
         <Tooltip value={props.file.path} placement="bottom" class="h-full">
           <div class="relative h-full">
-            <Tabs.Trigger value={props.file.path} class="peer/tab pr-7" onClick={() => props.onTabClick(props.file)}>
+            <Tabs.Trigger
+              value={props.file.path}
+              class="group/tab pl-3 pr-1"
+              onClick={() => props.onTabClick(props.file)}
+            >
               <TabVisual file={props.file} />
+              <IconButton
+                icon="close"
+                class="mt-0.5 opacity-0 text-text-muted/60 group-data-[selected]/tab:opacity-100
+                       group-data-[selected]/tab:text-text group-data-[selected]/tab:hover:bg-border-subtle
+                       hover:opacity-100 group-hover/tab:opacity-100"
+                variant="ghost"
+                onClick={() => props.onTabClose(props.file)}
+              />
             </Tabs.Trigger>
-            <IconButton
-              icon="close"
-              class="absolute right-1 top-1.5 opacity-0 text-text-muted/60 peer-data-[selected]/tab:opacity-100 peer-data-[selected]/tab:text-text peer-data-[selected]/tab:hover:bg-border-subtle hover:opacity-100 peer-hover/tab:opacity-100"
-              variant="ghost"
-              onClick={() => props.onTabClose(props.file)}
-            />
           </div>
         </Tooltip>
       </div>
@@ -377,6 +384,7 @@ export default function Page() {
               {(session) => {
                 const diffs = createMemo(() => session.summary?.diffs ?? [])
                 const filesChanged = createMemo(() => diffs().length)
+                const updated = DateTime.fromMillis(session.time.updated)
                 return (
                   <Tooltip placement="right" value={session.title}>
                     <div>
@@ -385,7 +393,14 @@ export default function Page() {
                           {session.title}
                         </span>
                         <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                          {DateTime.fromMillis(session.time.updated).toRelative()}
+                          {Math.abs(updated.diffNow().as("seconds")) < 60
+                            ? "Now"
+                            : updated
+                                .toRelative({ style: "short", unit: ["days", "hours", "minutes"] })
+                                ?.replace(" ago", "")
+                                ?.replace(/ days?/, "d")
+                                ?.replace(" min.", "m")
+                                ?.replace(" hr.", "h")}
                         </span>
                       </div>
                       <div class="flex justify-between items-center self-stretch">
@@ -497,7 +512,7 @@ export default function Page() {
                   <Show
                     when={local.session.active()}
                     fallback={
-                      <div class="flex flex-col pb-36 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
+                      <div class="flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch">
                         <div class="text-20-medium text-text-weaker">New session</div>
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
@@ -528,101 +543,14 @@ export default function Page() {
                             >
                               <For each={local.session.userMessages()}>
                                 {(message) => {
-                                  const countLines = (text: string) => {
-                                    if (!text) return 0
-                                    return text.split("\n").length
-                                  }
-
-                                  const additions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.additions ?? 0), 0) ?? 0,
-                                  )
-
-                                  const deletions = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + (diff.deletions ?? 0), 0) ?? 0,
-                                  )
-
-                                  const totalBeforeLines = createMemo(
-                                    () =>
-                                      message.summary?.diffs.reduce((acc, diff) => acc + countLines(diff.before), 0) ??
-                                      0,
-                                  )
-
-                                  const blockCounts = createMemo(() => {
-                                    const TOTAL_BLOCKS = 5
-
-                                    const adds = additions()
-                                    const dels = deletions()
-                                    const unchanged = Math.max(0, totalBeforeLines() - dels)
-
-                                    const totalActivity = unchanged + adds + dels
-
-                                    if (totalActivity === 0) {
-                                      return { added: 0, deleted: 0, neutral: TOTAL_BLOCKS }
-                                    }
-
-                                    const percentAdded = adds / totalActivity
-                                    const percentDeleted = dels / totalActivity
-                                    const added_raw = percentAdded * TOTAL_BLOCKS
-                                    const deleted_raw = percentDeleted * TOTAL_BLOCKS
-
-                                    let added = adds > 0 ? Math.ceil(added_raw) : 0
-                                    let deleted = dels > 0 ? Math.ceil(deleted_raw) : 0
-
-                                    let total_allocated = added + deleted
-                                    if (total_allocated > TOTAL_BLOCKS) {
-                                      if (added_raw < deleted_raw) {
-                                        added = Math.floor(added_raw)
-                                      } else {
-                                        deleted = Math.floor(deleted_raw)
-                                      }
-
-                                      total_allocated = added + deleted
-                                      if (total_allocated > TOTAL_BLOCKS) {
-                                        if (added_raw < deleted_raw) {
-                                          deleted = Math.floor(deleted_raw)
-                                        } else {
-                                          added = Math.floor(added_raw)
-                                        }
-                                      }
-                                    }
-
-                                    const neutral = Math.max(0, TOTAL_BLOCKS - added - deleted)
-
-                                    return { added, deleted, neutral }
-                                  })
-
-                                  const ADD_COLOR = "var(--icon-diff-add-base)"
-                                  const DELETE_COLOR = "var(--icon-diff-delete-base)"
-                                  const NEUTRAL_COLOR = "var(--icon-weak-base)"
-
-                                  const visibleBlocks = createMemo(() => {
-                                    const counts = blockCounts()
-                                    const blocks = [
-                                      ...Array(counts.added).fill(ADD_COLOR),
-                                      ...Array(counts.deleted).fill(DELETE_COLOR),
-                                      ...Array(counts.neutral).fill(NEUTRAL_COLOR),
-                                    ]
-                                    return blocks.slice(0, 5)
-                                  })
+                                  const diffs = createMemo(() => message.summary?.diffs ?? [])
 
                                   return (
                                     <li
                                       class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
                                       onClick={() => local.session.setActiveMessage(message.id)}
                                     >
-                                      <div class="w-[18px] shrink-0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 12" fill="none">
-                                          <g>
-                                            <For each={visibleBlocks()}>
-                                              {(color, i) => (
-                                                <rect x={i() * 4} width="2" height="12" rx="1" fill={color} />
-                                              )}
-                                            </For>
-                                          </g>
-                                        </svg>
-                                      </div>
+                                      <DiffChanges diff={diffs()} variant="bars" />
                                       <div
                                         data-active={local.session.activeMessage()?.id === message.id}
                                         classList={{
@@ -660,7 +588,7 @@ export default function Page() {
                                       class="flex flex-col items-start self-stretch gap-8 min-h-screen"
                                     >
                                       {/* Title */}
-                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger">
+                                      <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
                                         <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
                                           {title() ?? prompt()}
                                         </h1>
@@ -825,7 +753,7 @@ export default function Page() {
                                                 </div>
                                               </Collapsible.Trigger>
                                               <Collapsible.Content>
-                                                <div class="w-full flex flex-col items-start self-stretch gap-8">
+                                                <div class="w-full flex flex-col items-start self-stretch gap-3">
                                                   <For each={assistantMessages()}>
                                                     {(assistantMessage) => {
                                                       const parts = createMemo(
@@ -873,7 +801,7 @@ export default function Page() {
                 const draggedFile = local.file.node(id)
                 if (!draggedFile) return null
                 return (
-                  <div class="relative px-3 h-8 flex items-center text-sm font-medium text-text whitespace-nowrap shrink-0 bg-background-panel border-x border-border-subtle/40 border-b border-b-transparent">
+                  <div class="relative px-3 h-10 flex items-center bg-background-base border-x border-border-weak-base border-b border-b-transparent">
                     <TabVisual file={draggedFile} />
                   </div>
                 )
