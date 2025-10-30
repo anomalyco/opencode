@@ -490,19 +490,7 @@ func (a *App) InitializeProvider() tea.Cmd {
 		}
 	}
 
-	// Priority 2: Config file model setting
-	if selectedProvider == nil && a.Config.Model != "" {
-		if provider, model := findModelByFullID(providers, a.Config.Model); provider != nil &&
-			model != nil {
-			selectedProvider = provider
-			selectedModel = model
-			slog.Debug("Selected model from config", "provider", provider.ID, "model", model.ID)
-		} else {
-			slog.Debug("Config model not found", "model", a.Config.Model)
-		}
-	}
-
-	// Priority 3: Current agent's preferred model
+	// Priority 2: Current agent's preferred model
 	if selectedProvider == nil && a.Agent().Model.ModelID != "" {
 		if provider, model := findModelByProviderAndModelID(providers, a.Agent().Model.ProviderID, a.Agent().Model.ModelID); provider != nil &&
 			model != nil {
@@ -519,6 +507,18 @@ func (a *App) InitializeProvider() tea.Cmd {
 			)
 		} else {
 			slog.Debug("Agent model not found", "provider", a.Agent().Model.ProviderID, "model", a.Agent().Model.ModelID, "agent", a.Agent().Name)
+		}
+	}
+
+	// Priority 3: Config file model setting
+	if selectedProvider == nil && a.Config.Model != "" {
+		if provider, model := findModelByFullID(providers, a.Config.Model); provider != nil &&
+			model != nil {
+			selectedProvider = provider
+			selectedModel = model
+			slog.Debug("Selected model from config", "provider", provider.ID, "model", model.ID)
+		} else {
+			slog.Debug("Config model not found", "model", a.Config.Model)
 		}
 	}
 
