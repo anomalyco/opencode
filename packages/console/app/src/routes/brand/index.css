@@ -8,7 +8,6 @@
   }
 }
 
-
 [data-page="enterprise"] {
   --color-background: hsl(0, 20%, 99%);
   --color-background-weak: hsl(0, 8%, 97%);
@@ -51,7 +50,6 @@
     --color-text-strong: hsl(0, 15%, 94%);
     --color-text-inverted: hsl(0, 9%, 7%);
     --color-text-success: hsl(119, 60%, 72%);
-
 
     --color-border: hsl(0, 3%, 28%);
     --color-border-weak: hsl(0, 4%, 23%);
@@ -263,7 +261,6 @@
   [data-component="content"] {
   }
 
-
   [data-component="brand-content"] {
     padding: 4rem 5rem;
 
@@ -297,10 +294,9 @@
       cursor: pointer;
       display: flex;
       width: fit-content;
-      gap: 12px;
+      gap: 32px;
       transition: background-color 0.2s ease;
       text-decoration: none;
-
 
       &:hover:not(:disabled) {
         background: var(--color-background-strong-hover);
@@ -320,14 +316,10 @@
       margin-bottom: 2rem;
     }
 
-
     @media (max-width: 60rem) {
       padding: 2rem 1.5rem;
     }
   }
-
-
-
 
   [data-component="faq"] {
     border-top: 1px solid var(--color-border-weak);
@@ -419,6 +411,9 @@
     color: var(--color-text-weak);
     text-align: center;
     padding: 2rem 5rem;
+    display: flex;
+    gap: 32px;
+    justify-content: center;
 
     @media (max-width: 60rem) {
       padding: 2rem 1.5rem;
@@ -427,6 +422,11 @@
     a {
       color: var(--color-text-weak);
       text-decoration: none;
+    }
+
+    a:hover {
+      color: var(--color-text);
+      text-decoration: underline;
     }
   }
 

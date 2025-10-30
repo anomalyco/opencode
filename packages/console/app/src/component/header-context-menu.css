@@ -29,7 +29,6 @@
   color: var(--color-text);
   font-size: var(--font-size-sm);
   text-align: left;
-  cursor: pointer;
   border-radius: 2px;
   transition: background-color 0.2s ease;
 
