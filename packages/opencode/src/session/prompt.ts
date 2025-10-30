@@ -1048,6 +1048,20 @@ export namespace SessionPrompt {
               case "tool-call": {
                 const match = toolcalls[value.toolCallId]
                 if (match) {
+                  const part = await Session.updatePart({
+                    ...match,
+                    tool: value.toolName,
+                    state: {
+                      status: "running",
+                      input: value.input,
+                      time: {
+                        start: Date.now(),
+                      },
+                    },
+                    metadata: value.providerMetadata,
+                  })
+                  toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+
                   const currentParts = await Session.getParts(assistantMsg.id)
                   const toolParts = currentParts.filter(
                     (p): p is MessageV2.ToolPart => p.type === "tool" && p.state.status !== "pending",
@@ -1075,20 +1089,6 @@ export namespace SessionPrompt {
                       },
                     })
                   }
-
-                  const part = await Session.updatePart({
-                    ...match,
-                    tool: value.toolName,
-                    state: {
-                      status: "running",
-                      input: value.input,
-                      time: {
-                        start: Date.now(),
-                      },
-                    },
-                    metadata: value.providerMetadata,
-                  })
-                  toolcalls[value.toolCallId] = part as MessageV2.ToolPart
                 }
                 break
               }
