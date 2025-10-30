@@ -14,6 +14,8 @@ import { Agent } from "../../agent/agent"
 import { Command } from "../../command"
 import { SessionPrompt } from "../../session/prompt"
 import { EOL } from "os"
+import { Permission } from "@/permission"
+import { select } from "@clack/prompts"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -229,7 +231,9 @@ export const RunCommand = cmd({
           const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
           const title =
             part.state.title ||
-            (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
+            (Object.keys(part.state.input).length > 0
+              ? JSON.stringify(part.state.input)
+              : "Unknown")
 
           printEvent(color, tool, title)
 
@@ -273,6 +277,31 @@ export const RunCommand = cmd({
 
         if (outputJsonEvent("error", { error })) return
         UI.error(err)
+      })
+
+      Bus.subscribe(Permission.Event.Updated, async (evt) => {
+        const permission = evt.properties
+        const message = `Permission required to run: ${permission.title}`
+
+        const result = await select({
+          message,
+          options: [
+            { value: "once", label: "Allow once" },
+            { value: "always", label: "Always allow" },
+            { value: "reject", label: "Reject" },
+          ],
+          initialValue: "once",
+        }).catch(() => "reject")
+        const response = (result.toString().includes("cancel") ? "reject" : result) as
+          | "once"
+          | "always"
+          | "reject"
+
+        Permission.respond({
+          sessionID: session.id,
+          permissionID: permission.id,
+          response,
+        })
       })
 
       await (async () => {
