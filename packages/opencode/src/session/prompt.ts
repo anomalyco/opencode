@@ -1062,15 +1062,13 @@ export namespace SessionPrompt {
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
-                  const currentParts = await Session.getParts(assistantMsg.id)
-                  const toolParts = currentParts.filter(
-                    (p): p is MessageV2.ToolPart => p.type === "tool" && p.state.status !== "pending",
-                  )
-                  const lastThree = toolParts.slice(-3)
+                  const parts = await Session.getParts(assistantMsg.id)
+                  const lastThree = parts.slice(-3)
                   if (
                     lastThree.length === 3 &&
                     lastThree.every(
                       (p) =>
+                        p.type === "tool" &&
                         p.tool === value.toolName &&
                         p.state.status !== "pending" &&
                         JSON.stringify(p.state.input) === JSON.stringify(value.input),
