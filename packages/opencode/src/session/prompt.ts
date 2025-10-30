@@ -618,7 +618,7 @@ export namespace SessionPrompt {
 
         return {
           title: "",
-          metadata: {},
+          metadata: result.metadata ?? {},
           output,
         }
       }
