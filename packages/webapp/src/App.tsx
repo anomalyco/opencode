@@ -1,9 +1,10 @@
-import { Show, onMount, createSignal } from "solid-js"
+import { Show, onMount, createSignal, createEffect } from "solid-js"
 import { SessionList } from "./components/SessionList"
 import { MessageView } from "./components/MessageView"
 import { ChatInput } from "./components/ChatInput"
 import { FileBrowser } from "./components/FileBrowser"
 import { CodeEditor } from "./components/CodeEditor"
+import { KanbanBoard } from "./components/forge/KanbanBoard"
 import {
   initializeStore,
   isConnected,
@@ -13,14 +14,16 @@ import {
   disconnectWebSocket,
 } from "./stores/session"
 import { openFiles } from "./stores/files"
+import { initializeForge, selectedTask, setSelectedTask } from "./stores/forge"
 
-type ViewMode = "chat" | "editor" | "split"
+type ViewMode = "chat" | "editor" | "split" | "forge"
 
 export default function App() {
   const [viewMode, setViewMode] = createSignal<ViewMode>("chat")
 
   onMount(() => {
     initializeStore()
+    initializeForge()
   })
 
   // Auto-switch to editor when files are opened
@@ -95,6 +98,16 @@ export default function App() {
             >
               Split
             </button>
+            <button
+              class={`px-3 py-1 rounded text-xs transition-colors ${
+                viewMode() === "forge"
+                  ? "bg-primary-600 text-white"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+              onClick={() => setViewMode("forge")}
+            >
+              FORGE
+            </button>
           </div>
         </div>
 
@@ -131,15 +144,20 @@ export default function App() {
 
       {/* Main Content */}
       <div class="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Sessions */}
-        <aside class="w-80 flex-shrink-0">
-          <SessionList />
-        </aside>
+        {/* Left Sidebar - Sessions (hidden in forge view) */}
+        <Show when={viewMode() !== "forge"}>
+          <aside class="w-80 flex-shrink-0">
+            <SessionList />
+          </aside>
+        </Show>
 
         {/* Center/Right Area - Dynamic based on view mode */}
         <Show
-          when={viewMode() === "chat"}
+          when={viewMode() === "forge"}
           fallback={
+            <Show
+              when={viewMode() === "chat"}
+              fallback={
             <Show
               when={viewMode() === "editor"}
               fallback={
@@ -228,6 +246,19 @@ export default function App() {
             </Show>
           </main>
         </Show>
+          }
+        >
+          {/* FORGE view */}
+          <div class="flex-1 flex flex-col">
+            <KanbanBoard
+              onTaskClick={(task) => {
+                setSelectedTask(task)
+                // Could open a detail panel or modal here
+                console.log("Task clicked:", task)
+              }}
+            />
+          </div>
+        </Show>
       </div>
 
       {/* Footer */}
@@ -254,6 +285,3 @@ export default function App() {
     </div>
   )
 }
-
-// Import createEffect for reactive watching
-import { createEffect } from "solid-js"

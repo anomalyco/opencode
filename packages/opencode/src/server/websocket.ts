@@ -285,7 +285,8 @@ export namespace WebSocketServer {
       if (
         event.properties?.sessionID === sessionID ||
         event.type.startsWith("server.") ||
-        event.type.startsWith("config.")
+        event.type.startsWith("config.") ||
+        event.type.startsWith("forge.")
       ) {
         send(ws, {
           type: "event",

@@ -38,6 +38,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { WebSocketServer } from "./websocket"
+import { forgeRoutes } from "../forge/routes"
 
 const ERRORS = {
   400: {
@@ -140,6 +141,7 @@ export namespace Server {
       )
       .use(validator("query", z.object({ directory: z.string().optional() })))
       .route("/project", ProjectRoute)
+      .route("/forge", forgeRoutes)
       .get(
         "/config",
         describeRoute({
