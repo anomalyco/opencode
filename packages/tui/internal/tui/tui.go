@@ -203,7 +203,6 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 3. Handle completions trigger
 		if keyString == "/" &&
 			!a.showCompletionDialog &&
-			a.editor.Value() == "" &&
 			!a.app.IsBashMode {
 			a.showCompletionDialog = true
 

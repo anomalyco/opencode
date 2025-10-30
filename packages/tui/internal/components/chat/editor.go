@@ -231,9 +231,12 @@ func (m *editorComponent) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			updated, cmd := m.Clear()
-			m = updated.(*editorComponent)
-			cmds = append(cmds, cmd)
+			// Find the last '/' and replace from there to cursor
+			slashIndex := m.textarea.LastRuneIndex('/')
+			if slashIndex != -1 {
+				cursorCol := m.textarea.CursorColumn()
+				m.textarea.ReplaceRange(slashIndex, cursorCol, "")
+			}
 
 			commandName := strings.TrimPrefix(msg.Item.Value, "/")
 			cmds = append(cmds, util.CmdHandler(commands.ExecuteCommandMsg(m.app.Commands[commands.CommandName(commandName)])))
