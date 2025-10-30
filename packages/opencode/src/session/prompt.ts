@@ -56,6 +56,7 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = 32_000
   const MAX_RETRIES = 10
+  const DOOM_LOOP_THRESHOLD = 3
 
   export const Event = {
     Idle: Bus.event(
@@ -1068,6 +1069,32 @@ export namespace SessionPrompt {
                     metadata: value.providerMetadata,
                   })
                   toolcalls[value.toolCallId] = part as MessageV2.ToolPart
+
+                  const parts = await Session.getParts(assistantMsg.id)
+                  const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+                  if (
+                    lastThree.length === DOOM_LOOP_THRESHOLD &&
+                    lastThree.every(
+                      (p) =>
+                        p.type === "tool" &&
+                        p.tool === value.toolName &&
+                        p.state.status !== "pending" &&
+                        JSON.stringify(p.state.input) === JSON.stringify(value.input),
+                    )
+                  ) {
+                    await Permission.ask({
+                      type: "doom-loop",
+                      pattern: value.toolName,
+                      sessionID: assistantMsg.sessionID,
+                      messageID: assistantMsg.id,
+                      callID: value.toolCallId,
+                      title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
+                      metadata: {
+                        tool: value.toolName,
+                        input: value.input,
+                      },
+                    })
+                  }
                 }
                 break
               }
