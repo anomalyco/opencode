@@ -22,6 +22,9 @@ import { AttachCommand } from "./cli/cmd/attach"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 
+// Set environment variable to indicate this is an AI agent
+process.env["AGENT"] = "1"
+
 const cancel = new AbortController()
 
 process.on("unhandledRejection", (e) => {
