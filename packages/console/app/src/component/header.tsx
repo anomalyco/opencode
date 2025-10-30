@@ -6,12 +6,32 @@ import copyWordmarkLight from "../asset/lander/wordmark-light.svg"
 import copyWordmarkDark from "../asset/lander/wordmark-dark.svg"
 import copyBrandAssetsLight from "../asset/lander/brand-assets-light.svg"
 import copyBrandAssetsDark from "../asset/lander/brand-assets-dark.svg"
+
+// SVG files for copying (separate from button icons)
+// Replace these with your actual SVG files for copying
+import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
+import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
+import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
+import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
 import { A, createAsync } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
 import { createEffect, onCleanup } from "solid-js"
 import "./header-context-menu.css"
+
+const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
+
+const fetchSvgContent = async (svgPath: string): Promise<string> => {
+  try {
+    const response = await fetch(svgPath)
+    const svgText = await response.text()
+    return svgText
+  } catch (err) {
+    console.error("Failed to fetch SVG content:", err)
+    throw err
+  }
+}
 
 export function Header(props: { zen?: boolean }) {
   const githubData = createAsync(() => github())
@@ -66,32 +86,9 @@ export function Header(props: { zen?: boolean }) {
 
   const copyWordmarkToClipboard = async () => {
     try {
-      const wordmarkSvg = `<svg width="234" height="42" viewBox="0 0 234 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-<g clip-path="url(#clip0_1306_86249)">
-<path d="M18 30H6V18H18V30Z" fill="#CFCECD"/>
-<path d="M18 12H6V30H18V12ZM24 36H0V6H24V36Z" fill="#656363"/>
-<path d="M48 30H36V18H48V30Z" fill="#CFCECD"/>
-<path d="M36 30H48V12H36V30ZM54 36H36V42H30V6H54V36Z" fill="#656363"/>
-<path d="M84 24V30H66V24H84Z" fill="#CFCECD"/>
-<path d="M84 24H66V30H84V36H60V6H84V24ZM66 18H78V12H66V18Z" fill="#656363"/>
-<path d="M108 36H96V18H108V36Z" fill="#CFCECD"/>
-<path d="M108 12H96V36H90V6H108V12ZM114 36H108V12H114V36Z" fill="#656363"/>
-<path d="M144 30H126V18H144V30Z" fill="#CFCECD"/>
-<path d="M144 12H126V30H144V36H120V6H144V12Z" fill="#211E1E"/>
-<path d="M168 30H156V18H168V30Z" fill="#CFCECD"/>
-<path d="M168 12H156V30H168V12ZM174 36H150V6H174V36Z" fill="#211E1E"/>
-<path d="M198 30H186V18H198V30Z" fill="#CFCECD"/>
-<path d="M198 12H186V30H198V12ZM204 36H180V6H198V0H204V36Z" fill="#211E1E"/>
-<path d="M234 24V30H216V24H234Z" fill="#CFCECD"/>
-<path d="M216 12V18H228V12H216ZM234 24H216V30H234V36H210V6H234V24Z" fill="#211E1E"/>
-</g>
-<defs>
-<clipPath id="clip0_1306_86249">
-<rect width="234" height="42" fill="white"/>
-</clipPath>
-</defs>
-</svg>
-`
+      const isDark = isDarkMode()
+      const wordmarkSvgPath = isDark ? copyWordmarkSvgDark : copyWordmarkSvgLight
+      const wordmarkSvg = await fetchSvgContent(wordmarkSvgPath)
       await navigator.clipboard.writeText(wordmarkSvg)
     } catch (err) {
       console.error("Failed to copy wordmark to clipboard:", err)
@@ -100,11 +97,9 @@ export function Header(props: { zen?: boolean }) {
 
   const copyLogoToClipboard = async () => {
     try {
-      const logoSvg = `<svg width="80" height="100" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M60 80H20V40H60V80Z" fill="#BCBBBB"/>
-<path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="#211E1E"/>
-</svg>
-`
+      const isDark = isDarkMode()
+      const logoSvgPath = isDark ? copyLogoSvgDark : copyLogoSvgLight
+      const logoSvg = await fetchSvgContent(logoSvgPath)
       await navigator.clipboard.writeText(logoSvg)
     } catch (err) {
       console.error("Failed to copy logo to clipboard:", err)
