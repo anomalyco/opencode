@@ -9,7 +9,6 @@ import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "../util/error"
-import matter from "gray-matter"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import {
@@ -21,6 +20,7 @@ import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
+import { ConfigMarkdown } from "./markdown"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -191,8 +191,7 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const name = (() => {
@@ -231,8 +230,7 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       // Extract relative path from agent folder for nested agents
@@ -274,8 +272,7 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
-      const content = await Bun.file(item).text()
-      const md = matter(content)
+      const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
       const config = {
