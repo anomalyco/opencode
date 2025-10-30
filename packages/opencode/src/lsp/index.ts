@@ -163,7 +163,10 @@ export namespace LSP {
     const clients = await getClients(input)
     await run(async (client) => {
       if (!clients.includes(client)) return
-      const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
+
+      const wait = waitForDiagnostics
+        ? client.waitForDiagnostics({ path: input })
+        : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
     }).catch((err) => {

@@ -54,7 +54,17 @@ export namespace LSPServer {
 
   export const Deno: Info = {
     id: "deno",
-    root: NearestRoot(["deno.json", "deno.jsonc"]),
+    root: async (file) => {
+      const files = Filesystem.up({
+        targets: ["deno.json", "deno.jsonc"],
+        start: path.dirname(file),
+        stop: Instance.directory,
+      })
+      const first = await files.next()
+      await files.return()
+      if (!first.value) return undefined
+      return path.dirname(first.value)
+    },
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs"],
     async spawn(root) {
       const deno = Bun.which("deno")
@@ -78,7 +88,9 @@ export namespace LSPServer {
     ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(
+        () => {},
+      )
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
         cwd: root,
@@ -101,7 +113,13 @@ export namespace LSPServer {
   export const Vue: Info = {
     id: "vue",
     extensions: [".vue"],
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
     async spawn(root) {
       let binary = Bun.which("vue-language-server")
       const args: string[] = []
@@ -149,17 +167,31 @@ export namespace LSPServer {
 
   export const ESLint: Info = {
     id: "eslint",
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
       const eslint = await Bun.resolve("eslint", Instance.directory).catch(() => {})
       if (!eslint) return
       log.info("spawning eslint server")
-      const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
+      const serverPath = path.join(
+        Global.Path.bin,
+        "vscode-eslint",
+        "server",
+        "out",
+        "eslintServer.js",
+      )
       if (!(await Bun.file(serverPath).exists())) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading and building VS Code ESLint server")
-        const response = await fetch("https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip")
+        const response = await fetch(
+          "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip",
+        )
         if (!response.ok) return
 
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
@@ -284,12 +316,25 @@ export namespace LSPServer {
   export const Pyright: Info = {
     id: "pyright",
     extensions: [".py", ".pyi"],
-    root: NearestRoot(["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
+    root: NearestRoot([
+      "pyproject.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+      "pyrightconfig.json",
+    ]),
     async spawn(root) {
       let binary = Bun.which("pyright-langserver")
       const args = []
       if (!binary) {
-        const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "pyright",
+          "dist",
+          "pyright-langserver.js",
+        )
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "pyright"], {
@@ -307,9 +352,11 @@ export namespace LSPServer {
 
       const initialization: Record<string, string> = {}
 
-      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
-        (p): p is string => p !== undefined,
-      )
+      const potentialVenvPaths = [
+        process.env["VIRTUAL_ENV"],
+        path.join(root, ".venv"),
+        path.join(root, "venv"),
+      ].filter((p): p is string => p !== undefined)
       for (const venvPath of potentialVenvPaths) {
         const isWindows = process.platform === "win32"
         const potentialPythonPath = isWindows
@@ -360,7 +407,9 @@ export namespace LSPServer {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           log.info("downloading elixir-ls from GitHub releases")
 
-          const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
+          const response = await fetch(
+            "https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip",
+          )
           if (!response.ok) return
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
@@ -410,7 +459,9 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading zls from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/zigtools/zls/releases/latest")
+        const releaseResponse = await fetch(
+          "https://api.github.com/repos/zigtools/zls/releases/latest",
+        )
         if (!releaseResponse.ok) {
           log.error("Failed to fetch zls release info")
           return
@@ -585,7 +636,13 @@ export namespace LSPServer {
 
   export const Clangd: Info = {
     id: "clangd",
-    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
+    root: NearestRoot([
+      "compile_commands.json",
+      "compile_flags.txt",
+      ".clangd",
+      "CMakeLists.txt",
+      "Makefile",
+    ]),
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
       let bin = Bun.which("clangd", {
@@ -595,7 +652,9 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading clangd from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/clangd/clangd/releases/latest")
+        const releaseResponse = await fetch(
+          "https://api.github.com/repos/clangd/clangd/releases/latest",
+        )
         if (!releaseResponse.ok) {
           log.error("Failed to fetch clangd release info")
           return
@@ -664,12 +723,24 @@ export namespace LSPServer {
   export const Svelte: Info = {
     id: "svelte",
     extensions: [".svelte"],
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
     async spawn(root) {
       let binary = Bun.which("svelteserver")
       const args: string[] = []
       if (!binary) {
-        const js = path.join(Global.Path.bin, "node_modules", "svelte-language-server", "bin", "server.js")
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "svelte-language-server",
+          "bin",
+          "server.js",
+        )
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "svelte-language-server"], {
@@ -704,9 +775,17 @@ export namespace LSPServer {
   export const Astro: Info = {
     id: "astro",
     extensions: [".astro"],
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(
+        () => {},
+      )
       if (!tsserver) {
         log.info("typescript not found, required for Astro language server")
         return
@@ -716,7 +795,14 @@ export namespace LSPServer {
       let binary = Bun.which("astro-ls")
       const args: string[] = []
       if (!binary) {
-        const js = path.join(Global.Path.bin, "node_modules", "@astrojs", "language-server", "bin", "nodeServer.js")
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "@astrojs",
+          "language-server",
+          "bin",
+          "nodeServer.js",
+        )
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
           await Bun.spawn([BunProc.which(), "install", "@astrojs/language-server"], {
@@ -794,7 +880,9 @@ export namespace LSPServer {
         .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
       if (!(await fs.exists(launcherJar))) {
-        log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
+        log.error(
+          `Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`,
+        )
         return
       }
       const configFile = path.join(
@@ -860,7 +948,9 @@ export namespace LSPServer {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("downloading lua-language-server from GitHub releases")
 
-        const releaseResponse = await fetch("https://api.github.com/repos/LuaLS/lua-language-server/releases/latest")
+        const releaseResponse = await fetch(
+          "https://api.github.com/repos/LuaLS/lua-language-server/releases/latest",
+        )
         if (!releaseResponse.ok) {
           log.error("Failed to fetch lua-language-server release info")
           return
@@ -897,7 +987,9 @@ export namespace LSPServer {
 
         const assetSuffix = `${lualsPlatform}-${lualsArch}.${ext}`
         if (!supportedCombos.includes(assetSuffix)) {
-          log.error(`Platform ${platform} and architecture ${arch} is not supported by lua-language-server`)
+          log.error(
+            `Platform ${platform} and architecture ${arch} is not supported by lua-language-server`,
+          )
           return
         }
 
@@ -920,7 +1012,10 @@ export namespace LSPServer {
         // Unlike zls which is a single self-contained binary,
         // lua-language-server needs supporting files (meta/, locale/, etc.)
         // Extract entire archive to dedicated directory to preserve all files
-        const installDir = path.join(Global.Path.bin, `lua-language-server-${lualsArch}-${lualsPlatform}`)
+        const installDir = path.join(
+          Global.Path.bin,
+          `lua-language-server-${lualsArch}-${lualsPlatform}`,
+        )
 
         // Remove old installation if exists
         const stats = await fs.stat(installDir).catch(() => undefined)
@@ -945,7 +1040,11 @@ export namespace LSPServer {
         await fs.rm(tempPath, { force: true })
 
         // Binary is located in bin/ subdirectory within the extracted archive
-        bin = path.join(installDir, "bin", "lua-language-server" + (platform === "win32" ? ".exe" : ""))
+        bin = path.join(
+          installDir,
+          "bin",
+          "lua-language-server" + (platform === "win32" ? ".exe" : ""),
+        )
 
         if (!(await Bun.file(bin).exists())) {
           log.error("Failed to extract lua-language-server binary")
@@ -954,7 +1053,9 @@ export namespace LSPServer {
 
         if (platform !== "win32") {
           const ok = await $`chmod +x ${bin}`.quiet().catch((error) => {
-            log.error("Failed to set executable permission for lua-language-server binary", { error })
+            log.error("Failed to set executable permission for lua-language-server binary", {
+              error,
+            })
           })
           if (!ok) return
         }
