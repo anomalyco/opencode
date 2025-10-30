@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@tsconfig/node22": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:",

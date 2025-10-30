@@ -291,6 +291,7 @@
       },
       "devDependencies": {
         "@tailwindcss/vite": "catalog:",
+        "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
