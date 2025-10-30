@@ -10,6 +10,8 @@ import {
   Diff,
   Collapsible,
   Part,
+  DiffChanges,
+  ProgressCircle,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -33,10 +35,8 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { ProgressCircle } from "@/components/progress-circle"
 import { Message } from "@/components/message"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
-import { DiffChanges } from "@opencode-ai/ui"
 import { Markdown } from "@/components/markdown"
 
 export default function Page() {
