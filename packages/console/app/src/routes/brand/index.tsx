@@ -3,11 +3,23 @@ import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
-import { Faq } from "~/component/faq"
-import brand from "../../asset/lander/brand.png"
+import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
+import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
+import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
+import previewWordmarkDark from "../../asset/brand/preview-opencode-wordmark-dark.png"
+import previewWordmarkSimpleLight from "../../asset/brand/preview-opencode-wordmark-simple-light.png"
+import previewWordmarkSimpleDark from "../../asset/brand/preview-opencode-wordmark-simple-dark.png"
 
 
 export default function Brand() {
+  const downloadFile = (url: string, filename: string) => {
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   return (
     <main data-page="enterprise">
@@ -19,82 +31,183 @@ export default function Brand() {
         <div data-component="content">
           <section data-component="brand-content">
             <h2>Brand guidelines</h2>
-            <p>
-              Resources and assets to help you work with the OpenCode brand.
-            </p>
-            <a data-component="download-button" href="#">Download brand assets<svg
-              width="24" height="24" viewBox="0 0 24 24" fill="none"
-              xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 6.5L12 17M7.5 13L12 17.5L16.5 13" stroke="currentColor"
-                    stroke-width="1.5" stroke-linecap="square"/>
-            </svg>
-            </a>
-            <img src={brand} alt=""/>
+            <p>Resources and assets to help you work with the OpenCode brand.</p>
+            <button data-component="download-button">
+              Download all assets
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                   xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+              </svg>
+            </button>
 
-            <p>If you need any help with anything brand related <a href="mailto:david@anoma.ly">contact us</a>.</p>
-          </section>
-
-          <section data-component="faq">
-            <div data-slot="section-title">
-              <h3>FAQ</h3>
+            <div data-component="brand-grid">
+              <div>
+                <img src={previewLogoLight} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(LogoLight, "opencode-logo-light.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => downloadFile(brandAssetsLight, "opencode-logo-light.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <img src={previewLogoDark} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(brand, "opencode-logo-dark.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => downloadFile(brandAssetsLight, "opencode-logo-dark.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <img src={previewWordmarkLight} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(brand, "opencode-wordmark-light.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => downloadFile(brandAssetsLight, "opencode-wordmark-light.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <img src={previewWordmarkDark} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(brand, "opencode-wordmark-dark.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => downloadFile(brandAssetsLight, "opencode-wordmark-dark.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <img src={previewWordmarkSimpleLight} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(brand, "opencode-wordmark-simple-light.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => downloadFile(brandAssetsLight, "opencode-wordmark-simple-light.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <img src={previewWordmarkSimpleDark} alt="OpenCode brand guidelines"/>
+                <div data-component="actions">
+                  <button
+                    onClick={() => downloadFile(brand, "opencode-wordmark-simple-dark.png")}>
+                    PNG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => downloadFile(brandAssetsLight, "opencode-wordmark-simple-dark.svg")}>
+                    SVG
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
+                         xmlns="http://www.w3.org/2000/svg">
+                      <path
+                        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+                        stroke="currentColor" stroke-width="1.5"
+                        stroke-linecap="square"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
-            <ul>
-              <li>
-                <Faq question="Does Opencode store our code or context data?">
-                  No. OpenCode never stores your code or context data. All
-                  processing happens locally or directly with your AI provider.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Who owns the code generated with OpenCode?">
-                  You do. All code produced is yours, with no licensing
-                  restrictions or ownership claims.
-                </Faq>
-              </li>
-              <li>
-                <Faq
-                  question="How can we trial OpenCode inside our organization?">
-                  Simply install and run an internal trial with your team. Since
-                  OpenCode doesn’t store any data, your developers can get
-                  started right away.
-                </Faq>
-              </li>
-              <li>
-                <Faq
-                  question="What happens if someone uses the `/share` feature?">
-                  By default, sharing is disabled. If enabled, conversations are
-                  sent to our share service and cached through our CDN. For
-                  enterprise use, we recommend disabling or self-hosting this
-                  feature.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can OpenCode integrate with our company’s SSO?">
-                  Yes. Enterprise deployments can include SSO integration so all
-                  sessions and shared conversations are protected by your
-                  authentication system.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can OpenCode be self-hosted?">
-                  Absolutely. You can fully self-host OpenCode, including the
-                  share feature, ensuring that data and pages are accessible
-                  only after authentication.
-                </Faq>
-              </li>
-              <li>
-                <Faq
-                  question="How do we get started with enterprise deployment?">
-                  Contact us to discuss pricing, implementation, and enterprise
-                  options like SSO, private registries, and self-hosting.
-                </Faq>
-              </li>
-            </ul>
           </section>
         </div>
-        <Footer />
+        <Footer/>
       </div>
-      <Legal />
+      <Legal/>
     </main>
   )
 }

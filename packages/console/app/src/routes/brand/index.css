@@ -294,9 +294,11 @@
       cursor: pointer;
       display: flex;
       width: fit-content;
-      gap: 32px;
+      align-items: center;
+      gap: 12px;
       transition: background-color 0.2s ease;
       text-decoration: none;
+
 
       &:hover:not(:disabled) {
         background: var(--color-background-strong-hover);
@@ -308,13 +310,82 @@
       }
     }
 
-    img {
-      width: 100%;
-      height: auto;
-      display: block;
+    [data-component="brand-grid"] {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
       margin-top: 4rem;
       margin-bottom: 2rem;
     }
+
+    [data-component="brand-grid"] img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 4px;
+      border: 1px solid var(--color-border-weak);
+    }
+
+    [data-component="brand-grid"] > div {
+      position: relative;
+    }
+
+    [data-component="actions"] {
+      position: absolute;
+      background: rgba(4, 0, 0, 0.08);
+      border-radius: 4px;
+      bottom: 0;
+      right: 0;
+      top: 0;
+      left: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+
+      @media (max-width: 60rem) {
+        position: static;
+        opacity: 1;
+        margin-top: 1rem;
+        justify-content: center;
+      }
+    }
+
+    [data-component="brand-grid"] > div:hover [data-component="actions"] {
+      opacity: 1;
+
+      @media (max-width: 60rem) {
+        opacity: 1;
+      }
+    }
+
+    [data-component="actions"] button {
+      padding: 6px 12px;
+      background: var(--color-background);
+      color: var(--color-text);
+      border: none;
+      border-radius: 4px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: background-color 0.2s ease;
+      cursor: pointer;
+      box-shadow:
+        0 0 0 1px rgba(19, 16, 16, 0.08),
+        0 6px 8px -4px rgba(19, 16, 16, 0.12),
+        0 4px 3px -2px rgba(19, 16, 16, 0.12),
+        0 1px 2px -1px rgba(19, 16, 16, 0.12);
+
+
+      &:hover {
+        background: var(--color-background);
+      }
+    }
+
+
 
     @media (max-width: 60rem) {
       padding: 2rem 1.5rem;

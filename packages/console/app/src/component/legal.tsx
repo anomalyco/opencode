@@ -1,3 +1,5 @@
+import { A } from "@solidjs/router"
+
 export function Legal() {
   return (
     <div data-component="legal">
@@ -5,10 +7,7 @@ export function Legal() {
         ©{new Date().getFullYear()} <a href="https://anoma.ly">Anomaly</a>
       </span>
       <span>
-        <a href="/brand">Brand</a>
-      </span>
-      <span>
-        <a href="/legal">Legal</a>
+        <A href="/brand">Brand</A>
       </span>
     </div>
   )
