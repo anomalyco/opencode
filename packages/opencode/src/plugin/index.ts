@@ -7,7 +7,6 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
-import { createCliPermissionHandler } from "../cli/permission-handler"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -43,9 +42,6 @@ export namespace Plugin {
         hooks.push(init)
       }
     }
-
-    const cliPermissionHandler = await createCliPermissionHandler(input)
-    hooks.push(cliPermissionHandler)
 
     return {
       hooks,
