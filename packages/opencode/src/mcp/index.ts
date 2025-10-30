@@ -167,7 +167,7 @@ export namespace MCP {
       return
     }
 
-    const result = await withTimeout(mcpClient.tools(), 5000).catch(() => {})
+    const result = await withTimeout(mcpClient.tools(), mcp.timeout ?? 5000).catch(() => { })
     if (!result) {
       log.warn("mcp client verification failed, dropping client", { name })
       return
