@@ -283,6 +283,7 @@
         "@pierre/precision-diffs": "catalog:",
         "@shikijs/transformers": "3.9.2",
         "@solidjs/meta": "catalog:",
+        "@typescript/native-preview": "catalog:",
         "fuzzysort": "catalog:",
         "luxon": "catalog:",
         "marked": "16.2.0",
