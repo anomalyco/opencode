@@ -332,10 +332,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             break
           case "file.watcher.updated":
-            setTimeout(sync.load.changes, 1000)
-            const relativePath = relative(event.properties.file)
-            if (relativePath.startsWith(".git/")) return
-            load(relativePath)
+            // setTimeout(sync.load.changes, 1000)
+            // const relativePath = relative(event.properties.file)
+            // if (relativePath.startsWith(".git/")) return
+            // load(relativePath)
             break
         }
       })
