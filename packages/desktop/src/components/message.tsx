@@ -1,4 +1,4 @@
-import type { Part, AssistantMessage, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk"
+import type { Part, ReasoningPart, TextPart, ToolPart, Message, AssistantMessage, UserMessage } from "@opencode-ai/sdk"
 import { children, Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Markdown } from "./markdown"
@@ -17,28 +17,54 @@ import type { WriteTool } from "opencode/tool/write"
 import type { TodoWriteTool } from "opencode/tool/todo"
 import { DiffChanges } from "./diff-changes"
 
-export function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; lastToolOnly?: boolean }) {
+export function Message(props: { message: Message; parts: Part[] }) {
+  return (
+    <Switch>
+      <Match when={props.message.role === "user" && props.message}>
+        {(userMessage) => <UserMessage message={userMessage()} parts={props.parts} />}
+      </Match>
+      <Match when={props.message.role === "assistant" && props.message}>
+        {(assistantMessage) => <AssistantMessage message={assistantMessage()} parts={props.parts} />}
+      </Match>
+    </Switch>
+  )
+}
+
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[] }) {
   const filteredParts = createMemo(() => {
-    let tool = false
     return props.parts?.filter((x) => {
-      if (x.type === "tool" && props.lastToolOnly && tool) return false
-      if (x.type === "tool") tool = true
+      if (x.type === "reasoning") return false
       return x.type !== "tool" || x.tool !== "todoread"
     })
   })
   return (
     <div class="w-full flex flex-col items-start gap-4">
-      <For each={filteredParts()}>
-        {(part) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic component={component()} part={part as any} message={props.message} />
-            </Show>
-          )
-        }}
-      </For>
+      <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
     </div>
+  )
+}
+
+function UserMessage(props: { message: UserMessage; parts: Part[] }) {
+  const text = createMemo(() =>
+    props.parts
+      ?.filter((p) => p.type === "text" && !p.synthetic)
+      ?.map((p) => (p as TextPart).text)
+      ?.join(""),
+  )
+  return <div class="text-12-regular text-text-base line-clamp-3">{text()}</div>
+}
+
+export function Part(props: { part: Part; message: Message; hideDetails?: boolean }) {
+  const component = createMemo(() => PART_MAPPING[props.part.type as keyof typeof PART_MAPPING])
+  return (
+    <Show when={component()}>
+      <Dynamic
+        component={component()}
+        part={props.part as any}
+        message={props.message}
+        hideDetails={props.hideDetails}
+      />
+    </Show>
   )
 }
 
@@ -48,16 +74,7 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
-function ReasoningPart(props: { part: ReasoningPart; message: AssistantMessage }) {
-  return null
-  // return (
-  //   <Show when={props.part.text.trim()}>
-  //     <div>{props.part.text}</div>
-  //   </Show>
-  // )
-}
-
-function TextPart(props: { part: TextPart; message: AssistantMessage }) {
+function ReasoningPart(props: { part: ReasoningPart; message: Message }) {
   return (
     <Show when={props.part.text.trim()}>
       <Markdown text={props.part.text.trim()} />
@@ -65,17 +82,19 @@ function TextPart(props: { part: TextPart; message: AssistantMessage }) {
   )
 }
 
-function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
-  // const sync = useSync()
+function TextPart(props: { part: TextPart; message: Message }) {
+  return (
+    <Show when={props.part.text.trim()}>
+      <Markdown text={props.part.text.trim()} />
+    </Show>
+  )
+}
 
+function ToolPart(props: { part: ToolPart; message: Message; hideDetails?: boolean }) {
   const component = createMemo(() => {
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
-
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
     const input = props.part.state.status === "completed" ? props.part.state.input : {}
-    // const permissions = sync.data.permission[props.message.sessionID] ?? []
-    // const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
-    // const permission = permissions[permissionIndex]
 
     return (
       <Dynamic
@@ -83,8 +102,8 @@ function ToolPart(props: { part: ToolPart; message: AssistantMessage }) {
         input={input}
         tool={props.part.tool}
         metadata={metadata}
-        // permission={permission?.metadata ?? {}}
         output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+        hideDetails={props.hideDetails}
       />
     )
   })
@@ -106,7 +125,12 @@ const isTriggerTitle = (val: any): val is TriggerTitle => {
   return typeof val === "object" && val !== null && "title" in val && !(val instanceof Node)
 }
 
-function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX.Element; children?: JSX.Element }) {
+function BasicTool(props: {
+  icon: IconProps["name"]
+  trigger: TriggerTitle | JSX.Element
+  children?: JSX.Element
+  hideDetails?: boolean
+}) {
   const resolved = children(() => props.children)
   return (
     <Collapsible>
@@ -161,13 +185,13 @@ function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX
               </Switch>
             </div>
           </div>
-          <Show when={resolved()}>
+          <Show when={resolved() && !props.hideDetails}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.children}>
-        <Collapsible.Content>{props.children}</Collapsible.Content>
+      <Show when={resolved() && !props.hideDetails}>
+        <Collapsible.Content>{resolved()}</Collapsible.Content>
       </Show>
     </Collapsible>
     // <>
@@ -177,15 +201,15 @@ function BasicTool(props: { icon: IconProps["name"]; trigger: TriggerTitle | JSX
 }
 
 function GenericTool(props: ToolProps<any>) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} />
+  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
 }
 
 type ToolProps<T extends Tool.Info> = {
   input: Partial<Tool.InferParameters<T>>
   metadata: Partial<Tool.InferMetadata<T>>
-  // permission: Record<string, any>
   tool: string
   output?: string
+  hideDetails?: boolean
 }
 
 const ToolRegistry = (() => {

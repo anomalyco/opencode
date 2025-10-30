@@ -177,6 +177,7 @@ export function fromOpenaiRequest(body: any): CommonRequest {
   })()
 
   return {
+    model: body.model,
     max_tokens: body.max_output_tokens ?? body.max_tokens,
     temperature: body.temperature,
     top_p: body.top_p,
@@ -310,7 +311,7 @@ export function toOpenaiRequest(body: CommonRequest) {
     metadata: (body as any).metadata,
     store: (body as any).store,
     user: (body as any).user,
-    text: { verbosity: "low" },
+    text: { verbosity: body.model === "gpt-5-codex" ? "medium" : "low" },
     reasoning: { effort: "medium" },
   }
 }

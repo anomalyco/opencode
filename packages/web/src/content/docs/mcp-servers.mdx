@@ -45,12 +45,12 @@ with a unique name. You can refer to that MCP by name when prompting the LLM.
   "mcp": {
     "name-of-mcp-server": {
       // ...
-      "enabled": true
+      "enabled": true,
     },
     "name-of-other-mcp-server": {
       // ...
-    }
-  }
+    },
+  },
 }
 ```
 
@@ -72,10 +72,10 @@ Add local MCP servers using `type` to `"local"` within the MCP object.
       "command": ["npx", "-y", "my-mcp-command"],
       "enabled": true,
       "environment": {
-        "MY_ENV_VAR": "my_env_var_value"
-      }
-    }
-  }
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
 }
 ```
 
@@ -91,8 +91,8 @@ For example, here's how I can add the test
     "mcp_everything": {
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
-    }
-  }
+    },
+  },
 }
 ```
 
@@ -106,12 +106,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Here are all the options for configuring a local MCP server.
 
-| Option        | Type    | Required | Description                                           |
-| ------------- | ------- | -------- | ----------------------------------------------------- |
-| `type`        | String  | Y        | Type of MCP server connection, must be `"local"`.     |
-| `command`     | Array   | Y        | Command and arguments to run the MCP server.          |
-| `environment` | Object  |          | Environment variables to set when running the server. |
-| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.          |
+| Option        | Type    | Required | Description                                                                         |
+| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `type`        | String  | Y        | Type of MCP server connection, must be `"local"`.                                   |
+| `command`     | Array   | Y        | Command and arguments to run the MCP server.                                        |
+| `environment` | Object  |          | Environment variables to set when running the server.                               |
+| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                        |
+| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
 
 ---
 
@@ -139,12 +140,13 @@ Here the `url` is the URL of the remote MCP server and with the `headers` option
 
 #### Options
 
-| Option    | Type    | Required | Description                                        |
-| --------- | ------- | -------- | -------------------------------------------------- |
-| `type`    | String  | Y        | Type of MCP server connection, must be `"remote"`. |
-| `url`     | String  | Y        | URL of the remote MCP server.                      |
-| `enabled` | Boolean |          | Enable or disable the MCP server on startup.       |
-| `headers` | Object  |          | Headers to send with the request.                  |
+| Option    | Type    | Required | Description                                                                         |
+| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| `type`    | String  | Y        | Type of MCP server connection, must be `"remote"`.                                  |
+| `url`     | String  | Y        | URL of the remote MCP server.                                                       |
+| `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
+| `headers` | Object  |          | Headers to send with the request.                                                   |
+| `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
 
 ---
 

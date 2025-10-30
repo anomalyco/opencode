@@ -129,6 +129,36 @@ Run the command with arguments:
 
 And `$ARGUMENTS` will be replaced with `Button`.
 
+You can also access individual arguments using positional parameters:
+
+- `$1` - First argument
+- `$2` - Second argument
+- `$3` - Third argument
+- And so on...
+
+For example:
+
+```md title=".opencode/command/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Run the command:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+This replaces:
+
+- `$1` with `config.json`
+- `$2` with `src`
+- `$3` with `{ "key": "value" }`
+
 ---
 
 ### Shell output

@@ -656,12 +656,26 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opencode.EventListResponseEventSessionError:
 		switch err := msg.Properties.Error.AsUnion().(type) {
 		case nil:
+			// No error details provided
 		case opencode.ProviderAuthError:
 			slog.Error("Failed to authenticate with provider", "error", err.Data.Message)
 			return a, toast.NewErrorToast("Provider error: " + err.Data.Message)
 		case opencode.UnknownError:
 			slog.Error("Server error", "name", err.Name, "message", err.Data.Message)
 			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
+		case opencode.EventListResponseEventSessionErrorPropertiesErrorAPIError:
+			slog.Error("API error", "message", err.Data.Message, "statusCode", err.Data.StatusCode)
+			return a, toast.NewErrorToast(err.Data.Message, toast.WithTitle(string(err.Name)))
+		case opencode.MessageAbortedError:
+			// Message was aborted - this is expected when user cancels, so just log it
+			slog.Debug("Message aborted", "message", err.Data.Message)
+		case opencode.EventListResponseEventSessionErrorPropertiesErrorMessageOutputLengthError:
+			slog.Error("Message output length error")
+			return a, toast.NewErrorToast("Message output length exceeded limit")
+		default:
+			// Handle any unhandled error types
+			slog.Error("Unhandled session error type", "type", fmt.Sprintf("%T", err))
+			return a, toast.NewErrorToast("An unexpected error occurred")
 		}
 	case opencode.EventListResponseEventSessionCompacted:
 		if msg.Properties.SessionID == a.app.Session.ID {

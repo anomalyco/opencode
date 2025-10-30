@@ -827,12 +827,8 @@ body {
         outline: none;
         border: none;
         color: var(--color-text-strong);
-
-        border: 1px solid var(--color-background-strong); /* Tailwind blue-600 as example */
-
-        /* Tailwind-style ring */
+        border: 1px solid var(--color-background-strong);
         box-shadow: 0 0 0 3px var(--color-background-interactive);
-        /* mimics "ring-2 ring-blue-600/50" */
 
         @media (prefers-color-scheme: dark) {
           box-shadow: none;
