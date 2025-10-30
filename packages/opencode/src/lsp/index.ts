@@ -115,21 +115,40 @@ export namespace LSP {
     const s = await state()
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
+    log.info("getting clients for file", {
+      file,
+      extension,
+      serverCount: Object.keys(s.servers).length,
+    })
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      log.info("checking server", { serverID: server.id, extensions: server.extensions })
+      if (server.extensions.length && !server.extensions.includes(extension)) {
+        log.info("server extensions don't match", { serverID: server.id, extension })
+        continue
+      }
       const root = await server.root(file)
-      if (!root) continue
-      if (s.broken.has(root + server.id)) continue
+      log.info("server root result", { serverID: server.id, root })
+      if (!root) {
+        log.info("server returned no root", { serverID: server.id })
+        continue
+      }
+      if (s.broken.has(root + server.id)) {
+        log.info("server is marked as broken", { serverID: server.id })
+        continue
+      }
 
       const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
       if (match) {
+        log.info("found existing client", { serverID: server.id })
         result.push(match)
         continue
       }
+      log.info("spawning new server", { serverID: server.id, root })
       const handle = await server
         .spawn(root)
         .then((h) => {
           if (h === undefined) {
+            log.info("spawn returned undefined", { serverID: server.id })
             s.broken.add(root + server.id)
           }
           return h
@@ -156,14 +175,24 @@ export namespace LSP {
       s.clients.push(client)
       result.push(client)
     }
+    log.info("getClients complete", { resultCount: result.length })
     return result
   }
 
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     const clients = await getClients(input)
+    log.info("touching file", {
+      file: input,
+      clientCount: clients.length,
+      clientIDs: clients.map((c) => c.serverID),
+    })
     await run(async (client) => {
       if (!clients.includes(client)) return
-      const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
+      log.info("touched file with client", { serverID: client.serverID, root: client.root })
+
+      const wait = waitForDiagnostics
+        ? client.waitForDiagnostics({ path: input })
+        : Promise.resolve()
       await client.notify.open({ path: input })
       return wait
     }).catch((err) => {
