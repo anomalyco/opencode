@@ -37,7 +37,7 @@ import type { JSX } from "solid-js"
 import { Code } from "@/components/code"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
+import { Session, type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { Markdown } from "@opencode-ai/ui"
 import { Spinner } from "@/components/spinner"
 
@@ -47,6 +47,7 @@ export default function Page() {
   const sdk = useSDK()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
+    hoverTimer: undefined as number | undefined,
     fileSelectOpen: false,
   })
   let inputRef!: HTMLDivElement
@@ -127,6 +128,31 @@ export default function Page() {
       setStore("clickTimer", undefined)
     }, 300)
     setStore("clickTimer", newClickTimer as unknown as number)
+  }
+  const handleSessionHover = (s: Session | undefined) => {
+    // Clear previous timer and always update state
+    if (store.hoverTimer) {
+      clearTimeout(store.hoverTimer)
+      setStore("hoverTimer", undefined)
+    }
+
+    if (!s) {
+      return
+    }
+
+    // Skip sync if messages already loaded (avoid duplicate API calls)
+    const hasMessages = sync.data.message[s.id]?.length > 0
+    if (hasMessages) {
+      return
+    }
+
+    // Use 500ms delay for more intentional hover (industry standard)
+    const timer = setTimeout(() => {
+      sync.session.sync(s.id)
+      setStore("hoverTimer", undefined)
+    }, 500)
+
+    setStore("hoverTimer", timer as unknown as number)
   }
 
   const handleFileClick = async (file: LocalFile) => {
@@ -382,7 +408,7 @@ export default function Page() {
               key={(x) => x.id}
               current={local.session.active()}
               onSelect={(s) => local.session.setActive(s?.id)}
-              onHover={(s) => (!!s ? sync.session.sync(s?.id) : undefined)}
+              onHover={handleSessionHover}
             >
               {(session) => {
                 const diffs = createMemo(() => session.summary?.diffs ?? [])
