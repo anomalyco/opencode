@@ -530,6 +530,17 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
+                if (keybind.match("input_forward_delete", e) && store.prompt.input !== "") {
+                  const cursorOffset = input.cursorOffset
+                  if (cursorOffset < input.plainText.length) {
+                    const text = input.plainText
+                    const newText = text.slice(0, cursorOffset) + text.slice(cursorOffset + 1)
+                    input.setText(newText)
+                    input.cursorOffset = cursorOffset
+                  }
+                  e.preventDefault()
+                  return
+                }
                 if (keybind.match("app_exit", e)) {
                   await exit()
                   return
