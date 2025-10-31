@@ -53,7 +53,7 @@ export function tui(input: {
     render(
       () => {
         return (
-          <ErrorBoundary fallback={<text>Something went wrong</text>}>
+          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
             <ExitProvider onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
@@ -327,5 +327,54 @@ function App() {
         </box>
       </box>
     </box>
+  )
+}
+
+function ErrorComponent(props: { error: Error; reset: () => void, onExit: () => Promise<void> }) {
+  const term = useTerminalDimensions()
+  useKeyboard((evt) => {
+    if (evt.ctrl && evt.name === "c") {
+      props.onExit()
+    }
+  })
+  const [copied, setCopied] = createSignal(false)
+
+  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+
+  if (props.error.message) {
+    issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
+  }
+
+  if (props.error.stack) {
+    issueURL.searchParams.set("description", "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```")
+  }
+
+  const copyIssueURL = () => {
+    Clipboard.copy(issueURL.toString()).then(() => { setCopied(true) })
+  }
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <box flexDirection="row" gap={1} alignItems="center">
+        <text attributes={TextAttributes.BOLD}>Please report an issue.</text>
+        <box onMouseUp={copyIssueURL} backgroundColor="#565f89" padding={1}>
+          <text attributes={TextAttributes.BOLD}>Copy issue URL (exception info pre-filled)</text>
+        </box>
+        {copied() && <text>Successfully copied</text>}
+      </box>
+      <box flexDirection="row" gap={2} alignItems="center">
+        <text>A fatal error occurred!</text>
+        <box onMouseUp={props.reset} backgroundColor="#565f89" padding={1}>
+          <text>Reset TUI</text>
+        </box>
+        <box onMouseUp={props.onExit} backgroundColor="#565f89" padding={1}>
+          <text>Exit</text>
+        </box>
+      </box>
+      <scrollbox height={Math.floor(term().height * 0.7)}>
+        <text>{props.error.stack}</text>
+      </scrollbox>
+      <text>{props.error.message}</text>
+    </box >
   )
 }
