@@ -583,7 +583,8 @@ export default function Page() {
                             <For each={local.session.userMessages()}>
                               {(message) => {
                                 const isActive = createMemo(() => local.session.activeMessage()?.id === message.id)
-                                const [initialized, setInitialized] = createSignal(!!message.summary?.title)
+                                const [titled, setTitled] = createSignal(!!message.summary?.title)
+                                const [completed, setCompleted] = createSignal(!!message.summary?.body)
                                 const [expanded, setExpanded] = createSignal(false)
                                 const parts = createMemo(() => sync.data.part[message.id])
                                 const title = createMemo(() => message.summary?.title)
@@ -597,11 +598,16 @@ export default function Page() {
                                 const hasToolPart = createMemo(() =>
                                   assistantMessages()
                                     ?.flatMap((m) => sync.data.part[m.id])
-                                    .some((p) => p.type === "tool"),
+                                    .some((p) => p?.type === "tool"),
                                 )
                                 const working = createMemo(() => !summary())
+
+                                // allowing time for the animations to finish
                                 createEffect(() => {
-                                  setTimeout(() => setInitialized(!!title()), 10_000)
+                                  setTimeout(() => setTitled(!!title()), 10_000)
+                                })
+                                createEffect(() => {
+                                  setTimeout(() => setCompleted(!!summary()), 3_000)
                                 })
 
                                 return (
@@ -613,7 +619,7 @@ export default function Page() {
                                       {/* Title */}
                                       <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
                                         <div class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
-                                          <Show when={initialized()} fallback={<Typewriter as="h1" text={title()} />}>
+                                          <Show when={titled()} fallback={<Typewriter as="h1" text={title()} />}>
                                             <h1>{title()}</h1>
                                           </Show>
                                         </div>
@@ -684,10 +690,10 @@ export default function Page() {
                                       {/* Response */}
                                       <div class="w-full">
                                         <Switch>
-                                          <Match when={working()}>
-                                            <MessageProgress assistantMessages={assistantMessages} />
+                                          <Match when={!completed()}>
+                                            <MessageProgress assistantMessages={assistantMessages} done={!working()} />
                                           </Match>
-                                          <Match when={!working() && hasToolPart()}>
+                                          <Match when={completed() && hasToolPart()}>
                                             <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
                                               <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
                                                 <div class="flex items-center gap-1 self-stretch">

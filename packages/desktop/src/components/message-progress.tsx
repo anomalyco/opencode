@@ -1,23 +1,47 @@
-import { For, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, JSXElement, Match, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Part } from "@opencode-ai/ui"
 import { useSync } from "@/context/sync"
-import type { AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
+import type { AssistantMessage as AssistantMessageType, Part as PartType, ToolPart } from "@opencode-ai/sdk"
 
-export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[] }) {
+export function MessageProgress(props: { assistantMessages: () => AssistantMessageType[]; done?: boolean }) {
   const sync = useSync()
-  const items = createMemo(() => props.assistantMessages().flatMap((m) => sync.data.part[m.id]))
+  const parts = createMemo(() => props.assistantMessages().flatMap((m) => sync.data.part[m.id]))
+  const done = createMemo(() => props.done ?? false)
+  const currentTask = createMemo(
+    () =>
+      parts().findLast(
+        (p) =>
+          p &&
+          p.type === "tool" &&
+          p.tool === "task" &&
+          p.state &&
+          "metadata" in p.state &&
+          p.state.metadata &&
+          p.state.metadata.sessionId &&
+          p.state.status === "running",
+      ) as ToolPart,
+  )
 
-  const finishedItems = createMemo(() => [
-    "",
-    "",
-    "Loading...",
-    ...items().filter(
+  const eligibleItems = createMemo(() => {
+    let allParts = parts()
+    const task = currentTask()
+    if (task && task.state && "metadata" in task.state && task.state.metadata?.sessionId) {
+      const messages = sync.data.message[task.state.metadata.sessionId as string]?.filter((m) => m.role === "assistant")
+      allParts = messages?.flatMap((m) => sync.data.part[m.id]) ?? parts()
+    }
+    return allParts.filter(
       (p) =>
         p?.type === "text" ||
         (p?.type === "reasoning" && p.time?.end) ||
         (p?.type === "tool" && p.state.status === "completed"),
-    ),
+    )
+  })
+  const finishedItems = createMemo<(JSXElement | PartType)[]>(() => [
     "",
+    "",
+    <div class="text-text-diff-add-base">Loading...</div>,
+    ...eligibleItems(),
+    ...(done() ? ["", "", ""] : []),
   ])
 
   const MINIMUM_DELAY = 400
@@ -54,26 +78,28 @@ export function MessageProgress(props: { assistantMessages: () => AssistantMessa
       >
         <For each={finishedItems()}>
           {(part) => {
-            if (typeof part === "string") return <div class="h-8 flex items-center w-full">{part}</div>
-            const message = createMemo(() => sync.data.message[part.sessionID].find((m) => m.id === part.messageID))
-            return (
-              <div class="h-8 flex items-center w-full">
-                <Switch>
-                  <Match when={part.type === "text" && part}>
-                    {(p) => (
-                      <div
-                        textContent={p().text}
-                        class="text-12-regular text-text-base whitespace-nowrap truncate w-full"
-                      />
-                    )}
-                  </Match>
-                  <Match when={part.type === "reasoning" && part}>
-                    {(p) => <Part message={message()!} part={p()} />}
-                  </Match>
-                  <Match when={part.type === "tool" && part}>{(p) => <Part message={message()!} part={p()} />}</Match>
-                </Switch>
-              </div>
-            )
+            if (part && typeof part === "object" && "type" in part) {
+              const message = createMemo(() => sync.data.message[part.sessionID].find((m) => m.id === part.messageID))
+              return (
+                <div class="h-8 flex items-center w-full">
+                  <Switch>
+                    <Match when={part.type === "text" && part}>
+                      {(p) => (
+                        <div
+                          textContent={p().text}
+                          class="text-12-regular text-text-base whitespace-nowrap truncate w-full"
+                        />
+                      )}
+                    </Match>
+                    <Match when={part.type === "reasoning" && part}>
+                      {(p) => <Part message={message()!} part={p()} />}
+                    </Match>
+                    <Match when={part.type === "tool" && part}>{(p) => <Part message={message()!} part={p()} />}</Match>
+                  </Switch>
+                </div>
+              )
+            }
+            return <div class="h-8 flex items-center w-full">{part}</div>
           }}
         </For>
       </div>
