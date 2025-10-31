@@ -305,9 +305,14 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 8. Handle exit key debounce for app exit when using non-leader command
+		// 8. Handle immediate exit command both for empty and non-empty editor
 		exitCommand := a.app.Commands[commands.AppExitCommand]
-		if exitCommand.Matches(msg, a.app.IsLeaderSequence) {
+		if exitCommand.Matches(msg, a.app.IsLeaderSequence) && keyString == "ctrl+d" && a.editor.Length() == 0 {
+			return a, util.CmdHandler(commands.ExecuteCommandMsg(exitCommand))
+		}
+
+		// 9. Handle exit key debounce for app exit when using non-leader command
+		if exitCommand.Matches(msg, a.app.IsLeaderSequence) && keyString != "ctrl+d" {
 			switch a.exitKeyState {
 			case ExitKeyIdle:
 				// First exit key press - start debounce timer
@@ -324,22 +329,26 @@ func (a Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// 9. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
+		// 10. Check again for commands that don't require leader (excluding interrupt when busy and exit when in debounce)
 		matches := a.app.Commands.Matches(msg, a.app.IsLeaderSequence)
-		if len(matches) > 0 {
+		if len(matches) > 0 && keyString != "ctrl+d" {
 			// Skip interrupt key if we're in debounce mode and app is busy
 			if interruptCommand.Matches(msg, a.app.IsLeaderSequence) && a.app.IsBusy() && a.interruptKeyState != InterruptKeyIdle {
+				return a, nil
+			}
+			// Skip ctrl+d immediate exit key if the editor has content. Allow editor update commands to handle it as forward delete.
+			if exitCommand.Matches(msg, a.app.IsLeaderSequence) && keyString == "ctrl+d" && a.editor.Length() > 0 {
 				return a, nil
 			}
 			return a, util.CmdHandler(commands.ExecuteCommandsMsg(matches))
 		}
 
-		// Fallback: suspend if ctrl+z is pressed and no user keybind matched
+		// 11. Fallback: suspend if ctrl+z is pressed and no user keybind matched
 		if keyString == "ctrl+z" {
 			return a, tea.Suspend
 		}
 
-		// 10. Fallback to editor. This is for other characters like backspace, tab, etc.
+		// 12. Fallback to editor. This is for other characters like backspace, tab, etc.
 		updatedEditor, cmd := a.editor.Update(msg)
 		a.editor = updatedEditor.(chat.EditorComponent)
 		return a, cmd

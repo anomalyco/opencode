@@ -15,7 +15,7 @@ class KeybindsConfig:
     Attributes:
         leader (Union[Unset, str]): Leader key for keybind combinations Default: 'ctrl+x'.
         app_help (Union[Unset, str]): Show help dialog Default: '<leader>h'.
-        app_exit (Union[Unset, str]): Exit the application Default: 'ctrl+c,<leader>q'.
+        app_exit (Union[Unset, str]): Exit the application Default: 'ctrl+d,ctrl+c,<leader>q'.
         editor_open (Union[Unset, str]): Open external editor Default: '<leader>e'.
         theme_list (Union[Unset, str]): List available themes Default: '<leader>t'.
         project_init (Union[Unset, str]): Create/update AGENTS.md Default: '<leader>i'.
@@ -67,7 +67,7 @@ class KeybindsConfig:
 
     leader: Union[Unset, str] = "ctrl+x"
     app_help: Union[Unset, str] = "<leader>h"
-    app_exit: Union[Unset, str] = "ctrl+c,<leader>q"
+    app_exit: Union[Unset, str] = "ctrl+d,ctrl+c,<leader>q"
     editor_open: Union[Unset, str] = "<leader>e"
     theme_list: Union[Unset, str] = "<leader>t"
     project_init: Union[Unset, str] = "<leader>i"

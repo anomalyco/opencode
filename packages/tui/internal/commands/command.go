@@ -367,7 +367,6 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 			Description: "last message",
 			Keybindings: parseBindings("ctrl+alt+g"),
 		},
-
 		{
 			Name:        MessagesCopyCommand,
 			Description: "copy message",
@@ -388,7 +387,8 @@ func LoadFromConfig(config *opencode.Config, customCommands []opencode.Command) 
 		{
 			Name:        AppExitCommand,
 			Description: "exit the app",
-			Keybindings: parseBindings("ctrl+c", "<leader>q"),
+			// NOTE: ctrl+c requires a double press to exit while ctrl+d requires a single press
+			Keybindings: parseBindings("ctrl+c", "ctrl+d", "<leader>q"),
 			Trigger:     []string{"exit", "quit", "q"},
 		},
 	}

@@ -402,7 +402,7 @@ export namespace Config {
         .default("ctrl+x")
         .describe("Leader key for keybind combinations"),
       app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
-      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
+      app_exit: z.string().optional().default("ctrl+d,ctrl+c,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
