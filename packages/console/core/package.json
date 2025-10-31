@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "0.15.29",
+  "version": "0.15.30",
   "private": true,
   "type": "module",
   "dependencies": {
