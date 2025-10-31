@@ -4,6 +4,7 @@
   overflow: auto;
   scrollbar-width: none;
   color: var(--text-base);
+  text-wrap: pretty;
 
   /* text-14-regular */
   font-family: var(--font-family-sans);
@@ -33,5 +34,11 @@
   ol {
     margin-top: 16px;
     margin-bottom: 16px;
+  }
+
+  hr {
+    margin-top: 8px;
+    margin-bottom: 16px;
+    border-color: var(--border-weaker-base);
   }
 }

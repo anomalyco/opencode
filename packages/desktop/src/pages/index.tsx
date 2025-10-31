@@ -17,6 +17,7 @@ import {
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
+import { MessageProgress } from "@/components/message-progress"
 import { For, onCleanup, onMount, Show, Match, Switch, createSignal, createEffect, createMemo } from "solid-js"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -39,6 +40,7 @@ import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { type AssistantMessage as AssistantMessageType } from "@opencode-ai/sdk"
 import { Markdown } from "@opencode-ai/ui"
+import { Spinner } from "@/components/spinner"
 
 export default function Page() {
   const local = useLocal()
@@ -546,21 +548,31 @@ export default function Page() {
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const diffs = createMemo(() => message.summary?.diffs ?? [])
+                                  const working = createMemo(() => !message.summary?.title)
                                   return (
-                                    <li
-                                      class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
-                                      onClick={() => local.session.setActiveMessage(message.id)}
-                                    >
-                                      <DiffChanges diff={diffs()} variant="bars" />
-                                      <div
-                                        data-active={local.session.activeMessage()?.id === message.id}
-                                        classList={{
-                                          "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
-                                          "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
-                                        }}
+                                    <li class="group/li flex items-center self-stretch">
+                                      <button
+                                        class="flex items-center self-stretch w-full gap-x-2 py-1 cursor-default"
+                                        onClick={() => local.session.setActiveMessage(message.id)}
                                       >
-                                        {message.summary?.title ?? local.session.getMessageText(message)}
-                                      </div>
+                                        <Switch>
+                                          <Match when={working()}>
+                                            <Spinner class="text-text-base shrink-0 w-[18px] aspect-square" />
+                                          </Match>
+                                          <Match when={true}>
+                                            <DiffChanges diff={diffs()} variant="bars" />
+                                          </Match>
+                                        </Switch>
+                                        <div
+                                          data-active={local.session.activeMessage()?.id === message.id}
+                                          classList={{
+                                            "text-14-regular text-text-weak whitespace-nowrap truncate min-w-0": true,
+                                            "text-text-weak data-[active=true]:text-text-strong group-hover/li:text-text-base": true,
+                                          }}
+                                        >
+                                          {message.summary?.title ?? local.session.getMessageText(message)}
+                                        </div>
+                                      </button>
                                     </li>
                                   )
                                 }}
@@ -576,11 +588,17 @@ export default function Page() {
                                 const parts = createMemo(() => sync.data.part[message.id])
                                 const title = createMemo(() => message.summary?.title)
                                 const summary = createMemo(() => message.summary?.body)
+                                const diffs = createMemo(() => message.summary?.diffs ?? [])
                                 const assistantMessages = createMemo(() => {
                                   return sync.data.message[activeSession().id]?.filter(
                                     (m) => m.role === "assistant" && m.parentID == message.id,
                                   ) as AssistantMessageType[]
                                 })
+                                const hasToolPart = createMemo(() =>
+                                  assistantMessages()
+                                    ?.flatMap((m) => sync.data.part[m.id])
+                                    .some((p) => p.type === "tool"),
+                                )
                                 const working = createMemo(() => !summary())
                                 createEffect(() => {
                                   setTimeout(() => setInitialized(!!title()), 10_000)
@@ -600,22 +618,23 @@ export default function Page() {
                                           </Show>
                                         </div>
                                       </div>
-                                      <Show when={title}>
-                                        <div class="-mt-8">
-                                          <Message message={message} parts={parts()} />
-                                        </div>
-                                      </Show>
+                                      <div class="-mt-8">
+                                        <Message message={message} parts={parts()} />
+                                      </div>
                                       {/* Summary */}
                                       <Show when={!working()}>
                                         <div class="w-full flex flex-col gap-6 items-start self-stretch">
                                           <div class="flex flex-col items-start gap-1 self-stretch">
-                                            <h2 class="text-12-medium text-text-weak">Summary</h2>
-                                            <Show when={summary()}>
-                                              <Markdown text={summary()!} />
-                                            </Show>
+                                            <h2 class="text-12-medium text-text-weak">
+                                              <Switch>
+                                                <Match when={diffs().length}>Summary</Match>
+                                                <Match when={true}>Response</Match>
+                                              </Switch>
+                                            </h2>
+                                            <Show when={summary()}>{(summary) => <Markdown text={summary()} />}</Show>
                                           </div>
                                           <Accordion class="w-full" multiple>
-                                            <For each={message.summary?.diffs || []}>
+                                            <For each={diffs()}>
                                               {(diff) => (
                                                 <Accordion.Item value={diff.file}>
                                                   <Accordion.Header>
@@ -666,87 +685,9 @@ export default function Page() {
                                       <div class="w-full">
                                         <Switch>
                                           <Match when={working()}>
-                                            {(_) => {
-                                              const items = createMemo(() =>
-                                                assistantMessages().flatMap((m) => sync.data.part[m.id]),
-                                              )
-                                              const finishedItems = createMemo(() =>
-                                                items().filter(
-                                                  (p) =>
-                                                    (p?.type === "text" && p.time?.end) ||
-                                                    (p?.type === "reasoning" && p.time?.end) ||
-                                                    (p?.type === "tool" && p.state.status === "completed"),
-                                                ),
-                                              )
-
-                                              const MINIMUM_DELAY = 800
-                                              const [visibleCount, setVisibleCount] = createSignal(1)
-
-                                              createEffect(() => {
-                                                const total = finishedItems().length
-                                                if (total > visibleCount()) {
-                                                  const timer = setTimeout(() => {
-                                                    setVisibleCount((prev) => prev + 1)
-                                                  }, MINIMUM_DELAY)
-                                                  onCleanup(() => clearTimeout(timer))
-                                                } else if (total < visibleCount()) {
-                                                  setVisibleCount(total)
-                                                }
-                                              })
-
-                                              const translateY = createMemo(() => {
-                                                const total = visibleCount()
-                                                if (total < 2) return "0px"
-                                                return `-${(total - 2) * 48 - 8}px`
-                                              })
-
-                                              return (
-                                                <div class="flex flex-col gap-3">
-                                                  <div
-                                                    class="h-36 overflow-hidden pointer-events-none 
-                                                           mask-alpha mask-y-from-66% mask-y-from-background-base mask-y-to-transparent"
-                                                  >
-                                                    <div
-                                                      class="w-full flex flex-col items-start self-stretch gap-2 py-10
-                                                             transform transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                                                      style={{ transform: `translateY(${translateY()})` }}
-                                                    >
-                                                      <For each={finishedItems()}>
-                                                        {(part) => {
-                                                          const message = createMemo(() =>
-                                                            sync.data.message[part.sessionID].find(
-                                                              (m) => m.id === part.messageID,
-                                                            ),
-                                                          )
-                                                          return (
-                                                            <div class="h-10 flex items-center w-full">
-                                                              <Switch>
-                                                                <Match when={part.type === "text" && part}>
-                                                                  {(p) => (
-                                                                    <div
-                                                                      textContent={p().text}
-                                                                      class="text-12-regular text-text-base whitespace-nowrap truncate w-full"
-                                                                    />
-                                                                  )}
-                                                                </Match>
-                                                                <Match when={part.type === "reasoning" && part}>
-                                                                  {(p) => <Part message={message()!} part={p()} />}
-                                                                </Match>
-                                                                <Match when={part.type === "tool" && part}>
-                                                                  {(p) => <Part message={message()!} part={p()} />}
-                                                                </Match>
-                                                              </Switch>
-                                                            </div>
-                                                          )
-                                                        }}
-                                                      </For>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              )
-                                            }}
+                                            <MessageProgress assistantMessages={assistantMessages} />
                                           </Match>
-                                          <Match when={!working()}>
+                                          <Match when={!working() && hasToolPart()}>
                                             <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
                                               <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
                                                 <div class="flex items-center gap-1 self-stretch">

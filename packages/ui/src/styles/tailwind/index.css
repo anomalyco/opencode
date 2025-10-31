@@ -64,6 +64,8 @@
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);
   --shadow-xs-border-selected: var(--shadow-xs-border-selected);
+
+  --animate-pulse: var(--animate-pulse);
 }
 
 @import "./colors.css";
