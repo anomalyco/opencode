@@ -107,6 +107,10 @@ export type KeybindsConfig = {
    */
   messages_redo?: string
   /**
+   * Toggle code block concealment in messages
+   */
+  messages_toggle_conceal?: string
+  /**
    * List available models
    */
   model_list?: string
