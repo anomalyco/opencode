@@ -9,7 +9,6 @@ import {
   Accordion,
   Diff,
   Collapsible,
-  Part,
   DiffChanges,
   ProgressCircle,
   Message,
@@ -724,7 +723,12 @@ export default function Page() {
                                               </Switch>
                                             </h2>
                                             <Show when={summary()}>
-                                              {(summary) => <Markdown class="[&>*]:fade-up-text" text={summary()} />}
+                                              {(summary) => (
+                                                <Markdown
+                                                  classList={{ "[&>*]:fade-up-text": !diffs().length }}
+                                                  text={summary()}
+                                                />
+                                              )}
                                             </Show>
                                           </div>
                                           <Accordion class="w-full" multiple>
