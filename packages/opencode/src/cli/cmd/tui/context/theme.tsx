@@ -642,10 +642,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           return values()[prop]
         },
       }),
-      get selectedTheme() {
+      get selected() {
         return kv.data.theme
       },
-      setSelectedTheme(theme: string) {
+      set(theme: string) {
+        if (!THEMES[theme]) return
         setTheme(theme)
         kv.set("theme", theme)
       },
