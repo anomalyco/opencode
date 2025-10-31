@@ -706,67 +706,71 @@ export namespace LSPServer {
         return
       }
       const platform = process.platform
-      const prefixMap: Record<string, string> = {
+      const tokens: Record<string, string> = {
         darwin: "mac",
         linux: "linux",
         win32: "windows",
       }
-      const prefixToken = prefixMap[platform]
-      if (!prefixToken) {
+      const token = tokens[platform]
+      if (!token) {
         log.error(`Platform ${platform} is not supported by clangd auto-download`)
         return
       }
 
-      const releaseAssets: { name?: string; browser_download_url?: string }[] = release.assets ?? []
-
-      const relevant = releaseAssets.filter((item) => {
+      const assets = release.assets ?? []
+      const valid = (item: { name?: string; browser_download_url?: string }) => {
         if (!item.name) return false
         if (!item.browser_download_url) return false
-        if (!item.name.includes(prefixToken)) return false
+        if (!item.name.includes(token)) return false
         return item.name.includes(tag)
-      })
+      }
 
-      const preferred = relevant.find((item) => item.name?.endsWith(".zip")) ?? relevant.find((item) => item.name?.endsWith(".tar.xz")) ?? relevant[0]
-      if (!preferred || !preferred.browser_download_url || !preferred.name) {
+      const asset =
+        assets.find((item) => valid(item) && item.name?.endsWith(".zip")) ??
+        assets.find((item) => valid(item) && item.name?.endsWith(".tar.xz")) ??
+        assets.find((item) => valid(item))
+      if (!asset?.name || !asset.browser_download_url) {
         log.error("clangd could not match release asset", { tag, platform })
         return
       }
 
-      const assetName = preferred.name
-      const downloadResponse = await fetch(preferred.browser_download_url)
+      const name = asset.name
+      const downloadResponse = await fetch(asset.browser_download_url)
       if (!downloadResponse.ok) {
         log.error("Failed to download clangd")
         return
       }
 
-      const archivePath = path.join(Global.Path.bin, assetName)
+      const archive = path.join(Global.Path.bin, name)
       const buf = await downloadResponse.arrayBuffer()
-      await Bun.write(archivePath, buf)
-      const stats = await fs.stat(archivePath).catch(() => undefined)
-      if (!stats || stats.size === 0) {
+      if (buf.byteLength === 0) {
         log.error("Failed to write clangd archive")
         return
       }
+      await Bun.write(archive, buf)
 
-      const isZip = assetName.endsWith(".zip")
-      const isTar = assetName.endsWith(".tar.xz")
-      if (!isZip && !isTar) {
-        log.error("clangd encountered unsupported asset", { asset: assetName })
+      const zip = name.endsWith(".zip")
+      const tar = name.endsWith(".tar.xz")
+      if (!zip && !tar) {
+        log.error("clangd encountered unsupported asset", { asset: name })
         return
       }
 
-      if (isZip) {
-        await $`unzip -o -q ${archivePath}`.quiet().cwd(Global.Path.bin).nothrow()
+      if (zip) {
+        await $`unzip -o -q ${archive}`.quiet().cwd(Global.Path.bin).nothrow()
       }
-      if (isTar) {
-        await $`tar -xf ${archivePath}`.cwd(Global.Path.bin).nothrow()
+      if (tar) {
+        await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
       }
-      await fs.rm(archivePath, { force: true })
+      await fs.rm(archive, { force: true })
 
-      const extractedDir = path.join(Global.Path.bin, "clangd_" + tag)
-      const bin = path.join(extractedDir, "bin", "clangd" + ext)
-      const binExists = await Bun.file(bin).exists()
-      if (!binExists) {
+      const bin = path.join(
+        Global.Path.bin,
+        "clangd_" + tag,
+        "bin",
+        "clangd" + ext,
+      )
+      if (!(await Bun.file(bin).exists())) {
         log.error("Failed to extract clangd binary")
         return
       }
@@ -775,9 +779,8 @@ export namespace LSPServer {
         await $`chmod +x ${bin}`.nothrow()
       }
 
-      const symlinkPath = path.join(Global.Path.bin, "clangd")
-      await fs.unlink(symlinkPath).catch(() => {})
-      await fs.symlink(bin, symlinkPath).catch(() => {})
+      await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
+      await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
 
       log.info(`installed clangd`, { bin })
 
