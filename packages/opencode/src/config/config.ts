@@ -86,7 +86,7 @@ export namespace Config {
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
-    await Promise.all(promises)
+    await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
