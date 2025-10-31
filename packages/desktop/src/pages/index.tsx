@@ -588,11 +588,17 @@ export default function Page() {
                                 const parts = createMemo(() => sync.data.part[message.id])
                                 const title = createMemo(() => message.summary?.title)
                                 const summary = createMemo(() => message.summary?.body)
+                                const diffs = createMemo(() => message.summary?.diffs ?? [])
                                 const assistantMessages = createMemo(() => {
                                   return sync.data.message[activeSession().id]?.filter(
                                     (m) => m.role === "assistant" && m.parentID == message.id,
                                   ) as AssistantMessageType[]
                                 })
+                                const hasToolPart = createMemo(() =>
+                                  assistantMessages()
+                                    ?.flatMap((m) => sync.data.part[m.id])
+                                    .some((p) => p.type === "tool"),
+                                )
                                 const working = createMemo(() => !summary())
                                 createEffect(() => {
                                   setTimeout(() => setInitialized(!!title()), 10_000)
@@ -619,11 +625,16 @@ export default function Page() {
                                       <Show when={!working()}>
                                         <div class="w-full flex flex-col gap-6 items-start self-stretch">
                                           <div class="flex flex-col items-start gap-1 self-stretch">
-                                            <h2 class="text-12-medium text-text-weak">Summary</h2>
+                                            <h2 class="text-12-medium text-text-weak">
+                                              <Switch>
+                                                <Match when={diffs().length}>Summary</Match>
+                                                <Match when={true}>Response</Match>
+                                              </Switch>
+                                            </h2>
                                             <Show when={summary()}>{(summary) => <Markdown text={summary()} />}</Show>
                                           </div>
                                           <Accordion class="w-full" multiple>
-                                            <For each={message.summary?.diffs || []}>
+                                            <For each={diffs()}>
                                               {(diff) => (
                                                 <Accordion.Item value={diff.file}>
                                                   <Accordion.Header>
@@ -676,7 +687,7 @@ export default function Page() {
                                           <Match when={working()}>
                                             <MessageProgress assistantMessages={assistantMessages} />
                                           </Match>
-                                          <Match when={!working()}>
+                                          <Match when={!working() && hasToolPart()}>
                                             <Collapsible variant="ghost" open={expanded()} onOpenChange={setExpanded}>
                                               <Collapsible.Trigger class="text-text-weak hover:text-text-strong">
                                                 <div class="flex items-center gap-1 self-stretch">
