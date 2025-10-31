@@ -334,8 +334,8 @@ export function Autocomplete(props: {
           if (e.name === "up") move(-1)
           if (e.name === "down") move(1)
           if (e.name === "escape") hide()
-          if (e.name === "return") select()
-          if (["up", "down", "return", "escape"].includes(e.name)) e.preventDefault()
+          if (e.name === "return" || e.name === "tab") select()
+          if (["up", "down", "return", "tab", "escape"].includes(e.name)) e.preventDefault()
         }
         if (!store.visible) {
           if (e.name === "@") {
@@ -391,11 +391,14 @@ export function Autocomplete(props: {
               backgroundColor={index() === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? theme.background : theme.text}>
+              <text fg={index() === store.selected ? theme.background : theme.text} flexShrink={0}>
                 {option.display}
               </text>
               <Show when={option.description}>
-                <text fg={index() === store.selected ? theme.background : theme.textMuted}>
+                <text
+                  fg={index() === store.selected ? theme.background : theme.textMuted}
+                  wrapMode="none"
+                >
                   {option.description}
                 </text>
               </Show>
