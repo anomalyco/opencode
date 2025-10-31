@@ -222,6 +222,11 @@ export function Autocomplete(props: {
           description: "unshare a session",
           onSelect: () => command.trigger("session.unshare"),
         },
+        {
+          display: "/rename",
+          description: "rename session",
+          onSelect: () => command.trigger("session.rename"),
+        },
       )
     }
     results.push(

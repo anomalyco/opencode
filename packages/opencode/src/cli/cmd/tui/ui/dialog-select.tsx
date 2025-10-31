@@ -138,7 +138,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     for (const item of props.keybind ?? []) {
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
-        if (s) item.onTrigger(s)
+        if (s) {
+          evt.preventDefault()
+          item.onTrigger(s)
+        }
       }
     }
   })
