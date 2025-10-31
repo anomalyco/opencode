@@ -83,8 +83,8 @@ export const RunCommand = cmd({
         describe: "title for the session (uses truncated prompt if no value provided)",
       })
       .option("timeout", {
-        type: "number",
-        describe: "timeout in milliseconds for each AI request (default: 300000 ms, 5 mins)",
+        type: "string",
+        describe: "timeout for each AI request (e.g., '60s', '2m', '1h', '500ms', default: '5m')",
       })
   },
   handler: async (args) => {

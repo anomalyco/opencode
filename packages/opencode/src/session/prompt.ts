@@ -51,6 +51,7 @@ import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { Config } from "@/config/config"
+import { parseTimeout } from "@/util/timeout"
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -98,7 +99,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    timeout: z.number().int().positive().optional(),
+    timeout: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -165,7 +166,7 @@ export namespace SessionPrompt {
     let runtimeOptions: Record<string, unknown> | undefined = undefined
     if (input.timeout) {
       runtimeOptions ??= {}
-      runtimeOptions.timeout = input.timeout
+      runtimeOptions.timeout = parseTimeout(input.timeout)
     }
 
     const agent = await Agent.get(input.agent ?? "build")
@@ -1489,7 +1490,7 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
-    timeout: z.number().int().positive().optional(),
+    timeout: z.string().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
