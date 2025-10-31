@@ -98,6 +98,7 @@ export namespace LSP {
         broken: new Set<string>(),
         servers,
         clients,
+        spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
       }
     },
     async (state) => {
@@ -124,35 +125,53 @@ export namespace LSP {
         result.push(match)
         continue
       }
-      const handle = await server
-        .spawn(root)
-        .then((h) => {
-          if (h === undefined) {
-            s.broken.add(root + server.id)
-          }
-          return h
-        })
-        .catch((err) => {
-          s.broken.add(root + server.id)
-          log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
-          return undefined
-        })
-      if (!handle) continue
-      log.info("spawned lsp server", { serverID: server.id })
 
-      const client = await LSPClient.create({
-        serverID: server.id,
-        server: handle,
-        root,
-      }).catch((err) => {
-        s.broken.add(root + server.id)
-        handle.process.kill()
-        log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
-        return undefined
-      })
-      if (!client) continue
-      s.clients.push(client)
-      result.push(client)
+      const spawnKey = root + server.id
+      let spawnPromise = s.spawning.get(spawnKey)
+
+      if (!spawnPromise) {
+        spawnPromise = (async () => {
+          const handle = await server
+            .spawn(root)
+            .then((h) => {
+              if (h === undefined) {
+                s.broken.add(root + server.id)
+              }
+              return h
+            })
+            .catch((err) => {
+              s.broken.add(root + server.id)
+              log.error(`Failed to spawn LSP server ${server.id}`, { error: err })
+              return undefined
+            })
+          if (!handle) return undefined
+          log.info("spawned lsp server", { serverID: server.id })
+
+          const client = await LSPClient.create({
+            serverID: server.id,
+            server: handle,
+            root,
+          }).catch((err) => {
+            s.broken.add(root + server.id)
+            handle.process.kill()
+            log.error(`Failed to initialize LSP client ${server.id}`, { error: err })
+            return undefined
+          })
+          if (!client) return undefined
+          s.clients.push(client)
+          return client
+        })()
+
+        s.spawning.set(spawnKey, spawnPromise)
+        spawnPromise.finally(() => {
+          s.spawning.delete(spawnKey)
+        })
+      }
+
+      const client = await spawnPromise
+      if (client) {
+        result.push(client)
+      }
     }
     return result
   }
