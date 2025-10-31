@@ -76,7 +76,7 @@ export namespace Clipboard {
           const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited
+          await proc.exited.catch(() => {})
         }
       }
       if (Bun.which("xclip")) {
@@ -89,7 +89,7 @@ export namespace Clipboard {
           })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited
+          await proc.exited.catch(() => {})
         }
       }
       if (Bun.which("xsel")) {
@@ -102,7 +102,7 @@ export namespace Clipboard {
           })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited
+          await proc.exited.catch(() => {})
         }
       }
     }
