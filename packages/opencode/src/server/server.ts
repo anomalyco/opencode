@@ -316,7 +316,6 @@ export namespace Server {
         }),
         async (c) => {
           const sessions = await Array.fromAsync(Session.list())
-          sessions.sort((a, b) => b.time.updated - a.time.updated)
           return c.json(sessions)
         },
       )

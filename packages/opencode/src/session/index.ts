@@ -17,6 +17,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Snapshot } from "@/snapshot"
 import { Command } from "../command"
+import { LIST_CONFIG, readSessionBatch } from "./session-loader"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -294,10 +295,30 @@ export namespace Session {
     return result
   })
 
+  /**
+   * Lists all sessions for the current project, yielding them sorted by update time.
+   * Uses batching and optimized file reading for performance with large session lists.
+   */
   export async function* list() {
     const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+    // Get all session storage items
+    const items = await Storage.list(["session", project.id])
+
+    // Read sessions in batches to control concurrency
+    const sessions: Info[] = []
+
+    for (let i = 0; i < items.length; i += LIST_CONFIG.BATCH_SIZE) {
+      const batch = items.slice(i, i + LIST_CONFIG.BATCH_SIZE)
+      const batchResults = await readSessionBatch(batch, project.id)
+      sessions.push(...batchResults)
+    }
+
+    // Sort by time.updated descending (most recent first)
+    sessions.sort((a, b) => b.time.updated - a.time.updated)
+
+    // Yield sorted sessions
+    for (const session of sessions) {
+      yield session
     }
   }
 

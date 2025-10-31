@@ -131,8 +131,8 @@ export namespace Snapshot {
   export const FileDiff = z
     .object({
       file: z.string(),
-      before: z.string(),
-      after: z.string(),
+      before: z.string().optional(),
+      after: z.string().optional(),
       additions: z.number(),
       deletions: z.number(),
     })
