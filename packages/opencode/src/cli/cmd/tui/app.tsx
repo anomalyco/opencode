@@ -53,7 +53,11 @@ export function tui(input: {
     render(
       () => {
         return (
-          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
+          <ErrorBoundary
+            fallback={(error, reset) => (
+              <ErrorComponent error={error} reset={reset} onExit={onExit} />
+            )}
+          >
             <ExitProvider onExit={onExit}>
               <KVProvider>
                 <ToastProvider>
@@ -319,7 +323,7 @@ function App() {
           <text
             bg={local.agent.color(local.agent.current().name)}
             fg={theme.background}
-            wrapMode="none"
+            wrapMode={undefined}
           >
             <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
@@ -330,7 +334,7 @@ function App() {
   )
 }
 
-function ErrorComponent(props: { error: Error; reset: () => void, onExit: () => Promise<void> }) {
+function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => Promise<void> }) {
   const term = useTerminalDimensions()
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
@@ -346,11 +350,16 @@ function ErrorComponent(props: { error: Error; reset: () => void, onExit: () => 
   }
 
   if (props.error.stack) {
-    issueURL.searchParams.set("description", "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```")
+    issueURL.searchParams.set(
+      "description",
+      "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```",
+    )
   }
 
   const copyIssueURL = () => {
-    Clipboard.copy(issueURL.toString()).then(() => { setCopied(true) })
+    Clipboard.copy(issueURL.toString()).then(() => {
+      setCopied(true)
+    })
   }
 
   return (
@@ -375,6 +384,6 @@ function ErrorComponent(props: { error: Error; reset: () => void, onExit: () => 
         <text>{props.error.stack}</text>
       </scrollbox>
       <text>{props.error.message}</text>
-    </box >
+    </box>
   )
 }
