@@ -76,13 +76,22 @@ export namespace SessionPrompt {
           callback: (input: MessageV2.WithParts) => void
         }[]
       >()
+      const pending = new Set<Promise<void>>()
+
+      const track = (promise: Promise<void>) => {
+        pending.add(promise)
+        promise.finally(() => pending.delete(promise))
+      }
 
       return {
         queued,
+        pending,
+        track,
       }
     },
     async (current) => {
       current.queued.clear()
+      await Promise.allSettled([...current.pending])
     },
   )
 
@@ -227,13 +236,15 @@ export namespace SessionPrompt {
       step++
       await processor.next(msgs.findLast((m) => m.info.role === "user")?.info.id!)
       if (step === 1) {
-        ensureTitle({
-          session,
-          history: msgs,
-          message: userMsg,
-          providerID: model.providerID,
-          modelID: model.info.id,
-        })
+        state().track(
+          ensureTitle({
+            session,
+            history: msgs,
+            message: userMsg,
+            providerID: model.providerID,
+            modelID: model.info.id,
+          }),
+        )
         SessionSummary.summarize({
           sessionID: input.sessionID,
           messageID: userMsg.info.id,
@@ -1794,7 +1805,7 @@ export namespace SessionPrompt {
         thinkingBudget: 0,
       }
     }
-    generateText({
+    await generateText({
       maxOutputTokens: small.info.reasoning ? 1500 : 20,
       providerOptions: ProviderTransform.providerOptions(small.npm, small.providerID, options),
       messages: [
