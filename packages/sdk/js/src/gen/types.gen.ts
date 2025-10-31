@@ -426,7 +426,7 @@ export type Config = {
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
           experimental?: boolean
-          status?: "alpha" | "beta"
+          status?: "alpha" | "beta" | "deprecated"
           options?: {
             [key: string]: unknown
           }
@@ -990,7 +990,7 @@ export type Model = {
     output: Array<"text" | "audio" | "image" | "video" | "pdf">
   }
   experimental?: boolean
-  status?: "alpha" | "beta"
+  status?: "alpha" | "beta" | "deprecated"
   options: {
     [key: string]: unknown
   }
