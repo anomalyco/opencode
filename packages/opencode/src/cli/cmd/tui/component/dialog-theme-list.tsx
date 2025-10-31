@@ -4,23 +4,23 @@ import { useDialog } from "../ui/dialog"
 import { onCleanup, onMount } from "solid-js"
 
 export function DialogThemeList() {
-  const { selectedTheme, setSelectedTheme } = useTheme()
+  const theme = useTheme()
   const options = Object.keys(THEMES).map((value) => ({
     title: value,
     value: value as keyof typeof THEMES,
   }))
-  const initial = selectedTheme()
   const dialog = useDialog()
   let confirmed = false
   let ref: DialogSelectRef<keyof typeof THEMES>
+  const initial = theme.selectedTheme
 
   onMount(() => {
     // highlight the first theme in the list when we open it for UX
-    setSelectedTheme(Object.keys(THEMES)[0] as keyof typeof THEMES)
+    theme.setSelectedTheme(Object.keys(THEMES)[0] as keyof typeof THEMES)
   })
   onCleanup(() => {
     // if we close the dialog without confirming, reset back to the initial theme
-    if (!confirmed) setSelectedTheme(initial)
+    if (!confirmed) theme.setSelectedTheme(initial)
   })
 
   return (
@@ -28,10 +28,10 @@ export function DialogThemeList() {
       title="Themes"
       options={options}
       onMove={(opt) => {
-        setSelectedTheme(opt.value)
+        theme.setSelectedTheme(opt.value)
       }}
       onSelect={(opt) => {
-        setSelectedTheme(opt.value)
+        theme.setSelectedTheme(opt.value)
         confirmed = true
         dialog.clear()
       }}
@@ -40,12 +40,12 @@ export function DialogThemeList() {
       }}
       onFilter={(query) => {
         if (query.length === 0) {
-          setSelectedTheme(initial)
+          theme.setSelectedTheme(initial)
           return
         }
 
         const first = ref.filtered[0]
-        if (first) setSelectedTheme(first.value)
+        if (first) theme.setSelectedTheme(first.value)
       }}
     />
   )

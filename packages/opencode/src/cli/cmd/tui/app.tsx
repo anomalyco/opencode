@@ -27,6 +27,7 @@ import { ExitProvider } from "./context/exit"
 import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
+import { KVProvider, useKV } from "./context/kv"
 
 export function tui(input: {
   url: string
@@ -54,27 +55,29 @@ export function tui(input: {
         return (
           <ErrorBoundary fallback={<text>Something went wrong</text>}>
             <ExitProvider onExit={onExit}>
-              <ToastProvider>
-                <RouteProvider data={routeData}>
-                  <SDKProvider url={input.url}>
-                    <SyncProvider>
-                      <ThemeProvider>
-                        <LocalProvider initialModel={input.model} initialAgent={input.agent}>
-                          <KeybindProvider>
-                            <DialogProvider>
-                              <CommandProvider>
-                                <PromptHistoryProvider>
-                                  <App />
-                                </PromptHistoryProvider>
-                              </CommandProvider>
-                            </DialogProvider>
-                          </KeybindProvider>
-                        </LocalProvider>
-                      </ThemeProvider>
-                    </SyncProvider>
-                  </SDKProvider>
-                </RouteProvider>
-              </ToastProvider>
+              <KVProvider>
+                <ToastProvider>
+                  <RouteProvider data={routeData}>
+                    <SDKProvider url={input.url}>
+                      <SyncProvider>
+                        <ThemeProvider>
+                          <LocalProvider initialModel={input.model} initialAgent={input.agent}>
+                            <KeybindProvider>
+                              <DialogProvider>
+                                <CommandProvider>
+                                  <PromptHistoryProvider>
+                                    <App />
+                                  </PromptHistoryProvider>
+                                </CommandProvider>
+                              </DialogProvider>
+                            </KeybindProvider>
+                          </LocalProvider>
+                        </ThemeProvider>
+                      </SyncProvider>
+                    </SDKProvider>
+                  </RouteProvider>
+                </ToastProvider>
+              </KVProvider>
             </ExitProvider>
           </ErrorBoundary>
         )
@@ -95,6 +98,7 @@ function App() {
   renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
+  const kv = useKV()
   const command = useCommandDialog()
   const { event } = useSDK()
   const sync = useSync()
@@ -222,13 +226,13 @@ function App() {
 
   createEffect(() => {
     const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !local.kv.data.openrouter_warning) {
+    if (providerID === "openrouter" && !kv.data.openrouter_warning) {
       untrack(() => {
         DialogAlert.show(
           dialog,
           "Warning",
           "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => local.kv.set("openrouter_warning", true))
+        ).then(() => kv.set("openrouter_warning", true))
       })
     }
   })

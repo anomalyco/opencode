@@ -1,5 +1,5 @@
 import { SyntaxStyle, RGBA } from "@opentui/core"
-import { createMemo, createSignal, createEffect } from "solid-js"
+import { createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
@@ -24,8 +24,7 @@ import synthwave84 from "../../../../../../tui/internal/theme/themes/synthwave84
 import tokyonight from "../../../../../../tui/internal/theme/themes/tokyonight.json" with { type: "json" }
 import vesper from "../../../../../../tui/internal/theme/themes/vesper.json" with { type: "json" }
 import zenburn from "../../../../../../tui/internal/theme/themes/zenburn.json" with { type: "json" }
-import { iife } from "@/util/iife"
-import { createStore, reconcile } from "solid-js/store"
+import { useKV } from "./kv"
 
 type Theme = {
   primary: RGBA
@@ -628,28 +627,28 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: () => {
     const sync = useSync()
-    const [selectedTheme, setSelectedTheme] = createSignal<keyof typeof THEMES>("opencode")
-    const [theme, setTheme] = createStore({} as Theme)
-    createEffect(() => {
-      if (!sync.ready) return
-      setSelectedTheme(
-        iife(() => {
-          if (typeof sync.data.config.theme === "string" && sync.data.config.theme in THEMES) {
-            return sync.data.config.theme as keyof typeof THEMES
-          }
-          return "opencode"
-        }),
-      )
-    })
+    const kv = useKV()
 
-    createEffect(() => {
-      setTheme(reconcile(THEMES[selectedTheme()]))
+    const theme = createMemo(() => {
+      console.log(kv.data.theme)
+      return { ...(THEMES[kv.data.theme as keyof typeof THEMES] ?? THEMES.opencode) }
     })
 
     return {
-      theme,
-      selectedTheme,
-      setSelectedTheme,
+      get theme() {
+        return new Proxy(theme(), {
+          get(_target, prop) {
+            // @ts-expect-error
+            return theme()[prop]
+          },
+        })
+      },
+      get selectedTheme() {
+        return kv.data.theme
+      },
+      setSelectedTheme(theme: string) {
+        kv.set("theme", theme)
+      },
       get ready() {
         return sync.ready
       },

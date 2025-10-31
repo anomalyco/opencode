@@ -15,17 +15,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const toast = useToast()
 
-    function isModelValid(model: { providerID: string, modelID: string }) {
+    function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
     }
 
-    function getFirstValidModel(...modelFns: (() => { providerID: string, modelID: string } | undefined)[]) {
+    function getFirstValidModel(
+      ...modelFns: (() => { providerID: string; modelID: string } | undefined)[]
+    ) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
-        if (isModelValid(model))
-          return model
+        if (isModelValid(model)) return model
       }
     }
 
@@ -141,7 +142,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x) => {
           setModelStore("recent", x.recent)
         })
-        .catch(() => { })
+        .catch(() => {})
         .finally(() => {
           setModelStore("ready", true)
         })
@@ -227,49 +228,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
-    const kv = iife(() => {
-      const [ready, setReady] = createSignal(false)
-      const [kvStore, setKvStore] = createStore({
-        openrouter_warning: false,
-      })
-      const file = Bun.file(path.join(Global.Path.state, "kv.json"))
-
-      file
-        .json()
-        .then((x) => {
-          setKvStore(x)
-        })
-        .catch(() => { })
-        .finally(() => {
-          setReady(true)
-        })
-
-      return {
-        get data() {
-          return kvStore
-        },
-        get ready() {
-          return ready()
-        },
-        set(key: string, value: any) {
-          setKvStore(key as any, value)
-          Bun.write(
-            file,
-            JSON.stringify({
-              [key]: value,
-            }),
-          )
-        },
-      }
-    })
-
     const result = {
       model,
       agent,
-      kv,
-      get ready() {
-        return kv.ready && model.ready
-      },
     }
     return result
   },
