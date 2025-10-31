@@ -365,6 +365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               current={local.agent.current().name}
               onSelect={local.agent.set}
               class="capitalize"
+              variant="ghost"
             />
             <SelectDialog
               title="Select model"
