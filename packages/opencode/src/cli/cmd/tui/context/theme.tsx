@@ -630,8 +630,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const kv = useKV()
 
     const theme = createMemo(() => {
-      console.log(kv.data.theme)
-      return { ...(THEMES[kv.data.theme as keyof typeof THEMES] ?? THEMES.opencode) }
+      return THEMES[kv.data.theme as keyof typeof THEMES] ?? THEMES.opencode
     })
 
     return {
