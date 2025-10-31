@@ -124,7 +124,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
     const sanitizePart = (part: Part) => {
       if (part.type === "tool") {
-        if (part.state.status === "completed") {
+        if (part.state.status === "completed" || part.state.status === "error") {
           for (const key in part.state.metadata) {
             if (typeof part.state.metadata[key] === "string") {
               part.state.metadata[key] = sanitize(part.state.metadata[key] as string)
@@ -134,6 +134,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             if (typeof part.state.input[key] === "string") {
               part.state.input[key] = sanitize(part.state.input[key] as string)
             }
+          }
+          if ("error" in part.state) {
+            part.state.error = sanitize(part.state.error as string)
           }
         }
       }

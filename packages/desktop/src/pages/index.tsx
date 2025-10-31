@@ -53,10 +53,11 @@ export default function Page() {
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
   createEffect(() => {
-    if (!local.session.activeMessage()) return
-    if (!messageScrollElement) return
-    const element = messageScrollElement.querySelector(`[data-message="${local.session.activeMessage()?.id}"]`)
-    element?.scrollIntoView({ block: "start", behavior: "instant" })
+    // Set first message as active if none selected
+    const userMessages = local.session.userMessages()
+    if (userMessages.length > 0 && !local.session.activeMessage()) {
+      local.session.setActiveMessage(userMessages[0].id)
+    }
   })
 
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
@@ -567,28 +568,29 @@ export default function Page() {
                             </ul>
                           </Show>
                           <div ref={messageScrollElement} class="grow min-w-0 h-full overflow-y-auto no-scrollbar">
-                            <div class="flex flex-col items-start gap-50 pb-50">
-                              <For each={local.session.userMessages()}>
-                                {(message) => {
-                                  const [initialized, setInitialized] = createSignal(!!message.summary?.title)
-                                  const [expanded, setExpanded] = createSignal(false)
-                                  const parts = createMemo(() => sync.data.part[message.id])
-                                  const title = createMemo(() => message.summary?.title)
-                                  const summary = createMemo(() => message.summary?.body)
-                                  const assistantMessages = createMemo(() => {
-                                    return sync.data.message[activeSession().id]?.filter(
-                                      (m) => m.role === "assistant" && m.parentID == message.id,
-                                    ) as AssistantMessageType[]
-                                  })
-                                  const working = createMemo(() => !summary())
-                                  createEffect(() => {
-                                    setTimeout(() => setInitialized(!!title()), 10_000)
-                                  })
+                            <For each={local.session.userMessages()}>
+                              {(message) => {
+                                const isActive = createMemo(() => local.session.activeMessage()?.id === message.id)
+                                const [initialized, setInitialized] = createSignal(!!message.summary?.title)
+                                const [expanded, setExpanded] = createSignal(false)
+                                const parts = createMemo(() => sync.data.part[message.id])
+                                const title = createMemo(() => message.summary?.title)
+                                const summary = createMemo(() => message.summary?.body)
+                                const assistantMessages = createMemo(() => {
+                                  return sync.data.message[activeSession().id]?.filter(
+                                    (m) => m.role === "assistant" && m.parentID == message.id,
+                                  ) as AssistantMessageType[]
+                                })
+                                const working = createMemo(() => !summary())
+                                createEffect(() => {
+                                  setTimeout(() => setInitialized(!!title()), 10_000)
+                                })
 
-                                  return (
+                                return (
+                                  <Show when={isActive()}>
                                     <div
                                       data-message={message.id}
-                                      class="flex flex-col items-start self-stretch gap-8 min-h-screen"
+                                      class="flex flex-col items-start self-stretch gap-8 pb-50"
                                     >
                                       {/* Title */}
                                       <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
@@ -774,10 +776,10 @@ export default function Page() {
                                         </Switch>
                                       </div>
                                     </div>
-                                  )
-                                }}
-                              </For>
-                            </div>
+                                  </Show>
+                                )
+                              }}
+                            </For>
                           </div>
                         </div>
                       </div>

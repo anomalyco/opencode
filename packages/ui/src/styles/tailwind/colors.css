@@ -7,8 +7,8 @@
   --color-background-weak: var(--background-weak);
   --color-background-strong: var(--background-strong);
   --color-background-stronger: var(--background-stronger);
-  --color-base: var(--base);
   --color-surface-base: var(--surface-base);
+  --color-base: var(--base);
   --color-surface-base-hover: var(--surface-base-hover);
   --color-surface-base-active: var(--surface-base-active);
   --color-surface-base-interactive-active: var(--surface-base-interactive-active);
@@ -22,6 +22,7 @@
   --color-surface-float-base: var(--surface-float-base);
   --color-surface-float-base-hover: var(--surface-float-base-hover);
   --color-surface-raised-base-hover: var(--surface-raised-base-hover);
+  --color-surface-raised-base-active: var(--surface-raised-base-active);
   --color-surface-raised-strong: var(--surface-raised-strong);
   --color-surface-raised-strong-hover: var(--surface-raised-strong-hover);
   --color-surface-raised-stronger: var(--surface-raised-stronger);
@@ -48,8 +49,8 @@
   --color-surface-info-base: var(--surface-info-base);
   --color-surface-info-weak: var(--surface-info-weak);
   --color-surface-info-strong: var(--surface-info-strong);
-  --color-surface-diff-hidden-base: var(--surface-diff-hidden-base);
   --color-surface-diff-skip-base: var(--surface-diff-skip-base);
+  --color-surface-diff-hidden-base: var(--surface-diff-hidden-base);
   --color-surface-diff-unchanged-base: var(--surface-diff-unchanged-base);
   --color-surface-diff-hidden-weak: var(--surface-diff-hidden-weak);
   --color-surface-diff-hidden-weaker: var(--surface-diff-hidden-weaker);
@@ -80,6 +81,9 @@
   --color-text-on-interactive-base: var(--text-on-interactive-base);
   --color-text-on-interactive-weak: var(--text-on-interactive-weak);
   --color-text-on-success-base: var(--text-on-success-base);
+  --color-text-on-critical-base: var(--text-on-critical-base);
+  --color-text-on-critical-weak: var(--text-on-critical-weak);
+  --color-text-on-critical-strong: var(--text-on-critical-strong);
   --color-text-on-warning-base: var(--text-on-warning-base);
   --color-text-on-info-base: var(--text-on-info-base);
   --color-text-diff-add-base: var(--text-diff-add-base);
@@ -139,8 +143,8 @@
   --color-icon-selected: var(--icon-selected);
   --color-icon-disabled: var(--icon-disabled);
   --color-icon-focus: var(--icon-focus);
-  --color-icon-weak-base: var(--icon-weak-base);
   --color-icon-invert-base: var(--icon-invert-base);
+  --color-icon-weak-base: var(--icon-weak-base);
   --color-icon-weak-hover: var(--icon-weak-hover);
   --color-icon-weak-active: var(--icon-weak-active);
   --color-icon-weak-selected: var(--icon-weak-selected);
@@ -191,7 +195,6 @@
   --color-icon-diff-add-active: var(--icon-diff-add-active);
   --color-icon-diff-delete-base: var(--icon-diff-delete-base);
   --color-icon-diff-delete-hover: var(--icon-diff-delete-hover);
-  --color-icon-diff-delete-active: var(--icon-diff-delete-active);
   --color-syntax-comment: var(--syntax-comment);
   --color-syntax-string: var(--syntax-string);
   --color-syntax-keyword: var(--syntax-keyword);
@@ -227,4 +230,6 @@
   --color-border-weaker-selected: var(--border-weaker-selected);
   --color-border-weaker-disabled: var(--border-weaker-disabled);
   --color-border-weaker-focus: var(--border-weaker-focus);
+  --color-button-ghost-hover: var(--button-ghost-hover);
+  --color-button-ghost-hover2: var(--button-ghost-hover2);
 }
