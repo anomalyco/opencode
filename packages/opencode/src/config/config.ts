@@ -49,7 +49,7 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = await fetch(`${key}/.well-known/opencode`).then((x) => x.json())
+        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
         result = mergeDeep(
           result,
           await load(JSON.stringify(wellknown.config ?? {}), process.cwd()),
@@ -108,29 +108,13 @@ export namespace Config {
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
       result.share = "auto"
     }
-    if (result.keybinds?.messages_revert && !result.keybinds.messages_undo) {
-      result.keybinds.messages_undo = result.keybinds.messages_revert
-    }
-    if (result.keybinds?.switch_mode && !result.keybinds.switch_agent) {
-      result.keybinds.switch_agent = result.keybinds.switch_mode
-    }
-    if (result.keybinds?.switch_mode_reverse && !result.keybinds.switch_agent_reverse) {
-      result.keybinds.switch_agent_reverse = result.keybinds.switch_mode_reverse
-    }
-    if (result.keybinds?.switch_agent && !result.keybinds.agent_cycle) {
-      result.keybinds.agent_cycle = result.keybinds.switch_agent
-    }
-    if (result.keybinds?.switch_agent_reverse && !result.keybinds.agent_cycle_reverse) {
-      result.keybinds.agent_cycle_reverse = result.keybinds.switch_agent_reverse
-    }
+
+    if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     return {
       config: result,
@@ -181,7 +165,7 @@ export namespace Config {
       {
         cwd: dir,
       },
-    )
+    ).catch(() => {})
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
@@ -401,17 +385,11 @@ export namespace Config {
         .optional()
         .default("ctrl+x")
         .describe("Leader key for keybind combinations"),
-      app_help: z.string().optional().default("<leader>h").describe("Show help dialog"),
       app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
-      project_init: z.string().optional().default("<leader>i").describe("Create/update AGENTS.md"),
-      tool_details: z.string().optional().default("<leader>d").describe("Toggle tool details"),
-      thinking_blocks: z
-        .string()
-        .optional()
-        .default("<leader>b")
-        .describe("Toggle thinking blocks"),
+      sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z
         .string()
         .optional()
@@ -424,29 +402,23 @@ export namespace Config {
         .optional()
         .default("<leader>g")
         .describe("Show session timeline"),
-      session_share: z.string().optional().default("<leader>s").describe("Share current session"),
+      session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
-      session_interrupt: z.string().optional().default("esc").describe("Interrupt current session"),
+      session_interrupt: z
+        .string()
+        .optional()
+        .default("escape")
+        .describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
-      session_child_cycle: z
-        .string()
-        .optional()
-        .default("ctrl+right")
-        .describe("Cycle to next child session"),
-      session_child_cycle_reverse: z
-        .string()
-        .optional()
-        .default("ctrl+left")
-        .describe("Cycle to previous child session"),
       messages_page_up: z
         .string()
         .optional()
-        .default("pgup")
+        .default("pageup")
         .describe("Scroll messages up by one page"),
       messages_page_down: z
         .string()
         .optional()
-        .default("pgdown")
+        .default("pagedown")
         .describe("Scroll messages down by one page"),
       messages_half_page_up: z
         .string()
@@ -458,22 +430,26 @@ export namespace Config {
         .optional()
         .default("ctrl+alt+d")
         .describe("Scroll messages down by half page"),
-      messages_first: z.string().optional().default("ctrl+g").describe("Navigate to first message"),
+      messages_first: z
+        .string()
+        .optional()
+        .default("ctrl+g,home")
+        .describe("Navigate to first message"),
       messages_last: z
         .string()
         .optional()
-        .default("ctrl+alt+g")
+        .default("ctrl+alt+g,end")
         .describe("Navigate to last message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
-      model_list: z.string().optional().default("<leader>m").describe("List available models"),
-      model_cycle_recent: z.string().optional().default("f2").describe("Next recent model"),
-      model_cycle_recent_reverse: z
+      messages_toggle_conceal: z
         .string()
         .optional()
-        .default("shift+f2")
-        .describe("Previous recent model"),
+        .default("<leader>h")
+        .describe("Toggle code block concealment in messages"),
+      model_list: z.string().optional().default("<leader>m").describe("List available models"),
+      command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
@@ -485,59 +461,6 @@ export namespace Config {
         .optional()
         .default("shift+enter,ctrl+j")
         .describe("Insert newline in input"),
-      // Deprecated commands
-      switch_mode: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated use agent_cycle. Next mode"),
-      switch_mode_reverse: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated use agent_cycle_reverse. Previous mode"),
-      switch_agent: z
-        .string()
-        .optional()
-        .default("tab")
-        .describe("@deprecated use agent_cycle. Next agent"),
-      switch_agent_reverse: z
-        .string()
-        .optional()
-        .default("shift+tab")
-        .describe("@deprecated use agent_cycle_reverse. Previous agent"),
-      file_list: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated Currently not available. List files"),
-      file_close: z.string().optional().default("none").describe("@deprecated Close file"),
-      file_search: z.string().optional().default("none").describe("@deprecated Search file"),
-      file_diff_toggle: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated Split/unified diff"),
-      messages_previous: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated Navigate to previous message"),
-      messages_next: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated Navigate to next message"),
-      messages_layout_toggle: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated Toggle layout"),
-      messages_revert: z
-        .string()
-        .optional()
-        .default("none")
-        .describe("@deprecated use messages_undo. Revert message"),
     })
     .strict()
     .meta({
@@ -820,7 +743,10 @@ export namespace Config {
               const errMsg = `bad file reference: "${match}"`
               if (error.code === "ENOENT") {
                 throw new InvalidError(
-                  { path: configFilepath, message: errMsg + ` ${resolvedPath} does not exist` },
+                  {
+                    path: configFilepath,
+                    message: errMsg + ` ${resolvedPath} does not exist`,
+                  },
                   { cause: error },
                 )
               }
@@ -874,7 +800,10 @@ export namespace Config {
       return data
     }
 
-    throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
+    throw new InvalidError({
+      path: configFilepath,
+      issues: parsed.error.issues,
+    })
   }
   export const JsonError = NamedError.create(
     "ConfigJsonError",

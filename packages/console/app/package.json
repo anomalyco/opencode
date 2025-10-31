@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",
-    "@kobalte/core": "catalog:",
-    "@openauthjs/openauth": "0.0.0-20250322224806",
     "@opencode-ai/console-core": "workspace:*",
+    "@opencode-ai/console-mail": "workspace:*",
+    "@openauthjs/openauth": "catalog:",
+    "@kobalte/core": "catalog:",
+    "@jsx-email/render": "1.1.1",
     "@opencode-ai/console-resource": "workspace:*",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",

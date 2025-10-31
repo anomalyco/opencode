@@ -1,6 +1,12 @@
 import { Log } from "../util/log"
 import { Bus } from "../bus"
-import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
+import {
+  describeRoute,
+  generateSpecs,
+  validator,
+  resolver,
+  openAPIRouteHandler,
+} from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
@@ -15,7 +21,7 @@ import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
 import { MessageV2 } from "../session/message-v2"
-import { callTui, TuiRoute } from "./tui"
+import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
@@ -35,6 +41,7 @@ import { InstanceBootstrap } from "../project/bootstrap"
 import { MCP } from "../mcp"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 
@@ -248,7 +255,9 @@ export namespace Server {
               id: t.id,
               description: t.description,
               // Handle both Zod schemas and plain JSON schemas
-              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+              parameters: (t.parameters as any)?._def
+                ? zodToJsonSchema(t.parameters as any)
+                : t.parameters,
             })),
           )
         },
@@ -446,7 +455,11 @@ export namespace Server {
           }),
         ),
         async (c) => {
-          await Session.remove(c.req.valid("param").id)
+          const sessionID = c.req.valid("param").id
+          await Session.remove(sessionID)
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
           return c.json(true)
         },
       )
@@ -1033,7 +1046,10 @@ export namespace Server {
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item.info))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            default: mapValues(
+              providers,
+              (item) => Provider.sort(Object.values(item.models))[0].id,
+            ),
           })
         },
       )
@@ -1290,7 +1306,7 @@ export namespace Server {
               description: "MCP server status",
               content: {
                 "application/json": {
-                  schema: resolver(z.any()),
+                  schema: resolver(z.record(z.string(), MCP.Status)),
                 },
               },
             },
@@ -1298,6 +1314,26 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await MCP.status())
+        },
+      )
+      .get(
+        "/lsp",
+        describeRoute({
+          description: "Get LSP server status",
+          operationId: "lsp.status",
+          responses: {
+            200: {
+              description: "LSP server status",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await LSP.status())
         },
       )
       .post(
@@ -1317,13 +1353,11 @@ export namespace Server {
             ...errors(400),
           },
         }),
-        validator(
-          "json",
-          z.object({
-            text: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", TuiEvent.PromptAppend.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-help",
@@ -1341,7 +1375,10 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          // TODO: open dialog
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-sessions",
@@ -1359,7 +1396,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-themes",
@@ -1377,7 +1419,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "session.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/open-models",
@@ -1395,7 +1442,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "model.list",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/submit-prompt",
@@ -1413,7 +1465,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.submit",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/clear-prompt",
@@ -1431,7 +1488,12 @@ export namespace Server {
             },
           },
         }),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          await Bus.publish(TuiEvent.CommandExecute, {
+            command: "prompt.clear",
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/execute-command",
@@ -1450,13 +1512,27 @@ export namespace Server {
             ...errors(400),
           },
         }),
-        validator(
-          "json",
-          z.object({
-            command: z.string(),
-          }),
-        ),
-        async (c) => c.json(await callTui(c)),
+        validator("json", z.object({ command: z.string() })),
+        async (c) => {
+          const command = c.req.valid("json").command
+          await Bus.publish(TuiEvent.CommandExecute, {
+            // @ts-expect-error
+            command: {
+              session_new: "session.new",
+              session_share: "session.share",
+              session_interrupt: "session.interrupt",
+              session_compact: "session.compact",
+              messages_page_up: "session.page.up",
+              messages_page_down: "session.page.down",
+              messages_half_page_up: "session.half.page.up",
+              messages_half_page_down: "session.half.page.down",
+              messages_first: "session.first",
+              messages_last: "session.last",
+              agent_cycle: "agent.cycle",
+            }[command],
+          })
+          return c.json(true)
+        },
       )
       .post(
         "/tui/show-toast",
@@ -1474,15 +1550,52 @@ export namespace Server {
             },
           },
         }),
+        validator("json", TuiEvent.ToastShow.properties),
+        async (c) => {
+          await Bus.publish(TuiEvent.ToastShow, c.req.valid("json"))
+          return c.json(true)
+        },
+      )
+      .post(
+        "/tui/publish",
+        describeRoute({
+          description: "Publish a TUI event",
+          operationId: "tui.publish",
+          responses: {
+            200: {
+              description: "Event published successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
         validator(
           "json",
-          z.object({
-            title: z.string().optional(),
-            message: z.string(),
-            variant: z.enum(["info", "success", "warning", "error"]),
-          }),
+          z.union(
+            Object.values(TuiEvent).map((def) => {
+              return z
+                .object({
+                  type: z.literal(def.type),
+                  properties: def.properties,
+                })
+                .meta({
+                  ref: "Event" + "." + def.type,
+                })
+            }),
+          ),
         ),
-        async (c) => c.json(await callTui(c)),
+        async (c) => {
+          const evt = c.req.valid("json")
+          await Bus.publish(
+            Object.values(TuiEvent).find((def) => def.type === evt.type)!,
+            evt.properties,
+          )
+          return c.json(true)
+        },
       )
       .route("/tui/control", TuiRoute)
       .put(

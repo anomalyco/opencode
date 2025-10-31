@@ -108,7 +108,8 @@ export namespace SystemPrompt {
     const found = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
-        .catch(() => ""),
+        .catch(() => "")
+        .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
   }

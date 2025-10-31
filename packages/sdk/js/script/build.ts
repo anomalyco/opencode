@@ -10,6 +10,8 @@ import { createClient } from "@hey-api/openapi-ts"
 
 await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
 
+await $`rm -rf src/gen`
+
 await createClient({
   input: "./openapi.json",
   output: {

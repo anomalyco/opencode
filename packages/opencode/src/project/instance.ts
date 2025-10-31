@@ -1,3 +1,4 @@
+import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -42,6 +43,15 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async dispose() {
+    Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
+  },
+  async disposeAll() {
+    for (const [_key, value] of cache) {
+      await context.provide(value, async () => {
+        await Instance.dispose()
+      })
+    }
+    cache.clear()
   },
 }

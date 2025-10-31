@@ -81,10 +81,15 @@ export namespace SessionSummary {
           ),
           {
             role: "user" as const,
-            content: textPart?.text ?? "",
+            content: `
+              The following is the text to summarize:
+              <text>
+              ${textPart?.text ?? ""}
+              </text>
+            `,
           },
         ],
-        headers:small.info.headers,
+        headers: small.info.headers,
         model: small.language,
       })
       log.info("title", { title: result.text })
@@ -117,9 +122,9 @@ export namespace SessionSummary {
             `,
             },
           ],
-          headers: small.info.headers
-        })
-        summary = result.text
+          headers: small.info.headers,
+        }).catch(() => {})
+        if (result) summary = result.text
       }
       userMsg.summary.body = summary
       log.info("body", { body: summary })
