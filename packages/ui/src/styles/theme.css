@@ -60,10 +60,18 @@
     0 1px 2px -1px rgba(19, 16, 16, 0.04),
     0 1px 2px 0 rgba(19, 16, 16, 0.06),
     0 1px 3px 0 rgba(19, 16, 16, 0.08);
-  --shadow-xs-border-selected:
+  --shadow-xs-border-select:
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
     0 0 0 1px var(--border-selected, rgba(0, 74, 255, 0.99)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
     0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12);
+  --shadow-xs-border-focus:
+    0 0 0 1px var(--border-base, rgba(11, 6, 0, 0.20)),
+    0 1px 2px -1px rgba(19, 16, 16, 0.25),
+    0 1px 2px 0 rgba(19, 16, 16, 0.08),
+    0 1px 3px 0 rgba(19, 16, 16, 0.12),
+    0 0 0 2px var(--background-weak, #F1F0F0),
+    0 0 0 3px var(--border-selected, rgba(0, 74, 255, 0.99));
+
 
   --text-mix-blend-mode: multiply;
 }
@@ -170,7 +178,7 @@
   --text-on-brand-weaker: var(--smoke-light-alpha-8);
   --text-on-brand-strong: var(--smoke-light-alpha-12);
   --button-secondary-base: #fdfcfc;
-  --button-secondary-base-hover: #faf9f9;
+  --button-secondary-hover: #fafafa;
   --border-base: var(--smoke-light-alpha-7);
   --border-hover: var(--smoke-light-alpha-8);
   --border-active: var(--smoke-light-alpha-9);
@@ -405,7 +413,7 @@
     --text-on-brand-weaker: var(--smoke-dark-alpha-8);
     --text-on-brand-strong: var(--smoke-dark-alpha-12);
     --button-secondary-base: var(--smoke-dark-4);
-    --button-secondary-base-hover: #2a2727;
+    --button-secondary-hover: #2A2727;
     --border-base: var(--smoke-dark-alpha-7);
     --border-hover: var(--smoke-dark-alpha-8);
     --border-active: var(--smoke-dark-alpha-9);
