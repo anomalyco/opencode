@@ -19,28 +19,6 @@ opencode run "Explain how closures work in JavaScript"
 
 ---
 
-### tui
-
-Start the OpenCode terminal user interface.
-
-```bash
-opencode [project]
-```
-
-#### Flags
-
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--prompt`   | `-p`  | Prompt to use                              |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
-| `--agent`    |       | Agent to use                               |
-| `--port`     |       | Port to listen on                          |
-| `--hostname` |       | Hostname to listen on                      |
-
----
-
 ## Commands
 
 The OpenCode CLI also has the following commands.
@@ -186,17 +164,13 @@ opencode run Explain the use of context in Go
 
 #### Flags
 
-| Flag         | Short | Description                                                        |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command`  |       | The command to run, use message for args                           |
-| `--continue` | `-c`  | Continue the last session                                          |
-| `--session`  | `-s`  | Session ID to continue                                             |
-| `--share`    |       | Share the session                                                  |
-| `--model`    | `-m`  | Model to use in the form of provider/model                         |
-| `--agent`    |       | Agent to use                                                       |
-| `--file`     | `-f`  | File(s) to attach to message                                       |
-| `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
-| `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
+| Flag         | Short | Description                                |
+| ------------ | ----- | ------------------------------------------ |
+| `--continue` | `-c`  | Continue the last session                  |
+| `--session`  | `-s`  | Session ID to continue                     |
+| `--share`    |       | Share the session                          |
+| `--model`    | `-m`  | Model to use in the form of provider/model |
+| `--agent`    |       | Agent to use                               |
 
 ---
 
@@ -215,7 +189,7 @@ This starts an HTTP server that provides API access to opencode functionality wi
 | Flag         | Short | Description           |
 | ------------ | ----- | --------------------- |
 | `--port`     | `-p`  | Port to listen on     |
-| `--hostname` |       | Hostname to listen on |
+| `--hostname` | `-h`  | Hostname to listen on |
 
 ---
 
@@ -247,13 +221,18 @@ opencode upgrade v0.1.48
 
 ---
 
-## Global Flags
+## Flags
 
 The opencode CLI takes the following global flags.
 
-| Flag           | Short | Description                          |
-| -------------- | ----- | ------------------------------------ |
-| `--help`       | `-h`  | Display help                         |
-| `--version`    | `-v`  | Print version number                 |
-| `--print-logs` |       | Print logs to stderr                 |
-| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR) |
+| Flag           | Short | Description                                |
+| -------------- | ----- | ------------------------------------------ |
+| `--help`       | `-h`  | Display help                               |
+| `--version`    |       | Print version number                       |
+| `--print-logs` |       | Print logs to stderr                       |
+| `--log-level`  |       | Log level (DEBUG, INFO, WARN, ERROR)       |
+| `--prompt`     | `-p`  | Prompt to use                              |
+| `--model`      | `-m`  | Model to use in the form of provider/model |
+| `--agent`      |       | Agent to use                               |
+| `--port`       |       | Port to listen on                          |
+| `--hostname`   |       | Hostname to listen on                      |

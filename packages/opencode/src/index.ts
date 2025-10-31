@@ -38,7 +38,6 @@ process.on("uncaughtException", (e) => {
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
   .help("help", "show help")
-  .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
   .option("print-logs", {
@@ -141,5 +140,5 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  process.exit();
 }
