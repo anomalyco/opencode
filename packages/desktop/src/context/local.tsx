@@ -162,10 +162,32 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const recent = createMemo(() => store.recent.map(find).filter(Boolean))
 
+      const cycle = (direction: 1 | -1) => {
+        const recentList = recent()
+        const current = currentModel()
+        if (!current) return
+
+        const index = recentList.findIndex((x) => x?.provider.id === current.provider.id && x?.id === current.id)
+        if (index === -1) return
+
+        let next = index + direction
+        if (next < 0) next = recentList.length - 1
+        if (next >= recentList.length) next = 0
+
+        const val = recentList[next]
+        if (!val) return
+
+        model.set({
+          providerID: val.provider.id,
+          modelID: val.id,
+        })
+      }
+
       return {
         current: currentModel,
         recent,
         list,
+        cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
             setStore("model", agent.current().name, model ?? fallbackModel())
