@@ -6,6 +6,7 @@ import { upgrade } from "@/cli/upgrade"
 import { Session } from "@/session"
 import { bootstrap } from "@/cli/bootstrap"
 import path from "path"
+import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 
 export const TuiThreadCommand = cmd({
@@ -77,7 +78,9 @@ export const TuiThreadCommand = cmd({
         return undefined
       })()
 
-      const worker = new Worker("./src/cli/cmd/tui/worker.ts")
+      const worker = new Worker(
+        path.join(path.dirname(fileURLToPath(import.meta.url)), "worker.ts"),
+      )
       worker.onerror = console.error
       const client = Rpc.client<typeof rpc>(worker)
       process.on("uncaughtException", (e) => {
