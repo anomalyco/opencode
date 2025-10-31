@@ -65,7 +65,7 @@ export default defineConfig({
         "providers",
         "enterprise",
         "troubleshooting",
-
+        "1-0",
         {
           label: "Usage",
           items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
