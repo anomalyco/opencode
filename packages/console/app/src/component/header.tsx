@@ -13,7 +13,7 @@ import copyLogoSvgLight from "../asset/lander/opencode-logo-light.svg"
 import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
-import { A, createAsync } from "@solidjs/router"
+import { A, createAsync, useNavigate } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
@@ -34,6 +34,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
 }
 
 export function Header(props: { zen?: boolean }) {
+  const navigate = useNavigate()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
@@ -128,48 +129,18 @@ export function Header(props: { zen?: boolean }) {
           style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
         >
           <button class="context-menu-item" onClick={copyLogoToClipboard}>
-            <img
-              data-slot="copy light"
-              src={copyLogoLight}
-              style="width: 22px; height: 26px;"
-              alt="Logo"
-            />
-            <img
-              data-slot="copy dark"
-              src={copyLogoDark}
-              style="width: 22px; height: 26px;"
-              alt="Logo"
-            />
+            <img data-slot="copy light" src={copyLogoLight} alt="Logo" />
+            <img data-slot="copy dark" src={copyLogoDark} alt="Logo" />
             Copy logo as SVG
           </button>
           <button class="context-menu-item" onClick={copyWordmarkToClipboard}>
-            <img
-              data-slot="copy light"
-              src={copyWordmarkLight}
-              style="width: 22px; height: 26px;"
-              alt="Wordmark"
-            />
-            <img
-              data-slot="copy dark"
-              src={copyWordmarkDark}
-              style="width: 22px; height: 26px;"
-              alt="Wordmark"
-            />
+            <img data-slot="copy light" src={copyWordmarkLight} alt="Wordmark" />
+            <img data-slot="copy dark" src={copyWordmarkDark} alt="Wordmark" />
             Copy wordmark as SVG
           </button>
-          <button class="context-menu-item" onClick={() => (window.location.href = "/brand")}>
-            <img
-              data-slot="copy light"
-              src={copyBrandAssetsLight}
-              style="width: 22px; height: 26px;"
-              alt="Brand Assets"
-            />
-            <img
-              data-slot="copy dark"
-              src={copyBrandAssetsDark}
-              style="width: 22px; height: 26px;"
-              alt="Brand Assets"
-            />
+          <button class="context-menu-item" onClick={() => navigate("/brand")}>
+            <img data-slot="copy light" src={copyBrandAssetsLight} alt="Brand Assets" />
+            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="Brand Assets" />
             Brand assets
           </button>
         </div>

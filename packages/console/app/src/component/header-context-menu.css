@@ -32,12 +32,6 @@
   border-radius: 2px;
   transition: background-color 0.2s ease;
 
-  .context-menu-item [data-slot="copy light"],
-  .context-menu-item [data-slot="copy dark"] {
-    width: 22px !important;
-    height: 26px !important;
-  }
-
   [data-slot="copy dark"] {
     display: none;
   }
@@ -54,6 +48,11 @@
   &:hover {
     background-color: var(--color-background-weak-hover);
     color: var(--color-text-strong);
+  }
+
+  img {
+    width: 22px;
+    height: 26px;
   }
 }
 
