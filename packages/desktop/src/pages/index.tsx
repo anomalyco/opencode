@@ -13,6 +13,7 @@ import {
   DiffChanges,
   ProgressCircle,
   Message,
+  Typewriter,
 } from "@opencode-ai/ui"
 import { FileIcon } from "@/ui"
 import FileTree from "@/components/file-tree"
@@ -544,7 +545,6 @@ export default function Page() {
                               <For each={local.session.userMessages()}>
                                 {(message) => {
                                   const diffs = createMemo(() => message.summary?.diffs ?? [])
-
                                   return (
                                     <li
                                       class="group/li flex items-center gap-x-2 py-1 self-stretch cursor-default"
@@ -570,9 +570,9 @@ export default function Page() {
                             <div class="flex flex-col items-start gap-50 pb-50">
                               <For each={local.session.userMessages()}>
                                 {(message) => {
+                                  const [initialized, setInitialized] = createSignal(!!message.summary?.title)
                                   const [expanded, setExpanded] = createSignal(false)
                                   const parts = createMemo(() => sync.data.part[message.id])
-                                  const prompt = createMemo(() => local.session.getMessageText(message))
                                   const title = createMemo(() => message.summary?.title)
                                   const summary = createMemo(() => message.summary?.body)
                                   const assistantMessages = createMemo(() => {
@@ -581,6 +581,9 @@ export default function Page() {
                                     ) as AssistantMessageType[]
                                   })
                                   const working = createMemo(() => !summary())
+                                  createEffect(() => {
+                                    setTimeout(() => setInitialized(!!title()), 10_000)
+                                  })
 
                                   return (
                                     <div
@@ -589,9 +592,11 @@ export default function Page() {
                                     >
                                       {/* Title */}
                                       <div class="py-2 flex flex-col items-start gap-2 self-stretch sticky top-0 bg-background-stronger z-10">
-                                        <h1 class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
-                                          {title() ?? prompt()}
-                                        </h1>
+                                        <div class="text-14-medium text-text-strong overflow-hidden text-ellipsis min-w-0">
+                                          <Show when={initialized()} fallback={<Typewriter as="h1" text={title()} />}>
+                                            <h1>{title()}</h1>
+                                          </Show>
+                                        </div>
                                       </div>
                                       <Show when={title}>
                                         <div class="-mt-8">

@@ -25,5 +25,6 @@
 @import "../components/select-dialog.css" layer(components);
 @import "../components/tabs.css" layer(components);
 @import "../components/tooltip.css" layer(components);
+@import "../components/typewriter.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
