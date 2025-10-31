@@ -98,6 +98,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    timeout: z.number().int().positive().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -159,11 +160,19 @@ export namespace SessionPrompt {
         state().queued.set(input.sessionID, queue)
       })
     }
+
+    // Build runtime options
+    let runtimeOptions: Record<string, unknown> | undefined = undefined
+    if (input.timeout) {
+      runtimeOptions ??= {}
+      runtimeOptions.timeout = input.timeout
+    }
+
     const agent = await Agent.get(input.agent ?? "build")
     const model = await resolveModel({
       agent,
       model: input.model,
-    }).then((x) => Provider.getModel(x.providerID, x.modelID))
+    }).then((x) => Provider.getModel(x.providerID, x.modelID, runtimeOptions))
 
     using abort = lock(input.sessionID)
 
@@ -1480,6 +1489,7 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    timeout: z.number().int().positive().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1692,6 +1702,7 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
+      timeout: input.timeout,
     })
   }
 

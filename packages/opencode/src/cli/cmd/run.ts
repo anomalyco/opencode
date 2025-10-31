@@ -82,6 +82,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "title for the session (uses truncated prompt if no value provided)",
       })
+      .option("timeout", {
+        type: "number",
+        describe: "timeout in milliseconds for each AI request (default: 300000 ms, 5 mins)",
+      })
   },
   handler: async (args) => {
     let message = args.message.join(" ")
@@ -284,6 +288,7 @@ export const RunCommand = cmd({
             model: providerID + "/" + modelID,
             command: args.command,
             arguments: message,
+            timeout: args.timeout,
           })
         }
         return await SessionPrompt.prompt({
@@ -302,6 +307,7 @@ export const RunCommand = cmd({
               text: message,
             },
           ],
+          timeout: args.timeout,
         })
       })()
       if (errorMsg) process.exit(1)
