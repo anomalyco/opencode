@@ -16,7 +16,7 @@ export default function () {
       <div data-slot="sections">
         <Show when={userInfo()?.isAdmin}>
           <BillingSection />
-          <Show when={billingInfo()?.paymentMethodType}>
+          <Show when={billingInfo()?.customerID}>
             <ReloadSection />
             <MonthlyLimitSection />
             <PaymentSection />

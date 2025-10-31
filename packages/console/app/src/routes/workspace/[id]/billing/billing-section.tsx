@@ -93,7 +93,7 @@ export function BillingSection() {
             </span>
             <span data-slot="balance-label">Current Balance</span>
           </div>
-          <Show when={balanceInfo()?.paymentMethodType}>
+          <Show when={balanceInfo()?.customerID}>
             <div data-slot="balance-right-section">
               <button
                 data-color="primary"
@@ -149,7 +149,7 @@ export function BillingSection() {
             </div>
           </Show>
         </div>
-        <Show when={!balanceInfo()?.paymentMethodType}>
+        <Show when={!balanceInfo()?.customerID}>
           <button
             data-slot="enable-billing-button"
             data-color="primary"

@@ -26,7 +26,14 @@ const setReload = action(async (form: FormData) => {
         .update(BillingTable)
         .set({
           reload: reloadValue,
-          ...(reloadValue ? { reloadError: null, timeReloadError: null } : {}),
+          ...(reloadValue
+            ? {
+                reloadTrigger: Billing.CHARGE_THRESHOLD_DOLLAR,
+                reloadAmount: Billing.CHARGE_AMOUNT_DOLLAR,
+                reloadError: null,
+                timeReloadError: null,
+              }
+            : {}),
         })
         .where(eq(BillingTable.workspaceID, workspaceID)),
     ),
@@ -51,10 +58,7 @@ export function ReloadSection() {
     <section class={styles.root}>
       <div data-slot="section-title">
         <h2>Auto Reload</h2>
-        <p>Automatically reload your balance when it gets low.</p>
-      </div>
-      <div data-slot="section-content">
-        <div data-slot="setting-row">
+        <div data-slot="title-row">
           <Show
             when={balanceInfo()?.reload}
             fallback={
@@ -79,6 +83,8 @@ export function ReloadSection() {
             </button>
           </form>
         </div>
+      </div>
+      <div data-slot="section-content">
         <Show when={balanceInfo()?.reload && balanceInfo()?.reloadError}>
           <div data-slot="reload-error">
             <p>
