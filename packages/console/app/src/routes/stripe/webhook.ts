@@ -97,8 +97,6 @@ export async function POST(input: APIEvent) {
               ? {}
               : {
                   reload: true,
-                  reloadTrigger: Billing.CHARGE_THRESHOLD_DOLLAR,
-                  reloadAmount: Billing.CHARGE_AMOUNT_DOLLAR,
                   reloadError: null,
                   timeReloadError: null,
                 }),

@@ -28,8 +28,6 @@ const setReload = action(async (form: FormData) => {
           reload: reloadValue,
           ...(reloadValue
             ? {
-                reloadTrigger: Billing.CHARGE_THRESHOLD_DOLLAR,
-                reloadAmount: Billing.CHARGE_AMOUNT_DOLLAR,
                 reloadError: null,
                 timeReloadError: null,
               }
