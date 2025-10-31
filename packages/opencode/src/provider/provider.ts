@@ -306,6 +306,7 @@ export namespace Provider {
               input: ["text"],
               output: ["text"],
             },
+          headers: model.headers,
           provider: model.provider ?? existing?.provider,
         }
         if (model.id && model.id !== modelID) {

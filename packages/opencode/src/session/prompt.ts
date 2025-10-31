@@ -270,13 +270,15 @@ export namespace SessionPrompt {
               toolName: "invalid",
             }
           },
-          headers:
-            model.providerID === "opencode"
+          headers: {
+            ...(model.providerID === "opencode"
               ? {
                   "x-opencode-session": input.sessionID,
                   "x-opencode-request": userMsg.info.id,
                 }
-              : undefined,
+              : undefined),
+            ...model.info.headers,
+          },
           // set to 0, we handle loop
           maxRetries: 0,
           activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
@@ -1816,6 +1818,7 @@ export namespace SessionPrompt {
           },
         ]),
       ],
+      headers: small.info.headers,
       model: small.language,
     })
       .then((result) => {
