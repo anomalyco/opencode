@@ -150,6 +150,7 @@ export namespace SessionCompaction {
         maxRetries: 0,
         model: model.language,
         providerOptions: ProviderTransform.providerOptions(model.npm, model.providerID, model.info.options),
+        headers: model.info.headers,
         abortSignal: signal,
         onError(error) {
           log.error("stream error", {

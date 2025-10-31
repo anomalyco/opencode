@@ -45,9 +45,7 @@ export namespace MCP {
       }
     },
     async (state) => {
-      for (const client of Object.values(state.clients)) {
-        client.close()
-      }
+      await Promise.all(Object.values(state.clients).map((client) => client.close()))
     },
   )
 

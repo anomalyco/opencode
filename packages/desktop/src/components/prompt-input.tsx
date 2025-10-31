@@ -71,7 +71,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   })
 
-  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
+  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
     items: local.file.search,
     key: (x) => x,
     onSelect: (path) => {
@@ -79,6 +79,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       addPart({ type: "file", path, content: "@" + getFilename(path), start: 0, end: 0 })
       setStore("popoverIsOpen", false)
     },
+  })
+
+  createEffect(() => {
+    local.model.recent()
+    refetch()
   })
 
   createEffect(
@@ -369,16 +374,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               items={local.model.list()}
               current={local.model.current()}
               filterKeys={["provider.name", "name", "id"]}
-              groupBy={(x) => x.provider.name}
+              groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
               sortGroupsBy={(a, b) => {
                 const order = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+                if (a.category === "Recent" && b.category !== "Recent") return -1
+                if (b.category === "Recent" && a.category !== "Recent") return 1
                 const aProvider = a.items[0].provider.id
                 const bProvider = b.items[0].provider.id
                 if (order.includes(aProvider) && !order.includes(bProvider)) return -1
                 if (!order.includes(aProvider) && order.includes(bProvider)) return 1
                 return order.indexOf(aProvider) - order.indexOf(bProvider)
               }}
-              onSelect={(x) => local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined)}
+              onSelect={(x) =>
+                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, { recent: true })
+              }
               trigger={
                 <Button as="div" variant="ghost">
                   {local.model.current()?.name ?? "Select model"}

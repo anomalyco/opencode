@@ -84,6 +84,7 @@ export namespace SessionSummary {
             content: textPart?.text ?? "",
           },
         ],
+        headers:small.info.headers,
         model: small.language,
       })
       log.info("title", { title: result.text })
@@ -116,6 +117,7 @@ export namespace SessionSummary {
             `,
             },
           ],
+          headers: small.info.headers
         })
         summary = result.text
       }

@@ -430,6 +430,9 @@ export type Config = {
           options?: {
             [key: string]: unknown
           }
+          headers?: {
+            [key: string]: string
+          }
           provider?: {
             npm: string
           }
@@ -990,6 +993,9 @@ export type Model = {
   status?: "alpha" | "beta"
   options: {
     [key: string]: unknown
+  }
+  headers?: {
+    [key: string]: string
   }
   provider?: {
     npm: string

@@ -11,7 +11,7 @@ export async function InstanceBootstrap() {
   await Plugin.init()
   Share.init()
   Format.init()
-  LSP.init()
+  await LSP.init()
   FileWatcher.init()
   File.init()
 }

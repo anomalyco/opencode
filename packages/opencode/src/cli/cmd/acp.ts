@@ -56,7 +56,11 @@ export const AcpCommand = cmd({
       }, stream)
 
       log.info("setup connection")
+      process.stdin.resume()
+      await new Promise((resolve, reject) => {
+        process.stdin.on("end", resolve)
+        process.stdin.on("error", reject)
+      })
     })
-    process.stdin.resume()
   },
 })

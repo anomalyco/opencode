@@ -77,21 +77,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
-          const parts = store.part[event.properties.part.messageID]
+          const part = sanitizePart(event.properties.part)
+          const parts = store.part[part.messageID]
           if (!parts) {
-            setStore("part", event.properties.part.messageID, [event.properties.part])
+            setStore("part", part.messageID, [part])
             break
           }
-          const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
+          const result = Binary.search(parts, part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            setStore("part", part.messageID, result.index, reconcile(part))
             break
           }
           setStore(
             "part",
-            event.properties.part.messageID,
+            part.messageID,
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
+              draft.splice(result.index, 0, part)
             }),
           )
           break
@@ -121,6 +122,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const sanitizer = createMemo(() => new RegExp(`${store.path.directory}/`, "g"))
     const sanitize = (text: string) => text.replace(sanitizer(), "")
     const absolute = (path: string) => (store.path.directory + "/" + path).replace("//", "/")
+    const sanitizePart = (part: Part) => {
+      if (part.type === "tool") {
+        if (part.state.status === "completed") {
+          for (const key in part.state.metadata) {
+            if (typeof part.state.metadata[key] === "string") {
+              part.state.metadata[key] = sanitize(part.state.metadata[key] as string)
+            }
+          }
+          for (const key in part.state.input) {
+            if (typeof part.state.input[key] === "string") {
+              part.state.input[key] = sanitize(part.state.input[key] as string)
+            }
+          }
+        }
+      }
+      return part
+    }
 
     return {
       data: store,
@@ -155,7 +173,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 .slice()
                 .sort((a, b) => a.id.localeCompare(b.id))
               for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+                draft.part[message.info.id] = message.parts
+                  .slice()
+                  .map(sanitizePart)
+                  .sort((a, b) => a.id.localeCompare(b.id))
               }
             }),
           )

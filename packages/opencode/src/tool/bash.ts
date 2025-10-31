@@ -115,22 +115,10 @@ export const BashTool = Tool.define("bash", {
         }
         if (action === "ask") {
           const pattern = (() => {
-            let head = ""
-            let sub: string | undefined
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i)
-              if (!child) continue
-              if (child.type === "command_name") {
-                if (!head) {
-                  head = child.text
-                }
-                continue
-              }
-              if (!sub && child.type === "word") {
-                if (!child.text.startsWith("-")) sub = child.text
-              }
-            }
-            if (!head) return
+            if (command.length === 0) return
+            const head = command[0]
+            // Find first non-flag argument as subcommand
+            const sub = command.slice(1).find((arg) => !arg.startsWith("-"))
             return sub ? `${head} ${sub} *` : `${head} *`
           })()
           if (pattern) {

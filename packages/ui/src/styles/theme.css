@@ -59,10 +59,14 @@
     0 0 0 3px var(--border-weak-selected, rgba(1, 103, 255, 0.29)),
     0 0 0 1px var(--border-selected, rgba(0, 74, 255, 0.99)), 0 1px 2px -1px rgba(19, 16, 16, 0.25),
     0 1px 2px 0 rgba(19, 16, 16, 0.08), 0 1px 3px 0 rgba(19, 16, 16, 0.12);
+
+  --text-mix-blend-mode: multiply;
 }
 
 :root {
   /* OC-1-Light */
+  --text-mix-blend-mode: multiply;
+
   color-scheme: light;
   --background-base: #f8f7f7;
   --background-weak: var(--smoke-light-3);
@@ -292,6 +296,8 @@
   --button-ghost-hover2: var(--smoke-light-alpha-3);
 
   @media (prefers-color-scheme: dark) {
+    --text-mix-blend-mode: plus-lighter;
+
     /* OC-1-Dark */
     color-scheme: dark;
     --background-base: var(--smoke-dark-1);
