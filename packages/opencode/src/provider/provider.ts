@@ -207,6 +207,17 @@ export namespace Provider {
         },
       }
     },
+    zenmux: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   const state = Instance.state(async () => {
