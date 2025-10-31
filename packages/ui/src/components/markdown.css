@@ -6,12 +6,12 @@
   color: var(--text-base);
   text-wrap: pretty;
 
-  /* text-14-regular */
+  /* text-12-regular */
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 142.857% */
+  line-height: var(--line-height-large); /* 166.667% */
   letter-spacing: var(--letter-spacing-normal);
 
   &::-webkit-scrollbar {
