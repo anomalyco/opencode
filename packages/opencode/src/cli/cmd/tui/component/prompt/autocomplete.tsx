@@ -251,6 +251,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("opencode.status"),
       },
       {
+        display: "/theme",
+        description: "toggle theme",
+        onSelect: () => command.trigger("theme.switch"),
+      },
+      {
         display: "/help",
         description: "show help",
         onSelect: () => command.trigger("help.show"),
