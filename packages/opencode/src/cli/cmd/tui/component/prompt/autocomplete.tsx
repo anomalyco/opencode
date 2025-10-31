@@ -241,6 +241,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("agent.list"),
       },
       {
+        display: "/session",
+        description: "list sessions",
+        onSelect: () => command.trigger("session.list"),
+      },
+      {
         display: "/status",
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
