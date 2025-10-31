@@ -28,10 +28,10 @@
   }
 
   &[data-variant="secondary"] {
-    border-color: var(--border-weak-base);
+    border-color: transparent;
     background-color: var(--button-secondary-base);
     color: var(--text-strong);
-    box-shadow: var(--shadow-xs);
+    box-shadow: var(--shadow-xs-border);
 
     &:hover:not(:disabled) {
       border-color: var(--border-hover);
