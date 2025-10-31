@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "0.15.30",
+  "version": "0.15.31",
   "type": "module",
   "exports": {
     ".": "./src/components/index.ts",

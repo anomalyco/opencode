@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-mail",
-  "version": "0.15.30",
+  "version": "0.15.31",
   "dependencies": {
     "@jsx-email/all": "2.2.3",
     "@jsx-email/cli": "1.4.3",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "0.15.30",
+  "version": "0.15.31",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
