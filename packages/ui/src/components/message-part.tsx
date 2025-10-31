@@ -151,15 +151,17 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="icon" />
+                  <Icon name="circle-ban-sign" size="small" data-slot="tool-error-icon" />
                   <Switch>
                     <Match when={title}>
-                      <div data-slot="content">
-                        <div data-slot="title">{title}</div>
-                        <span>{rest.join(": ")}</span>
+                      <div data-slot="tool-error-content">
+                        <div data-slot="tool-error-title">{title}</div>
+                        <span data-slot="tool-error-message">{rest.join(": ")}</span>
                       </div>
                     </Match>
-                    <Match when={true}>{cleaned}</Match>
+                    <Match when={true}>
+                      <span data-slot="tool-error-message">{cleaned}</span>
+                    </Match>
                   </Switch>
                 </div>
               </Card>

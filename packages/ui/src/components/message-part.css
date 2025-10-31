@@ -29,20 +29,21 @@
 
 [data-component="tool-error"] {
   display: flex;
-  align-items: center;
+  align-items: start;
   gap: 8px;
 
-  [data-slot="icon"] {
+  [data-slot="tool-error-icon"] {
     color: var(--icon-critical-active);
+    margin-top: 4px;
   }
 
-  [data-slot="content"] {
+  [data-slot="tool-error-content"] {
     display: flex;
-    align-items: center;
+    align-items: start;
     gap: 8px;
   }
 
-  [data-slot="title"] {
+  [data-slot="tool-error-title"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -51,7 +52,11 @@
     letter-spacing: var(--letter-spacing-normal);
     color: var(--ember-light-11);
     text-transform: capitalize;
+    white-space: nowrap;
   }
+
+  /* [data-slot="tool-error-message"] { */
+  /* } */
 }
 
 [data-component="tool-output"] {
