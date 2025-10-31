@@ -150,6 +150,14 @@ export type KeybindsConfig = {
    * Insert newline in input
    */
   input_newline?: string
+  /**
+   * Previous history item
+   */
+  history_previous?: string
+  /**
+   * Previous history item
+   */
+  history_next?: string
 }
 
 export type AgentConfig = {

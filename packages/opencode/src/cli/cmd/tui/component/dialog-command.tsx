@@ -47,6 +47,9 @@ function init() {
         }
       }
     },
+    show() {
+      dialog.replace(() => <DialogCommand options={options()} />)
+    },
     register(cb: () => CommandOption[]) {
       const results = createMemo(cb)
       setRegistrations((arr) => [results, ...arr])
@@ -90,7 +93,10 @@ function DialogCommand(props: { options: CommandOption[] }) {
   return (
     <DialogSelect
       title="Commands"
-      options={props.options.map((x) => ({ ...x, footer: x.keybind ? keybind.print(x.keybind) : undefined }))}
+      options={props.options.map((x) => ({
+        ...x,
+        footer: x.keybind ? keybind.print(x.keybind) : undefined,
+      }))}
     />
   )
 }
