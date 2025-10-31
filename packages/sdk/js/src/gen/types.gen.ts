@@ -135,6 +135,10 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
+   * Forward delete characters in input field
+   */
+  input_forward_delete?: string
+  /**
    * Paste from clipboard
    */
   input_paste?: string

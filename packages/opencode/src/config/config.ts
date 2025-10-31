@@ -385,7 +385,7 @@ export namespace Config {
         .optional()
         .default("ctrl+x")
         .describe("Leader key for keybind combinations"),
-      app_exit: z.string().optional().default("ctrl+c,<leader>q").describe("Exit the application"),
+      app_exit: z.string().optional().default("ctrl+c,ctrl+d,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
@@ -454,6 +454,7 @@ export namespace Config {
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
+      input_forward_delete: z.string().optional().default("ctrl+d").describe("Forward delete"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("enter").describe("Submit input"),
       input_newline: z
