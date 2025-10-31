@@ -1,5 +1,5 @@
 import { SyntaxStyle, RGBA } from "@opentui/core"
-import { createMemo } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
@@ -83,7 +83,7 @@ type ThemeJson = {
   theme: Record<keyof Theme, ColorValue>
 }
 
-export const THEMES = {
+export const THEMES: Record<string, Theme> = {
   aura: resolveTheme(aura),
   ayu: resolveTheme(ayu),
   catppuccin: resolveTheme(catppuccin),
@@ -629,23 +629,24 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const sync = useSync()
     const kv = useKV()
 
-    const theme = createMemo(() => {
-      return THEMES[kv.data.theme as keyof typeof THEMES] ?? THEMES.opencode
+    const [theme, setTheme] = createSignal(sync.data.config.theme ?? kv.data.theme)
+
+    const values = createMemo(() => {
+      return THEMES[theme()] ?? THEMES.opencode
     })
 
     return {
-      get theme() {
-        return new Proxy(theme(), {
-          get(_target, prop) {
-            // @ts-expect-error
-            return theme()[prop]
-          },
-        })
-      },
+      theme: new Proxy(values(), {
+        get(_target, prop) {
+          // @ts-expect-error
+          return values()[prop]
+        },
+      }),
       get selectedTheme() {
         return kv.data.theme
       },
       setSelectedTheme(theme: string) {
+        setTheme(theme)
         kv.set("theme", theme)
       },
       get ready() {
