@@ -5,10 +5,13 @@ import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
 import { TextAttributes } from "@opentui/core"
+import { ContextUsageBar } from "../../component/context-usage-bar"
+import { useLocal } from "../../context/local"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const local = useLocal()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
@@ -25,7 +28,8 @@ export function Sidebar(props: { sessionID: string }) {
     const last = messages().findLast(
       (x) => x.role === "assistant" && x.tokens.output > 0,
     ) as AssistantMessage
-    if (!last) return
+    if (!last) return { tokens: 0, tokenLimit: 0, tokensFormatted: "0", percentage: 0 }
+
     const total =
       last.tokens.input +
       last.tokens.output +
@@ -33,9 +37,13 @@ export function Sidebar(props: { sessionID: string }) {
       last.tokens.cache.read +
       last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const tokenLimit = model?.limit.context || 0
+
     return {
-      tokens: total.toLocaleString(),
-      percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      tokens: total,
+      tokenLimit,
+      tokensFormatted: total.toLocaleString(),
+      percentage: tokenLimit ? Math.round((total / tokenLimit) * 100) : 0,
     }
   })
 
@@ -58,8 +66,14 @@ export function Sidebar(props: { sessionID: string }) {
           <text fg={theme.text}>
             <b>Context</b>
           </text>
-          <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-          <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
+          <ContextUsageBar
+            currentTokens={context().tokens}
+            tokenLimit={context().tokenLimit}
+            agentColor={local.agent.color(session().mode)}
+            backgroundColor={theme.backgroundPanel}
+          />
+          <text fg={theme.textMuted}>{context().tokensFormatted} tokens</text>
+          <text fg={theme.textMuted}>{context().percentage}% used</text>
           <text fg={theme.textMuted}>{cost()} spent</text>
         </box>
         <Show when={Object.keys(sync.data.mcp).length > 0}>
