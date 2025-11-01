@@ -174,6 +174,27 @@ export namespace Provider {
         },
       }
     },
+    freemium: async () => {
+      const { Freemium } = await import("./freemium")
+
+      return {
+        autoload: true,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "OpenCode Freemium",
+          },
+        },
+        async getModel(sdk: any, modelID: string) {
+          const freeModels = await Freemium.getFreeModels()
+          const selected = Freemium.selectBestModel(freeModels)
+          if (!selected) throw new Error("No free models available")
+
+          log.info("freemium routing", { from: modelID, to: selected.id })
+          return sdk(selected.id)
+        },
+      }
+    },
     vercel: async () => {
       return {
         autoload: false,
@@ -356,6 +377,32 @@ export namespace Provider {
     }
 
     const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
+
+    // Add freemium provider synthetically
+    if (!disabled.has("freemium") && process.env["OPENROUTER_API_KEY"]) {
+      database["freemium"] = {
+        id: "freemium",
+        name: "Freemium",
+        npm: "@ai-sdk/openai-compatible",
+        env: ["OPENROUTER_API_KEY"],
+        api: "https://openrouter.ai/api/v1",
+        models: {
+          auto: {
+            id: "auto",
+            name: "Freemium (Auto-Rotating Free Models)",
+            release_date: "2025-01-01",
+            attachment: false,
+            reasoning: false,
+            temperature: true,
+            tool_call: true,
+            cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+            limit: { context: 256000, output: 16000 },
+            options: {},
+          },
+        },
+      }
+    }
+
     // load env
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
