@@ -421,6 +421,33 @@ export namespace Session {
     },
   )
 
+  export namespace AllowedDirectories {
+    const dirs: Record<string, Set<string>> = {}
+
+    export async function add(input: { sessionID: string; directory: string }) {
+      if (!dirs[input.sessionID]) {
+        dirs[input.sessionID] = new Set()
+      }
+      dirs[input.sessionID].add(input.directory)
+      log.info("added allowed directory", {
+        sessionID: input.sessionID,
+        directory: input.directory,
+      })
+    }
+
+    export function get(sessionID: string): string[] {
+      return Array.from(dirs[sessionID] ?? new Set())
+    }
+
+    export function has(sessionID: string, directory: string): boolean {
+      return dirs[sessionID]?.has(directory) ?? false
+    }
+
+    export function clear(sessionID: string) {
+      delete dirs[sessionID]
+    }
+  }
+
   export class BusyError extends Error {
     constructor(public readonly sessionID: string) {
       super(`Session ${sessionID} is busy`)
