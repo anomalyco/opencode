@@ -1,7 +1,16 @@
 import { $ } from "bun"
 
-if (process.versions.bun !== "1.3.0") {
-  throw new Error("This script requires bun@1.3.0")
+const bunVersionRequired = await (async () => {
+  const packageJson = await Bun.file(new URL("../../../package.json", import.meta.url)).json()
+  const packageManager = packageJson.packageManager
+  if (!packageManager || !packageManager.startsWith("bun@")) {
+    throw new Error("packageManager field must specify bun version (e.g., 'bun@1.3.0')")
+  }
+  return packageManager.split("@")[1]
+})()
+
+if (process.versions.bun !== bunVersionRequired) {
+  throw new Error(`This script requires bun@${bunVersionRequired}`)
 }
 
 const CHANNEL =
