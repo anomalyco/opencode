@@ -18,10 +18,11 @@
  * ```
  */
 
-export { SkillSystem } from './skill-system'
-export { SkillLoader } from './skill-loader'
-export { SkillMatcher, calculateSimpleSimilarity, extractTriggerPhrases } from './skill-matcher'
-export { SkillExecutor, isValidTool, getAllToolNames } from './skill-executor'
+export { SkillSystem } from "./skill-system"
+export { SkillLoader } from "./skill-loader"
+export { SkillMatcher, calculateSimpleSimilarity, extractTriggerPhrases } from "./skill-matcher"
+export { SkillExecutor, isValidTool, getAllToolNames } from "./skill-executor"
+export { SkillInstance } from "./instance"
 
 export type {
   // Core types
@@ -42,4 +43,4 @@ export type {
   SkillSystemConfig,
   SkillSystemStats,
   SkillSystemEvents,
-} from './types'
+} from "./types"

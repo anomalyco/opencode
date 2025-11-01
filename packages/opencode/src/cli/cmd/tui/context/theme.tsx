@@ -13,6 +13,7 @@ import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
+import mellow from "../../../../../../tui/internal/theme/themes/mellow.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
@@ -69,15 +70,16 @@ type Theme = {
   markdownImage: RGBA
   markdownImageText: RGBA
   markdownCodeBlock: RGBA
-  syntaxComment: RGBA
-  syntaxKeyword: RGBA
-  syntaxFunction: RGBA
-  syntaxVariable: RGBA
-  syntaxString: RGBA
-  syntaxNumber: RGBA
-  syntaxType: RGBA
-  syntaxOperator: RGBA
-  syntaxPunctuation: RGBA
+  // Optional syntax highlighting colors (used by some themes)
+  syntaxComment?: RGBA
+  syntaxKeyword?: RGBA
+  syntaxFunction?: RGBA
+  syntaxVariable?: RGBA
+  syntaxString?: RGBA
+  syntaxNumber?: RGBA
+  syntaxType?: RGBA
+  syntaxOperator?: RGBA
+  syntaxPunctuation?: RGBA
 }
 
 type HexColor = `#${string}`
@@ -105,6 +107,7 @@ export const THEMES: Record<string, ThemeJson> = {
   kanagawa,
   material,
   matrix,
+  mellow,
   monokai,
   nightowl,
   nord,
@@ -121,14 +124,84 @@ export const THEMES: Record<string, ThemeJson> = {
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
-  function resolveColor(c: ColorValue): RGBA {
-    if (typeof c === "string") return c.startsWith("#") ? RGBA.fromHex(c) : resolveColor(defs[c])
-    return resolveColor(c[mode])
+  function resolveColor(c: ColorValue, keyName?: string): RGBA {
+    if (!c) {
+      throw new Error(`Color value is undefined for key: ${keyName}`)
+    }
+    if (typeof c === "string") {
+      if (c.startsWith("#")) return RGBA.fromHex(c)
+      if (!defs[c]) {
+        throw new Error(`Color reference "${c}" not found in defs for key: ${keyName}`)
+      }
+      return resolveColor(defs[c], keyName)
+    }
+    // TODO: support light theme when opentui has the equivalent of lipgloss.AdaptiveColor
+    if (!c.dark) {
+      throw new Error(`ColorModeObj missing dark property for key: ${keyName}`)
+    }
+    return resolveColor(c.dark, keyName)
   }
+
+  // Only process properties that exist in the Theme type
+  const validKeys = new Set([
+    "primary",
+    "secondary",
+    "accent",
+    "error",
+    "warning",
+    "success",
+    "info",
+    "text",
+    "textMuted",
+    "background",
+    "backgroundPanel",
+    "backgroundElement",
+    "border",
+    "borderActive",
+    "borderSubtle",
+    "diffAdded",
+    "diffRemoved",
+    "diffContext",
+    "diffHunkHeader",
+    "diffHighlightAdded",
+    "diffHighlightRemoved",
+    "diffAddedBg",
+    "diffRemovedBg",
+    "diffContextBg",
+    "diffLineNumber",
+    "diffAddedLineNumberBg",
+    "diffRemovedLineNumberBg",
+    "markdownText",
+    "markdownHeading",
+    "markdownLink",
+    "markdownLinkText",
+    "markdownCode",
+    "markdownBlockQuote",
+    "markdownEmph",
+    "markdownStrong",
+    "markdownHorizontalRule",
+    "markdownListItem",
+    "markdownListEnumeration",
+    "markdownImage",
+    "markdownImageText",
+    "markdownCodeBlock",
+    "syntaxComment",
+    "syntaxKeyword",
+    "syntaxFunction",
+    "syntaxVariable",
+    "syntaxString",
+    "syntaxNumber",
+    "syntaxType",
+    "syntaxOperator",
+    "syntaxPunctuation",
+  ])
+
   return Object.fromEntries(
-    Object.entries(theme.theme).map(([key, value]) => {
-      return [key, resolveColor(value)]
-    }),
+    Object.entries(theme.theme)
+      .filter(([key]) => validKeys.has(key))
+      .map(([key, value]) => {
+        return [key, resolveColor(value, key)]
+      }),
   ) as Theme
 }
 

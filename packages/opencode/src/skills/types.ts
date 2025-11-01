@@ -9,22 +9,22 @@
  * Valid tool names that can be restricted in skill execution
  */
 export type ToolName =
-  | 'Read'
-  | 'Write'
-  | 'Edit'
-  | 'Glob'
-  | 'Grep'
-  | 'Bash'
-  | 'WebFetch'
-  | 'WebSearch'
-  | 'Task'
-  | 'SlashCommand'
-  | 'Skill'
-  | 'TodoWrite'
-  | 'AskUserQuestion'
-  | 'NotebookEdit'
-  | 'KillShell'
-  | 'BashOutput'
+  | "Read"
+  | "Write"
+  | "Edit"
+  | "Glob"
+  | "Grep"
+  | "Bash"
+  | "WebFetch"
+  | "WebSearch"
+  | "Task"
+  | "SlashCommand"
+  | "Skill"
+  | "TodoWrite"
+  | "AskUserQuestion"
+  | "NotebookEdit"
+  | "KillShell"
+  | "BashOutput"
 
 /**
  * YAML frontmatter from SKILL.md
@@ -68,7 +68,7 @@ export interface SkillMetadata {
   skillFilePath: string
 
   /** Source location (project, user, or plugin) */
-  source: 'project' | 'user' | 'plugin'
+  source: "project" | "user" | "plugin"
 
   /** Whether supporting files exist */
   hasReference: boolean
@@ -122,10 +122,10 @@ export interface SkillMatch {
  * Configuration for skill discovery and loading
  */
 export interface SkillSystemConfig {
-  /** Path to project skills directory (default: .claude/skills) */
+  /** Path to project skills directory (default: .codesurf/skills, also checks .claude/skills) */
   projectSkillsPath?: string
 
-  /** Path to user skills directory (default: ~/.claude/skills) */
+  /** Path to user skills directory (default: ~/.codesurf/skills, also checks ~/.claude/skills) */
   userSkillsPath?: string
 
   /** Whether to load plugin skills (default: false) */
@@ -163,7 +163,7 @@ export interface SkillExecutionContext {
   /** Execution metadata */
   metadata: {
     activatedAt: Date
-    source: 'automatic' | 'explicit'
+    source: "automatic" | "explicit"
   }
 }
 
@@ -172,22 +172,22 @@ export interface SkillExecutionContext {
  */
 export interface SkillSystemEvents {
   /** Emitted when skills are discovered */
-  'skills:discovered': { skills: SkillMetadata[], count: number }
+  "skills:discovered": { skills: SkillMetadata[]; count: number }
 
   /** Emitted when a skill is matched */
-  'skill:matched': { match: SkillMatch }
+  "skill:matched": { match: SkillMatch }
 
   /** Emitted when a skill is fully loaded */
-  'skill:loaded': { skill: LoadedSkill, tokensUsed: number }
+  "skill:loaded": { skill: LoadedSkill; tokensUsed: number }
 
   /** Emitted when a skill is activated */
-  'skill:activated': { skill: LoadedSkill, context: SkillExecutionContext }
+  "skill:activated": { skill: LoadedSkill; context: SkillExecutionContext }
 
   /** Emitted when a skill is deactivated */
-  'skill:deactivated': { skillName: string, tokensFreed: number }
+  "skill:deactivated": { skillName: string; tokensFreed: number }
 
   /** Emitted on errors */
-  'error': { error: Error, context?: unknown }
+  error: { error: Error; context?: unknown }
 }
 
 /**

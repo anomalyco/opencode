@@ -4,10 +4,10 @@
  * Handles discovery and progressive loading of skills with token optimization
  */
 
-import { readdir, readFile, stat } from 'fs/promises'
-import { join, resolve } from 'path'
-import { homedir } from 'os'
-import yaml from 'yaml'
+import { readdir, readFile, stat } from "fs/promises"
+import { join, resolve } from "path"
+import { homedir } from "os"
+import yaml from "yaml"
 import type {
   SkillFrontmatter,
   SkillMetadata,
@@ -15,17 +15,20 @@ import type {
   SkillSystemConfig,
   SkillLoadOptions,
   ToolName,
-} from './types'
+} from "./types"
 
 /**
  * Parses YAML frontmatter from markdown content
  */
-function extractFrontmatter(content: string): { frontmatter: Record<string, unknown>, body: string } {
+function extractFrontmatter(content: string): {
+  frontmatter: Record<string, unknown>
+  body: string
+} {
   const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/
   const match = content.match(frontmatterRegex)
 
   if (!match) {
-    throw new Error('No YAML frontmatter found in SKILL.md')
+    throw new Error("No YAML frontmatter found in SKILL.md")
   }
 
   const [, frontmatterYaml, body] = match
@@ -45,17 +48,17 @@ function estimateTokens(text: string): number {
  * Validates skill frontmatter structure
  */
 function validateFrontmatter(frontmatter: unknown): SkillFrontmatter {
-  if (!frontmatter || typeof frontmatter !== 'object') {
-    throw new Error('Invalid frontmatter: must be an object')
+  if (!frontmatter || typeof frontmatter !== "object") {
+    throw new Error("Invalid frontmatter: must be an object")
   }
 
   const fm = frontmatter as Record<string, unknown>
 
-  if (!fm.name || typeof fm.name !== 'string') {
+  if (!fm.name || typeof fm.name !== "string") {
     throw new Error('Invalid frontmatter: missing or invalid "name" field')
   }
 
-  if (!fm.description || typeof fm.description !== 'string') {
+  if (!fm.description || typeof fm.description !== "string") {
     throw new Error('Invalid frontmatter: missing or invalid "description" field')
   }
 
@@ -65,16 +68,21 @@ function validateFrontmatter(frontmatter: unknown): SkillFrontmatter {
   }
 
   // Validate allowed-tools if present
-  if (fm.allowedTools || fm['allowed-tools']) {
-    const tools = (fm.allowedTools || fm['allowed-tools']) as unknown
+  if (fm.allowedTools || fm["allowed-tools"]) {
+    const tools = (fm.allowedTools || fm["allowed-tools"]) as unknown
     if (Array.isArray(tools)) {
       validated.allowedTools = tools as ToolName[]
     }
   }
 
   // Preserve other metadata
-  Object.keys(fm).forEach(key => {
-    if (key !== 'name' && key !== 'description' && key !== 'allowedTools' && key !== 'allowed-tools') {
+  Object.keys(fm).forEach((key) => {
+    if (
+      key !== "name" &&
+      key !== "description" &&
+      key !== "allowedTools" &&
+      key !== "allowed-tools"
+    ) {
       validated[key] = fm[key]
     }
   })
@@ -97,8 +105,8 @@ export class SkillLoader {
 
   constructor(config: SkillSystemConfig = {}) {
     this.config = {
-      projectSkillsPath: config.projectSkillsPath || '.claude/skills',
-      userSkillsPath: config.userSkillsPath || join(homedir(), '.claude', 'skills'),
+      projectSkillsPath: config.projectSkillsPath || ".codesurf/skills",
+      userSkillsPath: config.userSkillsPath || join(homedir(), ".codesurf", "skills"),
       loadPluginSkills: config.loadPluginSkills ?? false,
       pluginSkillsPaths: config.pluginSkillsPaths || [],
       minConfidenceThreshold: config.minConfidenceThreshold ?? 0.6,
@@ -113,28 +121,41 @@ export class SkillLoader {
    * Returns lightweight metadata for all available skills
    */
   async discoverSkills(): Promise<SkillMetadata[]> {
-    this.log('Starting skill discovery...')
+    this.log("Starting skill discovery...")
     this.discoveredSkills.clear()
 
+    // Check both .codesurf and .claude paths for compatibility
+    const projectPaths = [".codesurf/skills", ".claude/skills"]
+    const userPaths = [join(homedir(), ".codesurf", "skills"), join(homedir(), ".claude", "skills")]
+
     const discoveries = await Promise.allSettled([
-      this.discoverFromPath(this.config.projectSkillsPath, 'project'),
-      this.discoverFromPath(this.config.userSkillsPath, 'user'),
+      // Project skills from both .codesurf and .claude
+      ...projectPaths.map((path) => this.discoverFromPath(path, "project")),
+      // User skills from both ~/.codesurf and ~/.claude
+      ...userPaths.map((path) => this.discoverFromPath(path, "user")),
+      // Plugin skills if enabled
       ...(this.config.loadPluginSkills
-        ? this.config.pluginSkillsPaths.map(path => this.discoverFromPath(path, 'plugin'))
-        : []
-      ),
+        ? this.config.pluginSkillsPaths.map((path) => this.discoverFromPath(path, "plugin"))
+        : []),
     ])
 
-    // Collect all successful discoveries
-    const skills: SkillMetadata[] = []
+    // Collect all successful discoveries, removing duplicates by name
+    const skillsMap = new Map<string, SkillMetadata>()
     for (const result of discoveries) {
-      if (result.status === 'fulfilled') {
-        skills.push(...result.value)
+      if (result.status === "fulfilled") {
+        for (const skill of result.value) {
+          // Prefer .codesurf over .claude if duplicate names
+          const existing = skillsMap.get(skill.frontmatter.name)
+          if (!existing || skill.path.includes(".codesurf")) {
+            skillsMap.set(skill.frontmatter.name, skill)
+          }
+        }
       } else {
-        this.log(`Discovery failed: ${result.reason}`, 'warn')
+        this.log(`Discovery failed: ${result.reason}`, "warn")
       }
     }
 
+    const skills = Array.from(skillsMap.values())
     this.log(`Discovered ${skills.length} skills`)
     return skills
   }
@@ -144,27 +165,27 @@ export class SkillLoader {
    */
   private async discoverFromPath(
     basePath: string,
-    source: 'project' | 'user' | 'plugin'
+    source: "project" | "user" | "plugin",
   ): Promise<SkillMetadata[]> {
     try {
       const absolutePath = resolve(basePath)
       const stats = await stat(absolutePath)
 
       if (!stats.isDirectory()) {
-        this.log(`Path ${absolutePath} is not a directory`, 'warn')
+        this.log(`Path ${absolutePath} is not a directory`, "warn")
         return []
       }
 
       const entries = await readdir(absolutePath, { withFileTypes: true })
-      const skillDirs = entries.filter(e => e.isDirectory())
+      const skillDirs = entries.filter((e) => e.isDirectory())
 
       const skills = await Promise.all(
-        skillDirs.map(dir => this.loadSkillMetadata(join(absolutePath, dir.name), source))
+        skillDirs.map((dir) => this.loadSkillMetadata(join(absolutePath, dir.name), source)),
       )
 
       return skills.filter((s): s is SkillMetadata => s !== null)
     } catch (error) {
-      this.log(`Failed to discover skills from ${basePath}: ${error}`, 'warn')
+      this.log(`Failed to discover skills from ${basePath}: ${error}`, "warn")
       return []
     }
   }
@@ -174,21 +195,21 @@ export class SkillLoader {
    */
   private async loadSkillMetadata(
     skillPath: string,
-    source: 'project' | 'user' | 'plugin'
+    source: "project" | "user" | "plugin",
   ): Promise<SkillMetadata | null> {
     try {
-      const skillFilePath = join(skillPath, 'SKILL.md')
-      const content = await readFile(skillFilePath, 'utf-8')
+      const skillFilePath = join(skillPath, "SKILL.md")
+      const content = await readFile(skillFilePath, "utf-8")
 
       const { frontmatter } = extractFrontmatter(content)
       const validated = validateFrontmatter(frontmatter)
 
       // Check for supporting files (without loading them)
       const [hasReference, hasExamples, hasScripts, hasTemplates] = await Promise.all([
-        this.fileExists(join(skillPath, 'reference.md')),
-        this.fileExists(join(skillPath, 'examples.md')),
-        this.dirExists(join(skillPath, 'scripts')),
-        this.dirExists(join(skillPath, 'templates')),
+        this.fileExists(join(skillPath, "reference.md")),
+        this.fileExists(join(skillPath, "examples.md")),
+        this.dirExists(join(skillPath, "scripts")),
+        this.dirExists(join(skillPath, "templates")),
       ])
 
       const metadata: SkillMetadata = {
@@ -207,7 +228,7 @@ export class SkillLoader {
 
       return metadata
     } catch (error) {
-      this.log(`Failed to load skill from ${skillPath}: ${error}`, 'error')
+      this.log(`Failed to load skill from ${skillPath}: ${error}`, "error")
       return null
     }
   }
@@ -216,10 +237,7 @@ export class SkillLoader {
    * Phase 2: Fully load a skill (content + supporting files)
    * Only called when skill is activated
    */
-  async loadSkill(
-    skillName: string,
-    options: SkillLoadOptions = {}
-  ): Promise<LoadedSkill | null> {
+  async loadSkill(skillName: string, options: SkillLoadOptions = {}): Promise<LoadedSkill | null> {
     // Check if already loaded
     if (this.loadedSkills.has(skillName)) {
       this.log(`Skill ${skillName} already loaded, returning cached version`)
@@ -228,7 +246,7 @@ export class SkillLoader {
 
     const metadata = this.discoveredSkills.get(skillName)
     if (!metadata) {
-      this.log(`Skill ${skillName} not found in discovered skills`, 'error')
+      this.log(`Skill ${skillName} not found in discovered skills`, "error")
       return null
     }
 
@@ -236,7 +254,7 @@ export class SkillLoader {
       this.log(`Loading full content for skill: ${skillName}`)
 
       // Load SKILL.md content
-      const skillContent = await readFile(metadata.skillFilePath, 'utf-8')
+      const skillContent = await readFile(metadata.skillFilePath, "utf-8")
       const { body } = extractFrontmatter(skillContent)
 
       const loaded: LoadedSkill = {
@@ -247,39 +265,39 @@ export class SkillLoader {
 
       // Load reference.md if requested and exists
       if (options.loadReference !== false && metadata.hasReference) {
-        const refPath = join(metadata.path, 'reference.md')
-        const refContent = await readFile(refPath, 'utf-8')
+        const refPath = join(metadata.path, "reference.md")
+        const refContent = await readFile(refPath, "utf-8")
         loaded.reference = refContent
         loaded.estimatedTokens += estimateTokens(refContent)
       }
 
       // Load examples.md if requested and exists
       if (options.loadExamples !== false && metadata.hasExamples) {
-        const examplesPath = join(metadata.path, 'examples.md')
-        const examplesContent = await readFile(examplesPath, 'utf-8')
+        const examplesPath = join(metadata.path, "examples.md")
+        const examplesContent = await readFile(examplesPath, "utf-8")
         loaded.examples = examplesContent
         loaded.estimatedTokens += estimateTokens(examplesContent)
       }
 
       // List scripts if requested and exist
       if (options.loadScripts !== false && metadata.hasScripts) {
-        const scriptsDir = join(metadata.path, 'scripts')
+        const scriptsDir = join(metadata.path, "scripts")
         const scriptFiles = await readdir(scriptsDir)
-        loaded.scripts = scriptFiles.map(f => join(scriptsDir, f))
+        loaded.scripts = scriptFiles.map((f) => join(scriptsDir, f))
       }
 
       // List templates if requested and exist
       if (options.loadTemplates !== false && metadata.hasTemplates) {
-        const templatesDir = join(metadata.path, 'templates')
+        const templatesDir = join(metadata.path, "templates")
         const templateFiles = await readdir(templatesDir)
-        loaded.templates = templateFiles.map(f => join(templatesDir, f))
+        loaded.templates = templateFiles.map((f) => join(templatesDir, f))
       }
 
       // Check token limit
       if (options.maxTokens && loaded.estimatedTokens > options.maxTokens) {
         this.log(
           `Skill ${skillName} exceeds token limit: ${loaded.estimatedTokens} > ${options.maxTokens}`,
-          'warn'
+          "warn",
         )
       }
 
@@ -288,7 +306,7 @@ export class SkillLoader {
 
       return loaded
     } catch (error) {
-      this.log(`Failed to load skill ${skillName}: ${error}`, 'error')
+      this.log(`Failed to load skill ${skillName}: ${error}`, "error")
       return null
     }
   }
@@ -338,8 +356,10 @@ export class SkillLoader {
    * Get total estimated tokens for all loaded skills
    */
   getTotalTokens(): number {
-    return Array.from(this.loadedSkills.values())
-      .reduce((sum, skill) => sum + skill.estimatedTokens, 0)
+    return Array.from(this.loadedSkills.values()).reduce(
+      (sum, skill) => sum + skill.estimatedTokens,
+      0,
+    )
   }
 
   /**
@@ -369,15 +389,15 @@ export class SkillLoader {
   /**
    * Debug logging
    */
-  private log(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
-    if (!this.debug && level === 'info') return
+  private log(message: string, level: "info" | "warn" | "error" = "info"): void {
+    if (!this.debug && level === "info") return
 
-    const prefix = '[SkillLoader]'
+    const prefix = "[SkillLoader]"
     switch (level) {
-      case 'warn':
+      case "warn":
         console.warn(`${prefix} ${message}`)
         break
-      case 'error':
+      case "error":
         console.error(`${prefix} ${message}`)
         break
       default:
