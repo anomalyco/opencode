@@ -42,7 +42,7 @@ export function Sidebar(props: { sessionID: string }) {
     <Show when={session()}>
       <box flexShrink={0} gap={1} width={40}>
         <box>
-          <text>
+          <text fg={theme.text}>
             <b>{session().title}</b>
           </text>
           <Show when={session().share?.url}>
@@ -50,7 +50,7 @@ export function Sidebar(props: { sessionID: string }) {
           </Show>
         </box>
         <box>
-          <text>
+          <text fg={theme.text}>
             <b>Context</b>
           </text>
           <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
@@ -59,7 +59,7 @@ export function Sidebar(props: { sessionID: string }) {
         </box>
         <Show when={Object.keys(sync.data.mcp).length > 0}>
           <box>
-            <text>
+            <text fg={theme.text}>
               <b>MCP</b>
             </text>
             <For each={Object.entries(sync.data.mcp)}>
@@ -77,7 +77,7 @@ export function Sidebar(props: { sessionID: string }) {
                   >
                     •
                   </text>
-                  <text wrapMode="word">
+                  <text fg={theme.text} wrapMode="word">
                     {key}{" "}
                     <span style={{ fg: theme.textMuted }}>
                       <Switch>
@@ -96,7 +96,7 @@ export function Sidebar(props: { sessionID: string }) {
         </Show>
         <Show when={sync.data.lsp.length > 0}>
           <box>
-            <text>
+            <text fg={theme.text}>
               <b>LSP</b>
             </text>
             <For each={sync.data.lsp}>
@@ -123,7 +123,7 @@ export function Sidebar(props: { sessionID: string }) {
         </Show>
         <Show when={session().summary?.diffs}>
           <box>
-            <text>
+            <text fg={theme.text}>
               <b>Modified Files</b>
             </text>
             <For each={session().summary?.diffs || []}>
@@ -155,7 +155,7 @@ export function Sidebar(props: { sessionID: string }) {
         </Show>
         <Show when={todo().length > 0}>
           <box>
-            <text>
+            <text fg={theme.text}>
               <b>Todo</b>
             </text>
             <For each={todo()}>

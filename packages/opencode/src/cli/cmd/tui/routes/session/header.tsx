@@ -51,7 +51,7 @@ export function Header() {
       borderColor={theme.backgroundElement}
       flexShrink={0}
     >
-      <text>
+      <text fg={theme.text}>
         <span style={{ bold: true, fg: theme.accent }}>#</span>{" "}
         <span style={{ bold: true }}>{session().title}</span>
       </text>
@@ -64,7 +64,7 @@ export function Header() {
               </text>
             </Match>
             <Match when={true}>
-              <text wrapMode="word">
+              <text fg={theme.text} wrapMode="word">
                 /share <span style={{ fg: theme.textMuted }}>to create a shareable link</span>
               </text>
             </Match>

@@ -161,7 +161,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     <box gap={1}>
       <box paddingLeft={3} paddingRight={2}>
         <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD}>{props.title}</text>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            {props.title}
+          </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
         <box paddingTop={1} paddingBottom={1}>
