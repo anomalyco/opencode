@@ -126,6 +126,7 @@
         "@thisbeyond/solid-dnd": "0.7.5",
         "diff": "catalog:",
         "fuzzysort": "catalog:",
+        "livekit-client": "2.15.14",
         "luxon": "catalog:",
         "marked": "16.2.0",
         "marked-shiki": "1.2.1",

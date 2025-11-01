@@ -1,12 +1,13 @@
 import { Button, Icon, IconButton, Select, SelectDialog } from "@opencode-ai/ui"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, createMemo, Show, For, onMount, onCleanup } from "solid-js"
+import { createEffect, on, Component, createMemo, Show, For, onMount, onCleanup, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@/ui"
 import { getDirectory, getFilename } from "@/utils"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { TextSelection, useLocal } from "@/context/local"
 import { DateTime } from "luxon"
+import { createSpeechRecognition } from "@/utils/speech"
 
 interface PartBase {
   content: string
@@ -47,6 +48,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
   const isFocused = createFocusSignal(() => editorRef)
+
+  // Speech recognition
+  const speech = createSpeechRecognition({
+    onFinal: (text) => {
+      if (text.trim()) {
+        addPart({ type: "text", content: text + " ", start: 0, end: 0 })
+      }
+    },
+  })
+
+  const toggleRecording = () => {
+    if (speech.isRecording()) {
+      speech.stop()
+    } else {
+      speech.start()
+    }
+  }
 
   const handlePaste = (event: ClipboardEvent) => {
     event.preventDefault()
@@ -362,6 +380,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </div>
         <div class="p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
+            <Show when={speech.isSupported()}>
+              <IconButton
+                icon={speech.isRecording() ? "bolt" : "robot"}
+                iconSize="normal"
+                variant={speech.isRecording() ? "primary" : "secondary"}
+                onClick={toggleRecording}
+                aria-label={speech.isRecording() ? "Stop recording" : "Start recording"}
+                classList={{
+                  "text-red-500": speech.isRecording(),
+                  "animate-pulse": speech.isRecording(),
+                }}
+              />
+            </Show>
             <Select
               options={local.agent.list().map((agent) => agent.name)}
               current={local.agent.current().name}
