@@ -334,7 +334,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-2xl overflow-clip focus-within:shadow-xs-border-selected": true,
+          "rounded-2xl overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -365,6 +365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               current={local.agent.current().name}
               onSelect={local.agent.set}
               class="capitalize"
+              variant="ghost"
             />
             <SelectDialog
               title="Select model"

@@ -25,8 +25,8 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
-        preinstall: "node ./preinstall.mjs",
-        postinstall: "node ./postinstall.mjs",
+        preinstall: "bun ./preinstall.mjs || node ./preinstall.mjs",
+        postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: Script.version,
       optionalDependencies: binaries,

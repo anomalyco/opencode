@@ -1054,6 +1054,8 @@ export namespace SessionPrompt {
                   callID: value.id,
                   state: {
                     status: "pending",
+                    input: {},
+                    raw: "",
                   },
                 })
                 toolcalls[value.id] = part as MessageV2.ToolPart
@@ -1302,16 +1304,16 @@ export namespace SessionPrompt {
             part.state.status !== "completed" &&
             part.state.status !== "error"
           ) {
-            Session.updatePart({
+            await Session.updatePart({
               ...part,
               state: {
+                ...part.state,
                 status: "error",
                 error: "Tool execution aborted",
                 time: {
                   start: Date.now(),
                   end: Date.now(),
                 },
-                input: {},
               },
             })
           }
@@ -1591,6 +1593,7 @@ export namespace SessionPrompt {
       let index = 0
       template = template.replace(bashRegex, () => results[index++])
     }
+    template = template.trim()
 
     const parts = [
       {
@@ -1655,6 +1658,8 @@ export namespace SessionPrompt {
     })()
 
     const agent = await Agent.get(agentName)
+    let result: MessageV2.WithParts
+
     if ((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true) {
       using abort = lock(input.sessionID)
 
@@ -1730,7 +1735,7 @@ export namespace SessionPrompt {
       }
       await Session.updatePart(toolPart)
 
-      const result = await TaskTool.init().then((t) =>
+      const taskResult = await TaskTool.init().then((t) =>
         t.execute(args, {
           sessionID: input.sessionID,
           abort: abort.signal,
@@ -1758,22 +1763,31 @@ export namespace SessionPrompt {
           },
           input: toolPart.state.input,
           title: "",
-          metadata: result.metadata,
-          output: result.output,
+          metadata: taskResult.metadata,
+          output: taskResult.output,
         }
         await Session.updatePart(toolPart)
       }
 
-      return { info: assistantMsg, parts: [toolPart] }
+      result = { info: assistantMsg, parts: [toolPart] }
+    } else {
+      result = await prompt({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        model,
+        agent: agentName,
+        parts,
+      })
     }
 
-    return prompt({
+    Bus.publish(Command.Event.Executed, {
+      name: input.command,
       sessionID: input.sessionID,
-      messageID: input.messageID,
-      model,
-      agent: agentName,
-      parts,
+      arguments: input.arguments,
+      messageID: result.info.id,
     })
+
+    return result
   }
 
   async function ensureTitle(input: {
@@ -1815,6 +1829,12 @@ export namespace SessionPrompt {
             content: x,
           }),
         ),
+        {
+          role: "user" as const,
+          content: `
+              The following is the text to summarize:
+            `,
+        },
         ...MessageV2.toModelMessage([
           {
             info: {

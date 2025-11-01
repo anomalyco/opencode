@@ -19,10 +19,6 @@ export type KeybindsConfig = {
    */
   leader?: string
   /**
-   * Show help dialog
-   */
-  app_help?: string
-  /**
    * Exit the application
    */
   app_exit?: string
@@ -35,17 +31,13 @@ export type KeybindsConfig = {
    */
   theme_list?: string
   /**
-   * Create/update AGENTS.md
+   * Toggle sidebar
    */
-  project_init?: string
+  sidebar_toggle?: string
   /**
-   * Toggle tool details
+   * View status
    */
-  tool_details?: string
-  /**
-   * Toggle thinking blocks
-   */
-  thinking_blocks?: string
+  status_view?: string
   /**
    * Export session to editor
    */
@@ -78,14 +70,6 @@ export type KeybindsConfig = {
    * Compact the session
    */
   session_compact?: string
-  /**
-   * Cycle to next child session
-   */
-  session_child_cycle?: string
-  /**
-   * Cycle to previous child session
-   */
-  session_child_cycle_reverse?: string
   /**
    * Scroll messages up by one page
    */
@@ -123,17 +107,25 @@ export type KeybindsConfig = {
    */
   messages_redo?: string
   /**
+   * Toggle code block concealment in messages
+   */
+  messages_toggle_conceal?: string
+  /**
    * List available models
    */
   model_list?: string
   /**
-   * Next recent model
+   * Next recently used model
    */
   model_cycle_recent?: string
   /**
-   * Previous recent model
+   * Previous recently used model
    */
   model_cycle_recent_reverse?: string
+  /**
+   * List available commands
+   */
+  command_list?: string
   /**
    * List agents
    */
@@ -151,6 +143,10 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
+   * Forward delete
+   */
+  input_forward_delete?: string
+  /**
    * Paste from clipboard
    */
   input_paste?: string
@@ -163,53 +159,13 @@ export type KeybindsConfig = {
    */
   input_newline?: string
   /**
-   * @deprecated use agent_cycle. Next mode
+   * Previous history item
    */
-  switch_mode?: string
+  history_previous?: string
   /**
-   * @deprecated use agent_cycle_reverse. Previous mode
+   * Previous history item
    */
-  switch_mode_reverse?: string
-  /**
-   * @deprecated use agent_cycle. Next agent
-   */
-  switch_agent?: string
-  /**
-   * @deprecated use agent_cycle_reverse. Previous agent
-   */
-  switch_agent_reverse?: string
-  /**
-   * @deprecated Currently not available. List files
-   */
-  file_list?: string
-  /**
-   * @deprecated Close file
-   */
-  file_close?: string
-  /**
-   * @deprecated Search file
-   */
-  file_search?: string
-  /**
-   * @deprecated Split/unified diff
-   */
-  file_diff_toggle?: string
-  /**
-   * @deprecated Navigate to previous message
-   */
-  messages_previous?: string
-  /**
-   * @deprecated Navigate to next message
-   */
-  messages_next?: string
-  /**
-   * @deprecated Toggle layout
-   */
-  messages_layout_toggle?: string
-  /**
-   * @deprecated use messages_undo. Revert message
-   */
-  messages_revert?: string
+  history_next?: string
 }
 
 export type AgentConfig = {
@@ -426,7 +382,7 @@ export type Config = {
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
           experimental?: boolean
-          status?: "alpha" | "beta"
+          status?: "alpha" | "beta" | "deprecated"
           options?: {
             [key: string]: unknown
           }
@@ -781,11 +737,17 @@ export type FilePart = {
 
 export type ToolStatePending = {
   status: "pending"
+  input: {
+    [key: string]: unknown
+  }
+  raw: string
 }
 
 export type ToolStateRunning = {
   status: "running"
-  input: unknown
+  input: {
+    [key: string]: unknown
+  }
   title?: string
   metadata?: {
     [key: string]: unknown
@@ -990,7 +952,7 @@ export type Model = {
     output: Array<"text" | "audio" | "image" | "video" | "pdf">
   }
   experimental?: boolean
-  status?: "alpha" | "beta"
+  status?: "alpha" | "beta" | "deprecated"
   options: {
     [key: string]: unknown
   }
@@ -1086,6 +1048,72 @@ export type Agent = {
   }
 }
 
+export type McpStatusConnected = {
+  status: "connected"
+}
+
+export type McpStatusDisabled = {
+  status: "disabled"
+}
+
+export type McpStatusFailed = {
+  status: "failed"
+  error: string
+}
+
+export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed
+
+export type LspStatus = {
+  id: string
+  name: string
+  root: string
+  status: "connected" | "error"
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | (
+          | "session.list"
+          | "session.new"
+          | "session.share"
+          | "session.interrupt"
+          | "session.compact"
+          | "session.page.up"
+          | "session.page.down"
+          | "session.half.page.up"
+          | "session.half.page.down"
+          | "session.first"
+          | "session.last"
+          | "prompt.clear"
+          | "prompt.submit"
+          | "agent.cycle"
+        )
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -1118,6 +1146,13 @@ export type EventLspClientDiagnostics = {
   properties: {
     serverID: string
     path: string
+  }
+}
+
+export type EventLspUpdated = {
+  type: "lsp.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 
@@ -1261,16 +1296,10 @@ export type EventServerConnected = {
   }
 }
 
-export type EventIdeInstalled = {
-  type: "ide.installed"
-  properties: {
-    ide: string
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventLspClientDiagnostics
+  | EventLspUpdated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1286,8 +1315,10 @@ export type Event =
   | EventSessionUpdated
   | EventSessionDeleted
   | EventSessionError
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
   | EventServerConnected
-  | EventIdeInstalled
 
 export type ProjectListData = {
   body?: never
@@ -2455,8 +2486,30 @@ export type McpStatusResponses = {
   /**
    * MCP server status
    */
-  200: unknown
+  200: {
+    [key: string]: McpStatus
+  }
 }
+
+export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
+
+export type LspStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/lsp"
+}
+
+export type LspStatusResponses = {
+  /**
+   * LSP server status
+   */
+  200: Array<LspStatus>
+}
+
+export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
 
 export type TuiAppendPromptData = {
   body?: {
@@ -2629,6 +2682,10 @@ export type TuiShowToastData = {
     title?: string
     message: string
     variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
   }
   path?: never
   query?: {
@@ -2645,6 +2702,33 @@ export type TuiShowToastResponses = {
 }
 
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
+
+export type TuiPublishData = {
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/publish"
+}
+
+export type TuiPublishErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiPublishError = TuiPublishErrors[keyof TuiPublishErrors]
+
+export type TuiPublishResponses = {
+  /**
+   * Event published successfully
+   */
+  200: boolean
+}
+
+export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses]
 
 export type TuiControlNextData = {
   body?: never

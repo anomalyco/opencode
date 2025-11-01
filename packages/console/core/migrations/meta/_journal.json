@@ -260,6 +260,13 @@
       "when": 1760668952329,
       "tag": "0036_slimy_energizer",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1761928273807,
+      "tag": "0037_messy_jackal",
+      "breakpoints": true
     }
   ]
 }

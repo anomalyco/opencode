@@ -62,15 +62,21 @@ export const querySessionInfo = query(async (workspaceID: string) => {
   return withActor(() => {
     return {
       isAdmin: Actor.userRole() === "admin",
-      isBeta: Resource.App.stage === "production" ? workspaceID === "wrk_01K46JDFR0E75SG2Q8K172KF3Y" : true,
+      isBeta:
+        Resource.App.stage === "production"
+          ? workspaceID === "wrk_01K46JDFR0E75SG2Q8K172KF3Y"
+          : true,
     }
   }, workspaceID)
 }, "session.get")
 
-export const createCheckoutUrl = action(async (workspaceID: string, successUrl: string, cancelUrl: string) => {
-  "use server"
-  return withActor(() => Billing.generateCheckoutUrl({ successUrl, cancelUrl }), workspaceID)
-}, "checkoutUrl")
+export const createCheckoutUrl = action(
+  async (workspaceID: string, successUrl: string, cancelUrl: string) => {
+    "use server"
+    return withActor(() => Billing.generateCheckoutUrl({ successUrl, cancelUrl }), workspaceID)
+  },
+  "checkoutUrl",
+)
 
 export const queryBillingInfo = query(async (workspaceID: string) => {
   "use server"

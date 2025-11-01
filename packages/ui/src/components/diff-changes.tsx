@@ -16,16 +16,6 @@ export function DiffChanges(props: { diff: FileDiff | FileDiff[]; variant?: "def
   )
   const total = createMemo(() => (additions() ?? 0) + (deletions() ?? 0))
 
-  const countLines = (text: string) => {
-    if (!text) return 0
-    return text.split("\n").length
-  }
-
-  const totalBeforeLines = createMemo(() => {
-    if (!Array.isArray(props.diff)) return countLines(props.diff.before || "")
-    return props.diff.reduce((acc, diff) => acc + countLines(diff.before || ""), 0)
-  })
-
   const blockCounts = createMemo(() => {
     const TOTAL_BLOCKS = 5
 

@@ -12,13 +12,14 @@ import { Installation } from "./installation"
 import { NamedError } from "./util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { TuiCommand } from "./cli/cmd/tui"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
-import { AttachCommand } from "./cli/cmd/attach"
+import { AttachCommand } from "./cli/cmd/tui/attach"
+import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 
@@ -37,6 +38,7 @@ process.on("uncaughtException", (e) => {
 const cli = yargs(hideBin(process.argv))
   .scriptName("opencode")
   .help("help", "show help")
+  .alias("help", "h")
   .version("version", "show version number", Installation.VERSION)
   .alias("version", "v")
   .option("print-logs", {
@@ -69,7 +71,8 @@ const cli = yargs(hideBin(process.argv))
   .usage("\n" + UI.logo())
   .command(AcpCommand)
   .command(McpCommand)
-  .command(TuiCommand)
+  .command(TuiThreadCommand)
+  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
@@ -138,5 +141,5 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
-  process.exit();
+  process.exit()
 }

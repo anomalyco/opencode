@@ -65,7 +65,6 @@ export const TuiCommand = cmd({
         default: 0,
       })
       .option("hostname", {
-        alias: ["h"],
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",

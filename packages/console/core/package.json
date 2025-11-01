@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "0.15.30",
+  "version": "1.0.7",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -14,7 +14,7 @@
     "drizzle-orm": "0.41.0",
     "postgres": "3.4.7",
     "stripe": "18.0.0",
-    "ulid": "3.0.0",
+    "ulid": "catalog:",
     "zod": "catalog:"
   },
   "exports": {

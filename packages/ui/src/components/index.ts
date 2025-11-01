@@ -20,6 +20,7 @@ export * from "./select-dialog"
 export * from "./tabs"
 export * from "./basic-tool"
 export * from "./tooltip"
+export * from "./typewriter"
 
 export * from "../context/helper"
 export * from "../context/shiki"

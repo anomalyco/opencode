@@ -1,8 +1,27 @@
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import PROMPT_INITIALIZE from "./template/initialize.txt"
+import { Bus } from "../bus"
+import { Identifier } from "../id/id"
 
 export namespace Command {
+  export const Default = {
+    INIT: "init",
+  } as const
+
+  export const Event = {
+    Executed: Bus.event(
+      "command.executed",
+      z.object({
+        name: z.string(),
+        sessionID: Identifier.schema("session"),
+        arguments: z.string(),
+        messageID: Identifier.schema("message"),
+      }),
+    ),
+  }
+
   export const Info = z
     .object({
       name: z.string(),
@@ -30,6 +49,14 @@ export namespace Command {
         description: command.description,
         template: command.template,
         subtask: command.subtask,
+      }
+    }
+
+    if (result[Default.INIT] === undefined) {
+      result[Default.INIT] = {
+        name: Default.INIT,
+        description: "create/update AGENTS.md",
+        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
       }
     }
 

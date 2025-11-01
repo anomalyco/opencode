@@ -1,5 +1,4 @@
 import path from "path"
-import { $ } from "bun"
 import { exec } from "child_process"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -20,6 +19,7 @@ import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { $ } from "bun"
 
 type GitHubAuthor = {
   login: string

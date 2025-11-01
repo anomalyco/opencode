@@ -139,7 +139,10 @@ export namespace LSPClient {
           if (version !== undefined) {
             const next = version + 1
             files[input.path] = next
-            log.info("textDocument/didChange", { path: input.path, version: next })
+            log.info("textDocument/didChange", {
+              path: input.path,
+              version: next,
+            })
             await connection.sendNotification("textDocument/didChange", {
               textDocument: {
                 uri: `file://` + input.path,
