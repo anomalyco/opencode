@@ -321,6 +321,7 @@ export function Autocomplete(props: {
   }
 
   function show(mode: "@" | "/") {
+    command.keybinds(false)
     setStore({
       visible: mode,
       index: props.input().visualCursor.offset,
@@ -338,6 +339,7 @@ export function Autocomplete(props: {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
     }
+    command.keybinds(true)
     setStore("visible", false)
   }
 

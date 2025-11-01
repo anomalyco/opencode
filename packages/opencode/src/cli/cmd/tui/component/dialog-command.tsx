@@ -28,7 +28,9 @@ function init() {
     return registrations().flatMap((x) => x())
   })
 
+  let keybinds = true
   useKeyboard((evt) => {
+    if (!keybinds) return
     for (const option of options()) {
       if (option.keybind && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
@@ -46,6 +48,9 @@ function init() {
           return
         }
       }
+    },
+    keybinds(enabled: boolean) {
+      keybinds = enabled
     },
     show() {
       dialog.replace(() => <DialogCommand options={options()} />)
