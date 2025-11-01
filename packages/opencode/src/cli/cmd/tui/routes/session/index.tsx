@@ -65,6 +65,7 @@ import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { useKV } from "../../context/kv.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -82,6 +83,7 @@ function use() {
 export function Session() {
   const route = useRouteData("session")
   const sync = useSync()
+  const kv = useKV()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
@@ -92,7 +94,7 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">("auto")
+  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
   const [conceal, setConceal] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -200,19 +202,18 @@ export function Session() {
       disabled: !!session()?.share?.url,
       category: "Session",
       onSelect: async (dialog) => {
-        await sdk.client.session.share({
-          path: {
-            id: route.sessionID,
-          },
-        })
+        await sdk.client.session
+          .share({
+            path: {
+              id: route.sessionID,
+            },
+          })
           .then((res) =>
             Clipboard.copy(res.data!.share!.url).catch(() =>
-              toast.show({ message: "Failed to copy URL to clipboard", variant: "error" })
-            )
+              toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+            ),
           )
-          .then(() =>
-            toast.show({ message: "Share URL copied to clipboard!", variant: "success" })
-          )
+          .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
         dialog.clear()
       },
@@ -306,6 +307,8 @@ export function Session() {
           if (prev === "show") return "hide"
           return "show"
         })
+        if (sidebar() === "show") kv.set("sidebar", "auto")
+        if (sidebar() === "hide") kv.set("sidebar", "hide")
         dialog.clear()
       },
     },

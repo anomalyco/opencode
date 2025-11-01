@@ -242,7 +242,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           )}
         </For>
       </scrollbox>
-      <box paddingRight={2} paddingLeft={3} flexDirection="row" paddingBottom={1}>
+      <box paddingRight={2} paddingLeft={3} flexDirection="row" paddingBottom={1} gap={1}>
         <For each={props.keybind ?? []}>
           {(item) => (
             <text>
