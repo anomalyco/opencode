@@ -1,13 +1,13 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./raid-search.txt"
+import DESCRIPTION from "./kb-search.txt"
 import { Log } from "../util/log"
 import { loadRaidConfig, validateRaidConfig } from "../raid/raid-config"
 import { RaidKnowledgeBase } from "../raid/raid-kb"
 
-const log = Log.create({ service: "raid-search-tool" })
+const log = Log.create({ service: "kb-search-tool" })
 
-export const RaidSearchTool = Tool.define("raid-search", {
+export const KbSearchTool = Tool.define("kb-search", {
   description: DESCRIPTION,
   parameters: z.object({
     query: z.string().describe("Search query using FTS syntax"),
@@ -28,7 +28,7 @@ export const RaidSearchTool = Tool.define("raid-search", {
       .optional()
       .default(false),
   }),
-  async execute(params, ctx) {
+  async execute(params, _ctx) {
     const { query, maxResults, source, tags, contentType, includeContent } = params
     try {
       // Load and validate config
@@ -39,7 +39,7 @@ export const RaidSearchTool = Tool.define("raid-search", {
         return {
           title: "Config Error",
           metadata: { count: 0 },
-          output: `RAID configuration error:\n${validation.errors.join("\n")}`,
+          output: `KB configuration error:\n${validation.errors.join("\n")}`,
         }
       }
 

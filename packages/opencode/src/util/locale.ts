@@ -36,4 +36,15 @@ export namespace Locale {
     const template = count === 1 ? singular : plural
     return template.replace("{}", count.toString())
   }
+
+  export function stripMarkdown(str: string): string {
+    return str
+      .replace(/\*\*(.+?)\*\*/g, "$1") // Bold **text**
+      .replace(/\*(.+?)\*/g, "$1") // Italic *text*
+      .replace(/__(.+?)__/g, "$1") // Bold __text__
+      .replace(/_(.+?)_/g, "$1") // Italic _text_
+      .replace(/`(.+?)`/g, "$1") // Inline code `code`
+      .replace(/\[(.+?)\]\(.+?\)/g, "$1") // Links [text](url)
+      .replace(/^#+\s+/gm, "") // Headers
+  }
 }

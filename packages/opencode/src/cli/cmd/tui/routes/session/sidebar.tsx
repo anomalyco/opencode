@@ -8,8 +8,6 @@ import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
 import { useKeyboard, useRenderer } from "@opentui/solid"
-import { useSDK } from "../../context/sdk"
-
 type TabType = "files" | "todos" | "mcp"
 
 export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
@@ -17,10 +15,12 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const { theme } = useTheme()
   const local = useLocal()
   const renderer = useRenderer()
-  const sdk = useSDK()
   const [activeTab, setActiveTab] = createSignal<TabType>("mcp")
   const [expandedMcpServers, setExpandedMcpServers] = createSignal<Set<string>>(new Set())
   const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, any>>>({})
+  const [selectedFiles, setSelectedFiles] = createSignal<Set<string>>(new Set())
+  const [commitMessage, setCommitMessage] = createSignal("")
+  const [isCommitting, setIsCommitting] = createSignal(false)
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
@@ -31,6 +31,32 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
     if (evt.name === "2") setActiveTab("todos")
     if (evt.name === "3") setActiveTab("files")
   })
+
+  async function handleCommit() {
+    if (selectedFiles().size === 0 || !commitMessage() || isCommitting()) return
+    setIsCommitting(true)
+    try {
+      const files = Array.from(selectedFiles())
+      const gitAdd = files.map((f) => `git add "${f}"`).join(" && ")
+      const gitCommit = `git commit -m "${commitMessage().replace(/"/g, '\\"')}"`
+      const command = `${gitAdd} && ${gitCommit}`
+
+      const response = await fetch("http://localhost:4096/bash/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command, description: "Commit changes" }),
+      })
+
+      if (response.ok) {
+        setSelectedFiles(new Set<string>())
+        setCommitMessage("")
+      }
+    } catch (error) {
+      console.error("Commit failed:", error)
+    } finally {
+      setIsCommitting(false)
+    }
+  }
 
   async function toggleMcpServer(serverName: string) {
     const expanded = expandedMcpServers()
@@ -43,8 +69,6 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
       // Load tools if not already loaded
       if (!mcpTools()[serverName]) {
         try {
-          // After SDK regeneration, this should work as sdk.client.mcp.serverTools()
-          // For now using fetch as fallback until SDK is regenerated
           const response = await fetch(
             `http://localhost:4096/mcp/${encodeURIComponent(serverName)}/tools`,
           )
@@ -272,10 +296,28 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
 
         <Show when={activeTab() === "files"}>
           <Show when={session().summary?.diffs}>
-            <box marginTop={0}>
-              <text>
-                <b>Modified Files</b>
-              </text>
+            <box marginTop={0} flexDirection="column">
+              <box flexDirection="row" justifyContent="space-between">
+                <text>
+                  <b>Modified Files</b>
+                </text>
+                <text
+                  fg={theme.accent}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    const diffs = session().summary?.diffs || []
+                    if (selectedFiles().size === diffs.length) {
+                      setSelectedFiles(new Set<string>())
+                    } else {
+                      setSelectedFiles(new Set<string>(diffs.map((d) => d.file)))
+                    }
+                  }}
+                >
+                  {selectedFiles().size === (session().summary?.diffs || []).length
+                    ? "Desel All"
+                    : "Sel All"}
+                </text>
+              </box>
               <For each={session().summary?.diffs || []}>
                 {(item) => {
                   const file = createMemo(() => {
@@ -284,10 +326,27 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                     const rest = splits.slice(0, -1).join(path.sep)
                     return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
                   })
+                  const isSelected = createMemo(() => selectedFiles().has(item.file))
                   return (
-                    <box flexDirection="row" gap={1} justifyContent="space-between">
-                      <text fg={theme.textMuted} wrapMode="char">
-                        {file()}
+                    <box
+                      flexDirection="row"
+                      gap={1}
+                      justifyContent="space-between"
+                      onMouseUp={() => {
+                        if (renderer.getSelection()?.getSelectedText()) return
+                        setSelectedFiles((prev) => {
+                          const newFiles = new Set(prev)
+                          if (prev.has(item.file)) {
+                            newFiles.delete(item.file)
+                          } else {
+                            newFiles.add(item.file)
+                          }
+                          return newFiles
+                        })
+                      }}
+                    >
+                      <text fg={isSelected() ? theme.accent : theme.textMuted}>
+                        [{isSelected() ? "✓" : " "}] {file()}
                       </text>
                       <box flexDirection="row" gap={1} flexShrink={0}>
                         <Show when={item.additions}>
@@ -301,6 +360,34 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
                   )
                 }}
               </For>
+              <box marginTop={1}>
+                <text fg={theme.textMuted}>{commitMessage() || "Click Auto or type message"}</text>
+              </box>
+              <box flexDirection="row" gap={2}>
+                <text
+                  fg={selectedFiles().size > 0 && !isCommitting() ? theme.success : theme.textMuted}
+                  onMouseUp={() => {
+                    if (selectedFiles().size === 0 || isCommitting()) return
+                    const count = selectedFiles().size
+                    setCommitMessage(`Update ${count} file${count > 1 ? "s" : ""}`)
+                  }}
+                >
+                  [Auto]
+                </text>
+                <text
+                  fg={
+                    selectedFiles().size > 0 && commitMessage() && !isCommitting()
+                      ? theme.success
+                      : theme.textMuted
+                  }
+                  onMouseUp={() => {
+                    if (!isCommitting()) handleCommit()
+                  }}
+                >
+                  {isCommitting() ? "[Committing...]" : "[Commit]"}
+                </text>
+              </box>
+              <text fg={theme.textMuted}>{selectedFiles().size} selected</text>
             </box>
           </Show>
         </Show>

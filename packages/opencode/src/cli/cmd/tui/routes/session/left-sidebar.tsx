@@ -41,7 +41,7 @@ export function LeftSidebar(props: {
             <b>Current:</b>
           </text>
           <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-            {Locale.truncate(currentSession().title, 24)}
+            {Locale.truncate(Locale.stripMarkdown(currentSession().title), 24)}
           </text>
         </box>
 
@@ -61,7 +61,7 @@ export function LeftSidebar(props: {
                 }}
               >
                 {session.id === props.sessionID ? "▶ " : "  "}
-                {Locale.truncate(session.title, 22)}
+                {Locale.truncate(Locale.stripMarkdown(session.title), 22)}
               </text>
             )}
           </For>

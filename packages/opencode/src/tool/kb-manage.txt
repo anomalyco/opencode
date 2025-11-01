@@ -1,6 +1,6 @@
-Manage the RAID knowledge base - view statistics, list documents, get details, and delete documents.
+Manage the KB knowledge base - view statistics, list documents, get details, and delete documents.
 
-This tool provides administrative functions for the RAID knowledge base:
+This tool provides administrative functions for the KB knowledge base:
 
 Actions:
 - **stats**: Show knowledge base statistics (document counts, tokens, top keywords)

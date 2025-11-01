@@ -25,42 +25,12 @@ export interface FileAttachmentPart extends PartBase {
   selection?: TextSelection
 }
 
-export interface ImageAttachmentPart extends PartBase {
-  type: "image"
-  id: string        // unique ID for tracking
-  path: string      // original filename
-  data: string      // base64 encoded image data
-  index: number     // display number [image #N]
-}
-
-export type ContentPart = TextPart | FileAttachmentPart | ImageAttachmentPart
+export type ContentPart = TextPart | FileAttachmentPart
 
 interface PromptInputProps {
   onSubmit: (parts: ContentPart[]) => void
   class?: string
   ref?: (el: HTMLDivElement) => void
-}
-
-
-// Image Preview Component
-const ImagePreview: Component<{ image: ImageAttachmentPart, onRemove: () => void }> = (props) => {
-  return (
-    <div class="inline-flex items-center gap-2 px-2 py-1 bg-background-element rounded border border-border mr-2 mb-2">
-      <img 
-        src={props.image.data} 
-        alt={props.image.path}
-        class="w-10 h-10 object-cover rounded"
-      />
-      <span class="text-xs text-text font-mono">[image #{props.image.index}]</span>
-      <span class="text-xs text-text-muted truncate max-w-24">{props.image.path}</span>
-      <button
-        onClick={props.onRemove}
-        class="text-text-muted hover:text-error transition-colors"
-      >
-        <Icon name="close" class="size-3" />
-      </button>
-    </div>
-  )
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -79,19 +49,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const isEmpty = createMemo(() => isEqual(store.contentParts, defaultParts))
   const isFocused = createFocusSignal(() => editorRef)
 
-  // Image upload state
-  const [uploadedImages, setUploadedImages] = createSignal<Map<number, ImageAttachmentPart>>(new Map())
-  const [imageCounter, setImageCounter] = createSignal(0)
-  const [isDragging, setIsDragging] = createSignal(false)
-
-  const generateImageId = () => {
-    const count = imageCounter() + 1
-    setImageCounter(count)
-    return `img_${Date.now()}_${count}`
-  }
-
-
-
   // Speech recognition
   const speech = createSpeechRecognition({
     onFinal: (text) => {
@@ -108,60 +65,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       speech.start()
     }
   }
-  // Drag and drop handlers for images
-  const handleDragOver = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-  }
-
-  const handleDrop = async (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-    
-    const files = Array.from(e.dataTransfer?.files || [])
-    const imageFiles = files.filter(f => f.type.startsWith('image/'))
-    
-    for (const file of imageFiles) {
-      const reader = new FileReader()
-      reader.onload = (evt) => {
-        const data = evt.target?.result as string
-        const index = imageCounter() + 1
-        const id = generateImageId()
-        
-        const imagePart: ImageAttachmentPart = {
-          type: "image",
-          id,
-          path: file.name,
-          data,
-          index,
-          content: `[image #${index}]`,
-          start: 0,
-          end: 0
-        }
-        
-        setUploadedImages(prev => new Map(prev).set(index, imagePart))
-        addPart({ type: "text", content: `[image #${index}] `, start: 0, end: 0 })
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const removeImage = (index: number) => {
-    setUploadedImages(prev => {
-      const newMap = new Map(prev)
-      newMap.delete(index)
-      return newMap
-    })
-  }
-
 
   const handlePaste = (event: ClipboardEvent) => {
     event.preventDefault()
@@ -187,7 +90,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
-    items: local.file.searchFilesAndDirectories,
+    items: local.file.search,
     key: (x) => x,
     onSelect: (path) => {
       if (!path) return
@@ -413,33 +316,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleSubmit = (event: Event) => {
     event.preventDefault()
     if (store.contentParts.length > 0) {
-      const parts = [...store.contentParts]
-      const images = uploadedImages()
-      
-      // Extract all [image #N] references from the text
-      const textContent = parts.map(p => p.content).join(' ')
-      const imageRefs = textContent.match(/\[image #(\d+)\]/g) || []
-      const referencedIndexes = new Set(
-        imageRefs.map(ref => parseInt(ref.match(/\d+/)?.[0] || '0'))
-      )
-      
-      // Only include images that are actually referenced in the text
-      const referencedImages: ImageAttachmentPart[] = []
-      images.forEach((image, index) => {
-        if (referencedIndexes.has(index)) {
-          referencedImages.push(image)
-        }
-      })
-      
-      // Combine text parts with referenced images
-      const allParts = [...parts, ...referencedImages]
-      
-      props.onSubmit(allParts)
-      
-      // Clear everything
+      props.onSubmit([...store.contentParts])
       setStore("contentParts", defaultParts)
-      setUploadedImages(new Map())
-      setImageCounter(0)
     }
   }
 
@@ -447,29 +325,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popoverIsOpen}>
         <div class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10 overflow-y-auto flex flex-col p-2 pb-0 rounded-2xl border border-border-base bg-surface-raised-stronger-non-alpha shadow-md">
-          <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2">No matching files</div>}>
-            <For each={flat()}>
-              {(i) => (
-                <div
-                  classList={{
-                    "w-full flex items-center justify-between rounded-md": true,
-                    "bg-surface-raised-base-hover": active() === i,
-                  }}
-                >
-                  <div class="flex items-center gap-x-2 grow min-w-0">
-                    <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                    <div class="flex items-center text-14-regular">
-                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                        {getDirectory(i)}
-                      </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                    </div>
+          <For each={flat()}>
+            {(i) => (
+              <div
+                classList={{
+                  "w-full flex items-center justify-between rounded-md": true,
+                  "bg-surface-raised-base-hover": active() === i,
+                }}
+              >
+                <div class="flex items-center gap-x-2 grow min-w-0">
+                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
+                  <div class="flex items-center text-14-regular">
+                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                      {getDirectory(i)}
+                    </span>
+                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
                   </div>
-                  <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
                 </div>
-              )}
-            </For>
-          </Show>
+                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
+              </div>
+            )}
+          </For>
         </div>
       </Show>
       <form
@@ -481,20 +357,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }}
       >
         <div class="relative max-h-[240px] overflow-y-auto">
-          {/* Image Previews */}
-          <Show when={uploadedImages().size > 0}>
-            <div class="flex flex-wrap p-2 border-b border-border bg-background-weak">
-              <For each={Array.from(uploadedImages().values())}>
-                {(image) => (
-                  <ImagePreview 
-                    image={image} 
-                    onRemove={() => removeImage(image.index)} 
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-
           <div
             ref={(el) => {
               editorRef = el
@@ -503,14 +365,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             contenteditable="true"
             onInput={handleInput}
             onKeyDown={handleKeyDown}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
             classList={{
               "w-full p-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
-              "ring-2 ring-primary": isDragging(),
-              "ring-offset-2": isDragging()
             }}
           />
           <Show when={isEmpty()}>
@@ -608,9 +465,6 @@ function isEqual(arrA: ContentPart[], arrB: ContentPart[]): boolean {
       return false
     }
     if (partA.type === "file" && partA.path !== (partB as FileAttachmentPart).path) {
-      return false
-    }
-    if (partA.type === "image" && partA.data !== (partB as ImageAttachmentPart).data) {
       return false
     }
   }

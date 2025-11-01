@@ -1,13 +1,13 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./raid-kb.txt"
+import DESCRIPTION from "./kb-manage.txt"
 import { Log } from "../util/log"
 import { loadRaidConfig, validateRaidConfig } from "../raid/raid-config"
 import { RaidKnowledgeBase } from "../raid/raid-kb"
 
-const log = Log.create({ service: "raid-kb-tool" })
+const log = Log.create({ service: "kb-manage-tool" })
 
-export const RaidKbTool = Tool.define("raid-kb", {
+export const KbManageTool = Tool.define("kb-manage", {
   description: DESCRIPTION,
   parameters: z.object({
     action: z.enum(["stats", "list", "get", "delete", "clear"]).describe("Action to perform"),
@@ -22,7 +22,7 @@ export const RaidKbTool = Tool.define("raid-kb", {
     limit: z.number().describe("Limit for 'list' action").optional().default(20),
     offset: z.number().describe("Offset for 'list' action").optional().default(0),
   }),
-  async execute(params, ctx) {
+  async execute(params, _ctx) {
     const { action, documentId, source, limit, offset } = params
     try {
       // Load and validate config
@@ -33,7 +33,7 @@ export const RaidKbTool = Tool.define("raid-kb", {
         return {
           title: "Config Error",
           metadata: {},
-          output: `RAID configuration error:\n${validation.errors.join("\n")}`,
+          output: `KB configuration error:\n${validation.errors.join("\n")}`,
         }
       }
 

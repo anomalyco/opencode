@@ -11,10 +11,12 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { AddDirTool } from "./add-dir"
-import { RaidIngestTool } from "./raid-ingest"
-import { RaidSearchTool } from "./raid-search"
-import { RaidQueryTool } from "./raid-query"
-import { RaidKbTool } from "./raid-kb"
+import { KbIngestTool } from "./kb-ingest"
+import { KbSearchTool } from "./kb-search"
+import { KbQueryTool } from "./kb-query"
+import { KbManageTool } from "./kb-manage"
+import { LspDiagnosticTool } from "./lsp-diagnostics"
+import { LspHoverTool } from "./lsp-hover"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -99,10 +101,12 @@ export namespace ToolRegistry {
       TodoReadTool,
       TaskTool,
       AddDirTool,
-      RaidIngestTool,
-      RaidSearchTool,
-      RaidQueryTool,
-      RaidKbTool,
+      KbIngestTool,
+      KbSearchTool,
+      KbQueryTool,
+      KbManageTool,
+      LspDiagnosticTool,
+      LspHoverTool,
       ...custom,
     ]
   }

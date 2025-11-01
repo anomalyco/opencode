@@ -1,14 +1,14 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./raid-query.txt"
+import DESCRIPTION from "./kb-query.txt"
 import { Log } from "../util/log"
 import { loadRaidConfig, validateRaidConfig } from "../raid/raid-config"
 import { RaidKnowledgeBase } from "../raid/raid-kb"
 import { RaidOrchestrator } from "../raid/raid-orchestrator"
 
-const log = Log.create({ service: "raid-query-tool" })
+const log = Log.create({ service: "kb-query-tool" })
 
-export const RaidQueryTool = Tool.define("raid-query", {
+export const KbQueryTool = Tool.define("kb-query", {
   description: DESCRIPTION,
   parameters: z.object({
     query: z.string().describe("Natural language question to answer using the knowledge base"),
@@ -33,7 +33,7 @@ export const RaidQueryTool = Tool.define("raid-query", {
         return {
           title: "Config Error",
           metadata: {},
-          output: `RAID configuration error:\n${validation.errors.join("\n")}`,
+          output: `KB configuration error:\n${validation.errors.join("\n")}`,
         }
       }
 

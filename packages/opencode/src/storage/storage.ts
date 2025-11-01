@@ -178,6 +178,19 @@ export namespace Storage {
     })
   }
 
+  export async function readMany<T>(keys: string[][]) {
+    const dir = await state().then((x) => x.dir)
+    return Promise.all(
+      keys.map(async (key) => {
+        const target = path.join(dir, ...key) + ".json"
+        return withErrorHandling(async () => {
+          using _ = await Lock.read(target)
+          return Bun.file(target).json() as Promise<T>
+        })
+      }),
+    )
+  }
+
   export async function update<T>(key: string[], fn: (draft: T) => void) {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"

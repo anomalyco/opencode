@@ -53,6 +53,33 @@ export default function Page() {
   let messageScrollElement!: HTMLDivElement
   const [activeItem, setActiveItem] = createSignal<string | undefined>(undefined)
 
+  // Scroll to bottom when session changes
+  createEffect(() => {
+    const activeSession = local.session.active()
+    if (activeSession && messageScrollElement) {
+      // Small delay to ensure content is rendered
+      setTimeout(() => {
+        if (messageScrollElement) {
+          messageScrollElement.scrollTop = messageScrollElement.scrollHeight
+        }
+      }, 100)
+    }
+  })
+
+  // Helper function to check if session is actively running
+  const isSessionActive = (sessionId: string) => {
+    const messages = sync.data.message[sessionId] || []
+    for (const message of messages) {
+      const parts = sync.data.part[message.id] || []
+      for (const part of parts) {
+        if (part.type === 'tool' && (part.state.status === 'pending' || part.state.status === 'running')) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
   const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
 
   onMount(() => {
@@ -385,13 +412,19 @@ export default function Page() {
                 const diffs = createMemo(() => session.summary?.diffs ?? [])
                 const filesChanged = createMemo(() => diffs().length)
                 const updated = DateTime.fromMillis(session.time.updated)
+                const isActive = createMemo(() => isSessionActive(session.id))
                 return (
                   <Tooltip placement="right" value={session.title}>
-                    <div>
+                    <div classList={{ "relative": true, "session-active": isActive() }}>
                       <div class="flex items-center self-stretch gap-6 justify-between">
-                        <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                          {session.title}
-                        </span>
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                          <Show when={isActive()}>
+                            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+                          </Show>
+                          <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                            {session.title}
+                          </span>
+                        </div>
                         <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
                           {Math.abs(updated.diffNow().as("seconds")) < 60
                             ? "Now"

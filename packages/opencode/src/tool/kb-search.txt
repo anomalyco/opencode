@@ -1,4 +1,4 @@
-Search the RAID knowledge base using full-text search with relevance ranking.
+Search the KB knowledge base using full-text search with relevance ranking.
 
 This tool performs fast, SQLite FTS5-powered searches across all ingested documents, with:
 - BM25 relevance ranking

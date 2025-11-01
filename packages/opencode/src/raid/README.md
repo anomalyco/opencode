@@ -1,6 +1,6 @@
-# RAID - Retrieval-Augmented Intelligence Database
+# KB - Knowledge Base
 
-RAID is an advanced knowledge management system for OpenCode that combines traditional full-text search with AI-powered query orchestration.
+KB is an advanced knowledge management system for OpenCode that combines traditional full-text search with AI-powered query orchestration.
 
 ## Features
 
@@ -30,14 +30,14 @@ export RAID_ORCH_MODEL="gpt-4o"          # Powerful model for orchestration
 
 ```bash
 # Ingest project documentation
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ./docs/api-reference.md \
   --source project \
   --tags "api,reference" \
   --generateSummary true
 
 # Ingest to global knowledge base
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ~/Documents/style-guide.md \
   --source global \
   --tags "guidelines,style"
@@ -47,13 +47,13 @@ opencode tool raid-ingest \
 
 ```bash
 # Full-text search
-opencode tool raid-search \
+opencode tool kb-search \
   --query "authentication" \
   --maxResults 5 \
   --source both
 
 # Search with filters
-opencode tool raid-search \
+opencode tool kb-search \
   --query "api AND endpoints" \
   --contentType '["markdown"]' \
   --tags '["api"]'
@@ -63,12 +63,12 @@ opencode tool raid-search \
 
 ```bash
 # Ask natural language questions
-opencode tool raid-query \
+opencode tool kb-query \
   --query "How do I configure authentication?" \
   --showProgress true
 
 # Query specific documents
-opencode tool raid-query \
+opencode tool kb-query \
   --query "Explain the rate limiting implementation" \
   --documentIds '["doc-id-123"]'
 ```
@@ -77,19 +77,19 @@ opencode tool raid-query \
 
 ```bash
 # View statistics
-opencode tool raid-kb --action stats
+opencode tool kb-manage --action stats
 
 # List all documents
-opencode tool raid-kb --action list --limit 20
+opencode tool kb-manage --action list --limit 20
 
 # Get specific document
-opencode tool raid-kb --action get --documentId "doc-123"
+opencode tool kb-manage --action get --documentId "doc-123"
 
 # Delete document
-opencode tool raid-kb --action delete --documentId "doc-123"
+opencode tool kb-manage --action delete --documentId "doc-123"
 
 # Clear all project documents
-opencode tool raid-kb --action clear --source project
+opencode tool kb-manage --action clear --source project
 ```
 
 ## Architecture
@@ -108,10 +108,10 @@ packages/opencode/src/raid/
 
 ```
 packages/opencode/src/tool/
-├── raid-ingest.ts/.txt   # Document ingestion
-├── raid-search.ts/.txt   # Full-text search
-├── raid-query.ts/.txt    # AI-powered querying
-└── raid-kb.ts/.txt       # KB management
+├── kb-ingest.ts/.txt   # Document ingestion
+├── kb-search.ts/.txt   # Full-text search
+├── kb-query.ts/.txt    # AI-powered querying
+└── kb-manage.ts/.txt   # KB management
 ```
 
 ## Configuration
@@ -144,12 +144,12 @@ Index your project documentation and query it naturally:
 
 ```bash
 # Ingest docs
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ./docs/architecture.md \
   --source project
 
 # Ask questions
-opencode tool raid-query \
+opencode tool kb-query \
   --query "What database does the system use?"
 ```
 
@@ -159,13 +159,13 @@ Build a knowledge base from technical specifications:
 
 ```bash
 # Ingest API specs
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ./specs/api-v2.yaml \
   --source project \
   --tags "api,spec"
 
 # Query implementation details
-opencode tool raid-query \
+opencode tool kb-query \
   --query "How are webhooks authenticated?"
 ```
 
@@ -175,13 +175,13 @@ Create a global knowledge base for your organization:
 
 ```bash
 # Ingest company guidelines
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ~/company/coding-standards.md \
   --source global \
   --tags "standards,guidelines"
 
 # New team members can query
-opencode tool raid-query \
+opencode tool kb-query \
   --query "What are our TypeScript conventions?"
 ```
 
@@ -192,14 +192,14 @@ Index research papers and technical articles:
 ```bash
 # Ingest research
 for paper in ~/research/*.pdf; do
-  opencode tool raid-ingest \
+  opencode tool kb-ingest \
     --filePath "$paper" \
     --source global \
     --tags "research"
 done
 
 # Find relevant research
-opencode tool raid-search \
+opencode tool kb-search \
   --query "machine learning optimization"
 ```
 
@@ -241,19 +241,19 @@ Use SQLite FTS5 syntax for advanced searches:
 
 ```bash
 # Exact phrase
-opencode tool raid-search --query '"user authentication"'
+opencode tool kb-search --query '"user authentication"'
 
 # Boolean operators
-opencode tool raid-search --query 'api AND (rest OR graphql)'
+opencode tool kb-search --query 'api AND (rest OR graphql)'
 
 # Prefix matching
-opencode tool raid-search --query 'auth*'
+opencode tool kb-search --query 'auth*'
 
 # Field-specific
-opencode tool raid-search --query 'title:authentication'
+opencode tool kb-search --query 'title:authentication'
 
 # Exclude terms
-opencode tool raid-search --query 'api -deprecated'
+opencode tool kb-search --query 'api -deprecated'
 ```
 
 ## Performance Tips
@@ -302,10 +302,10 @@ export OPENAI_API_KEY="your-key"
 
 ```bash
 # Check if documents exist
-opencode tool raid-kb --action stats
+opencode tool kb-manage --action stats
 
 # Try simpler query
-opencode tool raid-search --query "keyword"
+opencode tool kb-search --query "keyword"
 ```
 
 ### AI Query Fails
@@ -352,17 +352,17 @@ export RAID_SHARD_MODEL="gpt-3.5-turbo"
 ```bash
 # Ingest all markdown docs
 find ./docs -name "*.md" -exec \
-  opencode tool raid-ingest \
+  opencode tool kb-ingest \
     --filePath {} \
     --source project \
     --tags "documentation" \;
 
 # Search for specific topics
-opencode tool raid-search \
+opencode tool kb-search \
   --query "deployment configuration"
 
 # Ask questions
-opencode tool raid-query \
+opencode tool kb-query \
   --query "How do I deploy to production?"
 ```
 
@@ -370,13 +370,13 @@ opencode tool raid-query \
 
 ```bash
 # Ingest architecture decision records
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ./adr/0001-use-postgresql.md \
   --source project \
   --tags "adr,database"
 
 # Query decisions
-opencode tool raid-query \
+opencode tool kb-query \
   --query "Why did we choose PostgreSQL?"
 ```
 
@@ -384,30 +384,30 @@ opencode tool raid-query \
 
 ```bash
 # Create global knowledge base
-opencode tool raid-ingest \
+opencode tool kb-ingest \
   --filePath ~/notes/coding-tips.md \
   --source global \
   --tags "tips,personal"
 
 # Search across all projects
-opencode tool raid-search \
+opencode tool kb-search \
   --query "performance optimization" \
   --source global
 ```
 
 ## Integration with OpenCode
 
-RAID tools are available in OpenCode sessions:
+KB tools are available in OpenCode sessions:
 
 ```
 User: "Can you search our documentation for authentication info?"
-Agent: [Uses raid-search tool automatically]
+Agent: [Uses kb-search tool automatically]
 
 User: "Ingest this API spec into the knowledge base"
-Agent: [Uses raid-ingest tool to add document]
+Agent: [Uses kb-ingest tool to add document]
 
 User: "What does our architecture doc say about caching?"
-Agent: [Uses raid-query tool for AI-powered answer]
+Agent: [Uses kb-query tool for AI-powered answer]
 ```
 
 ## Limitations

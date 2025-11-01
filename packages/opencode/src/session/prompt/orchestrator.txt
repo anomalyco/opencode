@@ -33,7 +33,7 @@ You have access to all standard OpenCode tools:
 - **Code Execution**: bash
 - **Web**: webfetch
 - **Task Management**: task (for delegating to sub-agents)
-- **RAID Knowledge Base**: raid-ingest, raid-search, raid-query, raid-kb
+- **KB Knowledge Base**: kb-ingest, kb-search, kb-query, kb-manage
 - **Todo Management**: todowrite, todoread
 
 ## Orchestration Workflow
@@ -187,7 +187,7 @@ I'll debug this systematically:
 4. Review search implementation
 
 Step 1: Checking if documents exist...
-@general use raid-kb tool to check stats
+@general use kb-manage tool to check stats
 
 [After diagnosis]
 Found the issue: FTS query syntax needs quotes for phrases.
@@ -217,16 +217,16 @@ Starting with backend markdown parser...
 [Continues through each component]
 ```
 
-## Integration with RAID
+## Integration with KB
 
-Use RAID tools for knowledge queries:
+Use KB tools for knowledge queries:
 
 ```
 User: "How does authentication work?"
 
 Orchestrator:
 I'll search our knowledge base for authentication documentation.
-@general use raid-query tool to ask: "How is authentication implemented?"
+@general use kb-query tool to ask: "How is authentication implemented?"
 
 [RAID provides answer from docs]
 Here's what I found: [summarize RAID answer]

@@ -7,9 +7,58 @@ Custom tools are functions you create that the LLM can call during conversations
 
 ---
 
-## Creating a tool
+## Core Tools vs Custom Tools
 
-Tools are defined as **TypeScript** or **JavaScript** files.
+Understanding the distinction between core and custom tools is important for choosing the right approach:
+
+### Core Tools
+
+**Core tools** are built into OpenCode by contributors and are always available to all users. These are located in `src/tool/` within the OpenCode repository and include:
+
+- **File operations**: `read`, `write`, `edit`, `list`, `glob`, `grep`
+- **System operations**: `bash`, `patch`, `add-dir`
+- **Language Server Protocol (LSP)**: `lsp-diagnostics`, `lsp-hover`
+- **Knowledge Base (KB)**: `kb-ingest`, `kb-search`, `kb-query`, `kb-manage`
+- **Task management**: `todowrite`, `todoread`, `task`
+- **Web operations**: `webfetch`
+
+Core tools are maintained by the OpenCode team and follow strict quality standards. They're deeply integrated with OpenCode's architecture and optimized for performance.
+
+### Custom Tools
+
+**Custom tools** are created by individual users or projects for specific needs. They follow the plugin system pattern and are located in:
+
+- `.opencode/tool/` (project-specific)
+- `~/.config/opencode/tool/` (global)
+
+Custom tools use the `tool()` helper from `@opencode-ai/plugin` and are perfect for:
+
+- Project-specific operations (database queries, API calls)
+- Domain-specific workflows
+- Integration with proprietary systems
+- Experimental functionality
+
+### When to Create Custom Tools vs Contribute Core Tools
+
+**Create a custom tool when:**
+- The functionality is specific to your project or organization
+- You need rapid prototyping or experimentation
+- The tool integrates with proprietary systems
+- You want to customize behavior for your specific workflow
+
+**Consider contributing a core tool when:**
+- The functionality would benefit the entire OpenCode community
+- The tool provides fundamental development capabilities
+- You want to ensure long-term maintenance and optimization
+- The feature aligns with OpenCode's core mission
+
+To contribute a core tool, submit a pull request to the OpenCode repository with your tool implementation in `src/tool/`.
+
+---
+
+## Creating a Custom Tool
+
+Custom tools are defined as **TypeScript** or **JavaScript** files.
 
 ---
 
@@ -19,6 +68,8 @@ They can be defined:
 
 - Locally by placing them in the `.opencode/tool/` directory of your project.
 - Or globally, by placing them in `~/.config/opencode/tool/`.
+
+**Note**: The `src/tool/` directory is reserved for OpenCode core contributors. End users should only create custom tools in the `.opencode/tool/` or `~/.config/opencode/tool/` directories.
 
 ---
 
@@ -71,6 +122,32 @@ export default {
   },
 }
 ```
+
+---
+
+## Core Tool Examples
+
+To help you understand the difference, here are some examples of recently added core tools:
+
+### LSP Tools
+
+The Language Server Protocol tools provide IDE-like capabilities:
+
+- `lsp-diagnostics`: Get real-time error checking and warnings
+- `lsp-hover`: Get type information and documentation for code symbols
+
+These are core tools because they provide fundamental development capabilities that benefit all OpenCode users.
+
+### Knowledge Base Tools
+
+The RAID (Retrieval-Augmented Intelligence Database) tools enable intelligent document search:
+
+- `kb-ingest`: Add documents to the knowledge base with AI-powered summarization
+- `kb-search`: Fast full-text search across ingested documents
+- `kb-query`: AI-powered question answering using the knowledge base
+- `kb-manage`: Manage knowledge base documents and statistics
+
+These are core tools because they provide essential AI-enhanced development capabilities.
 
 ---
 

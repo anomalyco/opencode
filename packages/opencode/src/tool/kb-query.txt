@@ -1,6 +1,6 @@
-Query the RAID knowledge base with AI-powered orchestration, intelligent shard routing, and answer fusion.
+Query the KB knowledge base with AI-powered orchestration, intelligent shard routing, and answer fusion.
 
-This is the main RAID query interface that uses advanced RAG techniques:
+This is the main KB query interface that uses advanced RAG techniques:
 
 1. **Document Discovery**: Searches knowledge base for relevant documents
 2. **Smart Sharding**: Breaks large documents into overlapping chunks

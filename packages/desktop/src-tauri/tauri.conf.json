@@ -1,0 +1,37 @@
+{
+  "productName": "OpenCode",
+  "identifier": "ai.opencode.desktop",
+  "version": "1.0.10",
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://localhost:4096",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "copyright": "Copyright © 2025 OpenCode",
+    "category": "DeveloperTool",
+    "shortDescription": "AI-powered code assistant",
+    "longDescription": "OpenCode Desktop - An intelligent coding assistant powered by AI"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OpenCode",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {}
+}

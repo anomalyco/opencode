@@ -1,23 +1,50 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="shortcut icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OpenCode</title>
   </head>
-  <body class="antialiased overscroll-none select-none text-12-regular">
-    <!-- <script> -->
-    <!--   ;(function () { -->
-    <!--     const savedTheme = localStorage.getItem("theme") || "opencode" -->
-    <!--     const savedDarkMode = localStorage.getItem("darkMode") !== "false" -->
-    <!--     document.documentElement.setAttribute("data-theme", savedTheme) -->
-    <!--     document.documentElement.setAttribute("data-dark", savedDarkMode.toString()) -->
-    <!--   })() -->
-    <!-- </script> -->
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+  <body>
     <div id="root"></div>
-    <script src="/src/index.tsx" type="module"></script>
+    <script type="module">
+      // Tauri integration: Wait for server to be ready
+      if (window.__TAURI__) {
+        const { invoke, event } = window.__TAURI__;
+        
+        // Show loading state
+        const root = document.getElementById('root');
+        root.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100vh; font-family: system-ui; color: #888;">Starting OpenCode server...</div>';
+        
+        // Listen for server ready event
+        event.listen('server-ready', (e) => {
+          console.log('Server ready on port:', e.payload);
+          // Server is ready, load the actual app
+          import('/src/index.tsx');
+        });
+        
+        // Listen for server errors
+        event.listen('server-error', (e) => {
+          console.error('Server error:', e.payload);
+          root.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui; color: #f44; gap: 16px;">
+            <div>Failed to start OpenCode server</div>
+            <div style="color: #888; font-size: 14px;">${e.payload}</div>
+            <div style="color: #888; font-size: 12px;">Please ensure 'opencode' is installed and in your PATH</div>
+          </div>`;
+        });
+        
+        // Check server status periodically
+        setInterval(async () => {
+          const ready = await invoke('check_server_status');
+          if (!ready) {
+            console.warn('Server not responding, reloading may be needed');
+          }
+        }, 5000);
+      } else {
+        // Running in browser, load app normally
+        import('/src/index.tsx');
+      }
+    </script>
   </body>
 </html>

@@ -1,6 +1,6 @@
-Ingest documents into the RAID knowledge base with automatic sharding, AI-powered summarization, and keyword extraction.
+Ingest documents into the KB knowledge base with automatic sharding, AI-powered summarization, and keyword extraction.
 
-This tool adds documents to the RAID (Retrieval-Augmented Intelligence Database) system, which:
+This tool adds documents to the KB (Knowledge Base) system, which:
 - Automatically shards large documents into overlapping chunks for efficient querying
 - Extracts keywords and generates summaries using AI
 - Supports both project-specific and global knowledge bases

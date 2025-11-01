@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./raid-ingest.txt"
+import DESCRIPTION from "./kb-ingest.txt"
 import { Log } from "../util/log"
 import { loadRaidConfig, validateRaidConfig } from "../raid/raid-config"
 import { RaidKnowledgeBase } from "../raid/raid-kb"
@@ -9,9 +9,9 @@ import { readFile } from "node:fs/promises"
 import { basename, extname } from "node:path"
 import { ulid } from "ulid"
 
-const log = Log.create({ service: "raid-ingest-tool" })
+const log = Log.create({ service: "kb-ingest-tool" })
 
-export const RaidIngestTool = Tool.define("raid-ingest", {
+export const KbIngestTool = Tool.define("kb-ingest", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("Path to the file or directory to ingest"),
@@ -38,7 +38,7 @@ export const RaidIngestTool = Tool.define("raid-ingest", {
         return {
           title: "Config Error",
           metadata: {},
-          output: `RAID configuration error:\n${validation.errors.join("\n")}`,
+          output: `KB configuration error:\n${validation.errors.join("\n")}`,
         }
       }
 
