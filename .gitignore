@@ -11,5 +11,4 @@ playground
 tmp
 dist
 .turbo
-**/.serena
-.serena/
+.opencode
