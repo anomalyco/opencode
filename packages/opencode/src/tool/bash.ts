@@ -1,5 +1,6 @@
 import z from "zod"
-import { spawn } from "child_process"
+import { spawn, type SpawnOptionsWithoutStdio } from "child_process"
+import { normalize } from "path"
 import { Tool } from "./tool"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
@@ -141,12 +142,14 @@ export const BashTool = Tool.define("bash", {
       })
     }
 
-    const proc = spawn(params.command, {
-      shell: true,
+    const shell = process.env["SHELL"]
+    const spawnOptions = {
       cwd: Instance.directory,
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
-    })
+      shell: process.platform === "win32" && shell ? shell : true,
+    } as SpawnOptionsWithoutStdio & { stdio: ["ignore", "pipe", "pipe"] }
+    const proc = spawn(params.command, spawnOptions)
 
     let output = ""
 

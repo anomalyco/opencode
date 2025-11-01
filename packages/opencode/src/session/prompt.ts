@@ -1429,7 +1429,7 @@ export namespace SessionPrompt {
     }
     await Session.updatePart(part)
     const shell = process.env["SHELL"] ?? "bash"
-    const shellName = path.basename(shell)
+    const shellName = path.basename(shell).replace(/\.(exe|cmd|bat)$/i, "")
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
