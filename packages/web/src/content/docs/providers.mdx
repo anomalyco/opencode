@@ -559,9 +559,55 @@ To use Kimi K2 from Moonshot AI:
 
 ### Ollama
 
-You can configure opencode to use local models through Ollama.
+OpenCode provides zero-configuration support for Ollama, automatically detecting your server and discovering all installed models.
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+:::tip
+**Zero Configuration Required!** Just have Ollama running and OpenCode will automatically discover your server and all installed models.
+:::
+
+#### Quick Start (Zero Config!)
+
+1. **Start Ollama** (if not already running):
+   ```bash
+   ollama serve
+   ```
+
+2. **Run OpenCode** - it will automatically detect Ollama and discover all models:
+   ```bash
+   opencode
+   ```
+
+That's it! All your Ollama models will appear in the model list automatically.
+
+#### Auto-detection
+
+OpenCode will automatically detect the Ollama server URL in the following priority:
+
+1. **Environment variable**: If you set `OLLAMA_BASE_URL`, OpenCode will use that URL.
+   ```bash
+   OLLAMA_BASE_URL=http://192.168.2.26:11434 opencode
+   ```
+
+   Or add it to your bash profile:
+   ```bash title="~/.bash_profile"
+   export OLLAMA_BASE_URL=http://192.168.2.26:11434
+   ```
+
+2. **Default URLs**: If `OLLAMA_BASE_URL` is not set, OpenCode will automatically try:
+   - `http://localhost:11434`
+   - `http://127.0.0.1:11434`
+
+3. **Model Discovery**: OpenCode automatically fetches and loads all models from `/api/tags`
+
+:::note
+All models installed in your Ollama instance will be automatically discovered and loaded. Custom configuration is optional and only needed if you want to override display names or other settings.
+:::
+
+#### Optional Manual Configuration
+
+If you want to customize model names or specify a custom server URL, you can configure Ollama in `opencode.json`:
+
+```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -569,11 +615,14 @@ You can configure opencode to use local models through Ollama.
       "npm": "@ai-sdk/openai-compatible",
       "name": "Ollama (local)",
       "options": {
-        "baseURL": "http://localhost:11434/v1"
+        "baseURL": "http://custom-server:11434/v1"
       },
       "models": {
-        "llama2": {
-          "name": "Llama 2"
+        "llama3.2:latest": {
+          "name": "Llama 3.2"
+        },
+        "qwen2.5-coder:7b": {
+          "name": "Qwen 2.5 Coder 7B"
         }
       }
     }
@@ -581,13 +630,13 @@ You can configure opencode to use local models through Ollama.
 }
 ```
 
-In this example:
+**Configuration options:**
 
-- `ollama` is the custom provider ID. This can be any string you want.
-- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
-- `name` is the display name for the provider in the UI.
-- `options.baseURL` is the endpoint for the local server.
-- `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+- `ollama` - provider ID (defaults to "ollama")
+- `npm` - AI SDK package (defaults to `@ai-sdk/openai-compatible`)
+- `name` - display name in UI (defaults to "Ollama (local)")
+- `options.baseURL` - server endpoint (auto-detected if not specified)
+- `models` - custom model configurations (auto-discovered if not specified)
 
 :::tip
 If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 16k - 32k.

@@ -227,6 +227,71 @@ export namespace Provider {
         },
       }
     },
+    ollama: async (provider) => {
+      const envUrl = process.env["OLLAMA_BASE_URL"]
+      const url = await (async () => {
+        if (envUrl) {
+          log.info("ollama auto-detected via OLLAMA_BASE_URL", { baseURL: envUrl })
+          return envUrl
+        }
+
+        for (const base of ["http://localhost:11434", "http://127.0.0.1:11434"]) {
+          const ok = await fetch(`${base}/api/tags`, {
+            signal: AbortSignal.timeout(1000),
+          })
+            .then((r) => r.ok)
+            .catch(() => false)
+
+          if (ok) {
+            log.info("ollama auto-detected at", { baseURL: base })
+            return base
+          }
+        }
+        return null
+      })()
+
+      if (!url) {
+        log.debug("ollama not detected")
+        return { autoload: false }
+      }
+
+      type TagsResponse = { models?: Array<{ name: string; model: string }> }
+      const data = await fetch(`${url}/api/tags`, {
+        signal: AbortSignal.timeout(3000),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null) as TagsResponse | null
+
+      const models = data?.models || []
+      if (models.length === 0 && Object.keys(provider?.models || {}).length === 0) {
+        log.debug("ollama not detected or no models available")
+        return { autoload: false }
+      }
+
+      for (const model of models) {
+        if (provider?.models?.[model.name]) continue
+        if (!provider) continue
+        if (!provider.models) provider.models = {}
+
+        provider.models[model.name] = {
+          id: model.name,
+          name: model.name,
+          release_date: new Date().toISOString().split("T")[0],
+          attachment: false,
+          reasoning: false,
+          temperature: true,
+          tool_call: true,
+          cost: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+          limit: { context: 0, output: 0 },
+          modalities: { input: ["text"], output: ["text"] },
+          options: {},
+        }
+      }
+
+      const baseURL = url.endsWith("/v1") ? url : `${url}/v1`
+      log.info("ollama auto-loaded with models", { count: models.length })
+      return { autoload: true, options: { baseURL } }
+    },
   }
 
   const state = Instance.state(async () => {
@@ -341,6 +406,20 @@ export namespace Provider {
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+    }
+
+    // Ensure Ollama provider exists in database for auto-detection
+    if (!database["ollama"]) {
+      database["ollama"] = {
+        id: "ollama",
+        name: "Ollama (local)",
+        npm: "@ai-sdk/openai-compatible",
+        env: [],
+        models: {},
+      }
+    }
+    if (database["ollama"] && !database["ollama"].npm) {
+      database["ollama"].npm = "@ai-sdk/openai-compatible"
     }
 
     const disabled = await Config.get().then((cfg) => new Set(cfg.disabled_providers ?? []))
