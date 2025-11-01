@@ -35,7 +35,7 @@ export interface DialogSelectOption<T = any> {
   category?: string
   disabled?: boolean
   bg?: RGBA
-  onSelect?: (ctx: DialogContext) => void
+  onSelect?: (ctx: DialogContext, trigger?: "prompt") => void
 }
 
 export type DialogSelectRef<T> = {
@@ -59,7 +59,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       props.options,
       filter((x) => x.disabled !== true),
       take(props.limit ?? Infinity),
-      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
+      (x) =>
+        !needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
     )
     return result
   })
@@ -122,20 +123,25 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const keybind = useKeybind()
   useKeyboard((evt) => {
-    if (evt.name === "up") move(-1)
-    if (evt.name === "down") move(1)
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
     if (evt.name === "pagedown") move(10)
     if (evt.name === "return") {
       const option = selected()
-      if (option.onSelect) option.onSelect(dialog)
-      props.onSelect?.(option)
+      if (option) {
+        if (option.onSelect) option.onSelect(dialog)
+        props.onSelect?.(option)
+      }
     }
 
     for (const item of props.keybind ?? []) {
       if (Keybind.match(item.keybind, keybind.parse(evt))) {
         const s = selected()
-        if (s) item.onTrigger(s)
+        if (s) {
+          evt.preventDefault()
+          item.onTrigger(s)
+        }
       }
     }
   })
@@ -206,11 +212,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         props.onSelect?.(option)
                       }}
                       onMouseOver={() => {
-                        const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                        const index = filtered().findIndex((x) =>
+                          isDeepEqual(x.value, option.value),
+                        )
                         if (index === -1) return
                         moveTo(index)
                       }}
-                      backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
+                      backgroundColor={
+                        active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)
+                      }
                       paddingLeft={1}
                       paddingRight={1}
                       gap={1}
@@ -218,7 +228,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       <Option
                         title={option.title}
                         footer={option.footer}
-                        description={option.description !== category ? option.description : undefined}
+                        description={
+                          option.description !== category ? option.description : undefined
+                        }
                         active={active()}
                         current={isDeepEqual(option.value, props.current)}
                       />
@@ -234,7 +246,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <For each={props.keybind ?? []}>
           {(item) => (
             <text>
-              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>{Keybind.toString(item.keybind)}</span>
+              <span style={{ fg: theme.text, attributes: TextAttributes.BOLD }}>
+                {Keybind.toString(item.keybind)}
+              </span>
               <span style={{ fg: theme.textMuted }}> {item.title}</span>
             </text>
           )}
@@ -263,7 +277,10 @@ function Option(props: {
         wrapMode="none"
       >
         {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? theme.background : theme.textMuted }}> {props.description}</span>
+        <span style={{ fg: props.active ? theme.background : theme.textMuted }}>
+          {" "}
+          {props.description}
+        </span>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>

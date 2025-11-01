@@ -15,7 +15,7 @@ export function DialogStatus() {
         <text attributes={TextAttributes.BOLD}>Status</text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <Show when={Object.keys(sync.data.mcp).length > 0}>
+      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text>No MCP Servers</text>}>
         <box>
           <text>{Object.keys(sync.data.mcp).length} MCP Servers</text>
           <For each={Object.entries(sync.data.mcp)}>

@@ -115,6 +115,14 @@ export type KeybindsConfig = {
    */
   model_list?: string
   /**
+   * Next recently used model
+   */
+  model_cycle_recent?: string
+  /**
+   * Previous recently used model
+   */
+  model_cycle_recent_reverse?: string
+  /**
    * List available commands
    */
   command_list?: string
@@ -135,7 +143,7 @@ export type KeybindsConfig = {
    */
   input_clear?: string
   /**
-   * Forward delete characters in input field
+   * Forward delete
    */
   input_forward_delete?: string
   /**
@@ -150,6 +158,14 @@ export type KeybindsConfig = {
    * Insert newline in input
    */
   input_newline?: string
+  /**
+   * Previous history item
+   */
+  history_previous?: string
+  /**
+   * Previous history item
+   */
+  history_next?: string
 }
 
 export type AgentConfig = {

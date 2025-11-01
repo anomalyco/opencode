@@ -98,14 +98,9 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
-        onSelect: async (dialog) => {
+        onSelect: async (dialog, trigger) => {
           dialog.clear()
-          const value = input.plainText
-          input.clear()
-          setStore("prompt", {
-            input: "",
-            parts: [],
-          })
+          const value = trigger === "prompt" ? "" : input.plainText
           const content = await Editor.open({ value, renderer })
           if (content) {
             input.setText(content, { history: false })
@@ -563,10 +558,11 @@ export function Prompt(props: PromptProps) {
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (
-                    (e.name === "up" && input.cursorOffset === 0) ||
-                    (e.name === "down" && input.cursorOffset === input.plainText.length)
+                    (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
+                    (keybind.match("history_next", e) &&
+                      input.cursorOffset === input.plainText.length)
                   ) {
-                    const direction = e.name === "up" ? -1 : 1
+                    const direction = keybind.match("history_previous", e) ? -1 : 1
                     const item = history.move(direction, input.plainText)
 
                     if (item) {

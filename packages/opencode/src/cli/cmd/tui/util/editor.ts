@@ -24,6 +24,7 @@ export namespace Editor {
     })
     await proc.exited
     const content = await Bun.file(filepath).text()
+    opts.renderer.currentRenderBuffer.clear()
     opts.renderer.resume()
     opts.renderer.requestRender()
     return content || undefined

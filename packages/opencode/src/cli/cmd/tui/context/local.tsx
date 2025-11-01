@@ -147,15 +147,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setModelStore("ready", true)
         })
 
-      createEffect(() => {
-        Bun.write(
-          file,
-          JSON.stringify({
-            recent: modelStore.recent,
-          }),
-        )
-      })
-
       const fallbackModel = createMemo(() => {
         if (sync.data.config.model) {
           const [providerID, modelID] = sync.data.config.model.split("/")
@@ -206,6 +197,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             model: model.name ?? value.modelID,
           }
         }),
+        cycle(direction: 1 | -1) {
+          const current = currentModel()
+          if (!current) return
+          const recent = modelStore.recent
+          const index = recent.findIndex(
+            (x) => x.providerID === current.providerID && x.modelID === current.modelID,
+          )
+          if (index === -1) return
+          let next = index + direction
+          if (next < 0) next = recent.length - 1
+          if (next >= recent.length) next = 0
+          const val = recent[next]
+          if (!val) return
+          setModelStore("model", agent.current().name, { ...val })
+        },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) {
@@ -216,12 +222,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               if (uniq.length > 5) uniq.pop()
               setModelStore("recent", uniq)
+              Bun.write(
+                file,
+                JSON.stringify({
+                  recent: modelStore.recent,
+                }),
+              )
             }
           })
         },

@@ -12,15 +12,16 @@ export function DialogThemeList() {
   const dialog = useDialog()
   let confirmed = false
   let ref: DialogSelectRef<keyof typeof THEMES>
-  const initial = theme.selectedTheme
+  const initial = theme.selected
 
   onMount(() => {
     // highlight the first theme in the list when we open it for UX
-    theme.setSelectedTheme(Object.keys(THEMES)[0] as keyof typeof THEMES)
+    theme.set(Object.keys(THEMES)[0] as keyof typeof THEMES)
   })
+
   onCleanup(() => {
     // if we close the dialog without confirming, reset back to the initial theme
-    if (!confirmed) theme.setSelectedTheme(initial)
+    if (!confirmed) theme.set(initial)
   })
 
   return (
@@ -28,10 +29,10 @@ export function DialogThemeList() {
       title="Themes"
       options={options}
       onMove={(opt) => {
-        theme.setSelectedTheme(opt.value)
+        theme.set(opt.value)
       }}
       onSelect={(opt) => {
-        theme.setSelectedTheme(opt.value)
+        theme.set(opt.value)
         confirmed = true
         dialog.clear()
       }}
@@ -40,12 +41,12 @@ export function DialogThemeList() {
       }}
       onFilter={(query) => {
         if (query.length === 0) {
-          theme.setSelectedTheme(initial)
+          theme.set(initial)
           return
         }
 
         const first = ref.filtered[0]
-        if (first) theme.setSelectedTheme(first.value)
+        if (first) theme.set(first.value)
       }}
     />
   )

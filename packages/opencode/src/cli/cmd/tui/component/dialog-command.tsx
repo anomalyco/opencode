@@ -28,7 +28,9 @@ function init() {
     return registrations().flatMap((x) => x())
   })
 
+  let keybinds = true
   useKeyboard((evt) => {
+    if (!keybinds) return
     for (const option of options()) {
       if (option.keybind && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
@@ -39,13 +41,19 @@ function init() {
   })
 
   const result = {
-    trigger(name: string) {
+    trigger(name: string, source?: "prompt") {
       for (const option of options()) {
         if (option.value === name) {
-          option.onSelect?.(dialog)
+          option.onSelect?.(dialog, source)
           return
         }
       }
+    },
+    keybinds(enabled: boolean) {
+      keybinds = enabled
+    },
+    show() {
+      dialog.replace(() => <DialogCommand options={options()} />)
     },
     register(cb: () => CommandOption[]) {
       const results = createMemo(cb)
@@ -75,7 +83,7 @@ export function CommandProvider(props: ParentProps) {
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
-    if (keybind.match("command_list", evt)) {
+    if (keybind.match("command_list", evt) && dialog.stack.length === 0) {
       evt.preventDefault()
       dialog.replace(() => <DialogCommand options={value.options} />)
       return
@@ -90,7 +98,10 @@ function DialogCommand(props: { options: CommandOption[] }) {
   return (
     <DialogSelect
       title="Commands"
-      options={props.options.map((x) => ({ ...x, footer: x.keybind ? keybind.print(x.keybind) : undefined }))}
+      options={props.options.map((x) => ({
+        ...x,
+        footer: x.keybind ? keybind.print(x.keybind) : undefined,
+      }))}
     />
   )
 }

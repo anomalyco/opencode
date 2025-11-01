@@ -7,6 +7,7 @@ import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
+import { DialogSessionRename } from "./dialog-session-rename"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -72,6 +73,13 @@ export function DialogSessionList() {
               return
             }
             setToDelete(option.value)
+          },
+        },
+        {
+          keybind: Keybind.parse("r")[0],
+          title: "rename",
+          onTrigger: async (option) => {
+            dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
         },
       ]}

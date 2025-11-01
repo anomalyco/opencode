@@ -63,6 +63,7 @@ import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Toast } from "../../ui/toast"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
 
 addDefaultParsers(parsers.parsers)
 
@@ -240,7 +241,9 @@ export function Session() {
         prompt.set(
           parts.reduce(
             (agg, part) => {
-              if (part.type === "text") agg.input += part.text
+              if (part.type === "text") {
+                if (!part.synthetic) agg.input += part.text
+              }
               if (part.type === "file") agg.parts.push(part)
               return agg
             },
@@ -368,6 +371,15 @@ export function Session() {
       onSelect: (dialog) => {
         scroll.scrollTo(scroll.scrollHeight)
         dialog.clear()
+      },
+    },
+    {
+      title: "Rename session",
+      value: "session.rename",
+      keybind: "session_rename",
+      category: "Session",
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
       },
     },
   ])

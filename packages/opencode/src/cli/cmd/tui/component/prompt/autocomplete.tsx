@@ -222,6 +222,11 @@ export function Autocomplete(props: {
           description: "unshare a session",
           onSelect: () => command.trigger("session.unshare"),
         },
+        {
+          display: "/rename",
+          description: "rename session",
+          onSelect: () => command.trigger("session.rename"),
+        },
       )
     }
     results.push(
@@ -258,12 +263,17 @@ export function Autocomplete(props: {
       {
         display: "/editor",
         description: "open editor",
-        onSelect: () => command.trigger("prompt.editor"),
+        onSelect: () => command.trigger("prompt.editor", "prompt"),
       },
       {
         display: "/help",
         description: "show help",
         onSelect: () => command.trigger("help.show"),
+      },
+      {
+        display: "/commands",
+        description: "show all commands",
+        onSelect: () => command.show(),
       },
     )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
@@ -311,6 +321,7 @@ export function Autocomplete(props: {
   }
 
   function show(mode: "@" | "/") {
+    command.keybinds(false)
     setStore({
       visible: mode,
       index: props.input().visualCursor.offset,
@@ -328,6 +339,7 @@ export function Autocomplete(props: {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
     }
+    command.keybinds(true)
     setStore("visible", false)
   }
 
