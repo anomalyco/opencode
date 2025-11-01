@@ -249,4 +249,13 @@ export namespace MCP {
     }
     return result
   }
+
+  export async function serverTools(serverName: string) {
+    const allClients = await clients()
+    const client = allClients[serverName]
+    if (!client) {
+      return {}
+    }
+    return client.tools()
+  }
 }

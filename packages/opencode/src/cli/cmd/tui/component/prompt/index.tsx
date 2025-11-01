@@ -28,6 +28,8 @@ import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk"
 import { TuiEvent } from "../../event"
+import { DialogModel } from "../dialog-model"
+import { useDialog } from "../../ui/dialog"
 
 export type PromptProps = {
   sessionID?: string
@@ -61,6 +63,7 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const dialog = useDialog()
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -697,9 +700,18 @@ export function Prompt(props: PromptProps) {
           ></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none" fg={theme.text}>
+          <text
+            flexShrink={0}
+            wrapMode="none" fg={theme.text}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              dialog.replace(() => <DialogModel />)
+            }}
+          >
             <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
-            <span style={{ bold: true }}>{local.model.parsed().model}</span>
+            <span style={{ bold: true, fg: theme.primary, underline: true }}>
+              {local.model.parsed().model}
+            </span>
           </text>
           <Switch>
             <Match when={status() === "compacting"}>

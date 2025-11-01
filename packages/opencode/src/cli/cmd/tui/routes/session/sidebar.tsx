@@ -7,15 +7,20 @@ import type { AssistantMessage } from "@opencode-ai/sdk"
 import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useSDK } from "../../context/sdk"
 
 type TabType = "files" | "todos" | "mcp"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
   const sync = useSync()
   const { theme } = useTheme()
   const local = useLocal()
+  const renderer = useRenderer()
+  const sdk = useSDK()
   const [activeTab, setActiveTab] = createSignal<TabType>("mcp")
+  const [expandedMcpServers, setExpandedMcpServers] = createSignal<Set<string>>(new Set())
+  const [mcpTools, setMcpTools] = createSignal<Record<string, Record<string, any>>>({})
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
@@ -26,6 +31,36 @@ export function Sidebar(props: { sessionID: string }) {
     if (evt.name === "2") setActiveTab("todos")
     if (evt.name === "3") setActiveTab("files")
   })
+
+  async function toggleMcpServer(serverName: string) {
+    const expanded = expandedMcpServers()
+    const newExpanded = new Set(expanded)
+
+    if (expanded.has(serverName)) {
+      newExpanded.delete(serverName)
+    } else {
+      newExpanded.add(serverName)
+      // Load tools if not already loaded
+      if (!mcpTools()[serverName]) {
+        try {
+          // After SDK regeneration, this should work as sdk.client.mcp.serverTools()
+          // For now using fetch as fallback until SDK is regenerated
+          const response = await fetch(
+            `http://localhost:4096/mcp/${encodeURIComponent(serverName)}/tools`,
+          )
+          if (response.ok) {
+            const tools = await response.json()
+            setMcpTools((prev) => ({ ...prev, [serverName]: tools }))
+          }
+        } catch (error) {
+          console.error(`Failed to load tools for ${serverName}:`, error)
+          setMcpTools((prev) => ({ ...prev, [serverName]: {} }))
+        }
+      }
+    }
+
+    setExpandedMcpServers(newExpanded)
+  }
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -61,9 +96,18 @@ export function Sidebar(props: { sessionID: string }) {
   return (
     <Show when={session()}>
       <box flexShrink={0} gap={1} width={40}>
-        <box flexDirection="row" justifyContent="flex-end" paddingRight={1}>
+        <box flexDirection="row" justifyContent="space-between" paddingRight={1}>
           <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
             CODESURF
+          </text>
+          <text
+            fg={theme.textMuted}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              props.onToggle()
+            }}
+          >
+            ▶
           </text>
         </box>
         <box>
@@ -89,6 +133,7 @@ export function Sidebar(props: { sessionID: string }) {
           <text fg={theme.textMuted}>{context().percentage}% used</text>
           <text fg={theme.textMuted}>{cost()} spent</text>
         </box>
+
         {/* Tab Navigation */}
         <box flexDirection="row" gap={2}>
           <text
@@ -157,31 +202,48 @@ export function Sidebar(props: { sessionID: string }) {
               </text>
               <For each={Object.entries(sync.data.mcp)}>
                 {([key, item]) => (
-                  <box flexDirection="row" gap={1}>
-                    <text
-                      flexShrink={0}
-                      style={{
-                        fg: {
-                          connected: theme.success,
-                          failed: theme.error,
-                          disabled: theme.textMuted,
-                        }[item.status],
-                      }}
-                    >
-                      •
-                    </text>
-                    <text wrapMode="word">
-                      {key}{" "}
-                      <span style={{ fg: theme.textMuted }}>
+                  <box flexDirection="column">
+                    <box flexDirection="row" gap={1}>
+                      <text
+                        flexShrink={0}
+                        style={{
+                          fg: {
+                            connected: theme.success,
+                            failed: theme.error,
+                            disabled: theme.textMuted,
+                          }[item.status],
+                        }}
+                      >
+                        •
+                      </text>
+                      <text
+                        wrapMode="word"
+                        fg={theme.accent}
+                        attributes={TextAttributes.BOLD}
+                        onMouseUp={() => {
+                          if (renderer.getSelection()?.getSelectedText()) return
+                          toggleMcpServer(key)
+                        }}
+                      >
+                        {expandedMcpServers().has(key) ? "▼" : "▶"} {key}
+                      </text>
+                      <text fg={theme.textMuted}>
                         <Switch>
                           <Match when={item.status === "connected"}>Connected</Match>
                           <Match when={item.status === "failed" && item}>
                             {(val) => <i>{val().error}</i>}
                           </Match>
-                          <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                          <Match when={item.status === "disabled"}>Disabled</Match>
                         </Switch>
-                      </span>
-                    </text>
+                      </text>
+                    </box>
+                    <Show when={expandedMcpServers().has(key) && mcpTools()[key]}>
+                      <box marginLeft={3} flexDirection="column">
+                        <For each={Object.entries(mcpTools()[key] || {})}>
+                          {([toolName, tool]) => <text fg={theme.textMuted}>⚙ {toolName}</text>}
+                        </For>
+                      </box>
+                    </Show>
                   </box>
                 )}
               </For>

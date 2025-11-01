@@ -26,10 +26,24 @@ export function DialogSkillManager() {
   async function loadSkills() {
     try {
       setLoading(true)
-      const system = await SkillInstance.get()
+      console.log("[DialogSkillManager] Starting to load skills...")
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Skill loading timeout after 10 seconds")), 10000),
+      )
+
+      const system = (await Promise.race([SkillInstance.get(), timeoutPromise])) as Awaited<
+        ReturnType<typeof SkillInstance.get>
+      >
+
+      console.log("[DialogSkillManager] Got skill system instance")
       const discovered = system.getAllSkills()
       const active = system.getActiveSkills()
 
+      console.log(
+        `[DialogSkillManager] Discovered ${discovered.length} skills, ${active.length} active`,
+      )
       setSkills(discovered)
       setActiveSkills(new Set(active.map((s) => s.frontmatter.name)))
 
@@ -38,6 +52,7 @@ export function DialogSkillManager() {
         variant: "success",
       })
     } catch (error) {
+      console.error("[DialogSkillManager] Failed to load skills:", error)
       toast.show({
         message: `Failed to load skills: ${error}`,
         variant: "error",

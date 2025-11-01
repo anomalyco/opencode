@@ -128,6 +128,9 @@ export class SkillLoader {
     const projectPaths = [".codesurf/skills", ".claude/skills"]
     const userPaths = [join(homedir(), ".codesurf", "skills"), join(homedir(), ".claude", "skills")]
 
+    this.log(`Checking project paths: ${projectPaths.join(", ")}`)
+    this.log(`Checking user paths: ${userPaths.join(", ")}`)
+
     const discoveries = await Promise.allSettled([
       // Project skills from both .codesurf and .claude
       ...projectPaths.map((path) => this.discoverFromPath(path, "project")),

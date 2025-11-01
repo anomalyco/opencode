@@ -106,6 +106,11 @@ import type {
   AppAgentsResponses,
   McpStatusData,
   McpStatusResponses,
+  McpServerToolsData,
+  McpServerToolsResponses,
+  McpServerUpdateData,
+  McpServerUpdateResponses,
+  McpServerUpdateErrors,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -752,6 +757,40 @@ class App extends _HeyApiClient {
   }
 }
 
+class Server extends _HeyApiClient {
+  /**
+   * Get tools for a specific MCP server
+   */
+  public tools<ThrowOnError extends boolean = false>(
+    options: Options<McpServerToolsData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).get<McpServerToolsResponses, unknown, ThrowOnError>({
+      url: "/mcp/{serverName}/tools",
+      ...options,
+    })
+  }
+
+  /**
+   * Update MCP server configuration
+   */
+  public update<ThrowOnError extends boolean = false>(
+    options: Options<McpServerUpdateData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).patch<
+      McpServerUpdateResponses,
+      McpServerUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/mcp/{serverName}",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    })
+  }
+}
+
 class Mcp extends _HeyApiClient {
   /**
    * Get MCP server status
@@ -764,6 +803,7 @@ class Mcp extends _HeyApiClient {
       ...options,
     })
   }
+  server = new Server({ client: this._client })
 }
 
 class Lsp extends _HeyApiClient {

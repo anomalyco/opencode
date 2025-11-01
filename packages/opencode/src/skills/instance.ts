@@ -12,10 +12,12 @@ export namespace SkillInstance {
    */
   export const state = lazy(async () => {
     const system = new SkillSystem({
-      debug: false, // Will be configurable later
+      debug: true, // Enable debug logging to diagnose issues
     })
 
+    console.log("[SkillInstance] Initializing skill system...")
     await system.initialize()
+    console.log("[SkillInstance] Skill system initialized")
 
     return system
   })

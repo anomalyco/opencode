@@ -3,7 +3,7 @@
 import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
-import { $ } from "bun"
+import { $, Glob } from "bun"
 import { fileURLToPath } from "url"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -40,22 +40,32 @@ for (const [os, arch] of targets) {
   await $`mkdir -p dist/${name}/bin`
 
   const opentui = `@opentui/core-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}`
-  await $`mkdir -p ../../node_modules/${opentui}`
+  const opentuiDir = path.join(dir, "../../node_modules", opentui)
+  await $`mkdir -p ${opentuiDir}`
   await $`npm pack ${opentui}@${pkg.dependencies["@opentui/core"]}`.cwd(
     path.join(dir, "../../node_modules"),
   )
-  await $`tar -xf ../../node_modules/${opentui.replace("@opentui/", "opentui-")}-*.tgz -C ../../node_modules/${opentui} --strip-components=1`
+  const opentuiGlob = new Glob(`${opentui.replace("@opentui/", "opentui-")}-*.tgz`)
+  const opentuiTarballs = Array.from(
+    opentuiGlob.scanSync({ cwd: path.join(dir, "../../node_modules") }),
+  )
+  if (opentuiTarballs.length === 0) throw new Error(`No tarball found for ${opentui}`)
+  const opentuiTarball = path.join(dir, "../../node_modules", opentuiTarballs[0])
+  await $`cd ${opentuiDir} && tar -xzf ${opentuiTarball} --strip-components=1`
 
   const watcher = `@parcel/watcher-${os === "windows" ? "win32" : os}-${arch.replace("-baseline", "")}${os === "linux" ? "-glibc" : ""}`
-  await $`mkdir -p ../../node_modules/${watcher}`
+  const watcherDir = path.join(dir, "../../node_modules", watcher)
+  await $`mkdir -p ${watcherDir}`
   await $`npm pack ${watcher}`.cwd(path.join(dir, "../../node_modules")).quiet()
-  await $`tar -xf ../../node_modules/${watcher.replace("@parcel/", "parcel-")}-*.tgz -C ../../node_modules/${watcher} --strip-components=1`
-
-  const parserWorker = fs.realpathSync(
-    path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"),
+  const watcherGlob = new Glob(`${watcher.replace("@parcel/", "parcel-")}-*.tgz`)
+  const watcherTarballs = Array.from(
+    watcherGlob.scanSync({ cwd: path.join(dir, "../../node_modules") }),
   )
-  const workerPath = "./src/cli/cmd/tui/worker.ts"
+  if (watcherTarballs.length === 0) throw new Error(`No tarball found for ${watcher}`)
+  const watcherTarball = path.join(dir, "../../node_modules", watcherTarballs[0])
+  await $`cd ${watcherDir} && tar -xzf ${watcherTarball} --strip-components=1`
 
+  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",

@@ -60,6 +60,7 @@ import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
+import { LeftSidebar } from "./left-sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -81,6 +82,7 @@ function use() {
 
 export function Session() {
   const route = useRouteData("session")
+  const router = useRoute()
   const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
@@ -95,11 +97,102 @@ export function Session() {
 
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
+  const [leftSidebar, setLeftSidebar] = createSignal<"show" | "hide" | "auto">(
+    kv.get("leftSidebar", "auto"),
+  )
+  const [rightSidebar, setRightSidebar] = createSignal<"show" | "hide" | "auto">(
+    kv.get("rightSidebar", "auto"),
+  )
   const [conceal, setConceal] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => sidebar() === "show" || (sidebar() === "auto" && wide()))
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+
+  const leftSidebarVisible = createMemo(
+    () => leftSidebar() === "show" || (leftSidebar() === "auto" && wide()),
+  )
+  const rightSidebarVisible = createMemo(
+    () => rightSidebar() === "show" || (rightSidebar() === "auto" && wide()),
+  )
+
+  const bothSidebarsCollapsed = createMemo(() => !leftSidebarVisible() && !rightSidebarVisible())
+
+  const toggleLeftSidebar = () => {
+    setLeftSidebar((prev) => {
+      const next =
+        prev === "auto"
+          ? leftSidebarVisible()
+            ? "hide"
+            : "show"
+          : prev === "show"
+            ? "hide"
+            : "show"
+      if (next === "show") kv.set("leftSidebar", "auto")
+      if (next === "hide") kv.set("leftSidebar", "hide")
+      return next
+    })
+  }
+
+  const toggleRightSidebar = () => {
+    setRightSidebar((prev) => {
+      const next =
+        prev === "auto"
+          ? rightSidebarVisible()
+            ? "hide"
+            : "show"
+          : prev === "show"
+            ? "hide"
+            : "show"
+      if (next === "show") kv.set("rightSidebar", "auto")
+      if (next === "hide") kv.set("rightSidebar", "hide")
+      return next
+    })
+  }
+
+  const toggleBothSidebars = () => {
+    const bothVisible = leftSidebarVisible() && rightSidebarVisible()
+    setLeftSidebar(bothVisible ? "hide" : "show")
+    setRightSidebar(bothVisible ? "hide" : "show")
+    if (!bothVisible) {
+      kv.set("leftSidebar", "auto")
+      kv.set("rightSidebar", "auto")
+    } else {
+      kv.set("leftSidebar", "hide")
+      kv.set("rightSidebar", "hide")
+    }
+  }
+
+  const selectSession = (sessionID: string) => {
+    if (sessionID === route.sessionID) return
+    router.navigate({
+      type: "session",
+      sessionID,
+    })
+  }
+
+  const handleNewSession = () => {
+    router.navigate({
+      type: "home",
+    })
+  }
+
+  const handleDeleteSession = () => {
+    import("@tui/component/dialog-session-list").then((m) => {
+      dialog.replace(() => <m.DialogSessionList />)
+    })
+  }
+
+  const handleSwitchSession = () => {
+    import("@tui/component/dialog-session-list").then((m) => {
+      dialog.replace(() => <m.DialogSessionList />)
+    })
+  }
+
+  const contentWidth = createMemo(() => {
+    const leftWidth = leftSidebarVisible() ? 30 : 0
+    const rightWidth = rightSidebarVisible() ? 42 : 0
+    return dimensions().width - leftWidth - rightWidth - 4
+  })
 
   createEffect(() => sync.session.sync(route.sessionID))
 
@@ -113,6 +206,22 @@ export function Session() {
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
+
+    // Sidebar toggle shortcuts
+    if (evt.ctrl || evt.meta) {
+      if (evt.name === "[") {
+        toggleLeftSidebar()
+        return
+      }
+      if (evt.name === "]") {
+        toggleRightSidebar()
+        return
+      }
+      if (evt.name === "b") {
+        toggleBothSidebars()
+        return
+      }
+    }
 
     const first = permissions()[0]
     if (first) {
@@ -309,7 +418,37 @@ export function Session() {
       },
     },
     {
-      title: "Toggle sidebar",
+      title: "Toggle left sidebar",
+      value: "session.sidebar.left.toggle",
+      keybind: "sidebar_left_toggle" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        toggleLeftSidebar()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle right sidebar",
+      value: "session.sidebar.right.toggle",
+      keybind: "sidebar_right_toggle" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        toggleRightSidebar()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle both sidebars",
+      value: "session.sidebar.both.toggle",
+      keybind: "sidebar_both_toggle" as any,
+      category: "Session",
+      onSelect: (dialog) => {
+        toggleBothSidebars()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Toggle legacy sidebar",
       value: "session.sidebar.toggle",
       keybind: "sidebar_toggle",
       category: "Session",
@@ -568,7 +707,23 @@ export function Session() {
         paddingRight={2}
         gap={2}
       >
-        <box flexGrow={1} gap={1}>
+        {/* Left Sidebar */}
+        <Show when={leftSidebarVisible()}>
+          <LeftSidebar
+            sessionID={route.sessionID}
+            onToggle={toggleLeftSidebar}
+            onSelect={selectSession}
+            onSwitch={handleSwitchSession}
+          />
+        </Show>
+
+        {/* Main Content */}
+        <box
+          flexGrow={1}
+          gap={1}
+          justifyContent={bothSidebarsCollapsed() ? "center" : "flex-start"}
+          maxWidth={bothSidebarsCollapsed() ? 120 : undefined}
+        >
           <Show when={session()}>
             <Show when={session().parentID}>
               <box
@@ -725,8 +880,10 @@ export function Session() {
           </Show>
           <Toast />
         </box>
-        <Show when={sidebarVisible()}>
-          <Sidebar sessionID={route.sessionID} />
+
+        {/* Right Sidebar */}
+        <Show when={rightSidebarVisible()}>
+          <Sidebar sessionID={route.sessionID} onToggle={toggleRightSidebar} />
         </Show>
       </box>
     </context.Provider>

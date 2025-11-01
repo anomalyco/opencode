@@ -1350,6 +1350,76 @@ export namespace Server {
         },
       )
       .get(
+        "/mcp/:serverName/tools",
+        describeRoute({
+          description: "Get tools for a specific MCP server",
+          operationId: "mcp.server.tools",
+          responses: {
+            200: {
+              description: "MCP server tools",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), z.any())),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const serverName = c.req.param("serverName")
+          return c.json(await MCP.serverTools(serverName))
+        },
+      )
+      .patch(
+        "/mcp/:serverName",
+        describeRoute({
+          description: "Update MCP server configuration",
+          operationId: "mcp.server.update",
+          responses: {
+            200: {
+              description: "Successfully updated MCP server",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.boolean() })),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            enabled: z.boolean().optional(),
+            disabledTools: z.string().array().optional(),
+          }),
+        ),
+        async (c) => {
+          const serverName = c.req.param("serverName")
+          const updates = c.req.valid("json")
+          const config = await Config.get()
+
+          if (!config.mcp || !config.mcp[serverName]) {
+            return c.json({ error: "MCP server not found" }, 404)
+          }
+
+          const updatedMcp = {
+            ...config.mcp[serverName],
+            ...updates,
+          }
+
+          await Config.update({
+            ...config,
+            mcp: {
+              ...config.mcp,
+              [serverName]: updatedMcp,
+            },
+          })
+
+          return c.json({ success: true })
+        },
+      )
+      .get(
         "/lsp",
         describeRoute({
           description: "Get LSP server status",

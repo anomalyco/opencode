@@ -35,6 +35,18 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle left sidebar
+   */
+  sidebar_left_toggle?: string
+  /**
+   * Toggle right sidebar
+   */
+  sidebar_right_toggle?: string
+  /**
+   * Toggle both sidebars
+   */
+  sidebar_both_toggle?: string
+  /**
    * View status
    */
   status_view?: string
@@ -256,6 +268,10 @@ export type McpLocalConfig = {
    */
   enabled?: boolean
   /**
+   * List of tool names to disable from this MCP server
+   */
+  disabledTools?: Array<string>
+  /**
    * Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds) if not specified.
    */
   timeout?: number
@@ -274,6 +290,10 @@ export type McpRemoteConfig = {
    * Enable or disable the MCP server on startup
    */
   enabled?: boolean
+  /**
+   * List of tool names to disable from this MCP server
+   */
+  disabledTools?: Array<string>
   /**
    * Headers to send with the request
    */
@@ -2557,6 +2577,62 @@ export type McpStatusResponses = {
 }
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
+
+export type McpServerToolsData = {
+  body?: never
+  path: {
+    serverName: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{serverName}/tools"
+}
+
+export type McpServerToolsResponses = {
+  /**
+   * MCP server tools
+   */
+  200: {
+    [key: string]: unknown
+  }
+}
+
+export type McpServerToolsResponse = McpServerToolsResponses[keyof McpServerToolsResponses]
+
+export type McpServerUpdateData = {
+  body?: {
+    enabled?: boolean
+    disabledTools?: Array<string>
+  }
+  path: {
+    serverName: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/{serverName}"
+}
+
+export type McpServerUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpServerUpdateError = McpServerUpdateErrors[keyof McpServerUpdateErrors]
+
+export type McpServerUpdateResponses = {
+  /**
+   * Successfully updated MCP server
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type McpServerUpdateResponse = McpServerUpdateResponses[keyof McpServerUpdateResponses]
 
 export type LspStatusData = {
   body?: never

@@ -486,13 +486,25 @@ function App() {
           <text fg={theme.textMuted} paddingRight={1}>
             tab
           </text>
-          <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
+          <text
+            fg={local.agent.color(local.agent.current().name)}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              dialog.replace(() => <DialogAgent />)
+            }}
+          >
+            {""}
+          </text>
           <text
             bg={local.agent.color(local.agent.current().name)}
             fg={theme.background}
             wrapMode={undefined}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              dialog.replace(() => <DialogAgent />)
+            }}
           >
-            <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
+            <span style={{ bold: true, underline: true }}> {local.agent.current().name.toUpperCase()}</span>
             <span> AGENT </span>
           </text>
         </box>
