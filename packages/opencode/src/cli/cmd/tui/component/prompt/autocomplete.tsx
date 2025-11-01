@@ -18,6 +18,7 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  aliases?: string[]
   disabled?: boolean
   description?: string
   onSelect?: () => void
@@ -207,6 +208,7 @@ export function Autocomplete(props: {
         },
         {
           display: "/compact",
+          aliases: ["/summarize"],
           description: "compact the session",
           onSelect: () => command.trigger("session.compact"),
         },
@@ -232,6 +234,7 @@ export function Autocomplete(props: {
     results.push(
       {
         display: "/new",
+        aliases: ["/clear"],
         description: "create a new session",
         onSelect: () => command.trigger("session.new"),
       },
@@ -247,6 +250,7 @@ export function Autocomplete(props: {
       },
       {
         display: "/session",
+        aliases: ["/resume", "/continue"],
         description: "list sessions",
         onSelect: () => command.trigger("session.list"),
       },
@@ -275,6 +279,12 @@ export function Autocomplete(props: {
         description: "show all commands",
         onSelect: () => command.show(),
       },
+      {
+        display: "/exit",
+        aliases: ["/quit", "/q"],
+        description: "exit the app",
+        onSelect: () => command.trigger("app.exit"),
+      },
     )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
@@ -293,7 +303,7 @@ export function Autocomplete(props: {
     const currentFilter = filter()
     if (!currentFilter) return mixed.slice(0, 10)
     const result = fuzzysort.go(currentFilter, mixed, {
-      keys: ["display", "description"],
+      keys: ["display", "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
     })
     return result.map((arr) => arr.obj)
