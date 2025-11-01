@@ -296,8 +296,9 @@ function App() {
           /* @ts-expect-error */
           renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
+            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .catch(toast.error)
           renderer.clearSelection()
-          toast.show({ message: "Copied to clipboard", variant: "info" })
         }
       }}
     >
