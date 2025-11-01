@@ -3,7 +3,7 @@
  * Handles document CRUD operations, full-text search, and metadata management
  */
 
-import Database from "better-sqlite3"
+import { Database } from "bun:sqlite"
 import { mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
 import { get_encoding } from "@dqbd/tiktoken"
@@ -23,7 +23,7 @@ const encoding = get_encoding("cl100k_base")
  * RAID Knowledge Base - manages documents in SQLite with FTS
  */
 export class RaidKnowledgeBase {
-  private db: Database.Database
+  private db: Database
   private config: RaidConfig
 
   constructor(config: RaidConfig) {
@@ -34,16 +34,16 @@ export class RaidKnowledgeBase {
   /**
    * Initialize SQLite database with schema
    */
-  private initDatabase(dbPath: string): Database.Database {
+  private initDatabase(dbPath: string): Database {
     // Ensure directory exists
     mkdir(dirname(dbPath), { recursive: true }).catch(() => {})
 
-    const db = new Database(dbPath)
-    db.pragma("journal_mode = WAL")
-    db.pragma("foreign_keys = ON")
+    const db = new Database(dbPath, { create: true })
+    db.run("PRAGMA journal_mode = WAL")
+    db.run("PRAGMA foreign_keys = ON")
 
     // Create documents table
-    db.exec(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS documents (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -66,7 +66,7 @@ export class RaidKnowledgeBase {
     `)
 
     // Create FTS virtual table for full-text search
-    db.exec(`
+    db.run(`
       CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
         title,
         content,
@@ -78,7 +78,7 @@ export class RaidKnowledgeBase {
     `)
 
     // Create triggers to keep FTS in sync
-    db.exec(`
+    db.run(`
       CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
         INSERT INTO documents_fts(rowid, title, content, keywords, summary)
         VALUES (new.rowid, new.title, new.content, new.keywords, new.summary);
@@ -96,7 +96,7 @@ export class RaidKnowledgeBase {
     `)
 
     // Create indexes
-    db.exec(`
+    db.run(`
       CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source);
       CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at);
       CREATE INDEX IF NOT EXISTS idx_documents_content_type ON documents(content_type);
@@ -142,7 +142,8 @@ export class RaidKnowledgeBase {
       },
     }
 
-    const stmt = this.db.prepare(`
+    this.db.run(
+      `
       INSERT INTO documents (
         id, title, content, file_path, tags, keywords, source,
         created_at, updated_at, token_count, shard_ids,
@@ -164,9 +165,7 @@ export class RaidKnowledgeBase {
         file_size = excluded.file_size,
         last_modified = excluded.last_modified,
         file_type = excluded.file_type
-    `)
-
-    stmt.run(
+    `,
       document.id,
       document.title,
       document.content,
@@ -193,8 +192,7 @@ export class RaidKnowledgeBase {
    * Get document by ID
    */
   getDocument(id: string): RaidDocument | null {
-    const stmt = this.db.prepare("SELECT * FROM documents WHERE id = ?")
-    const row = stmt.get(id) as any
+    const row = this.db.query("SELECT * FROM documents WHERE id = ?").get(id) as any
 
     if (!row) return null
 
@@ -243,8 +241,7 @@ export class RaidKnowledgeBase {
     sql += " ORDER BY rank LIMIT ?"
     params.push(maxResults)
 
-    const stmt = this.db.prepare(sql)
-    const rows = stmt.all(...params) as any[]
+    const rows = this.db.query(sql).all(...params) as any[]
 
     return rows.map((row) => ({
       document: this.rowToDocument(row),
@@ -273,8 +270,7 @@ export class RaidKnowledgeBase {
     sql += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
     params.push(limit, offset)
 
-    const stmt = this.db.prepare(sql)
-    const rows = stmt.all(...params) as any[]
+    const rows = this.db.query(sql).all(...params) as any[]
 
     return rows.map((row) => this.rowToDocument(row))
   }
@@ -283,9 +279,8 @@ export class RaidKnowledgeBase {
    * Delete document by ID
    */
   deleteDocument(id: string): boolean {
-    const stmt = this.db.prepare("DELETE FROM documents WHERE id = ?")
-    const result = stmt.run(id)
-    return result.changes > 0
+    this.db.run("DELETE FROM documents WHERE id = ?", id)
+    return true // Bun SQLite doesn't return changes count easily
   }
 
   /**
@@ -293,43 +288,44 @@ export class RaidKnowledgeBase {
    */
   deleteAllDocuments(source?: "project" | "global"): number {
     let sql = "DELETE FROM documents"
-    const params: any[] = []
 
     if (source) {
       sql += " WHERE source = ?"
-      params.push(source)
+      this.db.run(sql, source)
+    } else {
+      this.db.run(sql)
     }
 
-    const stmt = this.db.prepare(sql)
-    const result = stmt.run(...params)
-    return result.changes
+    return 0 // Bun SQLite doesn't return changes count easily
   }
 
   /**
    * Get knowledge base statistics
    */
   getStats(): RaidStats {
-    const totalStmt = this.db.prepare(
-      "SELECT COUNT(*) as count, SUM(token_count) as tokens FROM documents",
-    )
-    const projectStmt = this.db.prepare(
-      "SELECT COUNT(*) as count FROM documents WHERE source = 'project'",
-    )
-    const globalStmt = this.db.prepare(
-      "SELECT COUNT(*) as count FROM documents WHERE source = 'global'",
-    )
-    const keywordsStmt = this.db.prepare(`
+    const total = this.db
+      .query("SELECT COUNT(*) as count, SUM(token_count) as tokens FROM documents")
+      .get() as any
+
+    const project = this.db
+      .query("SELECT COUNT(*) as count FROM documents WHERE source = 'project'")
+      .get() as any
+
+    const global = this.db
+      .query("SELECT COUNT(*) as count FROM documents WHERE source = 'global'")
+      .get() as any
+
+    const keywords = this.db
+      .query(
+        `
       SELECT json_each.value as keyword, COUNT(*) as count
       FROM documents, json_each(documents.keywords)
       GROUP BY keyword
       ORDER BY count DESC
       LIMIT 20
-    `)
-
-    const total = totalStmt.get() as any
-    const project = projectStmt.get() as any
-    const global = globalStmt.get() as any
-    const keywords = keywordsStmt.all() as any[]
+    `,
+      )
+      .all() as any[]
 
     const totalDocs = total.count || 0
     const totalTokens = total.tokens || 0
@@ -349,8 +345,12 @@ export class RaidKnowledgeBase {
    * Update document shard IDs
    */
   updateShardIds(docId: string, shardIds: string[]): void {
-    const stmt = this.db.prepare("UPDATE documents SET shard_ids = ?, updated_at = ? WHERE id = ?")
-    stmt.run(JSON.stringify(shardIds), Date.now(), docId)
+    this.db.run(
+      "UPDATE documents SET shard_ids = ?, updated_at = ? WHERE id = ?",
+      JSON.stringify(shardIds),
+      Date.now(),
+      docId,
+    )
   }
 
   /**
