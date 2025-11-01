@@ -6,10 +6,11 @@ import { generateText, type ModelMessage } from "ai"
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
-
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "./system"
 import { Log } from "@/util/log"
+import path from "path"
+import { Instance } from "@/project/instance"
 
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
@@ -33,10 +34,13 @@ export namespace SessionSummary {
       input.messages
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
-        .flatMap((x) => x.files),
+        .flatMap((x) => x.files)
+        .map((x) => path.relative(Instance.worktree, x)),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
-      x.filter((x) => files.has(x.file)),
+      x.filter((x) => {
+        return files.has(x.file)
+      }),
     )
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
