@@ -181,7 +181,7 @@ function App() {
       return
     }
 
-    if (evt.meta && evt.name === "d") {
+    if (evt.meta && evt.name === "f12") {
       renderer.console.toggle()
       return
     }
