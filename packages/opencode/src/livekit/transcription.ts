@@ -128,6 +128,11 @@ export class TranscriptionService {
     }
 
     this.recognition = new SpeechRecognition()
+
+    if (!this.recognition) {
+      throw this.createError("Failed to create speech recognition instance", "browser")
+    }
+
     this.recognition.lang = this.config.language
     this.recognition.continuous = this.config.continuousMode
     this.recognition.interimResults = this.config.interimResults
