@@ -6,7 +6,7 @@ const bunVersionRequired = await (async () => {
   if (!packageManager || !packageManager.startsWith("bun@")) {
     throw new Error("packageManager field must specify bun version (e.g., 'bun@1.3.0')")
   }
-  return packageManager.split("@")[1]
+  return packageManager.slice(4)
 })()
 
 if (process.versions.bun !== bunVersionRequired) {
