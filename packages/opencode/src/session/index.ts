@@ -24,6 +24,9 @@ export namespace Session {
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
 
+  // In-memory cache for messages to speed up session switching
+  const messageCache = new Map<string, { timestamp: number; messages: MessageV2.WithParts[] }>()
+
   function createDefaultTitle(isChild = false) {
     return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
   }
@@ -275,15 +278,27 @@ export namespace Session {
   })
 
   export const messages = fn(Identifier.schema("session"), async (sessionID) => {
-    const result = [] as MessageV2.WithParts[]
-    for (const p of await Storage.list(["message", sessionID])) {
-      const read = await Storage.read<MessageV2.Info>(p)
-      result.push({
-        info: read,
-        parts: await getParts(read.id),
-      })
+    // Check cache first
+    const session = await get(sessionID)
+    const cached = messageCache.get(sessionID)
+    if (cached && cached.timestamp >= session.time.updated) {
+      return cached.messages
     }
+
+    const paths = await Storage.list(["message", sessionID])
+    // Load all messages in parallel
+    const result = await Promise.all(
+      paths.map(async (p) => {
+        const info = await Storage.read<MessageV2.Info>(p)
+        const parts = await getParts(info.id)
+        return { info, parts }
+      }),
+    )
     result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+
+    // Update cache
+    messageCache.set(sessionID, { timestamp: Date.now(), messages: result })
+
     return result
   })
 
@@ -301,11 +316,9 @@ export namespace Session {
   )
 
   export const getParts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
+    const items = await Storage.list(["part", messageID])
+    // Load all parts in parallel
+    const result = await Promise.all(items.map((item) => Storage.read<MessageV2.Part>(item)))
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   })
@@ -353,6 +366,8 @@ export namespace Session {
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
     await Storage.write(["message", msg.sessionID, msg.id], msg)
+    // Invalidate cache when message is updated
+    messageCache.delete(msg.sessionID)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
@@ -366,6 +381,8 @@ export namespace Session {
     }),
     async (input) => {
       await Storage.remove(["message", input.sessionID, input.messageID])
+      // Invalidate cache when message is removed
+      messageCache.delete(input.sessionID)
       Bus.publish(MessageV2.Event.Removed, {
         sessionID: input.sessionID,
         messageID: input.messageID,
@@ -390,6 +407,8 @@ export namespace Session {
     const part = "delta" in input ? input.part : input
     const delta = "delta" in input ? input.delta : undefined
     await Storage.write(["part", part.messageID, part.id], part)
+    // Invalidate cache when part is updated
+    messageCache.delete(part.sessionID)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
       delta,
