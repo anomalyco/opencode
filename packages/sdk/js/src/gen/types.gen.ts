@@ -1070,6 +1070,12 @@ export type LspStatus = {
   status: "connected" | "error"
 }
 
+export type FormatterStatus = {
+  name: string
+  extensions: Array<string>
+  enabled: boolean
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -1248,6 +1254,16 @@ export type EventTodoUpdated = {
   }
 }
 
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
 export type EventSessionIdle = {
   type: "session.idle"
   properties: {
@@ -1310,6 +1326,7 @@ export type Event =
   | EventFileEdited
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventCommandExecuted
   | EventSessionIdle
   | EventSessionCreated
   | EventSessionUpdated
@@ -2510,6 +2527,24 @@ export type LspStatusResponses = {
 }
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type FormatterStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/formatter"
+}
+
+export type FormatterStatusResponses = {
+  /**
+   * Formatter status
+   */
+  200: Array<FormatterStatus>
+}
+
+export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
 export type TuiAppendPromptData = {
   body?: {

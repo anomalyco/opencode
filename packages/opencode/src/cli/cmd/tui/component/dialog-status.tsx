@@ -1,13 +1,15 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show } from "solid-js"
+import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
+
+  const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -73,6 +75,28 @@ export function DialogStatus() {
           </For>
         </box>
       )}
+      <Show when={enabledFormatters().length > 0} fallback={<text>No Formatters</text>}>
+        <box>
+          <text>{enabledFormatters().length} Formatters</text>
+          <For each={enabledFormatters()}>
+            {(item) => (
+              <box flexDirection="row" gap={1}>
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: theme.success,
+                  }}
+                >
+                  •
+                </text>
+                <text wrapMode="word">
+                  <b>{item.name}</b>
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }
