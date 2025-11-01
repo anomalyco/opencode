@@ -1,11 +1,12 @@
 
-- Allows opencode to search the web and use the results to inform responses
+- Searches the web for current information using Perplexity AI
 - Provides up-to-date information for current events and recent data
-- Returns search result information formatted as search result blocks
-- Use this tool for accessing information beyond Claude's knowledge cutoff
-- Searches are performed automatically within a single API call
+- Returns precise and concise answers based on real-time web search
+- Use this tool when you need information beyond your training data
+- Requires PERPLEXITY_API_KEY to be set in ~/.local/share/opencode/auth.json
 
 Usage notes:
-  - Domain filtering is supported to include or block specific websites
-  - Web search is only available in the US
+  - The query parameter should be specific and detailed for better results
+  - Uses Perplexity's llama-3.1-sonar-small-128k-online model for real-time search
+  - Returns error messages if the API key is missing or the request fails
 
