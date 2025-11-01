@@ -446,6 +446,45 @@ To use Google Vertex AI with OpenCode:
 
 ---
 
+### Hugging Face
+
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) provides access to open models supported by 17+ providers.
+
+1. Head over to [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) to create a token with permission to make calls to Inference Providers.
+
+2. Run `opencode auth login` and select **Hugging Face**.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◆  Select provider
+   │  ● Hugging Face
+   │  ...
+   └
+   ```
+
+3. Enter your Hugging Face token.
+
+   ```bash
+   $ opencode auth login
+
+   ┌  Add credential
+   │
+   ◇  Select provider
+   │  Hugging Face
+   │
+   ◇  Enter your API key
+   │  _
+   └
+   ```
+
+4. Run the `/models` command to select a model like _Kimi-K2-Instruct_ or _GLM-4.6_.
+
+
+---
+
 ### LM Studio
 
 You can configure opencode to use local models through LM Studio.

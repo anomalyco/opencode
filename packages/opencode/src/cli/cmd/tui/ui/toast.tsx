@@ -49,7 +49,7 @@ function init() {
 
   let timeoutHandle: NodeJS.Timeout | null = null
 
-  return {
+  const toast = {
     show(options: ToastOptions) {
       const parsedOptions = TuiEvent.ToastShow.properties.parse(options)
       const { duration, ...currentToast } = parsedOptions
@@ -59,10 +59,22 @@ function init() {
         setStore("currentToast", null)
       }, duration).unref()
     },
+    error: (err: any) => {
+      if (err instanceof Error)
+        return toast.show({
+          variant: "error",
+          message: err.message,
+        })
+      toast.show({
+        variant: "error",
+        message: "An unknown error has occurred",
+      })
+    },
     get currentToast(): ToastOptions | null {
       return store.currentToast
     },
   }
+  return toast
 }
 
 export type ToastContext = ReturnType<typeof init>
