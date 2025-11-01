@@ -19,5 +19,5 @@ For anything in the packages/app use the ignore: prefix.
 prefer to explain WHY something was done from an end user perspective instead of
 WHAT was done.
 
-do not do generic messages like "improvied agent experience" be very specific
+do not do generic messages like "improved agent experience" be very specific
 about what user facing changes were made
