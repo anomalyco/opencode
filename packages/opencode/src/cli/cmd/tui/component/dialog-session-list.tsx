@@ -60,7 +60,7 @@ export function DialogSessionList() {
       }}
       keybind={[
         {
-          keybind: Keybind.parse("delete")[0],
+          keybind: Keybind.parse("ctrl+d")[0],
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
