@@ -249,7 +249,7 @@ function App() {
 
   createEffect(() => {
     const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.data.openrouter_warning) {
+    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
           dialog,

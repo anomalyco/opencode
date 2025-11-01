@@ -629,7 +629,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const sync = useSync()
     const kv = useKV()
 
-    const [theme, setTheme] = createSignal(sync.data.config.theme ?? kv.data.theme)
+    const [theme, setTheme] = createSignal(sync.data.config.theme ?? kv.get("theme", "opencode"))
 
     const values = createMemo(() => {
       return THEMES[theme()] ?? THEMES.opencode
@@ -643,7 +643,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         },
       }),
       get selected() {
-        return kv.data.theme
+        return theme()
       },
       set(theme: string) {
         if (!THEMES[theme]) return

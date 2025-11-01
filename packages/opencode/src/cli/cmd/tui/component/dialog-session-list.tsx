@@ -60,7 +60,7 @@ export function DialogSessionList() {
       }}
       keybind={[
         {
-          keybind: Keybind.parse("delete")[0],
+          keybind: Keybind.parse("ctrl+d")[0],
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
@@ -76,7 +76,7 @@ export function DialogSessionList() {
           },
         },
         {
-          keybind: Keybind.parse("r")[0],
+          keybind: Keybind.parse("ctrl+r")[0],
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
