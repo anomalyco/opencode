@@ -733,7 +733,7 @@ export namespace Server {
       .get(
         "/session/:id/message",
         describeRoute({
-          description: "List messages for a session",
+          description: "List messages for a session with optional pagination",
           operationId: "session.messages",
           responses: {
             200: {
@@ -753,8 +753,62 @@ export namespace Server {
             id: z.string().meta({ description: "Session ID" }),
           }),
         ),
+        validator(
+          "query",
+          z.object({
+            limit: z.coerce
+              .number()
+              .optional()
+              .meta({ description: "Maximum number of messages to return" }),
+            offset: z.coerce
+              .number()
+              .optional()
+              .meta({ description: "Number of messages to skip" }),
+          }),
+        ),
         async (c) => {
-          const messages = await Session.messages(c.req.valid("param").id)
+          const { id } = c.req.valid("param")
+          const { limit, offset } = c.req.valid("query")
+          const messages = await Session.messages({ sessionID: id, limit, offset })
+          return c.json(messages)
+        },
+      )
+      .get(
+        "/session/:id/message/recent",
+        describeRoute({
+          description: "Get recent messages for a session (optimized for faster loading)",
+          operationId: "session.messages.recent",
+          responses: {
+            200: {
+              description: "List of recent messages",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.WithParts.array()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "query",
+          z.object({
+            count: z.coerce
+              .number()
+              .default(50)
+              .meta({ description: "Number of recent messages to return" }),
+          }),
+        ),
+        async (c) => {
+          const { id } = c.req.valid("param")
+          const { count } = c.req.valid("query")
+          const messages = await Session.messagesRecent({ sessionID: id, count })
           return c.json(messages)
         },
       )
