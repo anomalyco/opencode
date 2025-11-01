@@ -10,6 +10,7 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { AddDirTool } from "./add-dir"
 import { RaidIngestTool } from "./raid-ingest"
 import { RaidSearchTool } from "./raid-search"
 import { RaidQueryTool } from "./raid-query"
@@ -97,6 +98,7 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      AddDirTool,
       RaidIngestTool,
       RaidSearchTool,
       RaidQueryTool,

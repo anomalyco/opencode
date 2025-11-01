@@ -1,0 +1,7 @@
+- Add an external directory to the current session, allowing agents to access files outside the project root
+- Use this when you need to work with files in other locations on the filesystem
+- The directory path must be absolute and must exist
+- Takes a directory path as input
+- Once added, all filesystem tools (read, write, edit, patch, bash) can access files within that directory
+- The directory is only accessible for this session unless manually added to the project's opencode.jsonc config file
+- This is useful for accessing configuration files, data files, or code in other repositories without copying them
