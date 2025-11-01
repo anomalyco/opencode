@@ -92,7 +92,12 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">("auto")
+  const validSidebar = (v: unknown): v is "show" | "hide" | "auto" =>
+    v === "show" || v === "hide" || v === "auto"
+  const initialSidebar = validSidebar(sync.data.config.tui?.sidebar)
+    ? sync.data.config.tui.sidebar
+    : "auto"
+  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(initialSidebar)
   const [conceal, setConceal] = createSignal(true)
 
   const wide = createMemo(() => dimensions().width > 120)

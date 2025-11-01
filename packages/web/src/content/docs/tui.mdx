@@ -336,7 +336,8 @@ You can customize TUI behavior through your OpenCode config file.
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
-    "scroll_speed": 3
+    "scroll_speed": 3,
+    "sidebar": "hide"
   }
 }
 ```
@@ -344,3 +345,4 @@ You can customize TUI behavior through your OpenCode config file.
 ### Options
 
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (default: `2`, minimum: `1`)
+- `sidebar` - Sets the initial sidebar behavior (default: `auto` uses the responsive layout, `show` forces it visible, `hide` keeps it hidden until toggled)

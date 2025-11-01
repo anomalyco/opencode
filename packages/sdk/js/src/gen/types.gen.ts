@@ -285,6 +285,10 @@ export type Config = {
      * TUI scroll speed
      */
     scroll_speed?: number
+    /**
+     * Default sidebar visibility state
+     */
+    sidebar?: "auto" | "show" | "hide"
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

@@ -73,7 +73,7 @@ from .config_providers_response_200 import ConfigProvidersResponse200
 from .config_providers_response_200_default import ConfigProvidersResponse200Default
 from .config_share import ConfigShare
 from .config_tools import ConfigTools
-from .config_tui import ConfigTui
+from .config_tui import ConfigTui, ConfigTuiSidebar
 from .config_watcher import ConfigWatcher
 from .error import Error
 from .error_data import ErrorData
@@ -249,6 +249,7 @@ __all__ = (
     "ConfigShare",
     "ConfigTools",
     "ConfigTui",
+    "ConfigTuiSidebar",
     "ConfigWatcher",
     "Error",
     "ErrorData",

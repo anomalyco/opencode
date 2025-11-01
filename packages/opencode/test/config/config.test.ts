@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -348,5 +348,78 @@ test("gets config directories", async () => {
       const dirs = await Config.directories()
       expect(dirs.length).toBeGreaterThanOrEqual(1)
     },
+  })
+})
+
+describe("TUI sidebar configuration", () => {
+  test("defaults to auto when not specified", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tui: {
+              scroll_speed: 3,
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.tui?.sidebar).toBe("auto")
+        expect(config.tui?.scroll_speed).toBe(3)
+      },
+    })
+  })
+
+  test("accepts all valid values (auto, show, hide)", async () => {
+    for (const sidebarValue of ["auto", "show", "hide"] as const) {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              tui: {
+                sidebar: sidebarValue,
+              },
+            }),
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.tui?.sidebar).toBe(sidebarValue)
+        },
+      })
+    }
+  })
+
+  test("rejects invalid values", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tui: {
+              sidebar: "invalid_value",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(Config.get()).rejects.toThrow()
+      },
+    })
   })
 })

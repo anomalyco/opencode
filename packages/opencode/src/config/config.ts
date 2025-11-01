@@ -482,7 +482,13 @@ export namespace Config {
 
   export const TUI = z.object({
     scroll_speed: z.number().min(1).optional().default(2).describe("TUI scroll speed"),
+    sidebar: z
+      .enum(["auto", "show", "hide"])
+      .optional()
+      .default("auto")
+      .describe("Default sidebar visibility state"),
   })
+  export type TUI = z.infer<typeof TUI>
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",

@@ -93,10 +93,17 @@ You can configure TUI-specific settings through the `tui` option.
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
-    "scroll_speed": 3
+    "scroll_speed": 3,
+    "sidebar": "hide"
   }
 }
 ```
+
+Set `sidebar` to control the initial state of the session sidebar:
+
+- `"auto"` (default) shows the sidebar when there is enough horizontal space.
+- `"show"` always shows the sidebar on launch.
+- `"hide"` keeps the sidebar hidden until toggled.
 
 [Learn more about using the TUI here](/docs/tui).
 

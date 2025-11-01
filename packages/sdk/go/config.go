@@ -1834,13 +1834,16 @@ func (r ConfigShare) IsKnown() bool {
 // TUI specific settings
 type ConfigTui struct {
 	// TUI scroll speed
-	ScrollSpeed float64       `json:"scroll_speed"`
-	JSON        configTuiJSON `json:"-"`
+	ScrollSpeed float64 `json:"scroll_speed"`
+	// Default sidebar visibility state
+	Sidebar ConfigTuiSidebar `json:"sidebar"`
+	JSON    configTuiJSON    `json:"-"`
 }
 
 // configTuiJSON contains the JSON metadata for the struct [ConfigTui]
 type configTuiJSON struct {
 	ScrollSpeed apijson.Field
+	Sidebar     apijson.Field
 	raw         string
 	ExtraFields map[string]apijson.Field
 }
@@ -1851,6 +1854,22 @@ func (r *ConfigTui) UnmarshalJSON(data []byte) (err error) {
 
 func (r configTuiJSON) RawJSON() string {
 	return r.raw
+}
+
+type ConfigTuiSidebar string
+
+const (
+	ConfigTuiSidebarAuto ConfigTuiSidebar = "auto"
+	ConfigTuiSidebarShow ConfigTuiSidebar = "show"
+	ConfigTuiSidebarHide ConfigTuiSidebar = "hide"
+)
+
+func (r ConfigTuiSidebar) IsKnown() bool {
+	switch r {
+	case ConfigTuiSidebarAuto, ConfigTuiSidebarShow, ConfigTuiSidebarHide:
+		return true
+	}
+	return false
 }
 
 type ConfigWatcher struct {
