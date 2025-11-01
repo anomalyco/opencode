@@ -6,3 +6,5 @@ The file you create will be given to agentic coding agents (such as yourself) th
 If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.
 
 If there's already an AGENTS.md, improve it if it's located in ${path}
+
+$ARGUMENTS
