@@ -272,11 +272,6 @@ export namespace Session {
     return result
   }
 
-  export const diff = fn(Identifier.schema("session"), async (sessionID) => {
-    const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-    return diffs ?? []
-  })
-
   export const messages = fn(Identifier.schema("session"), async (sessionID) => {
     // Check cache first
     const session = await get(sessionID)
@@ -285,22 +280,34 @@ export namespace Session {
       return cached.messages
     }
 
-    const paths = await Storage.list(["message", sessionID])
-    // Load all messages in parallel
-    const result = await Promise.all(
-      paths.map(async (p) => {
-        const info = await Storage.read<MessageV2.Info>(p)
-        const parts = await getParts(info.id)
-        return { info, parts }
-      }),
-    )
-    result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+      const paths = await Storage.list(["message", sessionID])
 
-    // Update cache
-    messageCache.set(sessionID, { timestamp: Date.now(), messages: result })
+      // Apply pagination if specified
+      let paginatedPaths = paths
+      if (limit !== undefined || offset !== undefined) {
+        const start = offset ?? 0
+        const end = limit !== undefined ? start + limit : paths.length
+        paginatedPaths = paths.slice(start, end)
+      }
 
-    return result
-  })
+      // Load messages in parallel using batch read
+      const infos = await Storage.readMany<MessageV2.Info>(paginatedPaths)
+      const result = await Promise.all(
+        infos.map(async (info) => {
+          const parts = await getParts(info.id)
+          return { info, parts }
+        }),
+      )
+      result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+
+      // Update cache only for full loads
+      if (!limit && !offset) {
+        messageCache.set(sessionID, { timestamp: Date.now(), messages: result })
+      }
+
+      return result
+    },
+  )
 
   export const getMessage = fn(
     z.object({
@@ -317,11 +324,36 @@ export namespace Session {
 
   export const getParts = fn(Identifier.schema("message"), async (messageID) => {
     const items = await Storage.list(["part", messageID])
-    // Load all parts in parallel
-    const result = await Promise.all(items.map((item) => Storage.read<MessageV2.Part>(item)))
+    // Load all parts in parallel using batch read
+    const result = await Storage.readMany<MessageV2.Part>(items)
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
     return result
   })
+
+  // Lazy load: load only recent messages initially for faster session switching
+  export const messagesRecent = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      count: z.number().default(50),
+    }),
+    async (input) => {
+      const paths = await Storage.list(["message", input.sessionID])
+      // Take the most recent N messages
+      const recentPaths = paths.slice(-input.count)
+
+      // Load messages in parallel using batch read
+      const infos = await Storage.readMany<MessageV2.Info>(recentPaths)
+      const result = await Promise.all(
+        infos.map(async (info) => {
+          const parts = await getParts(info.id)
+          return { info, parts }
+        }),
+      )
+      result.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+
+      return result
+    },
+  )
 
   export async function* list() {
     const project = Instance.project
