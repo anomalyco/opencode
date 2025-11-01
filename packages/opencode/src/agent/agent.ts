@@ -3,9 +3,11 @@ import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_ORCHESTRATOR from "../session/prompt/orchestrator.txt"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
+import { Log } from "../util/log"
 
 export namespace Agent {
   export const Info = z
@@ -127,6 +129,39 @@ export namespace Agent {
         mode: "primary",
         builtIn: true,
       },
+      orchestrator: {
+        name: "orchestrator",
+        description: "Orchestrates complex workflows by coordinating specialized agents",
+        tools: {
+          write: false,
+          edit: false,
+          bash: false,
+          task: true,
+          read: true,
+          glob: true,
+          grep: true,
+          ...defaultTools,
+        },
+        options: {},
+        permission: {
+          edit: "deny",
+          bash: {
+            "git status*": "allow",
+            "git log*": "allow",
+            "git diff*": "allow",
+            "*": "deny",
+          },
+          webfetch: "allow",
+        },
+        mode: "primary",
+        builtIn: true,
+        temperature: 0.3,
+        model: {
+          providerID: "anthropic",
+          modelID: "claude-sonnet-4-20250514",
+        },
+        prompt: PROMPT_ORCHESTRATOR,
+      },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
       if (value.disable) {
@@ -143,7 +178,18 @@ export namespace Agent {
           tools: {},
           builtIn: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, ...extra } = value
+      const {
+        name,
+        model,
+        prompt,
+        tools,
+        description,
+        temperature,
+        top_p,
+        mode,
+        permission,
+        ...extra
+      } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -182,37 +228,56 @@ export namespace Agent {
   }
 
   export async function generate(input: { description: string }) {
+    const log = Log.create({ service: "agent.generate" })
     const defaultModel = await Provider.defaultModel()
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const system = SystemPrompt.header(defaultModel.providerID)
     system.push(PROMPT_GENERATE)
     const existing = await list()
-    const result = await generateObject({
-      temperature: 0.3,
-      prompt: [
-        ...system.map(
-          (item): ModelMessage => ({
-            role: "system",
-            content: item,
-          }),
-        ),
-        {
-          role: "user",
-          content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
-        },
-      ],
-      model: model.language,
-      schema: z.object({
-        identifier: z.string(),
-        whenToUse: z.string(),
-        systemPrompt: z.string(),
-      }),
-    })
-    return result.object
+
+    try {
+      const result = await generateObject({
+        temperature: 0.3,
+        prompt: [
+          ...system.map(
+            (item): ModelMessage => ({
+              role: "system",
+              content: item,
+            }),
+          ),
+          {
+            role: "user",
+            content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
+          },
+        ],
+        model: model.language,
+        schema: z.object({
+          identifier: z.string(),
+          whenToUse: z.string(),
+          systemPrompt: z.string(),
+        }),
+      })
+      return result.object
+    } catch (error) {
+      log.error("Failed to generate agent configuration", {
+        description: input.description,
+        error: error instanceof Error ? error.message : String(error),
+      })
+
+      // Return fallback agent configuration
+      return {
+        identifier: "custom-agent",
+        whenToUse: "For general purpose tasks when other agents are not suitable",
+        systemPrompt: `You are a helpful assistant specialized in ${input.description}. Provide clear, accurate, and helpful responses.`,
+      }
+    }
   }
 }
 
-function mergeAgentPermissions(basePermission: any, overridePermission: any): Agent.Info["permission"] {
+function mergeAgentPermissions(
+  basePermission: any,
+  overridePermission: any,
+): Agent.Info["permission"] {
   if (typeof basePermission.bash === "string") {
     basePermission.bash = {
       "*": basePermission.bash,
