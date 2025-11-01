@@ -19,20 +19,13 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
     return (props.currentTokens / props.tokenLimit) * 100
   })
 
-  const statusChar = createMemo(() => {
-    const percent = usagePercent()
-    if (percent < 70) return "●" // Green dot - optimal
-    if (percent < 90) return "◐" // Yellow half-circle - approaching
-    return "◉" // Red filled circle - critical
-  })
-
   const barContent = createMemo(() => {
     // Calculate bar length based on width
-    // Format: [status] [bar] [percentage]
-    // Status char = 1, spaces = 2, percentage = ~4, padding = 4, borders = 2
-    // Available for bar = width - 13
-    const availableWidth = (props.width || 40) - 13
-    const barLength = Math.max(10, Math.min(availableWidth, 30)) // Between 10-30 chars
+    // Format: [bar] [percentage]
+    // Percentage = ~4, spaces = 1, padding = 4, borders = 2
+    // Available for bar = width - 11
+    const availableWidth = (props.width || 40) - 11
+    const barLength = Math.max(15, availableWidth) // At least 15 chars
 
     const percent = usagePercent()
     const filledCount = Math.min(Math.floor((barLength * percent) / 100), barLength)
@@ -77,9 +70,9 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
 
   return (
     <Show when={props.tokenLimit > 0}>
-      <box flexDirection="row" paddingLeft={1} paddingRight={1}>
+      <box flexDirection="row" paddingLeft={0} paddingRight={1}>
         <text fg={props.agentColor} bg={props.backgroundColor}>
-          {statusChar()} {barContent()}
+          {barContent()}
           {percentText()}
         </text>
       </box>

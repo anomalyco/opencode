@@ -17,15 +17,8 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
     return (props.currentTokens / props.tokenLimit) * 100
   })
 
-  const statusChar = createMemo(() => {
-    const percent = usagePercent()
-    if (percent < 70) return "●" // Green dot - optimal
-    if (percent < 90) return "◐" // Yellow half-circle - approaching
-    return "◉" // Red filled circle - critical
-  })
-
   const barContent = createMemo(() => {
-    const barLength = 15
+    const barLength = 20
     const percent = usagePercent()
     const filledCount = Math.min(Math.floor((barLength * percent) / 100), barLength)
 
@@ -81,7 +74,7 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
         "white-space": "nowrap",
       }}
     >
-      {statusChar()} {barContent()}
+      {barContent()}
       {percentText()}
     </span>
   )

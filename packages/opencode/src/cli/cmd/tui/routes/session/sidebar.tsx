@@ -50,9 +50,10 @@ export function Sidebar(props: { sessionID: string }) {
   return (
     <Show when={session()}>
       <box flexShrink={0} gap={1} width={40}>
-        <box flexDirection="row" gap={0}>
-          <text fg={theme.textMuted}>code</text>
-          <text attributes={TextAttributes.BOLD}>surf</text>
+        <box flexDirection="row" justifyContent="flex-end" paddingRight={1}>
+          <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
+            CODESURF
+          </text>
         </box>
         <box>
           <text fg={theme.text}>
