@@ -2,11 +2,19 @@
  * LiveKit Room Manager
  *
  * Simplified room connection and audio management for OpenCode
- *
- * TODO: Install dependencies before using:
- *   bun add livekit-client livekit-server-sdk
  */
 
+import {
+  Room,
+  createLocalAudioTrack,
+  type RemoteParticipant,
+  type RemoteTrack,
+  type LocalAudioTrack,
+  type RemoteTrackPublication,
+  RoomEvent,
+  ConnectionState,
+} from "livekit-client"
+import { AccessToken } from "livekit-server-sdk"
 import type {
   LiveKitConfig,
   RoomOptions,
@@ -19,12 +27,6 @@ import type {
   RoomEvents,
   LiveKitError,
 } from "./types"
-
-// Placeholder types until livekit-client is installed
-type Room = any
-type RemoteParticipant = any
-type RemoteAudioTrack = any
-type LocalAudioTrack = any
 
 /**
  * Manages LiveKit room connections and audio
@@ -62,19 +64,15 @@ export class RoomManager {
    */
   async connect(options: RoomOptions): Promise<void> {
     try {
-      // TODO: Implement with livekit-client
-      // const { Room } = await import('livekit-client')
-      // const token = await this.generateToken(options)
-      // this.room = new Room({
-      //   adaptiveStream: options.adaptiveStream ?? true,
-      //   dynacast: options.dynacast ?? true,
-      // })
-      // await this.room.connect(this.config.serverUrl, token)
-      // this.setupEventListeners()
+      const token = await this.generateToken(options)
 
-      throw new Error(
-        "LiveKit dependencies not installed. Run: bun add livekit-client livekit-server-sdk",
-      )
+      this.room = new Room({
+        adaptiveStream: options.adaptiveStream ?? true,
+        dynacast: options.dynacast ?? true,
+      })
+
+      this.setupEventListeners()
+      await this.room.connect(this.config.serverUrl, token)
     } catch (error) {
       throw this.createError("Failed to connect to LiveKit room", "CONNECT_FAILED", error)
     }
@@ -109,10 +107,10 @@ export class RoomManager {
     }
 
     return {
-      connected: this.room.state === "connected",
+      connected: this.room.state === ConnectionState.Connected,
       roomName: this.room.name,
       participantId: this.room.localParticipant?.identity,
-      participantCount: this.room.participants.size + 1, // +1 for local
+      participantCount: this.room.remoteParticipants.size + 1, // +1 for local
       audioEnabled: this.microphoneState.enabled,
     }
   }
@@ -130,17 +128,14 @@ export class RoomManager {
     }
 
     try {
-      // TODO: Implement with livekit-client
-      // const { createLocalAudioTrack } = await import('livekit-client')
-      // this.localAudioTrack = await createLocalAudioTrack({
-      //   echoCancellation: this.audioConfig.echoCancellation,
-      //   noiseSuppression: this.audioConfig.noiseSuppression,
-      //   autoGainControl: this.audioConfig.autoGainControl,
-      // })
-      // await this.room.localParticipant.publishTrack(this.localAudioTrack)
-      // this.microphoneState.enabled = true
+      this.localAudioTrack = await createLocalAudioTrack({
+        echoCancellation: this.audioConfig.echoCancellation,
+        noiseSuppression: this.audioConfig.noiseSuppression,
+        autoGainControl: this.audioConfig.autoGainControl,
+      })
 
-      throw new Error("LiveKit dependencies not installed")
+      await this.room.localParticipant.publishTrack(this.localAudioTrack)
+      this.microphoneState.enabled = true
     } catch (error) {
       throw this.createError("Failed to enable microphone", "MIC_ENABLE_FAILED", error)
     }
@@ -169,8 +164,8 @@ export class RoomManager {
     if (!this.localAudioTrack) return
 
     const clampedLevel = Math.max(0, Math.min(1, level))
-    // TODO: Implement volume control
-    // this.localAudioTrack.setVolume(clampedLevel)
+    // Note: Volume control is typically done at the audio element level
+    // MediaStreamTrack doesn't have volume control
     this.microphoneState.volume = clampedLevel
   }
 
@@ -180,7 +175,7 @@ export class RoomManager {
   async setMicrophoneMuted(muted: boolean): Promise<void> {
     if (!this.localAudioTrack) return
 
-    await this.localAudioTrack.setMuted(muted)
+    await this.localAudioTrack.mute()
     this.microphoneState.muted = muted
   }
 
@@ -204,7 +199,7 @@ export class RoomManager {
     const participants: Participant[] = []
 
     // Add remote participants
-    for (const [, participant] of this.room.participants) {
+    for (const [, participant] of this.room.remoteParticipants) {
       participants.push(this.mapParticipant(participant))
     }
 
@@ -219,14 +214,14 @@ export class RoomManager {
 
     const tracks: AudioTrack[] = []
 
-    for (const [, participant] of this.room.participants) {
-      for (const [, track] of participant.audioTracks) {
-        if (track.track) {
+    for (const [, participant] of this.room.remoteParticipants) {
+      for (const [, publication] of participant.audioTrackPublications) {
+        if (publication.track) {
           tracks.push({
-            sid: track.trackSid,
+            sid: publication.trackSid,
             participantId: participant.identity,
-            enabled: !track.isMuted,
-            volume: 1.0, // TODO: Get actual volume
+            enabled: !publication.isMuted,
+            volume: 1.0,
           })
         }
       }
@@ -252,12 +247,9 @@ export class RoomManager {
       const data = encoder.encode(JSON.stringify(message))
 
       if (participantId) {
-        const participant = this.room.participants.get(participantId)
-        if (participant) {
-          await this.room.localParticipant.publishData(data, {
-            destinationIdentities: [participantId],
-          })
-        }
+        await this.room.localParticipant.publishData(data, {
+          destinationIdentities: [participantId],
+        })
       } else {
         await this.room.localParticipant.publishData(data)
       }
@@ -302,25 +294,19 @@ export class RoomManager {
    * Generate LiveKit access token
    */
   private async generateToken(options: RoomOptions): Promise<string> {
-    // TODO: Implement with livekit-server-sdk
-    // const { AccessToken } = await import('livekit-server-sdk')
-    // const token = new AccessToken(
-    //   this.config.apiKey,
-    //   this.config.apiSecret,
-    //   {
-    //     identity: options.participantName || 'opencode-user',
-    //     name: options.participantName,
-    //   }
-    // )
-    // token.addGrant({
-    //   roomJoin: true,
-    //   room: options.name,
-    //   canPublish: true,
-    //   canSubscribe: true,
-    // })
-    // return await token.toJwt()
+    const token = new AccessToken(this.config.apiKey, this.config.apiSecret, {
+      identity: options.participantName || "opencode-user",
+      name: options.participantName,
+    })
 
-    throw new Error("Token generation requires livekit-server-sdk")
+    token.addGrant({
+      roomJoin: true,
+      room: options.name,
+      canPublish: true,
+      canSubscribe: true,
+    })
+
+    return await token.toJwt()
   }
 
   /**
@@ -329,44 +315,79 @@ export class RoomManager {
   private setupEventListeners(): void {
     if (!this.room) return
 
-    // TODO: Implement with livekit-client event types
-    // this.room.on('connected', () => {
-    //   this.emit('connected', this.getConnectionState())
-    // })
+    this.room.on(RoomEvent.Connected, () => {
+      this.emit("connected", this.getConnectionState())
+    })
 
-    // this.room.on('disconnected', (reason) => {
-    //   this.emit('disconnected', reason?.toString())
-    // })
+    this.room.on(RoomEvent.Disconnected, (reason) => {
+      this.emit("disconnected", reason?.toString())
+    })
 
-    // this.room.on('participantConnected', (participant) => {
-    //   this.emit('participantJoined', this.mapParticipant(participant))
-    // })
+    this.room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+      this.emit("participantJoined", this.mapParticipant(participant))
+    })
 
-    // this.room.on('participantDisconnected', (participant) => {
-    //   this.emit('participantLeft', this.mapParticipant(participant))
-    // })
+    this.room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      this.emit("participantLeft", this.mapParticipant(participant))
+    })
 
-    // this.room.on('trackSubscribed', (track, publication, participant) => {
-    //   if (track.kind === 'audio') {
-    //     this.emit('audioTrackSubscribed', {
-    //       sid: publication.trackSid,
-    //       participantId: participant.identity,
-    //       enabled: !publication.isMuted,
-    //       volume: 1.0,
-    //     }, this.mapParticipant(participant))
-    //   }
-    // })
+    this.room.on(
+      RoomEvent.TrackSubscribed,
+      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (track.kind === "audio") {
+          this.emit(
+            "audioTrackSubscribed",
+            {
+              sid: publication.trackSid,
+              participantId: participant.identity,
+              enabled: !publication.isMuted,
+              volume: 1.0,
+            },
+            this.mapParticipant(participant),
+          )
+        }
+      },
+    )
 
-    // this.room.on('dataReceived', (payload, participant) => {
-    //   try {
-    //     const decoder = new TextDecoder()
-    //     const text = decoder.decode(payload)
-    //     const message = JSON.parse(text) as DataChannelMessage
-    //     this.emit('dataReceived', message, this.mapParticipant(participant))
-    //   } catch (error) {
-    //     console.error('Failed to parse data message:', error)
-    //   }
-    // })
+    this.room.on(
+      RoomEvent.TrackUnsubscribed,
+      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (track.kind === "audio") {
+          this.emit(
+            "audioTrackUnsubscribed",
+            {
+              sid: publication.trackSid,
+              participantId: participant.identity,
+              enabled: !publication.isMuted,
+              volume: 1.0,
+            },
+            this.mapParticipant(participant),
+          )
+        }
+      },
+    )
+
+    this.room.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
+      if (!participant) return
+
+      try {
+        const decoder = new TextDecoder()
+        const text = decoder.decode(payload)
+        const message = JSON.parse(text) as DataChannelMessage
+        this.emit("dataReceived", message, this.mapParticipant(participant))
+      } catch (error) {
+        console.error("Failed to parse data message:", error)
+      }
+    })
+
+    this.room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const speakerIds = new Set(speakers.map((s) => s.identity))
+
+      for (const [, participant] of this.room!.remoteParticipants) {
+        const isSpeaking = speakerIds.has(participant.identity)
+        this.emit("speakingChanged", this.mapParticipant(participant), isSpeaking)
+      }
+    })
   }
 
   /**
