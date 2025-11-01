@@ -22,15 +22,16 @@ export type CommandOption = DialogSelectOption & {
 
 function init() {
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
+  const [suspendCount, setSuspendCount] = createSignal(0)
   const dialog = useDialog()
   const keybind = useKeybind()
   const options = createMemo(() => {
     return registrations().flatMap((x) => x())
   })
+  const suspended = () => suspendCount() > 0
 
-  let keybinds = true
   useKeyboard((evt) => {
-    if (!keybinds) return
+    if (suspended()) return
     for (const option of options()) {
       if (option.keybind && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
@@ -50,8 +51,9 @@ function init() {
       }
     },
     keybinds(enabled: boolean) {
-      keybinds = enabled
+      setSuspendCount((count) => count + (enabled ? -1 : 1))
     },
+    suspended,
     show() {
       dialog.replace(() => <DialogCommand options={options()} />)
     },
@@ -83,7 +85,10 @@ export function CommandProvider(props: ParentProps) {
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
-    if (keybind.match("command_list", evt) && dialog.stack.length === 0) {
+    if (value.suspended()) return
+    if (dialog.stack.length > 0) return
+    if (evt.defaultPrevented) return
+    if (keybind.match("command_list", evt)) {
       evt.preventDefault()
       dialog.replace(() => <DialogCommand options={value.options} />)
       return
