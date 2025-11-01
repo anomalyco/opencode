@@ -131,6 +131,10 @@ export type KeybindsConfig = {
    */
   agent_list?: string
   /**
+   * Manage agents
+   */
+  agent_manage?: string
+  /**
    * Next agent
    */
   agent_cycle?: string
@@ -166,6 +170,14 @@ export type KeybindsConfig = {
    * Next history item
    */
   history_next?: string
+  /**
+   * List and manage memories
+   */
+  memory_list?: string
+  /**
+   * Manage MCP servers
+   */
+  mcp_manage?: string
   /**
    * Next child session
    */

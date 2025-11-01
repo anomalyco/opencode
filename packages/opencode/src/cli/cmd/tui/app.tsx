@@ -15,7 +15,10 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogMemoryList } from "@tui/component/dialog-memory-list"
+import { DialogMCPManager } from "@tui/component/dialog-mcp-manager"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -270,6 +273,15 @@ function App() {
       },
     },
     {
+      title: "Manage agents",
+      value: "agent.manage",
+      keybind: "agent_manage",
+      category: "Agent",
+      onSelect: () => {
+        dialog.replace(() => <DialogAgentManager />)
+      },
+    },
+    {
       title: "Agent cycle",
       value: "agent.cycle",
       keybind: "agent_cycle",
@@ -321,6 +333,24 @@ function App() {
         dialog.replace(() => <DialogHelp />)
       },
       category: "System",
+    },
+    {
+      title: "Memory manager",
+      value: "memory.list",
+      keybind: "memory_list",
+      category: "System",
+      onSelect: () => {
+        dialog.replace(() => <DialogMemoryList />)
+      },
+    },
+    {
+      title: "MCP manager",
+      value: "mcp.manage",
+      keybind: "mcp_manage",
+      category: "System",
+      onSelect: () => {
+        dialog.replace(() => <DialogMCPManager />)
+      },
     },
     {
       title: "Exit the app",
