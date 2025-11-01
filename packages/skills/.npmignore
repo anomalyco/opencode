@@ -1,0 +1,38 @@
+# Source files (we publish dist)
+src/
+*.ts
+!*.d.ts
+
+# Tests
+**/__tests__/
+*.test.ts
+*.spec.ts
+
+# Development files
+tsconfig.json
+tsup.config.ts
+.eslintrc.*
+.prettierrc.*
+
+# Examples and demos
+examples/
+demo.ts
+
+# Documentation (keep main docs, exclude internal)
+LIVE_COMPARISON.md
+REAL_OUTPUT_COMPARISON.md
+
+# Build artifacts
+node_modules/
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore

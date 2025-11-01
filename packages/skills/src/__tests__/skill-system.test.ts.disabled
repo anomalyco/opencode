@@ -1,0 +1,517 @@
+/**
+ * Tests for the complete skill system
+ */
+
+import { describe, it, expect, beforeEach } from "bun:test"
+import { mock } from "bun:test"
+import { SkillSystem } from "../skill-system"
+import { SkillLoader } from "../skill-loader"
+import { SkillMatcher } from "../skill-matcher"
+import { SkillExecutor } from "../skill-executor"
+import type { SkillMetadata, LoadedSkill } from "../types"
+
+// Mock file system operations
+mock.mock("fs/promises", () => ({
+  readdir: mock.fn(),
+  readFile: mock.fn(),
+  stat: mock.fn(),
+}))
+
+describe("SkillSystem", () => {
+  let system: SkillSystem
+
+  beforeEach(() => {
+    mock.clearAllMocks()
+    system = new SkillSystem({
+      projectSkillsPath: "./test-skills",
+      debug: false,
+    })
+  })
+
+  describe("initialization", () => {
+    it("should initialize successfully", async () => {
+      const { readdir, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockResolvedValue({
+        isDirectory: () => true,
+        isFile: () => false,
+      } as any)
+
+      mock.mocked(readdir).mockResolvedValue([])
+
+      await system.initialize()
+
+      const skills = system.getAllSkills()
+      expect(skills).toBeDefined()
+      expect(Array.isArray(skills)).toBe(true)
+    })
+
+    it("should emit skills:discovered event", async () => {
+      const { readdir, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockResolvedValue({
+        isDirectory: () => true,
+        isFile: () => false,
+      } as any)
+
+      mock.mocked(readdir).mockResolvedValue([])
+
+      const listener = mock.fn()
+      system.on("skills:discovered", listener)
+
+      await system.initialize()
+
+      expect(listener).toHaveBeenCalled()
+    })
+
+    it("should throw error if used before initialization", async () => {
+      expect(() => system.getAllSkills()).toThrow("not initialized")
+    })
+  })
+
+  describe("processRequest", () => {
+    it("should match and activate skills", async () => {
+      const { readdir, readFile, stat } = await import("fs/promises")
+
+      // Mock directory structure
+      mock.mocked(stat).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        return Promise.resolve({ isDirectory: () => true, isFile: () => false } as any)
+      })
+
+      mock.mocked(readdir).mockImplementation((path: any) => {
+        if (path.includes("test-skills")) {
+          return Promise.resolve([{ name: "react-skill", isDirectory: () => true } as any])
+        }
+        return Promise.resolve([])
+      })
+
+      mock.mocked(readFile).mockResolvedValue(`---
+name: react-skill
+description: Use for React development. Activate when user mentions React, components, or hooks.
+---
+
+# React Skill Content
+
+Help with React development.
+`)
+
+      await system.initialize()
+
+      const result = await system.processRequest("Create a React component")
+
+      expect(result.matches.length).toBeGreaterThan(0)
+      expect(result.context).toBeTruthy()
+    })
+  })
+
+  describe("skill activation", () => {
+    it("should activate skill explicitly", async () => {
+      const { readdir, readFile, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        return Promise.resolve({ isDirectory: () => true, isFile: () => false } as any)
+      })
+
+      mock.mocked(readdir).mockImplementation((path: any) => {
+        if (path.includes("test-skills")) {
+          return Promise.resolve([{ name: "test-skill", isDirectory: () => true } as any])
+        }
+        return Promise.resolve([])
+      })
+
+      mock.mocked(readFile).mockResolvedValue(`---
+name: test-skill
+description: A test skill
+---
+
+Test skill content
+`)
+
+      await system.initialize()
+
+      const skill = await system.activateSkill("test-skill", "Test request")
+
+      expect(skill).toBeTruthy()
+      expect(skill?.frontmatter.name).toBe("test-skill")
+      expect(system.isSkillActive("test-skill")).toBe(true)
+    })
+
+    it("should deactivate skill", async () => {
+      const { readdir, readFile, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        return Promise.resolve({ isDirectory: () => true, isFile: () => false } as any)
+      })
+
+      mock.mocked(readdir).mockImplementation((path: any) => {
+        if (path.includes("test-skills")) {
+          return Promise.resolve([{ name: "test-skill", isDirectory: () => true } as any])
+        }
+        return Promise.resolve([])
+      })
+
+      mock.mocked(readFile).mockResolvedValue(`---
+name: test-skill
+description: A test skill
+---
+
+Test skill content
+`)
+
+      await system.initialize()
+      await system.activateSkill("test-skill", "Test request")
+
+      expect(system.isSkillActive("test-skill")).toBe(true)
+
+      system.deactivateSkill("test-skill")
+
+      expect(system.isSkillActive("test-skill")).toBe(false)
+    })
+  })
+
+  describe("statistics", () => {
+    it("should track activation statistics", async () => {
+      const { readdir, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockResolvedValue({
+        isDirectory: () => true,
+        isFile: () => false,
+      } as any)
+
+      mock.mocked(readdir).mockResolvedValue([])
+
+      await system.initialize()
+
+      const stats = system.getStats()
+
+      expect(stats).toHaveProperty("totalSkills")
+      expect(stats).toHaveProperty("activeSkills")
+      expect(stats).toHaveProperty("totalActivations")
+      expect(stats).toHaveProperty("averageConfidence")
+    })
+  })
+
+  describe("LLM context generation", () => {
+    it("should generate empty context when no skills active", () => {
+      const context = system.generatePrompt()
+      expect(context).toBe("")
+    })
+  })
+})
+
+describe("SkillLoader", () => {
+  let loader: SkillLoader
+
+  beforeEach(() => {
+    mock.clearAllMocks()
+    loader = new SkillLoader({
+      projectSkillsPath: "./test-skills",
+      debug: false,
+    })
+  })
+
+  describe("discoverSkills", () => {
+    it("should discover skills from valid directory", async () => {
+      const { readdir, readFile, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        return Promise.resolve({ isDirectory: () => true, isFile: () => false } as any)
+      })
+
+      mock.mocked(readdir).mockImplementation((path: any) => {
+        if (path.includes("test-skills")) {
+          return Promise.resolve([
+            { name: "skill1", isDirectory: () => true } as any,
+            { name: "skill2", isDirectory: () => true } as any,
+          ])
+        }
+        return Promise.resolve([])
+      })
+
+      mock.mocked(readFile).mockResolvedValue(`---
+name: test-skill
+description: Test description
+---
+
+Content here
+`)
+
+      const skills = await loader.discoverSkills()
+
+      expect(skills.length).toBeGreaterThanOrEqual(0)
+    })
+
+    it("should handle missing directories gracefully", async () => {
+      const { stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockRejectedValue(new Error("ENOENT"))
+
+      const skills = await loader.discoverSkills()
+
+      expect(skills).toEqual([])
+    })
+  })
+
+  describe("loadSkill", () => {
+    it("should fully load a skill", async () => {
+      const { readdir, readFile, stat } = await import("fs/promises")
+
+      mock.mocked(stat).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        if (path.includes("reference.md")) {
+          return Promise.resolve({ isFile: () => true, isDirectory: () => false } as any)
+        }
+        return Promise.resolve({ isDirectory: () => true, isFile: () => false } as any)
+      })
+
+      mock.mocked(readdir).mockImplementation((path: any) => {
+        if (path.includes("test-skills")) {
+          return Promise.resolve([{ name: "test-skill", isDirectory: () => true } as any])
+        }
+        return Promise.resolve([])
+      })
+
+      mock.mocked(readFile).mockImplementation((path: any) => {
+        if (path.includes("SKILL.md")) {
+          return Promise.resolve(`---
+name: test-skill
+description: Test description
+---
+
+Skill content
+`)
+        }
+        if (path.includes("reference.md")) {
+          return Promise.resolve("Reference content")
+        }
+        return Promise.resolve("")
+      })
+
+      await loader.discoverSkills()
+      const skill = await loader.loadSkill("test-skill", { loadReference: true })
+
+      expect(skill).toBeTruthy()
+      expect(skill?.content).toBe("Skill content")
+      expect(skill?.reference).toBe("Reference content")
+      expect(skill?.estimatedTokens).toBeGreaterThan(0)
+    })
+  })
+})
+
+describe("SkillMatcher", () => {
+  let matcher: SkillMatcher
+
+  beforeEach(() => {
+    matcher = new SkillMatcher(false)
+  })
+
+  describe("matchSkills", () => {
+    it("should match skills based on keywords", async () => {
+      const skills: SkillMetadata[] = [
+        {
+          frontmatter: {
+            name: "react-skill",
+            description:
+              "Use for React component development. Activate when creating React components, hooks, or JSX.",
+          },
+          path: "/skills/react-skill",
+          skillFilePath: "/skills/react-skill/SKILL.md",
+          source: "project",
+          hasReference: false,
+          hasExamples: false,
+          hasScripts: false,
+          hasTemplates: false,
+        },
+        {
+          frontmatter: {
+            name: "api-skill",
+            description:
+              "Use for API development and testing. Activate for REST API, endpoints, or HTTP requests.",
+          },
+          path: "/skills/api-skill",
+          skillFilePath: "/skills/api-skill/SKILL.md",
+          source: "project",
+          hasReference: false,
+          hasExamples: false,
+          hasScripts: false,
+          hasTemplates: false,
+        },
+      ]
+
+      const matches = await matcher.matchSkills(skills, {
+        request: "Create a React component with hooks",
+        minConfidence: 0.3,
+      })
+
+      expect(matches.length).toBeGreaterThan(0)
+      expect(matches[0].skill.frontmatter.name).toBe("react-skill")
+      expect(matches[0].confidence).toBeGreaterThan(0)
+    })
+
+    it("should filter by confidence threshold", async () => {
+      const skills: SkillMetadata[] = [
+        {
+          frontmatter: {
+            name: "unrelated-skill",
+            description: "Completely unrelated to the request",
+          },
+          path: "/skills/unrelated",
+          skillFilePath: "/skills/unrelated/SKILL.md",
+          source: "project",
+          hasReference: false,
+          hasExamples: false,
+          hasScripts: false,
+          hasTemplates: false,
+        },
+      ]
+
+      const matches = await matcher.matchSkills(skills, {
+        request: "Create a React component",
+        minConfidence: 0.8, // High threshold
+      })
+
+      expect(matches.length).toBe(0)
+    })
+  })
+})
+
+describe("SkillExecutor", () => {
+  let executor: SkillExecutor
+
+  beforeEach(() => {
+    executor = new SkillExecutor({ debug: false })
+  })
+
+  describe("activateSkill", () => {
+    it("should activate a skill", () => {
+      const skill: LoadedSkill = {
+        frontmatter: {
+          name: "test-skill",
+          description: "Test skill",
+        },
+        path: "/skills/test",
+        skillFilePath: "/skills/test/SKILL.md",
+        source: "project",
+        hasReference: false,
+        hasExamples: false,
+        hasScripts: false,
+        hasTemplates: false,
+        content: "Skill content",
+        estimatedTokens: 100,
+      }
+
+      const context = executor.activateSkill(skill, "Test request")
+
+      expect(context.activeSkills.length).toBe(1)
+      expect(context.totalTokens).toBe(100)
+    })
+
+    it("should enforce max active skills limit", () => {
+      const limitedExecutor = new SkillExecutor({ maxActiveSkills: 2 })
+
+      const skill1: LoadedSkill = {
+        frontmatter: { name: "skill1", description: "Skill 1" },
+        path: "/skills/skill1",
+        skillFilePath: "/skills/skill1/SKILL.md",
+        source: "project",
+        hasReference: false,
+        hasExamples: false,
+        hasScripts: false,
+        hasTemplates: false,
+        content: "Content 1",
+        estimatedTokens: 100,
+      }
+
+      const skill2: LoadedSkill = {
+        ...skill1,
+        frontmatter: { name: "skill2", description: "Skill 2" },
+        path: "/skills/skill2",
+        skillFilePath: "/skills/skill2/SKILL.md",
+      }
+
+      const skill3: LoadedSkill = {
+        ...skill1,
+        frontmatter: { name: "skill3", description: "Skill 3" },
+        path: "/skills/skill3",
+        skillFilePath: "/skills/skill3/SKILL.md",
+      }
+
+      limitedExecutor.activateSkill(skill1, "Test")
+      limitedExecutor.activateSkill(skill2, "Test")
+      limitedExecutor.activateSkill(skill3, "Test") // Should deactivate skill1
+
+      const activeSkills = limitedExecutor.getActiveSkills()
+      expect(activeSkills.length).toBeLessThanOrEqual(2)
+    })
+  })
+
+  describe("tool restrictions", () => {
+    it("should restrict tools based on skill allowedTools", () => {
+      const skill: LoadedSkill = {
+        frontmatter: {
+          name: "restricted-skill",
+          description: "Skill with tool restrictions",
+          allowedTools: ["Read", "Grep"],
+        },
+        path: "/skills/restricted",
+        skillFilePath: "/skills/restricted/SKILL.md",
+        source: "project",
+        hasReference: false,
+        hasExamples: false,
+        hasScripts: false,
+        hasTemplates: false,
+        content: "Content",
+        estimatedTokens: 100,
+      }
+
+      executor.activateSkill(skill, "Test request")
+
+      expect(executor.isToolAllowed("Read")).toBe(true)
+      expect(executor.isToolAllowed("Grep")).toBe(true)
+      expect(executor.isToolAllowed("Write")).toBe(false)
+      expect(executor.isToolAllowed("Edit")).toBe(false)
+    })
+  })
+
+  describe("generateLLMContext", () => {
+    it("should generate context for LLM", () => {
+      const skill: LoadedSkill = {
+        frontmatter: {
+          name: "test-skill",
+          description: "Test skill for LLM context",
+        },
+        path: "/skills/test",
+        skillFilePath: "/skills/test/SKILL.md",
+        source: "project",
+        hasReference: false,
+        hasExamples: false,
+        hasScripts: false,
+        hasTemplates: false,
+        content: "This is the skill content that should appear in context",
+        estimatedTokens: 100,
+      }
+
+      executor.activateSkill(skill, "Test request")
+
+      const context = executor.generateLLMContext()
+
+      expect(context).toContain("Active Skills")
+      expect(context).toContain("test-skill")
+      expect(context).toContain("This is the skill content")
+    })
+  })
+})

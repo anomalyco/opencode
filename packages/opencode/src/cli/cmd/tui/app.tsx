@@ -19,6 +19,7 @@ import { DialogAgentManager } from "@tui/component/dialog-agent-manager"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogMemoryList } from "@tui/component/dialog-memory-list"
 import { DialogMCPManager } from "@tui/component/dialog-mcp-manager"
+import { DialogSkillManager } from "@tui/component/dialog-skill-manager"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -353,6 +354,15 @@ function App() {
       },
     },
     {
+      title: "Skill manager",
+      value: "skill.manage",
+      keybind: "skill_manage",
+      category: "System",
+      onSelect: () => {
+        dialog.replace(() => <DialogSkillManager />)
+      },
+    },
+    {
       title: "Exit the app",
       value: "app.exit",
       onSelect: exit,
@@ -462,9 +472,9 @@ function App() {
             paddingLeft={1}
             paddingRight={1}
           >
-            <text fg={theme.textMuted}>open</text>
+            <text fg={theme.textMuted}>code</text>
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              code{" "}
+              surf{" "}
             </text>
             <text fg={theme.textMuted}>v{Installation.VERSION}</text>
           </box>

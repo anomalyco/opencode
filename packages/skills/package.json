@@ -1,0 +1,71 @@
+{
+  "name": "@codesurf/skills",
+  "version": "1.0.0",
+  "description": "Progressive skill loading system for LLMs - replicates Claude Code's skill mechanism with token optimization",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "BENCHMARKS.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "skills",
+    "progressive-disclosure",
+    "claude-code",
+    "token-optimization",
+    "skill-system",
+    "prompt-engineering",
+    "context-management",
+    "openai",
+    "anthropic",
+    "gpt",
+    "gemini"
+  ],
+  "author": "CodeSurf",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codesurf/skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codesurf/skills/issues"
+  },
+  "homepage": "https://github.com/codesurf/skills#readme",
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

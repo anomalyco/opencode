@@ -4,6 +4,7 @@ import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk"
+import { TextAttributes } from "@opentui/core"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -41,6 +42,10 @@ export function Sidebar(props: { sessionID: string }) {
   return (
     <Show when={session()}>
       <box flexShrink={0} gap={1} width={40}>
+        <box flexDirection="row" gap={0}>
+          <text fg={theme.textMuted}>code</text>
+          <text attributes={TextAttributes.BOLD}>surf</text>
+        </box>
         <box>
           <text fg={theme.text}>
             <b>{session().title}</b>

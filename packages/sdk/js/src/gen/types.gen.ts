@@ -179,6 +179,10 @@ export type KeybindsConfig = {
    */
   mcp_manage?: string
   /**
+   * Manage skills
+   */
+  skill_manage?: string
+  /**
    * Next child session
    */
   session_child_cycle?: string

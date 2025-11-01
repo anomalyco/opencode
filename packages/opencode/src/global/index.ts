@@ -3,12 +3,19 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
+const app = "codesurf"
+const legacyApp = "opencode"
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
+
+// Legacy paths for migration
+const legacyData = path.join(xdgData!, legacyApp)
+const legacyCache = path.join(xdgCache!, legacyApp)
+const legacyConfig = path.join(xdgConfig!, legacyApp)
+const legacyState = path.join(xdgState!, legacyApp)
 
 export namespace Global {
   export const Path = {
@@ -19,9 +26,14 @@ export namespace Global {
     cache,
     config,
     state,
+    // Legacy paths for fallback
+    legacyData,
+    legacyConfig,
+    legacyState,
   } as const
 }
 
+// Create codesurf directories
 await Promise.all([
   fs.mkdir(Global.Path.data, { recursive: true }),
   fs.mkdir(Global.Path.config, { recursive: true }),
@@ -29,6 +41,57 @@ await Promise.all([
   fs.mkdir(Global.Path.log, { recursive: true }),
   fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
+
+// Migrate from .opencode to .codesurf if needed
+async function migrateFromOpencode() {
+  try {
+    // Check if legacy config exists and new one doesn't have content
+    const legacyConfigExists = await fs
+      .access(legacyConfig)
+      .then(() => true)
+      .catch(() => false)
+    if (!legacyConfigExists) return
+
+    const newConfigFiles = await fs.readdir(Global.Path.config).catch(() => [])
+    const hasContent = newConfigFiles.length > 1 // More than just version file
+
+    if (hasContent) {
+      // Already migrated or has new content
+      return
+    }
+
+    console.log("[Migration] Copying settings from .opencode to .codesurf...")
+
+    // Copy config directory
+    const configFiles = await fs.readdir(legacyConfig).catch(() => [])
+    for (const file of configFiles) {
+      const src = path.join(legacyConfig, file)
+      const dest = path.join(Global.Path.config, file)
+      const stat = await fs.stat(src).catch(() => null)
+      if (!stat) continue
+
+      if (stat.isDirectory()) {
+        await fs.cp(src, dest, { recursive: true }).catch(() => {})
+      } else {
+        await fs.copyFile(src, dest).catch(() => {})
+      }
+    }
+
+    // Copy state directory (for databases, etc)
+    const stateFiles = await fs.readdir(legacyState).catch(() => [])
+    for (const file of stateFiles) {
+      const src = path.join(legacyState, file)
+      const dest = path.join(Global.Path.state, file)
+      await fs.copyFile(src, dest).catch(() => {})
+    }
+
+    console.log("[Migration] Migration complete. Legacy .opencode files preserved.")
+  } catch (error) {
+    console.error("[Migration] Failed to migrate from .opencode:", error)
+  }
+}
+
+await migrateFromOpencode()
 
 const CACHE_VERSION = "9"
 
