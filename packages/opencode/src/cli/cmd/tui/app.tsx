@@ -23,7 +23,7 @@ import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider } from "./context/exit"
+import { ExitProvider, useExit } from "./context/exit"
 import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
@@ -110,6 +110,7 @@ function App() {
   const toast = useToast()
   const [sessionExists, setSessionExists] = createSignal(false)
   const { theme } = useTheme()
+  const exit = useExit()
 
   useKeyboard(async (evt) => {
     if (evt.meta && evt.name === "t") {
@@ -245,6 +246,12 @@ function App() {
       },
       category: "System",
     },
+    {
+      title: "Exit the app",
+      value: "app.exit",
+      onSelect: exit,
+      category: "System",
+    }
   ])
 
   createEffect(() => {

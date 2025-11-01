@@ -72,11 +72,11 @@ type Theme = {
 
 type HexColor = `#${string}`
 type RefName = string
-type ColorModeObj = {
+type Variant = {
   dark: HexColor | RefName
   light: HexColor | RefName
 }
-type ColorValue = HexColor | RefName | ColorModeObj
+type ColorValue = HexColor | RefName | Variant
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>

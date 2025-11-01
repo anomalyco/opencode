@@ -26,7 +26,7 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 
 ## Developing OpenCode
 
-- Requirements: Bun 1.3+, Go 1.24.x.
+- Requirements: Bun 1.3+
 - Install dependencies and start the dev server from the repo root:
 
   ```bash
@@ -36,11 +36,11 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
-  - `packages/tui`: The TUI code, written in Go (will be removed soon in favor of [opentui](https://github.com/sst/opentui))
+  - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 > [!NOTE]
-> After touching `packages/opencode/src/server/server.ts`, the OpenCode team must regenerate the Stainless SDK before any client updates merge.
+> After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
 
 ## Pull Request Expectations
 
