@@ -198,6 +198,15 @@ export namespace Session {
         .catch(() => {
           // Silently ignore sharing errors during session creation
         })
+    // Initialize allowed directories from config
+    if (cfg.allowedDirectories && cfg.allowedDirectories.length > 0) {
+      for (const dir of cfg.allowedDirectories) {
+        await AllowedDirectories.add({
+          sessionID: result.id,
+          directory: dir,
+        })
+      }
+    }
     Bus.publish(Event.Updated, {
       info: result,
     })

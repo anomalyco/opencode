@@ -1,0 +1,20 @@
+{
+  "allowedDirectories": ["/Users/jkneen/Documents/GitHub/flows/opencode-stt"],
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/jkneen/Documents/GitHub/flows/opencode-stt"
+      ],
+      "enabled": true
+    },
+    "fetch": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-fetch"],
+      "enabled": true
+    }
+  }
+}

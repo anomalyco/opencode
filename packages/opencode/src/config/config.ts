@@ -369,6 +369,11 @@ export namespace Config {
         .optional()
         .describe("Environment variables to set when running the MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      disabledTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("List of tool names to disable from this MCP server"),
       timeout: z
         .number()
         .int()
@@ -388,6 +393,11 @@ export namespace Config {
       type: z.literal("remote").describe("Type of MCP server connection"),
       url: z.string().describe("URL of the remote MCP server"),
       enabled: z.boolean().optional().describe("Enable or disable the MCP server on startup"),
+      disabledTools: z
+        .string()
+        .array()
+        .optional()
+        .describe("List of tool names to disable from this MCP server"),
       headers: z
         .record(z.string(), z.string())
         .optional()
@@ -460,6 +470,13 @@ export namespace Config {
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
       theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
+      sidebar_left_toggle: z.string().optional().default("ctrl+[").describe("Toggle left sidebar"),
+      sidebar_right_toggle: z
+        .string()
+        .optional()
+        .default("ctrl+]")
+        .describe("Toggle right sidebar"),
+      sidebar_both_toggle: z.string().optional().default("ctrl+b").describe("Toggle both sidebars"),
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z
         .string()
@@ -756,6 +773,10 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
+      allowedDirectories: z
+        .array(z.string())
+        .optional()
+        .describe("Directories outside the project that agents can access"),
     })
     .strict()
     .meta({
