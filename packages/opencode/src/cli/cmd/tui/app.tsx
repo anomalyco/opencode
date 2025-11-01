@@ -34,6 +34,7 @@ export function tui(input: {
   sessionID?: string
   model?: string
   agent?: string
+  prompt?: string
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
@@ -65,7 +66,7 @@ export function tui(input: {
                     <SDKProvider url={input.url}>
                       <SyncProvider>
                         <ThemeProvider>
-                          <LocalProvider initialModel={input.model} initialAgent={input.agent}>
+                          <LocalProvider initialModel={input.model} initialAgent={input.agent} initialPrompt={input.prompt}>
                             <KeybindProvider>
                               <DialogProvider>
                                 <CommandProvider>

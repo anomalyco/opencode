@@ -8,10 +8,11 @@ import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
+import { createEventBus } from "@solid-primitives/event-bus"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
-  init: (props: { initialModel?: string; initialAgent?: string }) => {
+  init: (props: { initialModel?: string; initialAgent?: string; initialPrompt?: string }) => {
     const sync = useSync()
     const toast = useToast()
 
@@ -239,9 +240,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const setInitialPrompt = createEventBus<string>()
+
+    onMount(() => {
+      if (props.initialPrompt)
+        setInitialPrompt.emit(props.initialPrompt)
+    })
+
     const result = {
       model,
       agent,
+      get setInitialPrompt() {
+        return setInitialPrompt
+      },
     }
     return result
   },
