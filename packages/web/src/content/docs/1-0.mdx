@@ -13,13 +13,18 @@ The new TUI works like the old one since it connects to the same opencode server
 
 ## Upgrading
 
-You will not be autoupgraded to 1.0 if you are currently using a previous
-version.
+You should not be autoupgraded to 1.0 if you are currently using a previous
+version. However some older versions of OpenCode always grab latest.
 
 
 To upgrade manually, run
 ```bash
 $ opencode upgrade 1.0.0
+```
+
+To downgrade back to 0.x, run
+```bash
+$ opencode upgrade 0.15.31
 ```
 
 ---
