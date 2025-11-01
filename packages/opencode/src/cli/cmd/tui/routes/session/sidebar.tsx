@@ -71,6 +71,7 @@ export function Sidebar(props: { sessionID: string }) {
             tokenLimit={context().tokenLimit}
             agentColor={local.agent.color(session().mode)}
             backgroundColor={theme.backgroundPanel}
+            width={40}
           />
           <text fg={theme.textMuted}>{context().tokensFormatted} tokens</text>
           <text fg={theme.textMuted}>{context().percentage}% used</text>

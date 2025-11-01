@@ -6,6 +6,7 @@ export interface ContextUsageBarProps {
   tokenLimit: number
   agentColor: RGBA
   backgroundColor?: RGBA
+  width?: number // Width of the sidebar
 }
 
 /**
@@ -26,7 +27,13 @@ export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
   })
 
   const barContent = createMemo(() => {
-    const barLength = 15
+    // Calculate bar length based on width
+    // Format: [status] [bar] [percentage]
+    // Status char = 1, spaces = 2, percentage = ~4, padding = 4, borders = 2
+    // Available for bar = width - 13
+    const availableWidth = (props.width || 40) - 13
+    const barLength = Math.max(10, Math.min(availableWidth, 30)) // Between 10-30 chars
+
     const percent = usagePercent()
     const filledCount = Math.min(Math.floor((barLength * percent) / 100), barLength)
 
