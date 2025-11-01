@@ -241,7 +241,9 @@ export function Session() {
         prompt.set(
           parts.reduce(
             (agg, part) => {
-              if (part.type === "text") agg.input += part.text
+              if (part.type === "text") {
+                if (!part.synthetic) agg.input += part.text
+              }
               if (part.type === "file") agg.parts.push(part)
               return agg
             },
