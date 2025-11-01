@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
@@ -7,14 +7,25 @@ import type { AssistantMessage } from "@opencode-ai/sdk"
 import { TextAttributes } from "@opentui/core"
 import { ContextUsageBar } from "../../component/context-usage-bar"
 import { useLocal } from "../../context/local"
+import { useKeyboard } from "@opentui/solid"
+
+type TabType = "files" | "todos" | "mcp"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
   const { theme } = useTheme()
   const local = useLocal()
+  const [activeTab, setActiveTab] = createSignal<TabType>("mcp")
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  // Add keyboard shortcuts for tab switching
+  useKeyboard((evt) => {
+    if (evt.name === "1") setActiveTab("mcp")
+    if (evt.name === "2") setActiveTab("todos")
+    if (evt.name === "3") setActiveTab("files")
+  })
 
   const cost = createMemo(() => {
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
@@ -70,7 +81,7 @@ export function Sidebar(props: { sessionID: string }) {
           <ContextUsageBar
             currentTokens={context().tokens}
             tokenLimit={context().tokenLimit}
-            agentColor={local.agent.color(session().mode)}
+            agentColor={local.agent.color("assistant")}
             backgroundColor={theme.backgroundPanel}
             width={40}
           />
@@ -78,117 +89,158 @@ export function Sidebar(props: { sessionID: string }) {
           <text fg={theme.textMuted}>{context().percentage}% used</text>
           <text fg={theme.textMuted}>{cost()} spent</text>
         </box>
-        <Show when={Object.keys(sync.data.mcp).length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>MCP</b>
-            </text>
-            <For each={Object.entries(sync.data.mcp)}>
-              {([key, item]) => (
-                <box flexDirection="row" gap={1}>
-                  <text
-                    flexShrink={0}
-                    style={{
-                      fg: {
-                        connected: theme.success,
-                        failed: theme.error,
-                        disabled: theme.textMuted,
-                      }[item.status],
-                    }}
-                  >
-                    •
-                  </text>
-                  <text fg={theme.text} wrapMode="word">
-                    {key}{" "}
-                    <span style={{ fg: theme.textMuted }}>
-                      <Switch>
-                        <Match when={item.status === "connected"}>Connected</Match>
-                        <Match when={item.status === "failed" && item}>
-                          {(val) => <i>{val().error}</i>}
-                        </Match>
-                        <Match when={item.status === "disabled"}>Disabled in configuration</Match>
-                      </Switch>
-                    </span>
-                  </text>
-                </box>
-              )}
-            </For>
-          </box>
-        </Show>
-        <Show when={sync.data.lsp.length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>LSP</b>
-            </text>
-            <For each={sync.data.lsp}>
-              {(item) => (
-                <box flexDirection="row" gap={1}>
-                  <text
-                    flexShrink={0}
-                    style={{
-                      fg: {
-                        connected: theme.success,
-                        error: theme.error,
-                      }[item.status],
-                    }}
-                  >
-                    •
-                  </text>
-                  <text fg={theme.textMuted}>
-                    {item.id} {item.root}
-                  </text>
-                </box>
-              )}
-            </For>
-          </box>
-        </Show>
-        <Show when={session().summary?.diffs}>
-          <box>
-            <text fg={theme.text}>
-              <b>Modified Files</b>
-            </text>
-            <For each={session().summary?.diffs || []}>
-              {(item) => {
-                const file = createMemo(() => {
-                  const splits = item.file.split(path.sep).filter(Boolean)
-                  const last = splits.at(-1)!
-                  const rest = splits.slice(0, -1).join(path.sep)
-                  return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
-                })
-                return (
-                  <box flexDirection="row" gap={1} justifyContent="space-between">
-                    <text fg={theme.textMuted} wrapMode="char">
-                      {file()}
+        {/* Tab Navigation */}
+        <box flexDirection="row" gap={2}>
+          <text
+            style={{
+              fg: activeTab() === "mcp" ? theme.accent : theme.textMuted,
+              attributes: activeTab() === "mcp" ? TextAttributes.BOLD : undefined,
+            }}
+            onMouseUp={() => setActiveTab("mcp")}
+          >
+            {activeTab() === "mcp" ? "●" : "○"} MCP/LSP(
+            {Object.keys(sync.data.mcp).length + sync.data.lsp.length})
+          </text>
+          <text
+            style={{
+              fg: activeTab() === "todos" ? theme.accent : theme.textMuted,
+              attributes: activeTab() === "todos" ? TextAttributes.BOLD : undefined,
+            }}
+            onMouseUp={() => setActiveTab("todos")}
+          >
+            {activeTab() === "todos" ? "●" : "○"} Todos({todo().length})
+          </text>
+          <text
+            style={{
+              fg: activeTab() === "files" ? theme.accent : theme.textMuted,
+              attributes: activeTab() === "files" ? TextAttributes.BOLD : undefined,
+            }}
+            onMouseUp={() => setActiveTab("files")}
+          >
+            {activeTab() === "files" ? "●" : "○"} Files({session().summary?.diffs?.length || 0})
+          </text>
+        </box>
+
+        {/* Tab Content */}
+        <Show when={activeTab() === "mcp"}>
+          <Show when={sync.data.lsp.length > 0}>
+            <box marginTop={0}>
+              <text>
+                <b>LSP</b>
+              </text>
+              <For each={sync.data.lsp}>
+                {(item) => (
+                  <box flexDirection="row" gap={1}>
+                    <text
+                      flexShrink={0}
+                      style={{
+                        fg: {
+                          connected: theme.success,
+                          error: theme.error,
+                        }[item.status],
+                      }}
+                    >
+                      •
                     </text>
-                    <box flexDirection="row" gap={1} flexShrink={0}>
-                      <Show when={item.additions}>
-                        <text fg={theme.diffAdded}>+{item.additions}</text>
-                      </Show>
-                      <Show when={item.deletions}>
-                        <text fg={theme.diffRemoved}>-{item.deletions}</text>
-                      </Show>
-                    </box>
+                    <text fg={theme.textMuted}>
+                      {item.id} {item.root}
+                    </text>
                   </box>
-                )
-              }}
-            </For>
-          </box>
+                )}
+              </For>
+            </box>
+          </Show>
+          <Show when={Object.keys(sync.data.mcp).length > 0}>
+            <box marginTop={0}>
+              <text>
+                <b>MCP</b>
+              </text>
+              <For each={Object.entries(sync.data.mcp)}>
+                {([key, item]) => (
+                  <box flexDirection="row" gap={1}>
+                    <text
+                      flexShrink={0}
+                      style={{
+                        fg: {
+                          connected: theme.success,
+                          failed: theme.error,
+                          disabled: theme.textMuted,
+                        }[item.status],
+                      }}
+                    >
+                      •
+                    </text>
+                    <text wrapMode="word">
+                      {key}{" "}
+                      <span style={{ fg: theme.textMuted }}>
+                        <Switch>
+                          <Match when={item.status === "connected"}>Connected</Match>
+                          <Match when={item.status === "failed" && item}>
+                            {(val) => <i>{val().error}</i>}
+                          </Match>
+                          <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                        </Switch>
+                      </span>
+                    </text>
+                  </box>
+                )}
+              </For>
+            </box>
+          </Show>
         </Show>
-        <Show when={todo().length > 0}>
-          <box>
-            <text fg={theme.text}>
-              <b>Todo</b>
-            </text>
-            <For each={todo()}>
-              {(todo) => (
-                <text
-                  style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
-                >
-                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                </text>
-              )}
-            </For>
-          </box>
+
+        <Show when={activeTab() === "todos"}>
+          <Show when={todo().length > 0}>
+            <box marginTop={0}>
+              <text>
+                <b>Todo</b>
+              </text>
+              <For each={todo()}>
+                {(todo) => (
+                  <text
+                    style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}
+                  >
+                    [{todo.status === "completed" ? "✓" : " "}] {todo.content}
+                  </text>
+                )}
+              </For>
+            </box>
+          </Show>
+        </Show>
+
+        <Show when={activeTab() === "files"}>
+          <Show when={session().summary?.diffs}>
+            <box marginTop={0}>
+              <text>
+                <b>Modified Files</b>
+              </text>
+              <For each={session().summary?.diffs || []}>
+                {(item) => {
+                  const file = createMemo(() => {
+                    const splits = item.file.split(path.sep).filter(Boolean)
+                    const last = splits.at(-1)!
+                    const rest = splits.slice(0, -1).join(path.sep)
+                    return Locale.truncateMiddle(rest, 30 - last.length) + "/" + last
+                  })
+                  return (
+                    <box flexDirection="row" gap={1} justifyContent="space-between">
+                      <text fg={theme.textMuted} wrapMode="char">
+                        {file()}
+                      </text>
+                      <box flexDirection="row" gap={1} flexShrink={0}>
+                        <Show when={item.additions}>
+                          <text fg={theme.diffAdded}>+{item.additions}</text>
+                        </Show>
+                        <Show when={item.deletions}>
+                          <text fg={theme.diffRemoved}>-{item.deletions}</text>
+                        </Show>
+                      </box>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+          </Show>
         </Show>
       </box>
     </Show>
