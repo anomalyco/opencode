@@ -35,7 +35,7 @@ export interface DialogSelectOption<T = any> {
   category?: string
   disabled?: boolean
   bg?: RGBA
-  onSelect?: (ctx: DialogContext) => void
+  onSelect?: (ctx: DialogContext, trigger?: "prompt") => void
 }
 
 export type DialogSelectRef<T> = {

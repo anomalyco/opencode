@@ -41,10 +41,10 @@ function init() {
   })
 
   const result = {
-    trigger(name: string) {
+    trigger(name: string, source?: "prompt") {
       for (const option of options()) {
         if (option.value === name) {
-          option.onSelect?.(dialog)
+          option.onSelect?.(dialog, source)
           return
         }
       }

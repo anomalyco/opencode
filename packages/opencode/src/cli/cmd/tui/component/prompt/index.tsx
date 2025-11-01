@@ -98,14 +98,9 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
-        onSelect: async (dialog) => {
+        onSelect: async (dialog, trigger) => {
           dialog.clear()
-          const value = input.plainText
-          input.clear()
-          setStore("prompt", {
-            input: "",
-            parts: [],
-          })
+          const value = trigger === "prompt" ? "" : input.plainText
           const content = await Editor.open({ value, renderer })
           if (content) {
             input.setText(content, { history: false })
