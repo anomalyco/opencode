@@ -21,7 +21,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       [key in Event["type"]]: Extract<Event, { type: key }>
     }>()
 
-    sdk.event.subscribe().then(async (events) => {
+    sdk.event.subscribe({ path: { serverName: "" } }).then(async (events) => {
       for await (const event of events.stream) {
         console.log("event", event.type)
         emitter.emit(event.type, event)
