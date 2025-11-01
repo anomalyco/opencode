@@ -166,23 +166,25 @@ export class RaidKnowledgeBase {
         last_modified = excluded.last_modified,
         file_type = excluded.file_type
     `,
-      document.id,
-      document.title,
-      document.content,
-      document.filePath ?? null,
-      JSON.stringify(document.tags),
-      JSON.stringify(document.keywords),
-      document.source,
-      document.createdAt.getTime(),
-      document.updatedAt.getTime(),
-      document.tokenCount,
-      JSON.stringify(document.shardIds),
-      document.metadata.contentType,
-      JSON.stringify(document.metadata.extractedKeywords),
-      document.metadata.summary,
-      document.metadata.fileSize ?? null,
-      document.metadata.lastModified?.getTime() ?? null,
-      document.metadata.fileType ?? null,
+      [
+        document.id,
+        document.title,
+        document.content,
+        document.filePath ?? null,
+        JSON.stringify(document.tags),
+        JSON.stringify(document.keywords),
+        document.source,
+        document.createdAt.getTime(),
+        document.updatedAt.getTime(),
+        document.tokenCount,
+        JSON.stringify(document.shardIds),
+        document.metadata.contentType,
+        JSON.stringify(document.metadata.extractedKeywords),
+        document.metadata.summary,
+        document.metadata.fileSize ?? null,
+        document.metadata.lastModified?.getTime() ?? null,
+        document.metadata.fileType ?? null,
+      ],
     )
 
     return document
@@ -279,7 +281,7 @@ export class RaidKnowledgeBase {
    * Delete document by ID
    */
   deleteDocument(id: string): boolean {
-    this.db.run("DELETE FROM documents WHERE id = ?", id)
+    this.db.run("DELETE FROM documents WHERE id = ?", [id])
     return true // Bun SQLite doesn't return changes count easily
   }
 
@@ -291,9 +293,9 @@ export class RaidKnowledgeBase {
 
     if (source) {
       sql += " WHERE source = ?"
-      this.db.run(sql, source)
+      this.db.run(sql, [source])
     } else {
-      this.db.run(sql)
+      this.db.run(sql, [])
     }
 
     return 0 // Bun SQLite doesn't return changes count easily
@@ -345,12 +347,11 @@ export class RaidKnowledgeBase {
    * Update document shard IDs
    */
   updateShardIds(docId: string, shardIds: string[]): void {
-    this.db.run(
-      "UPDATE documents SET shard_ids = ?, updated_at = ? WHERE id = ?",
+    this.db.run("UPDATE documents SET shard_ids = ?, updated_at = ? WHERE id = ?", [
       JSON.stringify(shardIds),
       Date.now(),
       docId,
-    )
+    ])
   }
 
   /**
