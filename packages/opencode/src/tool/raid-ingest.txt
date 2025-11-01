@@ -1,0 +1,22 @@
+Ingest documents into the RAID knowledge base with automatic sharding, AI-powered summarization, and keyword extraction.
+
+This tool adds documents to the RAID (Retrieval-Augmented Intelligence Database) system, which:
+- Automatically shards large documents into overlapping chunks for efficient querying
+- Extracts keywords and generates summaries using AI
+- Supports both project-specific and global knowledge bases
+- Enables semantic search and intelligent query routing
+
+Environment Variables:
+- RAID_API_KEY or OPENAI_API_KEY: API key for AI operations
+- RAID_BASE_URL or OPENAI_BASE_URL: Base URL for OpenAI-compatible API (default: OpenAI)
+- RAID_SHARD_MODEL: Model for sharding operations (default: gpt-4o-mini)
+- RAID_ORCH_MODEL: Model for orchestration (default: gpt-4o)
+- RAID_NUM_SHARDS: Number of shards per document (default: 10)
+- RAID_MAX_TOKENS_PER_SHARD: Max tokens per shard (default: 4000)
+- RAID_OVERLAP_TOKENS: Token overlap between shards (default: 200)
+
+Usage:
+- Ingest project documentation for context-aware assistance
+- Add reference materials to the global knowledge base
+- Index large codebases for intelligent querying
+- Build a searchable knowledge repository

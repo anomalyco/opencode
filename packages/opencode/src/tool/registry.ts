@@ -10,6 +10,10 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { RaidIngestTool } from "./raid-ingest"
+import { RaidSearchTool } from "./raid-search"
+import { RaidQueryTool } from "./raid-query"
+import { RaidKbTool } from "./raid-kb"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -25,7 +29,12 @@ export namespace ToolRegistry {
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
-      for await (const match of glob.scan({ cwd: dir, absolute: true, followSymlinks: true, dot: true })) {
+      for await (const match of glob.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
@@ -88,6 +97,10 @@ export namespace ToolRegistry {
       TodoWriteTool,
       TodoReadTool,
       TaskTool,
+      RaidIngestTool,
+      RaidSearchTool,
+      RaidQueryTool,
+      RaidKbTool,
       ...custom,
     ]
   }
