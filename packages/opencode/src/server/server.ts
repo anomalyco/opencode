@@ -20,6 +20,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
+import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
@@ -1334,6 +1335,26 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await LSP.status())
+        },
+      )
+      .get(
+        "/formatter",
+        describeRoute({
+          description: "Get formatter status",
+          operationId: "formatter.status",
+          responses: {
+            200: {
+              description: "Formatter status",
+              content: {
+                "application/json": {
+                  schema: resolver(Format.Status.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Format.status())
         },
       )
       .post(
