@@ -1,0 +1,30 @@
+name: pkg.pr.new
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  publish-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Publish preview packages
+        run: bunx pkg-pr-new publish packages/opencode packages/sdk/js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
