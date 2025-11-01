@@ -181,6 +181,7 @@ export const AuthLoginCommand = cmd({
                     refresh: result.refresh,
                     access: result.access,
                     expires: result.expires,
+                    ...(result.has1MContext && { has1MContext: result.has1MContext }),
                   })
                 }
                 if ("key" in result) {
@@ -210,6 +211,7 @@ export const AuthLoginCommand = cmd({
                     refresh: result.refresh,
                     access: result.access,
                     expires: result.expires,
+                    ...(result.has1MContext && { has1MContext: result.has1MContext }),
                   })
                 }
                 if ("key" in result) {

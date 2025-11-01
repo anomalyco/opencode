@@ -10,6 +10,7 @@ export namespace Auth {
       refresh: z.string(),
       access: z.string(),
       expires: z.number(),
+      has1MContext: z.boolean().optional(),
     })
     .meta({ ref: "OAuth" })
 

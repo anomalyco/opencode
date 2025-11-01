@@ -51,6 +51,7 @@ export interface Hooks {
                             refresh: string
                             access: string
                             expires: number
+                            has1MContext?: boolean
                           }
                         | { key: string }
                       ))
@@ -69,6 +70,7 @@ export interface Hooks {
                             refresh: string
                             access: string
                             expires: number
+                            has1MContext?: boolean
                           }
                         | { key: string }
                       ))
