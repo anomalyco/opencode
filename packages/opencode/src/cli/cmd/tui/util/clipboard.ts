@@ -61,7 +61,7 @@ export namespace Clipboard {
   const getCopyMethod = lazy(() => {
     const os = platform()
 
-    if (os === "darwin") {
+    if (os === "darwin" && Bun.which("oascript")) {
       console.log("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
@@ -70,13 +70,13 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      if (process.env["WAYLAND_DISPLAY"]) {
+      if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
         console.log("clipboard: using wl-copy")
         return async (text: string) => {
           const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited
+          await proc.exited.catch(() => {})
         }
       }
       if (Bun.which("xclip")) {
@@ -117,7 +117,7 @@ export namespace Clipboard {
 
     console.log("clipboard: no native support")
     return async (text: string) => {
-      await clipboardy.write(text)
+      await clipboardy.write(text).catch(() => {})
     }
   })
 
