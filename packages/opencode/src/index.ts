@@ -21,6 +21,7 @@ import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
+import { MemoryCommand } from "./cli/cmd/memory"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 
@@ -88,6 +89,7 @@ const cli = yargs(hideBin(process.argv))
   .command(StatsCommand)
   .command(ExportCommand)
   .command(GithubCommand)
+  .command(MemoryCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
