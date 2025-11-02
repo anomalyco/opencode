@@ -17,20 +17,31 @@ The `cc_computer_use` tool allows Claude to interact with your desktop by:
 
 ### macOS
 
+**Required:**
+
 - `screencapture` (built-in) - for screenshots
 - `osascript` (built-in) - for keyboard/typing
-- `cliclick` (optional) - for enhanced mouse control
+- **`cliclick`** - for mouse control
   ```bash
   brew install cliclick
   ```
 
+**Permissions:**
+
+- **Screen Recording** - Required for screenshots
+- **Accessibility** - Required for mouse/keyboard control
+
+Grant permissions in **System Preferences → Security & Privacy → Privacy**
+
 ### Linux
+
+**Required:**
 
 - `import` (ImageMagick) - for screenshots
   ```bash
   sudo apt-get install imagemagick
   ```
-- `xdotool` - for mouse and keyboard control
+- **`xdotool`** - for mouse and keyboard control
   ```bash
   sudo apt-get install xdotool
   ```
@@ -39,9 +50,20 @@ The `cc_computer_use` tool allows Claude to interact with your desktop by:
 
 - PowerShell (built-in) - all functionality
 
+## Automatic Dependency Checking
+
+The tool automatically checks for required dependencies on first use and provides helpful error messages if anything is missing:
+
+```
+⚠️ Missing dependencies:
+  - cliclick (install with: brew install cliclick)
+
+Please install the required tools to use computer control features.
+```
+
 ## Configuration
 
-Enable in your `opencode.json`:
+Enable in your `~/.config/codesurf/codesurf.json` or project `.codesurf/codesurf.json`:
 
 ```jsonc
 {
