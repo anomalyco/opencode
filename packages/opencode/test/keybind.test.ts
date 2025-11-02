@@ -28,8 +28,14 @@ describe("Keybind.toString", () => {
   })
 
   test("should convert shift modifier to string", () => {
-    const info: Keybind.Info = { ctrl: false, meta: false, shift: true, leader: false, name: "enter" }
-    expect(Keybind.toString(info)).toBe("shift+enter")
+    const info: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: true,
+      leader: false,
+      name: "return",
+    }
+    expect(Keybind.toString(info)).toBe("shift+return")
   })
 
   test("should convert function key to string", () => {
@@ -38,7 +44,13 @@ describe("Keybind.toString", () => {
   })
 
   test("should convert special key to string", () => {
-    const info: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: false, name: "pgup" }
+    const info: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "pgup",
+    }
     expect(Keybind.toString(info)).toBe("pgup")
   })
 
@@ -220,15 +232,15 @@ describe("Keybind.parse", () => {
     ])
   })
 
-  test("should parse shift+enter combination", () => {
-    const result = Keybind.parse("shift+enter")
+  test("should parse shift+return combination", () => {
+    const result = Keybind.parse("shift+return")
     expect(result).toEqual([
       {
         ctrl: false,
         meta: false,
         shift: true,
         leader: false,
-        name: "enter",
+        name: "return",
       },
     ])
   })
