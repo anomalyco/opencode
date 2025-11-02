@@ -3,7 +3,7 @@ import { useTheme } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
@@ -75,8 +75,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return result
   })
 
-  const keybind = useKeybind()
-
   const flat = createMemo(() => {
     return pipe(
       grouped(),
@@ -123,6 +121,32 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
   }
 
+  const keybind = useKeybind()
+  useKeyboard((evt) => {
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+    if (evt.name === "pageup") move(-10)
+    if (evt.name === "pagedown") move(10)
+    if (evt.name === "return") {
+      const option = selected()
+      if (option) {
+        evt.preventDefault()
+        if (option.onSelect) option.onSelect(dialog)
+        props.onSelect?.(option)
+      }
+    }
+
+    for (const item of props.keybind ?? []) {
+      if (Keybind.match(item.keybind, keybind.parse(evt))) {
+        const s = selected()
+        if (s) {
+          evt.preventDefault()
+          item.onTrigger(s)
+        }
+      }
+    }
+  })
+
   let scroll: ScrollBoxRenderable
   const ref: DialogSelectRef<T> = {
     get filter() {
@@ -151,30 +175,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 props.onFilter?.(e)
               })
             }}
-            onKeyDown={(evt) => {
-              if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-              if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
-              if (evt.name === "pageup") move(-10)
-              if (evt.name === "pagedown") move(10)
-              if (evt.name === "return") {
-                const option = selected()
-                if (option) {
-                  evt.preventDefault()
-                  if (option.onSelect) option.onSelect(dialog)
-                  props.onSelect?.(option)
-                }
-              }
-
-              for (const item of props.keybind ?? []) {
-                if (Keybind.match(item.keybind, keybind.parse(evt))) {
-                  const s = selected()
-                  if (s) {
-                    evt.preventDefault()
-                    item.onTrigger(s)
-                  }
-                }
-              }
-            }}
+            onKeyDown={(e) => {}}
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.textMuted}
