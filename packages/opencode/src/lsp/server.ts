@@ -313,8 +313,8 @@ export namespace LSPServer {
     },
   }
 
-  export const Pyright: Info = {
-    id: "pyright",
+  export const Basedpyright: Info = {
+    id: "basedpyright",
     extensions: [".py", ".pyi"],
     root: NearestRoot([
       "pyproject.toml",
@@ -325,19 +325,13 @@ export namespace LSPServer {
       "pyrightconfig.json",
     ]),
     async spawn(root) {
-      let binary = Bun.which("pyright-langserver")
+      let binary = Bun.which("basedpyright-langserver")
       const args = []
       if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "pyright",
-          "dist",
-          "pyright-langserver.js",
-        )
+        const js = path.join(Global.Path.bin, "node_modules", "basedpyright", "langserver.index.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "pyright"], {
+          await Bun.spawn([BunProc.which(), "install", "basedpyright"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
