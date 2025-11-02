@@ -21,7 +21,7 @@ jobs:
             const description = issue.body || '';
 
             // Check for version patterns like v1.0.x or 1.0.x
-            const versionPattern = /\b[v]?1\.0\.[x\d]\b/i;
+            const versionPattern = /[v]?1\.0\./i;
 
             if (versionPattern.test(title) || versionPattern.test(description)) {
               await github.rest.issues.addLabels({
