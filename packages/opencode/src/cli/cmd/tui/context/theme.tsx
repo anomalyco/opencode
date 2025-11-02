@@ -2,29 +2,29 @@ import { SyntaxStyle, RGBA } from "@opentui/core"
 import { createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
-import aura from "../../../../../../tui/internal/theme/themes/aura.json" with { type: "json" }
-import ayu from "../../../../../../tui/internal/theme/themes/ayu.json" with { type: "json" }
-import catppuccin from "../../../../../../tui/internal/theme/themes/catppuccin.json" with { type: "json" }
-import cobalt2 from "../../../../../../tui/internal/theme/themes/cobalt2.json" with { type: "json" }
-import dracula from "../../../../../../tui/internal/theme/themes/dracula.json" with { type: "json" }
-import everforest from "../../../../../../tui/internal/theme/themes/everforest.json" with { type: "json" }
-import github from "../../../../../../tui/internal/theme/themes/github.json" with { type: "json" }
-import gruvbox from "../../../../../../tui/internal/theme/themes/gruvbox.json" with { type: "json" }
-import kanagawa from "../../../../../../tui/internal/theme/themes/kanagawa.json" with { type: "json" }
-import material from "../../../../../../tui/internal/theme/themes/material.json" with { type: "json" }
-import matrix from "../../../../../../tui/internal/theme/themes/matrix.json" with { type: "json" }
-import monokai from "../../../../../../tui/internal/theme/themes/monokai.json" with { type: "json" }
-import nightowl from "../../../../../../tui/internal/theme/themes/nightowl.json" with { type: "json" }
-import nord from "../../../../../../tui/internal/theme/themes/nord.json" with { type: "json" }
-import onedark from "../../../../../../tui/internal/theme/themes/one-dark.json" with { type: "json" }
-import opencode from "../../../../../../tui/internal/theme/themes/opencode.json" with { type: "json" }
-import palenight from "../../../../../../tui/internal/theme/themes/palenight.json" with { type: "json" }
-import rosepine from "../../../../../../tui/internal/theme/themes/rosepine.json" with { type: "json" }
-import solarized from "../../../../../../tui/internal/theme/themes/solarized.json" with { type: "json" }
-import synthwave84 from "../../../../../../tui/internal/theme/themes/synthwave84.json" with { type: "json" }
-import tokyonight from "../../../../../../tui/internal/theme/themes/tokyonight.json" with { type: "json" }
-import vesper from "../../../../../../tui/internal/theme/themes/vesper.json" with { type: "json" }
-import zenburn from "../../../../../../tui/internal/theme/themes/zenburn.json" with { type: "json" }
+import aura from "./theme/aura.json" with { type: "json" }
+import ayu from "./theme/ayu.json" with { type: "json" }
+import catppuccin from "./theme/catppuccin.json" with { type: "json" }
+import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
+import dracula from "./theme/dracula.json" with { type: "json" }
+import everforest from "./theme/everforest.json" with { type: "json" }
+import github from "./theme/github.json" with { type: "json" }
+import gruvbox from "./theme/gruvbox.json" with { type: "json" }
+import kanagawa from "./theme/kanagawa.json" with { type: "json" }
+import material from "./theme/material.json" with { type: "json" }
+import matrix from "./theme/matrix.json" with { type: "json" }
+import monokai from "./theme/monokai.json" with { type: "json" }
+import nightowl from "./theme/nightowl.json" with { type: "json" }
+import nord from "./theme/nord.json" with { type: "json" }
+import onedark from "./theme/one-dark.json" with { type: "json" }
+import opencode from "./theme/opencode.json" with { type: "json" }
+import palenight from "./theme/palenight.json" with { type: "json" }
+import rosepine from "./theme/rosepine.json" with { type: "json" }
+import solarized from "./theme/solarized.json" with { type: "json" }
+import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
+import tokyonight from "./theme/tokyonight.json" with { type: "json" }
+import vesper from "./theme/vesper.json" with { type: "json" }
+import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
 
 type Theme = {
