@@ -1,0 +1,47 @@
+---
+// CodeSurf-specific documentation block component
+interface Props {
+  title?: string
+  type?: 'feature' | 'difference' | 'addition'
+}
+
+const { title, type = 'feature' } = Astro.props
+
+const icons = {
+  feature: '🏄',
+  difference: '⚡',
+  addition: '➕'
+}
+
+const titles = {
+  feature: 'CodeSurf Feature',
+  difference: 'CodeSurf Difference',
+  addition: 'CodeSurf Addition'
+}
+
+const colors = {
+  feature: 'border-blue-500 bg-blue-50 dark:bg-blue-950',
+  difference: 'border-purple-500 bg-purple-50 dark:bg-purple-950',
+  addition: 'border-green-500 bg-green-50 dark:bg-green-950'
+}
+---
+
+<div class={`codesurf-block my-6 p-4 border-l-4 rounded-r-lg ${colors[type]}`}>
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-2xl">{icons[type]}</span>
+    <strong class="text-lg">{title || titles[type]}</strong>
+  </div>
+  <div class="prose prose-sm dark:prose-invert max-w-none">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .codesurf-block {
+    transition: all 0.2s ease;
+  }
+  
+  .codesurf-block:hover {
+    transform: translateX(2px);
+  }
+</style>

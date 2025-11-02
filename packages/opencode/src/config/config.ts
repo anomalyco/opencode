@@ -850,6 +850,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Directories outside the project that agents can access"),
+      favoriteTools: z
+        .array(z.string())
+        .optional()
+        .describe("List of favorite tool IDs that will be prioritized and shown at the top"),
     })
     .strict()
     .meta({

@@ -53,7 +53,8 @@ function init() {
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c" && store.stack.length > 0) {
-      const current = store.stack.at(-1)!
+      const current = store.stack.at(-1)
+      if (!current) return
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
       evt.preventDefault()
@@ -128,10 +129,12 @@ export function DialogProvider(props: ParentProps) {
     <ctx.Provider value={value}>
       {props.children}
       <box position="absolute">
-        <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
-          </Dialog>
+        <Show when={value.stack.at(-1)} keyed>
+          {(currentDialog) => (
+            <Dialog onClose={() => value.clear()} size={value.size}>
+              {currentDialog.element}
+            </Dialog>
+          )}
         </Show>
       </box>
     </ctx.Provider>

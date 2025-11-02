@@ -12,6 +12,7 @@ interface EmbeddedContent {
 let cachedIndex: EmbeddedContent[] | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 300000 // 5 minutes
+const MAX_CACHE_SIZE_MB = 100 // Maximum cache size in MB
 
 // Query embedding cache (avoids repeated API/model calls for same queries)
 const queryEmbeddingCache = new Map<string, number[]>()
@@ -19,6 +20,22 @@ const QUERY_CACHE_MAX = 100
 
 // Lazy-loaded local embedding model
 let embeddingModel: any = null
+
+function getCacheSizeMB(data: EmbeddedContent[]): number {
+  const sizeBytes = JSON.stringify(data).length
+  return sizeBytes / 1024 / 1024
+}
+
+function canCacheIndex(data: EmbeddedContent[]): boolean {
+  const sizeMB = getCacheSizeMB(data)
+  if (sizeMB > MAX_CACHE_SIZE_MB) {
+    console.log(
+      `[FastSearch] Index too large to cache (${sizeMB.toFixed(2)}MB > ${MAX_CACHE_SIZE_MB}MB)`,
+    )
+    return false
+  }
+  return true
+}
 
 async function getEmbeddingModel() {
   if (!embeddingModel) {
@@ -227,11 +244,20 @@ This will use local AI (no API key needed, 100% free!)`
       } else {
         const loadStart = performance.now()
         indexData = (await indexFile.json()) as EmbeddedContent[]
-        cachedIndex = indexData
-        cacheTimestamp = now
-        console.log(
-          `[FastSearch] Loaded index (${indexData.length} chunks, ${(performance.now() - loadStart).toFixed(0)}ms)`,
-        )
+
+        // Only cache if within memory limits
+        if (canCacheIndex(indexData)) {
+          cachedIndex = indexData
+          cacheTimestamp = now
+          const sizeMB = getCacheSizeMB(indexData)
+          console.log(
+            `[FastSearch] Loaded and cached index (${indexData.length} chunks, ${sizeMB.toFixed(2)}MB, ${(performance.now() - loadStart).toFixed(0)}ms)`,
+          )
+        } else {
+          console.log(
+            `[FastSearch] Loaded index without caching (${indexData.length} chunks, ${(performance.now() - loadStart).toFixed(0)}ms)`,
+          )
+        }
       }
 
       // Step 1: Hybrid pre-filtering (optional but recommended)
@@ -314,5 +340,103 @@ This will use local AI (no API key needed, 100% free!)`
       const message = error instanceof Error ? error.message : String(error)
       return `❌ Search failed: ${message}`
     }
+  },
+})
+
+// Cache management tool
+export const manage_search_cache = tool({
+  description:
+    "Manage semantic search caches (clear, view stats, check health) for performance optimization",
+  args: {
+    action: tool.schema
+      .enum(["clear", "stats", "health"])
+      .describe("Action: clear all caches, view stats, or check health"),
+  },
+  async execute(args, _ctx) {
+    const action = args.action
+
+    if (action === "clear") {
+      cachedIndex = null
+      cacheTimestamp = 0
+      queryEmbeddingCache.clear()
+      embeddingModel = null
+      return `✅ All caches cleared successfully!
+
+- Index cache: cleared
+- Query embedding cache: cleared  
+- Model cache: cleared
+
+Next search will reload data from disk.`
+    }
+
+    if (action === "stats") {
+      const indexCached = cachedIndex !== null
+      const indexSize = indexCached ? getCacheSizeMB(cachedIndex!).toFixed(2) : "0"
+      const indexAge = indexCached ? ((Date.now() - cacheTimestamp) / 1000).toFixed(0) : "N/A"
+      const indexChunks = cachedIndex?.length || 0
+      const queryCacheSize = queryEmbeddingCache.size
+      const modelLoaded = embeddingModel !== null
+
+      return `📊 Search Cache Statistics
+
+🗂️  Index Cache:
+   Status: ${indexCached ? "✓ Cached" : "✗ Not cached"}
+   Size: ${indexSize} MB (limit: ${MAX_CACHE_SIZE_MB} MB)
+   Chunks: ${indexChunks}
+   Age: ${indexAge}s (TTL: ${CACHE_TTL / 1000}s)
+
+🔍 Query Cache:
+   Entries: ${queryCacheSize}/${QUERY_CACHE_MAX}
+   Hit rate: ~${queryCacheSize > 0 ? "high" : "none yet"}
+
+🤖 Model:
+   Status: ${modelLoaded ? "✓ Loaded (all-MiniLM-L6-v2)" : "✗ Not loaded"}
+   
+💡 Tips:
+   - Index cache expires after ${CACHE_TTL / 60000} minutes
+   - Query cache stores last ${QUERY_CACHE_MAX} queries
+   - Use 'clear' action to free memory if needed`
+    }
+
+    if (action === "health") {
+      const warnings = []
+      const indexCached = cachedIndex !== null
+
+      if (indexCached) {
+        const sizeMB = getCacheSizeMB(cachedIndex!)
+        if (sizeMB > MAX_CACHE_SIZE_MB * 0.9) {
+          warnings.push(
+            `⚠️  Index cache near size limit (${sizeMB.toFixed(2)}MB / ${MAX_CACHE_SIZE_MB}MB)`,
+          )
+        }
+        const ageSeconds = (Date.now() - cacheTimestamp) / 1000
+        if (ageSeconds > CACHE_TTL * 0.9) {
+          warnings.push(
+            `⚠️  Index cache nearing expiration (${ageSeconds.toFixed(0)}s / ${CACHE_TTL / 1000}s)`,
+          )
+        }
+      }
+
+      if (queryEmbeddingCache.size > QUERY_CACHE_MAX * 0.9) {
+        warnings.push(
+          `⚠️  Query cache near capacity (${queryEmbeddingCache.size} / ${QUERY_CACHE_MAX})`,
+        )
+      }
+
+      if (warnings.length === 0) {
+        return `✅ Cache Health: Excellent
+
+All caches operating normally.
+No action needed.`
+      }
+
+      return `⚠️  Cache Health: Attention Needed
+
+${warnings.join("\n")}
+
+Consider running 'clear' action if performance degrades.`
+    }
+
+    return `❌ Unknown action: ${action}`
   },
 })

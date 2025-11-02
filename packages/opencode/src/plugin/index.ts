@@ -12,10 +12,11 @@ export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
   const state = Instance.state(async () => {
+    // Type cast needed due to incompatibility between Hono's fetch and standard fetch
+    const appFetch = Server.App().fetch as any
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: appFetch,
     })
     const config = await Config.get()
     const hooks = []
@@ -32,17 +33,40 @@ export namespace Plugin {
       plugins.push("opencode-anthropic-auth@0.0.2")
     }
     for (let plugin of plugins) {
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
-      }
-      const mod = await import(plugin)
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn(input)
-        hooks.push(init)
+      try {
+        log.info("loading plugin", { path: plugin })
+        if (!plugin.startsWith("file://")) {
+          const [pkg, version] = plugin.split("@")
+          if (!pkg || pkg.trim() === "") {
+            log.error("invalid plugin format", { plugin })
+            continue
+          }
+          plugin = await BunProc.install(pkg, version ?? "latest")
+        }
+        const mod = await import(plugin)
+        if (!mod || typeof mod !== "object") {
+          log.error("invalid plugin module", { plugin })
+          continue
+        }
+
+        for (const [name, fn] of Object.entries<PluginInstance>(mod)) {
+          if (typeof fn !== "function") {
+            log.warn("skipping non-function export", { plugin, name })
+            continue
+          }
+          const init = await fn(input)
+          if (init && typeof init === "object") {
+            hooks.push(init)
+            log.info("plugin loaded successfully", { plugin, name })
+          } else {
+            log.warn("plugin returned invalid hooks", { plugin, name })
+          }
+        }
+      } catch (error) {
+        log.error("failed to load plugin", {
+          plugin,
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
 
@@ -58,13 +82,19 @@ export namespace Plugin {
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
-    for (const hook of await state().then((x) => x.hooks)) {
+    const hooks = await state().then((x) => x.hooks)
+    for (const hook of hooks) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      try {
+        // Type assertion needed due to complex conditional hook typing
+        await (fn as (input: Input, output: Output) => Promise<void>)(input, output)
+      } catch (error) {
+        log.error("hook trigger failed", {
+          hook: name,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
     return output
   }

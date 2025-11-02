@@ -9,9 +9,26 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { LSPInstaller } from "./installer"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
+  const downloadLocks = new Map<string, Promise<void>>()
+
+  async function downloadWithLock<T>(
+    id: string,
+    download: () => Promise<T>,
+  ): Promise<T | undefined> {
+    const existing = downloadLocks.get(id)
+    if (existing) {
+      await existing
+      return undefined // Already downloaded by another caller
+    }
+
+    const promise = download().finally(() => downloadLocks.delete(id))
+    downloadLocks.set(id, promise as Promise<void>)
+    return promise
+  }
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -121,46 +138,28 @@ export namespace LSPServer {
       "yarn.lock",
     ]),
     async spawn(root) {
-      let binary = Bun.which("vue-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "@vue",
-          "language-server",
-          "bin",
-          "vue-language-server.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "@vue/language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "@vue/language-server",
+          entryPoint: "@vue/language-server/bin/vue-language-server.js",
+          binaryName: "vue-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
+          initialization: {},
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
-        initialization: {
-          // Leave empty; the server will auto-detect workspace TypeScript.
-        },
+      } catch (err) {
+        log.error("Failed to install Vue language server", { error: err })
+        return
       }
     },
   }
@@ -188,32 +187,41 @@ export namespace LSPServer {
       )
       if (!(await Bun.file(serverPath).exists())) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        log.info("downloading and building VS Code ESLint server")
-        const response = await fetch(
-          "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip",
-        )
-        if (!response.ok) return
 
-        const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
-        await Bun.file(zipPath).write(response)
+        const result = await downloadWithLock("vscode-eslint", async () => {
+          log.info("downloading and building VS Code ESLint server")
+          const response = await fetch(
+            "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip",
+          )
+          if (!response.ok) return
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
-        await fs.rm(zipPath, { force: true })
+          const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
+          await Bun.file(zipPath).write(response)
 
-        const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
-        const finalPath = path.join(Global.Path.bin, "vscode-eslint")
+          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          await fs.rm(zipPath, { force: true })
 
-        const stats = await fs.stat(finalPath).catch(() => undefined)
-        if (stats) {
-          log.info("removing old eslint installation", { path: finalPath })
-          await fs.rm(finalPath, { force: true, recursive: true })
+          const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
+          const finalPath = path.join(Global.Path.bin, "vscode-eslint")
+
+          const stats = await fs.stat(finalPath).catch(() => undefined)
+          if (stats) {
+            log.info("removing old eslint installation", { path: finalPath })
+            await fs.rm(finalPath, { force: true, recursive: true })
+          }
+          await fs.rename(extractedPath, finalPath)
+
+          await $`npm install`.cwd(finalPath).quiet()
+          await $`npm run compile`.cwd(finalPath).quiet()
+
+          log.info("installed VS Code ESLint server", { serverPath })
+        })
+
+        // If result is undefined, another process installed it
+        if (result === undefined && !(await Bun.file(serverPath).exists())) {
+          log.error("LSP download completed but binary not found")
+          return
         }
-        await fs.rename(extractedPath, finalPath)
-
-        await $`npm install`.cwd(finalPath).quiet()
-        await $`npm run compile`.cwd(finalPath).quiet()
-
-        log.info("installed VS Code ESLint server", { serverPath })
       }
 
       const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
@@ -239,35 +247,20 @@ export namespace LSPServer {
     },
     extensions: [".go"],
     async spawn(root) {
-      let bin = Bun.which("gopls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
-      })
-      if (!bin) {
-        if (!Bun.which("go")) return
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+      try {
+        const bin = await LSPInstaller.installGoPackage({
+          packagePath: "golang.org/x/tools/gopls@latest",
+          binaryName: "gopls",
+        })
 
-        log.info("installing gopls")
-        const proc = Bun.spawn({
-          cmd: ["go", "install", "golang.org/x/tools/gopls@latest"],
-          env: { ...process.env, GOBIN: Global.Path.bin },
-          stdout: "pipe",
-          stderr: "pipe",
-          stdin: "pipe",
-        })
-        const exit = await proc.exited
-        if (exit !== 0) {
-          log.error("Failed to install gopls")
-          return
+        return {
+          process: spawn(bin, {
+            cwd: root,
+          }),
         }
-        bin = path.join(Global.Path.bin, "gopls" + (process.platform === "win32" ? ".exe" : ""))
-        log.info(`installed gopls`, {
-          bin,
-        })
-      }
-      return {
-        process: spawn(bin!, {
-          cwd: root,
-        }),
+      } catch (err) {
+        log.error("Failed to install gopls", { error: err })
+        return
       }
     },
   }
@@ -325,59 +318,47 @@ export namespace LSPServer {
       "pyrightconfig.json",
     ]),
     async spawn(root) {
-      let binary = Bun.which("pyright-langserver")
-      const args = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "pyright",
-          "dist",
-          "pyright-langserver.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "pyright"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "pyright",
+          entryPoint: "pyright/dist/pyright-langserver.js",
+          binaryName: "pyright-langserver",
+        })
+
+        const initialization: Record<string, string> = {}
+
+        const potentialVenvPaths = [
+          process.env["VIRTUAL_ENV"],
+          path.join(root, ".venv"),
+          path.join(root, "venv"),
+        ].filter((p): p is string => p !== undefined)
+
+        for (const venvPath of potentialVenvPaths) {
+          const isWindows = process.platform === "win32"
+          const potentialPythonPath = isWindows
+            ? path.join(venvPath, "Scripts", "python.exe")
+            : path.join(venvPath, "bin", "python")
+          if (await Bun.file(potentialPythonPath).exists()) {
+            initialization["pythonPath"] = potentialPythonPath
+            break
+          }
         }
-        binary = BunProc.which()
-        args.push(...["run", js])
-      }
-      args.push("--stdio")
 
-      const initialization: Record<string, string> = {}
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
 
-      const potentialVenvPaths = [
-        process.env["VIRTUAL_ENV"],
-        path.join(root, ".venv"),
-        path.join(root, "venv"),
-      ].filter((p): p is string => p !== undefined)
-      for (const venvPath of potentialVenvPaths) {
-        const isWindows = process.platform === "win32"
-        const potentialPythonPath = isWindows
-          ? path.join(venvPath, "Scripts", "python.exe")
-          : path.join(venvPath, "bin", "python")
-        if (await Bun.file(potentialPythonPath).exists()) {
-          initialization["pythonPath"] = potentialPythonPath
-          break
+        return {
+          process: proc,
+          initialization,
         }
-      }
-
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
-        initialization,
+      } catch (err) {
+        log.error("Failed to install Pyright", { error: err })
+        return
       }
     },
   }
@@ -731,43 +712,28 @@ export namespace LSPServer {
       "yarn.lock",
     ]),
     async spawn(root) {
-      let binary = Bun.which("svelteserver")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "svelte-language-server",
-          "bin",
-          "server.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "svelte-language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "svelte-language-server",
+          entryPoint: "svelte-language-server/bin/server.js",
+          binaryName: "svelteserver",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
+          initialization: {},
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
-        initialization: {},
+      } catch (err) {
+        log.error("Failed to install Svelte language server", { error: err })
+        return
       }
     },
   }
@@ -792,48 +758,32 @@ export namespace LSPServer {
       }
       const tsdk = path.dirname(tsserver)
 
-      let binary = Bun.which("astro-ls")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "@astrojs",
-          "language-server",
-          "bin",
-          "nodeServer.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "@astrojs/language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
-        }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
-        initialization: {
-          typescript: {
-            tsdk,
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "@astrojs/language-server",
+          entryPoint: "@astrojs/language-server/bin/nodeServer.js",
+          binaryName: "astro-ls",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
           },
-        },
+        })
+
+        return {
+          process: proc,
+          initialization: {
+            typescript: {
+              tsdk,
+            },
+          },
+        }
+      } catch (err) {
+        log.error("Failed to install Astro language server", { error: err })
+        return
       }
     },
   }
@@ -1157,42 +1107,27 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".sh", ".bash"],
     async spawn(root) {
-      let binary = Bun.which("bash-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "bash-language-server",
-          "out",
-          "cli.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "bash-language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "bash-language-server",
+          entryPoint: "bash-language-server/out/cli.js",
+          binaryName: "bash-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "start"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("start")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install Bash language server", { error: err })
+        return
       }
     },
   }
@@ -1202,44 +1137,27 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".yaml", ".yml"],
     async spawn(root) {
-      let binary = Bun.which("yaml-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "yaml-language-server",
-          "out",
-          "server",
-          "src",
-          "server.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "yaml-language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "yaml-language-server",
+          entryPoint: "yaml-language-server/out/server/src/server.js",
+          binaryName: "yaml-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install YAML language server", { error: err })
+        return
       }
     },
   }
@@ -1249,42 +1167,27 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".json", ".jsonc"],
     async spawn(root) {
-      let binary = Bun.which("vscode-json-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "vscode-langservers-extracted",
-          "bin",
-          "vscode-json-language-server",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "vscode-langservers-extracted",
+          entryPoint: "vscode-langservers-extracted/bin/vscode-json-language-server",
+          binaryName: "vscode-json-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install JSON language server", { error: err })
+        return
       }
     },
   }
@@ -1294,42 +1197,27 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".html", ".htm"],
     async spawn(root) {
-      let binary = Bun.which("vscode-html-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "vscode-langservers-extracted",
-          "bin",
-          "vscode-html-language-server",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "vscode-langservers-extracted",
+          entryPoint: "vscode-langservers-extracted/bin/vscode-html-language-server",
+          binaryName: "vscode-html-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install HTML language server", { error: err })
+        return
       }
     },
   }
@@ -1339,42 +1227,27 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".css", ".scss", ".sass", ".less"],
     async spawn(root) {
-      let binary = Bun.which("vscode-css-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "vscode-langservers-extracted",
-          "bin",
-          "vscode-css-language-server",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "vscode-langservers-extracted",
+          entryPoint: "vscode-langservers-extracted/bin/vscode-css-language-server",
+          binaryName: "vscode-css-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install CSS language server", { error: err })
+        return
       }
     },
   }
@@ -1384,43 +1257,27 @@ export namespace LSPServer {
     root: NearestRoot(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"]),
     extensions: [".html", ".htm", ".jsx", ".tsx", ".vue", ".svelte"],
     async spawn(root) {
-      let binary = Bun.which("tailwindcss-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "@tailwindcss",
-          "language-server",
-          "bin",
-          "tailwindcss-language-server",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "@tailwindcss/language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "@tailwindcss/language-server",
+          entryPoint: "@tailwindcss/language-server/bin/tailwindcss-language-server",
+          binaryName: "tailwindcss-language-server",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install TailwindCSS language server", { error: err })
+        return
       }
     },
   }
@@ -1430,42 +1287,27 @@ export namespace LSPServer {
     root: NearestRoot(["composer.json", "composer.lock"]),
     extensions: [".php"],
     async spawn(root) {
-      let binary = Bun.which("intelephense")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "intelephense",
-          "lib",
-          "intelephense.js",
-        )
-        if (!(await Bun.file(js).exists())) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "intelephense"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
+      try {
+        const js = await LSPInstaller.installNPMPackage({
+          packageName: "intelephense",
+          entryPoint: "intelephense/lib/intelephense.js",
+          binaryName: "intelephense",
+        })
+
+        const proc = spawn(BunProc.which(), ["run", js, "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        })
+
+        return {
+          process: proc,
         }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
-        cwd: root,
-        env: {
-          ...process.env,
-          BUN_BE_BUN: "1",
-        },
-      })
-      return {
-        process: proc,
+      } catch (err) {
+        log.error("Failed to install PHP language server", { error: err })
+        return
       }
     },
   }
@@ -1598,37 +1440,20 @@ export namespace LSPServer {
     root: async () => Instance.directory,
     extensions: [".sql"],
     async spawn(root) {
-      let bin = Bun.which("sqls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
-      })
-
-      if (!bin) {
-        if (!Bun.which("go")) {
-          log.info("go not found, please install go to use sqls")
-          return
-        }
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-        log.info("installing sqls")
-        const proc = Bun.spawn({
-          cmd: ["go", "install", "github.com/sqls-server/sqls@latest"],
-          env: { ...process.env, GOBIN: Global.Path.bin },
-          stdout: "pipe",
-          stderr: "pipe",
-          stdin: "pipe",
+      try {
+        const bin = await LSPInstaller.installGoPackage({
+          packagePath: "github.com/sqls-server/sqls@latest",
+          binaryName: "sqls",
         })
-        const exit = await proc.exited
-        if (exit !== 0) {
-          log.error("Failed to install sqls")
-          return
-        }
-        bin = path.join(Global.Path.bin, "sqls" + (process.platform === "win32" ? ".exe" : ""))
-        log.info(`installed sqls`, { bin })
-      }
 
-      return {
-        process: spawn(bin, {
-          cwd: root,
-        }),
+        return {
+          process: spawn(bin, {
+            cwd: root,
+          }),
+        }
+      } catch (err) {
+        log.error("Failed to install SQL language server", { error: err })
+        return
       }
     },
   }

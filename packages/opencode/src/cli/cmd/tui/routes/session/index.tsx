@@ -61,6 +61,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { Sidebar } from "./sidebar"
 import { LeftSidebar } from "./left-sidebar"
+import { Footer } from "./footer"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
@@ -753,7 +754,7 @@ export function Session() {
                 </text>
               </box>
             </Show>
-            <Show when={!sidebarVisible()}>
+            <Show when={!sidebarVisible() && !leftSidebarVisible()}>
               <Header />
             </Show>
             <scrollbox
@@ -886,6 +887,9 @@ export function Session() {
           <Sidebar sessionID={route.sessionID} onToggle={toggleRightSidebar} />
         </Show>
       </box>
+
+      {/* Footer */}
+      <Footer />
     </context.Provider>
   )
 }

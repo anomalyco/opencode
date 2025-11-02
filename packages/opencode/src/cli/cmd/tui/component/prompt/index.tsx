@@ -527,7 +527,14 @@ export function Prompt(props: PromptProps) {
               minHeight={1}
               maxHeight={6}
               onContentChange={() => {
-                const value = input.plainText
+                let value = input.plainText
+                // Filter out mouse wheel escape sequences
+                const mouseWheelPattern = /\[<[\d;]+[mM]/g
+                if (mouseWheelPattern.test(value)) {
+                  value = value.replace(mouseWheelPattern, "")
+                  input.setText(value, { history: false })
+                  return
+                }
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()

@@ -3,6 +3,8 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
+import CodeSurfBlock from "../../components/CodeSurfBlock.astro"
+
 OpenCode has a list of keybinds that you can customize through the OpenCode config.
 
 ```json title="opencode.json"
@@ -52,6 +54,32 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
   }
 }
 ```
+
+---
+
+<CodeSurfBlock type="addition" title="Sidebar Keybinds">
+
+CodeSurf adds additional keybinds for the dual sidebar system:
+
+```json title="opencode.json"
+{
+  "keybinds": {
+    "sidebar_left_toggle": "cmd+[,ctrl+[",
+    "sidebar_right_toggle": "cmd+],ctrl+]",
+    "sidebar_both_toggle": "cmd+b,ctrl+b"
+  }
+}
+```
+
+### Quick Tab Switching
+
+When the right sidebar is open, use number keys to switch tabs:
+
+- `1` - Switch to Tools tab
+- `2` - Switch to Todos tab
+- `3` - Switch to Files tab
+
+</CodeSurfBlock>
 
 ---
 

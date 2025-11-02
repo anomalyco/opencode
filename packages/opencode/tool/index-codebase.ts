@@ -164,6 +164,23 @@ Run: bun add ai @ai-sdk/openai`
 let cachedIndex: EmbeddedContent[] | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 60000 // 1 minute
+const MAX_CACHE_SIZE_MB = 100 // Maximum cache size in MB
+
+function getCacheSizeMB(data: EmbeddedContent[]): number {
+  const sizeBytes = JSON.stringify(data).length
+  return sizeBytes / 1024 / 1024
+}
+
+function canCacheIndex(data: EmbeddedContent[]): boolean {
+  const sizeMB = getCacheSizeMB(data)
+  if (sizeMB > MAX_CACHE_SIZE_MB) {
+    console.log(
+      `[SemanticSearch] Index too large to cache (${sizeMB.toFixed(2)}MB > ${MAX_CACHE_SIZE_MB}MB)`,
+    )
+    return false
+  }
+  return true
+}
 
 export const semantic_search_code = tool({
   description:
@@ -199,11 +216,20 @@ Example: Use index_codebase to index the codebase`
       } else {
         const loadStart = performance.now()
         indexData = (await indexFile.json()) as EmbeddedContent[]
-        cachedIndex = indexData
-        cacheTimestamp = now
-        console.log(
-          `[SemanticSearch] Loaded index with ${indexData.length} chunks (${(performance.now() - loadStart).toFixed(0)}ms)`,
-        )
+
+        // Only cache if within memory limits
+        if (canCacheIndex(indexData)) {
+          cachedIndex = indexData
+          cacheTimestamp = now
+          const sizeMB = getCacheSizeMB(indexData)
+          console.log(
+            `[SemanticSearch] Loaded and cached index (${indexData.length} chunks, ${sizeMB.toFixed(2)}MB, ${(performance.now() - loadStart).toFixed(0)}ms)`,
+          )
+        } else {
+          console.log(
+            `[SemanticSearch] Loaded index without caching (${indexData.length} chunks, ${(performance.now() - loadStart).toFixed(0)}ms)`,
+          )
+        }
       }
 
       // Generate query embedding (this is the main bottleneck - OpenAI API call)
@@ -310,8 +336,12 @@ export const hybrid_search_code = tool({
         indexData = cachedIndex
       } else {
         indexData = (await indexFile.json()) as EmbeddedContent[]
-        cachedIndex = indexData
-        cacheTimestamp = now
+
+        // Only cache if within memory limits
+        if (canCacheIndex(indexData)) {
+          cachedIndex = indexData
+          cacheTimestamp = now
+        }
       }
 
       // Step 1: Optional keyword pre-filtering (reduces candidates by ~70-90%)
@@ -367,5 +397,78 @@ export const hybrid_search_code = tool({
       const message = error instanceof Error ? error.message : String(error)
       return `❌ Hybrid search failed: ${message}`
     }
+  },
+})
+
+// Cache management tool for OpenAI-based semantic search
+export const manage_openai_cache = tool({
+  description: "Manage OpenAI semantic search cache (clear, view stats, check health)",
+  args: {
+    action: tool.schema
+      .enum(["clear", "stats", "health"])
+      .describe("Action: clear cache, view stats, or check health"),
+  },
+  async execute(args, _ctx) {
+    const action = args.action
+
+    if (action === "clear") {
+      cachedIndex = null
+      cacheTimestamp = 0
+      return `✅ OpenAI semantic search cache cleared!
+
+Next search will reload index from disk.
+Note: This uses OpenAI embeddings (API costs apply).`
+    }
+
+    if (action === "stats") {
+      const indexCached = cachedIndex !== null
+      const indexSize = indexCached ? getCacheSizeMB(cachedIndex!).toFixed(2) : "0"
+      const indexAge = indexCached ? ((Date.now() - cacheTimestamp) / 1000).toFixed(0) : "N/A"
+      const indexChunks = cachedIndex?.length || 0
+
+      return `📊 OpenAI Search Cache Statistics
+
+🗂️  Index Cache:
+   Status: ${indexCached ? "✓ Cached" : "✗ Not cached"}
+   Size: ${indexSize} MB (limit: ${MAX_CACHE_SIZE_MB} MB)
+   Chunks: ${indexChunks}
+   Age: ${indexAge}s (TTL: ${CACHE_TTL / 1000}s)
+
+⚠️  Note: Query embeddings are NOT cached (OpenAI API call per query)
+   Consider using fast_semantic_search for free local caching!
+
+💡 Alternative: Use index_codebase_local + fast_semantic_search for:
+   - Zero API costs
+   - Query embedding cache
+   - Faster searches`
+    }
+
+    if (action === "health") {
+      const warnings = []
+      const indexCached = cachedIndex !== null
+
+      if (indexCached) {
+        const sizeMB = getCacheSizeMB(cachedIndex!)
+        if (sizeMB > MAX_CACHE_SIZE_MB * 0.9) {
+          warnings.push(
+            `⚠️  Index cache near size limit (${sizeMB.toFixed(2)}MB / ${MAX_CACHE_SIZE_MB}MB)`,
+          )
+        }
+      }
+
+      if (warnings.length === 0) {
+        return `✅ Cache Health: Good
+
+Index cache operating normally.`
+      }
+
+      return `⚠️  Cache Health Issues
+
+${warnings.join("\n")}
+
+Consider clearing cache if needed.`
+    }
+
+    return `❌ Unknown action: ${action}`
   },
 })

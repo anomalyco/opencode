@@ -20,7 +20,7 @@ export function LeftSidebar(props: {
 
   return (
     <Show when={currentSession()}>
-      <box flexShrink={0} gap={1} width={28}>
+      <box flexShrink={0} gap={1} width={45}>
         <box flexDirection="row" justifyContent="space-between" paddingRight={1}>
           <text fg={theme.textMuted} attributes={TextAttributes.BOLD}>
             SESSIONS
@@ -36,24 +36,17 @@ export function LeftSidebar(props: {
           </text>
         </box>
 
-        <box>
-          <text>
-            <b>Current:</b>
-          </text>
-          <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-            {Locale.truncate(Locale.stripMarkdown(currentSession().title), 24)}
-          </text>
-        </box>
-
-        <box>
-          <text>
-            <b>All Sessions</b>
+        <box overflow="hidden">
+          <text wrapMode="none" attributes={TextAttributes.BOLD}>
+            All Sessions
           </text>
           <For each={sessions()}>
             {(session) => (
               <text
                 fg={session.id === props.sessionID ? theme.accent : theme.text}
                 attributes={session.id === props.sessionID ? TextAttributes.BOLD : undefined}
+                wrapMode="none"
+                height={1}
                 onMouseUp={() => {
                   if (renderer.getSelection()?.getSelectedText()) return
                   if (session.id === props.sessionID) return
@@ -61,7 +54,7 @@ export function LeftSidebar(props: {
                 }}
               >
                 {session.id === props.sessionID ? "▶ " : "  "}
-                {Locale.truncate(Locale.stripMarkdown(session.title), 22)}
+                {Locale.truncate(Locale.stripMarkdown(session.title), 39)}
               </text>
             )}
           </For>

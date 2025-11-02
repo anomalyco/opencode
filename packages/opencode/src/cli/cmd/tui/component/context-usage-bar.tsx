@@ -18,71 +18,69 @@ export interface ContextUsageBarProps {
  */
 export const ContextUsageBar: Component<ContextUsageBarProps> = (props) => {
   const usagePercent = createMemo(() => {
-    if (props.tokenLimit === 0) return 0
-    return (props.currentTokens / props.tokenLimit) * 100
+    if (props.tokenLimit <= 0 || props.currentTokens < 0) return 0
+    const percent = (props.currentTokens / props.tokenLimit) * 100
+    return Math.min(100, Math.max(0, percent)) // Clamp to 0-100
   })
 
-  const barSegments = createMemo(() => {
-    // Calculate bar length based on width
-    // Format: [bar] [percentage]
-    // Percentage = ~4, spaces = 1, padding = 4, borders = 2
-    // Available for bar = width - 11
-    const availableWidth = (props.width || 40) - 11
-    const barLength = Math.max(15, availableWidth) // At least 15 chars
+  // Separate memos for each calculation step
+  const barLength = createMemo(() => Math.max(15, (props.width || 40) - 11))
 
+  const filledCount = createMemo(() => {
     const percent = usagePercent()
-    const filledCount = Math.min(Math.floor((barLength * percent) / 100), barLength)
+    const length = barLength()
+    return Math.min(Math.floor((length * percent) / 100), length)
+  })
 
-    // Visual characters for the bar
-    const charEmpty = "░"
-    const charAssistant = "▓"
-    const charTool = "█"
-    const charUser = "▒"
+  // Only recompute segments when filledCount or barLength actually changes
+  const barSegments = createMemo<Array<{ char: string; color: RGBA }>>((prev) => {
+    const filled = filledCount()
+    const length = barLength()
+    const empty = length - filled
+
+    // Early return if nothing changed
+    if (prev && prev.length === filled + empty + 2) {
+      // +2 for borders
+      return prev
+    }
 
     const segments: Array<{ char: string; color: RGBA }> = []
 
     // Add left border
     segments.push({ char: "▐", color: props.agentColor })
 
-    // Filled portion with rotating pattern and colors
-    for (let i = 0; i < filledCount; i++) {
+    // Filled segments with color rotation
+    for (let i = 0; i < filled; i++) {
+      let color: RGBA
       switch (i % 4) {
         case 0:
-          segments.push({
-            char: charAssistant,
-            color: props.assistantColor || props.agentColor,
-          })
+          color = props.assistantColor || props.agentColor
           break
         case 1:
-          segments.push({
-            char: charTool,
-            color: props.toolColor || props.agentColor,
-          })
+          color = props.toolColor || props.agentColor
           break
         case 2:
-          segments.push({
-            char: charUser,
-            color: props.userColor || props.agentColor,
-          })
+          color = props.userColor || props.agentColor
+          break
+        case 3:
+          color = props.assistantColor || props.agentColor
           break
         default:
-          segments.push({
-            char: charAssistant,
-            color: props.assistantColor || props.agentColor,
-          })
+          color = props.agentColor
       }
+      segments.push({ char: "█", color })
     }
 
-    // Empty portion
-    for (let i = filledCount; i < barLength; i++) {
-      segments.push({ char: charEmpty, color: props.agentColor })
+    // Empty segments
+    for (let i = 0; i < empty; i++) {
+      segments.push({ char: "░", color: props.agentColor })
     }
 
     // Add right border
     segments.push({ char: "▌", color: props.agentColor })
 
     return segments
-  })
+  }, [])
 
   const percentText = createMemo(() => {
     return ` ${Math.round(usagePercent())}%`

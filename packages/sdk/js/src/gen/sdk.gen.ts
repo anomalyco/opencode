@@ -11,6 +11,13 @@ import type {
   ConfigUpdateData,
   ConfigUpdateResponses,
   ConfigUpdateErrors,
+  FavoriteToolsListData,
+  FavoriteToolsListResponses,
+  FavoriteToolsCycleData,
+  FavoriteToolsCycleResponses,
+  FavoriteToolsCycleErrors,
+  FavoriteToolsGetLevelData,
+  FavoriteToolsGetLevelResponses,
   ToolIdsData,
   ToolIdsResponses,
   ToolIdsErrors,
@@ -65,9 +72,9 @@ import type {
   SessionPromptData,
   SessionPromptResponses,
   SessionPromptErrors,
-  SessionMessagesRecentData,
-  SessionMessagesRecentResponses,
-  SessionMessagesRecentErrors,
+  SessionMessagesApiRecentData,
+  SessionMessagesApiRecentResponses,
+  SessionMessagesApiRecentErrors,
   SessionMessageData,
   SessionMessageResponses,
   SessionMessageErrors,
@@ -109,6 +116,8 @@ import type {
   AppAgentsResponses,
   McpStatusData,
   McpStatusResponses,
+  McpDiscoverData,
+  McpDiscoverResponses,
   McpServerToolsData,
   McpServerToolsResponses,
   McpServerUpdateData,
@@ -250,6 +259,58 @@ class Config extends _HeyApiClient {
   }
 }
 
+class FavoriteTools extends _HeyApiClient {
+  /**
+   * Get project and global favorite tool IDs
+   */
+  public list<ThrowOnError extends boolean = false>(
+    options?: Options<FavoriteToolsListData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).get<FavoriteToolsListResponses, unknown, ThrowOnError>(
+      {
+        url: "/favorite-tools",
+        ...options,
+      },
+    )
+  }
+
+  /**
+   * Cycle tool favorite status: none → project → global → none
+   */
+  public cycle<ThrowOnError extends boolean = false>(
+    options?: Options<FavoriteToolsCycleData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).post<
+      FavoriteToolsCycleResponses,
+      FavoriteToolsCycleErrors,
+      ThrowOnError
+    >({
+      url: "/favorite-tools/cycle",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    })
+  }
+
+  /**
+   * Get favorite level for a specific tool
+   */
+  public getLevel<ThrowOnError extends boolean = false>(
+    options: Options<FavoriteToolsGetLevelData, ThrowOnError>,
+  ) {
+    return (options.client ?? this._client).get<
+      FavoriteToolsGetLevelResponses,
+      unknown,
+      ThrowOnError
+    >({
+      url: "/favorite-tools/{toolId}/level",
+      ...options,
+    })
+  }
+}
+
 class Tool extends _HeyApiClient {
   /**
    * List all tool IDs (including built-in and dynamically registered)
@@ -284,16 +345,16 @@ class Path extends _HeyApiClient {
   }
 }
 
-class Messages extends _HeyApiClient {
+class MessagesApi extends _HeyApiClient {
   /**
    * Get recent messages for a session (optimized for faster loading)
    */
   public recent<ThrowOnError extends boolean = false>(
-    options: Options<SessionMessagesRecentData, ThrowOnError>,
+    options: Options<SessionMessagesApiRecentData, ThrowOnError>,
   ) {
     return (options.client ?? this._client).get<
-      SessionMessagesRecentResponses,
-      SessionMessagesRecentErrors,
+      SessionMessagesApiRecentResponses,
+      SessionMessagesApiRecentErrors,
       ThrowOnError
     >({
       url: "/session/{id}/message/recent",
@@ -664,6 +725,7 @@ class Session extends _HeyApiClient {
       ...options,
     })
   }
+  messagesApi = new MessagesApi({ client: this._client })
 }
 
 class Command extends _HeyApiClient {
@@ -821,6 +883,18 @@ class Mcp extends _HeyApiClient {
   ) {
     return (options?.client ?? this._client).get<McpStatusResponses, unknown, ThrowOnError>({
       url: "/mcp",
+      ...options,
+    })
+  }
+
+  /**
+   * Discover available MCP servers from registry
+   */
+  public discover<ThrowOnError extends boolean = false>(
+    options?: Options<McpDiscoverData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).get<McpDiscoverResponses, unknown, ThrowOnError>({
+      url: "/mcp/discover",
       ...options,
     })
   }
@@ -1096,6 +1170,7 @@ export class OpencodeClient extends _HeyApiClient {
   }
   project = new Project({ client: this._client })
   config = new Config({ client: this._client })
+  favoriteTools = new FavoriteTools({ client: this._client })
   tool = new Tool({ client: this._client })
   path = new Path({ client: this._client })
   session = new Session({ client: this._client })

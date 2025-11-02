@@ -4,6 +4,7 @@ description: Using the OpenCode terminal user interface.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
+import CodeSurfBlock from "../../components/CodeSurfBlock.astro"
 
 OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
 
@@ -24,6 +25,39 @@ Once you're in the TUI, you can prompt it with a message.
 ```text
 Give me a quick summary of the codebase.
 ```
+
+---
+
+## Sidebars
+
+<CodeSurfBlock type="feature" title="Dual Sidebar Layout">
+
+CodeSurf features an enhanced dual sidebar layout for better project organization and session management.
+
+### Left Sidebar - Sessions
+
+View and manage all your sessions in one place.
+
+- **Session List**: Quick access to all active sessions
+- **Visual Indicator**: Active session highlighted with ▶ marker
+- **Quick Switch**: Click any session to switch instantly
+- **Toggle**: `Cmd+[` or `Ctrl+[` to show/hide
+
+### Right Sidebar - Tools & Files
+
+Context-aware information about your current session.
+
+**Tabs:**
+- **Tools**: Recently used tools with favorites support (click ⭐ to favorite)
+- **Todos**: Active todos for the current session
+- **Files**: Session file changes with git status and commit interface
+
+**Keybinds:**
+- `Cmd+]` or `Ctrl+]` - Toggle right sidebar
+- `Cmd+B` or `Ctrl+B` - Toggle both sidebars
+- `1`, `2`, `3` - Switch between Tools, Todos, Files tabs
+
+</CodeSurfBlock>
 
 ---
 
@@ -52,6 +86,33 @@ Start a message with `!` to run a shell command.
 ```
 
 The output of the command is added to the conversation as a tool result.
+
+---
+
+## Session Management
+
+<CodeSurfBlock type="feature" title="Enhanced Session Features">
+
+CodeSurf includes powerful session management features:
+
+### Quick Commit Workflow
+
+In the Files tab of the right sidebar:
+
+1. Select files with checkboxes
+2. Click **[Auto]** for automatic commit message
+3. Or type custom message
+4. Click **[Commit]** to commit selected files
+5. Files marked with ✓ show committed status
+
+### Session Switching
+
+- Use left sidebar to view all sessions
+- Click any session title to switch
+- Active session indicated with ▶ marker
+- Session context preserved across switches
+
+</CodeSurfBlock>
 
 ---
 
@@ -261,6 +322,31 @@ Unshare current session. [Learn more](/docs/share#un-sharing).
 
 ---
 
+## Tool Favorites
+
+<CodeSurfBlock type="feature" title="Favorite Tools System">
+
+Mark frequently used tools as favorites for quick access:
+
+### How to Favorite
+
+Click the ★ icon next to any tool in the Tools tab to cycle through:
+
+1. **☆ None** - Regular tool
+2. **★ Project** - Favorited for this project (blue)
+3. **★ Global** - Favorited across all projects (gold)
+
+### Benefits
+
+- Favorites appear at the top of the tools list
+- Sorted by: Global → Project → Regular
+- Synced via your config file
+- Persistent across sessions
+
+</CodeSurfBlock>
+
+---
+
 ## Editor setup
 
 Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
@@ -344,3 +430,19 @@ You can customize TUI behavior through your OpenCode config file.
 ### Options
 
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (default: `2`, minimum: `1`)
+
+---
+
+## Mouse Support
+
+<CodeSurfBlock type="difference" title="Enhanced Mouse Interaction">
+
+CodeSurf includes improved mouse support:
+
+- Click to select text
+- Click buttons and UI elements
+- Scroll with mouse wheel in message area
+- Mouse wheel input is filtered in the prompt area
+- Right-click context actions
+
+</CodeSurfBlock>

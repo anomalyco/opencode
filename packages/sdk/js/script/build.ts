@@ -21,6 +21,12 @@ for (const [path, methods] of Object.entries(openapi.paths)) {
     }
   }
 }
+
+// Fix duplicate 'messages' identifier: rename session.messages.recent to session.messagesApi.recent
+if (openapi.paths["/session/{id}/message/recent"]?.get) {
+  openapi.paths["/session/{id}/message/recent"].get.operationId = "session.messagesApi.recent"
+}
+
 await Bun.write(path.join(dir, "openapi.json"), JSON.stringify(openapi, null, 2))
 
 await $`rm -rf src/gen`

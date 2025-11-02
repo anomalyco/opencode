@@ -527,9 +527,78 @@ export type Config = {
     disable_paste_summary?: boolean
   }
   /**
+   * Anthropic-specific feature flags and settings
+   */
+  anthropic?: {
+    /**
+     * Enable prompt caching to reduce costs and latency (default: true)
+     */
+    promptCaching?: boolean
+    /**
+     * Report cache savings in session usage stats (default: true)
+     */
+    reportCacheSavings?: boolean
+    /**
+     * Enable context editing for compact/compressing context (default: true)
+     */
+    contextEditing?: boolean
+    /**
+     * Enable extended thinking for complex reasoning tasks (default: true)
+     */
+    extendedThinking?: boolean
+    /**
+     * Enable citations feature for source attribution (default: true)
+     */
+    citations?: boolean
+    /**
+     * Enable token efficient tool use to reduce token consumption (default: true)
+     */
+    tokenEfficientToolUse?: boolean
+    /**
+     * Enable fine-grained tool streaming for better progress tracking (default: true)
+     */
+    fineGrainedToolStreaming?: boolean
+    /**
+     * Enable code execution tool for running code snippets (default: true)
+     */
+    codeExecutionTool?: boolean
+    /**
+     * Enable computer use tool for desktop automation (requires special setup) (default: false)
+     */
+    computerUseTool?: boolean
+    /**
+     * Enable text editor tool for file manipulation (default: true)
+     */
+    textEditorTool?: boolean
+    /**
+     * Enable web fetch tool for retrieving web content (default: true)
+     */
+    webFetchTool?: boolean
+    /**
+     * Enable web search tool for searching the internet (default: true)
+     */
+    webSearchTool?: boolean
+    /**
+     * Enable memory tool for persistent knowledge storage (default: true)
+     */
+    memoryTool?: boolean
+    /**
+     * Enable pre-fill assistant messages for guidance and role-playing (default: true)
+     */
+    prefillAssistantMessages?: boolean
+    /**
+     * Enable chaining long prompts for complex multi-step tasks (default: true)
+     */
+    chainLongPrompts?: boolean
+  }
+  /**
    * Directories outside the project that agents can access
    */
   allowedDirectories?: Array<string>
+  /**
+   * List of favorite tool IDs that will be prioritized and shown at the top
+   */
+  favoriteTools?: Array<string>
 }
 
 export type BadRequestError = {
@@ -1117,6 +1186,17 @@ export type McpStatusFailed = {
 
 export type McpStatus = McpStatusConnected | McpStatusDisabled | McpStatusFailed
 
+export type McpDiscoveredServer = {
+  name: string
+  description: string
+  vendor: string
+  sourceUrl: string
+  homepage?: string
+  license?: string
+  runtime?: string
+  installCommand: string
+}
+
 export type LspStatus = {
   id: string
   name: string
@@ -1472,6 +1552,84 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type FavoriteToolsListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/favorite-tools"
+}
+
+export type FavoriteToolsListResponses = {
+  /**
+   * Lists of project and global favorite tool IDs
+   */
+  200: {
+    project: Array<string>
+    global: Array<string>
+  }
+}
+
+export type FavoriteToolsListResponse = FavoriteToolsListResponses[keyof FavoriteToolsListResponses]
+
+export type FavoriteToolsCycleData = {
+  body?: {
+    toolId: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/favorite-tools/cycle"
+}
+
+export type FavoriteToolsCycleErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type FavoriteToolsCycleError = FavoriteToolsCycleErrors[keyof FavoriteToolsCycleErrors]
+
+export type FavoriteToolsCycleResponses = {
+  /**
+   * Successfully cycled favorite status
+   */
+  200: {
+    toolId: string
+    level: "none" | "project" | "global"
+  }
+}
+
+export type FavoriteToolsCycleResponse =
+  FavoriteToolsCycleResponses[keyof FavoriteToolsCycleResponses]
+
+export type FavoriteToolsGetLevelData = {
+  body?: never
+  path: {
+    toolId: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/favorite-tools/{toolId}/level"
+}
+
+export type FavoriteToolsGetLevelResponses = {
+  /**
+   * Favorite level for the tool
+   */
+  200: {
+    toolId: string
+    level: "none" | "project" | "global"
+  }
+}
+
+export type FavoriteToolsGetLevelResponse =
+  FavoriteToolsGetLevelResponses[keyof FavoriteToolsGetLevelResponses]
 
 export type ToolIdsData = {
   body?: never
@@ -2101,7 +2259,7 @@ export type SessionPromptResponses = {
 
 export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptResponses]
 
-export type SessionMessagesRecentData = {
+export type SessionMessagesApiRecentData = {
   body?: never
   path: {
     /**
@@ -2119,7 +2277,7 @@ export type SessionMessagesRecentData = {
   url: "/session/{id}/message/recent"
 }
 
-export type SessionMessagesRecentErrors = {
+export type SessionMessagesApiRecentErrors = {
   /**
    * Bad request
    */
@@ -2130,10 +2288,10 @@ export type SessionMessagesRecentErrors = {
   404: NotFoundError
 }
 
-export type SessionMessagesRecentError =
-  SessionMessagesRecentErrors[keyof SessionMessagesRecentErrors]
+export type SessionMessagesApiRecentError =
+  SessionMessagesApiRecentErrors[keyof SessionMessagesApiRecentErrors]
 
-export type SessionMessagesRecentResponses = {
+export type SessionMessagesApiRecentResponses = {
   /**
    * List of recent messages
    */
@@ -2143,8 +2301,8 @@ export type SessionMessagesRecentResponses = {
   }>
 }
 
-export type SessionMessagesRecentResponse =
-  SessionMessagesRecentResponses[keyof SessionMessagesRecentResponses]
+export type SessionMessagesApiRecentResponse =
+  SessionMessagesApiRecentResponses[keyof SessionMessagesApiRecentResponses]
 
 export type SessionMessageData = {
   body?: never
@@ -2634,6 +2792,24 @@ export type McpStatusResponses = {
 }
 
 export type McpStatusResponse = McpStatusResponses[keyof McpStatusResponses]
+
+export type McpDiscoverData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/discover"
+}
+
+export type McpDiscoverResponses = {
+  /**
+   * List of discoverable MCP servers
+   */
+  200: Array<McpDiscoveredServer>
+}
+
+export type McpDiscoverResponse = McpDiscoverResponses[keyof McpDiscoverResponses]
 
 export type McpServerToolsData = {
   body?: never

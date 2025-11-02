@@ -34,8 +34,11 @@ import path from "path"
 import { type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { Log } from "../util/log"
 
 export namespace ToolRegistry {
+  const log = Log.create({ service: "tool-registry" })
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
@@ -47,10 +50,23 @@ export namespace ToolRegistry {
         followSymlinks: true,
         dot: true,
       })) {
-        const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
-        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+        try {
+          const namespace = path.basename(match, path.extname(match))
+          const mod = await import(match)
+          for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+            if (!validateToolDefinition(id, def)) {
+              log.warn("skipping invalid tool definition", { id, file: match })
+              continue
+            }
+            const toolId = id === "default" ? namespace : `${namespace}_${id}`
+            custom.push(fromPlugin(toolId, def))
+            log.info("loaded custom tool", { id: toolId, file: match })
+          }
+        } catch (error) {
+          log.error("failed to load custom tool", {
+            file: match,
+            error: error instanceof Error ? error.message : String(error),
+          })
         }
       }
     }
@@ -58,12 +74,36 @@ export namespace ToolRegistry {
     const plugins = await Plugin.list()
     for (const plugin of plugins) {
       for (const [id, def] of Object.entries(plugin.tool ?? {})) {
+        if (!validateToolDefinition(id, def)) {
+          log.warn("skipping invalid plugin tool", { id })
+          continue
+        }
         custom.push(fromPlugin(id, def))
       }
     }
 
     return { custom }
   })
+
+  function validateToolDefinition(id: string, def: ToolDefinition): boolean {
+    if (!def) {
+      log.warn("tool definition is null or undefined", { id })
+      return false
+    }
+    if (!def.description || typeof def.description !== "string") {
+      log.warn("tool missing or invalid description", { id })
+      return false
+    }
+    if (!def.args || typeof def.args !== "object") {
+      log.warn("tool missing or invalid args", { id })
+      return false
+    }
+    if (typeof def.execute !== "function") {
+      log.warn("tool missing or invalid execute function", { id })
+      return false
+    }
+    return true
+  }
 
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
@@ -72,11 +112,23 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
-          const result = await def.execute(args as any, ctx)
-          return {
-            title: "",
-            output: result,
-            metadata: {},
+          try {
+            const result = await def.execute(args as any, ctx)
+            return {
+              title: def.description.split(".")[0] || id,
+              output: result,
+              metadata: {},
+            }
+          } catch (error) {
+            log.error("tool execution failed", {
+              tool: id,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            return {
+              title: `Error in ${id}`,
+              output: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
+              metadata: { error: true },
+            }
           }
         },
       }),
