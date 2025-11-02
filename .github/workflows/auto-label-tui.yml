@@ -30,11 +30,4 @@ jobs:
                 issue_number: issue.number,
                 labels: ['opentui']
               });
-              
-              await github.rest.issues.addAssignees({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                assignees: ['thdxr']
-              });
             }
