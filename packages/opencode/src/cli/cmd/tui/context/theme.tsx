@@ -14,6 +14,7 @@ import kanagawa from "../../../../../../tui/internal/theme/themes/kanagawa.json"
 import material from "../../../../../../tui/internal/theme/themes/material.json" with { type: "json" }
 import matrix from "../../../../../../tui/internal/theme/themes/matrix.json" with { type: "json" }
 import monokai from "../../../../../../tui/internal/theme/themes/monokai.json" with { type: "json" }
+import nightowl from "../../../../../../tui/internal/theme/themes/nightowl.json" with { type: "json" }
 import nord from "../../../../../../tui/internal/theme/themes/nord.json" with { type: "json" }
 import onedark from "../../../../../../tui/internal/theme/themes/one-dark.json" with { type: "json" }
 import opencode from "../../../../../../tui/internal/theme/themes/opencode.json" with { type: "json" }
@@ -105,6 +106,7 @@ export const THEMES: Record<string, ThemeJson> = {
   material,
   matrix,
   monokai,
+  nightowl,
   nord,
   ["one-dark"]: onedark,
   opencode,
