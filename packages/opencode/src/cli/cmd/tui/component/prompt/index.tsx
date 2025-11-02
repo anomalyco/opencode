@@ -367,13 +367,29 @@ export function Prompt(props: PromptProps) {
       })
       setStore("mode", "normal")
     } else if (inputText.startsWith("/") && nonTextParts.length === 0) {
-      const [command, ...args] = inputText.split(" ")
+      const [commandStr, ...args] = inputText.split(" ")
+      const commandName = commandStr.slice(1)
+
+      // Handle special /voice command locally
+      if (commandName === "voice") {
+        command.trigger("livekit.connect")
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        input.clear()
+        return
+      }
+
       sdk.client.session.command({
         path: {
           id: sessionID,
         },
         body: {
-          command: command.slice(1),
+          command: commandName,
           arguments: args.join(" "),
           agent: local.agent.current().name,
           model: `${local.model.current().providerID}/${local.model.current().modelID}`,

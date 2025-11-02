@@ -67,7 +67,9 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
+import { DialogLiveKit } from "../../component/dialog-livekit"
 import { useKV } from "../../context/kv.tsx"
+import { useLiveKit } from "../../context/livekit"
 
 addDefaultParsers(parsers.parsers)
 
@@ -88,6 +90,7 @@ export function Session() {
   const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
+  const livekit = useLiveKit()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
 
@@ -656,6 +659,30 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         dialog.clear()
+      },
+    },
+    {
+      title: "Start LiveKit Voice Session",
+      value: "livekit.connect",
+      keybind: "livekit_connect" as any,
+      category: "Voice",
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogLiveKit
+            onConnect={async (config) => {
+              try {
+                await livekit.connect(config)
+                dialog.clear()
+              } catch (error) {
+                console.error("Failed to connect to LiveKit:", error)
+                // TODO: Show error dialog
+              }
+            }}
+            onCancel={() => {
+              dialog.clear()
+            }}
+          />
+        ))
       },
     },
     {

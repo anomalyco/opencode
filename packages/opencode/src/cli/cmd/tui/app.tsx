@@ -32,6 +32,7 @@ import type { SessionRoute } from "./context/route"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
+import { LiveKitProvider } from "./context/livekit"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -140,9 +141,11 @@ export function tui(input: {
                             <KeybindProvider>
                               <DialogProvider>
                                 <CommandProvider>
-                                  <PromptHistoryProvider>
-                                    <App />
-                                  </PromptHistoryProvider>
+                                  <LiveKitProvider>
+                                    <PromptHistoryProvider>
+                                      <App />
+                                    </PromptHistoryProvider>
+                                  </LiveKitProvider>
                                 </CommandProvider>
                               </DialogProvider>
                             </KeybindProvider>
@@ -504,7 +507,10 @@ function App() {
               dialog.replace(() => <DialogAgent />)
             }}
           >
-            <span style={{ bold: true, underline: true }}> {local.agent.current().name.toUpperCase()}</span>
+            <span style={{ bold: true, underline: true }}>
+              {" "}
+              {local.agent.current().name.toUpperCase()}
+            </span>
             <span> AGENT </span>
           </text>
         </box>

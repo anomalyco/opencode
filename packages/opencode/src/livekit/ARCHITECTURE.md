@@ -218,9 +218,9 @@ OpenCode → ToolBridge (Data Channel) → External Agent Tools → Result → O
 
 ### 1. Audio Handling
 
-- **Browser**: Use WebRTC MediaStream API
-- **Node.js**: Use node-speaker/node-microphone (optional)
-- **Bun**: Native audio support when available
+- **Terminal/Node.js/Bun**: Use `@livekit/rtc-node` with AudioSource for Node.js-compatible audio
+- **Browser**: Use `livekit-client` with WebRTC MediaStream API (future consideration)
+- OpenCode runs in terminal, so we use `@livekit/rtc-node` for non-browser environments
 
 ### 2. Transcription
 
@@ -255,12 +255,14 @@ Use data channels with JSON-RPC 2.0 format:
 
 ```json
 {
-  "livekit-client": "^2.5.7", // Room connection and WebRTC
-  "livekit-server-sdk": "^2.6.0", // Token generation
+  "@livekit/rtc-node": "^0.13.20", // Room connection for Node.js/Bun/terminal environments
+  "livekit-server-sdk": "^2.14.0", // Token generation
   "@deepgram/sdk": "^3.0.0", // Optional: Better STT
-  "openai": "^4.0.0" // AI processing
+  "openai": "^6.7.0" // AI processing
 }
 ```
+
+**Note**: We use `@livekit/rtc-node` instead of `livekit-client` because OpenCode runs in a terminal/TUI environment, not a browser. The `livekit-client` package requires WebRTC browser APIs which don't exist in Node.js/Bun.
 
 ## Configuration
 

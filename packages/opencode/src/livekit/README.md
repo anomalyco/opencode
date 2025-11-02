@@ -4,7 +4,8 @@ Room-based voice collaboration with AI assistance. Connect to LiveKit rooms, tra
 
 ## Features
 
-- 🎤 **Voice Rooms** - Join LiveKit rooms with audio support
+- 🎤 **Voice Input** - Capture audio from system microphone
+- 🔊 **Audio Playback** - Hear audio from remote participants (AI agents, etc.)
 - 🤖 **AI Agent** - Intelligent assistant that joins rooms
 - 📝 **Transcription** - Real-time speech-to-text
 - 📋 **Note Taking** - Automatic note generation
@@ -121,8 +122,13 @@ await manager.connect({
   participantName: "alice",
 })
 
-// Enable microphone
+// Microphone control (auto-enabled on connect)
 await manager.enableMicrophone()
+await manager.setMicrophoneVolume(0.8)
+
+// Audio playback control (auto-enabled on connect)
+manager.setPlaybackVolume(0.9) // Control speaker volume
+const volume = manager.getPlaybackVolume()
 
 // Get participants
 const participants = manager.getParticipants()
@@ -304,6 +310,159 @@ OPENAI_API_KEY=your-openai-key      # For AI responses
   }
 }
 ```
+
+## Audio System
+
+OpenCode provides full-duplex audio communication:
+
+- **Audio Capture**: Records from your system microphone using `node-record-lpcm16`
+- **Audio Playback**: Plays audio from remote participants using `speaker`
+
+Both are automatically enabled when connecting to a LiveKit room.
+
+### Requirements
+
+#### Audio Capture (Microphone)
+
+Requires **SoX** (Sound eXchange) for microphone capture:
+
+**macOS:**
+
+```bash
+brew install sox
+```
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt-get install sox libsox-fmt-all
+```
+
+**Linux (Fedora/RHEL):**
+
+```bash
+sudo dnf install sox
+```
+
+**Windows:**
+
+Download and install from [SoX SourceForge](https://sourceforge.net/projects/sox/)
+
+#### Audio Playback (Speakers)
+
+The `speaker` package is already included in dependencies. It requires:
+
+**macOS:** CoreAudio (built-in)
+
+**Linux:** ALSA development libraries
+
+```bash
+sudo apt-get install libasound2-dev
+```
+
+**Windows:** WASAPI (built-in)
+
+After installing dependencies, rebuild the native module:
+
+```bash
+npm rebuild speaker
+```
+
+See [AUDIO_PLAYBACK_SETUP.md](./AUDIO_PLAYBACK_SETUP.md) for detailed setup instructions.
+
+### How It Works
+
+#### Audio Capture (Your Microphone → LiveKit)
+
+1. **Microphone Capture** - Captures PCM16 audio from system microphone at 48kHz
+2. **Frame Processing** - Converts audio into 20ms frames (960 samples)
+3. **LiveKit Streaming** - Feeds frames to LiveKit's AudioSource via `captureFrame()`
+4. **Volume Control** - Applies volume adjustments in real-time
+5. **Mute Support** - Stops/starts capture for mute functionality
+
+#### Audio Playback (LiveKit → Your Speakers)
+
+1. **Track Subscription** - Subscribes to remote audio tracks automatically
+2. **Audio Streaming** - Reads AudioFrames from LiveKit's AudioStream
+3. **Multi-Track Mixing** - Combines audio from multiple participants
+4. **Speaker Output** - Plays mixed audio through system speakers
+5. **Volume Control** - Adjusts playback volume independently
+
+See [AUDIO_PLAYBACK.md](./AUDIO_PLAYBACK.md) for detailed documentation.
+
+### Automatic Microphone Enabling
+
+When you connect to a LiveKit room, the microphone is **automatically enabled**:
+
+```typescript
+// Connect to room (microphone auto-enabled)
+await manager.connect({
+  name: "my-room",
+  participantName: "OpenCode User",
+})
+// Microphone is now capturing and streaming audio
+```
+
+### Manual Control
+
+You can also control the microphone manually:
+
+```typescript
+// Enable microphone
+await manager.enableMicrophone()
+
+// Disable microphone
+await manager.disableMicrophone()
+
+// Toggle microphone
+const enabled = await manager.toggleMicrophone()
+
+// Set volume (0.0 to 1.0)
+await manager.setMicrophoneVolume(0.8)
+
+// Mute/unmute
+await manager.setMicrophoneMuted(true)
+
+// Get microphone state
+const state = manager.getMicrophoneState()
+// { enabled: true, volume: 0.8, muted: false }
+```
+
+### Audio Configuration
+
+Configure audio settings in `opencode.json`:
+
+```json
+{
+  "livekit": {
+    "audio": {
+      "sampleRate": 48000,
+      "channelCount": 1,
+      "echoCancellation": true,
+      "noiseSuppression": true,
+      "autoGainControl": true
+    }
+  }
+}
+```
+
+### Troubleshooting
+
+**"sox: not found" error:**
+
+- Install SoX using the commands above
+
+**No audio in LiveKit room:**
+
+- Check microphone permissions on your system
+- Verify SoX is installed: `sox --version`
+- Check microphone state: `manager.getMicrophoneState()`
+
+**Audio quality issues:**
+
+- Ensure sample rate is set to 48000 Hz
+- Enable audio processing (echo cancellation, noise suppression)
+- Check microphone volume level
 
 ## Agent Capabilities
 
