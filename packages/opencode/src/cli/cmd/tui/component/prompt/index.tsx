@@ -11,7 +11,7 @@ import {
 } from "@opentui/core"
 import { createEffect, createMemo, Match, Switch, type JSX, onMount, batch } from "solid-js"
 import { useLocal } from "@tui/context/local"
-import { SyntaxTheme, useTheme } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -60,7 +60,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
 
   const textareaKeybindings = createMemo(() => {
     const newlineBindings = keybind.all.input_newline || []
@@ -86,9 +86,9 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  const fileStyleId = SyntaxTheme.getStyleId("extmark.file")!
-  const agentStyleId = SyntaxTheme.getStyleId("extmark.agent")!
-  const pasteStyleId = SyntaxTheme.getStyleId("extmark.paste")!
+  const fileStyleId = syntax().getStyleId("extmark.file")!
+  const agentStyleId = syntax().getStyleId("extmark.agent")!
+  const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
 
   command.register(() => {
@@ -315,9 +315,9 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-        const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-        return sessionID
-      })()
+          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+          return sessionID
+        })()
     const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
@@ -680,7 +680,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.primary}
-              syntaxStyle={SyntaxTheme}
+              syntaxStyle={syntax()}
             />
           </box>
           <box
@@ -691,7 +691,7 @@ export function Prompt(props: PromptProps) {
           ></box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <text flexShrink={0} wrapMode="none">
+          <text flexShrink={0} wrapMode="none" fg={theme.text}>
             <span style={{ fg: theme.textMuted }}>{local.model.parsed().provider}</span>{" "}
             <span style={{ bold: true }}>{local.model.parsed().model}</span>
           </text>
@@ -701,14 +701,14 @@ export function Prompt(props: PromptProps) {
             </Match>
             <Match when={status() === "working"}>
               <box flexDirection="row" gap={1}>
-                <text>
+                <text fg={theme.text}>
                   esc <span style={{ fg: theme.textMuted }}>interrupt</span>
                 </text>
               </box>
             </Match>
             <Match when={props.hint}>{props.hint!}</Match>
             <Match when={true}>
-              <text>
+              <text fg={theme.text}>
                 ctrl+p <span style={{ fg: theme.textMuted }}>commands</span>
               </text>
             </Match>

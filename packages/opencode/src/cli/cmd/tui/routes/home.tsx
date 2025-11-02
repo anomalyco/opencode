@@ -27,7 +27,7 @@ export function Home() {
   const Hint = (
     <Show when={Object.keys(sync.data.mcp).length > 0}>
       <box flexShrink={0} flexDirection="row" gap={1}>
-        <text>
+        <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
               <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
@@ -76,7 +76,7 @@ function HelpRow(props: ParentProps<{ keybind: keyof KeybindsConfig }>) {
   const { theme } = useTheme()
   return (
     <box flexDirection="row" justifyContent="space-between" width="100%">
-      <text>{props.children}</text>
+      <text fg={theme.text}>{props.children}</text>
       <text fg={theme.primary}>{keybind.print(props.keybind)}</text>
     </box>
   )
