@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
-import { useRouteData } from "@tui/context/route"
+import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { useTheme } from "@tui/context/theme"
@@ -82,6 +82,7 @@ function use() {
 
 export function Session() {
   const route = useRouteData("session")
+  const { navigate } = useRoute()
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
@@ -155,6 +156,23 @@ export function Session() {
   })
 
   const local = useLocal()
+
+  function moveChild(direction: number) {
+    const parentID = session()?.parentID ?? session()?.id
+    let children = sync.data.session
+      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .toSorted((b, a) => a.id.localeCompare(b.id))
+    if (children.length === 1) return
+    let next = children.findIndex((x) => x.id === session()?.id) + direction
+    if (next >= children.length) next = 0
+    if (next < 0) next = children.length - 1
+    if (children[next]) {
+      navigate({
+        type: "session",
+        sessionID: children[next].id,
+      })
+    }
+  }
 
   const command = useCommandDialog()
   command.register(() => [
@@ -397,6 +415,28 @@ export function Session() {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
       },
     },
+    {
+      title: "Next child session",
+      value: "session.child.next",
+      keybind: "session_child_cycle",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        moveChild(1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous child session",
+      value: "session.child.previous",
+      keybind: "session_child_cycle_reverse",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        moveChild(-1)
+        dialog.clear()
+      },
+    },
   ])
 
   const revert = createMemo(() => {
@@ -458,6 +498,34 @@ export function Session() {
       >
         <box flexGrow={1} gap={1}>
           <Show when={session()}>
+            <Show when={session().parentID}>
+              <box
+                backgroundColor={theme.backgroundPanel}
+                justifyContent="space-between"
+                flexDirection="row"
+                paddingTop={1}
+                paddingBottom={1}
+                flexShrink={0}
+                paddingLeft={2}
+                paddingRight={2}
+              >
+                <text fg={theme.text}>
+                  Previous{" "}
+                  <span style={{ fg: theme.textMuted }}>
+                    {keybind.print("session_child_cycle_reverse")}
+                  </span>
+                </text>
+                <text fg={theme.text}>
+                  <b>Viewing subagent session</b>
+                </text>
+                <text fg={theme.text}>
+                  <span style={{ fg: theme.textMuted }}>
+                    {keybind.print("session_child_cycle")}
+                  </span>{" "}
+                  Next
+                </text>
+              </box>
+            </Show>
             <Show when={!sidebarVisible()}>
               <Header />
             </Show>
@@ -921,16 +989,14 @@ function GenericTool(props: ToolProps<any>) {
   )
 }
 
+type ToolRegistration<T extends Tool.Info = any> = {
+  name: string
+  container: "inline" | "block"
+  render?: Component<ToolProps<T>>
+}
 const ToolRegistry = (() => {
-  const state: Record<
-    string,
-    { name: string; container: "inline" | "block"; render?: Component<ToolProps<any>> }
-  > = {}
-  function register<T extends Tool.Info>(input: {
-    name: string
-    container: "inline" | "block"
-    render?: Component<ToolProps<T>>
-  }) {
+  const state: Record<string, ToolRegistration> = {}
+  function register<T extends Tool.Info>(input: ToolRegistration<T>) {
     state[input.name] = input
     return input
   }
@@ -1094,6 +1160,8 @@ ToolRegistry.register<typeof TaskTool>({
   container: "block",
   render(props) {
     const { theme } = useTheme()
+    const keybind = useKeybind()
+
     return (
       <>
         <ToolTitle icon="%" fallback="Delegating..." when={props.input.description}>
@@ -1110,6 +1178,10 @@ ToolRegistry.register<typeof TaskTool>({
             </For>
           </box>
         </Show>
+        <text fg={theme.text}>
+          {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
+          <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
+        </text>
       </>
     )
   },
