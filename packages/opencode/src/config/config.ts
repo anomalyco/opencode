@@ -29,7 +29,7 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
     let result = await global()
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
+    for (const file of ["opencode.jsonc", "opencode.json", "codesurf.jsonc", "codesurf.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
         result = mergeDeep(result, await loadFile(resolved))
@@ -864,6 +864,8 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "codesurf.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "codesurf.jsonc"))),
     )
 
     await import(path.join(Global.Path.config, "config"), {
