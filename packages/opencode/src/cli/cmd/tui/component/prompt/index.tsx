@@ -616,14 +616,16 @@ export function Prompt(props: PromptProps) {
 
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "")
+                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                console.log(pastedContent, filepath)
                 try {
                   const file = Bun.file(filepath)
                   if (file.type.startsWith("image/")) {
+                    event.preventDefault()
                     const content = await file
                       .arrayBuffer()
                       .then((buffer) => Buffer.from(buffer).toString("base64"))
-                      .catch(() => {})
+                      .catch(console.error)
                     if (content) {
                       await pasteImage({
                         filename: file.name,
