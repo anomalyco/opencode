@@ -25,6 +25,7 @@ import { ClaudeCodeListTool } from "./cc-list"
 import { ClaudeCodeGlobTool } from "./cc-glob"
 import { ClaudeCodeGrepTool } from "./cc-grep"
 import { ClaudeCodeWebFetchTool } from "./cc-webfetch"
+import { ClaudeCodeComputerUseTool } from "./cc-computer-use"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -107,6 +108,7 @@ export namespace ToolRegistry {
       ccTools.push(ClaudeCodeListTool)
     }
     if (anthropicConfig.webFetchTool !== false) ccTools.push(ClaudeCodeWebFetchTool)
+    if (anthropicConfig.computerUseTool === true) ccTools.push(ClaudeCodeComputerUseTool)
     // Add glob and grep as they're useful for file discovery
     ccTools.push(ClaudeCodeGlobTool)
     ccTools.push(ClaudeCodeGrepTool)

@@ -1,0 +1,48 @@
+Control the computer by viewing the screen, moving the mouse, clicking, and typing.
+
+This is the Anthropic-native computer use tool for desktop automation and GUI interaction.
+
+⚠️ EXPERIMENTAL FEATURE - USE WITH CAUTION ⚠️
+
+Capabilities:
+- screenshot: Capture the current screen state
+- mouse_move: Move cursor to screen coordinates
+- left_click: Click at current cursor position
+- right_click: Right-click at current cursor position
+- middle_click: Middle-click at current cursor position
+- double_click: Double-click at current cursor position
+- type: Type text at current cursor position
+- key: Press keyboard keys (supports modifiers like ctrl, cmd, alt)
+- cursor_position: Get current cursor coordinates
+
+Security & Permissions:
+- Requires screen recording permissions on macOS
+- Requires accessibility permissions for mouse/keyboard control
+- User will be prompted for permission on first use
+- All actions are logged for security audit
+- Can be disabled via agent permissions
+
+Usage Notes:
+- Coordinates are in [x, y] format from top-left (0, 0)
+- Screenshots are returned as base64 encoded images
+- Text typing respects current keyboard layout
+- Key names follow standard conventions (Return, Tab, Escape, etc.)
+- Modifier keys: ctrl, cmd/meta, alt/option, shift
+
+Platform Support:
+- macOS: Full support via native APIs
+- Linux: Support via xdotool (requires installation)
+- Windows: Support via PowerShell (experimental)
+
+Performance:
+- Screenshots can be large (500KB-2MB)
+- Consider reducing resolution for faster processing
+- Coordinate precision is pixel-perfect
+- Actions execute sequentially with ~100ms delay
+
+Best Practices:
+- Always take a screenshot before mouse actions
+- Use descriptive action sequences
+- Verify cursor position before clicking
+- Handle permission errors gracefully
+- Consider using CLI tools (bash) when possible

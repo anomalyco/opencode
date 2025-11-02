@@ -1,10 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  
+
   // Example configuration with all Anthropic features enabled
-  
+
   "model": "anthropic/claude-sonnet-4-5",
-  
+
   "anthropic": {
     // Core API features (all default to true)
     "promptCaching": true,
@@ -14,30 +14,30 @@
     "citations": true,
     "tokenEfficientToolUse": true,
     "fineGrainedToolStreaming": true,
-    
+
     // Built-in tool equivalents (OpenCode uses its own implementations)
     "codeExecutionTool": true,
     "textEditorTool": true,
     "webFetchTool": true,
     "webSearchTool": true,
     "memoryTool": true,
-    "computerUseTool": false,  // Experimental, requires special setup
-    
+    "computerUseTool": true, // Desktop automation (macOS: cliclick, Linux: xdotool)
+
     // Advanced features
     "prefillAssistantMessages": true,
-    "chainLongPrompts": true
+    "chainLongPrompts": true,
   },
-  
+
   // Provider configuration
   "provider": {
     "anthropic": {
       "options": {
         // API key from environment variable
-        "apiKey": "{env:ANTHROPIC_API_KEY}"
-      }
-    }
+        "apiKey": "{env:ANTHROPIC_API_KEY}",
+      },
+    },
   },
-  
+
   // Optional: Enable MCP servers for additional capabilities
   "mcp": {
     // Example: Add Exa for web search
@@ -45,8 +45,8 @@
       "type": "remote",
       "url": "https://smithery.ai/server/exa",
       "headers": {
-        "Authorization": "Bearer {env:EXA_API_KEY}"
-      }
-    }
-  }
+        "Authorization": "Bearer {env:EXA_API_KEY}",
+      },
+    },
+  },
 }
