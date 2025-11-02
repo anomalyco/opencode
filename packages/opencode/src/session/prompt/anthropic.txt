@@ -91,6 +91,7 @@ These are Anthropic-native tools optimized specifically for you:
 - cc_glob: Find files by pattern (e.g., "**/*.ts")
 - cc_grep: Search file contents by regex pattern
 - cc_webfetch: Fetch web content
+- cc_computer_use: Desktop automation (screenshot, mouse, keyboard) - when enabled
 
 **PREFER these cc_* tools when available** - they are designed for your optimal understanding and work seamlessly with your extended thinking, citations, and context editing capabilities.
 
