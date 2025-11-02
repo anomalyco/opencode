@@ -1,5 +1,13 @@
 {
   "allowedDirectories": ["/Users/jkneen/Documents/GitHub/flows/opencode-stt"],
+  "anthropic": {
+    "computerUseTool": true,
+    "promptCaching": true,
+    "extendedThinking": true,
+    "citations": true,
+    "tokenEfficientToolUse": true,
+    "fineGrainedToolStreaming": true
+  },
   "mcp": {
     "filesystem": {
       "type": "local",
