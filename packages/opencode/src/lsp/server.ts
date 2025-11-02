@@ -1070,4 +1070,566 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Kotlin: Info = {
+    id: "kotlin",
+    root: NearestRoot([
+      "build.gradle",
+      "build.gradle.kts",
+      "settings.gradle",
+      "settings.gradle.kts",
+      "pom.xml",
+    ]),
+    extensions: [".kt", ".kts"],
+    async spawn(root) {
+      let bin = Bun.which("kotlin-language-server", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading kotlin-language-server from GitHub releases")
+
+        const releaseResponse = await fetch(
+          "https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest",
+        )
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch kotlin-language-server release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+        const asset = release.assets.find((a: any) => a.name === "server.zip")
+        if (!asset) {
+          log.error("Could not find server.zip in latest kotlin-language-server release")
+          return
+        }
+
+        const downloadUrl = asset.browser_download_url
+        const downloadResponse = await fetch(downloadUrl)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download kotlin-language-server")
+          return
+        }
+
+        const zipPath = path.join(Global.Path.bin, "kotlin-language-server.zip")
+        await Bun.file(zipPath).write(downloadResponse)
+
+        const installDir = path.join(Global.Path.bin, "kotlin-language-server")
+        const stats = await fs.stat(installDir).catch(() => undefined)
+        if (stats) {
+          await fs.rm(installDir, { force: true, recursive: true })
+        }
+
+        await fs.mkdir(installDir, { recursive: true })
+        await $`unzip -o -q ${zipPath} -d ${installDir}`.quiet().nothrow()
+        await fs.rm(zipPath, { force: true })
+
+        bin = path.join(
+          installDir,
+          "server",
+          "bin",
+          "kotlin-language-server" + (process.platform === "win32" ? ".bat" : ""),
+        )
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract kotlin-language-server binary")
+          return
+        }
+
+        if (process.platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed kotlin-language-server`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Bash: Info = {
+    id: "bash",
+    root: async () => Instance.directory,
+    extensions: [".sh", ".bash"],
+    async spawn(root) {
+      let binary = Bun.which("bash-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "bash-language-server",
+          "out",
+          "cli.js",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "bash-language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("start")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const YAML: Info = {
+    id: "yaml",
+    root: async () => Instance.directory,
+    extensions: [".yaml", ".yml"],
+    async spawn(root) {
+      let binary = Bun.which("yaml-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "yaml-language-server",
+          "out",
+          "server",
+          "src",
+          "server.js",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "yaml-language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const JSON: Info = {
+    id: "json",
+    root: async () => Instance.directory,
+    extensions: [".json", ".jsonc"],
+    async spawn(root) {
+      let binary = Bun.which("vscode-json-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "vscode-langservers-extracted",
+          "bin",
+          "vscode-json-language-server",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const HTML: Info = {
+    id: "html",
+    root: async () => Instance.directory,
+    extensions: [".html", ".htm"],
+    async spawn(root) {
+      let binary = Bun.which("vscode-html-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "vscode-langservers-extracted",
+          "bin",
+          "vscode-html-language-server",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const CSS: Info = {
+    id: "css",
+    root: async () => Instance.directory,
+    extensions: [".css", ".scss", ".sass", ".less"],
+    async spawn(root) {
+      let binary = Bun.which("vscode-css-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "vscode-langservers-extracted",
+          "bin",
+          "vscode-css-language-server",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "vscode-langservers-extracted"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const TailwindCSS: Info = {
+    id: "tailwindcss",
+    root: NearestRoot(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"]),
+    extensions: [".html", ".htm", ".jsx", ".tsx", ".vue", ".svelte"],
+    async spawn(root) {
+      let binary = Bun.which("tailwindcss-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "@tailwindcss",
+          "language-server",
+          "bin",
+          "tailwindcss-language-server",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "@tailwindcss/language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const PHP: Info = {
+    id: "php",
+    root: NearestRoot(["composer.json", "composer.lock"]),
+    extensions: [".php"],
+    async spawn(root) {
+      let binary = Bun.which("intelephense")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(
+          Global.Path.bin,
+          "node_modules",
+          "intelephense",
+          "lib",
+          "intelephense.js",
+        )
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "intelephense"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const Swift: Info = {
+    id: "swift",
+    root: NearestRoot(["Package.swift"]),
+    extensions: [".swift"],
+    async spawn(root) {
+      const bin = Bun.which("sourcekit-lsp")
+      if (!bin) {
+        log.info("sourcekit-lsp not found, please install Swift toolchain or Xcode")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Scala: Info = {
+    id: "scala",
+    root: NearestRoot(["build.sbt", "build.sc", "pom.xml", "build.gradle"]),
+    extensions: [".scala", ".sc", ".sbt"],
+    async spawn(root) {
+      let bin = Bun.which("metals", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        const coursier = Bun.which("cs") || Bun.which("coursier")
+        if (!coursier) {
+          log.info("coursier not found, please install coursier to use metals")
+          return
+        }
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing metals via coursier")
+        const proc = Bun.spawn({
+          cmd: [
+            coursier,
+            "bootstrap",
+            "org.scalameta:metals_2.13:latest.release",
+            "-o",
+            path.join(Global.Path.bin, "metals"),
+          ],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install metals")
+          return
+        }
+        bin = path.join(Global.Path.bin, "metals")
+        if (process.platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+        log.info(`installed metals`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Haskell: Info = {
+    id: "haskell",
+    root: NearestRoot(["stack.yaml", "cabal.project", "package.yaml", "*.cabal"]),
+    extensions: [".hs", ".lhs"],
+    async spawn(root) {
+      const bin = Bun.which("haskell-language-server-wrapper")
+      if (!bin) {
+        log.info(
+          "haskell-language-server-wrapper not found, please install haskell-language-server",
+        )
+        return
+      }
+      return {
+        process: spawn(bin, ["--lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const OCaml: Info = {
+    id: "ocaml",
+    root: NearestRoot(["dune-project", "dune", "opam"]),
+    extensions: [".ml", ".mli", ".mll", ".mly"],
+    async spawn(root) {
+      const bin = Bun.which("ocamllsp")
+      if (!bin) {
+        log.info("ocamllsp not found, please install via opam: opam install ocaml-lsp-server")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const R: Info = {
+    id: "r",
+    root: NearestRoot([".Rproj", "DESCRIPTION"]),
+    extensions: [".r", ".R", ".rmd", ".Rmd"],
+    async spawn(root) {
+      const rBin = Bun.which("R")
+      if (!rBin) {
+        log.info("R not found, please install R first")
+        return
+      }
+      return {
+        process: spawn(rBin, ["--slave", "-e", "languageserver::run()"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const SQL: Info = {
+    id: "sql",
+    root: async () => Instance.directory,
+    extensions: [".sql"],
+    async spawn(root) {
+      let bin = Bun.which("sqls", {
+        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (!Bun.which("go")) {
+          log.info("go not found, please install go to use sqls")
+          return
+        }
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing sqls")
+        const proc = Bun.spawn({
+          cmd: ["go", "install", "github.com/sqls-server/sqls@latest"],
+          env: { ...process.env, GOBIN: Global.Path.bin },
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install sqls")
+          return
+        }
+        bin = path.join(Global.Path.bin, "sqls" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed sqls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
 }

@@ -2,3 +2,6 @@ research
 dist
 gen
 app.log
+
+# Screenshots folder for development
+.screenshots/

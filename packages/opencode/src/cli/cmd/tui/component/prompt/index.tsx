@@ -366,7 +366,7 @@ export function Prompt(props: PromptProps) {
         },
       })
       setStore("mode", "normal")
-    } else if (inputText.startsWith("/")) {
+    } else if (inputText.startsWith("/") && nonTextParts.length === 0) {
       const [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
         path: {
@@ -702,7 +702,8 @@ export function Prompt(props: PromptProps) {
         <box flexDirection="row" justifyContent="space-between">
           <text
             flexShrink={0}
-            wrapMode="none" fg={theme.text}
+            wrapMode="none"
+            fg={theme.text}
             onMouseUp={() => {
               if (renderer.getSelection()?.getSelectedText()) return
               dialog.replace(() => <DialogModel />)

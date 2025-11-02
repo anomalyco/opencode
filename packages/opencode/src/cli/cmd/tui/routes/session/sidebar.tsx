@@ -212,6 +212,9 @@ export function Sidebar(props: { sessionID: string; onToggle: () => void }) {
             currentTokens={context().tokens}
             tokenLimit={context().tokenLimit}
             agentColor={local.agent.color("assistant")}
+            assistantColor={theme.primary}
+            toolColor={theme.accent}
+            userColor={theme.secondary}
             backgroundColor={theme.backgroundPanel}
             width={40}
           />
