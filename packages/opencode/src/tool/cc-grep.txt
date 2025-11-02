@@ -1,0 +1,17 @@
+Fast content search tool that works with any codebase size.
+
+This is the Anthropic-native version of the grep tool, designed to work seamlessly with Claude's content search capabilities.
+
+Usage notes:
+  - Searches file contents using regular expressions
+  - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
+  - Filter files by pattern with include parameter (e.g., "*.js", "*.{ts,tsx}")
+  - Returns file paths with at least one match, sorted by modification time
+  - Use this tool when you need to find files containing specific patterns
+  - If you need to count matches within files, use bash with 'rg' (ripgrep)
+  - For open-ended searches, use the Task tool instead
+
+Examples:
+  - pattern: "TODO|FIXME", include: "*.ts" - Find todos in TypeScript files
+  - pattern: "class \\w+Service" - Find service classes
+  - pattern: "export function" - Find exported functions

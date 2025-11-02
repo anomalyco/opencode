@@ -26,13 +26,37 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
+      const config = await Config.get()
+      const anthropicConfig = config.anthropic ?? {}
+
+      // Default all flags to true if not explicitly set
+      const promptCaching = anthropicConfig.promptCaching ?? true
+      const contextEditing = anthropicConfig.contextEditing ?? true
+      const extendedThinking = anthropicConfig.extendedThinking ?? true
+      const citations = anthropicConfig.citations ?? true
+      const tokenEfficientToolUse = anthropicConfig.tokenEfficientToolUse ?? true
+      const fineGrainedToolStreaming = anthropicConfig.fineGrainedToolStreaming ?? true
+
+      // Build beta headers array based on enabled features
+      const betaFeatures: string[] = []
+
+      // Always include the core claude-code beta
+      betaFeatures.push("claude-code-20250219")
+
+      if (promptCaching) betaFeatures.push("prompt-caching-2024-07-31")
+      if (contextEditing) betaFeatures.push("context-editing-2025-05-14")
+      if (extendedThinking) betaFeatures.push("interleaved-thinking-2025-05-14")
+      if (citations) betaFeatures.push("citations-2025-05-14")
+      if (tokenEfficientToolUse) betaFeatures.push("token-efficient-tool-use-2024-11-01")
+      if (fineGrainedToolStreaming) betaFeatures.push("fine-grained-tool-streaming-2025-05-14")
+
       return {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": betaFeatures.join(","),
           },
+          ...(promptCaching ? { cacheControl: true } : {}),
         },
       }
     },

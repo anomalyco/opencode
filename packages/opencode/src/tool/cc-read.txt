@@ -1,0 +1,17 @@
+Reads a file from the local filesystem.
+
+This is the Anthropic-native version of the read tool, designed to work seamlessly with Claude's file reading capabilities.
+
+Usage notes:
+  - The filePath parameter must be an absolute path
+  - By default, reads up to 2000 lines from the beginning
+  - You can specify line offset and limit for long files
+  - Lines longer than 2000 characters will be truncated
+  - Results show line numbers starting at 1
+  - Can read any file in the project directory
+  - Image files can also be read
+
+Performance:
+  - For large files, use offset/limit to read specific sections
+  - Reading multiple files in parallel is supported
+  - Batch multiple file reads together when possible

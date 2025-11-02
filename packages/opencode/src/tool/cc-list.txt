@@ -1,0 +1,15 @@
+Lists files and directories in a given path.
+
+This is the Anthropic-native version of the list tool, designed to work seamlessly with Claude's directory browsing capabilities.
+
+Usage notes:
+  - The path parameter must be absolute
+  - Omit path to use the current workspace directory
+  - You can provide glob patterns to ignore certain files/directories
+  - Returns directory structure with file/directory indicators
+  - Prefer Glob and Grep tools when you know which directories to search
+
+Performance:
+  - For large directories, consider using ignore patterns
+  - Use Glob for pattern-based file discovery
+  - Use Grep for content-based file discovery

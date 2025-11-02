@@ -17,6 +17,14 @@ import { KbQueryTool } from "./kb-query"
 import { KbManageTool } from "./kb-manage"
 import { LspDiagnosticTool } from "./lsp-diagnostics"
 import { LspHoverTool } from "./lsp-hover"
+import { ClaudeCodeBashTool } from "./cc-bash"
+import { ClaudeCodeEditTool } from "./cc-edit"
+import { ClaudeCodeReadTool } from "./cc-read"
+import { ClaudeCodeWriteTool } from "./cc-write"
+import { ClaudeCodeListTool } from "./cc-list"
+import { ClaudeCodeGlobTool } from "./cc-glob"
+import { ClaudeCodeGrepTool } from "./cc-grep"
+import { ClaudeCodeWebFetchTool } from "./cc-webfetch"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -86,6 +94,23 @@ export namespace ToolRegistry {
 
   async function all(): Promise<Tool.Info[]> {
     const custom = await state().then((x) => x.custom)
+    const config = await Config.get()
+    const anthropicConfig = config.anthropic ?? {}
+
+    // Build list of Claude Code tools based on config
+    const ccTools: Tool.Info[] = []
+    if (anthropicConfig.codeExecutionTool !== false) ccTools.push(ClaudeCodeBashTool)
+    if (anthropicConfig.textEditorTool !== false) {
+      ccTools.push(ClaudeCodeEditTool)
+      ccTools.push(ClaudeCodeReadTool)
+      ccTools.push(ClaudeCodeWriteTool)
+      ccTools.push(ClaudeCodeListTool)
+    }
+    if (anthropicConfig.webFetchTool !== false) ccTools.push(ClaudeCodeWebFetchTool)
+    // Add glob and grep as they're useful for file discovery
+    ccTools.push(ClaudeCodeGlobTool)
+    ccTools.push(ClaudeCodeGrepTool)
+
     return [
       InvalidTool,
       BashTool,
@@ -107,6 +132,7 @@ export namespace ToolRegistry {
       KbManageTool,
       LspDiagnosticTool,
       LspHoverTool,
+      ...ccTools,
       ...custom,
     ]
   }
@@ -138,12 +164,17 @@ export namespace ToolRegistry {
       result["edit"] = false
       result["patch"] = false
       result["write"] = false
+      // Also disable Claude Code equivalents
+      result["cc_edit"] = false
+      result["cc_write"] = false
     }
     if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
       result["bash"] = false
+      result["cc_bash"] = false
     }
     if (agent.permission.webfetch === "deny") {
       result["webfetch"] = false
+      result["cc_webfetch"] = false
     }
 
     return result

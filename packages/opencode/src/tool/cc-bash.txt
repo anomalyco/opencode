@@ -1,0 +1,18 @@
+Executes bash commands in a persistent shell session with optional timeout.
+
+This is the Anthropic-native version of the bash tool, designed to work seamlessly with Claude's code execution capabilities.
+
+Usage notes:
+  - The command argument is required
+  - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes)
+  - Default timeout is 120000ms (2 minutes)
+  - Commands execute in the project's working directory
+  - Shell session persists between calls
+  - Quote file paths with spaces using double quotes
+  - Use ';' or '&&' to chain multiple commands
+  - Avoid interactive commands that require user input
+
+Security:
+  - Commands are subject to permission checks
+  - Dangerous operations may require user approval
+  - File system access limited to project directory and allowed directories

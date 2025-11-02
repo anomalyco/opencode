@@ -1,0 +1,15 @@
+Fast file pattern matching tool that works with any codebase size.
+
+This is the Anthropic-native version of the glob tool, designed to work seamlessly with Claude's file discovery capabilities.
+
+Usage notes:
+  - Supports glob patterns like "**/*.js" or "src/**/*.ts"
+  - Returns matching file paths sorted by modification time
+  - Use this tool when you need to find files by name patterns
+  - For open-ended searches requiring multiple rounds, use the Task tool instead
+  - You can batch multiple glob searches together for efficiency
+
+Examples:
+  - "**/*.test.ts" - Find all test files
+  - "src/**/*.{ts,tsx}" - Find TypeScript files in src
+  - "*.json" - Find JSON files in root directory

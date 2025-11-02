@@ -773,6 +773,79 @@ export namespace Config {
           disable_paste_summary: z.boolean().optional(),
         })
         .optional(),
+      anthropic: z
+        .object({
+          promptCaching: z
+            .boolean()
+            .optional()
+            .describe("Enable prompt caching to reduce costs and latency (default: true)"),
+          reportCacheSavings: z
+            .boolean()
+            .optional()
+            .describe("Report cache savings in session usage stats (default: true)"),
+          contextEditing: z
+            .boolean()
+            .optional()
+            .describe("Enable context editing for compact/compressing context (default: true)"),
+          extendedThinking: z
+            .boolean()
+            .optional()
+            .describe("Enable extended thinking for complex reasoning tasks (default: true)"),
+          citations: z
+            .boolean()
+            .optional()
+            .describe("Enable citations feature for source attribution (default: true)"),
+          tokenEfficientToolUse: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable token efficient tool use to reduce token consumption (default: true)",
+            ),
+          fineGrainedToolStreaming: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable fine-grained tool streaming for better progress tracking (default: true)",
+            ),
+          codeExecutionTool: z
+            .boolean()
+            .optional()
+            .describe("Enable code execution tool for running code snippets (default: true)"),
+          computerUseTool: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable computer use tool for desktop automation (requires special setup) (default: false)",
+            ),
+          textEditorTool: z
+            .boolean()
+            .optional()
+            .describe("Enable text editor tool for file manipulation (default: true)"),
+          webFetchTool: z
+            .boolean()
+            .optional()
+            .describe("Enable web fetch tool for retrieving web content (default: true)"),
+          webSearchTool: z
+            .boolean()
+            .optional()
+            .describe("Enable web search tool for searching the internet (default: true)"),
+          memoryTool: z
+            .boolean()
+            .optional()
+            .describe("Enable memory tool for persistent knowledge storage (default: true)"),
+          prefillAssistantMessages: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable pre-fill assistant messages for guidance and role-playing (default: true)",
+            ),
+          chainLongPrompts: z
+            .boolean()
+            .optional()
+            .describe("Enable chaining long prompts for complex multi-step tasks (default: true)"),
+        })
+        .optional()
+        .describe("Anthropic-specific feature flags and settings"),
       allowedDirectories: z
         .array(z.string())
         .optional()

@@ -1,0 +1,16 @@
+Fetches content from a specified URL.
+
+This is the Anthropic-native version of the webfetch tool, designed to work seamlessly with Claude's web fetching capabilities.
+
+Usage notes:
+  - The URL must be a fully-formed valid URL
+  - HTTP URLs will be automatically upgraded to HTTPS
+  - Results may be summarized if the content is very large
+  - This tool is read-only and does not modify any files
+  - Includes a self-cleaning 15-minute cache for faster responses
+  - HTML content is automatically converted to markdown for readability
+
+Security:
+  - User may be prompted before fetching external URLs
+  - Respects robots.txt and rate limiting
+  - Sensitive data is never cached

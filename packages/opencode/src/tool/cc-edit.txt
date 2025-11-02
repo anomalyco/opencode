@@ -1,0 +1,16 @@
+Performs exact string replacements in files.
+
+This is the Anthropic-native version of the edit tool, designed to work seamlessly with Claude's text editing capabilities.
+
+Usage notes:
+  - You must read a file before editing it
+  - Preserve exact indentation as shown in file content
+  - The edit will FAIL if oldString is not found exactly
+  - The edit will FAIL if oldString appears multiple times (provide more context)
+  - Use replaceAll to rename variables/strings throughout the file
+  - Never include line number prefixes in oldString/newString
+
+Security:
+  - Only files in the project directory can be edited
+  - Changes are tracked and can be reverted
+  - User may be prompted for dangerous operations

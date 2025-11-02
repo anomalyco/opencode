@@ -1,0 +1,16 @@
+Writes a file to the local filesystem.
+
+This is the Anthropic-native version of the write tool, designed to work seamlessly with Claude's file writing capabilities.
+
+Usage notes:
+  - This tool will overwrite existing files
+  - For existing files, you MUST read them first
+  - ALWAYS prefer editing existing files over writing new ones
+  - NEVER proactively create documentation files unless requested
+  - Only use emojis if explicitly requested by the user
+  - Absolute file paths are required
+
+Security:
+  - Only files in the project directory can be written
+  - User may be prompted before overwriting files
+  - Changes are tracked and can be reverted
