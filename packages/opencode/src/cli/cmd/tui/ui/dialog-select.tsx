@@ -180,7 +180,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedTextColor={theme.textMuted}
             ref={(r) => {
               input = r
-              input.focus()
+              setTimeout(() => input.focus(), 1)
             }}
             placeholder="Enter search term"
           />

@@ -1,23 +1,18 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { batch, createContext, createEffect, Show, useContext, type JSX, type ParentProps } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  Show,
+  useContext,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { createEventBus } from "@solid-primitives/event-bus"
 
-const Border = {
-  topLeft: "┃",
-  topRight: "┃",
-  bottomLeft: "┃",
-  bottomRight: "┃",
-  horizontal: "",
-  vertical: "┃",
-  topT: "+",
-  bottomT: "+",
-  leftT: "+",
-  rightT: "+",
-  cross: "+",
-}
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
@@ -45,11 +40,9 @@ export function Dialog(
         onMouseUp={async (e) => {
           e.stopPropagation()
         }}
-        customBorderChars={Border}
         width={props.size === "large" ? 80 : 60}
         maxWidth={dimensions().width - 2}
         backgroundColor={theme.backgroundPanel}
-        borderColor={theme.border}
         paddingTop={1}
       >
         {props.children}
@@ -138,7 +131,7 @@ function init() {
     },
     get allClosedEvent() {
       return allClosedEvent
-    }
+    },
   }
 }
 
