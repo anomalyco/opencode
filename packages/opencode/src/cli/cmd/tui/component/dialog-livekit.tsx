@@ -53,13 +53,6 @@ export function DialogLiveKit(props: DialogLiveKitProps) {
     }, 1)
   })
 
-  // Block tab/shift-tab from propagating to main screen
-  useKeyboard((evt) => {
-    if (evt.name === "tab" || (evt.name === "tab" && evt.shift)) {
-      evt.preventDefault()
-    }
-  })
-
   const handleSubmit = () => {
     const config: LiveKitConfig = {
       url: urlInput.plainText.trim(),
