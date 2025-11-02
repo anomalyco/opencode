@@ -6,17 +6,45 @@ export namespace Lock {
       writer: boolean
       waitingReaders: (() => void)[]
       waitingWriters: (() => void)[]
+      lastUsed: number
     }
   >()
 
+  const LOCK_TTL = 10 * 1000 // 10 seconds
+  let cleanupInterval: Timer | null = null
+
+  function scheduleCleanup() {
+    if (cleanupInterval) return
+    cleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [key, lock] of locks.entries()) {
+        if (
+          lock.readers === 0 &&
+          !lock.writer &&
+          lock.waitingReaders.length === 0 &&
+          lock.waitingWriters.length === 0 &&
+          now - lock.lastUsed > LOCK_TTL
+        ) {
+          locks.delete(key)
+        }
+      }
+    }, 5 * 1000) // cleanup every 5 seconds
+    cleanupInterval.unref()
+  }
+
   function get(key: string) {
     if (!locks.has(key)) {
+      scheduleCleanup()
       locks.set(key, {
         readers: 0,
         writer: false,
         waitingReaders: [],
         waitingWriters: [],
+        lastUsed: Date.now(),
       })
+    } else {
+      const lock = locks.get(key)!
+      lock.lastUsed = Date.now()
     }
     return locks.get(key)!
   }
@@ -39,7 +67,12 @@ export namespace Lock {
     }
 
     // Clean up empty locks
-    if (lock.readers === 0 && !lock.writer && lock.waitingReaders.length === 0 && lock.waitingWriters.length === 0) {
+    if (
+      lock.readers === 0 &&
+      !lock.writer &&
+      lock.waitingReaders.length === 0 &&
+      lock.waitingWriters.length === 0
+    ) {
       locks.delete(key)
     }
   }

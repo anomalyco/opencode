@@ -82,10 +82,18 @@ export namespace Storage {
               sessionFile,
               dest,
             })
-            const session = await Bun.file(sessionFile).json()
+            const session = await Bun.file(sessionFile)
+              .json()
+              .catch((e) => {
+                log.warn(`Failed to parse session file: ${sessionFile}`, { error: e })
+                return null
+              })
+            if (!session) continue
             await Bun.write(dest, JSON.stringify(session))
             log.info(`migrating messages for session ${session.id}`)
-            for await (const msgFile of new Bun.Glob(`storage/session/message/${session.id}/*.json`).scan({
+            for await (const msgFile of new Bun.Glob(
+              `storage/session/message/${session.id}/*.json`,
+            ).scan({
               cwd: fullProjectDir,
               absolute: true,
             })) {
@@ -94,18 +102,30 @@ export namespace Storage {
                 msgFile,
                 dest,
               })
-              const message = await Bun.file(msgFile).json()
+              const message = await Bun.file(msgFile)
+                .json()
+                .catch((e) => {
+                  log.warn(`Failed to parse message file: ${msgFile}`, { error: e })
+                  return null
+                })
+              if (!message) continue
               await Bun.write(dest, JSON.stringify(message))
 
               log.info(`migrating parts for message ${message.id}`)
-              for await (const partFile of new Bun.Glob(`storage/session/part/${session.id}/${message.id}/*.json`).scan(
-                {
-                  cwd: fullProjectDir,
-                  absolute: true,
-                },
-              )) {
+              for await (const partFile of new Bun.Glob(
+                `storage/session/part/${session.id}/${message.id}/*.json`,
+              ).scan({
+                cwd: fullProjectDir,
+                absolute: true,
+              })) {
                 const dest = path.join(dir, "part", message.id, path.basename(partFile))
-                const part = await Bun.file(partFile).json()
+                const part = await Bun.file(partFile)
+                  .json()
+                  .catch((e) => {
+                    log.warn(`Failed to parse part file: ${partFile}`, { error: e })
+                    return null
+                  })
+                if (!part) continue
                 log.info("copying", {
                   partFile,
                   dest,
