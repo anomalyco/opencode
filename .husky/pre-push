@@ -1,2 +1,3 @@
 #!/bin/sh
+export PATH="$HOME/.bun/bin:$PATH"
 bun typecheck
